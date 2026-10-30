@@ -54942,14 +54942,17 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ is the theme's `DOOR_CLOSE_ROLE` exactly as the theme gives it,
-      // with no contrast floor: a floor moves its lightness until the red no
-      // longer reads as red on the state colour, and the ✖ must be red on
-      // every theme. `keptOn` only stops the terminal's rounding from costing
-      // it the contrast it has. Closed, the author's glyph keeps the cell's
-      // own text.
+      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
+      // gives it (`roleTextOn`): the theme's text-red where that reads on the
+      // pressed state, otherwise the role's own red or the nearest rung of its
+      // ladder out toward the pole the pressed state stands farther from that
+      // does, and where none does, the named red standing farthest off. It
+      // never slides lightness: a slid red stops reading as red, and the ✖
+      // must be red on every theme. `keptOn` only stops the terminal's
+      // rounding from costing it the contrast it has. Closed, the author's
+      // glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -76240,6 +76243,15 @@ function segmentColorFuncs(ref) {
     arity: { kind: "exact" },
     returnType: "string"
   };
+  const roleTextOn = {
+    fn: ((role, bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
+      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
+    }),
+    argTypes: ["string", "string"],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
   const keptOn = {
     fn: ((fgRef, bgRef) => {
       const { palette: palette2 } = requireActiveSegment(ref, "{{ keptOn }}");
@@ -76289,7 +76301,40 @@ function segmentColorFuncs(ref) {
     arity: { kind: "variadic" },
     returnType: "T"
   };
-  return { ...palette, bgOf, tint, keptOn, gauge };
+  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+}
+var RUNGS_OUT = {
+  "#000000": ["darken-1", "darken-2", "darken-3"],
+  "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
+};
+var RUNGS = Object.values(RUNGS_OUT).flat();
+function namedRoleText(palette, role, ground) {
+  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
+  const named3 = (name) => {
+    const colour = resolveColorRef(palette, name);
+    return {
+      colour,
+      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown)
+    };
+  };
+  const pole = contrastFor(shown).hex;
+  const out = RUNGS_OUT[pole];
+  if (out === void 0) {
+    throw new Error(
+      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
+    );
+  }
+  const text4 = `text-${role}`;
+  const rung = (step4) => `${role}-${step4}`;
+  const colours = new Map(
+    [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
+  );
+  const preferred = [text4, role, ...out.map(rung)].map(
+    (name) => colours.get(name)
+  );
+  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
+    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
+  )).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {
@@ -79956,7 +80001,7 @@ var FrameFeeds = class {
     if (seen < still && shown) feed.moving++;
     if (seen < still && !shown) feed.unseen++;
     const period = shown ? seen : still;
-    this.arm(feed, at + period / 1e3);
+    this.arm(feed, at + period / 1e3, this.deps.instant());
   }
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
   // moving period while its bar is on a screen, the still period while it is
@@ -79979,16 +80024,18 @@ var FrameFeeds = class {
     const now2 = this.deps.now();
     const at = Math.max(now2, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
-    this.arm(feed, this.deps.instant() + (at - now2) / 1e3);
+    const wall = this.deps.instant();
+    this.arm(feed, wall + (at - now2) / 1e3, wall);
     return true;
   }
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
-  // that is. Its wait is read off one wall reading, and its monotonic due time
-  // is what a wake compares against.
-  arm(feed, due) {
+  // that is. Its wait is measured from `wall`, the caller's own reading, so
+  // the instant a caller set is never rebuilt from a second, truncated one;
+  // its monotonic due time is what a wake compares against.
+  arm(feed, due, wall) {
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
-    const delay = Math.max(0, (due - this.deps.instant()) * 1e3);
+    const delay = Math.max(0, (due - wall) * 1e3);
     feed.phase = {
       kind: "due",
       at: this.deps.now() + delay,
@@ -83132,6 +83179,17 @@ function drawRender(setup, drawing2) {
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
+  const body = viewing === null ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion } : {
+    text: viewerRows(
+      diagnostics,
+      viewing,
+      sessionId2,
+      drawing2.by,
+      geometry
+    ),
+    nextChange: Infinity,
+    motion: frame.motion === "still" ? "still" : "can-move"
+  };
   const g = gitService.getStats();
   const u = usageStore.getStats();
   const fx = effects.lastFrame();
@@ -83165,8 +83223,8 @@ function drawRender(setup, drawing2) {
     stateRev: String(fx.revision),
     fades: passages(fx.fades),
     leaves: passages(fx.leaves),
-    // What the frame drew: whether anything on it changes without new data.
-    motion: frame.motion,
+    // What the body drew: whether anything on it changes without new data.
+    motion: body.motion,
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(frame.evaluated),
@@ -83190,13 +83248,13 @@ function drawRender(setup, drawing2) {
   });
   return {
     drawn: {
-      body: viewing === null ? frame.text : viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry),
+      body: body.text,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry
     },
-    motion: frame.motion,
-    nextChange: frame.nextChange,
+    motion: body.motion,
+    nextChange: body.nextChange,
     evaluated: frame.evaluated,
     clickShown,
     delivered,
