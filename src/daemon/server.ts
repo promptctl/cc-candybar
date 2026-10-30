@@ -199,6 +199,7 @@ import {
   handoffRows,
   type DiagnosticList,
   viewedIndex,
+  viewerRowCap,
   viewerRows,
   type DiagnosticGeometry,
 } from "../render/diagnostics.js";
@@ -2428,6 +2429,7 @@ function drawRender(
   );
   const geometry: DiagnosticGeometry = {
     width,
+    rows: viewerRowCap(hints.termRows),
     colorCompatibility: effective.colorCompatibility,
   };
   // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
@@ -2503,7 +2505,10 @@ function drawRender(
     diag: String(diagnostics.length),
     warnRecord: recorded ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
-    viewer: viewing === null ? "-" : `${viewing}/${diagnostics.length}`,
+    viewer:
+      viewing === null
+        ? "-"
+        : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`,
   });
   return {
     drawn: {

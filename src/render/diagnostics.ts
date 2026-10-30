@@ -148,19 +148,53 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 }
 
 // [LAW:one-source-of-truth] Which message the viewer shows is stored as the
-// message itself — its severity and verbatim text, digested — never as a
-// position: a list that shifts under an open viewer would otherwise show
-// another message under the same position, and one that shrank and grew
-// again would reopen it. A positive integer, so the viewer's key keeps the
-// integer gate every click to it crosses.
-export function diagnosticKey(message: DiagnosticMessage): string {
+// message's identity, never as a position: a list that shifts under an open
+// viewer would otherwise show another message under the same position, and
+// one that shrank and grew again would reopen it. The identity is the
+// severity and the message's first line, digested — what a message is about,
+// which a later line it gains (an update act's failure) does not change — and
+// which of the list's messages of that identity it is, so two alike are two
+// stops. The page of the message shown rides in the same key.
+const IDENTITY_BITS = 38;
+const OCCURRENCES = 256;
+const PAGES = 64;
+function identityOf(message: DiagnosticMessage): number {
+  const headline = message.message.split(/\r\n|\r|\n/, 1)[0];
   const digest = createHash("sha256")
-    .update(
-      `${message.severity.level}\0${message.severity.glyph}\0${message.message}`,
-    )
+    .update(`${message.severity.level}\0${message.severity.glyph}\0${headline}`)
     .digest("hex");
-  // 48 bits: a safe integer, and no collision inside any one list.
-  return String(Number.parseInt(digest.slice(0, 12), 16) + 1);
+  return (
+    Number.parseInt(digest.slice(0, IDENTITY_BITS / 4 + 1), 16) %
+    2 ** IDENTITY_BITS
+  );
+}
+
+// Each message's identity and the occurrence of it, in list order.
+function stopsOf(list: DiagnosticList): readonly number[] {
+  const seen = new Map<number, number>();
+  return list.map((m) => {
+    const id = identityOf(m);
+    const n = seen.get(id) ?? 0;
+    seen.set(id, n + 1);
+    return id * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
+  });
+}
+
+// The key showing page `page` of the message at `at` (0-based). A positive
+// integer below 2^52, so the viewer's key keeps the integer gate every click
+// to it crosses.
+export function viewerKey(
+  list: DiagnosticList,
+  at: number,
+  page: number,
+): string {
+  return String(stopsOf(list)[at]! * PAGES + Math.min(page, PAGES - 1) + 1);
+}
+
+// Where the viewer stands: the message (1-based) and its page (0-based).
+export interface ViewerPosition {
+  readonly index: number;
+  readonly page: number;
 }
 
 // [LAW:one-source-of-truth] What the door's indicator reads (the `diagnostics`
@@ -190,43 +224,64 @@ export function diagnosticsProjection(
       level === null ? "" : `⚠ ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
-    open: list[0] === undefined ? VIEWER_CLOSED : diagnosticKey(list[0]),
+    open: list.length === 0 ? VIEWER_CLOSED : viewerKey(list, 0, 0),
   };
 }
 
 // What the viewer's ✕ writes: no message has it as its key.
 const VIEWER_CLOSED = "0";
 
-// [LAW:dataflow-not-control-flow] The position (1-based) of the message the
-// stored key `raw` names in this draw's list; none while closed, and none once
-// that message is no longer in the list — the viewer closes rather than show
-// another message in its place.
+// [LAW:dataflow-not-control-flow] Where the stored key `raw` stands in this
+// draw's list; none while closed, and none once its message is no longer in
+// the list — the viewer closes rather than show another message in its place.
 export function viewedIndex(
   raw: string | null,
   list: DiagnosticList,
-): number | null {
-  const at = list.findIndex((m) => diagnosticKey(m) === raw);
-  return at === -1 ? null : at + 1;
+): ViewerPosition | null {
+  const key = Number(raw) - 1;
+  const at = stopsOf(list).indexOf(Math.floor(key / PAGES));
+  return raw === null || at === -1
+    ? null
+    : { index: at + 1, page: key % PAGES };
+}
+
+// [LAW:one-source-of-truth] The viewer's ceiling: a bar that eats the screen
+// is its own failure, so the viewer is at most this many rows, and at most
+// the client's reported rows. Rows absent (an older client, or no TTY on
+// stderr) reads as "no client ceiling", not as a guess.
+export const MAX_VIEWER_ROWS = 20;
+export function viewerRowCap(termRows: number | undefined): number {
+  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS);
 }
 
 export interface DiagnosticGeometry {
   // Usable cells per row — the same post-reserve width the bar renders at.
   readonly width: number;
+  // The most rows the viewer may draw, header included (viewerRowCap).
+  readonly rows: number;
   readonly colorCompatibility: ColorCompatibility;
 }
 
 // The viewer, standing in for the body: a header row — ✕ to close, ‹ › to the
-// neighbouring message (each only where there is one), the position, and ⧉ to
-// copy — then the one message at `index` (1-based, in range) in full, wrapped
-// at the width, with no row cap.
+// neighbouring page (the message's own, then the neighbouring message's; each
+// only where there is one), the position, and ⧉ to copy the whole message —
+// then one page of the message at `at.index` (1-based, in range), wrapped at
+// the width, the header and the page together within the geometry's rows.
 export function viewerRows(
   list: DiagnosticList,
-  index: number,
+  at: ViewerPosition,
   sessionId: string,
   geometry: DiagnosticGeometry,
 ): string {
+  const { index } = at;
   const shown = list[index - 1]!;
   const opts = viewerOptions(geometry);
+  // A header too wide for one row still leaves the message a row.
+  const perPage = Math.max(1, geometry.rows - 1);
+  const body = channelRows(shown, opts, []);
+  const pages = Math.ceil(body.length / perPage);
+  // A message that shrank under an open viewer shows its last page.
+  const page = Math.min(at.page, pages - 1);
   const style = new Style({
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg,
@@ -236,25 +291,41 @@ export function viewerRows(
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
   // the arrow's width, so the header never shifts as the reader pages.
-  const step = (glyph: string, to: number): RichText => {
-    const neighbour = list[to - 1];
-    return neighbour === undefined
+  const step = (glyph: string, to: ViewerPosition | null): RichText =>
+    to === null
       ? button(" ", null)
-      : button(glyph, go(diagnosticKey(neighbour)));
-  };
+      : button(glyph, go(viewerKey(list, to.index - 1, to.page)));
+  const back =
+    page > 0
+      ? { index, page: page - 1 }
+      : index > 1
+        ? { index: index - 1, page: 0 }
+        : null;
+  const on =
+    page < pages - 1
+      ? { index, page: page + 1 }
+      : index < list.length
+        ? { index: index + 1, page: 0 }
+        : null;
+  const steps = list.length > 1 || pages > 1;
+  const position =
+    pages > 1
+      ? `[${index}/${list.length} ${page + 1}/${pages}]`
+      : `[${index}/${list.length}]`;
   const header = [
     button("✕", go(VIEWER_CLOSED)),
-    ...(list.length > 1 ? [step("‹", index - 1)] : []),
-    button(`[${index}/${list.length}]`, null),
-    ...(list.length > 1 ? [step("›", index + 1)] : []),
+    ...(steps ? [step("‹", back)] : []),
+    button(position, null),
+    ...(steps ? [step("›", on)] : []),
     button("⧉ copy", effectsUrl([{ verb: VERB_COPY, args: [shown.message] }])),
   ];
-  return [renderStripCells(header, opts), messageRows(shown, geometry)].join(
-    "\n",
-  );
+  return [
+    renderStripCells(header, opts),
+    ...body.slice(page * perPage, (page + 1) * perPage),
+  ].join("\n");
 }
 
-// Every row of one message, uncapped: the viewer's body.
+// Every row of one message, unpaged: what the viewer pages.
 export function messageRows(
   message: DiagnosticMessage,
   geometry: DiagnosticGeometry,

@@ -14,7 +14,7 @@ import {
   diagnosticsProjection,
   ERROR_SEVERITY,
   UPDATE_SEVERITY,
-  diagnosticKey,
+  viewerKey,
   viewedIndex,
   viewerRows,
   WARNING_SEVERITY,
@@ -31,8 +31,10 @@ import { effectsOf } from "./helpers/click";
 import { links, linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SID = "sid-1";
+const at = (index: number) => ({ index, page: 0 });
 const geometry = (width: number): DiagnosticGeometry => ({
   width,
+  rows: 40,
   colorCompatibility: "truecolor",
 });
 
@@ -107,7 +109,7 @@ describe("the indicator the door reads", () => {
       fg: DIAGNOSTIC_ERROR_COLORS.fg,
       bg: DIAGNOSTIC_ERROR_COLORS.bg,
       // Its click opens the first message, by its key.
-      open: diagnosticKey(list[0]!),
+      open: viewerKey(list, 0, 0),
     });
   });
 
@@ -117,7 +119,7 @@ describe("the indicator the door reads", () => {
       label: "⚠ 2",
       fg: DIAGNOSTIC_WARNING_COLORS.fg,
       bg: DIAGNOSTIC_WARNING_COLORS.bg,
-      open: diagnosticKey(list[0]!),
+      open: viewerKey(list, 0, 0),
     });
   });
 
@@ -135,44 +137,80 @@ describe("the indicator the door reads", () => {
 describe("the viewer", () => {
   test("which message it shows: the one its key names, wherever the list moved it; closed once it is gone", () => {
     const list = collectDiagnostics(["a", "b"], [], ["c"]);
-    const [a, b, c] = list.map(diagnosticKey);
+    const [a, b, c] = list.map((_, i) => viewerKey(list, i, 0));
     expect(viewedIndex(null, list)).toBeNull();
     expect(viewedIndex("0", list)).toBeNull();
-    expect(viewedIndex(b!, list)).toBe(2);
-    expect(viewedIndex(c!, list)).toBe(3);
+    expect(viewedIndex(b!, list)).toEqual(at(2));
+    expect(viewedIndex(c!, list)).toEqual(at(3));
     // A new message ahead of it moves it, and the viewer follows it.
     const grown = collectDiagnostics(["new", "a", "b"], [], ["c"]);
-    expect(viewedIndex(b!, grown)).toBe(3);
+    expect(viewedIndex(b!, grown)).toEqual(at(3));
     // Gone: closed, never another message in its place.
     expect(viewedIndex(a!, collectDiagnostics(["b"], [], ["c"]))).toBeNull();
     expect(viewedIndex(a!, [])).toBeNull();
+    // The same message back again reopens; a different one leaves it closed.
+    expect(viewedIndex(a!, collectDiagnostics(["a"], [], []))).toEqual(at(1));
+    expect(viewedIndex(a!, collectDiagnostics(["z"], [], []))).toBeNull();
   });
 
-  test("a message's key is its severity and text: the same message keeps it, a warning and an error of one text differ", () => {
-    const [error] = collectDiagnostics(["same"], [], []);
-    const [again] = collectDiagnostics(["same"], [], []);
-    const [warning] = collectDiagnostics([], [], ["same"]);
-    expect(diagnosticKey(error!)).toBe(diagnosticKey(again!));
-    expect(diagnosticKey(error!)).not.toBe(diagnosticKey(warning!));
-    expect(diagnosticKey(error!)).toMatch(/^[1-9]\d*$/u);
+  test("a message's key is its severity and first line: a later line it gains keeps it, a warning and an error of one text differ", () => {
+    const keyOf = (errors: string[], warnings: string[]) =>
+      viewerKey(collectDiagnostics(errors, [], warnings), 0, 0);
+    expect(keyOf(["same"], [])).toBe(keyOf(["same"], []));
+    expect(keyOf(["same"], [])).toBe(keyOf(["same\nact failed: why"], []));
+    expect(keyOf(["same"], [])).not.toBe(keyOf([], ["same"]));
+    expect(keyOf(["same"], [])).toMatch(/^[1-9]\d*$/u);
+    expect(Number(keyOf(["same"], []))).toBeLessThan(2 ** 53);
+  });
+
+  test("two alike messages are two stops: › from the first reaches the second, and past it", () => {
+    const list = collectDiagnostics(["a", "b", "b", "c"], [], []);
+    const keys = list.map((_, i) => viewerKey(list, i, 0));
+    expect(new Set(keys).size).toBe(4);
+    expect(keys.map((k) => viewedIndex(k, list)!.index)).toEqual([1, 2, 3, 4]);
+    const next = links(viewerRows(list, at(2), SID, geometry(80)))
+      .filter((l) => stripAnsi(l.text).trim() === "›")
+      .flatMap((l) => effectsOf(l.url));
+    expect(next).toEqual([
+      { verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, keys[2]] },
+    ]);
+  });
+
+  test("a long message pages within the terminal's rows, and › walks its pages before the next message", () => {
+    const long = Array.from({ length: 30 }, (_, i) => `issue ${i}`).join("\n");
+    const list = collectDiagnostics([long, "next"], [], []);
+    const short = { ...geometry(80), rows: 5 };
+    const first = rowsOf(viewerRows(list, at(1), SID, short));
+    expect(first).toHaveLength(5);
+    expect(first[0]).toBe("✕   [1/2 1/8] › ⧉ copy ");
+    const last = rowsOf(viewerRows(list, { index: 1, page: 7 }, SID, short));
+    expect(last.at(-1)).toBe("  issue 29 ");
+    const onward = (pos: { index: number; page: number }) =>
+      links(viewerRows(list, pos, SID, short))
+        .filter((l) => stripAnsi(l.text).trim() === "›")
+        .flatMap((l) => effectsOf(l.url))
+        .map((e) => viewedIndex(e.args[2] as string, list));
+    expect(onward(at(1))).toEqual([{ index: 1, page: 1 }]);
+    expect(onward({ index: 1, page: 7 })).toEqual([at(2)]);
   });
 
   test("one message: ✕, its position and ⧉, then the message", () => {
     const list = collectDiagnostics(["boom"], [], []);
-    const out = viewerRows(list, 1, SID, geometry(80));
+    const out = viewerRows(list, at(1), SID, geometry(80));
     expect(rowsOf(out)).toEqual(["✕ [1/1] ⧉ copy ", "⚠ boom "]);
   });
 
   test("many: ‹ and › step to the neighbours, a blank where there is none", () => {
     const list = collectDiagnostics(["a", "b", "c"], [], []);
-    const at = (i: number) => rowsOf(viewerRows(list, i, SID, geometry(80)))[0];
-    expect(at(1)).toBe("✕   [1/3] › ⧉ copy ");
-    expect(at(2)).toBe("✕ ‹ [2/3] › ⧉ copy ");
-    expect(at(3)).toBe("✕ ‹ [3/3]   ⧉ copy ");
-    const writes = links(viewerRows(list, 2, SID, geometry(80)))
+    const header = (i: number) =>
+      rowsOf(viewerRows(list, at(i), SID, geometry(80)))[0];
+    expect(header(1)).toBe("✕   [1/3] › ⧉ copy ");
+    expect(header(2)).toBe("✕ ‹ [2/3] › ⧉ copy ");
+    expect(header(3)).toBe("✕ ‹ [3/3]   ⧉ copy ");
+    const writes = links(viewerRows(list, at(2), SID, geometry(80)))
       .filter((l) => stripAnsi(l.text) !== "⧉ copy ")
       .map((l) => [stripAnsi(l.text).trim(), effectsOf(l.url)]);
-    const [a, , c] = list.map(diagnosticKey);
+    const [a, , c] = list.map((_, i) => viewerKey(list, i, 0));
     expect(writes).toEqual([
       ["✕", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, "0"] }]],
       ["‹", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, a] }]],
@@ -187,7 +225,7 @@ describe("the viewer", () => {
       ["a warning"],
     );
     for (const width of [20, 40, 80]) {
-      const rows = rowsOf(viewerRows(list, 1, SID, geometry(width)));
+      const rows = rowsOf(viewerRows(list, at(1), SID, geometry(width)));
       for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
       const body = rows.slice(1).join(" ");
       expect(body).not.toContain("the other error");
@@ -201,7 +239,7 @@ describe("the viewer", () => {
 
   test("⧉ copies the viewed message verbatim, and nothing else in it clicks", () => {
     const list = collectDiagnostics([ERROR, "second"], [], []);
-    const out = viewerRows(list, 1, SID, geometry(60));
+    const out = viewerRows(list, at(1), SID, geometry(60));
     const copies = linkUrls(out)
       .flatMap((u) => effectsOf(u))
       .filter((e) => e.verb === "copy");
@@ -212,7 +250,7 @@ describe("the viewer", () => {
 
   test("a message's control characters are neutralized before they reach the terminal", () => {
     const list = collectDiagnostics(["x\x1b[31mred\x9bCSI"], [], []);
-    const body = viewerRows(list, 1, SID, geometry(80)).split("\n")[1]!;
+    const body = viewerRows(list, at(1), SID, geometry(80)).split("\n")[1]!;
     expect(stripAnsi(body)).not.toMatch(/[\x1b\x9b]/);
   });
 });
