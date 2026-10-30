@@ -16,6 +16,7 @@ import { placementIds } from "../src/config/dsl-types";
 import { rootNode } from "../src/config/root";
 import { presetRoot } from "../src/config/presets";
 import { EMPTY_DEFAULT, validateConfig } from "./helpers/parse-and-validate";
+import { withoutUnplaced } from "../src/config/loader/unplaced";
 
 const authored = (source: string) => {
   const raw = parseDslConfig(
@@ -35,7 +36,11 @@ const SOURCE = `{
 
 describe("a placement of an undeclared segment", () => {
   test("drops only its own cells, at any depth and in every preset, and is the load's error", () => {
-    const { config, dropped } = validateRenderable(authored(SOURCE), "<test>");
+    const { config, dropped } = validateRenderable(
+      authored(SOURCE),
+      new Map(),
+      "<test>",
+    );
     const placed = placementIds(rootNode(config.root));
     expect(placed).toEqual(expect.arrayContaining(["a", "b"]));
     for (const gone of ["ghost", "wraith", "spectre"])
@@ -55,7 +60,11 @@ describe("a placement of an undeclared segment", () => {
   });
 
   test("the strict load refuses it with the same message", () => {
-    const { dropped } = validateRenderable(authored(SOURCE), "<test>");
+    const { dropped } = validateRenderable(
+      authored(SOURCE),
+      new Map(),
+      "<test>",
+    );
     expect(() => validateConfig(authored(SOURCE), "<test>")).toThrow(
       dropped[0]!.message,
     );
@@ -66,9 +75,9 @@ describe("a placement of an undeclared segment", () => {
       segments: { a: { template: "{{ .nope }}" } },
       root: { h: ["a", "ghost"] },
     }`;
-    expect(() => validateRenderable(authored(source), "<test>")).toThrow(
-      /nope[\s\S]*"ghost" does not match/,
-    );
+    expect(() =>
+      validateRenderable(authored(source), new Map(), "<test>"),
+    ).toThrow(/nope[\s\S]*"ghost" does not match/);
   });
 
   test("an issue found after the drops are cut still names the drop beside it", () => {
@@ -77,18 +86,60 @@ describe("a placement of an undeclared segment", () => {
       segments: { a: { template: "a" } },
       root: { h: ["a", "ghost"] },
     }`;
-    expect(() => validateRenderable(authored(source), "<test>")).toThrow(
-      /declared under the variable "x"[\s\S]*"ghost" does not match/,
-    );
+    expect(() =>
+      validateRenderable(authored(source), new Map(), "<test>"),
+    ).toThrow(/declared under the variable "x"[\s\S]*"ghost" does not match/);
   });
 
   test("a config with nothing to drop is drawn as merged", () => {
     const clean = authored(
       `{ segments: { a: { template: "a" } }, root: { h: ["a"] } }`,
     );
-    const { config, dropped } = validateRenderable(clean, "<test>");
+    const { config, dropped } = validateRenderable(clean, new Map(), "<test>");
     expect(dropped).toEqual([]);
     expect(config.root).toBe(clean.config.root);
+  });
+});
+
+describe("a placement under a plugin absent from the session", () => {
+  test("alone is removed from the tree, and is no drop", () => {
+    const { config, dropped } = validateRenderable(
+      authored(
+        `{ segments: { a: { template: "a" } }, root: { h: ["a", "repo.lit.ticket"] } }`,
+      ),
+      new Map(),
+      "<test>",
+    );
+    expect(dropped).toEqual([]);
+    expect(placementIds(rootNode(config.root))).toEqual(["a"]);
+  });
+
+  test("under a plugin that renders here is a drop naming its file", () => {
+    const { dropped } = validateRenderable(
+      authored(
+        `{ segments: { a: { template: "a" } }, root: { h: ["a", "repo.lit.tikcet"] } }`,
+      ),
+      new Map([
+        [
+          "repo.lit",
+          { scope: "repo", name: "lit", path: "/r/lit/plugin.json5" },
+        ],
+      ]),
+      "<test>",
+    );
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]!.message).toContain(
+      `root entry "repo.lit.tikcet" does not match any segment plugin "repo.lit" declares — the plugin loaded from /r/lit/plugin.json5 declares: no segments`,
+    );
+  });
+});
+
+describe("withoutUnplaced", () => {
+  test("returns the config itself when it removes nothing", () => {
+    const { config } = authored(
+      `{ segments: { a: { template: "a" } }, root: { h: ["a"] } }`,
+    );
+    expect(withoutUnplaced(config)).toBe(config);
   });
 });
 
@@ -156,6 +207,7 @@ describe("two placements of one undeclared name", () => {
       authored(
         `{ segments: { a: { template: "a" } }, root: { v: [{ h: ["a", "gti"] }, { h: ["gti"] }] } }`,
       ),
+      new Map(),
       "<test>",
     );
     expect(placementIds(rootNode(config.root))).toEqual(["a"]);

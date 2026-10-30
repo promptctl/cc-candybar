@@ -1,3 +1,15 @@
+## [1.166.0](https://github.com/promptctl/cc-candybar/compare/v1.165.1...v1.166.0) (2026-10-30)
+
+### Features
+
+* **plugins:** a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) ([#497](https://github.com/promptctl/cc-candybar/issues/497)) ([5577ddd](https://github.com/promptctl/cc-candybar/commit/5577ddd8731d529e5500113fe2febc34aff9f5b2))
+
+## [1.165.1](https://github.com/promptctl/cc-candybar/compare/v1.165.0...v1.165.1) (2026-10-30)
+
+### Bug Fixes
+
+* **var-system:** a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24) ([#495](https://github.com/promptctl/cc-candybar/issues/495)) ([5920905](https://github.com/promptctl/cc-candybar/commit/592090572d8ec1c672f7c5994824e93e218f8291))
+
 ## [1.165.0](https://github.com/promptctl/cc-candybar/compare/v1.164.1...v1.165.0) (2026-10-30)
 
 ### Features

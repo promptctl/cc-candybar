@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
-import { linkChain } from "../../utils/atomic-write.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
@@ -24,6 +23,7 @@ import {
   repoConfigsPath,
 } from "../repo-configs.js";
 import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
+import type { Drawing } from "../../config/lanes.js";
 import {
   repoUnreadNotice,
   type ApprovedRepo,
@@ -38,6 +38,7 @@ import {
   dslConfigCandidatePaths,
   detectConfigCollisions,
   ConfigError,
+  type DroppedFileError,
 } from "../../config/dsl-loader.js";
 import type {
   DslConfig,
@@ -71,12 +72,13 @@ import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry, type CatchUps } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateReader, SessionStateRW } from "../session-state.js";
-import type {
-  WatcherRegistry,
-  WatcherHandle,
-  HeldWatch,
-  Invalidation,
-  WatchTargets,
+import {
+  watchTargetsOf,
+  type WatcherRegistry,
+  type WatcherHandle,
+  type HeldWatch,
+  type Invalidation,
+  type PathsWatch,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { valueOf } from "../../utils/logfmt.js";
@@ -286,7 +288,7 @@ export interface DslRenderState {
   readonly config: ValidatedConfig;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
   // dropped to draw the rest of the bar, one error per file that wrote one.
-  readonly dropped: readonly ConfigError[];
+  readonly dropped: readonly DroppedFileError[];
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
   // it was compiled from): states carrying one key carry one compile.
   readonly compileKey: string;
@@ -625,32 +627,15 @@ function authoredRoots(
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
 // covers the exact set of paths the next reload would consult — an explicit
 // `configFile` collapses to one candidate; absent, the precedence chain unfolds
-// in full. A candidate that is a symbolic link (a dotfiles-managed config) is
-// watched in every place it changes (`linkChain`): its own directory by its
-// name, and each link's target's directory by the target's name, down to the
-// file a write lands in. Directories are deduped with their filename filters
-// unioned, and the whole set is sorted so equal sets spell equal signatures.
+// in full. Where each of those paths can change is the watch rule every file
+// watcher shares (`watchTargetsOf`): a dotfiles-managed config is heard
+// wherever a link in its chain is re-pointed.
 //
-// [LAW:no-silent-failure] A candidate whose chain the kernel refuses to walk
-// (a loop, an unreadable component) is watched as spelled and reported in
-// `unresolved` with the refusal, so the caller can say which path hears less
-// than it should. Nothing here throws: it runs inside watcher callbacks.
-function watchTargetsFor(entry: CacheEntry): {
-  readonly targets: WatchTargets;
-  readonly unresolved: ReadonlyArray<{ path: string; reason: string }>;
-} {
-  const unresolved: Array<{ path: string; reason: string }> = [];
-  const everywhere = (candidate: string): readonly string[] => {
-    try {
-      return linkChain(candidate);
-    } catch (e) {
-      unresolved.push({ path: candidate, reason: (e as Error).message });
-      return [candidate];
-    }
-  };
-  // [LAW:types-are-the-program] A directory watched for named children, or
-  // for every child (`null`): a plugin root holds folders no load has seen.
-  const byDir = new Map<string, Set<string> | null>();
+// [LAW:no-silent-failure] A candidate whose chain the kernel stopped walking
+// (a loop, an unreadable component) is watched as far as the walk got and
+// reported in `unresolved` with the reason, so the caller can say which path
+// hears less than it should.
+function watchTargetsFor(entry: CacheEntry): PathsWatch {
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
   const { loaded, dropped, unreached } = entry.state.plugins;
@@ -662,41 +647,23 @@ function watchTargetsFor(entry: CacheEntry): {
       path.join(entry.projectDir, REPO_PLUGIN_DIR),
     ]),
   ];
-  for (const candidate of [
-    ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
-    ...roots,
-    ...loaded.map((d) => d.path),
-    ...[...dropped, ...unreached].map((d) => d.path),
-    // [LAW:single-enforcer] A declared storage folder is watched by name in
-    // its plugin folder, by the follower that already watches the definition:
-    // its removal, recreation or replacement reloads the config, whose build
-    // recreates the folder and takes a new generation from the storage owner
-    // — which never re-arms a watch itself.
-    ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
-  ].flatMap(everywhere)) {
-    const { dir, name } = nearestWatchTarget(candidate);
-    const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
-    names?.add(name);
-    byDir.set(dir, names);
-  }
-  // An existing root is watched for every child: a folder created in it is a
-  // plugin installed.
-  for (const root of roots) {
-    const { dir, name, leaf } = nearestWatchTarget(path.join(root, "_"));
-    if (leaf && name === "_") byDir.set(dir, null);
-  }
-  return {
-    targets: {
-      dirs: [...byDir.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dirPath, names]) =>
-          names === null
-            ? { path: dirPath }
-            : { path: dirPath, filenames: [...names].sort() },
-        ),
-    },
-    unresolved,
-  };
+  return watchTargetsOf({
+    named: [
+      ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+      ...roots,
+      ...loaded.map((d) => d.path),
+      ...[...dropped, ...unreached].map((d) => d.path),
+      // [LAW:single-enforcer] A declared storage folder is watched by name in
+      // its plugin folder, by the follower that already watches the
+      // definition: its removal, recreation or replacement reloads the
+      // config, whose build recreates the folder and takes a new generation
+      // from the storage owner — which never re-arms a watch itself.
+      ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
+    ],
+    // An existing root is watched for every child: a folder created in it is
+    // a plugin installed.
+    whole: roots,
+  });
 }
 
 // The load's warning is ONE message (the bar's diagnostics show it whole);
@@ -906,6 +873,9 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { layers, config, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
+  const inserted = layers.flatMap((l) =>
+    (l.raw.insert ?? []).map((cell) => cell.seg),
+  );
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
   // state it builds, carried on it, so a reload that keeps the state keeps
   // them too.
@@ -994,12 +964,12 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain.layers.includes(chain.home) ? chain.home : null,
       // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed, so a segment only an insert entry places
-      // is used.
+      // over the trees as placed and every layer's insert entries, so a
+      // segment only an insert entry places is used, here or not.
       unused: [
         ...new Map(
           layers
-            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed))
+            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted))
             .map((u) => [`${u.kind}:${u.name}`, u] as const),
         ).values(),
       ],
@@ -1495,6 +1465,17 @@ export class RenderCache<
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<string, SessionView<S, F>>();
+  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
+  // delivered copies, by the key its copy click names (src/render/
+  // diagnostics.ts), one map per renderer, since a request and a feed frame
+  // list different messages and a click names the surface it came from. Held
+  // by session, not by view, because a frame on screen outlives the view it
+  // was drawn from (a reload's successor); dropped when the session has no
+  // view. No link carries the text it copies.
+  private readonly copies = new Map<
+    string,
+    Map<Drawing["by"], ReadonlyMap<string, string>>
+  >();
   // Every view the cache serves or served, until reclaimed.
   private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -1867,6 +1848,9 @@ export class RenderCache<
   private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
+    // A session left with no view is closed, and its frames with it; a
+    // successor opened first keeps what is on screen copyable.
+    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -2189,10 +2173,11 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const { targets, unresolved } = watchTargetsFor(entry);
-    // [LAW:one-source-of-truth] The key names the target set, so the
-    // registry's `follow` rebinds exactly when the set changed.
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
+    const paths = watchTargetsFor(entry);
+    const { targets, unresolved } = paths;
+    // [LAW:one-source-of-truth] The key names the target set and the folders
+    // it binds, so the registry's `follow` rebinds exactly when either moved.
+    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths.key}`;
     // [LAW:single-enforcer] One reload dispatcher per cache entry: any
     // change the entry's watch hears re-resolves its whole chain (so a
     // higher-precedence file appearing supersedes a lower one) and reloads.
@@ -2201,7 +2186,7 @@ export class RenderCache<
     // on the reload's cause.
     const { watch, move } = this.deps.watchers.follow(
       entry.watch,
-      { key, targets },
+      { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
     );
     entry.watch = watch;
@@ -2234,5 +2219,35 @@ export class RenderCache<
   // case by construction.
   latestView(): SessionView<S, F> | null {
     return [...this.views.values()].at(-1) ?? null;
+  }
+
+  // The renderer `by` delivered a frame of the session's bar listing
+  // `copies`. A session with no view is closed: nothing it delivers is kept.
+  delivered(
+    sessionId: string,
+    by: Drawing["by"],
+    copies: ReadonlyMap<string, string>,
+  ): void {
+    if (!this.views.has(sessionId)) return;
+    const drawn = this.copies.get(sessionId) ?? new Map();
+    this.copies.set(sessionId, drawn.set(by, copies));
+  }
+
+  // What the diagnostic under `key` copies in the frame renderer `by` last
+  // delivered for the session; undefined while that renderer's last frame
+  // did not list it. Reads, never opens, like latestView.
+  drawnCopy(
+    sessionId: string,
+    by: Drawing["by"],
+    key: string,
+  ): string | undefined {
+    return this.copies.get(sessionId)?.get(by)?.get(key);
+  }
+
+  // The renderer no longer draws the session's bar (its feed closed): what
+  // its last frame listed is on no surface now, so a click naming it is
+  // refused rather than copying a list gone stale.
+  stopDrawing(sessionId: string, by: Drawing["by"]): void {
+    this.copies.get(sessionId)?.delete(by);
   }
 }

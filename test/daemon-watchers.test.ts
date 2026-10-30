@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   WatcherRegistry,
+  watchTargetsOf,
   type Invalidation,
 } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -82,7 +83,7 @@ describe("WatcherRegistry", () => {
     const reg = new WatcherRegistry({ counters });
     const first = reg.follow(
       null,
-      { key: "a", targets: { dirs: [] } },
+      { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
     );
     expect(first.move).toBe("rebound");
@@ -90,7 +91,7 @@ describe("WatcherRegistry", () => {
 
     const kept = reg.follow(
       first.watch,
-      { key: "a", targets: { dirs: [] } },
+      { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
     );
     expect(kept.move).toBe("kept");
@@ -99,11 +100,21 @@ describe("WatcherRegistry", () => {
 
     const rebound = reg.follow(
       kept.watch,
-      { key: "b", targets: { dirs: [] } },
+      { key: "b", targets: { dirs: [] }, unbound: false },
       () => {},
     );
     expect(rebound.move).toBe("rebound");
     expect(rebound.watch.key).toBe("b");
+
+    // A spec naming a directory that binds nothing yet keeps the watch held,
+    // whatever its key: the derive that finds the directory there rebinds.
+    const unbound = reg.follow(
+      rebound.watch,
+      { key: "c", targets: { dirs: [] }, unbound: true },
+      () => {},
+    );
+    expect(unbound.move).toBe("kept");
+    expect(unbound.watch).toBe(rebound.watch);
     // The watch under the old key is released; one slot is held, the new one.
     expect(reg.size()).toBe(1);
     expect(counters).toEqual({
@@ -254,6 +265,39 @@ describe("WatcherRegistry", () => {
     }
   });
 
+  // The OS reports a watched directory's own removal or rename under its own
+  // name, which no name filter lists; without it, a watch bound to a removed
+  // directory never tells its consumer to derive the watch again.
+  test("a name-filtered directory hears its own removal, and no write to a child of its name", async () => {
+    let listener: (event: string, changed: string | null) => void = () => {};
+    const fake = Object.assign(new EventEmitter(), { close: () => {} });
+    const watch = jest.spyOn(fs, "watch").mockImplementation(((
+      _dir: string,
+      _opts: unknown,
+      l: typeof listener,
+    ) => {
+      listener = l;
+      return fake;
+    }) as unknown as typeof fs.watch);
+    try {
+      const reg = new WatcherRegistry({ logger: () => {} });
+      const seen: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: "/w/conf", filenames: ["config.json5"] }] }, (inv) => seen.push(inv));
+      listener("change", "conf");
+      listener("rename", "config.json5");
+      await until(() => seen.length === 1, "the watched name's invalidation");
+      listener("rename", "conf");
+      await until(() => seen.length === 2, "the removal's invalidation");
+      expect(seen).toEqual([
+        { kind: "changed", paths: new Set(["/w/conf/config.json5"]) },
+        { kind: "changed", paths: new Set(["/w/conf/conf"]) },
+      ]);
+      reg.closeAll();
+    } finally {
+      watch.mockRestore();
+    }
+  });
+
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
@@ -359,6 +403,62 @@ async function hearsRefOnlyMove(
     svc.close();
   }
 }
+
+describe("watchTargetsOf", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-targets-")));
+  });
+  afterEach(() => rmrf(dir));
+
+  test("a chain the kernel stops walking is watched as far as it got, and says why", () => {
+    // one/x → two/y → one/x: a loop across two directories.
+    for (const d of ["one", "two"]) fs.mkdirSync(path.join(dir, d));
+    const x = path.join(dir, "one", "x");
+    const y = path.join(dir, "two", "y");
+    fs.symlinkSync(y, x);
+    fs.symlinkSync(x, y);
+    const { targets, reached, unresolved } = watchTargetsOf({ named: [x], whole: [] });
+    expect(targets.dirs).toEqual([
+      { path: path.join(dir, "one"), filenames: ["x"] },
+      { path: path.join(dir, "two"), filenames: ["y"] },
+    ]);
+    expect(reached).toBe(true);
+    expect(unresolved).toEqual([{ path: x, reason: expect.stringMatching(/symbolic links/) }]);
+  });
+
+  // A held watch binds the inode it opened on (Linux's inotify), so the same
+  // directories by the same names are a different watch once one is made
+  // again at its path: a consumer following the key rebinds onto it.
+  test("a directory removed and made again at its path is a different watch", () => {
+    const d = path.join(dir, "d");
+    fs.mkdirSync(d);
+    const f = path.join(d, "f");
+    const before = watchTargetsOf({ named: [f], whole: [] });
+    expect(watchTargetsOf({ named: [f], whole: [] }).key).toBe(before.key);
+    rmrf(d);
+    fs.mkdirSync(d);
+    const after = watchTargetsOf({ named: [f], whole: [] });
+    expect(after.targets).toEqual(before.targets);
+    expect(after.key).not.toBe(before.key);
+  });
+
+  test("a directory watched whole hears every child, whatever names are watched in it", () => {
+    const d = path.join(dir, "d");
+    fs.mkdirSync(d);
+    const { targets } = watchTargetsOf({ named: [d, path.join(d, "f")], whole: [d] });
+    expect(targets.dirs).toEqual([
+      { path: dir, filenames: ["d"] },
+      { path: d },
+    ]);
+  });
+
+  test("a hop under a directory that does not exist yet has not reached it", () => {
+    const { targets, reached } = watchTargetsOf({ named: [path.join(dir, "later", "f")], whole: [] });
+    expect(targets.dirs).toEqual([{ path: dir, filenames: ["later"] }]);
+    expect(reached).toBe(false);
+  });
+});
 
 describe("GitDataProvider + watchers integration", () => {
   test("a ref-only move on a slash-named branch is heard in a main checkout (brandon-unfiled-3248.1x2q)", async () => {

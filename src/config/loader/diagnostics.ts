@@ -43,11 +43,30 @@ export class ConfigError extends Error {
   }
 }
 
+// [LAW:types-are-the-program] One file's dropped placements, and the prompt a
+// click on its ⚠ copies: pasted into Claude, it names the file to edit and
+// carries the error, whose plugin placements name the file that won and what
+// it declares, so the fix needs nothing the prompt does not hold.
+export class DroppedFileError extends ConfigError {
+  readonly prompt: string;
+
+  constructor(file: string, issues: readonly ConfigIssue[]) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file.",
+    ].join("\n\n");
+  }
+}
+
 // [LAW:types-are-the-program] What `check` and the demo refuse that the bar
 // draws past: every placement it dropped, as each writing file's own error.
 // An author's refusal like ConfigError, but over several files.
 export class DroppedPlacements extends Error {
-  constructor(readonly errors: readonly ConfigError[]) {
+  constructor(readonly errors: readonly DroppedFileError[]) {
     super(errors.map((e) => e.message).join("\n"));
     this.name = "DroppedPlacements";
   }

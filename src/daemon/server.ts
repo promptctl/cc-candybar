@@ -209,6 +209,8 @@ import { productionLaneEdge } from "./lane-edge.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
+  copyKeys,
+  type SourcedText,
   diagnosticsProjection,
   handoffRows,
   type DiagnosticList,
@@ -379,7 +381,15 @@ const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   watch: (sessionId, onChange) =>
     reaction(() => sessionState.revision(sessionId), onChange),
   lanes: (sessionId) => viewLanes(sessionId),
-  pin: (sessionId) => renderCache.pin(sessionId),
+  // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+  // moment the feed stops drawing, so its drawn copies retire with it.
+  pin: (sessionId) => {
+    const unpin = renderCache.pin(sessionId);
+    return () => {
+      renderCache.stopDrawing(sessionId, "feed");
+      unpin();
+    };
+  },
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
   refreshes: () => refreshLedger.totals(),
@@ -1486,7 +1496,7 @@ export async function replyTo(
     } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, at, waitFor(checked.req), facts).then(
-          ({ answer, motion, clickShown }) => {
+          ({ answer, motion, clickShown, delivered }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
@@ -1494,15 +1504,15 @@ export async function replyTo(
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
               // (src/daemon/click-error.ts).
-              delivered:
-                clickShown === null
-                  ? NOTHING_DELIVERED
-                  : () =>
-                      answeredClickError(
-                        sessionState,
-                        checked.req.sessionId,
-                        clickShown,
-                      ),
+              delivered: () => {
+                delivered();
+                if (clickShown !== null)
+                  answeredClickError(
+                    sessionState,
+                    checked.req.sessionId,
+                    clickShown,
+                  );
+              },
             };
           },
           (error: unknown) => {
@@ -1757,6 +1767,8 @@ const verbCtx = {
         origin.configFile ?? undefined,
       ),
   },
+  diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>
+    renderCache.drawnCopy(sessionId, by, key),
 };
 
 /**
@@ -1954,7 +1966,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   try {
     using setup = setUpFrame(sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, motion, evaluated, lanes } = drawRender(setup, {
+    const { drawn, motion, evaluated, delivered, lanes } = drawRender(setup, {
       by: "feed",
       fps,
     });
@@ -1973,6 +1985,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       },
       moves: motion === "moves",
       evaluated,
+      delivered,
       failure: null,
     };
   } catch (error) {
@@ -1990,6 +2003,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       statusline: failed,
       moves: false,
       evaluated: 0,
+      delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` },
     };
   }
@@ -2333,6 +2347,8 @@ function drawRender(
   motion: DrawnMotion;
   evaluated: number;
   clickShown: ClickErrorRecord | null;
+  // Records what the frame's copy clicks copy, once it reached its client.
+  delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
 } {
@@ -2388,18 +2404,27 @@ function drawRender(
   // drop about the file that wrote it, so their text may change under an open
   // viewer (an issue fixed) without becoming another message; a request's
   // refusal, its hints' and a click's are about exactly what their text says.
-  const said = (text: string | null | undefined) => ({ about: text, text });
-  const errors = [
+  // Each copies its own text, but a drop copies the prompt that fixes it.
+  const sourced = (about: string, text: string | null | undefined) => ({
+    about,
+    text,
+    copy: text,
+  });
+  const said = (text: string | null | undefined) => sourced(text ?? "", text);
+  const errors: SourcedText[] = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
-    { about: "load", text: entry.lastError },
-    { about: "update-act", text: updateWatch.error() },
+    sourced("load", entry.lastError),
+    sourced("update-act", updateWatch.error()),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
+      copy: e.prompt,
     })),
     said(clickShown?.text),
-  ].flatMap(({ about, text }) => (about && text ? [{ about, text }] : []));
+  ].flatMap(({ about, text, copy }) =>
+    about && text && copy ? [{ about, text, copy }] : [],
+  );
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, and the warning this
   // config's load carried.
@@ -2420,12 +2445,18 @@ function drawRender(
   // session (src/daemon/render-warnings.ts).
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
+    sessionId,
+    drawing.by,
     errors,
     [...updates, ...questions],
     [
       ...standing,
       ...renderWarnings.ofSession(sessionId, drawing.by, scope),
-    ].map((w) => ({ about: `${w.kind}\0${w.message}`, text: w.message })),
+    ].map((w) => ({
+      about: `${w.kind}\0${w.message}`,
+      text: w.message,
+      copy: w.message,
+    })),
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -2487,6 +2518,15 @@ function drawRender(
     // payload's `.effective` fields read.
     { ...effective, effects, idleSince },
   );
+  // [LAW:one-source-of-truth] What each copy click this frame mints copies,
+  // read back when the click runs (the copy-diagnostic verb): the list this
+  // renderer last delivered, never text carried in the link. Recorded when
+  // the frame reaches its client, so a draw that throws, or an answer that
+  // never arrives, leaves the shown frame's copies.
+  const keys = copyKeys(diagnostics);
+  const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
+  const delivered = (): void =>
+    renderCache.delivered(sessionId, drawing.by, copies);
   // What this frame drew is what the session's close timer follows.
   menuIdle.observe(sessionId, at, frame.menuRows > 0, effective.menuTimeout);
   const menusSince = menuIdle.since(sessionId, at);
@@ -2608,7 +2648,7 @@ function drawRender(
       body:
         viewing === null
           ? frame.text
-          : viewerRows(diagnostics, viewing, sessionId, geometry),
+          : viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
@@ -2616,6 +2656,7 @@ function drawRender(
     motion: frame.motion,
     evaluated: frame.evaluated,
     clickShown,
+    delivered,
     lanes,
   };
 }
@@ -2679,6 +2720,8 @@ interface RequestAnswer {
   answer: string;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
+  // Records what the answer's copy clicks copy, once it reached its client.
+  delivered: () => void;
 }
 
 async function answerRequest(
@@ -2794,7 +2837,10 @@ async function drawAnswer(
     ended,
     refreshed: refreshedFact(refreshed),
   });
-  const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
+  const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+    setup,
+    ANSWERING,
+  );
   const output = composeBar(drawn);
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
@@ -2813,6 +2859,7 @@ async function drawAnswer(
     answer: toStatusline ? statusline : output,
     motion,
     clickShown,
+    delivered,
   };
 }
 

@@ -15,8 +15,13 @@
 import { createHash } from "node:crypto";
 
 import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
-import { effectsUrl, VERB_COPY, VERB_SET_STATE } from "../click/wire.js";
+import {
+  effectsUrl,
+  VERB_COPY_DIAGNOSTIC,
+  VERB_SET_STATE,
+} from "../click/wire.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
+import type { Drawing } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
@@ -76,8 +81,10 @@ export const HANDOFF_SEVERITY: DiagnosticSeverity = {
 };
 
 // [LAW:parse-dont-validate] A run of words sharing one click, or none: a plain
-// message's words carry no click (its copy is the viewer's ⧉), while an update
-// notice's and a repository question's answers each carry their own. The text
+// message's first line copies what ⧉ copies and its other lines carry no
+// click, while an update notice's and a repository question's answers each
+// carry their own. A copy click names its message by key, never by the text
+// it copies, so a frame's bytes do not grow with that text. The text
 // is sanitized at construction — `diagnosticSpan` is the only constructor — so
 // every span the viewer meets is already safe to emit, whatever produced it.
 export interface DiagnosticSpan {
@@ -92,8 +99,9 @@ export function diagnosticSpan(
 }
 export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 
-// One message: its severity, what it is about, its verbatim text (what ⧉
-// copies), and the lines the viewer shows. Non-empty by construction — a
+// One message: its severity, what it is about, its verbatim text, what ⧉
+// copies (the text, or a prompt that fixes what the text reports), and the
+// lines the viewer shows. Non-empty by construction — a
 // message with no visible line is no message. `about` is named by the message's
 // producer — its source, and the file or repository it concerns — and stays
 // put while the text changes (an issue fixed, a failure line gained).
@@ -101,8 +109,13 @@ export interface DiagnosticMessage {
   readonly severity: DiagnosticSeverity;
   readonly about: string;
   readonly message: string;
+  readonly copy: string;
   readonly lines: readonly [DiagnosticLine, ...DiagnosticLine[]];
 }
+
+// What a line drawn in a message's colours reads: its severity and its lines.
+// The handoff line is one, never listed, so it copies nothing by key.
+export type ChannelMessage = Pick<DiagnosticMessage, "severity" | "lines">;
 
 // [LAW:types-are-the-program] Every message one draw owes its reader, in the
 // order the viewer pages them. Empty is "nothing to show".
@@ -112,6 +125,7 @@ export type DiagnosticList = readonly DiagnosticMessage[];
 export interface SourcedText {
   readonly about: string;
   readonly text: string;
+  readonly copy: string;
 }
 
 // [LAW:parse-dont-validate] The one place a draw's diagnostics become a list,
@@ -120,21 +134,54 @@ export interface SourcedText {
 // nothing visible in it — empty, whitespace, control characters — is no
 // message, decided here.
 export function collectDiagnostics(
+  sessionId: string,
+  // The renderer drawing the list: a copy click names it, so the daemon
+  // reads the list that surface shows.
+  by: Drawing["by"],
   errors: readonly SourcedText[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly SourcedText[],
 ): DiagnosticList {
-  return [
-    ...errors.flatMap((e) => plainMessage(e, ERROR_SEVERITY)),
+  const plain = new Set<DiagnosticMessage>();
+  const plainOf = (
+    text: SourcedText,
+    severity: DiagnosticSeverity,
+  ): DiagnosticMessage[] => {
+    const made = plainMessage(text, severity);
+    for (const m of made) plain.add(m);
+    return made;
+  };
+  const list = [
+    ...errors.flatMap((e) => plainOf(e, ERROR_SEVERITY)),
     ...notices,
-    ...warnings.flatMap((w) => plainMessage(w, WARNING_SEVERITY)),
+    ...warnings.flatMap((w) => plainOf(w, WARNING_SEVERITY)),
   ];
+  // A message's key depends on the whole list (which occurrence it is), so
+  // its first line's click is minted once the list stands.
+  const keys = copyKeys(list);
+  return list.map((m, i) =>
+    plain.has(m)
+      ? {
+          ...m,
+          lines: [
+            [
+              diagnosticSpan(
+                m.lines[0][0].text,
+                copyLink(sessionId, by, keys[i]!),
+              ),
+            ],
+            ...m.lines.slice(1),
+          ],
+        }
+      : m,
+  );
 }
 
-// A plain message: every visible line one span with no click. Blank lines are
-// dropped; a message with no visible line is none.
-export function plainMessage(
-  { about, text: message }: SourcedText,
+// A plain message: every visible line one span with no click (its first
+// gains the copy click once the list stands). Blank lines are dropped; a
+// message with no visible line is none.
+function plainMessage(
+  { about, text: message, copy }: SourcedText,
   severity: DiagnosticSeverity,
 ): DiagnosticMessage[] {
   const [first, ...rest] = message
@@ -144,7 +191,22 @@ export function plainMessage(
     .map((span): DiagnosticLine => [span]);
   return first === undefined
     ? []
-    : [{ severity, about, message, lines: [first, ...rest] }];
+    : [{ severity, about, message, copy, lines: [first, ...rest] }];
+}
+
+// [LAW:one-source-of-truth] The key a copy click names each message by: the
+// key the viewer opens it at, so one identity names a message for both.
+export function copyKeys(list: DiagnosticList): readonly string[] {
+  return stopsOf(list).map((stop) => String(stop * PAGES + 1));
+}
+
+// [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
+// first line alike: the daemon reads what it copies from the frame renderer
+// `by` last delivered for the session when the click runs.
+function copyLink(sessionId: string, by: Drawing["by"], key: string): string {
+  return effectsUrl([
+    { verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, by, key] },
+  ]);
 }
 
 // The level the list counts as: the worst of its members, none when empty.
@@ -286,6 +348,7 @@ export function viewerRows(
   list: DiagnosticList,
   at: ViewerPosition,
   sessionId: string,
+  by: Drawing["by"],
   geometry: DiagnosticGeometry,
 ): string {
   const { index } = at;
@@ -332,7 +395,7 @@ export function viewerRows(
         ...(steps ? [step("›", on)] : []),
         button(
           "⧉ copy",
-          effectsUrl([{ verb: VERB_COPY, args: [shown.message] }]),
+          copyLink(sessionId, by, viewerKey(list, index - 1, 0)),
         ),
       ],
       opts,
@@ -388,7 +451,7 @@ export function messageRows(
 // projection, the same colours, its click opening the same viewer, which the
 // statusline then draws in the handoff line's place.
 export function handoffRows(
-  handoff: DiagnosticMessage,
+  handoff: ChannelMessage,
   list: DiagnosticList,
   sessionId: string,
   geometry: DiagnosticGeometry,
@@ -445,7 +508,7 @@ const ISSUE_INDENT = " ";
 // the width — a long path breaks across rows rather than past the edge. Whole
 // words stay whole.
 function channelRows(
-  message: DiagnosticMessage,
+  message: ChannelMessage,
   opts: BuildLineOptions,
   trailing: readonly RichText[],
 ): string[] {

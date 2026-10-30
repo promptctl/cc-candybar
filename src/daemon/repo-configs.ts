@@ -178,6 +178,7 @@ export function repoQuestions(
       severity: APPROVAL_SEVERITY,
       about: `repo-question\0${dir}`,
       message,
+      copy: message,
       lines: [line],
     };
   });

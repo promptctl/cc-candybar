@@ -40,6 +40,7 @@ import {
   findKeyLine,
   keyLocator,
   DroppedPlacements,
+  DroppedFileError,
   type ConfigIssue,
 } from "./loader/diagnostics.js";
 import {
@@ -102,13 +103,22 @@ import {
   withDroppedPlacements,
   dropsOwning,
   type DroppedPlugin,
-  type NamedDefinition,
   type PluginDefinition,
   type PluginLayer,
 } from "./loader/plugins.js";
-import { ownedBy, type PluginScope } from "./loader/plugin-scope.js";
+import {
+  ownedBy,
+  type NamedDefinition,
+  type PluginScope,
+  type SegmentPresence,
+} from "./loader/plugin-scope.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
-import { withoutUnplaced } from "./loader/unplaced.js";
+import {
+  presenceOf,
+  reportable,
+  absentPlacement,
+  withoutUnplaced,
+} from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
@@ -122,7 +132,7 @@ export {
   editabilityNotice,
   findKeyLine,
 } from "./loader/diagnostics.js";
-export type { ConfigIssue } from "./loader/diagnostics.js";
+export type { ConfigIssue, DroppedFileError } from "./loader/diagnostics.js";
 export {
   dslConfigCandidatePaths,
   resolveDslConfig,
@@ -259,6 +269,7 @@ export function loadConfigSource(
   const standing = withDroppedPlacements(
     mergeWithDefault(parsed.raw, plugins.config),
     owning,
+    (parsed.raw.insert ?? []).map((cell) => cell.seg),
   );
   return {
     source,
@@ -431,6 +442,11 @@ export function loadConfigChain(
   const surfaced = plugins.dropped.filter(isReached);
   const unreached = plugins.dropped.filter((d) => !isReached(d));
   trace.warned(surfaced.map(droppedPluginNotice));
+  // [LAW:one-source-of-truth] The namespaces the chain renders, a repository's
+  // own included: what a placement is judged against, so a placement under
+  // a plugin this session lacks draws nothing and one under a plugin it has
+  // is checked against what that plugin declares.
+  const rendering = layers.at(-1)?.plugins.rendering ?? plugins.rendering;
   const installed = {
     checkout: ctx.checkout,
     roots: found.roots,
@@ -438,7 +454,7 @@ export function loadConfigChain(
     dropped: surfaced,
     unreached,
     reached,
-    rendering: layers.at(-1)?.plugins.rendering ?? plugins.rendering,
+    rendering,
   };
   const top = layers.at(-1);
   // The advisories validation earns over the whole chain (an insert cell no
@@ -459,6 +475,7 @@ export function loadConfigChain(
       ...renderable(
         validateRenderable(
           loadConfig(null, base, NO_PROJECT),
+          rendering,
           "<default>",
           allowedPalettes,
         ),
@@ -473,6 +490,7 @@ export function loadConfigChain(
       ...renderable(
         validateRenderable(
           top,
+          rendering,
           top.path,
           allowedPalettes,
           layers.slice(0, -1).reverse(),
@@ -488,6 +506,7 @@ export function loadConfigChain(
     for (const [i, layer] of layers.slice(0, -1).entries())
       validateRenderable(
         layer,
+        layer.plugins.rendering,
         layer.path,
         allowedPalettes,
         layers.slice(0, i).reverse(),
@@ -531,7 +550,7 @@ export interface LoadedChain {
   // The merged config the bar draws, and the placements it dropped
   // (validateRenderable).
   readonly config: ValidatedConfig;
-  readonly dropped: readonly ConfigError[];
+  readonly dropped: readonly DroppedFileError[];
   // The merged config with every layer's insert cells placed
   // (validateRenderable's `placed`).
   readonly placed: DslConfig;
@@ -587,7 +606,12 @@ function checkPlugin(
 ): void {
   if (replaces) {
     // [LAW:single-enforcer] The bar's own judgment of what fails a config.
-    validateRenderable(unauthored(config), filePath, allowedPalettes);
+    validateRenderable(
+      unauthored(config),
+      new Map(),
+      filePath,
+      allowedPalettes,
+    );
     return;
   }
   const owned = ownedBy(ns);
@@ -637,7 +661,7 @@ export interface Renderable {
   readonly config: ValidatedConfig;
   // [LAW:no-silent-failure] Each placement of an undeclared segment, as one
   // error per file that wrote one; empty for none. `check` refuses them.
-  readonly dropped: readonly ConfigError[];
+  readonly dropped: readonly DroppedFileError[];
   // [LAW:one-source-of-truth] The merged config with every layer's insert
   // cells placed, before the load drops or synthesizes anything: the trees
   // the files authored as they render, for a reader that asks what the
@@ -665,12 +689,21 @@ export type AuthoredLayer = AuthoredConfig & { readonly path: string };
  */
 export function validateRenderable(
   authoredConfig: AuthoredConfig,
+  // Each plugin namespace rendering in the session the config renders for,
+  // and the definition that won it: a placement under a namespace missing
+  // here draws nothing and is no error (plugin-scope.ts).
+  rendering: ReadonlyMap<string, NamedDefinition>,
   filePath = "<config>",
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[] = [],
 ): Renderable {
-  const written = layerInserts({ ...authoredConfig, path: filePath }, beneath);
+  const presence = presenceOf(authoredConfig.config.segments, rendering);
+  const written = layerInserts(
+    { ...authoredConfig, path: filePath },
+    beneath,
+    presence,
+  );
   // [LAW:single-enforcer] Every layer's `insert` cells are placed here, once,
   // before any check or synthesis walks a tree — so each walk sees the trees
   // that render and none places a cell again.
@@ -689,6 +722,7 @@ export function validateRenderable(
       allowedPalettes,
       beneath,
       inserted.config,
+      presence,
       written.dropped,
       [...inserted.notices, ...refused],
     );
@@ -748,6 +782,7 @@ function judgeRenderable(
   allowedPalettes: ReadonlySet<string>,
   beneath: readonly AuthoredLayer[],
   merged: DslConfig,
+  presence: (name: string) => SegmentPresence,
   filed: readonly FiledIssue[],
   notices: readonly string[],
 ): Renderable {
@@ -771,13 +806,22 @@ function judgeRenderable(
       );
     }
   };
-  validateCrossReferences(ctx, merged, raw);
+  validateCrossReferences(ctx, merged, raw, presence);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped = droppedByFile(filePath, merged.segments, ctx, beneath, filed);
-  // A config with nothing to drop is the merged one itself, so its trees keep
-  // their identity.
-  const config = dropped.length === 0 ? merged : withoutUnplaced(merged);
+  const dropped = droppedByFile(
+    filePath,
+    merged.segments,
+    ctx,
+    presence,
+    beneath,
+    filed,
+  );
+  // [LAW:dataflow-not-control-flow] Every undeclared placement leaves the
+  // tree, reported or not: a cell whose plugin is absent here is no error, so
+  // nothing was dropped, yet it must not reach the renderer. A config with
+  // nothing to remove comes back as itself, so its trees keep their identity.
+  const config = withoutUnplaced(merged);
   // [LAW:one-source-of-truth] A menu's keys are its PLACEMENT's, so they are
   // minted over the trees that render — which exist only now, merged and
   // cross-referenced — before the settings menu and edit chrome add their own.
@@ -828,21 +872,38 @@ interface FiledIssue {
 // Every layer's `insert` cells, lowest layer first so a later cell may anchor
 // on an earlier one, and the trees the files write. A cell naming no declared
 // segment draws nothing, like any placement of one: it is left out and
-// reported against the file and entry that wrote it, whichever layer that is.
+// reported against the file and entry that wrote it, whichever layer that is
+// — unless its plugin is absent here, which is no error.
 function layerInserts(
   top: AuthoredLayer,
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[],
+  presence: (name: string) => SegmentPresence,
 ): {
   readonly cells: readonly InsertCell[];
   readonly authored: AuthoredTrees;
   readonly dropped: readonly FiledIssue[];
 } {
   const layers = [...beneath].reverse().concat(top);
+  // [LAW:dataflow-not-control-flow] A cell anchored on a placement whose
+  // plugin is absent is absent with it, through any chain of cells: its
+  // anchor draws nothing here, so neither does it, and neither is an error
+  // (unplaced.ts reportable).
+  const standsOnAbsent = absentPlacement(
+    top.config,
+    layers.flatMap((layer) => layer.raw.insert ?? []),
+    presence,
+  );
+  const anchored = (cell: InsertCell): boolean => !standsOnAbsent(cell.anchor);
+  // [LAW:single-enforcer] A cell naming the bar's chrome (the settings menu's
+  // anchor among it) never gets here: the parse refuses it (loader/layout.ts).
   const declared = (cell: InsertCell): boolean =>
-    Object.prototype.hasOwnProperty.call(top.config.segments, cell.seg);
+    presence(cell.seg).kind === "declared";
+  const broken = (cell: InsertCell): boolean => reportable(presence(cell.seg));
+  const own = (layer: AuthoredLayer): readonly InsertCell[] =>
+    (layer.raw.insert ?? []).filter(anchored);
   return {
-    cells: layers.flatMap((layer) => (layer.raw.insert ?? []).filter(declared)),
+    cells: layers.flatMap((layer) => own(layer).filter(declared)),
     authored: {
       root: layers.some((layer) => layer.raw.root !== undefined),
       presets: new Set(
@@ -852,27 +913,29 @@ function layerInserts(
     // One locator per layer, so its source is parsed at most once.
     dropped: layers.flatMap((layer) => {
       const lineOf = keyLocator(layer.source);
-      return (layer.raw.insert ?? [])
-        .filter((cell) => !declared(cell))
-        .map((cell) => ({
-          file: layer.path,
-          issue: {
-            path: cell.by.entry,
-            message: unplacedMessage(
-              cell.by.entry,
-              cell.seg,
-              top.config.segments,
-            ),
-            line: lineOf(cell.by.entry.split(".")),
-          },
-        }));
+      // A cell's own segment is judged whatever it stands on: a typo under a
+      // present plugin is broken in every session, not only where its anchor
+      // draws.
+      return (layer.raw.insert ?? []).filter(broken).map((cell) => ({
+        file: layer.path,
+        issue: {
+          path: cell.by.entry,
+          message: unplacedMessage(
+            cell.by.entry,
+            cell.seg,
+            top.config.segments,
+            presence(cell.seg),
+          ),
+          line: lineOf(cell.by.entry.split(".")),
+        },
+      }));
     }),
   };
 }
 
 // [LAW:single-enforcer] What `check` and the demo refuse that the bar draws
 // past: every dropped placement, each file's error in turn.
-export function refuseDrops(dropped: readonly ConfigError[]): void {
+export function refuseDrops(dropped: readonly DroppedFileError[]): void {
   if (dropped.length > 0) throw new DroppedPlacements(dropped);
 }
 
@@ -886,10 +949,11 @@ function droppedByFile(
   // The segments the merged config declares.
   segments: DslConfig["segments"],
   ctx: ValidateCtx,
+  presence: (name: string) => SegmentPresence,
   beneath: readonly AuthoredLayer[],
   // Insert cells already filed against the file that wrote them.
   filed: readonly FiledIssue[],
-): ConfigError[] {
+): DroppedFileError[] {
   const byFile = new Map<string, ConfigIssue[]>();
   const add = (file: string, issue: ConfigIssue): void => {
     byFile.set(file, [...(byFile.get(file) ?? []), issue]);
@@ -905,11 +969,18 @@ function droppedByFile(
     else
       add(author.layer.path, {
         path: author.path,
-        message: unplacedMessage(author.layoutKey, name, segments),
+        message: unplacedMessage(
+          author.layoutKey,
+          name,
+          segments,
+          presence(name),
+        ),
         line: findKeyLine(author.layer.source, author.path.split(".")),
       });
   }
-  return [...byFile].map(([file, issues]) => new ConfigError(file, issues));
+  return [...byFile].map(
+    ([file, issues]) => new DroppedFileError(file, issues),
+  );
 }
 
 /**

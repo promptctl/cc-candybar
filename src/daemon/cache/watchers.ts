@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
+import { walkLinks } from "../../utils/atomic-write";
+import { boundKey, boundOf } from "../../utils/folder-identity";
+import {
+  canonicalDirectory,
+  nearestWatchTarget,
+} from "../../utils/watch-target";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects `dlog` (writes to daemon.log at the requested level); other
@@ -84,6 +90,93 @@ export interface Refusal {
   readonly reason: string;
 }
 
+// What watching a set of paths takes: a spec whose key spells the targets and
+// the folder each binds now (`bound`, by path: `null` while there is nothing
+// there to bind), whether every hop reached its own directory (`reached`: none
+// waits on a missing directory to appear, so an event can be about the path
+// itself), and the paths whose link chain the kernel stopped walking, with
+// why.
+export interface PathsWatch extends WatchSpec {
+  readonly bound: ReadonlyMap<string, string | null>;
+  readonly reached: boolean;
+  readonly unresolved: readonly Refusal[];
+}
+
+// Whether an event a directory's watch reported is the directory itself
+// removed or moved. Linux's inotify reports that under the directory's own
+// name, as a rename, and it is the event that leaves a handle bound to an
+// inode no longer at its path, so a name filter must let it through for the
+// consumer to derive its watch again. macOS reports a change under the
+// directory's name whenever a child comes or goes, and its watch follows the
+// path, so a change is not let through.
+function aboutItself(
+  dir: string,
+  event: string,
+  changed: string | null,
+): boolean {
+  return event === "rename" && changed === path.basename(dir);
+}
+
+// [LAW:single-enforcer] The one rule for where a set of paths can change, for
+// every consumer that watches files (the config watcher, `watch_file`
+// sources). A `named` path is watched wherever its content changes: each hop
+// of its link chain (`walkLinks`), by name in its nearest existing directory,
+// so re-pointing any link in the chain is heard where that link sits. A
+// `whole` path that is a directory is watched for every child, which
+// overrides any name filter on it; one that is not adds nothing. Directories
+// are deduped with their names unioned, and the set is sorted so equal sets
+// spell equal keys. Nothing here throws: it runs inside watcher callbacks.
+export function watchTargetsOf(paths: {
+  readonly named: readonly string[];
+  readonly whole: readonly string[];
+}): PathsWatch {
+  const unresolved: Refusal[] = [];
+  let reached = true;
+  // [LAW:types-are-the-program] A directory watched for named children, or
+  // for every child (`null`).
+  const byDir = new Map<string, Set<string> | null>();
+  for (const at of paths.named) {
+    const { hops, stopped } = walkLinks(at);
+    if (stopped !== null)
+      unresolved.push({ path: at, reason: stopped.message });
+    for (const hop of hops) {
+      const { dir, name, leaf } = nearestWatchTarget(hop);
+      reached &&= leaf;
+      const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
+      names?.add(name);
+      byDir.set(dir, names);
+    }
+  }
+  for (const dir of paths.whole.map(canonicalDirectory))
+    if (dir !== null) byDir.set(dir, null);
+  const targets: WatchTargets = {
+    dirs: [...byDir.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dirPath, names]) =>
+        names === null
+          ? { path: dirPath }
+          : { path: dirPath, filenames: [...names].sort() },
+      ),
+  };
+  // [LAW:one-source-of-truth] The folder identity every watch owner judges
+  // by, read once here for every consumer of the rule.
+  const bound = new Map(
+    targets.dirs.map((d) => {
+      const at = boundOf(d.path);
+      const bindable = typeof at !== "string" && "ino" in at;
+      return [d.path, bindable ? boundKey(at) : null] as const;
+    }),
+  );
+  return {
+    key: JSON.stringify([targets, [...bound]]),
+    targets,
+    unbound: [...bound.values()].includes(null),
+    bound,
+    reached,
+    unresolved,
+  };
+}
+
 // A debounce window's invalidation while it gathers: its paths are the
 // registry's own until the window closes and hands them to the consumer.
 type Gathering =
@@ -110,11 +203,15 @@ export interface WatcherHandle {
 
 // What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
 // The registry keeps the FIRST acquire's targets under a key, so the key must
-// name the target set: a different set is a different key, and "the targets
-// moved" and "the key changed" are one fact.
+// name the target set and the folders it binds: a different set, or a
+// directory made again at its path (Linux's inotify follows the inode, so the
+// held watch hears the one before), is a different key, and "the watch moved"
+// and "the key changed" are one fact. `unbound`: a directory the spec names is
+// gone or cannot be stat'd right now, so there is nothing to bind yet.
 export interface WatchSpec {
   readonly key: string;
   readonly targets: WatchTargets;
+  readonly unbound: boolean;
 }
 
 // A watch a consumer holds: the handle and the key it was acquired under.
@@ -232,12 +329,18 @@ export class WatcherRegistry {
   // a new key releases the watch bound to directories the spec no longer
   // names and acquires one on those it names now. Nothing held yet is a first
   // acquire, which is a rebind from nothing.
+  //
+  // A spec with a directory that binds nothing yet (gone, or a mount's
+  // transient fault) keeps the watch held: a derive that lands between a
+  // directory's removal and its making again would otherwise trade a watch
+  // FSEvents keeps on its path for a slot the OS refuses. The next derive
+  // that finds the directory there rebinds, since its key differs.
   follow(
     held: HeldWatch | null,
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    if (held !== null && held.key === spec.key) {
+    if (held !== null && (held.key === spec.key || spec.unbound)) {
       return { watch: held, move: "kept" };
     }
     held?.handle.release();
@@ -307,10 +410,16 @@ export class WatcherRegistry {
     for (const target of slot.targets.dirs) {
       try {
         const filterSet = target.filenames ? new Set(target.filenames) : null;
-        const onDirEvent = (_evt: string, filename: string | null) => {
+        const onDirEvent = (evt: string, filename: string | null) => {
           // [LAW:dataflow-not-control-flow] Filter is a value (Set) — same
           // code path every event; the Set's .has() decides whether to fire.
-          if (filterSet && (!filename || !filterSet.has(filename))) return;
+          if (
+            filterSet &&
+            (!filename ||
+              (!filterSet.has(filename) &&
+                !aboutItself(target.path, evt, filename)))
+          )
+            return;
           fire(namedOf(target.path, filename));
         };
         const w = fs.watch(

@@ -33,6 +33,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { repoGateAt } from "../src/daemon/repo-configs";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
+import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 
 let dir: string;
 beforeEach(() => {
@@ -314,7 +315,9 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
   test("a misspelt name under a plugin that loaded is still a load error", async () => {
     write("deploy/plugin.json5", DEFINITION);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.statsu"] } }`);
-    expect(fatal(await checkConfig(p, dir))).toContain(`"plugins.deploy.statsu" does not match any declared segment`);
+    expect(fatal(await checkConfig(p, dir))).toContain(
+      `"plugins.deploy.statsu" does not match any segment plugin "plugins.deploy" declares — the plugin loaded from ${path.join(dir, "deploy", "plugin.json5")} declares: plugins.deploy.status (no settings)`,
+    );
   });
 });
 
@@ -737,6 +740,63 @@ describe("an installed plugin", () => {
     expect(clean(await checkConfig(placing("repo.deploy.status"), repo)).rendered).toContain("mine-repo");
   });
 
+  // A home config used in every session: a placement under a plugin this
+  // session lacks draws nothing and is no error; one under a plugin it has
+  // names the file that won and what it declares.
+  const home = (...segs: string[]) =>
+    write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", ${segs.map((s) => JSON.stringify(s)).join(", ")}] } }`,
+    );
+
+  test("a repo's cell placed by a home config draws nothing outside that repo, and is no error", async () => {
+    repoInstall("repo", "lit", `{ segments: { ticket: { template: "TICKET" } } }`);
+    fs.mkdirSync(path.join(dir, "elsewhere"));
+    const p = home("repo.lit.ticket");
+    expect(clean(await checkConfig(p, path.join(dir, "repo"))).rendered).toContain("TICKET");
+    const outside = clean(await checkConfig(p, path.join(dir, "elsewhere")));
+    expect(outside.rendered).toContain("MINE");
+    expect(outside.rendered).not.toContain("TICKET");
+    expect(outside.warnings).toEqual([]);
+  });
+
+  test("a repo's cell in a repo the user has not approved draws nothing, and is no error", async () => {
+    write("unasked/.cc-candybar/plugins/lit/plugin.json5", `{ segments: { ticket: { template: "TICKET" } } }`);
+    const { rendered } = clean(await checkConfig(home("repo.lit.ticket"), path.join(dir, "unasked")));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("TICKET");
+  });
+
+  test("a cell of a plugin that is not installed draws nothing, and is no error", async () => {
+    const { rendered, warnings } = clean(await checkConfig(home("plugins.deploy.ticket"), dir));
+    expect(rendered).toContain("MINE");
+    expect(warnings).toEqual([]);
+  });
+
+  test("an insert cell of an absent plugin is neither drawn nor reported", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine"] }, insert: [{ seg: "repo.lit.ticket", after: "mine" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(warnings).toEqual([]);
+  });
+
+  test("a name a present plugin does not declare names the file that won, and what it declares", async () => {
+    install("share", "deploy", `{ segments: { status: { template: "far" } } }`);
+    const won = install(
+      "data",
+      "deploy",
+      `{ segments: { status: { template: "s", settings: { compact: { label: "c", domain: "bool", default: false }, wide: { label: "w", domain: "bool", default: true } } }, phase: { template: "p" } } }`,
+    );
+    const message = fatal(await checkConfig(home("plugins.deploy.statsu"), dir));
+    expect(message).toContain(
+      `root entry "plugins.deploy.statsu" does not match any segment plugin "plugins.deploy" declares — the plugin loaded from ${won} declares: plugins.deploy.phase (no settings), plugins.deploy.status (settings: compact, wide)`,
+    );
+    expect(message).not.toContain(path.join(dir, "share"));
+  });
+
   test("a plugin the config lists replaces an installed one of its name", async () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
@@ -821,6 +881,77 @@ describe("an installed plugin", () => {
     const message = fatal(await checkConfig(placing("plugins.empty.s"), dir));
     expect(message).toContain("1 plugin did not load");
     expect(message).toContain(notice);
+  });
+
+  test("an insert cell placing a broken one's segment reaches the drop as a tree placement does: ⚠ naming it", async () => {
+    install("data", "lit", `{ data: "./d.json", segments: { ticket: { template: "{{ if }}" } } }`);
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] }, insert: [{ seg: "plugins.lit.ticket", after: "mine" }] }`,
+    );
+    const notice = `plugin ${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} was not loaded`;
+    const message = fatal(await checkConfig(p, dir));
+    expect(message).toContain("1 plugin did not load");
+    expect(message).toContain(notice);
+    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    try {
+      expect(prepared.droppedPlugins).toHaveLength(1);
+      expect(prepared.config.segments["plugins.lit.ticket"]!.template).toContain(notice);
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
+  test("an insert cell anchored on an absent plugin's cell is absent with it: not drawn, no ⚠", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("TWO");
+    expect(rendered).not.toContain("⚠");
+    expect(warnings).toEqual([]);
+  });
+
+  test("an insert cell anchored on an absent plugin's placement by its id is absent with it", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", { seg: "repo.lit.ticket", id: "ticket" }] }, insert: [{ seg: "two", after: "ticket" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("TWO");
+    expect(rendered).not.toContain("⚠");
+    expect(warnings).toEqual([]);
+  });
+
+  test("an insert cell anchored on a cell that is itself absent is absent with it", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" }, three: { template: "THREE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }, { seg: "three", after: "two" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("THREE");
+    expect(rendered).not.toContain("⚠");
+    expect(warnings).toEqual([]);
+  });
+
+  test("an insert cell naming nothing is reported though its anchor's plugin is absent", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "nope", after: "repo.lit.ticket" }] }`,
+    );
+    expect(fatal(await checkConfig(p, dir))).toContain(`"nope" does not match any declared segment`);
+  });
+
+  test("the settings menu's anchor is refused as an insert cell", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine"] }, insert: [{ seg: "${SETTINGS_ANCHOR}", after: "mine" }] }`,
+    );
+    expect(fatal(await checkConfig(p, dir))).toContain(`an insert cell places a segment, and "${SETTINGS_ANCHOR}" is the bar's own chrome`);
   });
 
   // Nobody asked for a plugin nothing places: a broken one a package manager
@@ -1222,6 +1353,19 @@ describe("a repo's plugin beside an installed one of its name", () => {
     else process.env.XDG_CONFIG_HOME = saved.config;
   });
 
+  test("a user config's insert cell naming the repo's broken plugin shows its drop", async () => {
+    write(
+      "xdg/cc-candybar/config.json5",
+      `{ root: { rows: { status: { h: ["model", "plugins.lit.phase"] } } }, insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.phase" }] }`,
+    );
+    write("repo/.cc-candybar/plugins/lit/plugin.json5", `{ segments: { ticket: { template: "{{ if }}" } } }`);
+    write("repo/.cc-candybar.json5", `{}`);
+    answerRepo(repo);
+    const message = fatal(await checkConfig(undefined, repo));
+    expect(message).toContain("1 plugin did not load");
+    expect(message).toContain(`plugin ${path.join(repo, ".cc-candybar/plugins/lit/plugin.json5")} was not loaded`);
+  });
+
   test("approved, both load and all three cells draw with no warning", async () => {
     answerRepo(repo);
     const { rendered, warnings } = clean(await checkConfig(undefined, repo));
@@ -1411,17 +1555,31 @@ describe("a plugin names itself without its scope", () => {
     expect(cells(await checkConfig(explicit, dir))).toBe("⇪ prod! live [go]");
   });
 
-  test("a placement under one scope naming a segment only the other declares names the other", async () => {
-    write("repo/.cc-candybar/plugins/lit/plugin.json5", `{ segments: { ticket: { template: "t" } } }`);
-    write("repo/.cc-candybar.json5", `{ root: { h: ["plugins.lit.ticket"] } }`);
+  // The bar's cells, with no warning and no ⚠ beside them.
+  function drawn(o: CheckOutcome): string {
+    const { rendered, warnings } = clean(o);
+    expect(warnings).toEqual([]);
+    expect(rendered).not.toContain("⚠");
+    return rendered.trim();
+  }
+
+  test("a placement under a scope with no such plugin here draws nothing, even when the other scope declares it", async () => {
+    write("repo/.cc-candybar/plugins/lit/plugin.json5", `{ segments: { ticket: { template: "TICKET" } } }`);
+    write("repo/.cc-candybar.json5", `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "plugins.lit.ticket"] } }`);
+    answerRepo(path.join(dir, "repo"));
+    expect(drawn(await checkConfig(undefined, path.join(dir, "repo")))).not.toContain("TICKET");
+    write(path.join(userRoot, "plugin.json5"), `{ segments: { phase: { template: "PHASE" } } }`);
+    write("repo/.cc-candybar.json5", `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "repo.deploy.phase"] } }`);
+    expect(drawn(await checkConfig(undefined, path.join(dir, "repo")))).not.toContain("PHASE");
+  });
+
+  test("a placement under a present plugin naming a segment only the other scope declares names the other", async () => {
+    write("repo/.cc-candybar/plugins/deploy/plugin.json5", `{ segments: { ticket: { template: "t" } } }`);
+    write(path.join(userRoot, "plugin.json5"), `{ segments: { phase: { template: "p" } } }`);
+    write("repo/.cc-candybar.json5", `{ root: { h: ["plugins.deploy.ticket"] } }`);
     answerRepo(path.join(dir, "repo"));
     expect(fatal(await checkConfig(undefined, path.join(dir, "repo")))).toContain(
-      `"plugins.lit.ticket" does not match any declared segment ("repo.lit.ticket" is declared`,
-    );
-    write(path.join(userRoot, "plugin.json5"), `{ segments: { phase: { template: "p" } } }`);
-    write("repo/.cc-candybar.json5", `{ root: { h: ["repo.deploy.phase"] } }`);
-    expect(fatal(await checkConfig(undefined, path.join(dir, "repo")))).toContain(
-      `"repo.deploy.phase" does not match any declared segment ("plugins.deploy.phase" is declared`,
+      `"plugins.deploy.ticket" does not match any segment plugin "plugins.deploy" declares — the plugin loaded from ${path.join(dir, userRoot, "plugin.json5")} declares: plugins.deploy.phase (no settings) ("repo.deploy.ticket" is declared`,
     );
   });
 

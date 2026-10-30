@@ -15,13 +15,17 @@ import {
   loadConfig,
   NO_PROJECT,
   parseDslConfig,
+  mergeWithDefault,
+  validateRenderable,
 } from "../src/config/dsl-loader";
+import { presenceOf } from "../src/config/loader/unplaced";
+import { SETTINGS_ANCHOR } from "../src/config/door";
 import {
   Json5EditError,
   JSON5_DIALECT,
   setValue,
 } from "../src/config/json5-edit";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import {
   validateVariables,
   variableDeclJson,
@@ -2645,5 +2649,54 @@ describe("loadDslConfig — insert", () => {
       path: "insert",
       message: "must be a list",
     });
+  });
+});
+
+// ─── presence ────────────────────────────────────────────────────────────────
+
+describe("a placed name's presence", () => {
+  const LIT = {
+    scope: "repo",
+    name: "lit",
+    path: "/r/lit/plugin.json5",
+  } as const;
+  const presence = presenceOf(
+    { mine: {}, "repo.lit.ticket": {} },
+    new Map([["repo.lit", LIT]]),
+  );
+  test.each([
+    ["mine", { kind: "declared" }],
+    [SETTINGS_ANCHOR, { kind: "declared" }],
+    ["repo.lit.ticket", { kind: "declared" }],
+    ["repo.lit.tikcet", { kind: "plugin", definition: LIT }],
+    ["repo.deploy.status", { kind: "absent" }],
+    ["plugins.lit.ticket", { kind: "absent" }],
+    ["ghost", { kind: "missing" }],
+    ["repo", { kind: "missing" }],
+  ])("%s", (name, expected) => {
+    expect(presence(name)).toEqual(expected);
+  });
+});
+
+describe("a dropped placement's prompt", () => {
+  test("names the config file, carries the error, and the winning plugin's path", () => {
+    const source = `{ segments: { a: { template: "a" } }, root: { h: ["a", "repo.lit.tikcet"] } }`;
+    const raw = parseDslConfig("/home/config.json5", source);
+    const { dropped } = validateRenderable(
+      { config: mergeWithDefault(raw, EMPTY_DEFAULT), raw, source },
+      new Map([
+        [
+          "repo.lit",
+          { scope: "repo", name: "lit", path: "/r/lit/plugin.json5" },
+        ],
+      ]),
+      "/home/config.json5",
+    );
+    expect(dropped).toHaveLength(1);
+    const { prompt, message } = dropped[0]!;
+    expect(prompt).toContain("Config file to edit: /home/config.json5");
+    expect(prompt).toContain(message);
+    expect(prompt).toContain("/r/lit/plugin.json5");
+    expect(prompt).toContain("Edit only the config file");
   });
 });

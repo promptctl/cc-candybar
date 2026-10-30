@@ -49,6 +49,8 @@ export interface FeedFrame {
   readonly moves: boolean;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
+  // Records what the frame's copy clicks copy, once it went out to a follower.
+  readonly delivered: () => void;
   readonly failure: LogLine | null;
 }
 
@@ -624,6 +626,9 @@ export class FrameFeeds<Req> {
       }
     }
     if (feed.followers.size === 0) return;
+    // [LAW:one-source-of-truth] A frame whose bytes match the last one shows
+    // the same links, so what they copy is this frame's, pushed or not.
+    frame.delivered();
     const answers = {
       bar: sentOf(frame.resp),
       statusline: sentOf(frame.statusline),

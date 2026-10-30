@@ -17,6 +17,10 @@ export interface PluginId {
   readonly name: string;
 }
 
+// [LAW:types-are-the-program] A definition and the plugin it is: its scope,
+// and its name. Its namespace is derived (`pluginNs`), never carried beside it.
+export type NamedDefinition = PluginId & { readonly path: string };
+
 // [LAW:single-enforcer] The one spelling of a plugin's namespace.
 export function pluginNs({ scope, name }: PluginId): string {
   return `${scope}.${name}`;
@@ -27,6 +31,18 @@ export function pluginNs({ scope, name }: PluginId): string {
 export function ownedBy(ns: string): (name: string) => boolean {
   return (name) => name === ns || name.startsWith(`${ns}.`);
 }
+
+// [LAW:types-are-the-program] What a placed name is, in the session the
+// config renders for: a segment the config declares; one under a plugin
+// namespace no plugin renders here (a `repo.` cell outside its repository, a
+// plugin not installed), which is data, like a false `when`; one a plugin
+// that does render here does not declare, with the definition that won; or
+// one nothing explains.
+export type SegmentPresence =
+  | { readonly kind: "declared" }
+  | { readonly kind: "absent" }
+  | { readonly kind: "plugin"; readonly definition: NamedDefinition }
+  | { readonly kind: "missing" };
 
 // The scope-free name a plugin's own definition calls itself by: the loader
 // binds it to the namespace the plugin loads under, so one definition loads

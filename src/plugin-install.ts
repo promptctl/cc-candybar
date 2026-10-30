@@ -16,7 +16,7 @@ import {
 } from "./config/loader/plugin-folders.js";
 import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
 import { launchSync } from "./proc/launch.js";
-import { isDirectory } from "./var-system/sources.js";
+import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
 // [LAW:types-are-the-program] What a source argument names, decided once.
@@ -272,7 +272,11 @@ export function runPlugin(argv: readonly string[]): number {
     console.error(USAGE);
     return 2;
   }
-  const source = parsePluginSource(arg, process.cwd(), isDirectory);
+  const source = parsePluginSource(
+    arg,
+    process.cwd(),
+    (p) => canonicalDirectory(p) !== null,
+  );
   if ("error" in source) {
     console.error(`plugin install: ${source.error}`);
     return 2;

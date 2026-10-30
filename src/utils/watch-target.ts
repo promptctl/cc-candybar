@@ -2,8 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 // [LAW:single-enforcer] The one rule for watching a path that may not exist
-// yet, shared by the config watcher (src/daemon/cache/render.ts) and the
-// file/shell sources' WatchManager (src/var-system/sources.ts).
+// yet: the step the rule for where a set of paths can change
+// (`watchTargetsOf`, beside the watcher registry) takes for each hop of a
+// link chain.
 //
 // [LAW:dataflow-not-control-flow] Every path yields ONE (dir, name) watch
 // tuple: the nearest EXISTING ancestor directory, and the path component
@@ -39,7 +40,7 @@ export function nearestWatchTarget(candidate: string): {
 // stop at — absent, unreadable, a file, or removed mid-walk (the walk runs
 // inside watcher callbacks, during exactly the churn that races it, so one
 // call answers both questions and nothing here can throw).
-function canonicalDirectory(p: string): string | null {
+export function canonicalDirectory(p: string): string | null {
   try {
     return fs.statSync(p).isDirectory() ? fs.realpathSync(p) : null;
   } catch {

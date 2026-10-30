@@ -138,7 +138,7 @@ The complete shape of a `shell` variable:
 | `kind` | `"shell"` |
 | `command` | the command line, run by `/bin/sh -c` |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
-| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes; a watch the OS refuses is reported like a key that throws, below), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
+| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A source that reads no session's value runs once for its directory, shared by
@@ -1060,6 +1060,23 @@ since they live under `repo.`. An installed plugin's segments are in the
 add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads
 the bar.
+
+A placement of a plugin that is not present in the session draws nothing
+and is no error: no `⚠`, and `check` passes. So your own config can place
+`repo.lit.ticket` for every repository that ships `lit`, and in any other
+directory the cell is simply not there; the same goes for a `plugins.` cell
+whose plugin is not installed. A placement under a plugin that IS present
+but declares no such segment is an error: the message names the plugin file
+that won and every segment and setting it declares, and clicking it in the
+bar copies a prompt for Claude that names your config file and asks it to
+fix the placement.
+
+```json5 check:pass
+{
+  segments: { mine: { template: "mine" } },
+  root: { h: ["mine", "repo.lit.ticket", "plugins.notinstalled.status"] },
+}
+```
 
 ### Adding your segment to the user's bar from a repo
 
