@@ -797,7 +797,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     answerRepo(cwd);
     const outcome = await checkConfig(undefined, cwd);
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "repo" }]);
   });
 
   // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
