@@ -837,8 +837,9 @@ function placeBody(place: Place): ContainerNode {
 //
 // [LAW:single-enforcer] The anchor is the one position every bar is
 // guaranteed, so what every bar carries hangs on it: the door and, beside it,
-// how the bar is redrawn (FRAME_RATE). One unit, so the two share the door's
-// band, and no preset or authored root has to remember the rate.
+// how the bar is redrawn (FRAME_RATE). One node, so no preset or authored root
+// has to remember the rate; a plain horizontal one, so the two take two places
+// of the row and differ in shade as any two cells side by side do.
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)

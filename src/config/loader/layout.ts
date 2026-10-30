@@ -220,7 +220,11 @@ const SEGMENT_NODE_SCHEMA: RecordSchema<
 const distributionSpec = (): FieldSpec<DistributionName> =>
   optionalEnumSpec(DISTRIBUTION_NAMES);
 
-const CONTAINER_SCHEMA: RecordSchema<ContainerNode> = {
+// [LAW:types-are-the-program] The AUTHORABLE container: `unit` — edit chrome's
+// mark on the one place a content cell and its affordances share — is not a
+// field here, so a config spelling it is a load error, as for a segment's
+// synthesis-only fields above.
+const CONTAINER_SCHEMA: RecordSchema<Omit<ContainerNode, "unit">> = {
   noun: "layout-node key",
   fields: {
     kind: literalSpec("container"),

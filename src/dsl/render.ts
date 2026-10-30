@@ -832,9 +832,11 @@ export function compileDslConfig(
   const compileNode = <N extends LayoutNode>(
     node: N,
     path: string,
+    at: AddressStep | undefined,
   ): Compiled<N> => {
     const cctx: NodeCompileCtx = {
       path,
+      at,
       when:
         node.when === undefined
           ? undefined
@@ -862,7 +864,7 @@ export function compileDslConfig(
     // The path travels WITH the tree, so a preset that stages the config's own
     // root diagnoses under `root` — the place its author actually wrote it.
     const { node, path } = presetRoot(config, name);
-    roots.set(name, compileNode(node, path));
+    roots.set(name, compileNode(node, path, undefined));
   }
 
   // [LAW:no-silent-failure] Parsed eagerly so a malformed rule is a load error
