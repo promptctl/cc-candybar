@@ -525,11 +525,12 @@ export function windowAt(
  * A window of three listed the way the dial lists every position of three
  * (`ladderWindow`): its lowest rung, its highest, then the one between. The
  * default distribution deals the third entry at every other cell, so in that
- * order a row walks up and down the window a rung at a time, and a rung the
- * depth widened to past the position's own tones is dealt at an end of the
- * walk, not on every other cell. A window the depth left whole is in that
- * order already, so it does not move. Over two tones the order decides no
- * walk, so a window of two keeps the order it was built in.
+ * order a row walks up and down the window a rung at a time as the depth
+ * draws it. Appended instead, a widened rung would take the third entry
+ * wherever it stands on the ladder, and a row would wear a rung past the
+ * position's own tones on half its cells. A window the depth left whole is in
+ * that order already, so it does not move. Over two tones the order decides
+ * no walk, so a window of two keeps the order it was built in.
  */
 const inWalkOrder = (window: Tones): Tones => {
   if (window.length < 3) return window;
