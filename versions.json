@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-500",
+      "ref": "refs/pull/500/merge",
+      "sha": "c83999d80217d5848a316f67519a6939ef137624",
+      "timestamp": "2026-10-30T16:15:59.442Z",
+      "commits": [
+        {
+          "sha": "c83999d80217d5848a316f67519a6939ef137624",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:15:02-06:00",
+          "message": "Merge 925c432c5470ece599e1ccb72db9e47912d1a05f into 73801c6e3b63cf23ed6af12476e50b45a0c45333\n"
+        },
+        {
+          "sha": "925c432c5470ece599e1ccb72db9e47912d1a05f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:14:54-06:00",
+          "message": "fix(test): a test that SIGKILLs a daemon waits for the viewer's close to be saved, and the shared viewer read stays strict (brandon-unfiled-3248.vfhf)\n"
+        },
+        {
+          "sha": "0b7353d57b7b3968df196e5f8995bf792c837184",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:55:19-06:00",
+          "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
+        }
+      ]
+    },
+    {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
       "sha": "b0923f686b9d6cb65842862788ec5ae2add0fceb",
@@ -71,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:53:52-06:00",
           "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-500",
-      "ref": "refs/pull/500/merge",
-      "sha": "276fc9529dc3d42ae671a8b38a8a1292a93fd5fe",
-      "timestamp": "2026-10-30T15:57:06.288Z",
-      "commits": [
-        {
-          "sha": "276fc9529dc3d42ae671a8b38a8a1292a93fd5fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:55:43Z",
-          "message": "Merge 0b7353d57b7b3968df196e5f8995bf792c837184 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
-        },
-        {
-          "sha": "0b7353d57b7b3968df196e5f8995bf792c837184",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:55:19-06:00",
-          "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
         }
       ]
     },
