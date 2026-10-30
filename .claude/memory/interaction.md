@@ -62,4 +62,4 @@ A failed click's error shows for a few seconds of reruns, and after that until a
 
 ## Copying a diagnostic
 
-A diagnostic's copy click carries the message's key, never its text, and the daemon reads the text from the session's last draw when the click runs. Every word cell of a line repeats its link, and terminals drop OSC 8 links past a couple of kilobytes, so a fix prompt carried in the link would multiply a frame's bytes and then silently stop clicking.
+A diagnostic's copy click carries the message's key and the renderer that drew it, never its text, and the daemon reads the text from the frame that renderer last delivered when the click runs. The key alone is not enough: one message keeps its key while its text changes, and the statusline and a feed can show different frames of it. The texts are held per session rather than per view, because a frame stays on screen after a reload replaces the view it was drawn from. Every word cell of a line repeats its link, and terminals drop OSC 8 links past a couple of kilobytes, so a fix prompt carried in the link would multiply a frame's bytes and then silently stop clicking.

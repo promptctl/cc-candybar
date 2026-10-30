@@ -30,7 +30,7 @@ import {
   type DisclosureNest,
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
-import type { LaneSwitches } from "../../config/lanes";
+import type { Drawing, LaneSwitches } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -242,10 +242,11 @@ export interface DaemonContext {
   readonly views: {
     readonly follow: (sessionId: string, origin: RenderOrigin) => void;
   };
-  // What the diagnostic the session's last draw listed under `key` copies;
-  // undefined when that draw lists none under it.
+  // What the diagnostic the frame renderer `by` last delivered for the
+  // session listed under `key` copies; undefined when it lists none under it.
   readonly diagnosticCopy: (
     sessionId: string,
+    by: Drawing["by"],
     key: string,
   ) => string | undefined;
 }
@@ -346,13 +347,27 @@ function pbcopy(text: string, ctx: VerbContext): void {
 
 const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
 
-// [LAW:no-silent-failure] A key the session's last draw does not list (the
-// message fixed since, or the session never drawn here) is refused, never a
-// clipboard silently left as it was.
+// [LAW:parse-dont-validate] The renderer a copy click names: the surface it
+// was drawn on, whose last frame it copies from.
+const DRAWERS: ReadonlySet<string> = new Set<Drawing["by"]>([
+  "request",
+  "feed",
+]);
+function requireDrawer(by: string): Drawing["by"] {
+  if (!DRAWERS.has(by))
+    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
+  return by as Drawing["by"];
+}
+
+// [LAW:no-silent-failure] A key the frame the click came from does not list
+// (the message fixed since, or the session never drawn here) is refused,
+// never a clipboard silently left as it was.
 const copyDiagnostic: VerbHandler = (value, ctx) => {
-  const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(value));
+  const [sessionId = "", by = "", key = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
   const sid = requireSessionId(sessionId);
-  const text = ctx.diagnosticCopy(sid, key);
+  const text = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text === undefined)
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics — open ⚠ again and copy from there`,

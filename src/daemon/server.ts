@@ -1496,7 +1496,7 @@ export async function replyTo(
     } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, at, waitFor(checked.req), facts).then(
-          ({ answer, motion, clickShown }) => {
+          ({ answer, motion, clickShown, delivered }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
@@ -1504,15 +1504,15 @@ export async function replyTo(
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
               // (src/daemon/click-error.ts).
-              delivered:
-                clickShown === null
-                  ? NOTHING_DELIVERED
-                  : () =>
-                      answeredClickError(
-                        sessionState,
-                        checked.req.sessionId,
-                        clickShown,
-                      ),
+              delivered: () => {
+                delivered();
+                if (clickShown !== null)
+                  answeredClickError(
+                    sessionState,
+                    checked.req.sessionId,
+                    clickShown,
+                  );
+              },
             };
           },
           (error: unknown) => {
@@ -1767,8 +1767,8 @@ const verbCtx = {
         origin.configFile ?? undefined,
       ),
   },
-  diagnosticCopy: (sessionId: string, key: string) =>
-    renderCache.drawnCopy(sessionId, key),
+  diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>
+    renderCache.drawnCopy(sessionId, by, key),
 };
 
 /**
@@ -1966,7 +1966,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   try {
     using setup = setUpFrame(sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, motion, evaluated, lanes } = drawRender(setup, {
+    const { drawn, motion, evaluated, delivered, lanes } = drawRender(setup, {
       by: "feed",
       fps,
     });
@@ -1985,6 +1985,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       },
       moves: motion === "moves",
       evaluated,
+      delivered,
       failure: null,
     };
   } catch (error) {
@@ -2002,6 +2003,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       statusline: failed,
       moves: false,
       evaluated: 0,
+      delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` },
     };
   }
@@ -2345,6 +2347,8 @@ function drawRender(
   motion: DrawnMotion;
   evaluated: number;
   clickShown: ClickErrorRecord | null;
+  // Records what the frame's copy clicks copy, once it reached its client.
+  delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
 } {
@@ -2442,6 +2446,7 @@ function drawRender(
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
     sessionId,
+    drawing.by,
     errors,
     [...updates, ...questions],
     [
@@ -2515,13 +2520,13 @@ function drawRender(
   );
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
-  // renderer last delivered, never text carried in the link. Recorded once
-  // the frame exists, so a draw that throws leaves the shown frame's copies.
+  // renderer last delivered, never text carried in the link. Recorded when
+  // the frame reaches its client, so a draw that throws, or an answer that
+  // never arrives, leaves the shown frame's copies.
   const keys = copyKeys(diagnostics);
-  view.drawnCopies.set(
-    drawing.by,
-    new Map(diagnostics.map((m, i) => [keys[i]!, m.copy])),
-  );
+  const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
+  const delivered = (): void =>
+    renderCache.delivered(sessionId, drawing.by, copies);
   // What this frame drew is what the session's close timer follows.
   menuIdle.observe(sessionId, at, frame.menuRows > 0, effective.menuTimeout);
   const menusSince = menuIdle.since(sessionId, at);
@@ -2643,7 +2648,7 @@ function drawRender(
       body:
         viewing === null
           ? frame.text
-          : viewerRows(diagnostics, viewing, sessionId, geometry),
+          : viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
@@ -2651,6 +2656,7 @@ function drawRender(
     motion: frame.motion,
     evaluated: frame.evaluated,
     clickShown,
+    delivered,
     lanes,
   };
 }
@@ -2714,6 +2720,8 @@ interface RequestAnswer {
   answer: string;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
+  // Records what the answer's copy clicks copy, once it reached its client.
+  delivered: () => void;
 }
 
 async function answerRequest(
@@ -2829,7 +2837,10 @@ async function drawAnswer(
     ended,
     refreshed: refreshedFact(refreshed),
   });
-  const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
+  const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+    setup,
+    ANSWERING,
+  );
   const output = composeBar(drawn);
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
@@ -2848,6 +2859,7 @@ async function drawAnswer(
     answer: toStatusline ? statusline : output,
     motion,
     clickShown,
+    delivered,
   };
 }
 

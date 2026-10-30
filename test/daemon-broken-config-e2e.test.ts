@@ -232,14 +232,14 @@ describe("a config that cannot be drawn as written", () => {
     for (const c of copies)
       expect(c).toEqual({
         verb: "copy-diagnostic",
-        args: [sid, expect.any(String)],
+        args: [sid, "request", expect.any(String)],
       });
     for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
     for (const u of copyUrls) expect(u.length).toBeLessThan(200);
     expect(shown).not.toContain("Fix my cc-candybar");
     // A key no draw lists (the message fixed since) is refused loudly.
     await expect(
-      click(sockPath, copyUrls[0]!.replace(String(copies[0]!.args[1]), "1")),
+      click(sockPath, copyUrls[0]!.replace(String(copies[0]!.args[2]), "1")),
     ).rejects.toThrow(/no longer listed/);
     await click(sockPath, viewerLink(shown, "✕")!.url);
   });

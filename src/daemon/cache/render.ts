@@ -873,6 +873,9 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { layers, config, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
+  const inserted = layers.flatMap((l) =>
+    (l.raw.insert ?? []).map((cell) => cell.seg),
+  );
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
   // state it builds, carried on it, so a reload that keeps the state keeps
   // them too.
@@ -961,12 +964,12 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain.layers.includes(chain.home) ? chain.home : null,
       // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed, so a segment only an insert entry places
-      // is used.
+      // over the trees as placed and every layer's insert entries, so a
+      // segment only an insert entry places is used, here or not.
       unused: [
         ...new Map(
           layers
-            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed))
+            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted))
             .map((u) => [`${u.kind}:${u.name}`, u] as const),
         ).values(),
       ],
@@ -1195,11 +1198,6 @@ export interface SessionView<
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
-  // What each diagnostic the view's renderers last delivered copies, by the
-  // key its copy click names (src/render/diagnostics.ts), one map per
-  // renderer: a request and a feed frame list different messages, and a
-  // click may come from either surface. No link carries the text it copies.
-  readonly drawnCopies: Map<Drawing["by"], ReadonlyMap<string, string>>;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.
@@ -1430,7 +1428,6 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
-    drawnCopies: new Map<Drawing["by"], ReadonlyMap<string, string>>(),
     retire: stopChanged,
     dispose: () => {
       stop();
@@ -1468,6 +1465,17 @@ export class RenderCache<
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<string, SessionView<S, F>>();
+  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
+  // delivered copies, by the key its copy click names (src/render/
+  // diagnostics.ts), one map per renderer, since a request and a feed frame
+  // list different messages and a click names the surface it came from. Held
+  // by session, not by view, because a frame on screen outlives the view it
+  // was drawn from (a reload's successor); dropped when the session has no
+  // view. No link carries the text it copies.
+  private readonly copies = new Map<
+    string,
+    Map<Drawing["by"], ReadonlyMap<string, string>>
+  >();
   // Every view the cache serves or served, until reclaimed.
   private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -1840,6 +1848,9 @@ export class RenderCache<
   private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
+    // A session left with no view is closed, and its frames with it; a
+    // successor opened first keeps what is on screen copyable.
+    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -2210,25 +2221,33 @@ export class RenderCache<
     return [...this.views.values()].at(-1) ?? null;
   }
 
-  // What the diagnostic the session's view last delivered under `key`
-  // copies, from whichever renderer drew it; undefined while it has no view
-  // or no renderer's last frame listed it. Reads,
-  // never opens, like latestView.
-  drawnCopy(sessionId: string, key: string): string | undefined {
-    const drawn = this.views.get(sessionId)?.drawnCopies.values() ?? [];
-    // A key names a message's identity, so every renderer that lists it
-    // copies the same message.
-    for (const copies of drawn) {
-      const copy = copies.get(key);
-      if (copy !== undefined) return copy;
-    }
-    return undefined;
+  // The renderer `by` delivered a frame of the session's bar listing
+  // `copies`. A session with no view is closed: nothing it delivers is kept.
+  delivered(
+    sessionId: string,
+    by: Drawing["by"],
+    copies: ReadonlyMap<string, string>,
+  ): void {
+    if (!this.views.has(sessionId)) return;
+    const drawn = this.copies.get(sessionId) ?? new Map();
+    this.copies.set(sessionId, drawn.set(by, copies));
+  }
+
+  // What the diagnostic under `key` copies in the frame renderer `by` last
+  // delivered for the session; undefined while that renderer's last frame
+  // did not list it. Reads, never opens, like latestView.
+  drawnCopy(
+    sessionId: string,
+    by: Drawing["by"],
+    key: string,
+  ): string | undefined {
+    return this.copies.get(sessionId)?.get(by)?.get(key);
   }
 
   // The renderer no longer draws the session's bar (its feed closed): what
-  // its last frame listed is on no surface now, so a click naming only it is
+  // its last frame listed is on no surface now, so a click naming it is
   // refused rather than copying a list gone stale.
   stopDrawing(sessionId: string, by: Drawing["by"]): void {
-    this.views.get(sessionId)?.drawnCopies.delete(by);
+    this.copies.get(sessionId)?.delete(by);
   }
 }

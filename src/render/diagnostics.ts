@@ -21,6 +21,7 @@ import {
   VERB_SET_STATE,
 } from "../click/wire.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
+import type { Drawing } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
@@ -112,6 +113,10 @@ export interface DiagnosticMessage {
   readonly lines: readonly [DiagnosticLine, ...DiagnosticLine[]];
 }
 
+// What a line drawn in a message's colours reads: its severity and its lines.
+// The handoff line is one, never listed, so it copies nothing by key.
+export type ChannelMessage = Pick<DiagnosticMessage, "severity" | "lines">;
+
 // [LAW:types-are-the-program] Every message one draw owes its reader, in the
 // order the viewer pages them. Empty is "nothing to show".
 export type DiagnosticList = readonly DiagnosticMessage[];
@@ -130,6 +135,9 @@ export interface SourcedText {
 // message, decided here.
 export function collectDiagnostics(
   sessionId: string,
+  // The renderer drawing the list: a copy click names it, so the daemon
+  // reads the list that surface shows.
+  by: Drawing["by"],
   errors: readonly SourcedText[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly SourcedText[],
@@ -156,7 +164,12 @@ export function collectDiagnostics(
       ? {
           ...m,
           lines: [
-            [diagnosticSpan(m.lines[0][0].text, copyLink(sessionId, keys[i]!))],
+            [
+              diagnosticSpan(
+                m.lines[0][0].text,
+                copyLink(sessionId, by, keys[i]!),
+              ),
+            ],
             ...m.lines.slice(1),
           ],
         }
@@ -188,10 +201,12 @@ export function copyKeys(list: DiagnosticList): readonly string[] {
 }
 
 // [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
-// first line alike: the daemon reads what it copies from the session's last
-// draw when the click runs.
-function copyLink(sessionId: string, key: string): string {
-  return effectsUrl([{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, key] }]);
+// first line alike: the daemon reads what it copies from the frame renderer
+// `by` last delivered for the session when the click runs.
+function copyLink(sessionId: string, by: Drawing["by"], key: string): string {
+  return effectsUrl([
+    { verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, by, key] },
+  ]);
 }
 
 // The level the list counts as: the worst of its members, none when empty.
@@ -333,6 +348,7 @@ export function viewerRows(
   list: DiagnosticList,
   at: ViewerPosition,
   sessionId: string,
+  by: Drawing["by"],
   geometry: DiagnosticGeometry,
 ): string {
   const { index } = at;
@@ -377,7 +393,10 @@ export function viewerRows(
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
-        button("⧉ copy", copyLink(sessionId, viewerKey(list, index - 1, 0))),
+        button(
+          "⧉ copy",
+          copyLink(sessionId, by, viewerKey(list, index - 1, 0)),
+        ),
       ],
       opts,
     );
@@ -432,7 +451,7 @@ export function messageRows(
 // projection, the same colours, its click opening the same viewer, which the
 // statusline then draws in the handoff line's place.
 export function handoffRows(
-  handoff: DiagnosticMessage,
+  handoff: ChannelMessage,
   list: DiagnosticList,
   sessionId: string,
   geometry: DiagnosticGeometry,
@@ -489,7 +508,7 @@ const ISSUE_INDENT = " ";
 // the width — a long path breaks across rows rather than past the edge. Whole
 // words stay whole.
 function channelRows(
-  message: DiagnosticMessage,
+  message: ChannelMessage,
   opts: BuildLineOptions,
   trailing: readonly RichText[],
 ): string[] {

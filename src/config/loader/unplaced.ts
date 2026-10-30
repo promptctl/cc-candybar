@@ -93,21 +93,24 @@ export function absentPlacement(
       if (node.kind === "segment") add(placementId(node), { seg: node.name });
   for (const cell of cells)
     add(cell.id ?? cell.seg, { seg: cell.seg, anchor: cell.anchor });
-  // `seen` closes an anchor cycle, which places nothing and so stands on
-  // nothing absent: its cells stay and are reported missing.
-  const absent = (id: string, seen: ReadonlySet<string>): boolean => {
-    const at = placed.get(id) ?? [];
-    const on = new Set(seen).add(id);
-    return (
-      at.length > 0 &&
-      at.every(
-        (p) =>
-          presence(p.seg).kind === "absent" ||
-          (p.anchor !== undefined && !on.has(p.anchor) && absent(p.anchor, on)),
-      )
-    );
-  };
-  return (id) => absent(id, new Set());
+  // [LAW:dataflow-not-control-flow] The least fixpoint over every id, grown
+  // until a pass adds none: each pass is linear in the placements, however
+  // deep the anchor chains or however often an id is placed. A cycle of
+  // anchors places nothing and so never enters the set: its cells stay and
+  // are reported missing.
+  const absent = new Set<string>();
+  const standsOnAbsent = (at: { seg: string; anchor?: string }): boolean =>
+    presence(at.seg).kind === "absent" ||
+    (at.anchor !== undefined && absent.has(at.anchor));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id, at] of placed)
+      if (!absent.has(id) && at.every(standsOnAbsent)) {
+        absent.add(id);
+        grew = true;
+      }
+  }
+  return (id) => absent.has(id);
 }
 
 // `config` with every placement of an undeclared segment removed from its

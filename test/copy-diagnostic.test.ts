@@ -31,6 +31,7 @@ const PROMPT = `Fix my config.\n\n${"a placement that names nothing; ".repeat(20
 const drawn = () => {
   const list = collectDiagnostics(
     SID,
+    "request",
     [{ about: "dropped\0/x.json5", text: "first line\nsecond", copy: PROMPT }],
     [],
     [],
@@ -51,7 +52,8 @@ test("the first line's click copies the full prompt, though its link carries onl
   expect(link).not.toContain("placement");
   clickUrl(link, {
     ...testVerbContext(new SessionState()),
-    diagnosticCopy: (sid, key) => (sid === SID ? copies.get(key) : undefined),
+    diagnosticCopy: (sid, by, key) =>
+      sid === SID && by === "request" ? copies.get(key) : undefined,
   });
   expect(launched).toHaveLength(1);
   expect(launched[0]!.bin).toBe("/usr/bin/pbcopy");
