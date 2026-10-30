@@ -411,14 +411,16 @@ export interface DecorEntry {
 
 /**
  * The decorations a closed cell can wear under `decor` in `palette` at
- * `drawnAt` — what a theme's preview samples: each of its roles at every tone
+ * `drawnAt` — what a theme's preview samples: each of its roles at the tones
  * of that role's window there (`windowAt`), in the window's order, dealt
  * across as many places as the dial position names tones. The count is the
  * dial's at every depth, so a frame keeps its shape at every depth, while
  * the colours are the ones the depth deals; and a window of two or more
  * tones never puts one colour on two places side by side. The roles sit side
  * by side, so where one's places end and the next's begin they meet as a
- * row that turns hue does (`turnsHeld`).
+ * row that turns hue does (`turnsHeld`): a place there can wear another tone
+ * or a rung past its window in place of the tone it was dealt, and where the
+ * role has no other place in that tone, the sample does not show it.
  */
 export const vocabularyOf = (
   palette: Palette,
@@ -946,7 +948,11 @@ const DISTRIBUTION_NAME = new Map<Distribution, DistributionName>(
  * draws the seam. The line is read from its first place to its last, so a
  * cell with a turn on each side (one cell between two keystones) is decided
  * against the cell before it as that one finally stands, and every seam
- * behind the place being read stays held.
+ * behind the place being read stays held. That reading is why the cell after
+ * the turn moves first: it is the one not yet read, so no cell already read
+ * changes unless the cell after has nothing to give. A keystone ending a
+ * line is therefore the cell that moves, and one starting a line keeps its
+ * shade.
  *
  * Alike means drawn as one colour, by identity after rounding, as the window
  * decides it; nothing measures a distance between two colours. A cell keeps

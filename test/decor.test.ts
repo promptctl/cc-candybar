@@ -588,7 +588,17 @@ describe("where a row turns hue", () => {
       for (const drawnAt of DRAWN) {
         const shown = shownAt(drawnAt);
         for (const palette of REGISTRY) {
-          const drawn = (entry: DecorEntry): string => shown(decorEntryColour(palette, entry)).hex;
+          // How each entry is drawn, rounded once per palette and depth, since
+          // the walk below reads it for every pair of every line.
+          const drawnOf = new Map<string, string>();
+          const drawn = (entry: DecorEntry): string => {
+            const key = `${entry.hue} ${entry.shade}`;
+            const known = drawnOf.get(key);
+            if (known !== undefined) return known;
+            const hex = shown(decorEntryColour(palette, entry)).hex;
+            drawnOf.set(key, hex);
+            return hex;
+          };
           const ladder = (hue: DecorHue): string[] => LADDER.map((rung) => drawn({ hue, shade: rung }));
           for (const shade of SHADE_NAMES) {
             const decor: Decor = { variation, shade: SHADES[shade] };
