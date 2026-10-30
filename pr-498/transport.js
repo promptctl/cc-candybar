@@ -4452,7 +4452,7 @@ var require_lib = __commonJS({
     var NODOT = "(?!\\.)";
     var STAR = "[^/]*";
     var GLOBSTAR_NODOT = "[^/]*(?:/(?!\\.)[^/]*)*";
-    var literal = (pattern, i, code) => {
+    var literal = (pattern2, i, code) => {
       switch (code) {
         case 36:
         case 42:
@@ -4468,9 +4468,9 @@ var require_lib = __commonJS({
         case 123:
         case 124:
         case 125:
-          return "\\" + pattern[i];
+          return "\\" + pattern2[i];
         default:
-          return pattern[i];
+          return pattern2[i];
       }
     };
     var posixClass = (name) => {
@@ -4506,44 +4506,44 @@ var require_lib = __commonJS({
       }
       return;
     };
-    var classEnd = (pattern, i) => {
-      const length = pattern.length;
+    var classEnd = (pattern2, i) => {
+      const length = pattern2.length;
       let j = i + 1;
-      const first2 = pattern.charCodeAt(j);
+      const first2 = pattern2.charCodeAt(j);
       if (first2 === 33 || first2 === 94)
         j++;
-      if (pattern.charCodeAt(j) === 93)
+      if (pattern2.charCodeAt(j) === 93)
         j++;
       for (; j < length; j++) {
-        const code = pattern.charCodeAt(j);
+        const code = pattern2.charCodeAt(j);
         if (code === 93)
           return j + 1;
-        if (code === 91 && pattern.charCodeAt(j + 1) === 58) {
-          const close2 = pattern.indexOf(":]", j + 2);
+        if (code === 91 && pattern2.charCodeAt(j + 1) === 58) {
+          const close2 = pattern2.indexOf(":]", j + 2);
           if (close2 > 0)
             j = close2 + 1;
         }
       }
       return -1;
     };
-    var member = (pattern, i) => {
-      const code = pattern.charCodeAt(i);
+    var member = (pattern2, i) => {
+      const code = pattern2.charCodeAt(i);
       const special = code === 93 || code === 92 || code === 91 || code === 94 || code === 45;
-      return (special ? "\\" : "") + pattern[i];
+      return (special ? "\\" : "") + pattern2[i];
     };
-    var classSource = (pattern, i, end) => {
+    var classSource = (pattern2, i, end) => {
       const last2 = end - 1;
       let j = i + 1;
       let out = "";
       let members = 0;
-      const first2 = pattern.charCodeAt(j);
+      const first2 = pattern2.charCodeAt(j);
       const negate = first2 === 33 || first2 === 94;
       if (negate)
         j++;
       while (j < last2) {
-        if (pattern.charCodeAt(j) === 91 && pattern.charCodeAt(j + 1) === 58) {
-          const close2 = pattern.indexOf(":]", j + 2);
-          const cls = close2 > 0 ? posixClass(pattern.slice(j + 2, close2)) : void 0;
+        if (pattern2.charCodeAt(j) === 91 && pattern2.charCodeAt(j + 1) === 58) {
+          const close2 = pattern2.indexOf(":]", j + 2);
+          const cls = close2 > 0 ? posixClass(pattern2.slice(j + 2, close2)) : void 0;
           if (cls !== void 0) {
             out += cls;
             members += 2;
@@ -4551,31 +4551,31 @@ var require_lib = __commonJS({
             continue;
           }
         }
-        if (pattern.charCodeAt(j + 1) === 45 && j + 2 < last2) {
-          if (pattern.charCodeAt(j + 2) >= pattern.charCodeAt(j)) {
-            out += member(pattern, j) + "-" + member(pattern, j + 2);
+        if (pattern2.charCodeAt(j + 1) === 45 && j + 2 < last2) {
+          if (pattern2.charCodeAt(j + 2) >= pattern2.charCodeAt(j)) {
+            out += member(pattern2, j) + "-" + member(pattern2, j + 2);
             members += 2;
           }
           j += 3;
           continue;
         }
-        out += member(pattern, j);
+        out += member(pattern2, j);
         members++;
         j++;
       }
       if (!negate && members === 1)
-        return literal(pattern, last2 - 1, pattern.charCodeAt(last2 - 1));
+        return literal(pattern2, last2 - 1, pattern2.charCodeAt(last2 - 1));
       if (!members)
         return negate ? "[^/]" : "[]";
       return (negate ? "[^" : "[") + out + "]";
     };
-    var groupEnd = (pattern, i) => {
-      const length = pattern.length;
+    var groupEnd = (pattern2, i) => {
+      const length = pattern2.length;
       let depth = 1;
       for (; i < length; i++) {
-        const code = pattern.charCodeAt(i);
+        const code = pattern2.charCodeAt(i);
         if (code === 91) {
-          const end = classEnd(pattern, i);
+          const end = classEnd(pattern2, i);
           if (end > 0)
             i = end - 1;
         } else if (code === 40)
@@ -4634,18 +4634,18 @@ var require_lib = __commonJS({
       const once2 = "(?:" + body + ")(?:" + more + ")*";
       return type3 === 42 ? "(?:" + once2 + ")?" : once2;
     };
-    var compile = (pattern, extglob, nodot, tail, segStart) => {
-      const length = pattern.length;
+    var compile = (pattern2, extglob, nodot, tail, segStart) => {
+      const length = pattern2.length;
       let out = "";
       let i = 0;
       let start = segStart;
       while (i < length) {
-        const code = pattern.charCodeAt(i);
-        if (extglob && pattern.charCodeAt(i + 1) === 40 && isExtglobPrefix(code)) {
-          const end = groupEnd(pattern, i + 2);
+        const code = pattern2.charCodeAt(i);
+        if (extglob && pattern2.charCodeAt(i + 1) === 40 && isExtglobPrefix(code)) {
+          const end = groupEnd(pattern2, i + 2);
           if (end > 0) {
-            const after = compile(pattern.slice(end), extglob, nodot, tail, false);
-            const alts = splitAlts(pattern.slice(i + 2, end - 1));
+            const after = compile(pattern2.slice(end), extglob, nodot, tail, false);
+            const alts = splitAlts(pattern2.slice(i + 2, end - 1));
             return out + extglobSource(code, alts, extglob, nodot, after + tail, start) + after;
           }
         }
@@ -4655,26 +4655,26 @@ var require_lib = __commonJS({
         switch (code) {
           case 42: {
             let j = i + 1;
-            while (pattern.charCodeAt(j) === 42)
+            while (pattern2.charCodeAt(j) === 42)
               j++;
             if (j === i + 1) {
-              const whole = atStart && (j === length || pattern.charCodeAt(j) === 47);
+              const whole = atStart && (j === length || pattern2.charCodeAt(j) === 47);
               out += guard2 + (whole ? "[^/]+" : STAR);
               i = j;
               break;
             }
-            let slash2 = pattern.charCodeAt(j) === 47;
+            let slash2 = pattern2.charCodeAt(j) === 47;
             while (slash2) {
               let k = j + 1;
-              if (pattern.charCodeAt(k) !== 42 || pattern.charCodeAt(k + 1) !== 42)
+              if (pattern2.charCodeAt(k) !== 42 || pattern2.charCodeAt(k + 1) !== 42)
                 break;
               k += 2;
-              while (pattern.charCodeAt(k) === 42)
+              while (pattern2.charCodeAt(k) === 42)
                 k++;
               if (k === length) {
                 j = k;
                 slash2 = false;
-              } else if (pattern.charCodeAt(k) === 47)
+              } else if (pattern2.charCodeAt(k) === 47)
                 j = k;
               else
                 break;
@@ -4693,13 +4693,13 @@ var require_lib = __commonJS({
             i++;
             break;
           case 91: {
-            const end = classEnd(pattern, i);
+            const end = classEnd(pattern2, i);
             if (end < 0) {
               out += "\\[";
               i++;
               break;
             }
-            const cls = classSource(pattern, i, end);
+            const cls = classSource(pattern2, i, end);
             out += (cls.charCodeAt(0) === 91 ? guard2 : "") + cls;
             i = end;
             break;
@@ -4710,17 +4710,17 @@ var require_lib = __commonJS({
             start = true;
             break;
           default:
-            out += literal(pattern, i, code);
+            out += literal(pattern2, i, code);
             i++;
         }
       }
       return out;
     };
-    var closingBrace = (pattern, open2) => {
-      const length = pattern.length;
+    var closingBrace = (pattern2, open2) => {
+      const length = pattern2.length;
       let depth = 0;
       for (let i = open2; i < length; i++) {
-        const code = pattern.charCodeAt(i);
+        const code = pattern2.charCodeAt(i);
         if (code === 123)
           depth++;
         else if (code === 125 && !--depth)
@@ -4782,17 +4782,17 @@ var require_lib = __commonJS({
       }
       return out;
     };
-    var expandInto = (pattern, out, max2) => {
-      for (let open2 = pattern.indexOf("{"); open2 >= 0; open2 = pattern.indexOf("{", open2 + 1)) {
-        const close2 = closingBrace(pattern, open2);
+    var expandInto = (pattern2, out, max2) => {
+      for (let open2 = pattern2.indexOf("{"); open2 >= 0; open2 = pattern2.indexOf("{", open2 + 1)) {
+        const close2 = closingBrace(pattern2, open2);
         if (close2 < 0)
           continue;
-        const body = pattern.slice(open2 + 1, close2);
+        const body = pattern2.slice(open2 + 1, close2);
         const alts = commaSplit(body) || rangeOf3(body, max2);
         if (!alts)
           continue;
-        const prefix = pattern.slice(0, open2);
-        const suffixes = (0, exports.expandBraces)(pattern.slice(close2 + 1), max2);
+        const prefix = pattern2.slice(0, open2);
+        const suffixes = (0, exports.expandBraces)(pattern2.slice(close2 + 1), max2);
         for (let i = 0; i < alts.length; i++) {
           const heads = (0, exports.expandBraces)(alts[i], max2);
           for (let j = 0; j < heads.length; j++) {
@@ -4806,22 +4806,22 @@ var require_lib = __commonJS({
         }
         return;
       }
-      out.push(pattern);
+      out.push(pattern2);
     };
-    var expandBraces = (pattern, max2 = 1e5) => {
+    var expandBraces = (pattern2, max2 = 1e5) => {
       const out = [];
-      expandInto(pattern, out, max2);
+      expandInto(pattern2, out, max2);
       return out;
     };
     exports.expandBraces = expandBraces;
-    var toRegex = (pattern, options) => {
+    var toRegex = (pattern2, options) => {
       const extglob = !!options?.extglob;
       const nodot = options?.dot === false;
       let source;
-      if (pattern.indexOf("{") < 0)
-        source = compile(pattern, extglob, nodot, "", true);
+      if (pattern2.indexOf("{") < 0)
+        source = compile(pattern2, extglob, nodot, "", true);
       else {
-        const set2 = (0, exports.expandBraces)(pattern);
+        const set2 = (0, exports.expandBraces)(pattern2);
         const length = set2.length;
         if (length === 1)
           source = compile(set2[0], extglob, nodot, "", true);
@@ -4844,9 +4844,9 @@ var require_lib = __commonJS({
     };
     exports.toRegex = toRegex;
     var isRegExp = /^\/(.{1,4096})\/([gimsuy]{0,6})$/;
-    var toMatcher = (pattern, options) => {
+    var toMatcher = (pattern2, options) => {
       const regexes = [];
-      const patterns = Array.isArray(pattern) ? pattern : [pattern];
+      const patterns = Array.isArray(pattern2) ? pattern2 : [pattern2];
       for (const pat of patterns) {
         if (typeof pat === "string") {
           const match = isRegExp.exec(pat);
@@ -4874,16 +4874,16 @@ var require_watchIgnore = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.watchIgnoreToMatcher = exports.watchIgnorePatternToMatcher = void 0;
     var glob_to_regex_js_1 = require_lib();
-    var watchIgnorePatternToMatcher = (pattern) => {
-      if (typeof pattern === "function")
-        return pattern;
-      if (pattern instanceof RegExp)
-        return (filename) => pattern.test(filename);
-      if (typeof pattern === "string") {
-        const regex = (0, glob_to_regex_js_1.toRegex)(pattern);
+    var watchIgnorePatternToMatcher = (pattern2) => {
+      if (typeof pattern2 === "function")
+        return pattern2;
+      if (pattern2 instanceof RegExp)
+        return (filename) => pattern2.test(filename);
+      if (typeof pattern2 === "string") {
+        const regex = (0, glob_to_regex_js_1.toRegex)(pattern2);
         return (filename) => regex.test(filename);
       }
-      throw new TypeError(`The "options.ignore" property must be of type string, RegExp, function, or an array thereof. Received ${typeof pattern}`);
+      throw new TypeError(`The "options.ignore" property must be of type string, RegExp, function, or an array thereof. Received ${typeof pattern2}`);
     };
     exports.watchIgnorePatternToMatcher = watchIgnorePatternToMatcher;
     var watchIgnoreToMatcher = (ignore) => {
@@ -7678,8 +7678,8 @@ var require_glob = __commonJS({
       }
       return globParts.filter((parts) => parts.length);
     };
-    var compile = (pattern) => {
-      const source = pattern.replace(/\\/g, "/");
+    var compile = (pattern2) => {
+      const source = pattern2.replace(/\\/g, "/");
       if (!source)
         return [[], []];
       const globSet = [...new Set((0, glob_to_regex_js_1.expandBraces)(source))];
@@ -7821,19 +7821,19 @@ var require_glob = __commonJS({
       addToStatCache(path41, value) {
         this.stats.set(path41, value);
       }
-      add(path41, pattern) {
+      add(path41, pattern2) {
         let keys2 = this.seenKeys.get(path41);
         if (!keys2) {
           keys2 = /* @__PURE__ */ new Set();
           this.seenKeys.set(path41, keys2);
         }
         const originalSize = keys2.size;
-        for (const index of pattern.indexes)
-          keys2.add(pattern.cacheKey(index));
-        return keys2.size !== originalSize + pattern.indexes.size;
+        for (const index of pattern2.indexes)
+          keys2.add(pattern2.cacheKey(index));
+        return keys2.size !== originalSize + pattern2.indexes.size;
       }
-      seen(path41, pattern, index) {
-        return !!this.seenKeys.get(path41)?.has(pattern.cacheKey(index));
+      seen(path41, pattern2, index) {
+        return !!this.seenKeys.get(path41)?.has(pattern2.cacheKey(index));
       }
     };
     var depthOf = (root, fullpath) => {
@@ -7848,7 +7848,7 @@ var require_glob = __commonJS({
     };
     var EMPTY_OPTIONS = {};
     var Glob = class {
-      constructor(fs3, pattern, options = EMPTY_OPTIONS) {
+      constructor(fs3, pattern2, options = EMPTY_OPTIONS) {
         this.fs = fs3;
         this.followSymlinks = false;
         this.isExcluded = () => false;
@@ -7875,12 +7875,12 @@ var require_glob = __commonJS({
             this.exclude = exclude;
         }
         let patterns;
-        if (typeof pattern === "object") {
-          (0, validators_1.validateStringArray)(pattern, "patterns");
-          patterns = pattern;
+        if (typeof pattern2 === "object") {
+          (0, validators_1.validateStringArray)(pattern2, "patterns");
+          patterns = pattern2;
         } else {
-          (0, validators_1.validateString)(pattern, "patterns");
-          patterns = [pattern];
+          (0, validators_1.validateString)(pattern2, "patterns");
+          patterns = [pattern2];
         }
         const compiled = [];
         for (let i = 0; i < patterns.length; i++) {
@@ -7908,32 +7908,32 @@ var require_glob = __commonJS({
         const stat3 = this.cache.statSync(full);
         return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
       }
-      isDirectory(path41, stat3, pattern) {
+      isDirectory(path41, stat3, pattern2) {
         if (stat3?.isDirectory())
           return true;
         if (!stat3?.isSymbolicLink())
           return false;
         if (this.followSymlinks)
           return !!this.cache.followStatSync(path41)?.isDirectory();
-        return pattern.hasSeenSymlinks;
+        return pattern2.hasSeenSymlinks;
       }
-      nextRealpaths(path41, isDirectory, pattern) {
+      nextRealpaths(path41, isDirectory, pattern2) {
         if (!this.followSymlinks || !isDirectory)
-          return pattern.realpaths;
+          return pattern2.realpaths;
         const real = this.cache.realpathSync(path41);
         if (real === null)
-          return pattern.realpaths;
-        const realpaths = new Set(pattern.realpaths);
+          return pattern2.realpaths;
+        const realpaths = new Set(pattern2.realpaths);
         realpaths.add(real);
         return realpaths;
       }
-      isCyclic(path41, isDirectory, pattern) {
+      isCyclic(path41, isDirectory, pattern2) {
         if (!this.followSymlinks || !isDirectory)
           return false;
         const real = this.cache.realpathSync(path41);
-        return real !== null && pattern.realpaths.has(real);
+        return real !== null && pattern2.realpaths.has(real);
       }
-      addSubpattern(path41, pattern) {
+      addSubpattern(path41, pattern2) {
         if (this.isExcluded(path41))
           return;
         const fullpath = resolve(this.root, path41);
@@ -7950,9 +7950,9 @@ var require_glob = __commonJS({
         }
         const existing = this.subpatterns.get(path41);
         if (existing)
-          existing.push(pattern);
+          existing.push(pattern2);
         else
-          this.subpatterns.set(path41, [pattern]);
+          this.subpatterns.set(path41, [pattern2]);
       }
       accept(path41) {
         if (this.results.has(path41))
@@ -7962,49 +7962,49 @@ var require_glob = __commonJS({
         this.results.add(path41);
         return true;
       }
-      *walkPattern(path41, pattern) {
-        if (this.cache.add(path41, pattern))
+      *walkPattern(path41, pattern2) {
+        if (this.cache.add(path41, pattern2))
           return;
         const cache2 = this.cache;
         const fullpath = resolve(this.root, path41);
         const stat3 = cache2.statSync(fullpath);
-        const last2 = pattern.last;
-        const isDirectory = this.isDirectory(fullpath, stat3, pattern);
-        const isLast = pattern.isLast(isDirectory);
-        const isFirst = pattern.isFirst();
+        const last2 = pattern2.last;
+        const isDirectory = this.isDirectory(fullpath, stat3, pattern2);
+        const isLast = pattern2.isLast(isDirectory);
+        const isFirst = pattern2.isFirst();
         if (this.isExcluded(fullpath))
           return;
-        if (isFirst && pattern.at(0) === "") {
-          this.addSubpattern("/", pattern.child(/* @__PURE__ */ new Set([1])));
+        if (isFirst && pattern2.at(0) === "") {
+          this.addSubpattern("/", pattern2.child(/* @__PURE__ */ new Set([1])));
           return;
         }
-        if (isFirst && pattern.at(0) === "..") {
-          this.addSubpattern("../", pattern.child(/* @__PURE__ */ new Set([1])));
+        if (isFirst && pattern2.at(0) === "..") {
+          this.addSubpattern("../", pattern2.child(/* @__PURE__ */ new Set([1])));
           return;
         }
-        if (isFirst && pattern.at(0) === ".") {
-          this.addSubpattern(".", pattern.child(/* @__PURE__ */ new Set([1])));
+        if (isFirst && pattern2.at(0) === ".") {
+          this.addSubpattern(".", pattern2.child(/* @__PURE__ */ new Set([1])));
           return;
         }
-        if (isLast && typeof pattern.at(-1) === "string") {
-          const p2 = pattern.at(-1);
+        if (isLast && typeof pattern2.at(-1) === "string") {
+          const p2 = pattern2.at(-1);
           const leaf = cache2.statSync(join4(fullpath, p2));
           const match = join4(path41, p2);
           if (leaf && (p2 || isDirectory) && this.accept(match))
             yield this.result(match);
-          if (pattern.indexes.size === 1 && pattern.indexes.has(last2))
+          if (pattern2.indexes.size === 1 && pattern2.indexes.has(last2))
             return;
-        } else if (isLast && pattern.at(-1) === GLOBSTAR && (path41 !== "." || pattern.at(0) === "." || !last2 && stat3)) {
+        } else if (isLast && pattern2.at(-1) === GLOBSTAR && (path41 !== "." || pattern2.at(0) === "." || !last2 && stat3)) {
           if (this.accept(path41))
             yield this.result(path41);
         }
-        if (!isDirectory || this.isCyclic(fullpath, isDirectory, pattern))
+        if (!isDirectory || this.isCyclic(fullpath, isDirectory, pattern2))
           return;
         if (this.maxdepth !== Infinity && depthOf(this.root, fullpath) > this.maxdepth)
           return;
-        const nextRealpaths = this.nextRealpaths(fullpath, isDirectory, pattern);
+        const nextRealpaths = this.nextRealpaths(fullpath, isDirectory, pattern2);
         let children2;
-        const firstPattern = pattern.indexes.size === 1 && pattern.at(pattern.indexes.values().next().value);
+        const firstPattern = pattern2.indexes.size === 1 && pattern2.at(pattern2.indexes.values().next().value);
         if (typeof firstPattern === "string") {
           const child = cache2.statSync(join4(fullpath, firstPattern));
           if (!child)
@@ -8022,20 +8022,20 @@ var require_glob = __commonJS({
           const entryIsDirectory = entry.isDirectory() || this.followSymlinks && entry.isSymbolicLink() && !!cache2.followStatSync(entryFullpath)?.isDirectory();
           const subPatterns = /* @__PURE__ */ new Set();
           const nSymlinks = /* @__PURE__ */ new Set();
-          for (const index of pattern.indexes) {
-            if (cache2.seen(entryPath, pattern, index) || cache2.seen(entryPath, pattern, index + 1))
+          for (const index of pattern2.indexes) {
+            if (cache2.seen(entryPath, pattern2, index) || cache2.seen(entryPath, pattern2, index + 1))
               return;
-            const current = pattern.at(index);
+            const current = pattern2.at(index);
             const nextIndex = index + 1;
-            const next2 = pattern.at(nextIndex);
-            const fromSymlink = !this.followSymlinks && pattern.symlinks.has(index);
+            const next2 = pattern2.at(nextIndex);
+            const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
             if (current === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
-              const nextMatches = pattern.test(nextIndex, name);
+              const nextMatches = pattern2.test(nextIndex, name);
               let nextNonGlobIndex = nextIndex;
-              while (pattern.at(nextNonGlobIndex) === GLOBSTAR)
+              while (pattern2.at(nextNonGlobIndex) === GLOBSTAR)
                 nextNonGlobIndex++;
-              const matchesDot = isDot && pattern.test(nextNonGlobIndex, name);
+              const matchesDot = isDot && pattern2.test(nextNonGlobIndex, name);
               if (isDot && !matchesDot || this.exclude && this.exclude(this.withFileTypes ? entry : name))
                 continue;
               if (!fromSymlink && entryIsDirectory)
@@ -8047,25 +8047,25 @@ var require_glob = __commonJS({
                   yield this.result(entryPath);
               } else if (nextMatches && entryIsDirectory)
                 subPatterns.add(index + 2);
-              if ((nextMatches || pattern.at(0) === ".") && (entryIsDirectory || entry.isSymbolicLink()) && !fromSymlink)
+              if ((nextMatches || pattern2.at(0) === ".") && (entryIsDirectory || entry.isSymbolicLink()) && !fromSymlink)
                 subPatterns.add(nextIndex);
               if (!this.followSymlinks && entry.isSymbolicLink())
                 nSymlinks.add(index);
               if (next2 === ".." && entryIsDirectory) {
                 const parent = join4(path41, "..");
                 if (nextIndex < last2) {
-                  if (!this.subpatterns.has(path41) && !cache2.seen(path41, pattern, nextIndex + 1))
-                    this.subpatterns.set(path41, [pattern.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
-                  if (!this.subpatterns.has(parent) && !cache2.seen(parent, pattern, nextIndex + 1))
-                    this.subpatterns.set(parent, [pattern.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
+                  if (!this.subpatterns.has(path41) && !cache2.seen(path41, pattern2, nextIndex + 1))
+                    this.subpatterns.set(path41, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
+                  if (!this.subpatterns.has(parent) && !cache2.seen(parent, pattern2, nextIndex + 1))
+                    this.subpatterns.set(parent, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
                 } else {
-                  if (!cache2.seen(path41, pattern, nextIndex)) {
-                    cache2.add(path41, pattern.child(/* @__PURE__ */ new Set([nextIndex])));
+                  if (!cache2.seen(path41, pattern2, nextIndex)) {
+                    cache2.add(path41, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
                     if (this.accept(path41))
                       yield this.result(path41);
                   }
-                  if (!cache2.seen(path41, pattern, nextIndex) || !cache2.seen(parent, pattern, nextIndex)) {
-                    cache2.add(parent, pattern.child(/* @__PURE__ */ new Set([nextIndex])));
+                  if (!cache2.seen(path41, pattern2, nextIndex) || !cache2.seen(parent, pattern2, nextIndex)) {
+                    cache2.add(parent, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
                     if (this.accept(parent))
                       yield this.result(parent);
                   }
@@ -8073,9 +8073,9 @@ var require_glob = __commonJS({
               }
             }
             if (typeof current === "string") {
-              if (pattern.test(index, name) && index !== last2)
+              if (pattern2.test(index, name) && index !== last2)
                 subPatterns.add(nextIndex);
-              else if (current === "." && pattern.test(nextIndex, name)) {
+              else if (current === "." && pattern2.test(nextIndex, name)) {
                 if (nextIndex === last2) {
                   if (this.accept(entryPath))
                     yield this.result(entryPath);
@@ -8083,7 +8083,7 @@ var require_glob = __commonJS({
                   subPatterns.add(nextIndex + 1);
               }
             }
-            if (typeof current === "object" && pattern.test(index, name)) {
+            if (typeof current === "object" && pattern2.test(index, name)) {
               if (index === last2) {
                 if (this.accept(entryPath))
                   yield this.result(entryPath);
@@ -8092,21 +8092,21 @@ var require_glob = __commonJS({
             }
           }
           if (subPatterns.size > 0)
-            this.addSubpattern(entryPath, pattern.child(subPatterns, nSymlinks, nextRealpaths));
+            this.addSubpattern(entryPath, pattern2.child(subPatterns, nSymlinks, nextRealpaths));
         }
       }
     };
-    var globWalk = (fs3, pattern, options) => new Glob(fs3, pattern, options).walk();
+    var globWalk = (fs3, pattern2, options) => new Glob(fs3, pattern2, options).walk();
     exports.globWalk = globWalk;
-    var globSync = (fs3, pattern, options) => {
+    var globSync = (fs3, pattern2, options) => {
       const results = [];
-      for (const match of (0, exports.globWalk)(fs3, pattern, options))
+      for (const match of (0, exports.globWalk)(fs3, pattern2, options))
         results.push(match);
       return results;
     };
     exports.globSync = globSync;
-    async function* glob(fs3, pattern, options) {
-      yield* (0, exports.globWalk)(fs3, pattern, options);
+    async function* glob(fs3, pattern2, options) {
+      yield* (0, exports.globWalk)(fs3, pattern2, options);
     }
   }
 });
@@ -14827,7 +14827,7 @@ var require_FsPromises = __commonJS({
         this.opendir = (0, util_1.promisify)(this.fs, "opendir");
         this.statfs = (0, util_1.promisify)(this.fs, "statfs");
         this.lutimes = (0, util_1.promisify)(this.fs, "lutimes");
-        this.glob = (pattern, options) => (0, glob_1.glob)(this.fs, pattern, options);
+        this.glob = (pattern2, options) => (0, glob_1.glob)(this.fs, pattern2, options);
         this.access = (0, util_1.promisify)(this.fs, "access");
         this.chmod = (0, util_1.promisify)(this.fs, "chmod");
         this.chown = (0, util_1.promisify)(this.fs, "chown");
@@ -19332,13 +19332,13 @@ var require_volume = __commonJS({
           const type3 = options?.type || "";
           return new Blob([buffer], { type: type3 });
         };
-        this.glob = (pattern, options, callback) => {
+        this.glob = (pattern2, options, callback) => {
           if (typeof options === "function") {
             callback = options;
             options = void 0;
           }
           const cb = (0, util_2.validateCallback)(callback);
-          const walk3 = (0, glob_1.globWalk)(this, pattern, options);
+          const walk3 = (0, glob_1.globWalk)(this, pattern2, options);
           Promise.resolve().then(() => {
             const results = [];
             for (const match of walk3)
@@ -19346,7 +19346,7 @@ var require_volume = __commonJS({
             return results;
           }).then((results) => cb(null, results), cb);
         };
-        this.globSync = (pattern, options) => (0, glob_1.globSync)(this, pattern, options);
+        this.globSync = (pattern2, options) => (0, glob_1.globSync)(this, pattern2, options);
         this._opendir = (filename, options, path41, errorPath) => {
           const result = this._core.getResolvedLinkResult(filename, "opendir");
           if (!result.ok)
@@ -21480,8 +21480,8 @@ var require_dist = __commonJS({
       var token;
       var key;
       var root;
-      var parse3 = function parse4(text3, reviver) {
-        source = String(text3);
+      var parse3 = function parse4(text4, reviver) {
+        source = String(text4);
         parseState = "start";
         stack = [];
         pos = 0;
@@ -22617,13 +22617,13 @@ function splitVerb(s) {
 // src/click/read.ts
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cell-widths.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cell-widths.js
 init_globals();
 var RANGES = [
   [0, 0, 0],
@@ -23327,7 +23327,7 @@ function widensToEmoji(codePoint) {
   return NARROW_TO_WIDE.has(codePoint);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/memo.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/memo.js
 init_globals();
 var MEMO_MAX = 4096;
 var Memo = class {
@@ -23346,18 +23346,39 @@ var Memo = class {
     return value;
   }
 };
+var WeakMemo = class {
+  entries = /* @__PURE__ */ new WeakMap();
+  get(key, compute) {
+    const remembered = this.entries.get(key);
+    if (remembered !== void 0)
+      return remembered;
+    const value = compute(key);
+    this.entries.set(key, value);
+    return value;
+  }
+};
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/pattern.js
+init_globals();
+function pattern(re) {
+  if (re.global || re.sticky) {
+    throw new TypeError(`/${re.source}/${re.flags} keeps a cursor in lastIndex; make it in the function that runs it`);
+  }
+  return re;
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
 var cellLenMemo = new Memo();
 var ZWJ = 8205;
 var VS16 = 65039;
-var JOINERS = /[\u200d\ufe0f]/;
-var PRINTABLE_ASCII = /^[ -~]*$/;
-function richCells(text3) {
+var JOINERS = pattern(/[\u200d\ufe0f]/);
+var PRINTABLE_ASCII = pattern(/^[ -~]*$/);
+var SEGMENTER = new Intl.Segmenter(void 0, { granularity: "grapheme" });
+function richCells(text4) {
   let cells = 0;
   let widenable = false;
   let joined = false;
-  for (const ch of text3) {
+  for (const ch of text4) {
     const codePoint = ch.codePointAt(0);
     if (joined) {
       joined = false;
@@ -23374,20 +23395,20 @@ function richCells(text3) {
   }
   return cells;
 }
-function measure(text3) {
-  if (PRINTABLE_ASCII.test(text3))
-    return text3.length;
-  if (!JOINERS.test(text3))
-    return richCells(text3);
+function measure(text4) {
+  if (PRINTABLE_ASCII.test(text4))
+    return text4.length;
+  if (!JOINERS.test(text4))
+    return richCells(text4);
   let cells = 0;
-  for (const { segment } of graphemeSegmenter().segment(text3))
+  for (const { segment } of SEGMENTER.segment(text4))
     cells += richCells(segment);
   return cells;
 }
-function cellLen(text3) {
-  if (text3.length === 0)
+function cellLen(text4) {
+  if (text4.length === 0)
     return 0;
-  return text3.length <= 64 ? cellLenMemo.get(text3, measure) : measure(text3);
+  return text4.length <= 64 ? cellLenMemo.get(text4, measure) : measure(text4);
 }
 function asCellCol(n) {
   return n;
@@ -23398,29 +23419,29 @@ function asCodePoint(n) {
 function cellCount(n) {
   return n > 0 ? Math.floor(n) : 0;
 }
-function splitText(text3, position) {
+function splitText(text4, position) {
   if (position <= 0)
-    return ["", text3];
-  if (position >= cellLen(text3))
-    return [text3, ""];
-  const left = cellFit(text3, position);
-  return [left + " ".repeat(position - cellLen(left)), text3.slice(left.length)];
+    return ["", text4];
+  if (position >= cellLen(text4))
+    return [text4, ""];
+  const left = cellFit(text4, position);
+  return [left + " ".repeat(position - cellLen(left)), text4.slice(left.length)];
 }
-function cutCells(text3, positions) {
+function cutCells(text4, positions) {
   const pieces = [];
   let start = 0;
   let lead = 0;
   let at = 0;
   let col = 0;
   let next2 = 0;
-  for (const glyph of clustersFrom(text3, asCodePoint(0))) {
+  for (const glyph of clustersFrom(text4, asCodePoint(0))) {
     if (next2 === positions.length)
       break;
     const end = col + cellLen(glyph);
     let from = col;
     for (; next2 < positions.length && positions[next2] < end; next2++) {
       const cut = positions[next2];
-      pieces.push(" ".repeat(lead) + text3.slice(start, at) + " ".repeat(cut - from));
+      pieces.push(" ".repeat(lead) + text4.slice(start, at) + " ".repeat(cut - from));
       lead = 0;
       start = cut === col ? at : at + glyph.length;
       from = cut;
@@ -23430,48 +23451,59 @@ function cutCells(text3, positions) {
     at += glyph.length;
     col = end;
   }
-  pieces.push(" ".repeat(lead) + text3.slice(start));
+  pieces.push(" ".repeat(lead) + text4.slice(start));
   return pieces;
 }
-function chopCells(text3, maxWidth) {
-  if (maxWidth <= 0 || text3.length === 0)
-    return [text3];
-  const lines2 = [];
-  let start = asCodePoint(0);
-  while (start < text3.length) {
-    const end = cellStepFrom(text3, start, maxWidth);
-    lines2.push(text3.slice(start, end));
-    start = end;
+function chopCells(text4, maxWidth) {
+  if (maxWidth <= 0 || text4.length === 0)
+    return [text4];
+  return Array.from(cellRows(text4, () => maxWidth), ({ start, end }) => text4.slice(start, end));
+}
+function* cellRows(text4, capOf) {
+  let row2 = 0;
+  let start = 0;
+  let at = 0;
+  let cells = 0;
+  for (const glyph of clustersFrom(text4, asCodePoint(0))) {
+    const width = cellLen(glyph);
+    if (at > start && cells + width > capOf(row2)) {
+      yield { start: asCodePoint(start), end: asCodePoint(at) };
+      row2 += 1;
+      start = at;
+      cells = 0;
+    }
+    cells += width;
+    at += glyph.length;
   }
-  return lines2;
+  if (at > start)
+    yield { start: asCodePoint(start), end: asCodePoint(at) };
 }
-var segmenter;
-var lastSegmented;
-function graphemeSegmenter() {
-  return segmenter ??= new Intl.Segmenter(void 0, { granularity: "grapheme" });
+function graphemes(text4) {
+  if (PRINTABLE_ASCII.test(text4))
+    return text4.split("");
+  return Array.from(clustersFrom(text4, asCodePoint(0)));
 }
-function segmentsOf(text3) {
-  if (lastSegmented?.text !== text3) {
-    lastSegmented = { text: text3, segments: graphemeSegmenter().segment(text3) };
-  }
-  return lastSegmented.segments;
-}
-function graphemes(text3) {
-  return Array.from(clustersFrom(text3, asCodePoint(0)));
-}
-function* clustersFrom(text3, start) {
-  const segments = segmentsOf(text3);
+function* clustersFrom(text4, start) {
+  const segments = SEGMENTER.segment(text4);
   for (let at = start, s = segments.containing(at); s; s = segments.containing(at)) {
     const end = s.index + s.segment.length;
-    yield text3.slice(at, end);
+    yield text4.slice(at, end);
     at = asCodePoint(end);
   }
 }
-function cellFit(text3, cap) {
-  return text3.slice(0, fitLength(clustersFrom(text3, asCodePoint(0)), cap));
+function* clustersBefore(text4, end) {
+  const segments = SEGMENTER.segment(text4);
+  for (let at = end; at > 0; ) {
+    const { index } = segments.containing(at - 1);
+    yield text4.slice(index, at);
+    at = asCodePoint(index);
+  }
 }
-function cellFitEnd(text3, cap) {
-  return text3.slice(text3.length - fitLength(graphemes(text3).reverse(), cap));
+function cellFit(text4, cap) {
+  return text4.slice(0, fitLength(clustersFrom(text4, asCodePoint(0)), cap));
+}
+function cellFitEnd(text4, cap) {
+  return text4.slice(text4.length - fitLength(clustersBefore(text4, asCodePoint(text4.length)), cap));
 }
 function fitLength(clusters, cap) {
   let w = 0;
@@ -23485,21 +23517,14 @@ function fitLength(clusters, cap) {
   }
   return n;
 }
-function cellFitFrom(text3, startCU, cap) {
-  return asCodePoint(startCU + fitLength(clustersFrom(text3, startCU), cap));
-}
-function cellStepFrom(text3, startCU, cap) {
-  const [first2 = ""] = clustersFrom(text3, startCU);
-  return asCodePoint(Math.max(cellFitFrom(text3, startCU, cap), startCU + first2.length));
-}
 function parseTabSize(n) {
   if (!Number.isInteger(n) || n < 1) {
     throw new RangeError(`tabSize must be a positive integer, got ${n}`);
   }
   return n;
 }
-function expandTabs(text3, tabSize) {
-  const [head, ...rest2] = text3.split("	");
+function expandTabs(text4, tabSize) {
+  const [head, ...rest2] = text4.split("	");
   const tabAt = [];
   const grownBy = [];
   const columnAfter = (piece, column2) => {
@@ -23537,10 +23562,10 @@ function expandTabs(text3, tabSize) {
   return { text: expanded, offsetOf };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/palette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/palette.js
 init_globals();
 var Palette = class {
   name;
@@ -23572,7 +23597,7 @@ function opaqueOnly(name) {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
 function hex2(byte) {
   return byte.toString(16).padStart(2, "0");
 }
@@ -23651,22 +23676,19 @@ function rgbDistance(a, b) {
 }
 var ColorTable = class {
   colors;
+  /** Each entry's relative luminance. */
+  luminances;
   firstIndex;
   // Keyed by colours a host computes without end (ramp stops, mixes), so bounded.
   matchMemo = new Memo();
   readableMemo = new Memo();
   constructor(colors, firstIndex = 0) {
     this.colors = colors;
+    this.luminances = colors.map(relativeLuminance);
     this.firstIndex = firstIndex;
   }
   get(index) {
     return this.colors[index - this.firstIndex];
-  }
-  luminanceCache;
-  /** Each entry's relative luminance, computed once per table. */
-  luminances() {
-    this.luminanceCache ??= this.colors.map(relativeLuminance);
-    return this.luminanceCache;
   }
   /** How many entries the table holds (terminal indices `firstIndex`…). */
   get size() {
@@ -23714,7 +23736,7 @@ var ColorTable = class {
     let bestScore = -Infinity;
     for (let i = 0; i < this.colors.length; i++) {
       const c = this.colors[i];
-      const lc = this.luminances()[i];
+      const lc = this.luminances[i];
       const ratio = luminanceRatio(lc, lOn);
       const passes = ratio >= minRatio;
       const score = passes ? -rgbDistance(c, value) : ratio;
@@ -23842,16 +23864,19 @@ function terminalColorSystem(options) {
     return ColorDepth.STANDARD;
   return ColorDepth.STANDARD;
 }
-function resolveDestination(spec, options) {
+function resolveDestination(spec, options = {}) {
+  const reducedMotion = options.reducedMotion ?? false;
   if (spec !== "auto") {
     return {
       colorSystem: typeof spec === "string" ? resolveColorSystem(spec) : spec,
-      hyperlinks: true
+      hyperlinks: true,
+      reducedMotion
     };
   }
   return {
     colorSystem: detectColorSystem(options),
-    hyperlinks: (forcedColorSystem(envOf(options ?? {})) ?? null) !== null || terminalColorSystem(options ?? {}) !== null
+    hyperlinks: (forcedColorSystem(envOf(options)) ?? null) !== null || terminalColorSystem(options) !== null,
+    reducedMotion
   };
 }
 function resolveColorSystem(spec, options) {
@@ -23873,7 +23898,7 @@ var ColorSpec = class _ColorSpec {
   type;
   number;
   value;
-  downgradeCache = /* @__PURE__ */ new Map();
+  downgrades = new Memo();
   constructor(name, type3, number, value) {
     this.name = name;
     this.type = type3;
@@ -23970,12 +23995,7 @@ var ColorSpec = class _ColorSpec {
       return this;
     if (this.type === targetSystem || fidelity(this.type) < fidelity(targetSystem))
       return this;
-    const cached = this.downgradeCache.get(targetSystem);
-    if (cached)
-      return cached;
-    const result = this.performDowngrade(targetSystem);
-    this.downgradeCache.set(targetSystem, result);
-    return result;
+    return this.downgrades.get(`${targetSystem}`, () => this.performDowngrade(targetSystem));
   }
   /**
    * Resolves to an actual RGB(A) value for any color type.
@@ -24080,11 +24100,7 @@ var ColorSpec = class _ColorSpec {
    * `matchOn` rounds to, but for the default, read off the same two tables.
    */
   static indexed(depth, theme24) {
-    const byDepth = indexedMemo.get(theme24) ?? /* @__PURE__ */ new Map();
-    indexedMemo.set(theme24, byDepth);
-    const listed = byDepth.get(depth) ?? listIndexed(depth, theme24);
-    byDepth.set(depth, listed);
-    return listed;
+    return indexedMemo.get(theme24, () => new Memo()).get(`${depth}`, () => listIndexed(depth, theme24));
   }
   /**
    * The spec a slot is written in once its colour moves from `was`, what its
@@ -24127,7 +24143,7 @@ function cubeCandidate(value) {
   const index = EIGHT_BIT_DOWNGRADE_TABLE.match(value);
   return [ColorSpec.fromAnsi(index), EIGHT_BIT_DOWNGRADE_TABLE.get(index)];
 }
-var indexedMemo = /* @__PURE__ */ new WeakMap();
+var indexedMemo = new WeakMemo();
 function listIndexed(depth, theme24) {
   const slots = () => Array.from({ length: 16 }, (_, slot) => [new ColorSpec(`color(${slot})`, depth === ColorDepth.WINDOWS ? depth : ColorDepth.STANDARD, slot), theme24.ansiColors.get(slot)]);
   switch (depth) {
@@ -24166,10 +24182,10 @@ var ColorBlend = class extends ColorSpec {
     return mix(this.from, this.to, this.t, theme24);
   }
 };
-var RGB_RE = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/;
-var COLOR_NUMBER_RE = /^color\((\d+)\)$/;
-var BLEND_RE = /^blend\((.*)\)$/;
-var FRACTION_RE = /^\s*(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?\s*$/;
+var RGB_RE = pattern(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+var COLOR_NUMBER_RE = pattern(/^color\((\d+)\)$/);
+var BLEND_RE = pattern(/^blend\((.*)\)$/);
+var FRACTION_RE = pattern(/^\s*(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?\s*$/);
 function parseSingle(key) {
   if (key === "default" || key === "") {
     return ColorSpec.default();
@@ -24231,7 +24247,7 @@ function parseByte(key, digits, field) {
   }
   return n;
 }
-var HEX_DIGITS_RE = /^[0-9a-fA-F]+$/;
+var HEX_DIGITS_RE = pattern(/^[0-9a-fA-F]+$/);
 var HEX_GRAMMARS = { 6: "RRGGBB", 8: "RRGGBBAA" };
 function hexColor(input, lead, digits, lengths) {
   if (!lengths.includes(digits.length) || !HEX_DIGITS_RE.test(digits)) {
@@ -24636,7 +24652,7 @@ var ANSI_COLOR_NAMES = withGrayAliases({
 });
 var COLOR_NAMES = ["default", ...Object.keys(ANSI_COLOR_NAMES)];
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/oklch.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/oklch.js
 init_globals();
 var _a;
 var OKLCH_AXES = ["l", "c", "h", "alpha"];
@@ -24676,6 +24692,10 @@ var wrapHue = (h) => {
 function inGamut(r, g, b) {
   return r >= -GAMUT_EPS && r <= 1 + GAMUT_EPS && g >= -GAMUT_EPS && g <= 1 + GAMUT_EPS && b >= -GAMUT_EPS && b <= 1 + GAMUT_EPS;
 }
+function labOf(c, h) {
+  const hRad = h * (Math.PI / 180);
+  return [c * Math.cos(hRad), c * Math.sin(hRad)];
+}
 var Oklch = class {
   l;
   c;
@@ -24695,6 +24715,7 @@ var Oklch = class {
     if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
       throw new RangeError(`Oklch.alpha must be a finite number in [0,1]; got ${alpha}`);
     }
+    this.#lab = labOf(c, h);
   }
   /** sRGB → linear → OKLab → polar. Pure; no I/O, no allocation beyond the result. */
   static fromRgba(color) {
@@ -24821,16 +24842,21 @@ var Oklch = class {
    * Symmetric and pure.
    */
   deltaE(other) {
-    const a = this.h * Math.PI / 180;
-    const b = other.h * Math.PI / 180;
-    return Math.hypot(this.l - other.l, this.c * Math.cos(a) - other.c * Math.cos(b), this.c * Math.sin(a) - other.c * Math.sin(b));
+    const [a, b] = this.#lab;
+    const [otherA, otherB] = other.#lab;
+    return Math.hypot(this.l - other.l, a - otherA, b - otherB);
   }
+  /**
+   * This colour's OKLab a and b, kept with it: a colour matched against a
+   * palette is measured against every entry, and each entry against every
+   * colour it is matched with, so the trigonometry is paid once a colour
+   * rather than once a comparison.
+   */
+  #lab;
   /** Linear-sRGB coordinates for an explicit (l, C, h). Pure; `toRgba` passes
    * already-normalized values so this never sees out-of-range inputs. */
   toLinearRgb(l, C, h) {
-    const hRad = h * (Math.PI / 180);
-    const aLab = C * Math.cos(hRad);
-    const bLab = C * Math.sin(hRad);
+    const [aLab, bLab] = labOf(C, h);
     const lCube = l + 0.3963377774 * aLab + 0.2158037573 * bLab;
     const mCube = l - 0.1055613458 * aLab - 0.0638541728 * bLab;
     const sCube = l - 0.0894841775 * aLab - 1.291485548 * bLab;
@@ -24867,7 +24893,7 @@ var Oklch = class {
 };
 _a = Oklch;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorRef.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorRef.js
 init_globals();
 var ColorRefError = class extends Error {
   ref;
@@ -24902,10 +24928,10 @@ function suggest(palette, miss) {
   return near.length === 0 ? "" : `; did you mean: ${near.join(", ")}`;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorMath.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorMath.js
 init_globals();
 var LEVEL_STEP = 0.1;
 function rgbToHsl(c) {
@@ -25041,7 +25067,7 @@ function ensureContrastToward(fg, bg, minRatio, toward) {
   return new Oklch(pass, lab.c, lab.h, lab.alpha).toRgba();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
 var MUTED_BLEND = 0.7;
 var TEXT_ALPHA = 0.66;
 var SURFACE_LIFT = 0.05;
@@ -25089,16 +25115,16 @@ function accentText(tint, muted, background) {
   return ensureContrastToward(tint, muted, TEXT_ON_MUTED, contrastFor(background));
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-dark.js
 init_globals();
 var theme = {
   name: "atom-one-dark",
@@ -25278,7 +25304,7 @@ var theme = {
 };
 var atom_one_dark_default = theme;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-light.js
 init_globals();
 var theme2 = {
   name: "atom-one-light",
@@ -25458,7 +25484,7 @@ var theme2 = {
 };
 var atom_one_light_default = theme2;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-frappe.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-frappe.js
 init_globals();
 var theme3 = {
   name: "catppuccin-frappe",
@@ -25638,7 +25664,7 @@ var theme3 = {
 };
 var catppuccin_frappe_default = theme3;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-latte.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-latte.js
 init_globals();
 var theme4 = {
   name: "catppuccin-latte",
@@ -25818,7 +25844,7 @@ var theme4 = {
 };
 var catppuccin_latte_default = theme4;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-macchiato.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-macchiato.js
 init_globals();
 var theme5 = {
   name: "catppuccin-macchiato",
@@ -25998,7 +26024,7 @@ var theme5 = {
 };
 var catppuccin_macchiato_default = theme5;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-mocha.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-mocha.js
 init_globals();
 var theme6 = {
   name: "catppuccin-mocha",
@@ -26178,13 +26204,13 @@ var theme6 = {
 };
 var catppuccin_mocha_default = theme6;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/types.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/types.js
 init_globals();
 var ANSI_SLOTS = [
   "black",
@@ -26205,7 +26231,7 @@ var ANSI_SLOTS = [
   "brightWhite"
 ];
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
 var VGA_ANSI = Object.fromEntries(ANSI_SLOTS.map((slot, n) => [slot, STANDARD_TABLE.get(n).hex]));
 var TEXTUAL_DARK_ANSI = {
   black: "#1A1A1A",
@@ -26244,7 +26270,7 @@ var TEXTUAL_LIGHT_ANSI = {
   brightWhite: "#F7F7F7"
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
 var theme7 = {
   name: "cyberpunk",
   dark: true,
@@ -26424,7 +26450,7 @@ var theme7 = {
 };
 var cyberpunk_default = theme7;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/default.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/default.js
 init_globals();
 var theme8 = {
   name: "default",
@@ -26586,7 +26612,7 @@ var theme8 = {
 };
 var default_default = theme8;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/dracula.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/dracula.js
 init_globals();
 var theme9 = {
   name: "dracula",
@@ -26766,7 +26792,7 @@ var theme9 = {
 };
 var dracula_default = theme9;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/flexoki.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/flexoki.js
 init_globals();
 var theme10 = {
   name: "flexoki",
@@ -26946,7 +26972,7 @@ var theme10 = {
 };
 var flexoki_default = theme10;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/gruvbox.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/gruvbox.js
 init_globals();
 var theme11 = {
   name: "gruvbox",
@@ -27126,7 +27152,7 @@ var theme11 = {
 };
 var gruvbox_default = theme11;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/monokai.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/monokai.js
 init_globals();
 var theme12 = {
   name: "monokai",
@@ -27306,7 +27332,7 @@ var theme12 = {
 };
 var monokai_default = theme12;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/nord.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/nord.js
 init_globals();
 var theme13 = {
   name: "nord",
@@ -27486,7 +27512,7 @@ var theme13 = {
 };
 var nord_default = theme13;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine.js
 init_globals();
 var theme14 = {
   name: "rose-pine",
@@ -27666,7 +27692,7 @@ var theme14 = {
 };
 var rose_pine_default = theme14;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-dawn.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-dawn.js
 init_globals();
 var theme15 = {
   name: "rose-pine-dawn",
@@ -27846,7 +27872,7 @@ var theme15 = {
 };
 var rose_pine_dawn_default = theme15;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-moon.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-moon.js
 init_globals();
 var theme16 = {
   name: "rose-pine-moon",
@@ -28026,7 +28052,7 @@ var theme16 = {
 };
 var rose_pine_moon_default = theme16;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-dark.js
 init_globals();
 var theme17 = {
   name: "solarized-dark",
@@ -28206,7 +28232,7 @@ var theme17 = {
 };
 var solarized_dark_default = theme17;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-light.js
 init_globals();
 var theme18 = {
   name: "solarized-light",
@@ -28386,7 +28412,7 @@ var theme18 = {
 };
 var solarized_light_default = theme18;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/svg-export.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/svg-export.js
 init_globals();
 var theme19 = {
   name: "svg-export",
@@ -28566,7 +28592,7 @@ var theme19 = {
 };
 var svg_export_default = theme19;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-ansi.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-ansi.js
 init_globals();
 var theme20 = {
   name: "textual-ansi",
@@ -28728,7 +28754,7 @@ var theme20 = {
 };
 var textual_ansi_default = theme20;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-dark.js
 init_globals();
 var theme21 = {
   name: "textual-dark",
@@ -28890,7 +28916,7 @@ var theme21 = {
 };
 var textual_dark_default = theme21;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-light.js
 init_globals();
 var theme22 = {
   name: "textual-light",
@@ -29052,7 +29078,7 @@ var theme22 = {
 };
 var textual_light_default = theme22;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/tokyo-night.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/tokyo-night.js
 init_globals();
 var theme23 = {
   name: "tokyo-night",
@@ -29232,7 +29258,7 @@ var theme23 = {
 };
 var tokyo_night_default = theme23;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
 var THEMES = {
   "atom-one-dark": atom_one_dark_default,
   "atom-one-light": atom_one_light_default,
@@ -29259,21 +29285,16 @@ var THEMES = {
   "tokyo-night": tokyo_night_default
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
 var THEME_NAMES = Object.freeze(Object.keys(THEMES).sort());
-var cache = /* @__PURE__ */ new Map();
+var cache = new Memo();
 function listThemePalettes() {
   return THEME_NAMES;
 }
 function getThemePalette(name) {
   if (!isThemeName(name))
     return null;
-  const cached = cache.get(name);
-  if (cached !== void 0)
-    return cached;
-  const palette = hydrate(THEMES[name]);
-  cache.set(name, palette);
-  return palette;
+  return cache.get(name, () => hydrate(THEMES[name]));
 }
 function isThemeName(name) {
   return Object.hasOwn(THEMES, name);
@@ -29310,8 +29331,8 @@ function hydrate(data) {
     map.set(k, parseHex(v, data.name, `var ${k}`));
   }
   for (const key of ACCENT_KEYS) {
-    const text3 = requireBaseVar(data, `text-${key}`);
-    map.set(`text-${key}`, accentText(text3, requireBaseVar(data, `${key}-muted`), requireBaseVar(data, "background")));
+    const text4 = requireBaseVar(data, `text-${key}`);
+    map.set(`text-${key}`, accentText(text4, requireBaseVar(data, `${key}-muted`), requireBaseVar(data, "background")));
   }
   return new Palette(data.name, data.dark, map);
 }
@@ -29332,7 +29353,7 @@ function parseOpaqueHex(value, theme24, key) {
   return color;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
 function defineTheme(d) {
   return new TerminalTheme(d.bg, d.fg, d.ansi, buildPalette(d.name, d.dark, {
     primary: d.primary,
@@ -29369,7 +29390,7 @@ var TEXTUAL_DARK = defineTheme(getThemeBaseColors("textual-dark"));
 var TEXTUAL_LIGHT = defineTheme(getThemeBaseColors("textual-light"));
 var TEXTUAL_ANSI = defineTheme(getThemeBaseColors("textual-ansi"));
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/transpose.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/transpose.js
 init_globals();
 var ANCHORED_ROOTS = /* @__PURE__ */ new Set([
   "error",
@@ -29401,13 +29422,13 @@ function transposePalette(palette, key, name) {
   return new Palette(name ?? palette.name, newDark, next2);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/easing.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/easing.js
 init_globals();
 function cubicBezier(x1, y1, x2, y2) {
   for (const [name, v] of [["x1", x1], ["y1", y1], ["x2", x2], ["y2", y2]]) {
@@ -29572,24 +29593,45 @@ function positive(what, v, unit = "") {
 function positiveSeconds(what, seconds) {
   positive(what, seconds, " of seconds");
 }
-function wrapSeconds(what, t2, period) {
+var STILL = {
+  holds: [Number.POSITIVE_INFINITY],
+  period: Number.POSITIVE_INFINITY,
+  at: () => 0,
+  lastChange: () => Number.NEGATIVE_INFINITY,
+  nextChange: () => Number.POSITIVE_INFINITY,
+  reduced: () => STILL
+};
+function finiteTime(what, t2) {
   if (!Number.isFinite(t2))
     throw new RangeError(`${what} needs a finite t, got ${t2}`);
-  const into = t2 % period;
+  return t2;
+}
+function wrapSeconds(what, t2, period) {
+  const into = finiteTime(what, t2) % period;
   if (into >= 0)
     return into;
   const carried = into + period;
   return carried >= period ? 0 : carried;
 }
+function passAt(what, t2, period) {
+  const into = wrapSeconds(what, t2, period);
+  return { pass: Math.round((t2 - into) / period) + 0, into };
+}
+var MIN_NORMAL = 2 ** -1022;
 function nextUp(x) {
   if (x === 0)
     return Number.MIN_VALUE;
-  DOUBLE[0] = x;
-  BITS[0] = BITS[0] + (x > 0 ? 1n : -1n);
-  return DOUBLE[0];
+  const a = Math.abs(x);
+  if (a < MIN_NORMAL)
+    return x + Number.MIN_VALUE;
+  let e = Math.floor(Math.log2(a));
+  if (2 ** e > a)
+    e -= 1;
+  else if (2 ** (e + 1) <= a)
+    e += 1;
+  const ulp = 2 ** (e - 52);
+  return x > 0 ? x + ulp : x + (a === 2 ** e && a > MIN_NORMAL ? ulp / 2 : ulp);
 }
-var DOUBLE = new Float64Array(1);
-var BITS = new BigUint64Array(DOUBLE.buffer);
 var ULPS_OF_ROUNDING = 8;
 function walkUp(sum, reached, finer) {
   let x = sum;
@@ -29645,8 +29687,10 @@ function beat(holds2) {
       i--;
     return i;
   };
-  const boundary = (what, pass2, i, t2) => walkUp(pass2 * period + starts[i], (began) => index(wrapSeconds(what, began, period)) === i, () => `${what}: hold ${i} (${own2[i]} s) is finer than time resolves near t = ${t2}`);
-  const pass = (t2, into) => Math.round((t2 - into) / period);
+  const boundary = (what, p2, i, t2) => walkUp(p2 * period + starts[i], (began) => {
+    const { pass, into } = passAt(what, began, period);
+    return index(into) === i && pass === p2;
+  }, () => `${what}: hold ${i} (${own2[i]} s) is finer than time resolves near t = ${t2}`);
   return {
     holds: own2,
     period,
@@ -29654,16 +29698,17 @@ function beat(holds2) {
       return index(wrapSeconds("Beat.at", t2, period));
     },
     lastChange(t2) {
-      const into = wrapSeconds("Beat.lastChange", t2, period);
-      return boundary("Beat.lastChange", pass(t2, into), index(into), t2);
+      const { pass, into } = passAt("Beat.lastChange", t2, period);
+      return boundary("Beat.lastChange", pass, index(into), t2);
     },
     // The next hold's start, in the next pass when this hold is the last.
     nextChange(t2) {
-      const into = wrapSeconds("Beat.nextChange", t2, period);
+      const { pass, into } = passAt("Beat.nextChange", t2, period);
       const i = index(into);
       const last2 = i === own2.length - 1;
-      return boundary("Beat.nextChange", pass(t2, into) + (last2 ? 1 : 0), last2 ? 0 : i + 1, t2);
-    }
+      return boundary("Beat.nextChange", pass + (last2 ? 1 : 0), last2 ? 0 : i + 1, t2);
+    },
+    reduced: () => STILL
   };
 }
 var Phase = {
@@ -29687,260 +29732,16 @@ var Phase = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
-var Animation = {
-  /** `value` at every time, never changing. */
-  constant(value) {
-    return { at: () => value, nextChange: () => Number.POSITIVE_INFINITY, lastChange: () => Number.NEGATIVE_INFINITY };
-  },
-  /**
-   * The value `at` gives, taken to move at every moment: what an animation
-   * that cannot say when it holds still is, so a host draws it every frame.
-   */
-  continuous(at) {
-    return { at, nextChange: (t2) => t2, lastChange: (t2) => t2 };
-  },
-  /**
-   * `animation`'s value through `f`, changing when it does. Two values `f`
-   * maps alike make an early answer, which the contract allows.
-   */
-  map(animation, f) {
-    return { at: (t2) => f(animation.at(t2)), nextChange: (t2) => animation.nextChange(t2), lastChange: (t2) => animation.lastChange(t2) };
-  },
-  /**
-   * Every one of `animations` at once, their values in order, changing when
-   * the soonest of them does — so a stack of effects drawn together holds
-   * still exactly while each of them does. None never changes.
-   */
-  all(animations) {
-    return {
-      at: (t2) => animations.map((animation) => animation.at(t2)),
-      nextChange: (t2) => Math.min(...animations.map((animation) => animation.nextChange(t2))),
-      lastChange: (t2) => Math.max(...animations.map((animation) => animation.lastChange(t2)))
-    };
-  },
-  /**
-   * `first` until `seconds`, then `then`, handed the time since it began —
-   * each part on its own clock from 0, as every effect is. Before the switch
-   * the value next changes when `first`'s does or at the switch, whichever is
-   * sooner; after it, when `then`'s does, carried back onto this timeline.
-   */
-  sequence(first2, seconds, then) {
-    positiveSeconds("Animation.sequence seconds", seconds);
-    const carried = (local) => Number.isFinite(local) ? firstReaching(local + seconds, (x) => x - seconds >= local) : local;
-    return {
-      at: (t2) => t2 - seconds >= 0 ? then.at(t2 - seconds) : first2.at(t2),
-      nextChange(t2) {
-        const into = t2 - seconds;
-        if (into < 0)
-          return Math.min(first2.nextChange(t2), seconds);
-        return Math.max(t2, carried(then.nextChange(into)));
-      },
-      // After the switch the value became what it is at the switch or when
-      // `then`'s did since, whichever is later; before it, when `first`'s did.
-      lastChange(t2) {
-        const into = t2 - seconds;
-        if (into < 0)
-          return first2.lastChange(t2);
-        return Math.min(t2, Math.max(seconds, carried(then.lastChange(into))));
-      }
-    };
-  }
-};
-
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/tween.js
-init_globals();
-function tween(from, to, timing) {
-  for (const [name, v] of [["from", from], ["to", to]]) {
-    if (!Number.isFinite(v))
-      throw new RangeError(`tween ${name} must be finite, got ${v}`);
-  }
-  const { ease, seconds } = timing;
-  const phase = Phase.once(0, seconds);
-  if (from === to)
-    return Animation.constant(from);
-  return {
-    at(t2) {
-      const p2 = ease(phase(t2));
-      return (1 - p2) * from + p2 * to;
-    },
-    // Before it begins the value is held until 0; while it moves, every
-    // frame; from `seconds` on, never again — and it became what it is at
-    // `seconds`, or always was before it began.
-    nextChange: (t2) => t2 < 0 ? 0 : t2 < seconds ? t2 : Number.POSITIVE_INFINITY,
-    lastChange: (t2) => t2 < 0 ? Number.NEGATIVE_INFINITY : t2 < seconds ? t2 : seconds
-  };
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
-var ColorRamp = class {
-  ease;
-  stops;
-  constructor(ease, stops) {
-    this.ease = ease;
-    this.stops = stops;
-    if (stops.length === 0) {
-      throw new RangeError("a ColorRamp needs at least one stop");
-    }
-    for (const [i, stop2] of stops.entries()) {
-      if (!Number.isFinite(stop2.at)) {
-        throw new RangeError(`ColorRamp stop ${i} has a non-finite position ${stop2.at}`);
-      }
-      const prev = stops[i - 1];
-      if (prev !== void 0 && stop2.at < prev.at) {
-        throw new RangeError(`ColorRamp stops must be in ascending position order; stop ${i} at ${stop2.at} follows stop ${i - 1} at ${prev.at}`);
-      }
-    }
-  }
-  /**
-   * The color at `value`. Below the first stop it is the first color; at or
-   * above the last stop it is the last; between two stops the raw progress
-   * from the lower to the upper goes through `ease`, and the eased progress
-   * says how far to mix.
-   *
-   * Eased progress 0 is the lower stop's color and 1 the upper's, byte for
-   * byte — the exactness contract, not a shortcut: the sRGB → OKLCH → sRGB
-   * round-trip can land a channel one unit off, and a ramp that did not hit
-   * its own stops exactly would make a `step` ramp paint a color the author
-   * never wrote. So a value on a stop is that stop's color whenever the ease
-   * starts at 0, as every built-in does but `step-start` and the
-   * `jump-start`/`jump-both` steps, which jump at the start of the interval as
-   * CSS defines them. An ease that overshoots [0, 1] holds the end colors
-   * where it does: a ramp never paints outside its stops.
-   */
-  at(value) {
-    if (!Number.isFinite(value)) {
-      throw new RangeError(`ColorRamp.at needs a finite value, got ${value}`);
-    }
-    const stops = this.stops;
-    let lower2 = -1;
-    while (lower2 + 1 < stops.length && stops[lower2 + 1].at <= value)
-      lower2++;
-    if (lower2 < 0)
-      return stops[0].color;
-    const from = stops[lower2];
-    if (lower2 === stops.length - 1)
-      return from.color;
-    const to = stops[lower2 + 1];
-    const t2 = this.ease((value - from.at) / (to.at - from.at));
-    if (t2 <= 0)
-      return from.color;
-    if (t2 >= 1)
-      return to.color;
-    return Oklch.fromRgba(from.color).mix(Oklch.fromRgba(to.color), t2).toRgba();
-  }
-  /**
-   * This ramp read over time: its span of positions, from the first stop's
-   * to the last's, crossed at a steady rate in `seconds` and held at the last
-   * stop from then on, each colour along the way the ramp's own. A colour
-   * tween is a two-stop ramp over its seconds — the ramp's ease shaping the
-   * move, so `new ColorRamp(ease, [{ at: 0, color: a }, { at: 1, color: b
-   * }]).over(seconds)` is `a` eased to `b` — and a ramp of more stops over
-   * time is a sweep through all of them. [LAW:one-source-of-truth] The
-   * blending is `at`'s; what time adds is `tween`'s (`core/tween.ts`), so a
-   * host sampling once a second or sixty times reads the stop colours byte
-   * for byte where `at` paints them.
-   */
-  over(seconds) {
-    const first2 = this.stops[0].at;
-    const last2 = this.stops[this.stops.length - 1].at;
-    return Animation.map(tween(first2, last2, { seconds, ease: EASES.linear }), (value) => this.at(value));
-  }
-};
-
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/timeline.js
-init_globals();
-function finiteSeconds(what, seconds) {
-  if (!Number.isFinite(seconds))
-    throw new RangeError(`${what} must be a finite number of seconds, got ${seconds}`);
-  return seconds;
-}
-var hostTime = (host) => finiteSeconds("Timeline host time", host);
-function playbackRate(rate) {
-  if (!Number.isFinite(rate) || rate === 0)
-    throw new RangeError(`Timeline rate must be finite and not zero, got ${rate}`);
-  return rate;
-}
-function anchored(timeline, host, time, rate) {
-  const origin = hostTime(host);
-  return timeline.playing ? { playing: true, origin, time, rate } : { playing: false, time, rate };
-}
-function played(animation, { origin, time, rate }) {
-  const mapped = (host) => time + rate * (host - origin);
-  const forward = rate > 0;
-  const ahead = forward ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
-  const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
-  const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
-  const hostOf = (edge) => {
-    const sum = origin + (edge - time) / rate;
-    return Number.isFinite(sum) ? firstReaching(sum, (host) => past(mapped(host), edge)) : sum;
-  };
-  return {
-    at: (host) => animation.at(mapped(hostTime(host))),
-    nextChange(host) {
-      const h = hostTime(host);
-      const t2 = mapped(h);
-      const edge = ahead(t2);
-      return edge === t2 ? h : Math.max(h, hostOf(edge));
-    },
-    lastChange(host) {
-      const h = hostTime(host);
-      const t2 = mapped(h);
-      const edge = behind(t2);
-      return edge === t2 ? h : Math.min(h, hostOf(edge));
-    }
-  };
-}
-var Timeline = {
-  /** Playing from host time `origin`, at which the animation time is 0, at `rate` animation seconds a host second. */
-  play(origin, rate = 1) {
-    return { playing: true, origin: finiteSeconds("Timeline.play origin", origin), time: 0, rate: playbackRate(rate) };
-  },
-  /** The animation time at host time `host`. */
-  at(timeline, host) {
-    const h = hostTime(host);
-    return timeline.playing ? timeline.time + timeline.rate * (h - timeline.origin) : timeline.time;
-  },
-  /** `timeline` held at the animation time it maps `host` to. Pausing a paused timeline holds the same time. */
-  pause(timeline, host) {
-    return { playing: false, time: Timeline.at(timeline, host), rate: timeline.rate };
-  },
-  /** `timeline` playing from `host` at the animation time it maps `host` to, at its rate. Resuming a playing timeline is the same map. */
-  resume(timeline, host) {
-    return { playing: true, origin: hostTime(host), time: Timeline.at(timeline, host), rate: timeline.rate };
-  },
-  /** `timeline` with the animation at `time` at host time `host`, playing or held as it was. */
-  seek(timeline, host, time) {
-    return anchored(timeline, host, finiteSeconds("Timeline.seek time", time), timeline.rate);
-  },
-  /** `timeline` at `rate` from host time `host` on, with no jump: the animation time at `host` is what it was. */
-  withRate(timeline, host, rate) {
-    return anchored(timeline, host, Timeline.at(timeline, host), playbackRate(rate));
-  },
-  /**
-   * `animation` on host time: its value at the time `timeline` maps each
-   * host time to, changing at the host moment the mapped time reaches the
-   * animation's own answer — backwards, when it drops under where the value
-   * began. Paused, the value never changes and never did. The value is the
-   * animation's own, on no clock: what a drawn value's cells say about when
-   * they change is stamped by whoever draws it at a host time
-   * (`../renderables/frames.ts`, `frameAt`), never carried in from here.
-   */
-  run(timeline, animation) {
-    if (timeline.playing)
-      return played(animation, timeline);
-    return {
-      at: (host) => animation.at(Timeline.at(timeline, host)),
-      nextChange: (host) => (hostTime(host), Number.POSITIVE_INFINITY),
-      lastChange: (host) => (hostTime(host), Number.NEGATIVE_INFINITY)
-    };
-  }
-};
-
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/anchor.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
+init_globals();
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+init_globals();
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/anchor.js
 init_globals();
 function shiftAnchor(anchor, cells) {
   return {
@@ -29951,13 +29752,16 @@ function shiftAnchor(anchor, cells) {
   };
 }
 function drawnBy(anchor, owner) {
-  for (let level = anchor; level; level = level.inner)
-    if (level.owner === owner)
-      return true;
-  return false;
+  return levelOf(anchor, owner) !== void 0;
+}
+function levelOf(anchor, owner) {
+  let level = anchor;
+  while (level !== void 0 && level.owner !== owner)
+    level = level.inner;
+  return level;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
 var ATTRIBUTE_NAMES = [
   "bold",
   "dim",
@@ -29998,6 +29802,7 @@ var ATTRIBUTE_SHORT_ALIASES = {
   o: "overline",
   uu: "underline2"
 };
+var NEVER_CHANGES = { lastChange: Number.NEGATIVE_INFINITY, nextChange: Number.POSITIVE_INFINITY };
 var StyleSyntaxError = class extends Error {
   constructor(message, options) {
     super(message, options);
@@ -30030,23 +29835,29 @@ var Style = class _Style {
    */
   anchor;
   /**
-   * When what this style's cells show next changes, in seconds on the
-   * timeline of whoever drew the frame — `t` itself for a cell drawn by
-   * something that moves every frame, and `Infinity`, the default, for one
+   * The hold this style's cells are in, on the timeline of whoever drew the
+   * frame: since when what they show has been what it is (`lastChange`), and
+   * when it next changes (`nextChange`) — both `t` for a cell drawn by
+   * something that moves every frame, and `-Infinity`/`Infinity` for one
    * that never changes. It draws nothing. Whatever draws for a handed time
-   * stamps its cells with it (`Frames`, `Effected`), the stamp rides up
-   * through every container as the anchor does (`./anchor.ts`), and
-   * whoever holds the composed frame reads the soonest off it
-   * (`Segment.nextChange`), so a host knows when to draw again without
-   * asking each container. Two styles laid together change at the sooner.
+   * stamps its cells with it (`placedRender`, `Effected`), the stamp rides up
+   * through every container as the anchor does (`./anchor.ts`), and whoever
+   * holds the composed frame reads it off (`Segment.nextChange`, and
+   * `Segment.lastChange` for a host running its timeline backwards), so a
+   * host knows when to draw again without asking each container. Two styles
+   * laid together are in the intersection of their holds.
    */
-  nextChange;
+  hold;
   constructor(options = {}) {
-    const nextChange = options.nextChange ?? Number.POSITIVE_INFINITY;
+    const hold = options.hold ?? NEVER_CHANGES;
+    const { lastChange, nextChange } = hold;
     if (!(nextChange > Number.NEGATIVE_INFINITY)) {
       throw new RangeError(`Style nextChange must be a time in seconds or Infinity, got ${nextChange}`);
     }
-    this.nextChange = nextChange;
+    if (!(lastChange < Number.POSITIVE_INFINITY)) {
+      throw new RangeError(`Style lastChange must be a time in seconds or -Infinity, got ${lastChange}`);
+    }
+    this.hold = hold;
     this.color = resolveColor(options.color);
     this.bgcolor = resolveBackground(options.bgcolor);
     this.bold = options.bold;
@@ -30067,7 +29878,7 @@ var Style = class _Style {
     this.anchor = options.anchor;
   }
   get isNull() {
-    return this.color === void 0 && this.bgcolor === void 0 && this.bold === void 0 && this.dim === void 0 && this.italic === void 0 && this.underline === void 0 && this.blink === void 0 && this.blink2 === void 0 && this.reverse === void 0 && this.conceal === void 0 && this.strike === void 0 && this.underline2 === void 0 && this.frame === void 0 && this.encircle === void 0 && this.overline === void 0 && this.link === void 0 && this.meta === void 0 && this.anchor === void 0 && this.nextChange === Number.POSITIVE_INFINITY;
+    return this.color === void 0 && this.bgcolor === void 0 && this.bold === void 0 && this.dim === void 0 && this.italic === void 0 && this.underline === void 0 && this.blink === void 0 && this.blink2 === void 0 && this.reverse === void 0 && this.conceal === void 0 && this.strike === void 0 && this.underline2 === void 0 && this.frame === void 0 && this.encircle === void 0 && this.overline === void 0 && this.link === void 0 && this.meta === void 0 && this.anchor === void 0 && this.hold.nextChange === Number.POSITIVE_INFINITY && this.hold.lastChange === Number.NEGATIVE_INFINITY;
   }
   get transparentBackground() {
     return this.bgcolor === void 0 || this.bgcolor.isDefault;
@@ -30103,6 +29914,25 @@ var Style = class _Style {
   withAnchor(anchor) {
     return this.with({ anchor });
   }
+  /** The style's text attributes, each as it sets it. */
+  get attributes() {
+    return Object.fromEntries(ATTRIBUTE_NAMES.map((name) => [name, this[name]]));
+  }
+  /**
+   * The same style with each attribute `attributes` names set as it says —
+   * on, off, or unset — and every other field as it was.
+   */
+  withAttributes(attributes) {
+    return this.with(Object.fromEntries(ATTRIBUTE_NAMES.filter((name) => name in attributes).map((name) => [name, attributes[name]])));
+  }
+  /**
+   * This style with its motion taken out, what reduced motion draws: `blink`
+   * and `blink2`, the motion a terminal makes on its own, unset, and every
+   * other field as it was. A style that does not blink is its own.
+   */
+  reduced() {
+    return this.blink || this.blink2 ? this.withAttributes({ blink: void 0, blink2: void 0 }) : this;
+  }
   /**
    * This style on the cell `cells` to the right: its anchor shifted along its
    * row, or the style itself when it has no anchor.
@@ -30137,14 +29967,15 @@ var Style = class _Style {
       link: other.link ?? this.link,
       meta: other.meta && this.meta ? { ...this.meta, ...other.meta } : other.meta ?? this.meta,
       anchor: other.anchor ?? this.anchor,
-      // Cells under both change when either does: the sooner.
-      nextChange: Math.min(this.nextChange, other.nextChange)
+      // Cells under both change when either does: the sooner, and have been
+      // what they are since the later — the intersection of the two holds.
+      hold: { lastChange: Math.max(this.hold.lastChange, other.hold.lastChange), nextChange: Math.min(this.hold.nextChange, other.hold.nextChange) }
     });
   }
   equals(other) {
     if (this === other)
       return true;
-    return this.color?.name === other.color?.name && this.bgcolor?.name === other.bgcolor?.name && this.bold === other.bold && this.dim === other.dim && this.italic === other.italic && this.underline === other.underline && this.blink === other.blink && this.blink2 === other.blink2 && this.reverse === other.reverse && this.conceal === other.conceal && this.strike === other.strike && this.underline2 === other.underline2 && this.frame === other.frame && this.encircle === other.encircle && this.overline === other.overline && this.link === other.link && anchorsEqual(this.anchor, other.anchor) && this.nextChange === other.nextChange;
+    return this.color?.name === other.color?.name && this.bgcolor?.name === other.bgcolor?.name && this.bold === other.bold && this.dim === other.dim && this.italic === other.italic && this.underline === other.underline && this.blink === other.blink && this.blink2 === other.blink2 && this.reverse === other.reverse && this.conceal === other.conceal && this.strike === other.strike && this.underline2 === other.underline2 && this.frame === other.frame && this.encircle === other.encircle && this.overline === other.overline && this.link === other.link && anchorsEqual(this.anchor, other.anchor) && this.hold.nextChange === other.hold.nextChange && this.hold.lastChange === other.hold.lastChange;
   }
   /**
    * The colours this style puts on screen at `colorSystem`: each flattened
@@ -30185,7 +30016,7 @@ var Style = class _Style {
   /**
    * The look as a canonical string that round-trips through `Style.parse()`:
    * colours, attributes and the link, which is all a style string can spell.
-   * What a style carries beyond its look — `meta`, `anchor`, `nextChange` —
+   * What a style carries beyond its look — `meta`, `anchor`, `hold` —
    * has no spelling and is not here, so two styles that differ only there
    * read alike; `equals` tells them apart.
    */
@@ -30254,7 +30085,7 @@ var Style = class _Style {
   }
 };
 var NULL_STYLE = new Style();
-var STYLE_NAME_RE = /^[a-z][a-z0-9._-]*$/;
+var STYLE_NAME_RE = pattern(/^[a-z][a-z0-9._-]*$/);
 function layerStyle(base, over) {
   if (base instanceof Style)
     return base.add(over);
@@ -30267,19 +30098,14 @@ function layerStyle(base, over) {
 var Theme = class {
   styles;
   constructor(definitions = {}, options) {
-    this.styles = /* @__PURE__ */ new Map();
-    const inherit = options?.inherit !== false;
-    if (inherit) {
-      for (const [name, style] of Object.entries(DEFAULT_STYLES)) {
-        this.styles.set(name, style);
-      }
-    }
-    for (const [name, def] of Object.entries(definitions)) {
+    const inherited = options?.inherit !== false ? Object.entries(DEFAULT_STYLES) : [];
+    const defined = Object.entries(definitions).map(([name, def]) => {
       if (!STYLE_NAME_RE.test(name)) {
         throw new Error(`Invalid style name: "${name}" (must be lowercase, start with letter, contain only letters, digits, ".", "-", "_")`);
       }
-      this.styles.set(name, Style.parse(def));
-    }
+      return [name, Style.parse(def)];
+    });
+    this.styles = new Map([...inherited, ...defined]);
   }
   get(name) {
     return this.styles.get(name);
@@ -30598,7 +30424,171 @@ function anchorsEqual(a, b) {
   return a.owner === b.owner && a.row === b.row && a.col === b.col && anchorsEqual(a.inner, b.inner);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/segment.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
+var isAscii = (text4) => /^[\x00-\x7F]*$/.test(text4);
+function drawable(options, chosen, ascii, glyphs = String) {
+  return options.asciiOnly === true && !isAscii(glyphs(chosen)) ? ascii : chosen;
+}
+function getStyle(options, style) {
+  return (options.theme ?? DEFAULT_THEME).resolve(style);
+}
+var TERMINAL_GROUND = Style.parse("default on default");
+function withCellWidth(options) {
+  return { ...options, maxWidth: cellCount(options.maxWidth) };
+}
+function drawsNothing(options) {
+  return cellCount(options.maxWidth) < 1;
+}
+var active;
+function runIn(phase, run3) {
+  const outer = active;
+  active = phase;
+  try {
+    return run3();
+  } finally {
+    active = outer;
+  }
+}
+function betweenPasses(handler) {
+  return runIn(void 0, handler);
+}
+function activePass() {
+  return active?.pass;
+}
+var phaseHere = () => active ?? { pass: {}, effects: [] };
+function commit(phase) {
+  runIn(void 0, () => {
+    for (const effect of phase.effects.splice(0))
+      effect();
+  });
+}
+function withinPass(phase, drawn) {
+  if (Array.isArray(drawn)) {
+    commit(phase);
+    return drawn;
+  }
+  return {
+    [Symbol.iterator]: () => {
+      const steps2 = runIn(phase, () => drawn[Symbol.iterator]());
+      return Object.assign(Object.create(ITERATOR_PROTOTYPE), {
+        next: () => {
+          const step4 = runIn(phase, () => steps2.next());
+          if (step4.done === true)
+            commit(phase);
+          return step4;
+        },
+        return: (value) => runIn(phase, () => steps2.return?.(value) ?? { done: true, value: void 0 }),
+        throw: (error) => runIn(phase, () => {
+          if (steps2.throw)
+            return steps2.throw(error);
+          throw error;
+        })
+      });
+    }
+  };
+}
+var ITERATOR_PROTOTYPE = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
+function render(renderable, options) {
+  const opens = active === void 0;
+  const presence2 = drawsNothing(options) ? "held" : "drawn";
+  const { phase, drawing: drawing2 } = presence2 === "drawn" ? { phase: phaseHere(), drawing: options } : holding(options);
+  const drawn = runIn(phase, () => {
+    options.onPresent?.(renderable, presence2);
+    return renderable.render(drawing2);
+  });
+  if (presence2 === "held") {
+    runIn(phase, () => {
+      for (const _ of drawn)
+        ;
+    });
+    return [];
+  }
+  return opens ? withinPass(phase, drawn) : drawn;
+}
+function holding(options) {
+  const { onPresent } = options;
+  return {
+    phase: { pass: phaseHere().pass, effects: [] },
+    drawing: { ...options, maxWidth: 0, onPresent: onPresent && ((content) => onPresent(content, "held")) }
+  };
+}
+function measure2(measurable, options) {
+  return runIn({ pass: phaseHere().pass, effects: [] }, () => measurable.measure(measuring(options)));
+}
+function measuring(options) {
+  return { ...options, onPresent: void 0 };
+}
+function withBoundedWidth(options, self2) {
+  const parsed2 = withCellWidth(options);
+  if (Number.isFinite(parsed2.maxWidth))
+    return parsed2;
+  const natural = measure2(self2, parsed2).maximum;
+  if (!Number.isFinite(natural)) {
+    throw new RangeError("maxWidth is unbounded and this renderable has no natural width to fall back on: its content does not implement measure(), or something inside it asked for an unbounded width of its own. Render it at a finite width, or give the content a measure() that reports a finite maximum.");
+  }
+  return { ...parsed2, maxWidth: cellCount(natural) };
+}
+function isRenderable(obj) {
+  return typeof obj === "object" && obj !== null && "render" in obj && typeof obj.render === "function";
+}
+function isMeasurable(obj) {
+  return typeof obj === "object" && obj !== null && "measure" in obj && typeof obj.measure === "function";
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
+var Measurement = class _Measurement {
+  minimum;
+  maximum;
+  constructor(minimum, maximum) {
+    this.minimum = minimum;
+    this.maximum = maximum;
+  }
+  get span() {
+    return this.maximum - this.minimum;
+  }
+  /**
+   * A range with no cell meaning becomes one with the nearest meaning there is:
+   * negative floors to zero, an inverted pair collapses to its ceiling, and NaN
+   * reads as zero cells the same way `cellCount` reads it.
+   *
+   * NaN and Infinity are not treated alike here, and the difference is the whole
+   * point. `Infinity` is a maximum a renderable means — `Table` reports it when
+   * a column asks for every cell there is, and `withBoundedWidth` throws on it
+   * so a caller learns their offer was unanswerable. Flooring it to zero would
+   * turn that loud failure into a table measured at no width at all.
+   */
+  normalize() {
+    const cells = (n) => Number.isNaN(n) ? 0 : n;
+    const min2 = Math.max(0, Math.min(cells(this.minimum), cells(this.maximum)));
+    const max2 = Math.max(0, cells(this.maximum));
+    return new _Measurement(min2, max2);
+  }
+  withMaximum(width) {
+    return new _Measurement(Math.min(this.minimum, width), Math.min(this.maximum, width));
+  }
+  withMinimum(width) {
+    const min2 = Math.max(this.minimum, width);
+    const max2 = Math.max(this.maximum, min2);
+    return new _Measurement(min2, max2);
+  }
+  clamp(minWidth, maxWidth) {
+    return new _Measurement(Math.min(Math.max(this.minimum, minWidth), maxWidth), Math.min(Math.max(this.maximum, minWidth), maxWidth));
+  }
+  // [LAW:single-enforcer] Single entry point for measuring a renderable. One
+  // that cannot measure itself asks for the whole offer, as the reference's
+  // `Measurement.get` answers for it — so under an unbounded offer it asks for
+  // `Infinity`, and `withBoundedWidth` refuses rather than guessing a width.
+  static get(options, renderable) {
+    if (drawsNothing(options))
+      return new _Measurement(0, 0);
+    if (!isMeasurable(renderable))
+      return new _Measurement(0, options.maxWidth);
+    const { minimum, maximum } = measure2(renderable, options);
+    return new _Measurement(minimum, Math.min(maximum, options.maxWidth)).normalize();
+  }
+};
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/segment.js
 init_globals();
 var ControlType;
 (function(ControlType2) {
@@ -30623,8 +30613,8 @@ var Segment = class _Segment {
   text;
   style;
   control;
-  constructor(text3, style, control2) {
-    this.text = text3;
+  constructor(text4, style, control2) {
+    this.text = text4;
     this.style = style;
     this.control = control2;
   }
@@ -30655,12 +30645,12 @@ var Segment = class _Segment {
     return this.cutAt([position]);
   }
   cutAt(positions) {
-    return cutCells(this.text, positions).map((text3, piece) => new _Segment(text3, piece === 0 ? this.style : this.style?.shiftedBy(positions[piece - 1])));
+    return cutCells(this.text, positions).map((text4, piece) => new _Segment(text4, piece === 0 ? this.style : this.style?.shiftedBy(positions[piece - 1])));
   }
   // --- Static factories ---
-  static _line;
+  static _line = new _Segment("\n");
   static line() {
-    return _Segment._line ??= new _Segment("\n");
+    return _Segment._line;
   }
   // --- Static transformations ---
   /**
@@ -30685,7 +30675,7 @@ var Segment = class _Segment {
   }
   /**
    * When what `segments` show next changes, in seconds on the timeline of
-   * whoever drew them: the soonest `Style.nextChange` among them, read off
+   * whoever drew them: the soonest `Style.hold` among them, read off
    * the composed frame the way `anchorAt` reads an owner — `t` itself for a
    * frame something in moves every frame, `Infinity` for one that never
    * changes. What a host that drew the frame at `t` asks before drawing
@@ -30695,8 +30685,21 @@ var Segment = class _Segment {
   static nextChange(segments) {
     let soonest = Number.POSITIVE_INFINITY;
     for (const segment of segments)
-      soonest = Math.min(soonest, segment.style?.nextChange ?? Number.POSITIVE_INFINITY);
+      soonest = Math.min(soonest, segment.style?.hold.nextChange ?? Number.POSITIVE_INFINITY);
     return soonest;
+  }
+  /**
+   * Since when what `segments` show has been what it is, on the same
+   * timeline: the latest `Style.hold` among them, the other end of the
+   * hold `nextChange` reads — `t` for a frame something in moves every
+   * frame, `-Infinity` for one that always was. What a host running its
+   * timeline backwards asks before drawing again.
+   */
+  static lastChange(segments) {
+    let latest = Number.NEGATIVE_INFINITY;
+    for (const segment of segments)
+      latest = Math.max(latest, segment.style?.hold.lastChange ?? Number.NEGATIVE_INFINITY);
+    return latest;
   }
   /**
    * The anchor of the cell at column `x` of row `y` in a composed frame, or
@@ -30759,12 +30762,12 @@ var Segment = class _Segment {
         currentLine.push(segment);
         continue;
       }
-      const text3 = segment.text;
-      if (!text3.includes("\n")) {
+      const text4 = segment.text;
+      if (!text4.includes("\n")) {
         currentLine.push(segment);
         continue;
       }
-      const parts = text3.split("\n");
+      const parts = text4.split("\n");
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) {
           lines2.push(currentLine);
@@ -30776,9 +30779,8 @@ var Segment = class _Segment {
         }
       }
     }
-    if (currentLine.length > 0) {
+    if (currentLine.length > 0)
       lines2.push(currentLine);
-    }
     return lines2;
   }
   /**
@@ -30804,11 +30806,10 @@ var Segment = class _Segment {
       if (segWidth <= remaining) {
         result.push(segment);
         remaining -= segWidth;
-      } else {
+      } else if (remaining > 0) {
         const [left] = segment.splitCells(asCellCol(remaining));
         result.push(left);
         remaining = 0;
-        break;
       }
     }
     return result;
@@ -31086,128 +31087,515 @@ function stylesEqual(a, b) {
   return a.equals(b);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
-init_globals();
-var isAscii = (text3) => /^[\x00-\x7F]*$/.test(text3);
-function drawable(options, chosen, ascii, glyphs = String) {
-  return options.asciiOnly === true && !isAscii(glyphs(chosen)) ? ascii : chosen;
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
+function shownAt(animation, t2, motion) {
+  const reduced = motion.reducedMotion === true;
+  const drawn = reduced ? animation.reduced() : animation;
+  return { value: drawn.at(t2), nextChange: drawn.nextChange(t2), drawn, reduced };
 }
-function getStyle(options, style) {
-  return (options.theme ?? DEFAULT_THEME).resolve(style);
+function holdOf(shown, t2) {
+  return { lastChange: shown.drawn.lastChange(t2), nextChange: shown.nextChange };
 }
-var TERMINAL_GROUND = Style.parse("default on default");
-function withCellWidth(options) {
-  return { ...options, maxWidth: cellCount(options.maxWidth) };
+function stamp(hold) {
+  return new Style({ hold });
 }
-function drawsNothing(options) {
-  return cellCount(options.maxWidth) < 1;
+function stampFrame(segments, hold) {
+  return Segment.applyStyle(segments, stamp(hold));
 }
-function render(renderable, options) {
-  const presence2 = drawsNothing(options) ? "held" : "drawn";
-  options.onPresent?.(renderable, presence2);
-  if (presence2 === "drawn")
-    return renderable.render(options);
-  if (isComposite(renderable))
-    for (const content of renderable.contents())
-      render(content, options);
-  return [];
+function frameTimeOf(options) {
+  return options.frame?.time ?? 0;
 }
-function measuring(options) {
-  return { ...options, onPresent: void 0 };
+function drawable2(value) {
+  if (!isRenderable(value))
+    throw new TypeError("an Animation is drawn only when its values are renderables; place what it maps to (Animation.map)");
+  return value;
 }
-function withBoundedWidth(options, self2) {
-  const parsed2 = withCellWidth(options);
-  if (Number.isFinite(parsed2.maxWidth))
-    return parsed2;
-  const natural = self2.measure(measuring(parsed2)).maximum;
-  if (!Number.isFinite(natural)) {
-    throw new RangeError("maxWidth is unbounded and this renderable has no natural width to fall back on: its content does not implement measure(), or something inside it asked for an unbounded width of its own. Render it at a finite width, or give the content a measure() that reports a finite maximum.");
+function* placedRender(animation, options) {
+  const t2 = frameTimeOf(options);
+  const shown = shownAt(animation, t2, options);
+  const value = drawable2(shown.value);
+  const hold = holdOf(shown, t2);
+  options.onHold?.(hold);
+  yield* stampFrame(render(value, options), hold);
+}
+function placedMeasure(animation, options) {
+  const t2 = frameTimeOf(options);
+  const shown = shownAt(animation, t2, options);
+  options.onHold?.(holdOf(shown, t2));
+  return Measurement.get(options, drawable2(shown.value));
+}
+function membersOf(source) {
+  const copy3 = {};
+  for (let layer = source; layer !== null && layer !== Object.prototype; layer = Object.getPrototypeOf(layer)) {
+    for (const key of Reflect.ownKeys(layer)) {
+      if (key === "constructor" || Object.hasOwn(copy3, key))
+        continue;
+      const member = Object.getOwnPropertyDescriptor(layer, key);
+      Object.defineProperty(copy3, key, member.get !== void 0 ? { enumerable: true, configurable: true, get: () => Reflect.get(source, key) } : { enumerable: true, configurable: true, writable: true, value: typeof member.value === "function" ? member.value.bind(source) : member.value });
+    }
   }
-  return { ...parsed2, maxWidth: cellCount(natural) };
+  return copy3;
 }
-function isMeasurable(obj) {
-  return typeof obj === "object" && obj !== null && "measure" in obj && typeof obj.measure === "function";
-}
-function isComposite(obj) {
-  return "contents" in obj && typeof obj.contents === "function";
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
-init_globals();
-var Measurement = class _Measurement {
-  minimum;
-  maximum;
-  constructor(minimum, maximum) {
-    this.minimum = minimum;
-    this.maximum = maximum;
-  }
-  get span() {
-    return this.maximum - this.minimum;
-  }
+var Animation = {
   /**
-   * A range with no cell meaning becomes one with the nearest meaning there is:
-   * negative floors to zero, an inverted pair collapses to its ceiling, and NaN
-   * reads as zero cells the same way `cellCount` reads it.
-   *
-   * NaN and Infinity are not treated alike here, and the difference is the whole
-   * point. `Infinity` is a maximum a renderable means — `Table` reports it when
-   * a column asks for every cell there is, and `withBoundedWidth` throws on it
-   * so a caller learns their offer was unanswerable. Flooring it to zero would
-   * turn that loud failure into a table measured at no width at all.
+   * `timed` as an animation: every member it carries kept (`membersOf`),
+   * with the face its values call for — `render` and `measure`,
+   * drawing it at the frame's time. Every animation made from a literal is
+   * made here, the library's and a user's alike. [LAW:single-enforcer] The
+   * one cast in the type: a literal's `T` is not known at runtime, so every
+   * animation made here has the face, and one whose values are not
+   * renderables throws when it is drawn.
    */
-  normalize() {
-    const cells = (n) => Number.isNaN(n) ? 0 : n;
-    const min2 = Math.max(0, Math.min(cells(this.minimum), cells(this.maximum)));
-    const max2 = Math.max(0, cells(this.maximum));
-    return new _Measurement(min2, max2);
-  }
-  withMaximum(width) {
-    return new _Measurement(Math.min(this.minimum, width), Math.min(this.maximum, width));
-  }
-  withMinimum(width) {
-    const min2 = Math.max(this.minimum, width);
-    const max2 = Math.max(this.maximum, min2);
-    return new _Measurement(min2, max2);
-  }
-  clamp(minWidth, maxWidth) {
-    return new _Measurement(Math.min(Math.max(this.minimum, minWidth), maxWidth), Math.min(Math.max(this.maximum, minWidth), maxWidth));
-  }
-  // [LAW:single-enforcer] Single entry point for measuring a renderable. One
-  // that cannot measure itself asks for the whole offer, as the reference's
-  // `Measurement.get` answers for it — so under an unbounded offer it asks for
-  // `Infinity`, and `withBoundedWidth` refuses rather than guessing a width.
-  static get(options, renderable) {
-    if (drawsNothing(options))
-      return new _Measurement(0, 0);
-    if (!isMeasurable(renderable))
-      return new _Measurement(0, options.maxWidth);
-    const { minimum, maximum } = renderable.measure(measuring(options));
-    return new _Measurement(minimum, Math.min(maximum, options.maxWidth)).normalize();
+  of(timed) {
+    const faced = Object.assign(membersOf(timed), {
+      render: (options) => placedRender(faced, options),
+      measure: (options) => placedMeasure(faced, options)
+    });
+    return faced;
+  },
+  /** `value` at every time, never changing. */
+  constant(value) {
+    const still = Animation.of({ at: () => value, nextChange: () => Number.POSITIVE_INFINITY, lastChange: () => Number.NEGATIVE_INFINITY, reduced: () => still });
+    return still;
+  },
+  /**
+   * `before` until 0, then `after`: an instant change at 0 — a cut, what a
+   * one-shot is with its motion taken out, its start kept and its end at once.
+   */
+  cut(before, after) {
+    const cut = Animation.of({
+      at: (t2) => t2 < 0 ? before : after,
+      nextChange: (t2) => t2 < 0 ? 0 : Number.POSITIVE_INFINITY,
+      lastChange: (t2) => t2 < 0 ? Number.NEGATIVE_INFINITY : 0,
+      reduced: () => cut
+    });
+    return cut;
+  },
+  /**
+   * The value `at` gives, taken to move at every moment: what an animation
+   * that cannot say when it holds still is, so a host draws it every frame.
+   * Reduced, it holds its first value, as a loop does; a one-shot built on
+   * it says its own end (`transition`, `../renderables/effects.ts`).
+   */
+  continuous(at) {
+    return Animation.of({ at, nextChange: (t2) => t2, lastChange: (t2) => t2, reduced: () => Animation.constant(at(0)) });
+  },
+  /**
+   * The time itself, in seconds, moving at every moment: what a clock, a
+   * counter or anything else that reports the time is mapped from. It is
+   * information and not motion, so reduced it is itself, and a clock shown
+   * to a reader who wants no motion still keeps the time; motion computed
+   * from the time is `continuous`, which reduced holds still.
+   * [LAW:types-are-the-program]
+   */
+  time() {
+    const time = Animation.of({ at: (t2) => t2, nextChange: (t2) => t2, lastChange: (t2) => t2, reduced: () => time });
+    return time;
+  },
+  /**
+   * `animation`'s value through `f`, changing when it does. Two values `f`
+   * maps alike make an early answer, which the contract allows.
+   */
+  map(animation, f) {
+    return Animation.of({
+      at: (t2) => f(animation.at(t2)),
+      nextChange: (t2) => animation.nextChange(t2),
+      lastChange: (t2) => animation.lastChange(t2),
+      reduced: () => Animation.map(animation.reduced(), f)
+    });
+  },
+  /**
+   * Every one of `animations` at once, their values in order, changing when
+   * the soonest of them does — so a stack of effects drawn together holds
+   * still exactly while each of them does, and reduced each reduced — a
+   * stagger with every child arrived. None never changes.
+   */
+  all(animations) {
+    return Animation.of({
+      // [LAW:types-are-the-program] Each value at its own place in the tuple,
+      // which `map` cannot say of its array.
+      at: (t2) => animations.map((animation) => animation.at(t2)),
+      // A fold, not a spread: a stagger over a table's rows is a list as long
+      // as the table, past what an engine takes as arguments.
+      nextChange: (t2) => animations.reduce((soonest, animation) => Math.min(soonest, animation.nextChange(t2)), Number.POSITIVE_INFINITY),
+      lastChange: (t2) => animations.reduce((latest, animation) => Math.max(latest, animation.lastChange(t2)), Number.NEGATIVE_INFINITY),
+      reduced: () => Animation.all(animations.map((animation) => animation.reduced()))
+    });
+  },
+  /**
+   * `animation` sampled once a hold of `beat`: within a hold, its value at
+   * the hold's start, and at each hold's start it moves on. It changes at the
+   * first hold's start the sampled animation has moved by: the end of this
+   * hold for one that moves every moment, the hold its next change falls in
+   * for one that holds longer, and never for one that never changes again.
+   * The answer is read off what the animation says, never a comparison of
+   * values, so one that is back on the same value by the next hold still
+   * turns the beat there, an early answer the contract allows.
+   * [LAW:one-source-of-truth] The one stepping rule, for an effect's frames
+   * and a transition's schedule alike.
+   */
+  onBeat(animation, beat2) {
+    return Animation.of({
+      at: (t2) => animation.at(beat2.lastChange(t2)),
+      nextChange(t2) {
+        const moved = animation.nextChange(beat2.lastChange(t2));
+        if (moved === Number.POSITIVE_INFINITY)
+          return moved;
+        const end = beat2.nextChange(t2);
+        return moved <= end ? end : beat2.lastChange(moved) === moved ? moved : beat2.nextChange(moved);
+      },
+      // The value held now began at this hold's start at the latest: an early
+      // answer where the animation had not moved by it, which the contract allows.
+      lastChange: (t2) => beat2.lastChange(t2),
+      // Reduced, nothing moves between beats, so there is nothing to sample on them.
+      reduced: () => animation.reduced()
+    });
+  },
+  /**
+   * `first` until `seconds`, then `then`, handed the time since it began —
+   * each part on its own clock from 0, as every effect is. Before the switch
+   * the value next changes when `first`'s does or at the switch, whichever is
+   * sooner; after it, when `then`'s does, carried back onto this timeline.
+   * Reduced, each part is reduced and the switch kept, so what either shows
+   * shows on time; a one-shot that is the motion into what follows says its
+   * own end (`transition`, `../renderables/effects.ts`).
+   */
+  sequence(first2, seconds, then) {
+    positiveSeconds("Animation.sequence seconds", seconds);
+    const carried = (local) => Number.isFinite(local) ? firstReaching(local + seconds, (x) => x - seconds >= local) : local;
+    return Animation.of({
+      at: (t2) => t2 - seconds >= 0 ? then.at(t2 - seconds) : first2.at(t2),
+      nextChange(t2) {
+        const into = t2 - seconds;
+        if (into < 0)
+          return Math.min(first2.nextChange(t2), seconds);
+        return Math.max(t2, carried(then.nextChange(into)));
+      },
+      // After the switch the value became what it is at the switch or when
+      // `then`'s did since, whichever is later; before it, when `first`'s did.
+      lastChange(t2) {
+        const into = t2 - seconds;
+        if (into < 0)
+          return first2.lastChange(t2);
+        return Math.min(t2, Math.max(seconds, carried(then.lastChange(into))));
+      },
+      reduced: () => Animation.sequence(first2.reduced(), seconds, then.reduced())
+    });
+  },
+  /**
+   * `nth(n)` for every time in the `n`th turn, `[n·period, (n+1)·period)`,
+   * handed the time since that turn began — a one-shot played again every
+   * `period` seconds, a different one each turn if `nth` says so. `n` is any
+   * integer, so a timeline run back past 0 is in turn −1. Within a turn the
+   * value next changes when the turn's does or at the next turn, whichever is
+   * sooner, and became what it is when the turn's did or at this turn's start,
+   * whichever is later: run backwards, a host wakes where the turn began.
+   * Reduced, each turn is reduced and the turns kept, so a turn showing
+   * something new still shows it on time and a one-shot inside cuts to its
+   * end there. Nothing is walked through: a call reads only its turn.
+   */
+  repeat(period, nth) {
+    positiveSeconds("Animation.repeat period", period);
+    const turns = beat([period]);
+    const carried = (n, began, local) => Number.isFinite(local) ? firstReaching(began + local, (x) => {
+      const { pass, into } = passAt("Animation.repeat", x, period);
+      return pass > n || pass === n && into >= local;
+    }) : local;
+    return Animation.of({
+      at: (t2) => {
+        const { pass, into } = passAt("Animation.repeat", t2, period);
+        return nth(pass).at(into);
+      },
+      nextChange(t2) {
+        const { pass, into } = passAt("Animation.repeat", t2, period);
+        return Math.max(t2, Math.min(turns.nextChange(t2), carried(pass, turns.lastChange(t2), nth(pass).nextChange(into))));
+      },
+      lastChange(t2) {
+        const { pass, into } = passAt("Animation.repeat", t2, period);
+        const began = turns.lastChange(t2);
+        return Math.min(t2, Math.max(began, carried(pass, began, nth(pass).lastChange(into))));
+      },
+      reduced: () => Animation.repeat(period, (n) => nth(n).reduced())
+    });
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/tween.js
+init_globals();
+function tween(from, to, timing) {
+  for (const [name, v] of [["from", from], ["to", to]]) {
+    if (!Number.isFinite(v))
+      throw new RangeError(`tween ${name} must be finite, got ${v}`);
+  }
+  const { ease, seconds } = timing;
+  const phase = Phase.once(0, seconds);
+  if (from === to)
+    return Animation.constant(from);
+  return Animation.of({
+    at(t2) {
+      const p2 = ease(phase(t2));
+      return (1 - p2) * from + p2 * to;
+    },
+    // Before it begins the value is held until 0; while it moves, every
+    // frame; from `seconds` on, never again — and it became what it is at
+    // `seconds`, or always was before it began.
+    nextChange: (t2) => t2 < 0 ? 0 : t2 < seconds ? t2 : Number.POSITIVE_INFINITY,
+    lastChange: (t2) => t2 < 0 ? Number.NEGATIVE_INFINITY : t2 < seconds ? t2 : seconds,
+    // A one-shot, reduced, cuts from where it starts to where it arrives.
+    reduced: () => Animation.cut(from, to)
+  });
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
+var ColorRamp = class _ColorRamp {
+  ease;
+  stops;
+  /** How far the colours have moved along the span, in spans, in [0, 1). */
+  scroll;
+  /** How far every hue is rotated in OKLCH, in turns, in [0, 1). */
+  hue;
+  constructor(ease, stops, scroll = 0, hue = 0) {
+    this.ease = ease;
+    this.stops = stops;
+    this.scroll = turnOf("scroll", scroll);
+    this.hue = turnOf("hue", hue);
+    if (stops.length === 0) {
+      throw new RangeError("a ColorRamp needs at least one stop");
+    }
+    for (const [i, stop2] of stops.entries()) {
+      if (!Number.isFinite(stop2.at)) {
+        throw new RangeError(`ColorRamp stop ${i} has a non-finite position ${stop2.at}`);
+      }
+      const prev = stops[i - 1];
+      if (prev !== void 0 && stop2.at < prev.at) {
+        throw new RangeError(`ColorRamp stops must be in ascending position order; stop ${i} at ${stop2.at} follows stop ${i - 1} at ${prev.at}`);
+      }
+    }
+  }
+  /**
+   * The color at `value`. Below the first stop it is the first color; at or
+   * above the last stop it is the last; between two stops the raw progress
+   * from the lower to the upper goes through `ease`, and the eased progress
+   * says how far to mix.
+   *
+   * Eased progress 0 is the lower stop's color and 1 the upper's, byte for
+   * byte — the exactness contract, not a shortcut: the sRGB → OKLCH → sRGB
+   * round-trip can land a channel one unit off, and a ramp that did not hit
+   * its own stops exactly would make a `step` ramp paint a color the author
+   * never wrote. So a value on a stop is that stop's color whenever the ease
+   * starts at 0, as every built-in does but `step-start` and the
+   * `jump-start`/`jump-both` steps, which jump at the start of the interval as
+   * CSS defines them. An ease that overshoots [0, 1] holds the end colors
+   * where it does: a ramp never paints outside its stops.
+   *
+   * A scrolled ramp reads, inside its span, the colour `scroll` spans behind
+   * `value`, wrapped back round the span as a repeating gradient does —
+   * seamless when the first and last stops are one colour; outside the span
+   * its end colours hold, however far it has scrolled. A rotated ramp turns
+   * the colour read by `hue` at its own lightness and chroma. Unmoved, every
+   * read keeps the exactness above.
+   */
+  at(value) {
+    if (!Number.isFinite(value)) {
+      throw new RangeError(`ColorRamp.at needs a finite value, got ${value}`);
+    }
+    const first2 = this.stops[0].at;
+    const last2 = this.stops[this.stops.length - 1].at;
+    const span = last2 - first2;
+    const inside = first2 <= value && value <= last2;
+    const moved = inside ? value - this.scroll * span : value;
+    const read2 = this.unmoved(inside && moved < first2 ? moved + span : moved);
+    return this.hue === 0 ? read2 : Oklch.fromRgba(read2).applyKey({ ...IDENTITY, hueShift: 360 * this.hue }).toRgba();
+  }
+  /** The colour at `value` with the ramp unmoved: the stops and the ease alone. */
+  unmoved(value) {
+    const stops = this.stops;
+    let lower2 = -1;
+    while (lower2 + 1 < stops.length && stops[lower2 + 1].at <= value)
+      lower2++;
+    if (lower2 < 0)
+      return stops[0].color;
+    const from = stops[lower2];
+    if (lower2 === stops.length - 1)
+      return from.color;
+    const to = stops[lower2 + 1];
+    const t2 = this.ease((value - from.at) / (to.at - from.at));
+    if (t2 <= 0)
+      return from.color;
+    if (t2 >= 1)
+      return to.color;
+    return Oklch.fromRgba(from.color).mix(Oklch.fromRgba(to.color), t2).toRgba();
+  }
+  /**
+   * This ramp read over time: its span of positions, from the first stop's
+   * to the last's, crossed at a steady rate in `seconds` and held at the last
+   * stop from then on, each colour along the way the ramp's own. A colour
+   * tween is a two-stop ramp over its seconds — the ramp's ease shaping the
+   * move, so `new ColorRamp(ease, [{ at: 0, color: a }, { at: 1, color: b
+   * }]).over(seconds)` is `a` eased to `b` — and a ramp of more stops over
+   * time is a sweep through all of them. [LAW:one-source-of-truth] The
+   * blending is `at`'s; what time adds is `tween`'s (`core/tween.ts`), so a
+   * host sampling once a second or sixty times reads the stop colours byte
+   * for byte where `at` paints them.
+   */
+  over(seconds) {
+    const first2 = this.stops[0].at;
+    const last2 = this.stops[this.stops.length - 1].at;
+    return Animation.map(tween(first2, last2, { seconds, ease: EASES.linear }), (value) => this.at(value));
+  }
+  /**
+   * This ramp moving: at `t`, scrolled by `motion.scroll` and rotated by
+   * `motion.hue` at `t`, on top of however far it was already moved, and
+   * changing when either does — so a loop moves every frame and a ramp a
+   * tween settles never changes again once it arrives.
+   * [LAW:one-source-of-truth] When it next changes is `Animation.all`'s
+   * answer over the two parts; nothing here says it a second time. Whether
+   * the depth it is drawn at can show the move is decided where it is drawn
+   * (`gradient`, through `stillOnSlots`).
+   */
+  moving(motion) {
+    const still = Animation.constant(0);
+    return Animation.map(Animation.all([motion.scroll ?? still, motion.hue ?? still]), ([scroll, hue]) => new _ColorRamp(this.ease, this.stops, this.scroll + scroll, this.hue + hue));
+  }
+};
+function turnOf(what, v) {
+  if (!Number.isFinite(v))
+    throw new RangeError(`ColorRamp ${what} must be finite, got ${v}`);
+  const into = v - Math.floor(v);
+  return into < 1 ? into : 0;
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/timeline.js
+init_globals();
+function finiteSeconds(what, seconds) {
+  if (!Number.isFinite(seconds))
+    throw new RangeError(`${what} must be a finite number of seconds, got ${seconds}`);
+  return seconds;
+}
+var hostTime = (host) => finiteSeconds("Timeline host time", host);
+function playbackRate(rate) {
+  if (!Number.isFinite(rate) || rate === 0)
+    throw new RangeError(`Timeline rate must be finite and not zero, got ${rate}`);
+  return rate;
+}
+function anchored(timeline, host, time, rate) {
+  const origin = hostTime(host);
+  return timeline.playing ? { playing: true, origin, time, rate } : { playing: false, time, rate };
+}
+function played(animation, { origin, time, rate }) {
+  const mapped = (host) => time + rate * (host - origin);
+  const forward = rate > 0;
+  const ahead = forward ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
+  const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
+  const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
+  const hostOf = (edge) => {
+    const sum = origin + (edge - time) / rate;
+    return Number.isFinite(sum) ? firstReaching(sum, (host) => past(mapped(host), edge)) : sum;
+  };
+  return Animation.of({
+    at: (host) => animation.at(mapped(hostTime(host))),
+    nextChange(host) {
+      const h = hostTime(host);
+      const t2 = mapped(h);
+      const edge = ahead(t2);
+      return edge === t2 ? h : Math.max(h, hostOf(edge));
+    },
+    lastChange(host) {
+      const h = hostTime(host);
+      const t2 = mapped(h);
+      const edge = behind(t2);
+      return edge === t2 ? h : Math.min(h, hostOf(edge));
+    },
+    reduced: () => played(animation.reduced(), { playing: true, origin, time, rate })
+  });
+}
+var Timeline = {
+  /** Playing from host time `origin`, at which the animation time is 0, at `rate` animation seconds a host second. */
+  play(origin, rate = 1) {
+    return { playing: true, origin: finiteSeconds("Timeline.play origin", origin), time: 0, rate: playbackRate(rate) };
+  },
+  /** The animation time at host time `host`. */
+  at(timeline, host) {
+    const h = hostTime(host);
+    return timeline.playing ? timeline.time + timeline.rate * (h - timeline.origin) : timeline.time;
+  },
+  /** `timeline` held at the animation time it maps `host` to. Pausing a paused timeline holds the same time. */
+  pause(timeline, host) {
+    return { playing: false, time: Timeline.at(timeline, host), rate: timeline.rate };
+  },
+  /** `timeline` playing from `host` at the animation time it maps `host` to, at its rate. Resuming a playing timeline is the same map. */
+  resume(timeline, host) {
+    return { playing: true, origin: hostTime(host), time: Timeline.at(timeline, host), rate: timeline.rate };
+  },
+  /** `timeline` with the animation at `time` at host time `host`, playing or held as it was. */
+  seek(timeline, host, time) {
+    return anchored(timeline, host, finiteSeconds("Timeline.seek time", time), timeline.rate);
+  },
+  /** `timeline` at `rate` from host time `host` on, with no jump: the animation time at `host` is what it was. */
+  withRate(timeline, host, rate) {
+    return anchored(timeline, host, Timeline.at(timeline, host), playbackRate(rate));
+  },
+  /**
+   * `animation` on host time: its value at the time `timeline` maps each
+   * host time to, changing at the host moment the mapped time reaches the
+   * animation's own answer — backwards, when it drops under where the value
+   * began. Paused, the value never changes and never did. The value is the
+   * animation's own, on no clock: placed, it is stamped at the frame's time
+   * (`placedRender`, `./animation.ts`) with this animation's answers, so a
+   * value's contents follow the frame's clock and not this map.
+   * Reduced, it is the animation reduced on the same timeline: what shows
+   * still follows the timeline, and only the motion is gone.
+   */
+  run(timeline, animation) {
+    if (timeline.playing)
+      return played(animation, timeline);
+    return Animation.of({
+      at: (host) => animation.at(Timeline.at(timeline, host)),
+      nextChange: (host) => (hostTime(host), Number.POSITIVE_INFINITY),
+      lastChange: (host) => (hostTime(host), Number.NEGATIVE_INFINITY),
+      reduced: () => Timeline.run(timeline, animation.reduced())
+    });
+  },
+  /**
+   * Every one of `animations` at once, each on a timeline playing from its
+   * index times `delay` seconds after the earliest, their values in order, on
+   * a clock of the stagger's own from 0. It changes when the soonest of them
+   * does, on that clock (`Animation.all` of `run`s). A delay of 0 starts them
+   * together and a negative one starts the last at 0 and the first last.
+   * Reduced, the offsets are the cascade's choreography, which is motion: every
+   * child reduced at once, so from 0 everyone has arrived.
+   */
+  stagger(animations, delay) {
+    finiteSeconds("Timeline.stagger delay", delay);
+    const span = finiteSeconds("Timeline.stagger delay times the last index", Math.max(0, animations.length - 1) * delay);
+    const earliest = Math.min(0, span);
+    const cascade = Animation.all(animations.map((animation, i) => Timeline.run(Timeline.play(i * delay - earliest), animation)));
+    return Animation.of({ ...cascade, reduced: () => Animation.all(animations.map((animation) => animation.reduced())) });
+  }
+};
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
 init_globals();
-function* words(text3) {
+function* words(text4) {
   const re = /\s*\S+\s*/y;
-  for (let match = re.exec(text3); match !== null; match = re.exec(text3)) {
+  for (let match = re.exec(text4); match !== null; match = re.exec(text4)) {
     yield match[0];
   }
 }
 function widthOf(word) {
   return cellLen(word.trimEnd());
 }
-function wordWidths(text3) {
-  return Array.from(words(text3), widthOf);
+function wordWidths(text4) {
+  return Array.from(words(text4), widthOf);
 }
 function foldWord(word, width) {
   const pieces = chopCells(word, width);
   return cellLen(pieces[0]) > width ? ["", ...pieces] : pieces;
 }
-function divideLine(text3, width, options) {
+function divideLine(text4, width, options) {
   if (width <= 0)
     return [];
   const cuts = [];
@@ -31217,7 +31605,7 @@ function divideLine(text3, width, options) {
   };
   let used = 0;
   let wordStart = 0;
-  for (const word of words(text3)) {
+  for (const word of words(text4)) {
     const wordWidth = widthOf(word);
     if (width - used >= wordWidth) {
       used += cellLen(word);
@@ -31241,35 +31629,33 @@ function divideLine(text3, width, options) {
   return cuts;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
 init_globals();
 var utf8 = new TextEncoder();
-function fnv1a(text3) {
+function fnv1a(text4) {
   let hash2 = 2166136261;
-  for (const byte of utf8.encode(text3)) {
+  for (const byte of utf8.encode(text4)) {
     hash2 = Math.imul(hash2 ^ byte, 16777619);
   }
   return (hash2 >>> 0).toString(16).padStart(8, "0");
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
 var TERMINATORS = "\\x1b\\x07\\x9c";
-var TERMINATOR_RE = new RegExp(`[${TERMINATORS}]`, "g");
 function stripOscTerminators(url) {
-  return url.replace(TERMINATOR_RE, "");
+  return url.replace(new RegExp(`[${TERMINATORS}]`, "g"), "");
 }
 function osc8Open(url) {
   const clean = stripOscTerminators(url);
   return `\x1B]8;id=${fnv1a(clean)};${clean}\x1B\\`;
 }
 var OSC8_CLOSE = "\x1B]8;;\x1B\\";
-var OSC8 = new RegExp(`\\x1b\\]8;([^;${TERMINATORS}]*);([^${TERMINATORS}]*)(?:\\x1b\\\\|\\x07|\\x9c)`);
-var OSC8_SCAN = new RegExp(OSC8.source, "g");
-function osc8Sequences(text3) {
-  return [...text3.matchAll(OSC8_SCAN)].map((m) => ({
+var OSC8 = pattern(new RegExp(`\\x1b\\]8;([^;${TERMINATORS}]*);([^${TERMINATORS}]*)(?:\\x1b\\\\|\\x07|\\x9c)`));
+function osc8Sequences(text4) {
+  return [...text4.matchAll(new RegExp(OSC8.source, "g"))].map((m) => ({
     index: m.index,
     length: m[0].length,
     params: m[1],
@@ -31277,12 +31663,58 @@ function osc8Sequences(text3) {
   }));
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
-var CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g;
-function stripControlChars(text3) {
-  return text3.replace(CONTROL_CHARS_RE, "");
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/state.js
+init_globals();
+var RenderWriteError = class extends Error {
+  constructor() {
+    super("State was written during a render or measure. A render changes nothing: change state in an event handler, an update, or between frames.");
+    this.name = "RenderWriteError";
+  }
+};
+var State = class {
+  #value;
+  #owner = activePass();
+  constructor(value) {
+    this.#value = value;
+  }
+  get() {
+    return this.#value;
+  }
+  set(value) {
+    refuseRenderWrite(this.#owner);
+    this.#value = value;
+  }
+};
+var ListState = class {
+  #items;
+  #owner = activePass();
+  constructor(items = []) {
+    this.#items = [...items];
+  }
+  get() {
+    return this.#items;
+  }
+  // One item, not a rest parameter: a caller spreading a long list into one overflows the call stack.
+  push(item) {
+    refuseRenderWrite(this.#owner);
+    this.#items.push(item);
+  }
+  set(items) {
+    refuseRenderWrite(this.#owner);
+    this.#items = [...items];
+  }
+};
+function refuseRenderWrite(owner) {
+  const pass = activePass();
+  if (pass !== void 0 && pass !== owner)
+    throw new RenderWriteError();
 }
-var TRAILING_WHITESPACE_RE = /\s+$/;
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
+function stripControlChars(text4) {
+  return text4.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g, "");
+}
+var TRAILING_WHITESPACE_RE = pattern(/\s+$/);
 function plainOf(line) {
   return line.map((segment) => segment.text).join("");
 }
@@ -31321,7 +31753,7 @@ function resolveDefinition(options, style) {
   } catch (err) {
     if (!(err instanceof StyleSyntaxError))
       throw err;
-    options.onStyleError?.(err, style);
+    betweenPasses(() => options.onStyleError?.(err, style));
     return NULL_STYLE;
   }
 }
@@ -31361,36 +31793,42 @@ var Span = class _Span {
   }
 };
 var RichText = class _RichText {
+  // Rich's `Text` is changed in place — appended to, stylized, padded — so its
+  // characters, spans and format are state, and a write to one while
+  // something is drawn throws. Three holders rather than one per field: a
+  // `RichText` is the most-made object in the library.
   _text;
-  _spans;
-  _style;
-  _justify;
-  _overflow;
-  _end;
+  _spans = new ListState();
+  _format;
   _tabSize;
-  _noWrap;
-  constructor(text3, options) {
-    this._text = text3 ? stripControlChars(text3) : "";
-    this._spans = [];
-    this._style = admitStyle(options?.style ?? NULL_STYLE);
-    this._justify = options?.justify;
-    this._overflow = options?.overflow;
-    this._end = options?.end ?? "\n";
+  constructor(text4, options) {
+    this._text = new State(text4 ? stripControlChars(text4) : "");
+    this._format = new State({
+      // [LAW:single-enforcer] `admitStyle` is the boundary that sanitizes
+      // any link URL crossing into a RichText; downstream trusts the invariant.
+      style: admitStyle(options?.style ?? NULL_STYLE),
+      justify: options?.justify,
+      overflow: options?.overflow,
+      end: options?.end ?? "\n",
+      noWrap: options?.noWrap ?? false
+    });
     this._tabSize = parseTabSize(options?.tabSize ?? 8);
-    this._noWrap = options?.noWrap ?? false;
+  }
+  _reformat(change) {
+    this._format.set({ ...this._format.get(), ...change });
   }
   // --- Properties ---
   get plain() {
-    return this._text;
+    return this._text.get();
   }
   set plain(value) {
     const sanitized = stripControlChars(value);
-    this._text = sanitized;
+    this._text.set(sanitized);
     const len2 = sanitized.length;
-    this._spans = this._spans.map((s) => s.end > len2 ? new Span(s.start, Math.min(s.end, len2), s.style) : s).filter((s) => s.start < len2);
+    this._spans.set(this._spans.get().map((s) => s.end > len2 ? new Span(s.start, Math.min(s.end, len2), s.style) : s).filter((s) => s.start < len2));
   }
   get length() {
-    return this._text.length;
+    return this._text.get().length;
   }
   /**
    * The cells of the plain text with each tab widened to its stop counted from
@@ -31401,44 +31839,44 @@ var RichText = class _RichText {
    * no render draws.
    */
   get cellLength() {
-    return cellLen(expandTabs(this._text, this._tabSize).text);
+    return cellLen(expandTabs(this._text.get(), this._tabSize).text);
   }
   get hasContent() {
-    return this._text.length > 0;
+    return this._text.get().length > 0;
   }
   /** The base style every span layers over, resolved at render unless it is a `Style`. */
   get style() {
-    return this._style;
+    return this._format.get().style;
   }
   set style(value) {
-    this._style = admitStyle(value);
+    this._reformat({ style: admitStyle(value) });
   }
   get justify() {
-    return this._justify;
+    return this._format.get().justify;
   }
   set justify(value) {
-    this._justify = value;
+    this._reformat({ justify: value });
   }
   get overflow() {
-    return this._overflow;
+    return this._format.get().overflow;
   }
   set overflow(value) {
-    this._overflow = value;
+    this._reformat({ overflow: value });
   }
   get end() {
-    return this._end;
+    return this._format.get().end;
   }
   set end(value) {
-    this._end = value;
+    this._reformat({ end: value });
   }
   get noWrap() {
-    return this._noWrap;
+    return this._format.get().noWrap;
   }
   set noWrap(value) {
-    this._noWrap = value;
+    this._reformat({ noWrap: value });
   }
   get spans() {
-    return this._spans;
+    return this._spans.get();
   }
   /**
    * This text's own style, spans aside, as the render drawing it resolves it.
@@ -31446,7 +31884,7 @@ var RichText = class _RichText {
    * text forgives a missing name.
    */
   resolvedStyle(options) {
-    return resolveStyle(options, this._style);
+    return resolveStyle(options, this._format.get().style);
   }
   /**
    * The style of the cell-column at the named edge — base style merged with
@@ -31470,11 +31908,11 @@ var RichText = class _RichText {
    */
   edgeStyle(side, options) {
     const base = this.resolvedStyle(options);
-    if (this._text.length === 0)
+    if (this._text.get().length === 0)
       return base;
-    const pos = side === "left" ? 0 : this._text.length - 1;
+    const pos = side === "left" ? 0 : this._text.get().length - 1;
     let result = base;
-    for (const span of this._spans) {
+    for (const span of this._spans.get()) {
       if (span.start <= pos && pos < span.end) {
         result = result.add(resolveStyle(options, span.style));
       }
@@ -31487,34 +31925,34 @@ var RichText = class _RichText {
       if (style !== void 0) {
         throw new Error("Style argument must not be provided when appending RichText");
       }
-      const offset = this._text.length;
-      this._text += content._text;
-      this._addSpan(offset, this._text.length, content._style);
-      for (const span of content._spans) {
-        this._spans.push(span.move(offset));
-      }
+      const offset = this._text.get().length;
+      const moved = content._spans.get().map((span) => span.move(offset));
+      this._text.set(this._text.get() + content._text.get());
+      this._addSpan(offset, this._text.get().length, content._format.get().style);
+      for (const span of moved)
+        this._spans.push(span);
       return this;
     }
     const sanitized = stripControlChars(content);
-    const start = this._text.length;
-    this._text += sanitized;
-    this._addSpan(start, this._text.length, style ?? "");
+    const start = this._text.get().length;
+    this._text.set(this._text.get() + sanitized);
+    this._addSpan(start, this._text.get().length, style ?? "");
     return this;
   }
   contains(needle) {
-    const searchText = needle instanceof _RichText ? needle._text : needle;
-    return this._text.includes(searchText);
+    const searchText = needle instanceof _RichText ? needle._text.get() : needle;
+    return this._text.get().includes(searchText);
   }
   at(index) {
-    const resolved = index < 0 ? this._text.length + index : index;
-    const char = this._text[resolved];
+    const resolved = index < 0 ? this._text.get().length + index : index;
+    const char = this._text.get()[resolved];
     if (char === void 0)
       return new _RichText("");
     return this.slice(resolved, resolved + 1);
   }
   slice(start, end) {
-    const text3 = this._text;
-    const len2 = text3.length;
+    const text4 = this._text.get();
+    const len2 = text4.length;
     const s = start ?? 0;
     const e = end ?? len2;
     const resolvedStart = s < 0 ? Math.max(0, len2 + s) : Math.min(s, len2);
@@ -31522,9 +31960,9 @@ var RichText = class _RichText {
     if (resolvedStart >= resolvedEnd) {
       return this.blankCopy();
     }
-    const slicedText = text3.slice(resolvedStart, resolvedEnd);
+    const slicedText = text4.slice(resolvedStart, resolvedEnd);
     const result = this.blankCopy(slicedText);
-    for (const span of this._spans) {
+    for (const span of this._spans.get()) {
       const spanStart = Math.max(span.start, resolvedStart) - resolvedStart;
       const spanEnd = Math.min(span.end, resolvedEnd) - resolvedStart;
       if (spanStart < spanEnd) {
@@ -31546,7 +31984,7 @@ var RichText = class _RichText {
     this._spans.push(new Span(start, end, admitted));
   }
   stylize(style, start, end) {
-    const len2 = this._text.length;
+    const len2 = this._text.get().length;
     const s = start !== void 0 ? start < 0 ? len2 + start : start : 0;
     const e = end !== void 0 ? end < 0 ? len2 + end : end : len2;
     if (s >= e || s >= len2 || e <= 0)
@@ -31556,13 +31994,13 @@ var RichText = class _RichText {
     this._addSpan(clampedStart, clampedEnd, style);
     return this;
   }
-  highlightRegex(pattern, style) {
-    const text3 = this._text;
+  highlightRegex(pattern2, style) {
+    const text4 = this._text.get();
     let count = 0;
-    const flags = pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g";
-    const re = new RegExp(pattern.source, flags);
+    const flags = pattern2.flags.includes("g") ? pattern2.flags : pattern2.flags + "g";
+    const re = new RegExp(pattern2.source, flags);
     let match;
-    while ((match = re.exec(text3)) !== null) {
+    while ((match = re.exec(text4)) !== null) {
       if (match[0].length === 0) {
         re.lastIndex++;
         continue;
@@ -31597,7 +32035,7 @@ var RichText = class _RichText {
       const flags = caseSensitive ? "g" : "gi";
       const re = new RegExp(`\\b${escaped2}\\b`, flags);
       let match;
-      while ((match = re.exec(this._text)) !== null) {
+      while ((match = re.exec(this._text.get())) !== null) {
         this._addSpan(match.index, match.index + match[0].length, style);
         count++;
       }
@@ -31606,35 +32044,21 @@ var RichText = class _RichText {
   }
   // --- Copy Operations ---
   copy() {
-    const result = new _RichText(this._text, {
-      style: this._style,
-      justify: this._justify,
-      overflow: this._overflow,
-      end: this._end,
-      tabSize: this._tabSize,
-      noWrap: this._noWrap
-    });
-    result._spans = this._spans.slice();
+    const result = this.blankCopy(this._text.get());
+    result._spans.set(this._spans.get());
     return result;
   }
-  blankCopy(text3) {
-    return new _RichText(text3 ?? "", {
-      style: this._style,
-      justify: this._justify,
-      overflow: this._overflow,
-      end: this._end,
-      tabSize: this._tabSize,
-      noWrap: this._noWrap
-    });
+  blankCopy(text4) {
+    return new _RichText(text4 ?? "", { ...this._format.get(), tabSize: this._tabSize });
   }
   // --- Splitting ---
   split(separator) {
     const sep2 = separator ?? "\n";
-    const text3 = this._text;
+    const text4 = this._text.get();
     const parts = [];
     let start = 0;
     while (true) {
-      const idx = text3.indexOf(sep2, start);
+      const idx = text4.indexOf(sep2, start);
       if (idx === -1) {
         parts.push(this.slice(start));
         break;
@@ -31658,16 +32082,16 @@ var RichText = class _RichText {
   }
   // --- Whitespace Operations ---
   rstrip() {
-    const trimmed = this._text.replace(/\s+$/, "");
-    if (trimmed.length < this._text.length) {
+    const trimmed = this._text.get().replace(/\s+$/, "");
+    if (trimmed.length < this._text.get().length) {
       this.plain = trimmed;
     }
     return this;
   }
   pad(count, char) {
     const padding = stripControlChars(char ?? " ").repeat(count);
-    this._spans = this._spans.map((s) => s.move(padding.length));
-    this._text = padding + this._text + padding;
+    this._spans.set(this._spans.get().map((s) => s.move(padding.length)));
+    this._text.set(padding + this._text.get() + padding);
     return this;
   }
   /**
@@ -31676,33 +32100,33 @@ var RichText = class _RichText {
    * the text measures what it will draw.
    */
   expandTabs() {
-    const expanded = expandTabs(this._text, this._tabSize);
-    this._spans = this._spans.map((s) => new Span(expanded.offsetOf(s.start), expanded.offsetOf(s.end), s.style));
-    this._text = expanded.text;
+    const expanded = expandTabs(this._text.get(), this._tabSize);
+    this._spans.set(this._spans.get().map((s) => new Span(expanded.offsetOf(s.start), expanded.offsetOf(s.end), s.style)));
+    this._text.set(expanded.text);
     return this;
   }
   padLeft(count, char) {
     const padding = stripControlChars(char ?? " ").repeat(count);
-    this._spans = this._spans.map((s) => s.move(padding.length));
-    this._text = padding + this._text;
+    this._spans.set(this._spans.get().map((s) => s.move(padding.length)));
+    this._text.set(padding + this._text.get());
     return this;
   }
   padRight(count, char) {
-    this._text += stripControlChars(char ?? " ").repeat(count);
+    this._text.set(this._text.get() + stripControlChars(char ?? " ").repeat(count));
     return this;
   }
   setLength(length) {
-    if (this._text.length < length) {
-      this._text += " ".repeat(length - this._text.length);
-    } else if (this._text.length > length) {
-      this.plain = this._text.slice(0, length);
+    if (this._text.get().length < length) {
+      this._text.set(this._text.get() + " ".repeat(length - this._text.get().length));
+    } else if (this._text.get().length > length) {
+      this.plain = this._text.get().slice(0, length);
     }
     return this;
   }
   extendStyle(count) {
-    const oldLen = this._text.length;
-    this._text += " ".repeat(count);
-    this._spans = this._spans.map((s) => s.end === oldLen ? s.extend(count) : s);
+    const oldLen = this._text.get().length;
+    this._text.set(this._text.get() + " ".repeat(count));
+    this._spans.set(this._spans.get().map((s) => s.end === oldLen ? s.extend(count) : s));
     return this;
   }
   // --- Truncation ---
@@ -31745,28 +32169,28 @@ var RichText = class _RichText {
     if (mode === "right") {
       this._cropRightTo(budget);
       if (marker)
-        this._text += marker;
+        this._text.set(this._text.get() + marker);
       return this;
     }
     if (mode === "left") {
       this._cropLeftTo(budget);
       if (marker) {
-        this._spans = this._spans.map((s) => s.move(marker.length));
-        this._text = marker + this._text;
+        this._spans.set(this._spans.get().map((s) => s.move(marker.length)));
+        this._text.set(marker + this._text.get());
       }
       return this;
     }
     const leftBudget = asCellCol(Math.floor(budget / 2));
     const rightBudget = asCellCol(budget - leftBudget);
-    const leftEndCharIdx = cellFit(this._text, leftBudget).length;
-    const rightStartCharIdx = this._text.length - cellFitEnd(this._text, rightBudget).length;
-    const leftText = this._text.slice(0, leftEndCharIdx);
-    const rightText = this._text.slice(rightStartCharIdx);
+    const leftEndCharIdx = cellFit(this._text.get(), leftBudget).length;
+    const rightStartCharIdx = this._text.get().length - cellFitEnd(this._text.get(), rightBudget).length;
+    const leftText = this._text.get().slice(0, leftEndCharIdx);
+    const rightText = this._text.get().slice(rightStartCharIdx);
     const droppedStart = leftEndCharIdx;
     const droppedEnd = rightStartCharIdx;
     const shift = marker.length - (droppedEnd - droppedStart);
     const newSpans = [];
-    for (const s of this._spans) {
+    for (const s of this._spans.get()) {
       if (s.end <= droppedStart) {
         newSpans.push(s);
       } else if (s.start >= droppedEnd) {
@@ -31780,24 +32204,24 @@ var RichText = class _RichText {
         }
       }
     }
-    this._text = leftText + marker + rightText;
-    this._spans = newSpans;
+    this._text.set(leftText + marker + rightText);
+    this._spans.set(newSpans);
     return this;
   }
   _cropRightTo(targetWidth) {
-    this.plain = cellFit(this._text, targetWidth);
+    this.plain = cellFit(this._text.get(), targetWidth);
   }
   _cropLeftTo(targetWidth) {
-    const charIdx = this._text.length - cellFitEnd(this._text, targetWidth).length;
+    const charIdx = this._text.get().length - cellFitEnd(this._text.get(), targetWidth).length;
     const shift = -charIdx;
-    this._spans = this._spans.map((s) => {
+    this._spans.set(this._spans.get().map((s) => {
       if (s.end <= charIdx)
         return void 0;
       const newStart = Math.max(0, s.start + shift);
       const newEnd = s.end + shift;
       return new Span(newStart, newEnd, s.style);
-    }).filter((s) => s !== void 0);
-    this._text = this._text.slice(charIdx);
+    }).filter((s) => s !== void 0));
+    this._text.set(this._text.get().slice(charIdx));
   }
   // --- Alignment ---
   align(justify, width) {
@@ -31825,15 +32249,15 @@ var RichText = class _RichText {
   }
   // --- Suffix Removal ---
   removeSuffix(suffix) {
-    if (this._text.endsWith(suffix)) {
-      this.plain = this._text.slice(0, -suffix.length);
+    if (this._text.get().endsWith(suffix)) {
+      this.plain = this._text.get().slice(0, -suffix.length);
     }
     return this;
   }
   // --- Token Appending ---
   appendTokens(tokens2) {
-    for (const [text3, style] of tokens2) {
-      this.append(text3, style);
+    for (const [text4, style] of tokens2) {
+      this.append(text4, style);
     }
     return this;
   }
@@ -31846,14 +32270,14 @@ var RichText = class _RichText {
       } else if (part instanceof _RichText) {
         result.append(part);
       } else {
-        const [text3, style] = part;
-        result.append(text3, style);
+        const [text4, style] = part;
+        result.append(text4, style);
       }
     }
     return result;
   }
-  static styled(text3, style) {
-    const result = new _RichText(text3);
+  static styled(text4, style) {
+    const result = new _RichText(text4);
     result.stylize(style);
     return result;
   }
@@ -31881,18 +32305,18 @@ var RichText = class _RichText {
   }
   // --- Renderable ---
   *render(options) {
-    const expanded = expandTabs(this._text, this._tabSize);
+    const expanded = expandTabs(this._text.get(), this._tabSize);
     const base = this.resolvedStyle(options);
     const { segments: allSegments, covered } = this._buildSegments(expanded, base, options);
     const spanFree = spanFreeLines(allSegments, covered);
     allSegments.push(Segment.line());
     const logicalLines = Segment.splitLines(allSegments);
     const maxWidth = cellCount(withBoundedWidth(options, this).maxWidth);
-    const overflow = this._overflow ?? options.overflow ?? "fold";
-    const noWrap = this._noWrap || (options.noWrap ?? false);
+    const overflow = this._format.get().overflow ?? options.overflow ?? "fold";
+    const noWrap = this._format.get().noWrap || (options.noWrap ?? false);
     const edge = overflow === "ignore" ? cellCount(Infinity) : maxWidth;
     const wrapAt = noWrap ? cellCount(Infinity) : edge;
-    const justify = overflow === "ignore" ? void 0 : this._justify ?? options.justify;
+    const justify = overflow === "ignore" ? void 0 : this._format.get().justify ?? options.justify;
     const ellipsis = drawable(options, "\u2026", ".");
     for (let index = 0; index < logicalLines.length; index += 1) {
       const line = logicalLines[index];
@@ -31911,13 +32335,13 @@ var RichText = class _RichText {
         }
       }
     }
-    if (this._end) {
-      yield new Segment(this._end);
+    if (this._format.get().end) {
+      yield new Segment(this._format.get().end);
     }
   }
   // --- Measurable ---
   measure(options) {
-    const lines2 = expandTabs(this._text, this._tabSize).text.split("\n");
+    const lines2 = expandTabs(this._text.get(), this._tabSize).text.split("\n");
     const maxLineWidth = lines2.reduce((widest, line) => Math.max(widest, cellLen(line)), 0);
     const widths = lines2.flatMap(wordWidths);
     const maxWordWidth = widths.length > 0 ? widths.reduce((widest, w) => Math.max(widest, w), 0) : maxLineWidth;
@@ -31953,20 +32377,20 @@ var RichText = class _RichText {
    * always did, and then folds into no piece at all: its range comes out empty
    * and no case handles it.
    */
-  _buildSegments({ text: text3, offsetOf }, base, options) {
-    const clamp = (offset) => Math.max(0, Math.min(offsetOf(offset), text3.length));
+  _buildSegments({ text: text4, offsetOf }, base, options) {
+    const clamp = (offset) => Math.max(0, Math.min(offsetOf(offset), text4.length));
     const inner = /* @__PURE__ */ new Set();
-    for (const span of this._spans) {
+    for (const span of this._spans.get()) {
       inner.add(clamp(span.start));
       inner.add(clamp(span.end));
     }
     inner.delete(0);
-    inner.delete(text3.length);
-    const boundaries = [0, ...[...inner].sort((a, b) => a - b), text3.length];
+    inner.delete(text4.length);
+    const boundaries = [0, ...[...inner].sort((a, b) => a - b), text4.length];
     const pieceAt = new Map(boundaries.map((position, piece) => [position, piece]).reverse());
     const styles = boundaries.slice(0, -1).map(() => base);
     const covered = styles.map(() => false);
-    for (const span of this._spans) {
+    for (const span of this._spans.get()) {
       const end = clamp(span.end);
       const style = resolveStyle(options, span.style);
       const opensAt = pieceAt.get(clamp(span.start));
@@ -31975,7 +32399,7 @@ var RichText = class _RichText {
         covered[piece] = true;
       }
     }
-    const segments = styles.map((style, piece) => new Segment(text3.slice(boundaries[piece], boundaries[piece + 1]), style.isNull ? void 0 : style));
+    const segments = styles.map((style, piece) => new Segment(text4.slice(boundaries[piece], boundaries[piece + 1]), style.isNull ? void 0 : style));
     return { segments, covered };
   }
   /**
@@ -32160,28 +32584,9 @@ function* padded(drawn, free, left, right, style) {
     yield new Segment((tail ? line[last2].text : "") + pad(right), style);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
 init_globals();
 var JOIN = Object.freeze({ name: "join" });
-var ColorOwners = class {
-  fg;
-  bg;
-  constructor(fg, bg) {
-    this.fg = fg;
-    this.bg = bg;
-  }
-};
-function colorsOwnedBy(anchor, owners) {
-  for (let level = anchor; level; level = level.inner) {
-    if (owners.has(level.owner))
-      return { fg: true, bg: true };
-    if (level.owner instanceof ColorOwners) {
-      const { fg, bg } = level.owner;
-      return { fg: fg !== null && owners.has(fg), bg: bg !== null && owners.has(bg) };
-    }
-  }
-  return { fg: false, bg: false };
-}
 function drawJoin(joiner, left, right, context) {
   const join4 = joiner.join(left, right, context);
   return { render: (options) => Segment.anchorLines([[...render(join4, options)]], JOIN)[0] };
@@ -32210,10 +32615,6 @@ var Strip = class {
     }
     yield Segment.line();
   }
-  // The items; a join is drawn from what the joiner emits for it, not held.
-  contents() {
-    return this.items;
-  }
   /**
    * [LAW:one-source-of-truth] The width of the one row it draws, and that is
    * both bounds: the row never wraps and no item is offered less than the whole
@@ -32228,7 +32629,7 @@ var Strip = class {
     return { minimum: width, maximum: width };
   }
 };
-var PARTS = ["seam", "divider", "lead", "tail"];
+var PARTS = ["seam", "lead", "tail"];
 var SEAM_MIN_DELTA_E = 0.04;
 function* paintsIn(paint) {
   yield paint;
@@ -32243,7 +32644,6 @@ var pickGlyph = (cell3, part, index, at) => {
   return glyphs[Math.floor(parseInt(fnv1a(`${part}:${index}:${at}`), 16) / 2 ** 32 * glyphs.length)];
 };
 var cellWidth = (cell3) => cellLen(glyphsOf(cell3)[0] ?? "");
-var partWidth = (cells) => cells.reduce((width, cell3) => width + cellWidth(cell3), 0);
 function parsePaint(raw, absent, refuse3) {
   if (raw === "ground")
     return refuse3("mixes ground, whose colour is unknown");
@@ -32264,8 +32664,8 @@ function parsePaint(raw, absent, refuse3) {
   return refuse3(`has a colour that is not a Paint: ${JSON.stringify(raw)}`);
 }
 var parseColor = (raw, absent, refuse3) => raw === "ground" ? raw : parsePaint(raw, absent, refuse3);
-var ABSENT = { seam: void 0, divider: void 0, lead: "left", tail: "right" };
-var AUTHORED_IN = { seam: "seam", divider: "seam", lead: "caps", tail: "caps" };
+var ABSENT = { seam: void 0, lead: "left", tail: "right" };
+var AUTHORED_IN = { seam: "seam", lead: "caps", tail: "caps" };
 function parseCell(cell3, form, part, refuse3) {
   const glyph = cell3.glyph;
   const oneOf = typeof glyph === "object" && glyph !== null ? glyph.oneOf : void 0;
@@ -32311,20 +32711,8 @@ var asSeamCell = (form, part) => (cell3, refuse3) => {
     refuse3("names a cap and draws cells of its own; a cell is one or the other");
   return cap === "lead" || cap === "tail" ? Object.freeze({ cap }) : refuse3(`names a cap that is neither lead nor tail: ${JSON.stringify(cap)}`);
 };
-var seamWidth = (cells) => [
-  partWidth(cells.filter((cell3) => !("cap" in cell3))),
-  cells.filter((cell3) => "cap" in cell3 && cell3.cap === "lead").length,
-  cells.filter((cell3) => "cap" in cell3 && cell3.cap === "tail").length
-];
 function parseSeam(raw) {
-  const parseForm = (form) => {
-    const seam = parseCells(raw, form, "seam", asSeamCell(form, "seam"));
-    const divider = raw[form].divider === raw[form].seam ? seam : parseCells(raw, form, "divider", asSeamCell(form, "divider"));
-    const [seamAt, dividerAt] = [seamWidth(seam), seamWidth(divider)];
-    if (seamAt.some((n, i) => n !== dividerAt[i]))
-      throw new Error(`seam: ${form} divider is not the width of the seam under every caps`);
-    return Object.freeze({ seam, divider });
-  };
+  const parseForm = (form) => Object.freeze({ seam: parseCells(raw, form, "seam", asSeamCell(form, "seam")) });
   return Object.freeze({ glyph: parseForm("glyph"), ascii: parseForm("ascii") });
 }
 function parseCaps(raw) {
@@ -32332,20 +32720,20 @@ function parseCaps(raw) {
   return Object.freeze({ glyph: parseForm("glyph"), ascii: parseForm("ascii") });
 }
 function joinForms(seam, caps) {
-  const splice2 = (cells) => cells.flatMap((cell3) => "cap" in cell3 ? caps[cell3.cap] : [cell3]);
-  const seamCells = splice2(seam.seam);
-  return { seam: seamCells, divider: seam.divider === seam.seam ? seamCells : splice2(seam.divider), lead: caps.lead, tail: caps.tail };
+  return { seam: seam.seam.flatMap((cell3) => "cap" in cell3 ? caps[cell3.cap] : [cell3]), lead: caps.lead, tail: caps.tail };
 }
+var partsRead = (cell3, side) => new Set([cell3.fg, cell3.bg].flatMap((color) => color === "ground" ? [] : [...paintsIn(color)].flatMap((p2) => "edge" in p2 && p2.edge === side ? [p2.part] : [])));
 var readsGround = (cells, side) => cells.some((cell3) => [cell3.fg, cell3.bg].some((color) => color !== "ground" && [...paintsIn(color)].some((p2) => "edge" in p2 && p2.edge === side && p2.part === "bg")));
 function formOf(shape) {
-  const between = [...shape.seam, ...shape.divider];
+  const cells = (part) => shape[part].map((cell3) => ({ cell: cell3, parts: { left: partsRead(cell3, "left"), right: partsRead(cell3, "right") } }));
   return {
     shape,
     reads: {
-      seam: { left: readsGround(between, "left"), right: readsGround(between, "right") },
+      seam: { left: readsGround(shape.seam, "left"), right: readsGround(shape.seam, "right") },
       lead: readsGround(shape.lead, "right"),
       tail: readsGround(shape.tail, "left")
-    }
+    },
+    cells: { seam: cells("seam"), lead: cells("lead"), tail: cells("tail") }
   };
 }
 function paintableBg(bg) {
@@ -32354,15 +32742,36 @@ function paintableBg(bg) {
 function drawnGround(bg) {
   return bg.flattenAlpha(SURFACE_BLACK);
 }
-function vanishes(style, colorSystem) {
-  if (style.reverse)
-    return false;
-  const { color, bgcolor } = style.drawnColors(colorSystem ?? ColorDepth.TRUECOLOR);
-  if (color === void 0 || bgcolor === void 0)
-    return false;
-  const av = color.fixedValue;
-  const bv = bgcolor.fixedValue;
-  return av !== void 0 && bv !== void 0 ? Oklch.fromRgba(av).deltaE(Oklch.fromRgba(bv)) < SEAM_MIN_DELTA_E : color.number !== void 0 ? color.number === bgcolor.number : color.name === bgcolor.name;
+function standsOff(ink, ground) {
+  if (ink.isDefault || ground.isDefault)
+    return true;
+  const [a, b] = [ink.fixedValue, ground.fixedValue];
+  return a !== void 0 && b !== void 0 ? Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b)) >= SEAM_MIN_DELTA_E : ink.number !== void 0 ? ink.number !== ground.number : ink.name !== ground.name;
+}
+var LIFT_STEP = 1e-3;
+function* lightnessRay(origin) {
+  for (let k = 1; k * LIFT_STEP <= 1; k++) {
+    for (const l of [origin.l + k * LIFT_STEP, origin.l - k * LIFT_STEP]) {
+      if (l >= 0 && l <= 1)
+        yield new Oklch(l, origin.c, origin.h);
+    }
+  }
+}
+function standOff(ink, ground, depth) {
+  if (ink === void 0 || ground === void 0)
+    return ink;
+  const drawn = (color, at) => new Style({ color, bgcolor: ground }).drawnColors(at);
+  const { color: shown, bgcolor: under2 } = drawn(ink, depth);
+  if (standsOff(shown, under2))
+    return ink;
+  const laid = drawn(ink).color;
+  const kind = shown.fixedValue === void 0 ? ColorDepth.STANDARD : ColorDepth.TRUECOLOR;
+  for (const step4 of lightnessRay(Oklch.fromRgba(laid.getTruecolor()))) {
+    const candidate = drawn(ColorSpec.fromRgba(step4.toRgba()).downgrade(kind), depth).color;
+    if (standsOff(candidate, under2))
+      return candidate;
+  }
+  throw new Error(`no colour on the lightness ray of ${ink.name} stands off ${ground.name} at depth ${ColorDepth[depth]}`);
 }
 function resolvePaint(paint, edges, options) {
   if ("edge" in paint) {
@@ -32382,8 +32791,65 @@ function resolvePaint(paint, edges, options) {
 function cellStyle(cell3, edges, options) {
   if (cell3.fg === "ground")
     return new Style({ color: cell3.bg === "ground" ? void 0 : resolvePaint(cell3.bg, edges, options), reverse: true });
-  const color = resolvePaint(cell3.fg, edges, options);
-  return new Style({ color, bgcolor: cell3.bg === "ground" ? void 0 : resolvePaint(cell3.bg, edges, options) });
+  const bgcolor = cell3.bg === "ground" ? void 0 : resolvePaint(cell3.bg, edges, options);
+  return new Style({ color: standOff(resolvePaint(cell3.fg, edges, options), bgcolor, options.colorSystem ?? ColorDepth.TRUECOLOR), bgcolor });
+}
+var JoinedCell = class _JoinedCell {
+  cell;
+  parts;
+  neighbours;
+  edges;
+  options;
+  /** What the cell's paints read on each side: that neighbour and its edge as the cell was resolved from it, or `null` for a side they read nothing of. */
+  reads;
+  /** Whether the cell's paints read either neighbour, so it follows them under an effect. */
+  follows;
+  /** The cell as drawn from its edges: the one resolution, at join time and after an effect alike. */
+  style;
+  constructor(cell3, parts, neighbours, edges, options) {
+    this.cell = cell3;
+    this.parts = parts;
+    this.neighbours = neighbours;
+    this.edges = edges;
+    this.options = options;
+    const read2 = (side) => {
+      if (parts[side].size === 0)
+        return null;
+      const [owner, edge] = [neighbours[side], edges[side]];
+      if (owner === null || edge === void 0)
+        throw new Error(`a join cell paints with its ${side} neighbour's edge, and the join has no ${side} neighbour`);
+      return { owner, edge };
+    };
+    this.reads = { left: read2("left"), right: read2("right") };
+    this.follows = this.reads.left !== null || this.reads.right !== null;
+    this.style = cellStyle(cell3, edges, options);
+  }
+  /**
+   * The cell resolved again once each side's edge has moved as `moves` says:
+   * its `colors`, as `cellStyle` draws them, and `style`, the cell's own, with
+   * the record of that stamped where this one was, so an effect drawn over
+   * this one moves on from these edges. Resolved, lift included, at `depth`,
+   * the depth the effect writes the frame at. None when nothing moved of what
+   * the cell paints with: a seam of arrows in two grounds is as it was drawn
+   * while an effect moves only the lettering beside it, and its lift is not
+   * walked again for a frame that cannot change it.
+   */
+  rederived(moves, style, depth) {
+    const reaches = (side) => moves[side]?.color !== void 0 && this.parts[side].has("fg") || moves[side]?.bgcolor !== void 0 && this.parts[side].has("bg");
+    if (!reaches("left") && !reaches("right"))
+      return void 0;
+    const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
+    const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
+    const next2 = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
+    const restamp = (level) => ({ ...level, owner: level.owner === this ? next2 : level.owner, inner: level.inner && restamp(level.inner) });
+    return { colors: next2.style, style: style.withAnchor(style.anchor && restamp(style.anchor)) };
+  }
+};
+function joinedCell(anchor) {
+  for (let level = anchor; level; level = level.inner)
+    if (level.owner instanceof JoinedCell)
+      return level.owner;
+  return void 0;
 }
 var shapeGlyphs = (shape) => PARTS.flatMap((part) => shape[part].flatMap(glyphsOf)).join("");
 var CellJoiner = class {
@@ -32399,7 +32865,7 @@ var CellJoiner = class {
     const forms = this._forms;
     return {
       *render(options) {
-        const { shape: drawn, reads } = drawable(options, forms.glyph, forms.ascii, (form) => shapeGlyphs(form.shape));
+        const { cells, reads } = drawable(options, forms.glyph, forms.ascii, (form) => shapeGlyphs(form.shape));
         const edges = { left: left?.edgeStyle("right", options), right: right?.edgeStyle("left", options) };
         const leftBg = paintableBg(edges.left?.bgcolor);
         const rightBg = paintableBg(edges.right?.bgcolor);
@@ -32408,19 +32874,16 @@ var CellJoiner = class {
         const leads = hasRight && (!reads.lead || rightBg !== void 0);
         const tails = hasLeft && (!reads.tail || leftBg !== void 0);
         const neighbours = { left, right };
-        const ownerOf = (color) => color !== "ground" && "edge" in color ? neighbours[color.edge] : null;
-        const styled = (part) => drawn[part].map((cell3, at) => {
-          const owners = new ColorOwners(ownerOf(cell3.fg), ownerOf(cell3.bg));
-          return new Segment(pickGlyph(cell3, part, index, at), cellStyle(cell3, edges, options).withAnchor({ owner: owners, row: 0, col: 0, inner: void 0 }));
+        const styled = (part) => cells[part].map(({ cell: cell3, parts }, at) => {
+          const joined = new JoinedCell(cell3, parts, neighbours, edges, options);
+          return new Segment(pickGlyph(cell3, part, index, at), joined.style.withAnchor({ owner: joined, row: 0, col: 0, inner: void 0 }));
         });
         if (!hasLeft || !hasRight) {
           if (leads || tails)
             yield* styled(leads ? "lead" : "tail");
           return;
         }
-        const seam = styled("seam");
-        const lost = drawn.divider !== drawn.seam && seam.every((segment) => segment.style !== void 0 && vanishes(segment.style, options.colorSystem));
-        yield* lost ? styled("divider") : seam;
+        yield* styled("seam");
       }
     };
   }
@@ -32433,48 +32896,34 @@ var GROUND = "ground";
 var LEAD = { cap: "lead" };
 var TAIL = { cap: "tail" };
 var both = (glyph, ascii) => ({ glyph, ascii });
-var POWERLINE = { glyph: "\uE0B0", thin: "\uE0B1", ascii: ">", asciiThin: ">" };
-var SLANT = { glyph: "\uE0BC", thin: "\uE0BD", ascii: "/", asciiThin: "/" };
-var BACKSLANT = { glyph: "\uE0B8", thin: "\uE0B9", ascii: "\\", asciiThin: "\\" };
-var FLAME = { glyph: "\uE0C0", thin: "\uE0C1", ascii: "}", asciiThin: "}" };
-var PIXEL = { glyph: "\uE0C4", thin: "\uE0B1", ascii: "#", asciiThin: ">" };
-var ICE = { glyph: "\uE0C8", thin: "\uE0B1", ascii: "]", asciiThin: ">" };
-var BUBBLE = { glyph: "\uE0B4", thin: "\uE0B5", ascii: ")", asciiThin: ")" };
-var arrow = (glyph, thin) => ({
-  seam: [{ glyph, fg: LEFT_BG, bg: RIGHT_BG }],
-  divider: [{ glyph: thin, fg: LEFT_FG, bg: LEFT_BG }]
-});
-var arrowSeam = (f) => both(arrow(f.glyph, f.thin), arrow(f.ascii, f.asciiThin));
-function prism(glyph, thin) {
+var POWERLINE = { glyph: "\uE0B0", ascii: ">" };
+var SLANT = { glyph: "\uE0BC", ascii: "/" };
+var BACKSLANT = { glyph: "\uE0B8", ascii: "\\" };
+var FLAME = { glyph: "\uE0C0", ascii: "}" };
+var PIXEL = { glyph: "\uE0C4", ascii: "#" };
+var ICE = { glyph: "\uE0C8", ascii: "]" };
+var BUBBLE = { glyph: "\uE0B4", ascii: ")" };
+var arrow = (glyph) => ({ seam: [{ glyph, fg: LEFT_BG, bg: RIGHT_BG }] });
+var arrowSeam = (f) => both(arrow(f.glyph), arrow(f.ascii));
+function prism(glyph) {
   const third = (t2) => ({ mix: [LEFT_BG, RIGHT_BG, t2] });
-  const pad = { glyph: " ", fg: LEFT_FG, bg: LEFT_BG };
   return {
     seam: [
       { glyph, fg: LEFT_BG, bg: third(1 / 3) },
       { glyph, fg: third(1 / 3), bg: third(2 / 3) },
       { glyph, fg: third(2 / 3), bg: RIGHT_BG }
-    ],
-    divider: [pad, { glyph: thin, fg: LEFT_FG, bg: LEFT_BG }, pad]
+    ]
   };
 }
-function parted(between) {
-  const seam = [TAIL, ...between, LEAD];
-  return { seam, divider: seam };
-}
-function midpoint(glyph, fg) {
-  const seam = [{ glyph, fg, bg: HALF }];
-  return { seam, divider: seam };
-}
-function torn(glyphs) {
-  return { seam: midpoint({ oneOf: glyphs }, LEFT_BG).seam, divider: [{ glyph: { oneOf: glyphs }, fg: LEFT_FG, bg: HALF }] };
-}
-var PLAIN_SEAM = [{ glyph: " | ", fg: { role: "strip.separator" }, bg: GROUND }];
-var PLAIN = { seam: PLAIN_SEAM, divider: PLAIN_SEAM };
+var parted = (between) => ({ seam: [TAIL, ...between, LEAD] });
+var midpoint = (glyph, fg) => ({ seam: [{ glyph, fg, bg: HALF }] });
+var torn = (glyphs) => midpoint({ oneOf: glyphs }, LEFT_BG);
+var PLAIN = { seam: [{ glyph: " | ", fg: { role: "strip.separator" }, bg: GROUND }] };
 var SPACE = { glyph: " ", fg: LEFT_FG, bg: GROUND };
 var rail = (glyph) => ({ glyph, fg: { role: "strip.rail" }, bg: GROUND });
 var SEAMS = Object.freeze({
   powerline: parseSeam(arrowSeam(POWERLINE)),
-  prism: parseSeam(both(prism(POWERLINE.glyph, POWERLINE.thin), prism(POWERLINE.ascii, POWERLINE.asciiThin))),
+  prism: parseSeam(both(prism(POWERLINE.glyph), prism(POWERLINE.ascii))),
   slant: parseSeam(arrowSeam(SLANT)),
   backslant: parseSeam(arrowSeam(BACKSLANT)),
   flame: parseSeam(arrowSeam(FLAME)),
@@ -32523,16 +32972,20 @@ var JOINERS2 = Object.freeze({
   plain: new CellJoiner(SEAMS.plain, CAPS.flat)
 });
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/render.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/render.js
 init_globals();
+function shownOn(segment, destination) {
+  const style = destination.reducedMotion ? segment.style?.reduced() : segment.style;
+  return style === segment.style ? segment : new Segment(segment.text, style, segment.control);
+}
 function segmentToString(segment, destination) {
   if (segment.isControl)
     return "";
-  const { text: text3, style } = segment;
-  if (text3.length === 0 || style === void 0)
-    return text3;
+  const { text: text4, style } = shownOn(segment, destination);
+  if (text4.length === 0 || style === void 0)
+    return text4;
   const codes = destination.colorSystem === null ? "" : style.toSgrCodes(destination.colorSystem);
-  const styled = codes.length > 0 ? `\x1B[${codes}m${text3}\x1B[0m` : text3;
+  const styled = codes.length > 0 ? `\x1B[${codes}m${text4}\x1B[0m` : text4;
   const link = destination.hyperlinks ? style.link : void 0;
   return link === void 0 ? styled : `${osc8Open(link)}${styled}${OSC8_CLOSE}`;
 }
@@ -32543,12 +32996,12 @@ function segmentsToString(segments, destination) {
   return parts.join("");
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
 init_globals();
-var ESCAPE = /\r|\x1b\[([0-9;:]*)m|\x1b\[([012]?)K|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|\x9c|$)|\x1b[ -/]*[0-~]/g;
+var escapes = () => /\r|\x1b\[([0-9;:]*)m|\x1b\[([012]?)K|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|\x9c|$)|\x1b[ -/]*[0-~]/g;
 function* escapeTokens(bytes) {
   let at = 0;
-  for (const match of bytes.matchAll(ESCAPE)) {
+  for (const match of bytes.matchAll(escapes())) {
     if (match.index > at)
       yield { kind: "text", text: bytes.slice(at, match.index) };
     if (match[0] === "\r")
@@ -32684,17 +33137,18 @@ var AnsiDecoder = class {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
 init_globals();
-function setIntoLine(text3) {
-  text3.end = "";
-  text3.plain = text3.plain.replaceAll("\n", " ");
-  return text3.expandTabs();
+function setIntoLine(text4) {
+  text4.end = "";
+  text4.plain = text4.plain.replaceAll("\n", " ");
+  return text4.expandTabs();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
 init_globals();
-var Effected = class {
+var UNMOVED = { lastChange: Number.NEGATIVE_INFINITY, nextChange: Number.POSITIVE_INFINITY };
+var Recolored = class {
   renderable;
   effect;
   t;
@@ -32703,63 +33157,179 @@ var Effected = class {
   constructor(renderable, effect, options) {
     this.renderable = renderable;
     this.effect = effect;
-    if (!Number.isFinite(options.t)) {
-      throw new RangeError(`Effected needs a finite t, got ${options.t}`);
-    }
-    this.t = options.t;
+    this.t = finiteTime("Effected", options.t);
     this.key = options.key;
     this.theme = options.theme;
   }
   render(options) {
+    return this.moved(options).segments;
+  }
+  /** The frame the effect draws at `t`, and the hold it says that is in. */
+  moved(options) {
     const segments = render(this.renderable, options);
     if (options.colorSystem === null)
-      return segments;
-    return this._moved(segments, options);
-  }
-  *contents() {
-    yield this.renderable;
-  }
-  *_moved(segments, options) {
+      return { segments, hold: UNMOVED };
     const depth = options.colorSystem ?? ColorDepth.TRUECOLOR;
     const looked = looks(segments, depth, this.theme);
     const walked = walk(looked);
     const animation = this.effect(measured(looked, () => walked, depth, this.theme));
-    yield* Segment.applyStyle(this._recolored(walked, animation.at(this.t), depth), new Style({ nextChange: animation.nextChange(this.t) }));
+    const shown = shownAt(animation, this.t, options);
+    return { segments: this._recolored(walked, shown.value, depth), hold: holdOf(shown, this.t) };
   }
   *_recolored(walked, frame, depth) {
-    for (const { segment, look, glyphs } of walked) {
-      if (look === void 0) {
+    const drawings = walked.map(({ look, glyphs }) => {
+      if (look === void 0)
+        return void 0;
+      const joined = joinedCell(look.style.anchor);
+      if (joined?.follows === true)
+        return { joined };
+      const from = { fg: look.pair.fg, bg: look.pair.bg, attributes: look.attributes };
+      const { terminal, reverse: reverse2 } = look.pair;
+      return { painted: glyphs.map(({ cell: cell3 }) => cell3 === void 0 ? from : returned(frame(from, { ...cell3, seed: cellSeed(this.key, cell3.row, cell3.col), terminal, reverse: reverse2 }))) };
+    });
+    const beside2 = edgesBeside(walked, drawings);
+    for (const [i, { segment, look, glyphs }] of walked.entries()) {
+      const drawing2 = drawings[i];
+      if (look === void 0 || drawing2 === void 0)
         yield segment;
-        continue;
-      }
-      const { style: base, wire, slots, pair } = look;
-      const { terminal } = pair;
-      const from = { fg: pair.fg, bg: pair.bg };
-      const runs2 = [];
-      for (const { glyph, cell: cell3 } of glyphs) {
-        const colors = cell3 === void 0 ? slots : onScreen(frame(from, { ...cell3, seed: this.seed(cell3.row, cell3.col), terminal, reverse: pair.reverse }), pair.reverse);
-        const last2 = runs2[runs2.length - 1];
-        const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
-        if (last2 !== void 0 && writesAlike(last2.drawn, writes)) {
-          last2.text += glyph;
-          last2.cells += cellLen(glyph);
-          last2.colors = colors;
-        } else {
-          runs2.push({ text: glyph, cells: cellLen(glyph), colors, drawn: writes });
-        }
-      }
-      if (runs2.every((run3) => writesAlike(run3.drawn, wire))) {
-        yield segment;
-        continue;
-      }
-      let offset = 0;
-      for (const run3 of runs2) {
-        const shifted = base.shiftedBy(offset);
-        const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
-        yield new Segment(run3.text, style);
-        offset += run3.cells;
+      else if ("joined" in drawing2)
+        yield this._rejoined(segment, look, drawing2.joined, glyphs, beside2, frame, depth);
+      else
+        yield* this._repainted(segment, look, glyphs, drawing2.painted, depth);
+    }
+  }
+  /** `segment`'s cells drawn in the looks the effect painted them. */
+  *_repainted(segment, look, glyphs, moved, depth) {
+    const { style: base, wire, slots, pair, attributes } = look;
+    const runs2 = [];
+    for (const [k, { glyph }] of glyphs.entries()) {
+      const now2 = moved[k];
+      const colors = onScreen(now2, pair.reverse);
+      const last2 = runs2[runs2.length - 1];
+      const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
+      if (last2 !== void 0 && writesAlike(last2.drawn, writes) && sameAttributes(last2.attributes, now2.attributes)) {
+        last2.text += glyph;
+        last2.cells += cellLen(glyph);
+        last2.colors = colors;
+      } else {
+        runs2.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes });
       }
     }
+    if (runs2.every((run3) => writesAlike(run3.drawn, wire) && sameAttributes(run3.attributes, attributes))) {
+      yield segment;
+      return;
+    }
+    let offset = 0;
+    for (const run3 of runs2) {
+      const placed = base.shiftedBy(offset);
+      const shifted = sameAttributes(run3.attributes, attributes) ? placed : placed.withAttributes(cellAttributes(run3.attributes));
+      const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
+      yield new Segment(run3.text, style);
+      offset += run3.cells;
+    }
+  }
+  /**
+   * A join cell's `segment` resolved again from the edges beside it, as the
+   * effect left them: each neighbour's nearest cell to the join on its row,
+   * its slots as the depth writes them. A side whose neighbour the effect moved
+   * nothing of keeps the edge the cell was drawn from, so with neither moved
+   * the cell is as it was drawn.
+   */
+  _rejoined(segment, look, joined, glyphs, beside2, frame, depth) {
+    const cells = glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3]);
+    const [at] = cells;
+    if (at === void 0)
+      return segment;
+    const { theme: theme24 } = this;
+    const terminals = /* @__PURE__ */ new Set();
+    const edgeOf = (spec, foreground) => {
+      if (!spec?.isDefault)
+        return spec;
+      const own2 = ColorSpec.fromRgba(spec.getTruecolor(theme24, foreground));
+      terminals.add(own2);
+      return own2;
+    };
+    const moved = (from, to) => {
+      const specs = movedSpecs(from, to, depth, theme24);
+      return specs.fg === void 0 && specs.bg === void 0 ? void 0 : { color: edgeOf(specs.fg, true), bgcolor: edgeOf(specs.bg, false) };
+    };
+    const unseen = (edge) => {
+      const wire2 = edge.drawnColors(depth);
+      const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
+      const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
+      return moved(slots2, returned(frame({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+    };
+    const moveOf = (side) => {
+      const read2 = joined.reads[side];
+      if (read2 === null)
+        return void 0;
+      const cell3 = beside2(cells, side, read2.owner);
+      return cell3 === void 0 ? unseen(read2.edge) : moved(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
+    };
+    const rederived = joined.rederived({ left: moveOf("left"), right: moveOf("right") }, look.style, depth);
+    if (rederived === void 0)
+      return segment;
+    const { colors, style } = rederived;
+    const was = joined.style;
+    const drawn = colors.drawnColors(depth);
+    const { wire, slots } = look;
+    const rounded = this.respec(wire, slots, { fg: colors.color?.getTruecolor(theme24, true) ?? slots.fg, bg: colors.bgcolor?.getTruecolor(theme24, false) ?? slots.bg }, depth);
+    const written2 = (now2, before, wrote, drew, round2) => {
+      if (sameSpec(now2, before))
+        return wrote;
+      if (now2 === void 0)
+        throw new Error(`a seam cell resolved to ${before?.name ?? "nothing"} when drawn and to nothing after an effect moved its neighbours`);
+      return terminals.has(now2) ? round2 : drew;
+    };
+    const writes = {
+      color: written2(colors.color, was.color, wire.color, drawn.color, rounded.color),
+      bgcolor: written2(colors.bgcolor, was.bgcolor, wire.bgcolor, drawn.bgcolor, rounded.bgcolor)
+    };
+    return new Segment(segment.text, writesAlike(writes, wire) ? style : style.add(Style.fromColor(writes.color, writes.bgcolor)));
+  }
+  measure(options) {
+    return Measurement.get(options, this.renderable);
+  }
+  /**
+   * The specs that draw a cell's slot colours `to` where the segment drew
+   * `from` with `wire`: each moved slot in the spec `movedSpecs` writes it
+   * in, the rest as `wire` wrote them.
+   */
+  respec(wire, from, to, depth) {
+    const moved = movedSpecs(from, to, depth, this.theme);
+    return { color: moved.fg ?? wire.color, bgcolor: moved.bg ?? wire.bgcolor };
+  }
+};
+var Effected = class _Effected {
+  renderable;
+  effect;
+  key;
+  theme;
+  constructor(renderable, effect, options) {
+    this.renderable = renderable;
+    this.effect = effect;
+    this.key = options.key;
+    this.theme = options.theme;
+  }
+  /** The element through the effect at `t`, unstamped. */
+  at(t2) {
+    return new Recolored(this.renderable, this.effect, { t: t2, key: this.key, theme: this.theme });
+  }
+  nextChange(t2) {
+    return t2;
+  }
+  lastChange(t2) {
+    return t2;
+  }
+  /** The element under the effect with its motion taken out. */
+  reduced() {
+    const { effect } = this;
+    return new _Effected(this.renderable, (drawn) => effect(drawn).reduced(), this);
+  }
+  /** Drawn at the frame's time, its cells stamped with the effect's exact hold there. */
+  render(options) {
+    const { segments, hold } = this.at(frameTimeOf(options)).moved(options);
+    return stampFrame(segments, hold);
   }
   measure(options) {
     return Measurement.get(options, this.renderable);
@@ -32776,20 +33346,10 @@ var Effected = class {
     const moved = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
     return onScreen({ fg: moved.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
   }
-  /**
-   * The specs that draw a cell's slot colours `to` where the segment drew
-   * `from` with `wire`: each moved slot in the spec `movedSpecs` writes it
-   * in, the rest as `wire` wrote them.
-   */
-  respec(wire, from, to, depth) {
-    const moved = movedSpecs(from, to, depth, this.theme);
-    return { color: moved.fg ?? wire.color, bgcolor: moved.bg ?? wire.bgcolor };
-  }
-  /** A cell's seed: FNV-1a of the key and the position, scaled into [0, 1). */
-  seed(row2, col) {
-    return Number.parseInt(fnv1a(`${this.key}:${row2}:${col}`), 16) / 4294967296;
-  }
 };
+function cellSeed(key, row2, col) {
+  return Number.parseInt(fnv1a(`${key}:${row2}:${col}`), 16) / 4294967296;
+}
 var DEFAULT = ColorSpec.default();
 function looks(segments, depth, theme24) {
   return [...segments].map((segment) => {
@@ -32800,25 +33360,64 @@ function looks(segments, depth, theme24) {
     const slots = { fg: (wire.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
     const reverse2 = style.reverse === true;
     const terminal = onScreen({ fg: wire.color?.isDefault ?? true, bg: wire.bgcolor?.isDefault ?? true }, reverse2);
-    return { segment, look: { style, wire, slots, pair: { ...onScreen(slots, reverse2), terminal, reverse: reverse2 } } };
+    return { segment, look: { style, wire, slots, pair: { ...onScreen(slots, reverse2), terminal, reverse: reverse2 }, attributes: cellAttributes(style) } };
   });
 }
-function walk(looked) {
+function walkGlyphs(segments) {
   let row2 = 0;
   let col = 0;
-  return looked.map(({ segment, look }) => {
-    if (look === void 0)
-      return { segment, look, glyphs: [] };
-    const anchor = look.style.anchor;
+  return segments.map((segment) => {
+    if (segment.isControl)
+      return [];
+    const anchor = segment.style?.anchor;
     let into = 0;
-    const glyphs = [...graphemes(segment.text)].map((glyph) => {
+    return [...graphemes(segment.text)].map((glyph) => {
       const cell3 = glyph === "\n" ? void 0 : { row: row2, col, anchor: anchor && shiftAnchor(anchor, into) };
       [row2, col] = glyph === "\n" ? [row2 + 1, 0] : [row2, col + cellLen(glyph)];
       into += cellLen(glyph);
       return { glyph, cell: cell3 };
     });
-    return { segment, look, glyphs };
   });
+}
+function inked(text4) {
+  return text4.trim() !== "";
+}
+function walk(looked) {
+  const placed = walkGlyphs(looked.map(({ segment }) => segment));
+  return looked.map((item, i) => ({ ...item, glyphs: placed[i] }));
+}
+function edgesBeside(walked, drawings) {
+  let rows;
+  const index = () => {
+    const byRow = /* @__PURE__ */ new Map();
+    walked.forEach(({ look, glyphs }, i) => {
+      const drawing2 = drawings[i];
+      if (look === void 0 || drawing2 === void 0 || !("painted" in drawing2))
+        return;
+      const moved = drawing2.painted;
+      glyphs.forEach(({ cell: cell3 }, k) => {
+        if (cell3 === void 0)
+          return;
+        const row2 = byRow.get(cell3.row) ?? [];
+        row2.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved[k] });
+        byRow.set(cell3.row, row2);
+      });
+    });
+    return byRow;
+  };
+  return (cells, side, owner) => {
+    const row2 = (rows ??= index()).get(cells[0].row) ?? [];
+    const first2 = cells[0].col;
+    const last2 = cells[cells.length - 1].col;
+    if (side === "right")
+      return row2.find((cell3) => cell3.col > last2 && drawnBy(cell3.anchor, owner));
+    for (let k = row2.length - 1; k >= 0; k--) {
+      const cell3 = row2[k];
+      if (cell3.col < first2 && drawnBy(cell3.anchor, owner))
+        return cell3;
+    }
+    return void 0;
+  };
 }
 function drawsLines(style) {
   return [style.underline, style.underline2, style.strike, style.overline, style.frame, style.encircle].some((on2) => on2 === true);
@@ -32830,9 +33429,9 @@ function measured(looked, walked, depth, theme24) {
     if (look === void 0)
       return [];
     const blankShows = look.pair.bg.hex !== ground || drawsLines(look.style);
-    return glyphs.flatMap(({ glyph, cell: cell3 }) => cell3 !== void 0 && (glyph.trim() !== "" || blankShows) ? [cell3] : []);
+    return glyphs.flatMap(({ glyph, cell: cell3 }) => cell3 !== void 0 && (inked(glyph) || blankShows) ? [cell3] : []);
   });
-  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && segment.text.trim() !== "" && !drawnBy(look.style.anchor, JOIN) ? [look.pair] : []);
+  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !drawnBy(look.style.anchor, JOIN) ? [look.pair] : []);
   const pairs2 = [...new Map(words2.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
   const own2 = (slot) => pairs2.flatMap((pair) => pair.terminal[slot] ? [] : [pair[slot].hex]);
   return {
@@ -32846,16 +33445,14 @@ function measured(looked, walked, depth, theme24) {
 }
 function confined(effect, ...owners) {
   const confinedTo = new Set(owners);
-  const ownedOf = (cell3) => colorsOwnedBy(cell3.anchor, confinedTo);
-  const any2 = ({ fg, bg }) => fg || bg;
-  const owned = (drawn) => ({ ...drawn, cells: () => drawn.cells().filter((cell3) => any2(ownedOf(cell3))) });
-  return (drawn) => Animation.map(effect(owned(drawn)), (frame) => (colors, cell3) => {
-    const owns = ownedOf(cell3);
-    if (!any2(owns))
-      return colors;
-    const moved = frame(colors, cell3);
-    return { fg: owns.fg ? moved.fg : colors.fg, bg: owns.bg ? moved.bg : colors.bg };
-  });
+  const owned = (cell3) => {
+    for (let level = cell3.anchor; level; level = level.inner)
+      if (confinedTo.has(level.owner))
+        return true;
+    return false;
+  };
+  const narrowed = (drawn) => ({ ...drawn, cells: () => drawn.cells().filter(owned) });
+  return (drawn) => Animation.map(effect(narrowed(drawn)), (frame) => (look, cell3) => owned(cell3) ? frame(look, cell3) : look);
 }
 function onScreen(slots, reverse2) {
   return reverse2 ? { fg: slots.bg, bg: slots.fg } : slots;
@@ -32874,6 +33471,22 @@ function slotWritesAlike(a, b, foreground) {
 function written(spec, foreground) {
   return spec?.getAnsiCodes(foreground).join(";") ?? "";
 }
+function returned(look) {
+  if (look.attributes === void 0) {
+    throw new TypeError("an effect frame returns the look it was handed with its changes, { ...look, fg, bg }: this one returned no attributes");
+  }
+  return look;
+}
+var MOVED = ATTRIBUTE_NAMES.filter((name) => name !== "reverse");
+function cellAttributes(of) {
+  return Object.fromEntries(MOVED.map((name) => [name, of[name]]));
+}
+function sameAttributes(a, b) {
+  return a === b || MOVED.every((name) => a[name] === b[name]);
+}
+function sameSpec(a, b) {
+  return a === b || a !== void 0 && b !== void 0 && a.type === b.type && a.name === b.name;
+}
 function sameColors(a, b) {
   return sameColor(a.fg, b.fg) && sameColor(a.bg, b.bg);
 }
@@ -32881,10 +33494,10 @@ function sameColor(a, b) {
   return a.red === b.red && a.green === b.green && a.blue === b.blue && a.alpha === b.alpha;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/noise.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/noise.js
 init_globals();
 var P = (() => {
   const base = [
@@ -33197,7 +33810,7 @@ function smoothstep(a, b, x) {
   return t2 * t2 * (3 - 2 * t2);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
 var LEGIBLE = 4.5;
 var LEVELS = 48;
 var STRENGTHS = Array.from({ length: LEVELS }, (_, i) => (i + 1) / LEVELS);
@@ -33240,13 +33853,11 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
   return settled3;
 }
 function onColors(loop, colors) {
-  const settled3 = /* @__PURE__ */ new WeakMap();
+  const settled3 = new WeakMemo();
   const settle3 = (drawn) => {
     const lit = colors ?? drawn.colors;
     const key = [drawnKey(drawn), "|", ...lit].join(" ");
-    const memo = settled3.get(drawn.theme) ?? new Memo();
-    settled3.set(drawn.theme, memo);
-    return memo.get(key, () => shares(drawn, lit, loop.touch));
+    return settled3.get(drawn.theme, () => new Memo()).get(key, () => shares(drawn, lit, loop.touch));
   };
   return stillOnSlots(atShares(loop, settle3));
 }
@@ -33261,16 +33872,16 @@ function atShares(loop, share) {
     const shared = share(drawn);
     return Animation.continuous((t2) => {
       const field = loop.field(t2, drawn);
-      return ({ fg, bg }, cell3) => {
+      return (look, cell3) => {
         const w = Math.round(clamp013(field(cell3)) * LEVELS) / LEVELS;
         const moved = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
-        return { fg: moved(fg, cell3.terminal.fg), bg: moved(bg, cell3.terminal.bg) };
+        return { ...look, fg: moved(look.fg, cell3.terminal.fg), bg: moved(look.bg, cell3.terminal.bg) };
       };
     });
   };
 }
 function stillOnSlots(loop) {
-  return (drawn) => onlySlots(drawn.depth) ? Animation.constant((colors) => colors) : loop(drawn);
+  return (drawn) => onlySlots(drawn.depth) ? Animation.constant((look) => look) : loop(drawn);
 }
 function onlySlots(depth) {
   switch (depth) {
@@ -33291,6 +33902,10 @@ function requireCurve(curve) {
     throw new RangeError(`curve: seconds must be a positive number of seconds, got ${curve.seconds}`);
   if (!(curve.swing >= 0 && curve.swing <= 1))
     throw new RangeError(`curve: swing must be in [0, 1], got ${curve.swing}`);
+}
+function requireZ(what, z) {
+  if (!Number.isFinite(z))
+    throw new RangeError(`${what} z must be a finite place in the noise, got ${z}`);
 }
 var EFFECT_CURVES = {
   shimmer: { seconds: 109, ease: EASES.linear, swing: 0.9 },
@@ -33344,6 +33959,7 @@ function given(shape, s, k) {
 var FLASH = [[0.24, 1], [0.6, 0]];
 function pulse(curve, glow, z) {
   requireCurve(curve);
+  requireZ("pulse", z);
   const rate = 0.9 + 0.2 * hash(z, 3.1);
   const WANDER = 0.1;
   const wander = (t2) => WANDER * noise(t2 / (3 * curve.seconds), 0.5, 0.5 + z);
@@ -33362,6 +33978,7 @@ var STRIDE = 80;
 var bump = (d) => Math.abs(d) >= 1 ? 0 : (1 - d * d) ** 3;
 function shimmer(curve, width, glow, z) {
   requireCurve(curve);
+  requireZ("shimmer", z);
   const P2 = curve.seconds;
   const SLOT = P2 / 2;
   const sky = (j) => smoothstep(-0.4, 0.4, noise(j / 7, 3.3, 5.5 + z));
@@ -33403,6 +34020,7 @@ function shimmer(curve, width, glow, z) {
 }
 function sparkle(curve, glow, z) {
   requireCurve(curve);
+  requireZ("sparkle", z);
   const PER = 8;
   const ROWS2 = 3;
   const HALO = 5;
@@ -33453,58 +34071,56 @@ function veiled(visibility, swing) {
   return (drawn) => {
     const ground = Oklch.fromRgba(drawn.theme.backgroundColor);
     return Animation.continuous((t2) => {
-      const shows = visibility(t2, drawn);
-      return (colors, cell3) => {
-        const hidden = swing * (1 - clamp013(shows(cell3)));
+      const shows2 = visibility(t2, drawn);
+      return (look, cell3) => {
+        const hidden = swing * (1 - clamp013(shows2(cell3)));
         if (hidden === 0)
-          return colors;
-        const bg = blend(Oklch.fromRgba(colors.bg), ground, hidden);
-        return { fg: blend(Oklch.fromRgba(colors.fg), bg, hidden).toRgba(), bg: bg.toRgba() };
+          return look;
+        const bg = blend(Oklch.fromRgba(look.bg), ground, hidden);
+        return { ...look, fg: blend(Oklch.fromRgba(look.fg), bg, hidden).toRgba(), bg: bg.toRgba() };
       };
     });
   };
 }
 function order(z) {
-  const places = /* @__PURE__ */ new Map();
-  return (cell3) => {
-    const at = `${cell3.row}:${cell3.col}`;
-    const place = places.get(at) ?? clamp013(0.5 + 1.1 * fbm(cell3.col * 0.09 + 1.4 * noise(cell3.col * 0.035, cell3.row * 0.2 + 2.6, z + 0.5), cell3.row * 0.45, z, 3));
-    places.set(at, place);
-    return place;
-  };
+  return (cell3) => clamp013(0.5 + 1.1 * fbm(cell3.col * 0.09 + 1.4 * noise(cell3.col * 0.035, cell3.row * 0.2 + 2.6, z + 0.5), cell3.row * 0.45, z, 3));
 }
-function transition(curve, effect) {
-  const done2 = (t2) => t2 >= curve.seconds;
-  return {
-    effect: (drawn) => {
-      const moving = effect(drawn);
-      return {
-        at: (t2) => moving.at(t2),
-        nextChange: (t2) => done2(t2) ? Number.POSITIVE_INFINITY : moving.nextChange(t2),
-        // Done, the frame settled when the transition did; until then it is the effect's.
-        lastChange: (t2) => done2(t2) ? curve.seconds : moving.lastChange(t2)
-      };
-    },
-    done: done2
-  };
+var Transition = class {
+  effect;
+  schedule;
+  constructor(effect, schedule) {
+    this.effect = effect;
+    this.schedule = schedule;
+  }
+  done(t2) {
+    return this.schedule.nextChange(t2) === Number.POSITIVE_INFINITY;
+  }
+};
+function transition(seconds, effect) {
+  const schedule = Animation.sequence(Animation.continuous(() => void 0), seconds, Animation.constant(void 0));
+  const ran2 = new Transition((drawn) => {
+    const moving = effect(drawn);
+    return Animation.of({
+      at: (t2) => moving.at(t2),
+      nextChange: (t2) => ran2.done(t2) ? Number.POSITIVE_INFINITY : moving.nextChange(t2),
+      // Done, the frame settled when the transition did; until then it is the effect's.
+      lastChange: (t2) => ran2.done(t2) ? schedule.lastChange(t2) : moving.lastChange(t2),
+      // A one-shot, reduced, cuts from its start to its end, whatever the effect it runs would hold as a loop.
+      reduced: () => Animation.cut(moving.at(0), moving.at(seconds))
+    });
+  }, schedule);
+  return ran2;
 }
 var OWN = 0.45;
 function ownChange(curve, place) {
-  const changes = /* @__PURE__ */ new Map();
-  const key = (cell3) => `${cell3.row}:${cell3.col}`;
-  return (cells) => {
+  return (t2, cells) => {
     const [first2, last2] = extent(cells.map(place));
     const stagger = (last2 > first2 ? 1 - OWN : 0) * curve.seconds;
     const change = Phase.once(0, curve.seconds - stagger);
-    const settled3 = (cell3) => {
+    return (cell3) => {
       const along = last2 > first2 ? clamp013((place(cell3) - first2) / (last2 - first2)) : 0;
-      return { along, progress: (t2) => change(t2 - along * stagger) };
+      return { along, progress: change(t2 - along * stagger) };
     };
-    for (const cell3 of cells) {
-      const at = key(cell3);
-      changes.set(at, changes.get(at) ?? settled3(cell3));
-    }
-    return (cell3) => changes.get(key(cell3)) ?? settled3(cell3);
   };
 }
 function extent(values2) {
@@ -33518,23 +34134,25 @@ function extent(values2) {
 }
 function fadeIn(curve, z) {
   requireCurve(curve);
+  requireZ("fadeIn", z);
   const risen = ownChange(curve, order(1.7 + z));
-  return transition(curve, veiled((t2, drawn) => {
-    const of = risen(drawn.cells());
-    return (cell3) => curve.ease(of(cell3).progress(t2));
+  return transition(curve.seconds, veiled((t2, drawn) => {
+    const of = risen(t2, drawn.cells());
+    return (cell3) => curve.ease(of(cell3).progress);
   }, curve.swing));
 }
 var DISSOLVE_SHAPE = { depth: 0.4, from: 0.5, to: 0.95, maskFrom: 0.35, maskTo: 0.75, late: 0.6 };
 function dissolveOut(curve, z) {
   requireCurve(curve);
+  requireZ("dissolveOut", z);
   const eddy = order(9.3 + z);
   const faded = ownChange(curve, order(4.2 + z));
   const { depth, from, to, maskFrom, maskTo, late } = DISSOLVE_SHAPE;
-  return transition(curve, veiled((t2, drawn) => {
-    const of = faded(drawn.cells());
+  return transition(curve.seconds, veiled((t2, drawn) => {
+    const of = faded(t2, drawn.cells());
     return (cell3) => {
       const { along, progress } = of(cell3);
-      const gone = curve.ease(progress(t2));
+      const gone = curve.ease(progress);
       const q = clamp013((gone - from) / (to - from));
       const back2 = depth * smoothstep(maskFrom, maskTo, eddy(cell3)) * (1 - late + late * along) * Math.sin(Math.PI * q) ** 2;
       return 1 - gone + back2;
@@ -33545,6 +34163,7 @@ var STRAY_PERIODS = [211, 337];
 var STRAY = 180;
 function wheel(curve, z) {
   requireCurve(curve);
+  requireZ("wheel", z);
   const P2 = curve.seconds;
   const seed = (hex3) => hash(Number.parseInt(hex3.slice(1), 16) * 1e-4, 17.3 + z);
   const stray = (s, t2) => noise(t2 / STRAY_PERIODS[0], 5.9 + 97 * s, z) + 0.5 * noise(t2 / STRAY_PERIODS[1], 2.3 + 89 * s, z + 7.1);
@@ -33552,15 +34171,13 @@ function wheel(curve, z) {
     const s = seed(hex3);
     return 360 * t2 / P2 + curve.swing * STRAY * ((stray(s, t2) - stray(s, 0)) / 1.5);
   };
-  const settled3 = /* @__PURE__ */ new WeakMap();
+  const settled3 = new WeakMemo();
   return stillOnSlots((drawn) => {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const segmentOf = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
     const keyOf2 = (color, segment) => `${color.hex} ${segment}`;
-    const memo = settled3.get(theme24) ?? new Memo();
-    settled3.set(theme24, memo);
-    const bounds = memo.get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
+    const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
       return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], segmentOf(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
@@ -33579,7 +34196,7 @@ function wheel(curve, z) {
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
         const turn = (color, ours, other, theirs) => ours ? write(color, segmentOf(color, other, theirs)) : color;
-        return { fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
+        return { ...shown, fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
       };
     });
   });
@@ -33599,7 +34216,7 @@ function hueTurned(color, degrees) {
 }
 var stop = (color) => Math.log(contrastRatio(color, new ColorRgba(0, 0, 0)));
 var UNBOUNDED = { lo: -Infinity, hi: Infinity };
-var STILL = { lo: Infinity, hi: -Infinity };
+var STILL2 = { lo: Infinity, hi: -Infinity };
 var ROUNDING_GAP = Math.log(1.031);
 function turnedBounds(pairs2, depth, turnedAs) {
   const bounds = /* @__PURE__ */ new Map();
@@ -33615,15 +34232,12 @@ function turnedBounds(pairs2, depth, turnedAs) {
       bounds.set(key, mine >= theirs ? { lo: Math.max(lo, mine - share), hi } : { lo, hi: Math.min(hi, mine + share) });
     }
   }
-  return new Map([...bounds].map(([key, { lo, hi }]) => [key, hi - lo < ROUNDING_GAP ? STILL : { lo, hi }]));
+  return new Map([...bounds].map(([key, { lo, hi }]) => [key, hi - lo < ROUNDING_GAP ? STILL2 : { lo, hi }]));
 }
 var measured2 = (color) => ({ color, looks: Oklch.fromRgba(color), stop: stop(color) });
-var measuredMemo = /* @__PURE__ */ new WeakMap();
+var measuredMemo = new WeakMemo();
 function measuredIndexed(depth, theme24) {
-  const indexed = ColorSpec.indexed(depth, theme24);
-  const listed = measuredMemo.get(indexed) ?? indexed.map(([, color]) => measured2(color));
-  measuredMemo.set(indexed, listed);
-  return listed;
+  return measuredMemo.get(ColorSpec.indexed(depth, theme24), (indexed) => indexed.map(([, color]) => measured2(color)));
 }
 function nearestWithin(color, rest2, candidates, { lo, hi }) {
   return nearestOf(color, [measured2(rest2), ...candidates.filter(({ stop: stop2 }) => stop2 >= lo && stop2 <= hi)]).color;
@@ -33638,6 +34252,15 @@ function nearestOf(color, offered) {
   }
   return best?.[0];
 }
+function blink({ attribute, off, on: on2 }) {
+  const rhythm = beat([off, on2]);
+  const frames = [(look) => look, (look) => ({ ...look, attributes: { ...look.attributes, [attribute]: true } })];
+  return () => Animation.map(rhythm, (i) => frames[i]);
+}
+var ATTRIBUTE_DEFAULTS = {
+  blink: { attribute: "conceal", off: 0.5, on: 0.5 },
+  boldPulse: { attribute: "bold", off: 0.7, on: 0.3 }
+};
 var EFFECT_CATALOGUE = {
   loops: {
     shimmer: (element, curve = EFFECT_CURVES.shimmer) => onColors(shimmer(curve, SHIMMER_WIDTH, EFFECT_LIGHTS.sun, element.z)),
@@ -33648,10 +34271,244 @@ var EFFECT_CATALOGUE = {
   transitions: {
     fade: (element, curve = EFFECT_CURVES.fade) => fadeIn(curve, element.z),
     dissolve: (element, curve = EFFECT_CURVES.dissolve) => dissolveOut(curve, element.z)
+  },
+  attributes: {
+    blink: () => blink(ATTRIBUTE_DEFAULTS.blink),
+    boldPulse: () => blink(ATTRIBUTE_DEFAULTS.boldPulse)
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/frames.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effect.js
+init_globals();
+function placeGlyphs(segments, key) {
+  let index = 0;
+  const placed = walkGlyphs(segments).map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => ({ glyph, cell: cell3 && { ...cell3, glyph, index: index++, seed: cellSeed(key, cell3.row, cell3.col) } })));
+  return { placed, cells: placed.flatMap((glyphs) => glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3])) };
+}
+function showGlyphs(placed, frame) {
+  const shown = placed.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame, cell3)));
+  standsApart(placed.flat(), shown.flat());
+  return shown;
+}
+function reglyphText(text4, effect, options) {
+  const { placed, cells } = placeGlyphs([new Segment(text4.plain)], options.key);
+  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame) => rewritten(text4, placed[0], showGlyphs(placed, frame)[0]));
+}
+function rewritten(text4, glyphs, shown) {
+  if (shown.every((s, i) => s === glyphs[i].glyph))
+    return text4;
+  const from = [0];
+  const to = [0];
+  glyphs.forEach(({ glyph }, i) => {
+    from.push(from[i] + glyph.length);
+    to.push(to[i] + shown[i].length);
+  });
+  const moved = (offset) => {
+    let i = 0;
+    while (i + 1 < from.length && from[i + 1] <= offset)
+      i++;
+    return i === glyphs.length ? to[i] : to[i] + Math.min(offset - from[i], shown[i].length);
+  };
+  const result = text4.blankCopy(shown.join(""));
+  for (const span of text4.spans)
+    result.stylize(span.style, moved(span.start), moved(span.end));
+  return result;
+}
+var BREAKS = pattern(/[\n\t]/);
+function shows(frame, cell3) {
+  const text4 = frame(cell3);
+  if (text4 === cell3.glyph)
+    return text4;
+  if (cellLen(text4) !== cellLen(cell3.glyph) || BREAKS.test(text4) || stripControlChars(text4) !== text4) {
+    throw new RangeError(`a glyph effect turned ${JSON.stringify(cell3.glyph)} at row ${cell3.row}, column ${cell3.col} into ${JSON.stringify(text4)}: it must be ${cellLen(cell3.glyph)} cell(s) wide, with no line break or control character`);
+  }
+  return text4;
+}
+function standsApart(placed, shown) {
+  const beside2 = (j) => placed[j]?.cell === void 0 ? "" : shown[j];
+  shown.forEach((text4, i) => {
+    const { glyph, cell: cell3 } = placed[i];
+    if (cell3 === void 0 || text4 === glyph)
+      return;
+    const [before, after] = [beside2(i - 1), beside2(i + 1)];
+    if (graphemes(before + text4 + after).length !== graphemes(before).length + graphemes(text4).length + graphemes(after).length) {
+      throw new RangeError(`a glyph effect turned ${JSON.stringify(glyph)} at row ${cell3.row}, column ${cell3.col} into ${JSON.stringify(text4)}, which joins the cell beside it into one character`);
+    }
+  });
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effects.js
+init_globals();
+function blank(glyph) {
+  return " ".repeat(cellLen(glyph));
+}
+function text(cells) {
+  const ends = /* @__PURE__ */ new Map();
+  for (const cell3 of cells.filter((c) => inked(c.glyph)))
+    ends.set(cell3.row, { first: ends.get(cell3.row)?.first ?? cell3.index, last: cell3.index });
+  const place = /* @__PURE__ */ new Map();
+  for (const cell3 of cells) {
+    const row2 = ends.get(cell3.row);
+    if (row2 !== void 0 && cell3.index >= row2.first && cell3.index <= row2.last && cellLen(cell3.glyph) > 0)
+      place.set(cell3.index, place.size);
+  }
+  return { length: place.size, place };
+}
+function arrived(n, p2) {
+  return Math.min(n, Math.max(0, Math.floor(n * p2)));
+}
+function stepped(seconds) {
+  const pace = beat([seconds]);
+  return (frame, still) => Animation.of({
+    at: (t2) => frame(Math.round(pace.lastChange(t2) / seconds)),
+    nextChange: (t2) => pace.nextChange(t2),
+    lastChange: (t2) => pace.lastChange(t2),
+    reduced: () => Animation.constant(still)
+  });
+}
+var AS_WRITTEN = (cell3) => cell3.glyph;
+function typewriter(timing) {
+  const phase = Phase.once(0, timing.seconds);
+  const ease = settled(timing.ease);
+  return transition(timing.seconds, ({ cells }) => {
+    const { length, place } = text(cells);
+    return Animation.continuous((t2) => {
+      const typed = arrived(length, ease(phase(t2)));
+      return (cell3) => (place.get(cell3.index) ?? -1) < typed ? cell3.glyph : blank(cell3.glyph);
+    });
+  });
+}
+var SCRAMBLE_GLYPHS = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#$%&*+<=>?@"];
+var FLICKER = 1 / 15;
+function scramble(timing, z) {
+  requireZ("scramble", z);
+  const phase = Phase.once(0, timing.seconds);
+  const ease = settled(timing.ease);
+  const flicker = stepped(FLICKER)((step4) => step4, 0);
+  return transition(timing.seconds, ({ cells }) => {
+    const { length, place } = text(cells);
+    return Animation.continuous((t2) => {
+      const resolved = arrived(length, ease(phase(t2)));
+      const step4 = flicker.at(t2);
+      return (cell3) => !inked(cell3.glyph) || (place.get(cell3.index) ?? -1) < resolved ? cell3.glyph : churned(cell3, z, step4);
+    });
+  });
+}
+function churned(cell3, z, step4) {
+  const pick2 = (i) => SCRAMBLE_GLYPHS[Math.floor(hash(cell3.seed * 7919 + i, z + step4 * 0.618) * SCRAMBLE_GLYPHS.length)];
+  return Array.from({ length: cellLen(cell3.glyph) }, (_, i) => pick2(i)).join("");
+}
+function backspace(timing) {
+  const phase = Phase.once(0, timing.seconds);
+  const ease = settled(timing.ease);
+  return transition(timing.seconds, ({ cells }) => {
+    const { length, place } = text(cells);
+    return Animation.continuous((t2) => {
+      const kept = length - arrived(length, ease(phase(t2)));
+      return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
+    });
+  });
+}
+var CHURN = 0.3;
+function scrambleOut(timing, z) {
+  requireZ("scrambleOut", z);
+  const phase = Phase.once(0, timing.seconds);
+  const ease = settled(timing.ease);
+  const flicker = stepped(FLICKER)((step4) => step4, 0);
+  return transition(timing.seconds, ({ cells }) => {
+    const { length, place } = text(cells);
+    return Animation.continuous((t2) => {
+      const p2 = ease(phase(t2));
+      const churning = arrived(length, p2 / (1 - CHURN));
+      const gone = arrived(length, (p2 - CHURN) / (1 - CHURN));
+      const step4 = flicker.at(t2);
+      return (cell3) => {
+        const at = place.get(cell3.index) ?? Number.POSITIVE_INFINITY;
+        if (at < gone)
+          return blank(cell3.glyph);
+        return !inked(cell3.glyph) || at >= churning ? cell3.glyph : churned(cell3, z, step4);
+      };
+    });
+  });
+}
+function swapCase(glyph) {
+  const swapped = [...glyph].map((ch) => ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase()).join("");
+  return cellLen(swapped) === cellLen(glyph) ? swapped : glyph;
+}
+function caseWave({ step: step4, width }, z) {
+  positiveSeconds("caseWave step", step4);
+  if (!(Number.isInteger(width) && width > 0))
+    throw new RangeError(`caseWave width must be a positive whole number of columns, got ${width}`);
+  requireZ("caseWave", z);
+  const steps2 = stepped(step4);
+  return ({ cells }) => {
+    const columns = cells.reduce((most, cell3) => Math.max(most, cell3.col + cellLen(cell3.glyph)), 0);
+    const span = columns + width;
+    const start = Math.floor(hash(z, 2.3) * span);
+    return steps2((s) => {
+      const lead = ((s + start) % span + span) % span;
+      return (cell3) => cell3.col < lead && cell3.col + cellLen(cell3.glyph) > lead - width ? swapCase(cell3.glyph) : cell3.glyph;
+    }, AS_WRITTEN);
+  };
+}
+function particles(spec, z) {
+  const oneCell = (set2) => {
+    const glyphs2 = graphemes(set2);
+    if (glyphs2.length === 0 || glyphs2.some((glyph) => cellLen(glyph) !== 1))
+      throw new RangeError(`particles needs one-cell glyphs, got ${JSON.stringify(set2)}`);
+    return glyphs2;
+  };
+  const [glyphs, ascii] = [oneCell(spec.glyphs), oneCell(spec.ascii)];
+  if (!isAscii(spec.ascii))
+    throw new RangeError(`particles ascii must be ASCII, got ${JSON.stringify(spec.ascii)}`);
+  if (!(spec.density >= 0 && spec.density <= 1))
+    throw new RangeError(`particles density must be in [0, 1], got ${spec.density}`);
+  if (!Number.isInteger(spec.drift))
+    throw new RangeError(`particles drift must be a whole number of rows, got ${spec.drift}`);
+  if (!(spec.life > 0))
+    throw new RangeError(`particles life must be a positive number of steps, got ${spec.life}`);
+  positiveSeconds("particles step", spec.step);
+  requireZ("particles", z);
+  const steps2 = stepped(spec.step);
+  return ({ asciiOnly }) => {
+    const drawn = drawable({ asciiOnly }, glyphs, ascii, (set2) => set2.join(""));
+    return steps2((s) => {
+      const life = Number.isFinite(spec.life) ? Math.floor(s / spec.life) : 0;
+      const fallen = spec.drift * s;
+      return (cell3) => {
+        if (inked(cell3.glyph) || cellLen(cell3.glyph) === 0)
+          return cell3.glyph;
+        const from = cell3.row - fallen;
+        const field = z + 1.37 * cell3.col + 0.71 * life;
+        return hash(from, field) < spec.density ? drawn[Math.floor(hash(from, field + 3.1) * drawn.length)] + blank(cell3.glyph).slice(1) : cell3.glyph;
+      };
+    }, AS_WRITTEN);
+  };
+}
+var GLYPH_DEFAULTS = {
+  typewriter: { seconds: 2, ease: EASES.linear },
+  scramble: { seconds: 2.5, ease: EASES["ease-in"] },
+  backspace: { seconds: 1.5, ease: EASES.linear },
+  scrambleOut: { seconds: 2.5, ease: EASES["ease-out"] },
+  wave: { step: 0.06, width: 3 },
+  rain: { glyphs: "\u2502\u254E", ascii: "|:", density: 0.06, step: 0.08, drift: 1, life: Number.POSITIVE_INFINITY },
+  stars: { glyphs: "\xB7+*", ascii: ".+*", density: 0.04, step: 1.5, drift: 0, life: 1 }
+};
+var GLYPH_EFFECT_CATALOGUE = {
+  loops: {
+    wave: (element) => caseWave(GLYPH_DEFAULTS.wave, element.z),
+    rain: (element) => particles(GLYPH_DEFAULTS.rain, element.z),
+    stars: (element) => particles(GLYPH_DEFAULTS.stars, element.z)
+  },
+  transitions: {
+    typewriter: (_element, timing = GLYPH_DEFAULTS.typewriter) => typewriter(timing),
+    scramble: (element, timing = GLYPH_DEFAULTS.scramble) => scramble(timing, element.z),
+    backspace: (_element, timing = GLYPH_DEFAULTS.backspace) => backspace(timing),
+    scrambleOut: (element, timing = GLYPH_DEFAULTS.scrambleOut) => scrambleOut(timing, element.z)
+  }
+};
+
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/frames.js
 init_globals();
 var FrameSequence = class {
   /** Which frame is in progress when: the holds are the frames' seconds, in order. */
@@ -33663,18 +34520,18 @@ var FrameSequence = class {
   constructor(frames) {
     this.beat = beat(frames.map((frame) => frame.seconds));
     const texts = frames.map((frame) => setIntoLine(frame.text.copy()));
-    const widths = texts.map((text3) => text3.cellLength);
+    const widths = texts.map((text4) => text4.cellLength);
     this.width = Math.max(...widths);
-    this._shown = texts.map((text3, i) => {
-      text3.noWrap = true;
-      text3.overflow = "crop";
-      return text3.padRight(this.width - widths[i]);
+    this._shown = texts.map((text4, i) => {
+      text4.noWrap = true;
+      text4.overflow = "crop";
+      return text4.padRight(this.width - widths[i]);
     });
   }
   /**
    * The frame in progress at `t`, at `width` cells, ending no line: a copy,
    * the caller's to change, carrying no word on when it changes — that is
-   * `frameAt`'s, stamped by whoever draws it at a host time. `beat.at`
+   * stamped where it is placed, at the frame's time. `beat.at`
    * refuses a `t` that is not finite.
    */
   at(t2) {
@@ -33688,12 +34545,30 @@ var FrameSequence = class {
   lastChange(t2) {
     return this.beat.lastChange(t2);
   }
+  /** The frames with their motion taken out: the beat's first frame, held, a copy as `at`'s is. */
+  reduced() {
+    return Animation.map(this.beat.reduced(), (i) => this._shown[i].copy());
+  }
+  render(options) {
+    return placedRender(this, options);
+  }
+  /**
+   * One width both ways, the same for every frame and reduced or not: a frame
+   * is one picture, never wrapped apart at a space or narrowed as the frames
+   * turn. Fitting it to the room is `Measurement.get`'s, as for every measurable.
+   */
+  measure() {
+    return { minimum: this.width, maximum: this.width };
+  }
 };
-function frameAt(animation, t2) {
-  return animation.at(t2).copy().stylize(new Style({ nextChange: animation.nextChange(t2) }));
+function textFrameAt(animation, t2, motion) {
+  const shown = shownAt(animation, t2, motion);
+  const stamped = shown.value.copy();
+  stamped.style = layerStyle(stamped.style, stamp(holdOf(shown, t2)));
+  return stamped;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
 init_globals();
 function renderToBlock(r, options) {
   const segments = [...render(r, options)];
@@ -33730,10 +34605,6 @@ var FlexStrip = class {
     this.joiner = options?.joiner;
     this.gap = options?.gap ?? 0;
     this.align = options?.align ?? "left";
-  }
-  // The items; a join is drawn from what the joiner emits for it, not held.
-  contents() {
-    return this.items;
   }
   *render(options) {
     const items = this.items;
@@ -33959,9 +34830,9 @@ init_globals();
 // site/shims/crypto.ts
 init_globals();
 var import_buffer2 = __toESM(require_buffer(), 1);
-function fnv(text3) {
+function fnv(text4) {
   let h = 2166136261;
-  for (let i = 0; i < text3.length; i++) h = Math.imul(h ^ text3.charCodeAt(i), 16777619) >>> 0;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
   return h.toString(16).padStart(8, "0").repeat(8);
 }
 function createHash(_alg) {
@@ -34109,10 +34980,10 @@ var request = refuse("https.request");
 var createInterface = refuse("readline.createInterface");
 var createRequire = refuse("module.createRequire");
 var json = refuse("stream/consumers.json");
-var text = refuse("stream/consumers.text");
+var text2 = refuse("stream/consumers.text");
 var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text: text2, writeHeapSnapshot, getHeapStatistics };
 
 // src/proc/launch.ts
 init_globals();
@@ -34130,8 +35001,8 @@ var Stream = class extends import_events2.EventEmitter {
     this.encoding = encoding;
     return this;
   }
-  chunk(text3) {
-    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text3) : text3);
+  chunk(text4) {
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
   }
   pipe() {
     return this;
@@ -34599,17 +35470,17 @@ function launchJobSync(opts, files) {
   };
 }
 function readJobEnd(status) {
-  let text3;
+  let text4;
   try {
-    text3 = readFileSync(status, "utf8").trim();
+    text4 = readFileSync(status, "utf8").trim();
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
-  const exit2 = /^exit (\d+)$/.exec(text3);
+  const exit2 = /^exit (\d+)$/.exec(text4);
   if (exit2) return { kind: "exit", code: Number(exit2[1]) };
-  if (text3 === "timeout") return { kind: "timeout" };
-  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text3)}`);
+  if (text4 === "timeout") return { kind: "timeout" };
+  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function jobGroupAlive(pid2) {
   try {
@@ -34647,7 +35518,7 @@ function endJob(pid2, status, end) {
 // src/utils/atomic-write.ts
 init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text3, mode) {
+function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
   fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
@@ -34655,7 +35526,7 @@ function writeAtomic(at, text3, mode) {
   try {
     fs_default.writeFileSync(
       tmp,
-      text3,
+      text4,
       fileMode === void 0 ? {} : { mode: fileMode }
     );
     fs_default.renameSync(tmp, file);
@@ -35226,8 +36097,8 @@ function footprintCharge(pid2, run3) {
     } : { kind: "charged", measure: "phys_footprint", bytes };
   };
 }
-function physFootprintOf(text3) {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text3);
+function physFootprintOf(text4) {
+  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
   return m === null ? null : Number(m[1]);
 }
 function commandProbe(bin, args) {
@@ -35255,8 +36126,8 @@ function fileProbe(path41) {
     name: path41,
     read: () => {
       try {
-        const text3 = fs_default.readFileSync(path41, "utf8");
-        return text3.trim().length > 0 ? { kind: "text", text: text3 } : { kind: "unavailable", reason: "empty file" };
+        const text4 = fs_default.readFileSync(path41, "utf8");
+        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
       } catch (e) {
         return { kind: "unavailable", reason: e.message };
       }
@@ -35323,12 +36194,12 @@ function makeLimits(deps) {
   let latest = { kind: "unmeasured" };
   let inFlight = null;
   function check() {
-    inFlight ??= measure2().finally(() => {
+    inFlight ??= measure3().finally(() => {
       inFlight = null;
     });
     return inFlight;
   }
-  async function measure2() {
+  async function measure3() {
     if (triggered) return true;
     const { rss, heapTotal } = deps.memoryBytes();
     const charge = readCharge(await deps.memoryCharge(rss), latest);
@@ -35341,8 +36212,8 @@ function makeLimits(deps) {
       "warn",
       `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
     );
-    const stamp = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
-    const identity3 = `${stamp}-${deps.pid}`;
+    const stamp2 = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
+    const identity3 = `${stamp2}-${deps.pid}`;
     attempt(deps.log, "memory report", () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity3);
       deps.writeMemoryReport(file, deps.captureMemoryReport());
@@ -35455,7 +36326,7 @@ function realLimitsDeps(startedAtMs, shutdown2, overrides = {}) {
     // identity, so it shares a permission — a post-mortem pair where one half is
     // world-readable and the other is not invites exactly the "is this
     // sensitive?" question at the worst moment to be asking it.
-    writeMemoryReport: (file, text3) => fs_default.writeFileSync(file, text3, { mode: 384 }),
+    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
     writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
     writeLogNow: writeWaitingNow,
     // [LAW:no-silent-failure] A directory not yet made holds no breaches;
@@ -35526,8 +36397,8 @@ function disclosureTrigger(action2, closed, open2) {
 function disclosureTriggerCall(action2, closed, open2) {
   return `action "${action2}" ${closed} ${open2}`;
 }
-function templateLiteral(text3) {
-  return `"${escapeTemplateLiteral(text3)}"`;
+function templateLiteral(text4) {
+  return `"${escapeTemplateLiteral(text4)}"`;
 }
 function disclosureStateVar(key, def) {
   return { kind: "state", key, default: def };
@@ -35564,8 +36435,8 @@ var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
 var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
 var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
 var Scanner = class {
-  constructor(text3) {
-    this.text = text3;
+  constructor(text4) {
+    this.text = text4;
   }
   text;
   pos = 0;
@@ -35713,11 +36584,11 @@ var Scanner = class {
     return { kind: "array", span: { start, end: this.pos }, elements };
   }
 };
-function parseDocument(text3) {
-  const s = new Scanner(text3);
+function parseDocument(text4) {
+  const s = new Scanner(text4);
   const root = s.value();
   s.skipTrivia();
-  if (s.pos !== text3.length) s.fail("trailing content after the document");
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
   return root;
 }
 function entryOf(node, key) {
@@ -35730,15 +36601,15 @@ function nodeAt(root, path41) {
   }
   return node;
 }
-function textOf(text3, node) {
-  return text3.slice(node.span.start, node.span.end);
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
 }
-function movableTextOf(text3, node) {
-  const indent2 = indentOfLine(text3, node.span.start);
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
   const literals = literalSpans(node);
   const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
   let lineStart = node.span.start;
-  return textOf(text3, node).split("\n").map((line, i) => {
+  return textOf(text4, node).split("\n").map((line, i) => {
     const at = lineStart;
     lineStart += line.length + 1;
     const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
@@ -35764,12 +36635,12 @@ function keyText(key) {
 var JSON5_DIALECT = {
   key: keyText,
   trailingComma: ",",
-  parse: (text3) => import_json5.default.parse(text3)
+  parse: (text4) => import_json5.default.parse(text4)
 };
 var JSON_DIALECT = {
   key: (key) => JSON.stringify(key),
   trailingComma: "",
-  parse: (text3) => JSON.parse(text3)
+  parse: (text4) => JSON.parse(text4)
 };
 function json5Text(value) {
   if (Array.isArray(value)) {
@@ -35793,8 +36664,8 @@ ${items.join("\n")}
   }
   return JSON.stringify(value);
 }
-function eolOf(text3) {
-  return text3.includes("\r\n") ? "\r\n" : "\n";
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
 }
 function reindent(valueText, indent2, eol) {
   return valueText.split("\n").join(`${eol}${indent2}`);
@@ -35806,82 +36677,82 @@ function entryText(path41, valueText, dialect) {
 }`;
   return `${dialect.key(head)}: ${inner}`;
 }
-function splice(text3, start, end, insert) {
-  return text3.slice(0, start) + insert + text3.slice(end);
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
 }
-function lineStartOf(text3, offset) {
-  return text3.lastIndexOf("\n", offset - 1) + 1;
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
 }
 function isBlank(s) {
   return /^[ \t]*$/.test(s);
 }
-function indentOfLine(text3, offset) {
-  const ls = lineStartOf(text3, offset);
-  return /^[ \t]*/.exec(text3.slice(ls))[0];
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
 }
-function startsLine(text3, offset) {
-  return isBlank(text3.slice(lineStartOf(text3, offset), offset));
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
 }
 var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text3, end) {
+function trailerAfter(text4, end) {
   let i = end;
-  while (i < text3.length && (text3[i] === " " || text3[i] === "	")) i++;
-  const commaEnd = text3[i] === "," ? i + 1 : -1;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  const commaEnd = text4[i] === "," ? i + 1 : -1;
   if (commaEnd !== -1) i = commaEnd;
-  while (i < text3.length && (text3[i] === " " || text3[i] === "	")) i++;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
   LINE_TRAILER.lastIndex = i;
-  const m = LINE_TRAILER.exec(text3);
+  const m = LINE_TRAILER.exec(text4);
   if (m === null) return { commaEnd, line: null };
   const next2 = i + m[0].length;
   return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
 }
-function removeMember(text3, span) {
-  const { commaEnd, line } = trailerAfter(text3, span.end);
-  if (startsLine(text3, span.start) && line !== null) {
-    return splice(text3, lineStartOf(text3, span.start), line.next, "");
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
   }
   if (commaEnd !== -1) {
     let end = commaEnd;
-    while (end < text3.length && text3[end] === " ") end++;
-    return splice(text3, span.start, end, "");
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
   }
   let start = span.start;
-  while (start > 0 && (text3[start - 1] === " " || text3[start - 1] === "	")) {
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
     start--;
   }
-  if (text3[start - 1] === ",") return splice(text3, start - 1, span.end, "");
-  return splice(text3, span.start, span.end, "");
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
 }
-function insertLineAfter(text3, span, trailer, memberText, indent2) {
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
   const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text3 : splice(text3, span.end, span.end, ",");
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
   const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text3);
+  const eol = eolOf(text4);
   const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
   return splice(withComma, at, at, line);
 }
-function appendMember(text3, container, memberText, dialect) {
+function appendMember(text4, container, memberText, dialect) {
   const members = container.kind === "object" ? container.entries : container.elements;
   const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text3, container.span.start);
+  const baseIndent = indentOfLine(text4, container.span.start);
   if (last2 === void 0) {
     const inner = baseIndent + "  ";
-    const eol = eolOf(text3);
+    const eol = eolOf(text4);
     return splice(
-      text3,
+      text4,
       container.span.start + 1,
       container.span.end - 1,
       `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
     );
   }
-  const { commaEnd, line } = trailerAfter(text3, last2.span.end);
-  if (startsLine(text3, last2.span.start) && line !== null) {
-    const indent2 = text3.slice(
-      lineStartOf(text3, last2.span.start),
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
       last2.span.start
     );
     return insertLineAfter(
-      text3,
+      text4,
       last2.span,
       { commaEnd, line },
       memberText,
@@ -35891,19 +36762,19 @@ function appendMember(text3, container, memberText, dialect) {
   const at = commaEnd === -1 ? last2.span.end : commaEnd;
   const sep2 = commaEnd === -1 ? ", " : " ";
   const tail = commaEnd === -1 ? "" : ",";
-  return splice(text3, at, at, `${sep2}${memberText}${tail}`);
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
 }
-function setValue(text3, path41, valueText, dialect) {
+function setValue(text4, path41, valueText, dialect) {
   if (path41.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text3)) {
-    const eol = eolOf(text3);
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
     return `{${eol}  ${reindent(entryText(path41, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
   }
-  return setBelow(text3, parseDocument(text3), path41, valueText, dialect);
+  return setBelow(text4, parseDocument(text4), path41, valueText, dialect);
 }
-function setBelow(text3, start, path41, valueText, dialect) {
+function setBelow(text4, start, path41, valueText, dialect) {
   let node = start;
   for (let i = 0; i < path41.length; i++) {
     if (node.kind !== "object") {
@@ -35915,35 +36786,35 @@ function setBelow(text3, start, path41, valueText, dialect) {
     const entry = entryOf(node, path41[i]);
     if (entry === void 0) {
       return appendMember(
-        text3,
+        text4,
         node,
         entryText(path41.slice(i), valueText, dialect),
         dialect
       );
     }
     if (i === path41.length - 1) {
-      const indent2 = indentOfLine(text3, entry.keySpan.start);
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
       return splice(
-        text3,
+        text4,
         entry.value.span.start,
         entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text3))
+        reindent(valueText, indent2, eolOf(text4))
       );
     }
     node = entry.value;
   }
   throw new Json5EditError("unreachable: path exhausted", 0);
 }
-function deleteValue(text3, path41, keep2 = 0) {
+function deleteValue(text4, path41, keep2 = 0) {
   if (path41.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text3)) return text3;
+  if (/^\s*$/.test(text4)) return text4;
   const parentPath = path41.slice(0, -1);
-  const parent = nodeAt(parseDocument(text3), parentPath);
+  const parent = nodeAt(parseDocument(text4), parentPath);
   const entry = parent === void 0 ? void 0 : entryOf(parent, path41[path41.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text3;
-  const pruned = removeMember(text3, entry.span);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
   return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
 }
 var CHILD_KEYS = ["h", "v", "children"];
@@ -35991,28 +36862,28 @@ function hasSegmentRef(root, id2) {
   }
   return false;
 }
-function refAt(text3, rootPath, id2) {
-  const root = nodeAt(parseDocument(text3), rootPath);
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
   if (root === void 0) return null;
   for (const { node, bareAt } of nodesIn(root, rootPath)) {
     if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text3, ref: node };
+    if (bareAt === null) return { text: text4, ref: node };
     const wrapped = setValue(
-      text3,
+      text4,
       bareAt,
-      `{ h: [${textOf(text3, node)}] }`,
+      `{ h: [${textOf(text4, node)}] }`,
       JSON5_DIALECT
     );
     return refAt(wrapped, rootPath, id2);
   }
   return null;
 }
-function removeSegmentRef(text3, rootPath, target) {
-  const hit = refAt(text3, rootPath, target);
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
   return hit === null ? null : removeMember(hit.text, hit.ref.span);
 }
-function insertSegmentRef(text3, rootPath, placement, anchor, relation) {
-  const hit = refAt(text3, rootPath, anchor);
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
   if (hit === null) return null;
   const { text: src, ref } = hit;
   const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
@@ -36030,8 +36901,8 @@ function insertSegmentRef(text3, rootPath, placement, anchor, relation) {
   const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
   return splice(src, ref.span.start, ref.span.end, pair);
 }
-function setPlacementSetting(text3, rootPath, id2, setting, valueText) {
-  const hit = refAt(text3, rootPath, id2);
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
   if (hit === null) return null;
   const { text: src, ref } = hit;
   const settings = `{ ${keyText(setting)}: ${valueText} }`;
@@ -36198,7 +37069,7 @@ async function readWholeLines(path41, prior, until2, window2) {
     fh = await open(path41, "r");
     const st = await fh.stat();
     const { size, ino } = st;
-    const stamp = stampOf(st);
+    const stamp2 = stampOf(st);
     const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
     const start = reset || prior === void 0 ? 0 : prior.offset;
     const end = reset || until2 === void 0 ? size : Math.min(size, until2);
@@ -36236,7 +37107,7 @@ async function readWholeLines(path41, prior, until2, window2) {
       // still be unread; otherwise the read saw everything up to its end.
       atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
       size,
-      stamp,
+      stamp: stamp2,
       ino,
       reset,
       longLine
@@ -36358,11 +37229,11 @@ function readClaudeSettingsText(settingsPath) {
 function readClaudeSettings(settingsPath) {
   return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
 }
-function parseSettings(settingsPath, text3) {
+function parseSettings(settingsPath, text4) {
   let parsed2;
   try {
-    if (/^\s*$/.test(text3)) return {};
-    parsed2 = JSON_DIALECT.parse(text3);
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
   } catch (e) {
     throw cannotRead(settingsPath, e);
   }
@@ -36430,11 +37301,11 @@ var messageOf = (e) => e instanceof Error ? e.message : String(e);
 // src/install/currency.ts
 init_globals();
 var RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-function parseReleaseVersion(text3) {
-  const m = RELEASE_VERSION.exec(text3);
+function parseReleaseVersion(text4) {
+  const m = RELEASE_VERSION.exec(text4);
   return m ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] } : {
     kind: "failed",
-    reason: `"${text3}" is not a release version (expected MAJOR.MINOR.PATCH)`
+    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`
   };
 }
 function formatVersion(v) {
@@ -36464,18 +37335,18 @@ async function fetchLatestVersion(packageName, fetchImpl, registryUrl) {
     return failed(err instanceof Error ? err.message : String(err));
   }
 }
-function assessCurrency(stamp, latest) {
-  const installed = parseReleaseVersion(stamp);
+function assessCurrency(stamp2, latest) {
+  const installed = parseReleaseVersion(stamp2);
   if (installed.kind === "failed") {
-    return { kind: "unchecked", installed: stamp, reason: installed.reason };
+    return { kind: "unchecked", installed: stamp2, reason: installed.reason };
   }
   switch (latest.kind) {
     case "failed":
-      return { kind: "unchecked", installed: stamp, reason: latest.reason };
+      return { kind: "unchecked", installed: stamp2, reason: latest.reason };
     case "absent":
       return {
         kind: "unchecked",
-        installed: stamp,
+        installed: stamp2,
         reason: "the registry lists no `latest` dist-tag"
       };
     case "ok": {
@@ -36556,8 +37427,8 @@ init_globals();
 init_globals();
 var KEY = "click.error";
 var CLICK_ERROR_HOLD_S = 5;
-function holdClickError(state, sessionId2, text3, at) {
-  const record2 = { text: text3, at, answered: false };
+function holdClickError(state, sessionId2, text4, at) {
+  const record2 = { text: text4, at, answered: false };
   state.set(sessionId2, KEY, JSON.stringify(record2));
 }
 function answeredClickError(state, sessionId2, error) {
@@ -36584,8 +37455,8 @@ function recordOf(raw) {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { text: text3, at, answered: answered2 } = value;
-  return typeof text3 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text3, at, answered: answered2 === true } : null;
+  const { text: text4, at, answered: answered2 } = value;
+  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
 }
 
 // src/utils/instant.ts
@@ -36794,10 +37665,10 @@ function decorEntryFor(decor, address) {
 function entryAt(decor, row2, cell3) {
   const { hues, run: run3, keystones } = decor.variation;
   const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
-  const stepped = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
-  if (stepped === void 0) throw new Error("decorEntryFor: empty variation");
+  const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
+  if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
   return {
-    hue: keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped,
+    hue: keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2,
     shade: vocabularySelect(
       decor.shade.tones,
       cell3,
@@ -36835,8 +37706,8 @@ var STATE_FLOOR = 2.2;
 var STATE_STEPS = 12;
 var RAY_HALVINGS = 24;
 var groundCells = (palette, ground) => ground.map((entry) => decorEntryColour(palette, entry));
-var shownAt = (drawnAt) => (c) => drawnColour(c, drawnAt);
-var shownTrue = shownAt(ColorDepth.TRUECOLOR);
+var shownAt2 = (drawnAt) => (c) => drawnColour(c, drawnAt);
+var shownTrue = shownAt2(ColorDepth.TRUECOLOR);
 var toldFrom = (c, others) => others.every((other) => deltaE(c, other) >= SEAM_MIN_DELTA_E);
 function stateFor(palette, hue, cells, apart, drawnAt) {
   return STATES(
@@ -36865,13 +37736,13 @@ function searchState(palette, hue, among, apart, drawnAt) {
     ...ray(white).flatMap((c, k) => [c, toBlack[k]])
   ];
   const standsAt = (depth) => {
-    const shown2 = shownAt(depth);
+    const shown2 = shownAt2(depth);
     const drawn = cells.map(shown2);
     return (c) => Math.min(Infinity, ...drawn.map((cell3) => contrastRatio(shown2(c), cell3)));
   };
   const standsTrue = standsAt(ColorDepth.TRUECOLOR);
   const standsAsDrawn = standsAt(drawnAt);
-  const shown = shownAt(drawnAt);
+  const shown = shownAt2(drawnAt);
   const cellsDrawn = cells.map(shown);
   const drawnClear = (these) => {
     const theseDrawn = these.map(shown);
@@ -36888,7 +37759,7 @@ function searchState(palette, hue, among, apart, drawnAt) {
     return (c) => standsTrue(c) >= STATE_FLOOR && toldFrom(shownTrue(c), these) && drawn(c) !== void 0;
   };
   const stepsApart = (a, b) => Math.abs(a.red - b.red) + Math.abs(a.green - b.green) + Math.abs(a.blue - b.blue);
-  const drawable2 = (end, sign) => {
+  const drawable3 = (end, sign) => {
     const start = along(end, 0);
     const offers = [{ s: 0, colour: start }];
     const walk3 = (t0, c0, t1, c1, depth) => {
@@ -36908,8 +37779,8 @@ function searchState(palette, hue, among, apart, drawnAt) {
     const offered = new Set(candidates.map((c) => c.hex));
     const colours = [];
     for (const { colour } of [
-      ...drawable2(white, 1),
-      ...drawable2(black, -1)
+      ...drawable3(white, 1),
+      ...drawable3(black, -1)
     ].sort((a, b) => Math.abs(a.s) - Math.abs(b.s))) {
       if (!offered.has(colour.hex)) {
         offered.add(colour.hex);
@@ -36946,11 +37817,11 @@ function textOn(palette, background, drawnAt) {
   });
 }
 var POLE_TEXT = memoPerPalette();
-function legibleOn(palette, text3, background, drawnAt) {
+function legibleOn(palette, text4, background, drawnAt) {
   return LEGIBLE2(
     palette,
-    `${text3.hex}|${background.hex}|${drawnAt}`,
-    () => ensureContrast(text3, background, TEXT_MIN_CONTRAST, drawnAt)
+    `${text4.hex}|${background.hex}|${drawnAt}`,
+    () => ensureContrast(text4, background, TEXT_MIN_CONTRAST, drawnAt)
   );
 }
 var LEGIBLE2 = memoPerPalette();
@@ -37033,7 +37904,7 @@ function bandFor(palette, disclosure, drawnAt) {
       nested,
       drawnAt
     );
-    const asDrawn = shownAt(drawnAt);
+    const asDrawn = shownAt2(drawnAt);
     return {
       state,
       plane,
@@ -37106,7 +37977,7 @@ var drawnSeams = (palette, disclosure, { state, plane, items }, drawnAt) => {
   ];
 };
 var seamShortfalls = (palette, seams, drawnAt) => {
-  const asDrawn = shownAt(drawnAt);
+  const asDrawn = shownAt2(drawnAt);
   return seams.flatMap(({ between, a, b }) => {
     const apart = deltaE(asDrawn(a), asDrawn(b));
     return apart >= SEAM_MIN_DELTA_E ? [] : [
@@ -37115,7 +37986,7 @@ var seamShortfalls = (palette, seams, drawnAt) => {
   });
 };
 function drawnItems(palette, disclosure, drawnBand, nested, drawnAt) {
-  const asDrawn = shownAt(drawnAt);
+  const asDrawn = shownAt2(drawnAt);
   const seen = (others) => (candidate, drawn) => others.every(
     (other) => deltaE(candidate, drawn(other)) >= SEAM_MIN_DELTA_E
   );
@@ -37176,7 +38047,7 @@ function planeFloors(palette, disclosure, state, nested, drawnAt) {
   const unroundedPlane = (d) => unroundedBand(palette, { ...disclosure, depth: d }, drawnAt).plane;
   const plane = unroundedPlane(depth);
   const keptApart = (floor2, other) => deltaE(shownTrue(plane), shownTrue(other)) >= floor2 ? floor2 : 0;
-  const shown = shownAt(drawnAt);
+  const shown = shownAt2(drawnAt);
   const keptUnder = contrastRatio(shown(nested.state), shown(plane)) >= STATE_FLOOR ? STATE_FLOOR : 0;
   const apart = (other, floor2) => (candidate, drawn) => deltaE(candidate, drawn(other)) >= floor2;
   return [
@@ -37734,8 +38605,8 @@ var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
 var OPERAND_RE = new RegExp(
   `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
 );
-function operandAt(text3, dot, root) {
-  const m = OPERAND_RE.exec(text3.trimStart());
+function operandAt(text4, dot, root) {
+  const m = OPERAND_RE.exec(text4.trimStart());
   if (m === null) return null;
   const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
   if (base === null) return null;
@@ -37816,8 +38687,8 @@ function callGraph(template, helpers) {
 }
 var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
 function* dotRefs({ code, dot, root }) {
-  const text3 = code.replace(STRING_LITERAL_RE, "");
-  for (const r of [...text3.matchAll(REF_RE)]) {
+  const text4 = code.replace(STRING_LITERAL_RE, "");
+  for (const r of [...text4.matchAll(REF_RE)]) {
     const base = r[1] === "$" ? root : dot;
     if (base !== null) yield `${base}${r[2]}`;
   }
@@ -43516,10 +44387,10 @@ var Lexer = class {
   readIdentifier(start) {
     const startOffset = this.offset;
     while (isIdentPart(this.src[this.offset] ?? "")) this.advanceBy(1);
-    const text3 = this.src.slice(startOffset, this.offset);
-    const kw = KEYWORDS.get(text3);
-    if (kw) return this.makeToken(kw, text3, start);
-    return this.makeToken("Identifier", text3, start);
+    const text4 = this.src.slice(startOffset, this.offset);
+    const kw = KEYWORDS.get(text4);
+    if (kw) return this.makeToken(kw, text4, start);
+    return this.makeToken("Identifier", text4, start);
   }
   skipActionSpaces() {
     while (this.offset < this.src.length) {
@@ -44080,8 +44951,8 @@ function splitVariableIdents(value) {
   return [value.slice(0, dotIdx), ...value.slice(dotIdx + 1).split(".")];
 }
 function numberFromToken(t2) {
-  const text3 = t2.value;
-  const cleaned = text3.replace(/_/g, "");
+  const text4 = t2.value;
+  const cleaned = text4.replace(/_/g, "");
   const isComplex = cleaned.toLowerCase().endsWith("i");
   const body = isComplex ? cleaned.slice(0, -1) : cleaned;
   const isFloat = !isComplex && (body.includes(".") || !body.startsWith("0x") && !body.startsWith("0X") && /[eE]/.test(body) || (body.startsWith("0x") || body.startsWith("0X")) && /[pP]/.test(body));
@@ -44089,7 +44960,7 @@ function numberFromToken(t2) {
   const base = {
     type: "Number",
     pos: t2.pos,
-    text: text3,
+    text: text4,
     isInt,
     isUint: false,
     isFloat,
@@ -44128,9 +44999,9 @@ function runeNumberFromToken(t2, source) {
     intValue: BigInt(inner)
   };
 }
-function parseIntegerLiteral(text3) {
+function parseIntegerLiteral(text4) {
   let sign = 1n;
-  let body = text3;
+  let body = text4;
   if (body.startsWith("+")) body = body.slice(1);
   else if (body.startsWith("-")) {
     sign = -1n;
@@ -44138,8 +45009,8 @@ function parseIntegerLiteral(text3) {
   }
   return sign * BigInt(body);
 }
-function parseFloatLiteral(text3) {
-  return Number(text3);
+function parseFloatLiteral(text4) {
+  return Number(text4);
 }
 function decodeStringLiteral(raw, pos, source) {
   if (raw.startsWith("`")) return raw.slice(1, -1);
@@ -47758,13 +48629,13 @@ function sprigStrings() {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
 init_globals();
 function applyStyleToFragment(child, style) {
   const fragment = asFragment(child);
@@ -47779,7 +48650,7 @@ function asFragment(child) {
   return child;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
 function attrFunc(style) {
   return {
     fn: ((child) => applyStyleToFragment(child, style)),
@@ -47836,7 +48707,7 @@ function richTextStyleFuncs() {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
 init_globals();
 function asColor(value, func) {
   let colour;
@@ -47913,7 +48784,7 @@ function colorFuncs(drawnAt = () => TRUECOLOR) {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
 init_globals();
 function colorStops(tail, palette) {
   if (tail.length % 2 !== 0) {
@@ -47944,8 +48815,9 @@ function paletteFuncs(getPalette) {
   return { color: colorFunc2, ramp: rampFunc };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
 init_globals();
+var HOST_CLOCK = Timeline.play(0);
 function pairs(what, tail, value) {
   if (tail.length % 2 !== 0) {
     throw new RangeError(`last hold (${String(tail[tail.length - 1])} s) has no ${what} \u2014 the arguments are <seconds> <${what}> pairs`);
@@ -47960,11 +48832,35 @@ function pairs(what, tail, value) {
   }
   return paired;
 }
-function animationFuncs(frameTime) {
+var GLYPH_EFFECTS = {
+  ...GLYPH_EFFECT_CATALOGUE.loops,
+  typewriter: (element) => GLYPH_EFFECT_CATALOGUE.transitions.typewriter(element).effect,
+  scramble: (element) => GLYPH_EFFECT_CATALOGUE.transitions.scramble(element).effect,
+  backspace: (element) => GLYPH_EFFECT_CATALOGUE.transitions.backspace(element).effect,
+  scrambleOut: (element) => GLYPH_EFFECT_CATALOGUE.transitions.scrambleOut(element).effect
+};
+function glyphEffect(name) {
+  if (!Object.hasOwn(GLYPH_EFFECTS, name)) {
+    throw new RangeError(`unknown glyph effect ${JSON.stringify(name)}; expected one of ${Object.keys(GLYPH_EFFECTS).map((n) => JSON.stringify(n)).join(", ")}`);
+  }
+  return GLYPH_EFFECTS[name];
+}
+function animationFuncs(frame, options = {}) {
+  const timeline = options.timeline ?? (() => HOST_CLOCK);
+  const drawing2 = (what, animation, at) => [Timeline.run(timeline(), animation), finiteTime(what, at.time)];
+  const now2 = (what, animation) => {
+    const at = frame();
+    const [drawn, t2] = drawing2(what, animation, at);
+    const shown = shownAt(drawn, t2, at);
+    at.onHold?.(holdOf(shown, t2));
+    return shown.value;
+  };
+  const startedAt = (start, animation) => Timeline.run(Timeline.play(start), animation);
   const framesFunc = {
     fn: ((...tail) => {
       const frames = pairs("frame", tail, asFragment).map(({ seconds, value }) => ({ seconds, text: value }));
-      return frameAt(new FrameSequence(frames), frameTime());
+      const at = frame();
+      return textFrameAt(...drawing2("frames", new FrameSequence(frames), at), at);
     }),
     argTypes: ["float", "liftable"],
     arity: { kind: "alternating", minimum: 2 },
@@ -47973,16 +48869,41 @@ function animationFuncs(frameTime) {
   const steppedFunc = {
     fn: ((...tail) => {
       const steps2 = pairs("color", tail, (v) => asColor(v, "stepped"));
-      return steps2[beat(steps2.map((step4) => step4.seconds)).at(frameTime())].value.hex;
+      return steps2[now2("stepped", beat(steps2.map((step4) => step4.seconds)))].value.hex;
     }),
     argTypes: ["float", "string"],
     arity: { kind: "alternating", minimum: 2 },
     returnType: "string"
   };
-  return { frames: framesFunc, stepped: steppedFunc };
+  const tweenFunc = {
+    fn: ((seconds, ease, start, from, to) => now2("tween", startedAt(start, tween(from, to, { seconds, ease: parseEase(ease) })))),
+    argTypes: ["float", "string", "float", "float", "float"],
+    arity: { kind: "exact" },
+    returnType: "float"
+  };
+  const loopFunc = {
+    fn: ((seconds, start) => now2("loop", startedAt(start, Animation.continuous(Phase.loop(seconds))))),
+    argTypes: ["float", "float"],
+    arity: { kind: "exact" },
+    returnType: "float"
+  };
+  const glyphsFunc = {
+    fn: ((name, start, child) => {
+      const make = glyphEffect(name);
+      const fragment = asFragment(child);
+      const key = fragment.plain;
+      const at = frame();
+      const reglyphed = reglyphText(fragment, make({ z: cellSeed(key, 0, 0) }), { key, asciiOnly: at.asciiOnly === true });
+      return textFrameAt(...drawing2("glyphs", startedAt(start, reglyphed), at), at);
+    }),
+    argTypes: ["string", "float", "liftable"],
+    arity: { kind: "exact" },
+    returnType: "T"
+  };
+  return { frames: framesFunc, stepped: steppedFunc, tween: tweenFunc, loop: loopFunc, glyphs: glyphsFunc };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.24.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 function richTextFuncs(drawnAt) {
   return { ...richTextStyleFuncs(), ...colorFuncs(drawnAt) };
 }
@@ -48364,6 +49285,15 @@ var CLOCK = {
   now: () => dateOf(drawInProgress("now").at),
   animatedAt: () => drawInProgress("animatedAt").anim
 };
+function animationPair(time) {
+  const { frames, stepped: stepped2 } = animationFuncs(() => ({ time: time() }));
+  if (frames === void 0 || stepped2 === void 0) {
+    throw new Error(
+      "rich-js's animationFuncs no longer registers frames and stepped"
+    );
+  }
+  return { frames, stepped: stepped2 };
+}
 var SPRIG_CLOCK_READERS = /* @__PURE__ */ new Set(["now", "ago"]);
 function sprigDatetimeWhere(clock, readsClock) {
   return Object.fromEntries(
@@ -48379,9 +49309,9 @@ var SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
 }, false);
 var CLOCK_FACTORIES = [
   (clock) => sprigDatetimeWhere(clock.now, true),
-  (clock) => animationFuncs(clock.animatedAt),
+  (clock) => animationPair(clock.animatedAt),
   (clock) => Object.fromEntries(
-    Object.entries(animationFuncs(() => clock.now().getTime() / 1e3)).map(
+    Object.entries(animationPair(() => clock.now().getTime() / 1e3)).map(
       ([name, func]) => [
         `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
         func
@@ -48523,17 +49453,17 @@ function unwrapDocument(name, doc) {
 // src/var-system/parse.ts
 init_globals();
 var LINE_BREAK = /\r\n|\r|\n/g;
-var textParser = (text3) => ok(text3.replace(LINE_BREAK, " ").trim());
+var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
 function regexParser(regex) {
-  return (text3) => {
-    const m = regex.exec(text3);
+  return (text4) => {
+    const m = regex.exec(text4);
     const group = m?.[1];
     return group === void 0 ? failed("regex no-match") : ok(group.replace(LINE_BREAK, " "));
   };
 }
-var jsonParser = (text3) => {
+var jsonParser = (text4) => {
   try {
-    return ok(JSON.parse(text3));
+    return ok(JSON.parse(text4));
   } catch (e) {
     return failed(`JSON parse failed: ${e.message}`);
   }
@@ -50272,7 +51202,7 @@ function selection(sessionKey, spec, domain, shown, extra = {}) {
     themeDefault: extra.themeDefault ?? false
   };
 }
-var text2 = (spec) => ({
+var text3 = (spec) => ({
   kind: "text",
   spec
 });
@@ -50463,13 +51393,13 @@ var GLOBAL_FIELDS = {
     floor: "truecolor"
   },
   // The text segments render when their value is empty.
-  default_empty_value: text2(optionalStringSpec()),
+  default_empty_value: text3(optionalStringSpec()),
   // The cell separator `plain` draws between segments. Absent means the glyph
   // rich-js's bundled `plain` joiner owns — no floor here, since naming one
   // would be a second copy of a constant that lives in rich-js.
-  default_separator: text2(optionalStringSpec()),
+  default_separator: text3(optionalStringSpec()),
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text2(menuGlyphSpec)
+  menuGlyph: text3(menuGlyphSpec)
 };
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
@@ -51797,14 +52727,14 @@ var ColorSpecError = class extends Error {
     this.name = "ColorSpecError";
   }
 };
-function resolveSegmentColors(active, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text3 } = active;
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const filled = bgSpec !== NO_FILL;
   const bgColor = !filled ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active.bg = bgColor;
+  active2.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text3 : textOn(palette, ground, drawnAt);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn(palette, ground, drawnAt);
   const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled ? chosen(bgColor) : void 0;
   return new Style({
     ...filled && { bgcolor: ColorSpec.fromRgba(bgColor) },
@@ -52063,7 +52993,7 @@ function resolvedStyle(style) {
 
 // src/render/effect.ts
 init_globals();
-var STILL2 = { kind: "still" };
+var STILL3 = { kind: "still" };
 var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
 function isMoving(part) {
   return part.name !== EFFECT_FLOOR;
@@ -52091,19 +53021,20 @@ function fromGround(effect, ground) {
 function paintedOn(effect, owners) {
   return (row2) => confined(() => effect(row2), ...owners)(row2);
 }
-function noiseOffset(text3) {
+function noiseOffset(text4) {
   let hash2 = 2166136261;
-  for (let i = 0; i < text3.length; i++) {
-    hash2 ^= text3.charCodeAt(i);
+  for (let i = 0; i < text4.length; i++) {
+    hash2 ^= text4.charCodeAt(i);
     hash2 = Math.imul(hash2, 16777619) >>> 0;
   }
   return hash2 / 4294967296;
 }
 var NOISE_DEPTH = 4096;
-function closingFlash(fill, text3) {
-  const lit = (colors, { terminal }) => ({
-    bg: terminal.bg ? colors.bg : fill,
-    fg: terminal.fg ? colors.fg : terminal.bg ? fill : text3
+function closingFlash(fill, text4) {
+  const lit = (look, { terminal }) => ({
+    ...look,
+    bg: terminal.bg ? look.bg : fill,
+    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
   });
   const dark = (colors) => colors;
   const holds2 = CLOSING_FLASH.reduceRight(
@@ -52230,19 +53161,17 @@ var SessionEffects = class {
       leaves: leaving
     };
     const begin = (transition2, id2, { ground }) => {
-      const made2 = EFFECT_CATALOGUE.transitions[transition2]({
+      const begun = EFFECT_CATALOGUE.transitions[transition2]({
         z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
       });
       return {
         name: transition2,
         since: at,
-        transition: {
-          effect: fromGround(made2.effect, ground),
-          done: (t2) => made2.done(t2)
-        }
+        done: (t2) => begun.done(t2),
+        effect: fromGround(begun.effect, ground)
       };
     };
-    const over = ({ since, transition: transition2 }) => transition2.done(at - since);
+    const over = ({ since, done: done2 }) => done2(at - since);
     const shown = (id2, drawing2, last3) => ({
       drawing: drawing2,
       passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over(last3.passage) ? last3.passage : null
@@ -52320,7 +53249,7 @@ var SessionEffects = class {
         return passage === null ? [] : [
           {
             t: at - passage.since,
-            effect: confined(passage.transition.effect, ...owners)
+            effect: confined(passage.effect, ...owners)
           }
         ];
       });
@@ -52335,10 +53264,11 @@ var SessionEffects = class {
       const passing = passagesOf(items);
       const flashed = flashing(kind);
       if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
-        return STILL2;
+        return STILL3;
       const rowKey = `${this.key}#${rowName}`;
       return {
         kind: "moving",
+        time: bar.t,
         wrap: (strip) => new Effected(
           strip,
           together(bar.t, [
@@ -52354,7 +53284,7 @@ var SessionEffects = class {
             // veils: the menu is about to close.
             ...flashed
           ]),
-          { t: bar.t, key: rowKey, theme: ASSUMED_TERMINAL }
+          { key: rowKey, theme: ASSUMED_TERMINAL }
         )
       };
     };
@@ -52405,6 +53335,7 @@ var EffectSessions = class {
 var UNBOUNDED_DRAW_WIDTH = 80;
 function draw(renderable, options) {
   const destination = resolveDestination(options.colorSystem);
+  const { time } = options;
   const segments = [
     ...render(renderable, {
       maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
@@ -52412,6 +53343,7 @@ function draw(renderable, options) {
       asciiOnly: false,
       theme: RENDER_THEME,
       colorSystem: destination.colorSystem,
+      ...time === void 0 ? {} : { frame: { time, host: { frameTime: time } } },
       // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
       // as no style at all; a name the theme lacks is a broken config, so it
       // throws here exactly as the cell splitter throws on it.
@@ -52434,7 +53366,7 @@ function plainWith(separator) {
     const seam2 = form.seam.map(
       (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
     );
-    return { seam: seam2, divider: seam2 };
+    return { seam: seam2 };
   };
   const { seam, caps } = JOINERS2.plain;
   const joiner = new CellJoiner(
@@ -52482,17 +53414,17 @@ function stripSeamCols(options) {
   return stripGeometry(options).seam;
 }
 var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
-function privateGlyphsIn(text3) {
-  return [...new Set(text3.match(PRIVATE_USE) ?? [])].join("");
+function privateGlyphsIn(text4) {
+  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
 }
 function stripPrivateGlyphs(options) {
   const joiner = pickJoiner(options.endcaps, options.separator);
   const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
-  const cells = [cell3("#101010"), cell3("#202020"), cell3("#202020")];
+  const cells = [cell3("#101010"), cell3("#202020")];
   const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
   return privateGlyphsIn(drawn.text);
 }
-function drawStripCells(cells, options, motion = STILL2) {
+function drawStripCells(cells, options, motion = STILL3) {
   if (cells.length === 0) return { text: "", moves: false };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
@@ -52501,7 +53433,7 @@ function drawStripCells(cells, options, motion = STILL2) {
     ...flex ? { width: options.width } : {}
   };
   const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
-  const out = draw(motion.kind === "still" ? strip : motion.wrap(strip), drawn);
+  const out = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
   if (!out.text.endsWith("\n")) {
     throw new Error(
       "drawStripCells: rich-js strip output did not end its last line"
@@ -53985,7 +54917,7 @@ var TRIAL_CONTROLS = Object.keys(SETTINGS).filter((name) => SETTINGS[name].trial
 var MENU_CONTROLS = [...CONTROLS, ...TRIAL_CONTROLS];
 var controlsIn = (place) => MENU_CONTROLS.filter((c) => c.place === place);
 var controlsUnder = (place) => MENU_CONTROLS.filter((c) => within(c.place, place));
-var markedDisplay = (place) => (text3) => `(print ${templateLiteral(text3)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
   controlsUnder(place).map((c) => c.name)
 )}))`;
 var controlsAt = (place) => controlsIn(place).flatMap((c) => [
@@ -54582,10 +55514,10 @@ function labelChrome(child, decl, ctx, configure) {
     )
   };
 }
-function labelSegment(ctx, key, child, decl, text3) {
+function labelSegment(ctx, key, child, decl, text4) {
   const name = `${LABEL_NS}${key}:${child.name}`;
   ctx.artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(text3)}" }}`,
+    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
     ...decl.palette !== void 0 && { palette: decl.palette }
   };
   return name;
@@ -55209,11 +56141,11 @@ var PARSE_SCHEMA = {
     }
   }
 };
-function capturingPattern(ctx, path41, pattern) {
+function capturingPattern(ctx, path41, pattern2) {
   let groups;
   try {
-    new RegExp(pattern);
-    groups = new RegExp(`${pattern}|`).exec("").length - 1;
+    new RegExp(pattern2);
+    groups = new RegExp(`${pattern2}|`).exec("").length - 1;
   } catch (e) {
     return reject(
       ctx,
@@ -55221,10 +56153,10 @@ function capturingPattern(ctx, path41, pattern) {
       `parse.regex is not a valid regular expression: ${e.message}`
     );
   }
-  return groups >= 1 ? { regex: pattern } : reject(
+  return groups >= 1 ? { regex: pattern2 } : reject(
     ctx,
     path41,
-    `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern)}`
+    `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`
   );
 }
 function parseSpec() {
@@ -55286,11 +56218,11 @@ var LITERAL_FIELDS = {
   default: optionalStringSpec()
 };
 function inputPathSpec() {
-  const text3 = requireStringSpec();
+  const text4 = requireStringSpec();
   return {
-    ...text3,
+    ...text4,
     parse: (ctx, path41, field, raw) => {
-      const value = text3.parse(ctx, path41, field, raw);
+      const value = text4.parse(ctx, path41, field, raw);
       const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
       return instead === void 0 ? value : reject(
         ctx,
@@ -57487,7 +58419,7 @@ function valueReads({ names, helpers, actions }) {
   });
   const ofTemplate = perTemplate(
     (template) => texts(template).flatMap(
-      (text3) => [...templateReads(text3, helpers).keys()].map((path41) => ({
+      (text4) => [...templateReads(text4, helpers).keys()].map((path41) => ({
         path: path41,
         reaches: variableRead(path41, names)
       }))
@@ -57495,8 +58427,8 @@ function valueReads({ names, helpers, actions }) {
   );
   const calls = perTemplate(
     (template) => new Set(
-      texts(template).flatMap((text3) => [
-        ...templateFunctions(text3, helpers)
+      texts(template).flatMap((text4) => [
+        ...templateFunctions(text4, helpers)
       ])
     )
   );
@@ -58835,7 +59767,7 @@ function withDroppedPlacements(config2, owning, inserted) {
   };
 }
 function standIn(name, cause, placements) {
-  const text3 = `\u26A0 ${name}: ${cause.join("; ")}`;
+  const text4 = `\u26A0 ${name}: ${cause.join("; ")}`;
   const values2 = /* @__PURE__ */ new Map();
   for (const n of placements) {
     for (const [key, value] of Object.entries(n.settings ?? {})) {
@@ -58847,7 +59779,7 @@ function standIn(name, cause, placements) {
     [...values2].map(([key, vs]) => [key, settingFor(key, vs)])
   );
   return {
-    template: `{{ ${JSON.stringify(text3)} }}`,
+    template: `{{ ${JSON.stringify(text4)} }}`,
     bg: "error",
     description: "stands in for a segment whose plugin did not load",
     settings
@@ -59361,17 +60293,17 @@ function probe(read2) {
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
 var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root) {
-  const text3 = probe(() => fs_default.readFileSync(import_node_path20.default.join(root, ".git"), "utf-8"));
-  if (text3.kind !== "ok") return text3;
-  const named3 = text3.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+  const text4 = probe(() => fs_default.readFileSync(import_node_path20.default.join(root, ".git"), "utf-8"));
+  if (text4.kind !== "ok") return text4;
+  const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
   return named3 === void 0 ? failed(`${import_node_path20.default.join(root, ".git")} names no gitdir`) : ok(import_node_path20.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
-  const text3 = probe(
+  const text4 = probe(
     () => fs_default.readFileSync(import_node_path20.default.join(gitDir, "commondir"), "utf-8")
   );
-  if (text3.kind !== "ok") return text3;
-  const common = text3.value.trim();
+  if (text4.kind !== "ok") return text4;
+  const common = text4.value.trim();
   return common === "" ? failed(`${import_node_path20.default.join(gitDir, "commondir")} is empty`) : ok(import_node_path20.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
@@ -62057,10 +62989,10 @@ function createKeyspace(baseline, noun, derive) {
       createGate(baseline, [contribution], [], noun);
       daemonWide.push(contribution);
       epoch++;
-      let active = true;
+      let active2 = true;
       return () => {
-        if (!active) return;
-        active = false;
+        if (!active2) return;
+        active2 = false;
         daemonWide.splice(daemonWide.indexOf(contribution), 1);
         epoch++;
       };
@@ -62539,21 +63471,21 @@ function readConfigText(file) {
     throw e;
   }
 }
-function writeConfigText(file, text3, logger) {
+function writeConfigText(file, text4, logger) {
   try {
-    if (text3 === null) {
+    if (text4 === null) {
       fs_default.rmSync(resolvedTarget(file), { force: true });
       return;
     }
-    writeAtomic(file, text3);
+    writeAtomic(file, text4);
   } catch (e) {
     const message = `config write failed (${file}): ${e.message}`;
     logger("error", message);
     throw new Error(message);
   }
 }
-function docOf(text3) {
-  return /^\s*$/.test(text3) ? null : parseDocument(text3);
+function docOf(text4) {
+  return /^\s*$/.test(text4) ? null : parseDocument(text4);
 }
 function has2(doc, p2) {
   return doc !== null && nodeAt(doc, p2) !== void 0;
@@ -62682,8 +63614,8 @@ function stagedPathOf(doc, preset) {
 function resetPathOf(doc, target) {
   return target.scope === "preset-root" ? stagedPathOf(doc, target.preset) : persistPath(target);
 }
-function ensureAuthored(text3, { unit }) {
-  return unit === null ? text3 : setValue(text3, unit.path, json5Text(unit.value), JSON5_DIALECT);
+function ensureAuthored(text4, { unit }) {
+  return unit === null ? text4 : setValue(text4, unit.path, json5Text(unit.value), JSON5_DIALECT);
 }
 function requireTarget(key) {
   const target = parsePersistTarget(key);
@@ -62699,7 +63631,7 @@ function requireValueTarget(key) {
   }
   return target;
 }
-function commit(store, home, before, after, refuse3) {
+function commit2(store, home, before, after, refuse3) {
   const will = loadOrRefuse(home, after);
   let held;
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
@@ -62735,22 +63667,22 @@ function hiddenBy(home, was, will) {
     (p2) => !drawn.has(p2)
   );
 }
-function loadedOrNull(home, text3) {
+function loadedOrNull(home, text4) {
   try {
-    return chainOver(home, text3);
+    return chainOver(home, text4);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
   }
 }
-function chainOver(home, text3) {
+function chainOver(home, text4) {
   return loadConfigChain(
-    text3 !== null ? [home.path, ...home.above] : home.above,
+    text4 !== null ? [home.path, ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
     { warned: () => {
     } },
     { repo: home.repo, cwd: home.cwd, repoLayers: home.repoLayers },
-    (p2) => p2 === home.path && text3 !== null ? text3 : fs_default.readFileSync(p2, "utf8")
+    (p2) => p2 === home.path && text4 !== null ? text4 : fs_default.readFileSync(p2, "utf8")
   );
 }
 function homeConfig(home, chain2) {
@@ -62771,9 +63703,9 @@ function changedPaths(a, b, at = "") {
 function isPlainObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function loadOrRefuse(home, text3) {
+function loadOrRefuse(home, text4) {
   try {
-    return chainOver(home, text3);
+    return chainOver(home, text4);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -62812,26 +63744,26 @@ function writeValues(store, home, pairs2) {
 function writeDrafts(store, home, pairs2, placements) {
   const before = readConfigText(home.path);
   const valued = pairs2.reduce(
-    (text3, [key, raw]) => setValue(
-      text3,
-      valuePathOf(docOf(text3), requireValueTarget(key)),
+    (text4, [key, raw]) => setValue(
+      text4,
+      valuePathOf(docOf(text4), requireValueTarget(key)),
       persistValueText(key, raw),
       JSON5_DIALECT
     ),
     before ?? ""
   );
-  commit(
+  commit2(
     store,
     home,
     before,
     homeOnly(
       home,
-      () => withPlacements(valued, home.path, placements, (text3) => text3)
+      () => withPlacements(valued, home.path, placements, (text4) => text4)
     ),
     refuseHidden
   );
 }
-function withPlacements(text3, file, placements, own2) {
+function withPlacements(text4, file, placements, own2) {
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
     const acc = own2(prior, preset, id2);
     const placement = layoutPlacementOf(docOf(acc), preset, id2);
@@ -62848,41 +63780,41 @@ function withPlacements(text3, file, placements, own2) {
       );
     }
     return set2;
-  }, text3);
+  }, text4);
 }
-function ownRow(text3, preset, id2) {
-  const doc = docOf(text3);
+function ownRow(text4, preset, id2) {
+  const doc = docOf(text4);
   const own2 = ["presets", preset, "root"];
   for (const [row2, { path: path41, unit, node }] of cascadeOf(doc, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
-    if (own2.every((key, i) => path41[i] === key)) return text3;
-    const rowText = unit === null ? movableTextOf(text3, node) : json5Text(unit.value);
+    if (own2.every((key, i) => path41[i] === key)) return text4;
+    const rowText = unit === null ? movableTextOf(text4, node) : json5Text(unit.value);
     if (row2 !== TREE_BLOCK) {
-      return setValue(text3, [...own2, "rows", row2], rowText, JSON5_DIALECT);
+      return setValue(text4, [...own2, "rows", row2], rowText, JSON5_DIALECT);
     }
     if (presetLayer(doc, preset) !== null) {
       throw new BadVerbArgs(
         `cannot give preset "${preset}" its own copy of ${path41.join(".")}: it already stages rows of its own over that tree`
       );
     }
-    return setValue(text3, own2, rowText, JSON5_DIALECT);
+    return setValue(text4, own2, rowText, JSON5_DIALECT);
   }
-  return text3;
+  return text4;
 }
-function deleteAtPath(text3, path41) {
+function deleteAtPath(text4, path41) {
   const ownPreset = path41[0] === "presets" && path41.length > 2 && !isBundledPreset(path41[1]);
-  return deleteValue(text3, path41, ownPreset ? 2 : 0);
+  return deleteValue(text4, path41, ownPreset ? 2 : 0);
 }
 function deleteValues(store, home, keys2) {
   const targets = keys2.map(requireTarget);
   const before = readConfigText(home.path);
   if (before === null) return;
   const after = targets.reduce(
-    (text3, target) => deleteAtPath(text3, resetPathOf(docOf(text3), target)),
+    (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
     before
   );
   if (after === before) return;
-  commit(store, home, before, after, releases);
+  commit2(store, home, before, after, releases);
 }
 var SAVED_PRESET_PREFIX = "custom-";
 function presetKeys(doc) {
@@ -62931,7 +63863,7 @@ function writePreset(store, home, from, globals, picks, placements) {
     ];
   });
   const after = [...copied, ...pinned].reduce(
-    (text3, [at, value]) => setValue(text3, at, value, JSON5_DIALECT),
+    (text4, [at, value]) => setValue(text4, at, value, JSON5_DIALECT),
     setValue(before ?? "", own2, "{}", JSON5_DIALECT)
   );
   const placed = homeOnly(
@@ -62943,7 +63875,7 @@ function writePreset(store, home, from, globals, picks, placements) {
       ownRow
     )
   );
-  commit(store, home, before, placed, refuseHidden);
+  commit2(store, home, before, placed, refuseHidden);
   return name;
 }
 function writeThemeDefault(store, home, theme24, look) {
@@ -62954,7 +63886,7 @@ function writeThemeDefault(store, home, theme24, look) {
     json5Text(look),
     JSON5_DIALECT
   );
-  commit(store, home, before, after, refuseHidden);
+  commit2(store, home, before, after, refuseHidden);
 }
 function deletePreset(store, home, name) {
   if (isBundledPreset(name)) {
@@ -62975,11 +63907,11 @@ function deletePreset(store, home, name) {
     own2,
     ...selected?.kind === "string" && selected.value === name ? [["globals", "preset"]] : []
   ];
-  commit(
+  commit2(
     store,
     home,
     before,
-    paths.reduce((text3, at) => deleteAtPath(text3, at), before),
+    paths.reduce((text4, at) => deleteAtPath(text4, at), before),
     releases
   );
 }
@@ -63006,17 +63938,17 @@ function applyLayoutOp(store, home, key, op) {
       `${placement.path.join(".")} in ${home.path} has no placement "${subject}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
     );
   }
-  commit(store, home, before, after, refuseHidden);
+  commit2(store, home, before, after, refuseHidden);
   return placed;
 }
-function spliceOp(text3, path41, op, rendered) {
+function spliceOp(text4, path41, op, rendered) {
   switch (op.op) {
     case "remove":
-      return { after: removeSegmentRef(text3, path41, op.target), placed: null };
+      return { after: removeSegmentRef(text4, path41, op.target), placed: null };
     case "insert": {
       const placed = mintPlacement(op.segment, op.anchor, rendered());
       return {
-        after: insertSegmentRef(text3, path41, placed, op.anchor, op.relation),
+        after: insertSegmentRef(text4, path41, placed, op.anchor, op.relation),
         placed
       };
     }
@@ -63596,9 +64528,9 @@ var import_node_path23 = __toESM(require_path_browserify(), 1);
 function stateFile(dir, name, empty2, parse3) {
   const file = import_node_path23.default.join(dir, name);
   const read2 = () => {
-    let text3;
+    let text4;
     try {
-      text3 = fs_default.readFileSync(file, "utf8");
+      text4 = fs_default.readFileSync(file, "utf8");
     } catch (e) {
       if (e.code === "ENOENT") {
         return { kind: "ok", value: empty2 };
@@ -63607,7 +64539,7 @@ function stateFile(dir, name, empty2, parse3) {
     }
     let doc;
     try {
-      doc = JSON.parse(text3);
+      doc = JSON.parse(text4);
     } catch (e) {
       return {
         kind: "failed",
@@ -63647,15 +64579,15 @@ var NEUTRALIZED_RANGES = [
 function isControlChar(code) {
   return NEUTRALIZED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
 }
-function sanitizeText(text3) {
+function sanitizeText(text4) {
   let sanitized = "";
-  for (const ch of text3) {
+  for (const ch of text4) {
     sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
   }
   return sanitized.replace(/\s+/g, " ").trim();
 }
-function sanitizeAndTruncate(text3, maxLen) {
-  const sanitized = sanitizeText(text3);
+function sanitizeAndTruncate(text4, maxLen) {
+  const sanitized = sanitizeText(text4);
   let out = "";
   let count = 0;
   for (const ch of sanitized) {
@@ -63715,13 +64647,13 @@ var HANDOFF_SEVERITY = {
   glyph: "\u{1F9EA}",
   colors: DIAGNOSTIC_WARNING_COLORS
 };
-function diagnosticSpan(text3, link) {
-  return { text: sanitizeText(text3), link };
+function diagnosticSpan(text4, link) {
+  return { text: sanitizeText(text4), link };
 }
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
-  const plainOf2 = (text3, severity) => {
-    const made = plainMessage(text3, severity);
+  const plainOf2 = (text4, severity) => {
+    const made = plainMessage(text4, severity);
     for (const m of made) plain.add(m);
     return made;
   };
@@ -63818,7 +64750,7 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     color: shown.severity.colors.fg
   });
   const go = (key) => viewerLink(sessionId2, key);
-  const button = (text3, link) => cell(text3, link === null ? style : style.withLink(link));
+  const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
   const step4 = (glyph, to) => to === null ? button(" ", null) : button(glyph, go(viewerKey(list2, to.index - 1, to.page)));
   const headerOf = (pages, page2) => {
     const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
@@ -64732,16 +65664,16 @@ var GitService = class {
       "refs",
       "stash"
     );
-    let text3;
+    let text4;
     try {
-      text3 = fs_default.readFileSync(reflog, "utf-8");
+      text4 = fs_default.readFileSync(reflog, "utf-8");
     } catch (e) {
       if (e.code === "ENOENT") return ok(0);
       return failed(
         `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`
       );
     }
-    const entries = text3.trim();
+    const entries = text4.trim();
     return ok(entries ? entries.split("\n").length : 0);
   }
   // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
@@ -64798,15 +65730,15 @@ var GitService = class {
     );
     const identity3 = configIdentity(configPath);
     if (identity3 === null) return this.readRemotes(workingDir);
-    const { key, stamp } = identity3;
+    const { key, stamp: stamp2 } = identity3;
     const memo = this.remotesByConfig.get(key);
-    if (memo !== void 0 && memo.stamp === stamp) {
+    if (memo !== void 0 && memo.stamp === stamp2) {
       this.remotesByConfig.delete(key);
       this.remotesByConfig.set(key, memo);
       return memo.remotes;
     }
     const remotes = this.readRemotes(workingDir);
-    this.remotesByConfig.set(key, { stamp, remotes });
+    this.remotesByConfig.set(key, { stamp: stamp2, remotes });
     void remotes.then(
       (outcome) => {
         const held = this.remotesByConfig.get(key);
@@ -65842,9 +66774,9 @@ init_os();
 // src/utils/transcript-activity.ts
 init_globals();
 var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text3) {
-  if (typeof text3 !== "string") return void 0;
-  return COMMAND_NAME.exec(text3)?.[1];
+function slashCommand(text4) {
+  if (typeof text4 !== "string") return void 0;
+  return COMMAND_NAME.exec(text4)?.[1];
 }
 function todoItems(input) {
   const todos2 = input?.todos;
@@ -65853,10 +66785,10 @@ function todoItems(input) {
   for (const raw of todos2) {
     if (typeof raw !== "object" || raw === null) continue;
     const { content, activeForm, status } = raw;
-    const active = status === "in_progress";
-    const text3 = active && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text3 !== "string") continue;
-    items.push({ text: text3, active, done: status === "completed" });
+    const active2 = status === "in_progress";
+    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text4 !== "string") continue;
+    items.push({ text: text4, active: active2, done: status === "completed" });
   }
   return items;
 }
@@ -65980,9 +66912,9 @@ function userEntryOf(parsed2) {
   if (firstBlockType(msg) === "tool_result") return "tool-result";
   const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
   if (origin !== void 0 && origin !== "human") return "turn";
-  const text3 = turnText(msg?.content).trimStart();
-  if (text3.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text3) ? "claude-code" : "prompt";
+  const text4 = turnText(msg?.content).trimStart();
+  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
 }
 var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
 function firstBlockType(msg) {
@@ -66043,9 +66975,9 @@ function entryOf2(line) {
     return null;
   }
 }
-function parseJsonlLines(text3) {
+function parseJsonlLines(text4) {
   const entries = [];
-  for (const line of text3.split("\n")) {
+  for (const line of text4.split("\n")) {
     const entry = entryOf2(line);
     if (entry) entries.push(entry);
   }
@@ -67038,10 +67970,10 @@ function fcMatchCoverage(output, glyphs) {
       reason: `fc-match answered ${JSON.stringify(output.slice(0, 200))}, not families and their charsets`
     };
   }
-  const drawable2 = fonts.flatMap((f) => f.ranges);
+  const drawable3 = fonts.flatMap((f) => f.ranges);
   const lacks = [...glyphs].filter((g) => {
     const p2 = g.codePointAt(0);
-    return !drawable2.some(([lo, hi]) => lo <= p2 && p2 <= hi);
+    return !drawable3.some(([lo, hi]) => lo <= p2 && p2 <= hi);
   });
   return { kind: "ok", value: { font: fonts[0].family, lacks } };
 }
@@ -67092,9 +68024,9 @@ function alacrittyFile(doc) {
   };
 }
 function alacrittyFamilyIn(file, home, depth) {
-  let text3;
+  let text4;
   try {
-    text3 = fs_default.readFileSync(file, "utf8");
+    text4 = fs_default.readFileSync(file, "utf8");
   } catch (e) {
     return {
       kind: "failed",
@@ -67103,7 +68035,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   let doc;
   try {
-    doc = parse2(text3);
+    doc = parse2(text4);
   } catch (e) {
     return {
       kind: "failed",
@@ -67351,12 +68283,12 @@ function productionEdge(loadConfig3) {
   };
 }
 function transcriptWindow(bytes, whole) {
-  const text3 = bytes.toString("utf-8");
-  const from = whole ? 0 : text3.indexOf("\n") + 1;
-  const to = text3.lastIndexOf("\n") + 1;
+  const text4 = bytes.toString("utf-8");
+  const from = whole ? 0 : text4.indexOf("\n") + 1;
+  const to = text4.lastIndexOf("\n") + 1;
   let lines2 = 0;
   let unparsed = 0;
-  for (const line of text3.slice(from, to).split("\n")) {
+  for (const line of text4.slice(from, to).split("\n")) {
     const read2 = jsonLine(line);
     if (read2.kind === "blank") continue;
     lines2++;
@@ -67629,9 +68561,9 @@ function applyFix(stores, fix, facts) {
   switch (fix.kind) {
     case "claude-settings": {
       const settingsPath = fix.file.path;
-      const text3 = readClaudeSettingsText(settingsPath);
+      const text4 = readClaudeSettingsText(settingsPath);
       const next2 = setValue(
-        text3,
+        text4,
         fix.path,
         JSON.stringify(fix.value),
         JSON_DIALECT
@@ -68369,9 +69301,9 @@ function clickLaunch(opts, what, dlog2) {
     `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`
   );
 }
-function pbcopy(text3, ctx) {
+function pbcopy(text4, ctx) {
   clickLaunch(
-    { bin: "/usr/bin/pbcopy", stdinInput: text3, category: "click.pbcopy" },
+    { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
     "pbcopy",
     ctx.dlog
   );
@@ -68391,12 +69323,12 @@ var copyDiagnostic = (value, ctx) => {
     () => decodeSegments(value)
   );
   const sid = requireSessionId(sessionId2);
-  const text3 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
-  if (text3 === void 0)
+  const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  if (text4 === void 0)
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
     );
-  pbcopy(text3, ctx);
+  pbcopy(text4, ctx);
 };
 var openVscode = (value, ctx) => clickLaunch(
   {
@@ -69465,7 +70397,7 @@ function links2(rendered) {
     throw new Error(
       `OSC 8 open at ${open2.index} (${open2.uri}) is never closed`
     );
-  return out.map(({ url, text: text3 }) => ({ url, text: text3 }));
+  return out.map(({ url, text: text4 }) => ({ url, text: text4 }));
 }
 function drawnLinks(rendered) {
   return links2(rendered).map((l) => ({
@@ -70288,16 +71220,16 @@ function makeBinaryWatch(opts) {
   const { targets, intervalMs, stat: stat3, held, exit: exit2, log } = opts;
   const logHeld = changeLogger(log);
   const boot = targets.map((path41) => ({ path: path41, stamp: mtimeOf(path41, stat3) }));
-  const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
+  const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
   let timer = null;
   const sample = () => {
-    for (const { path: path41, stamp } of watched) {
+    for (const { path: path41, stamp: stamp2 } of watched) {
       const now2 = mtimeOf(path41, stat3);
       if (now2.kind === "failed") {
         log("warn", `binary stat failed (${path41}): ${now2.reason}`);
         continue;
       }
-      if (!sameStamp(stamp, now2)) {
+      if (!sameStamp(stamp2, now2)) {
         const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path41})`;
         if (held()) {
           logHeld([
@@ -70315,11 +71247,11 @@ function makeBinaryWatch(opts) {
   };
   return {
     arm() {
-      for (const { path: path41, stamp } of boot) {
-        if (stamp.kind === "failed") {
+      for (const { path: path41, stamp: stamp2 } of boot) {
+        if (stamp2.kind === "failed") {
           log(
             "warn",
-            `binary stat failed at boot (${path41}): ${stamp.reason}; not watched`
+            `binary stat failed at boot (${path41}): ${stamp2.reason}; not watched`
           );
         }
       }
@@ -70467,8 +71399,8 @@ var ATTRIBUTES2 = {
   encircle: null
 };
 var ATTRIBUTE_NAMES3 = Object.keys(ATTRIBUTES2);
-function escaped(text3) {
-  return text3.replaceAll("#", "##");
+function escaped(text4) {
+  return text4.replaceAll("#", "##");
 }
 function directive(style) {
   const attributes = ATTRIBUTE_NAMES3.filter((name) => style[name] === true).map(
@@ -70484,8 +71416,8 @@ function directive(style) {
 var PLAIN3 = new Style();
 function tmuxStatusFrame(ansi) {
   const links3 = {};
-  const run3 = (text3, style) => {
-    const drawn = directive(style) + escaped(text3);
+  const run3 = (text4, style) => {
+    const drawn = directive(style) + escaped(text4);
     if (style.link === void 0) return drawn;
     const range = rangeOf2(style.link);
     links3[range] = style.link;
@@ -71587,8 +72519,8 @@ var PricingService = class {
       { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
       { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
     ];
-    for (const { pattern, fallback } of patterns) {
-      if (pattern.some((p2) => lowerModelId.includes(p2))) {
+    for (const { pattern: pattern2, fallback } of patterns) {
+      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
         if (allPricing[fallback]) {
           return allPricing[fallback];
         }
@@ -71867,9 +72799,9 @@ var HoldReturn = class {
   }
   hold(held) {
     if (this.state === "disposed") return;
-    const returned = held && this.state === "released" && this.answered;
+    const returned2 = held && this.state === "released" && this.answered;
     this.state = held ? "held" : "released";
-    if (returned) this.reread();
+    if (returned2) this.reread();
   }
   dispose() {
     this.state = "disposed";
@@ -72131,10 +73063,10 @@ var SessionUsageStore = class {
     let refresh = null;
     const once2 = () => {
       if (refresh !== null) return refresh;
-      const stamp = statStamp(transcriptPath);
+      const stamp2 = statStamp(transcriptPath);
       refresh = {
-        stamp,
-        record: this.refreshed(sessionId2, transcriptPath, stamp)
+        stamp: stamp2,
+        record: this.refreshed(sessionId2, transcriptPath, stamp2)
       };
       return refresh;
     };
@@ -72176,11 +73108,11 @@ var SessionUsageStore = class {
   }
   // A request's ingest of its own session, whose outcome the session's slot
   // keeps for the draws until the next one.
-  refreshed(sessionId2, transcriptPath, stamp) {
-    return this.requestFlight.run(`${sessionId2}:${stamp}`, async () => {
+  refreshed(sessionId2, transcriptPath, stamp2) {
+    return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const tally = { hits: 0, misses: 0 };
       const startedAt = Date.now();
-      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp);
+      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
       this.renderTally.hits += tally.hits;
       this.renderTally.misses += tally.misses;
       if (tally.misses > 0) {
@@ -72242,14 +73174,14 @@ var SessionUsageStore = class {
   // day with no refresh. The active session's last ingest failing is the
   // projection's failure.
   todayAt(set2, hookData2, at) {
-    const active = this.sessions.get(hookData2?.session_id ?? "");
-    const failure = active?.failure.get() ?? null;
+    const active2 = this.sessions.get(hookData2?.session_id ?? "");
+    const failure = active2?.failure.get() ?? null;
     if (failure !== null) return failed(failure);
     const today = dayKey(dateOf(at));
     const total = { ...EMPTY_DAY };
     const inSet = set2.sums.get(today);
     if (inSet !== void 0) addDay(total, inSet);
-    const own2 = under(active?.record?.transcriptPath, set2.roots) ? void 0 : active?.record?.days.get(today);
+    const own2 = under(active2?.record?.transcriptPath, set2.roots) ? void 0 : active2?.record?.days.get(today);
     if (own2 !== void 0) addDay(total, own2);
     if (inSet === void 0 && own2 === void 0) return ABSENT2;
     return ok({
@@ -72277,8 +73209,8 @@ var SessionUsageStore = class {
   // A request's speed sample, over the request's one refresh of the session.
   async observed(sessionId2, refresh, nowMs) {
     if (!sessionId2) return ABSENT2;
-    const { stamp, record: refreshed } = refresh();
-    return this.speedFlight.run(`${sessionId2}:${stamp}`, async () => {
+    const { stamp: stamp2, record: refreshed } = refresh();
+    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const record2 = await refreshed;
       if (record2.kind === "failed") {
         answer(this.hold(sessionId2).speed, record2);
@@ -72316,10 +73248,10 @@ var SessionUsageStore = class {
   // transcript that exists but couldn't be parsed — NOT cached (only ok
   // records are stored; the next render retries, same rule as the git
   // cache). This is the single write-path of a slot's record.
-  async ingest(sessionId2, transcriptPath, tally, stamp) {
+  async ingest(sessionId2, transcriptPath, tally, stamp2) {
     if (!sessionId2) return ABSENT2;
     const existing = this.see(sessionId2)?.record;
-    if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
+    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
       tally.hits++;
       return ok(existing);
     }
@@ -72327,7 +73259,7 @@ var SessionUsageStore = class {
     tally.misses++;
     let refolded;
     try {
-      refolded = await this.flight.run(`${sessionId2}:${stamp}`, async () => {
+      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
         const prior2 = this.sessions.get(sessionId2)?.record;
         return {
           prior: prior2,
@@ -72354,7 +73286,7 @@ var SessionUsageStore = class {
       return ok(record2);
     }
     if (landed === void 0) return ok(record2);
-    return this.ingest(sessionId2, transcriptPath, tally, stamp);
+    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
   }
   // [LAW:single-enforcer] The one write of a slot's record: the slot is
   // replaced in the observable map, which is the change the day sums derive
@@ -72604,8 +73536,8 @@ var TranscriptFold = class {
   async read(sessionId2, transcriptPath) {
     const held = this.sessions.get(sessionId2);
     const prior = held?.folded;
-    const stamp = statStamp(transcriptPath);
-    if (held?.folded && stamp !== "" && held.folded.cursor.stamp === stamp) {
+    const stamp2 = statStamp(transcriptPath);
+    if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
       const { folded: folded3, answer: answer2 } = held;
       if (answer2.kind === "ok" && answer2.value === folded3.value) {
         this.sessions.touch(sessionId2);
@@ -73097,21 +74029,21 @@ var AutoCompactProvider = class {
     });
   }
   window(settingsPath) {
-    const stamp = stampAt(settingsPath);
+    const stamp2 = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
-    if (known !== void 0 && known.stamp === stamp) {
+    if (known !== void 0 && known.stamp === stamp2) {
       this.known.touch(settingsPath);
       return known.outcome;
     }
     const startedAt = Date.now();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
-      `path=${valueOf(settingsPath)} stamp=${valueOf(stamp)}`,
+      `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
       Date.now() - startedAt
     );
-    this.known.set(settingsPath, { stamp, outcome });
+    this.known.set(settingsPath, { stamp: stamp2, outcome });
     return outcome;
   }
   // The window as the last request left it, for a draw: the file is not
@@ -73169,14 +74101,14 @@ var CacheExpiryProvider = class {
   }
   // The session's refresh, which its statusline request makes.
   async refresh(sessionId2, transcriptPath) {
-    const stamp = statStamp(transcriptPath);
+    const stamp2 = statStamp(transcriptPath);
     const prior = this.known.get(sessionId2);
-    if (prior !== void 0 && stamp !== "" && prior.stamp === stamp && prior.outcome.kind !== "failed") {
+    if (prior !== void 0 && stamp2 !== "" && prior.stamp === stamp2 && prior.outcome.kind !== "failed") {
       this.known.touch(sessionId2);
       return prior.outcome;
     }
-    const outcome = await this.read(sessionId2, transcriptPath, stamp);
-    this.known.set(sessionId2, { stamp, outcome });
+    const outcome = await this.read(sessionId2, transcriptPath, stamp2);
+    this.known.set(sessionId2, { stamp: stamp2, outcome });
     return outcome;
   }
   // The expiry as the session's last refresh left it, for a draw.
@@ -73187,11 +74119,11 @@ var CacheExpiryProvider = class {
     const { refreshes, failures, lastMs } = this.refreshes.record();
     return { entries: this.known.size, refreshes, failures, lastMs };
   }
-  async read(sessionId2, transcriptPath, stamp) {
+  async read(sessionId2, transcriptPath, stamp2) {
     const startedAt = Date.now();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
-      `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp)}`,
+      `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
       "request",
       outcome,
       Date.now() - startedAt
@@ -73215,8 +74147,8 @@ async function findLastCacheActivityTs(transcriptPath) {
   return ABSENT2;
 }
 function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
-  const text3 = buf.toString("utf8");
-  const lines2 = text3.split("\n");
+  const text4 = buf.toString("utf8");
+  const lines2 = text4.split("\n");
   const start = bufStartsAtFileBeginning ? 0 : 1;
   for (let i = lines2.length - 1; i >= start; i--) {
     const line = lines2[i];
@@ -73545,15 +74477,15 @@ var ManagedStorage = class {
     const fault2 = this.standing(f.storage);
     if (fault2 !== null) return failed(fault2);
     const file = fileOf(f);
-    let text3;
+    let text4;
     try {
-      text3 = await fs_default.promises.readFile(file, "utf8");
+      text4 = await fs_default.promises.readFile(file, "utf8");
     } catch (e) {
       const err = e;
       return err.code === "ENOENT" ? ABSENT2 : failed(`${file}: ${err.message}`);
     }
-    if (text3.trim() === "") return ABSENT2;
-    const parsed2 = jsonParser(text3);
+    if (text4.trim() === "") return ABSENT2;
+    const parsed2 = jsonParser(text4);
     return parsed2.kind === "failed" ? failed(`${file}: ${parsed2.reason}`) : parsed2;
   }
   // Removes every `*.json` file nobody has written for 30 days, unless a
@@ -73666,25 +74598,25 @@ function sizeCell(cell3, width, how) {
     cell3.align(how.justify, width);
   }
 }
-function cellParts({ lead, text: text3, trail }) {
+function cellParts({ lead, text: text4, trail }) {
   return [
     ...lead === void 0 ? [] : [lead],
-    text3,
+    text4,
     ...trail === void 0 ? [] : [trail]
   ];
 }
-function heldCell({ text: text3, placement, lead, trail }) {
+function heldCell({ text: text4, placement, lead, trail }) {
   return {
-    text: unlinked(text3),
+    text: unlinked(text4),
     placement,
     ...lead !== void 0 && { lead: unlinked(lead) },
     ...trail !== void 0 && { trail: unlinked(trail) }
   };
 }
-function unlinked(text3) {
-  const copy3 = text3.blankCopy(text3.plain);
-  copy3.style = resolvedStyle(text3.style).clearMetaAndLinks();
-  for (const { start, end, style } of text3.spans)
+function unlinked(text4) {
+  const copy3 = text4.blankCopy(text4.plain);
+  copy3.style = resolvedStyle(text4.style).clearMetaAndLinks();
+  for (const { start, end, style } of text4.spans)
     copy3.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
   return copy3;
 }
@@ -73747,8 +74679,8 @@ function resolveFill(row2, options) {
   const remainder = deficit - share * demands.length;
   demands.forEach(({ at, how }, i) => {
     const grow = share + (i === demands.length - 1 ? remainder : 0);
-    const { text: text3 } = row2[at];
-    sizeCell(text3, text3.cellLength + grow, how);
+    const { text: text4 } = row2[at];
+    sizeCell(text4, text4.cellLength + grow, how);
   });
   return items();
 }
@@ -74075,9 +75007,9 @@ function readVar(store, name) {
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
 }
-function linkFragment(text3, url, active, base) {
-  const rt = new RichText(text3, {
-    style: Style.combine([base, new Style({ link: url, bold: active })])
+function linkFragment(text4, url, active2, base) {
+  const rt = new RichText(text4, {
+    style: Style.combine([base, new Style({ link: url, bold: active2 })])
   });
   rt.overflow = "ignore";
   rt.end = "";
@@ -74406,7 +75338,7 @@ function renderAction(name, displays, runtime) {
     store
   );
   const sessionId2 = readVar(store, "session.id");
-  const { effects, active } = realize(
+  const { effects, active: active2 } = realize(
     declared,
     display.plain,
     boundValue,
@@ -74414,7 +75346,7 @@ function renderAction(name, displays, runtime) {
     sessionId2,
     runtime.signer
   );
-  return linkOver(display, effectsUrl(effects), active);
+  return linkOver(display, effectsUrl(effects), active2);
 }
 function actionFuncs(runtime) {
   return {
@@ -74455,11 +75387,11 @@ function stateCell(palette, background, drawnAt) {
 }
 function decoratedCell({
   tint,
-  text: text3
+  text: text4
 }) {
   return new Style({
     bgcolor: ColorSpec.fromRgba(tint),
-    color: ColorSpec.fromRgba(text3)
+    color: ColorSpec.fromRgba(text4)
   });
 }
 function closeOn(palette, ground, drawnAt) {
@@ -74480,9 +75412,9 @@ function closeCell(palette, background, drawnAt) {
     closeOn(palette, background, drawnAt)
   ]);
 }
-function bandItemStyle(active, step4, drawnAt) {
+function bandItemStyle(active2, step4, drawnAt) {
   return decoratedCell(
-    bandItem(active.palette, active.disclosure, step4, drawnAt)
+    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
   );
 }
 
@@ -74510,34 +75442,34 @@ function swatch(palette) {
 }
 
 // src/render/option-paint.ts
-var cell2 = (text3, style) => {
-  const drawn = typeof text3 === "string" ? new RichText(text3, { style }) : text3;
+var cell2 = (text4, style) => {
+  const drawn = typeof text4 === "string" ? new RichText(text4, { style }) : text4;
   drawn.overflow = "ignore";
   drawn.end = "";
   return drawn;
 };
 var currentMark = (current) => new Style({ bold: current });
-function optionPaint(active, distribution, render3, paletteOf, drawnAt, ground) {
+function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
   if (paletteOf === void 0) {
     return (position, _option, label2, current) => cell2(
       label2,
       Style.combine([
-        bandItemStyle(active, { ...position, distribution }, drawnAt),
+        bandItemStyle(active2, { ...position, distribution }, drawnAt),
         currentMark(current)
       ])
     );
   }
-  const text3 = stateCell(active.palette, ground, drawnAt);
+  const text4 = stateCell(active2.palette, ground, drawnAt);
   return (_position, option, label2, current) => named2(
     label2,
-    Style.combine([text3, currentMark(current)]),
+    Style.combine([text4, currentMark(current)]),
     paletteOf(option, render3)
   );
 }
-var named2 = (label2, text3, palette) => cell2(
+var named2 = (label2, text4, palette) => cell2(
   RichText.fromFragments([
-    cell2(label2, text3),
-    cell2(" ", text3),
+    cell2(label2, text4),
+    cell2(" ", text4),
     swatch(palette)
   ])
 );
@@ -74546,13 +75478,13 @@ function valuePaint(render3, paletteOf) {
     return (_position, _option, label2) => cell2(label2);
   return (_position, option, label2) => named2(label2, void 0, paletteOf(option, render3));
 }
-function swatchPaint(active, render3, paletteOf, drawnAt, ground) {
-  const text3 = stateCell(active.palette, ground, drawnAt);
+function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
+  const text4 = stateCell(active2.palette, ground, drawnAt);
   return (_position, option, _label, current) => cell2(
     RichText.fromFragments([
-      cell2(current ? "[" : " ", text3),
+      cell2(current ? "[" : " ", text4),
       swatch(paletteOf(option, render3)),
-      cell2(current ? "]" : " ", text3)
+      cell2(current ? "]" : " ", text4)
     ])
   );
 }
@@ -74589,8 +75521,8 @@ function chunk2(items, size) {
     (_, n) => items.slice(n * size, (n + 1) * size)
   );
 }
-function fitCells(text3, width) {
-  return new RichText(text3).truncate(width, { marker: "\u2026" }).plain;
+function fitCells(text4, width) {
+  return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
 }
 
 // src/render/active-segment.ts
@@ -74598,19 +75530,19 @@ init_globals();
 function createActiveSegmentRef(drawnAt) {
   return { current: null, drawnAt };
 }
-function openSegment(ref, segName, placementId2, palette, disclosure, tint, text3) {
-  const active = {
+function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
+  const active2 = {
     segName,
     placementId: placementId2,
     palette,
     disclosure,
     tint,
-    text: text3,
+    text: text4,
     bg: void 0,
     drops: []
   };
-  ref.current = active;
-  return active;
+  ref.current = active2;
+  return active2;
 }
 function inSegment(ref, place, run3) {
   return publishing(
@@ -74643,20 +75575,20 @@ function publishing(ref, run3) {
   }
 }
 function requireActiveSegment(ref, spelling) {
-  const active = ref.current;
-  if (active === null) {
+  const active2 = ref.current;
+  if (active2 === null) {
     throw new Error(
       `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
     );
   }
-  return active;
+  return active2;
 }
 
 // src/render/picker.ts
 var PICKER_PREV = "\u2190";
 var PICKER_NEXT = "\u2192";
-function cellWidth2(text3) {
-  return new RichText(text3).cellLength;
+function cellWidth2(text4) {
+  return new RichText(text4).cellLength;
 }
 function rowBudget(runtime) {
   const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
@@ -74762,10 +75694,10 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
       (sections) => sections.some((section) => section.indices.includes(index))
     )
   );
-  const holding = pageHolding(
+  const holding2 = pageHolding(
     current === void 0 ? -1 : apply.options.indexOf(current)
   );
-  const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding : Math.min(rawPage, pages.length - 1);
+  const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
   const pageUrl = (value) => effectsUrl([
     { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
@@ -74878,10 +75810,10 @@ function pickerFuncs(runtime, activeSegment) {
             `{{ picker "${applyName}" \u2026 }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`
           );
         }
-        const active = requireActiveSegment(activeSegment, "{{ picker }}");
-        if (active.bg === void 0) {
+        const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
+        if (active2.bg === void 0) {
           throw new Error(
-            `{{ picker }} is not available while segments.${active.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
+            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
           );
         }
         const [line] = renderPicker(
@@ -74899,14 +75831,14 @@ function pickerFuncs(runtime, activeSegment) {
           // the default — the same resolution a `{{ menu }}` with no
           // "distribution" option makes.
           optionPaint(
-            active,
+            active2,
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
             apply.paletteOf,
             activeSegment.drawnAt(),
-            active.bg
+            active2.bg
           ),
-          closeOn(active.palette, active.bg, activeSegment.drawnAt())
+          closeOn(active2.palette, active2.bg, activeSegment.drawnAt())
         );
         return line;
       },
@@ -75069,10 +76001,10 @@ function carouselFuncs(runtime, activeSegment) {
         }
         const cap = neighbours ?? Infinity;
         const apply = requireOptionKind(runtime, applyName, "carousel");
-        const active = requireActiveSegment(activeSegment, "{{ carousel }}");
-        if (active.bg === void 0) {
+        const active2 = requireActiveSegment(activeSegment, "{{ carousel }}");
+        if (active2.bg === void 0) {
           throw new Error(
-            `{{ carousel }} is not available while segments.${active.segName}'s own "bg:" is being evaluated \u2014 a carousel is drawn on that background`
+            `{{ carousel }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a carousel is drawn on that background`
           );
         }
         return renderCarousel(
@@ -75081,12 +76013,12 @@ function carouselFuncs(runtime, activeSegment) {
           runtime,
           // Its options sit on the segment's own background, inline in it.
           optionPaint(
-            active,
+            active2,
             placedBy(void 0),
             renderLook(runtime, "{{ carousel }}"),
             apply.paletteOf,
             activeSegment.drawnAt(),
-            active.bg
+            active2.bg
           ),
           cap,
           centre
@@ -75166,10 +76098,10 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           "an int action ({ set, int: true })",
           "swatches"
         );
-        const active = requireActiveSegment(activeSegment, "{{ swatches }}");
-        if (active.bg === void 0) {
+        const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
+        if (active2.bg === void 0) {
           throw new Error(
-            `{{ swatches }} is not available while segments.${active.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
+            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
           );
         }
         const drawnAt = activeSegment.drawnAt();
@@ -75197,13 +76129,13 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           true,
           runtime,
           swatchPaint(
-            active,
+            active2,
             renderLook(runtime, "{{ swatches }}"),
             apply.paletteOf,
             drawnAt,
-            active.bg
+            active2.bg
           ),
-          closeOn(active.palette, active.bg, drawnAt),
+          closeOn(active2.palette, active2.bg, drawnAt),
           count === 0 ? [] : steps2()
         );
         return line;
@@ -75219,8 +76151,8 @@ function swatchesFuncs(runtime, activeSegment, clock) {
 var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
 function previewRows(palette, decor, opens, drawnAt) {
   const band = bandFor(palette, opens, drawnAt);
-  const chosen = (text3, colour) => ({
-    text: text3,
+  const chosen = (text4, colour) => ({
+    text: text4,
     colour,
     ink: textOn(palette, colour, drawnAt)
   });
@@ -75246,9 +76178,9 @@ function previewRows(palette, decor, opens, drawnAt) {
 }
 function renderRow(groups, available) {
   const cells = groups.flatMap(
-    (group, g) => group.map(({ text: text3, colour, ink }, i) => ({
+    (group, g) => group.map(({ text: text4, colour, ink }, i) => ({
       gap: g > 0 && i === 0 ? " " : "",
-      cell: new RichText(` ${text3} `, {
+      cell: new RichText(` ${text4} `, {
         style: decoratedCell({ tint: colour, text: ink })
       })
     }))
@@ -75499,13 +76431,13 @@ function litCells(value, max2, width) {
 function segmentColorFuncs(ref) {
   const bgOf = {
     fn: (() => {
-      const active = requireActiveSegment(ref, "{{ bgOf }}");
-      if (active.bg === void 0) {
+      const active2 = requireActiveSegment(ref, "{{ bgOf }}");
+      if (active2.bg === void 0) {
         throw new Error(
-          `{{ bgOf }} is not available while segments.${active.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
+          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
         );
       }
-      return active.bg.hex;
+      return active2.bg.hex;
     }),
     argTypes: [],
     arity: { kind: "exact" },
@@ -75871,7 +76803,7 @@ function drawSegment(node, ctx) {
       ...line,
       place: BODY_PLACE[opens.placement](line)
     }));
-    const leadCell = (text3, style, padding) => applySegmentLayout(fragmentsToCells([text3], style), {
+    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
       ...layoutOf(style),
       width: "auto",
       padding
@@ -76058,12 +76990,12 @@ var FrameMemory = class {
     const { last: last2 } = this;
     return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
   }
-  begin(source, returned) {
+  begin(source, returned2) {
     const placements = /* @__PURE__ */ new Map();
     const rules = /* @__PURE__ */ new Map();
     return {
       placed: (id2, lines2) => {
-        const { drawing: drawing2 } = returned(id2, lines2);
+        const { drawing: drawing2 } = returned2(id2, lines2);
         placements.set(
           id2,
           drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
@@ -76587,29 +77519,29 @@ function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
     drawnAt,
     ...decorationFor(palette, region, drawnAt)
   };
-  return inSegment(ref, placeOf(node, dealt), (active) => {
-    const style = resolveSegmentColors(active, drawnAt, bg, fg, scope);
-    return { ...dealt, bg: active.bg, style };
+  return inSegment(ref, placeOf(node, dealt), (active2) => {
+    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
+    return { ...dealt, bg: active2.bg, style };
   });
 }
 function bodyOf(ref, node, colours, template, bodyOpen, scope) {
-  return inSegment(ref, placeOf(node, colours), (active) => {
-    active.bg = bodyOpen ? bandOf(colours).state : colours.bg;
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
     const fragments = template.evaluate(scope);
     return {
       fragments,
-      drops: active.drops,
-      open: active.drops.length > 0 || bodyOpen
+      drops: active2.drops,
+      open: active2.drops.length > 0 || bodyOpen
     };
   });
 }
 function affixesOf(ref, node, colours, open2, lead, trail, scope) {
-  return inSegment(ref, placeOf(node, colours), (active) => {
-    active.bg = open2 ? bandOf(colours).state : colours.bg;
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = open2 ? bandOf(colours).state : colours.bg;
     return {
       lead: lead?.evaluate(scope) ?? [],
       trail: trail?.evaluate(scope) ?? [],
-      drops: active.drops
+      drops: active2.drops
     };
   });
 }
@@ -79322,9 +80254,9 @@ function controlledSessions(listClients) {
 function shownPanes(listPanes, controlled) {
   const shown = /* @__PURE__ */ new Set();
   for (const line of listPanes.split("\n")) {
-    const [pane, session, attached, current, zoomed, active] = line.trim().split(" ");
+    const [pane, session, attached, current, zoomed, active2] = line.trim().split(" ");
     if (pane === void 0 || pane === "" || session === void 0) continue;
-    if (Number(attached) > 0 && (current === "1" || controlled.has(session)) && (zoomed !== "1" || active === "1"))
+    if (Number(attached) > 0 && (current === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
       shown.add(pane);
   }
   return shown;
@@ -79488,8 +80420,8 @@ function chain(commands) {
     ...command
   ]);
 }
-function tmuxQuoted(text3) {
-  return `"${text3.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
+function tmuxQuoted(text4) {
+  return `"${text4.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
 }
 function commandText(commands) {
   return commands.map((c) => c.map(tmuxQuoted).join(" ")).join(" ; ");
@@ -79779,7 +80711,7 @@ var TmuxStatusLines = class {
   // (segments, as the binding's URL carries them): the link the frame the
   // daemon drew there marks it with.
   linkAt(value) {
-    const segments = segmentsOf2(value);
+    const segments = segmentsOf(value);
     const [socket, pane, range, ...extra] = segments ?? [];
     if (segments === null || socket === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
       return {
@@ -80136,7 +81068,7 @@ var TmuxStatusLines = class {
     );
   }
 };
-function segmentsOf2(value) {
+function segmentsOf(value) {
   try {
     return decodeSegments(value);
   } catch (err) {
@@ -80678,9 +81610,9 @@ var LaneSetups = class {
   sync(session, lane, on2, by) {
     const where = `by=${by} (session=${session.sessionId})`;
     const failed2 = (error) => {
-      const text3 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
-      this.deps.log("warn", `${text3} ${where}`);
-      holdClickError(this.deps.state, session.sessionId, text3, this.deps.now());
+      const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
+      this.deps.log("warn", `${text4} ${where}`);
+      holdClickError(this.deps.state, session.sessionId, text4, this.deps.now());
     };
     let outcome;
     try {
@@ -82242,12 +83174,12 @@ function drawRender(setup, drawing2) {
     enabled: effective.updateNotice
   });
   const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
-  const sourced = (about, text3) => ({
+  const sourced = (about, text4) => ({
     about,
-    text: text3,
-    copy: text3
+    text: text4,
+    copy: text4
   });
-  const said = (text3) => sourced(text3 ?? "", text3);
+  const said = (text4) => sourced(text4 ?? "", text4);
   const errors2 = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
@@ -82260,7 +83192,7 @@ function drawRender(setup, drawing2) {
     })),
     said(clickShown?.text)
   ].flatMap(
-    ({ about, text: text3, copy: copy3 }) => about && text3 && copy3 ? [{ about, text: text3, copy: copy3 }] : []
+    ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
@@ -82453,7 +83385,7 @@ async function answerRequest(req, at, wait, facts) {
   recordRequest(req);
   return drawAnswer(req, at, wait, facts);
 }
-function arrived(req, lanes) {
+function arrived2(req, lanes) {
   laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe(
     req.hookData.session_id,
@@ -82486,7 +83418,7 @@ async function drawAnswer(req, at, wait, facts) {
   var _stack = [];
   try {
     const setup = __using(_stack, setUpRender(req, at, facts));
-    arrived(req, laneSwitches(setup.view.source.effective()));
+    arrived2(req, laneSwitches(setup.view.source.effective()));
     noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
     const waitFrom = performance.now();
     const refreshed = /* @__PURE__ */ new Map();
@@ -82964,16 +83896,16 @@ async function render2(size) {
   });
   return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
-function copy2(text3) {
+function copy2(text4) {
   let writing;
   try {
-    writing = navigator.clipboard.writeText(text3);
+    writing = navigator.clipboard.writeText(text4);
   } catch (e) {
     writing = Promise.reject(e);
   }
   return writing.then(
     () => null,
-    (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text3}`
+    (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text4}`
   );
 }
 async function click(url, size) {
@@ -83016,8 +83948,8 @@ function advance(elapsed) {
 setInterval(() => {
   const elapsed = (Date.now() - lastTick) / 1e3;
   lastTick = Date.now();
-  const stepped = playing && advance(elapsed);
-  if (stepped || playing && Date.now() - lastNotified > 1e3) {
+  const stepped2 = playing && advance(elapsed);
+  if (stepped2 || playing && Date.now() - lastNotified > 1e3) {
     lastNotified = Date.now();
     notify();
   }
