@@ -1,217 +1,33 @@
-// [LAW:verifiable-goals] candybar-joiners-e5r4: the closing sweep. In every
-// bundled frame, under every bundled theme at truecolor, 256 colours and ansi,
-// the closed bar and the settings menu open on each tab, no seam joins two
-// grounds drawn as one colour: Brandon's rule, "don't put the same color on two
-// adjascent segments", read off the bytes a terminal is sent. Alike means one
-// colour after the writer rounds it, compared for identity, as the policy
-// decides it: where a theme names two neighbouring shades so near that the
-// joiner lifts the arrow between them, they are still two colours, and the
-// lifted arrow is that theme's look.
+// [LAW:verifiable-goals] candybar-joiners-e5r4: the closing sweep
+// (test/helpers/seam-sweep.ts), held under every variation a user picks from
+// the dial: in every bundled frame, under every bundled theme at truecolor,
+// 256 colours and ansi, no seam joins two grounds drawn as one colour.
+// candybar-joiners-e5r4.5x1: `alt` turns each row's hue every three cells, so
+// two hues meet on one line, which the bundled variation never shows.
 //
-// Three kinds of seam are not the policy's to hold, each read off the cells it
-// joins, never off the colour they share, so a seam of two other cells that
-// happen to meet on that colour is still held:
-// - A seam beside a cell whose background the bundled config authors (an
-//   alert). The policy colours by address and cannot see an authored
-//   neighbour; reading one would make a cell's colour depend on its
-//   neighbours. Those cells are listed below, by name, with the line that
-//   authors each, and each must wear an alert in every frame: one wearing its
-//   tint is the policy's own cell.
-// - A seam between two cells of a role whose whole ladder the depth draws as
-//   one colour. That role has no second rung to give (its muted form is the
-//   pressed button's), so its cells meet on one (textual-ansi names every rung
-//   of every role alike).
-// - A seam beside a cell in a pressed shade whose role's ladder the depth
-//   draws only in colours that stand beside the press. The same rule read for
-//   the pressed state: at sixteen colours a ladder of three slots, two of them
-//   on the band's items and one on the press a depth up, has nothing left.
-//   Computed below from what the design stands beside a press, never listed.
-// A cell is known by its visible text and the colour it is drawn in, and what
-// it wears by the shade the render dealt it before the writer rounded it (the
-// per-segment record). A seam is exempt only where every cell that could be
-// the one it joins wears an exempt shade, so two cells of one text (every ✕,
-// every blank lead) never lend each other an exemption.
+// The trial tunings put two hues on a line too, either side of a keystone.
+// Swept here, their twelve sweeps would be several minutes of the two-core CI
+// runner on their own, so the rule they turn on is held over every variation,
+// the tunings among them, at the level it lives (test/decor.test.ts), and the
+// whole bundled frame is swept under each of them nightly
+// (audits/seam-sweep.audit.ts).
 
-import { ColorDepth, drawnColour, getThemePalette, listThemePalettes, type ColorRgba, type Palette, type RichText } from "@promptctl/rich-js";
-import { sharedMenuStateKey } from "../src/config/menu-keys";
-import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
-import { resolvedStyle } from "../src/render/rich-theme";
-import {
-  DECOR_HUES,
-  bandFor,
-  hueOf,
-  paletteRole,
-  shadeRole,
-  type DecorHue,
-  type Disclosure,
-  type RoleShade,
-} from "../src/themes/decor";
-import { instantOf } from "../src/utils/instant";
-import { LADDER, TODAY, besidePress } from "./helpers/decor-vocabulary";
-import { drawnChars, seams, shown, type Char } from "./helpers/seams";
-import { sessionBar, type SessionBar } from "./helpers/session-bar";
+import { TRIAL_VARIATION_NAMES, type VariationName } from "../src/themes/decor";
+import { VARIATION_NAMES } from "./helpers/decor-vocabulary";
+import { expectEverySeamHeld, sweepRigs, type SweepRigs } from "./helpers/seam-sweep";
 
-const THEMES = listThemePalettes();
-const DEPTHS = [
-  ["truecolor", ColorDepth.TRUECOLOR],
-  ["256", ColorDepth.EIGHT_BIT],
-  ["ansi", ColorDepth.STANDARD],
-] as const;
-const TABS = ["session", "look", "layout", "config", "tools"] as const;
-const COLS = 200;
-const AT = instantOf(new Date("2026-10-30T12:00:00Z"));
+const SHIPPED: readonly VariationName[] = VARIATION_NAMES.filter((name) => !(TRIAL_VARIATION_NAMES as readonly string[]).includes(name));
 
-// The cells of the bundled frame whose background the bundled config authors,
-// by placement, with the line in src/config/default-dsl-config.ts that authors
-// it. On check's payload each wears its alert's colour.
-const AUTHORED: Readonly<Record<string, string>> = {
-  host: `bg: "warning"`,
-  context: `bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 (tint) }}'`,
-  block: `bg: '{{ ramp (round .block.nativeUtilization) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}'`,
-};
+let rigs: SweepRigs;
+beforeAll(() => {
+  rigs = sweepRigs();
+});
+afterAll(() => rigs.dispose());
 
-// The frames a user sees: the closed bar, and the settings menu open on each
-// tab with the theme's ⚙ open in it. Each sets every key it reads, so frames
-// compose in any order.
-const FRAMES: ReadonlyArray<readonly [string, (bar: SessionBar) => void]> = [
-  ["closed", (bar) => bar.pick(SETTINGS_ANCHOR, "closed")],
-  ...TABS.map(
-    (tab) =>
-      [
-        `${tab} tab`,
-        (bar: SessionBar) => {
-          bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-          bar.pick(`${SETTINGS_NS}tab`, tab);
-          bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
-        },
-      ] as const,
-  ),
-];
+test("the shipped variations are the dial's four", () => {
+  expect([...SHIPPED].sort()).toEqual(["accent", "alt", "duo", "mono"]);
+});
 
-// Every shade of a role of `palette`, as the palette names it, whose whole
-// ladder `drawnAt` draws as one colour.
-function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> {
-  const named = (hue: DecorHue, shade: RoleShade) => paletteRole(palette, shadeRole(hue, shade));
-  return new Set(
-    DECOR_HUES.flatMap((hue) =>
-      new Set(LADDER.map((rung) => drawnColour(named(hue, rung), drawnAt).hex)).size === 1
-        ? [...LADDER, "muted" as const].map((shade) => named(hue, shade).hex)
-        : [],
-    ),
-  );
-}
-
-// Every pressed shade under the bundled look, as the palette names it, whose
-// role's ladder `drawnAt` draws only in colours the design stands beside the
-// press (`besidePress`).
-function pressesWithNoneToGive(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> {
-  return new Set(
-    [0, 1, 2, 3].flatMap((depth) => {
-      const disclosure: Disclosure = { decor: TODAY, depth };
-      const hue = hueOf(disclosure);
-      const taken = besidePress(palette, TODAY, depth, drawnAt);
-      return LADDER.every((rung) => taken.has(drawnColour(paletteRole(palette, shadeRole(hue, rung)), drawnAt).hex))
-        ? [bandFor(palette, disclosure, drawnAt).state.hex]
-        : [];
-    }),
-  );
-}
-
-// A cell's background as the render dealt it, before the writer rounds it.
-const dealt = (cell: RichText): ColorRgba | undefined => resolvedStyle(cell.style).bgcolor?.value;
-const visible = (text: string): string => text.replace(/\s/g, "");
-
-// The visible text of the cell a seam leaves and the one it enters: the
-// characters back to the joiner before it, and on to the joiner after it.
-const cellBefore = (chars: readonly Char[], at: number): string => {
-  let from = at;
-  while (from > 0 && !chars[from - 1]!.joiner) from--;
-  return chars.slice(from, at).map((c) => c.ch).join("");
-};
-const cellAfter = (chars: readonly Char[], at: number): string => {
-  let to = at + 1;
-  while (to < chars.length && !chars[to]!.joiner) to++;
-  return chars.slice(at + 1, to).map((c) => c.ch).join("");
-};
-
-test("no seam on any bundled frame joins two grounds drawn as one colour, under every theme at truecolor, 256 colours and ansi", () => {
-  const alike: string[] = [];
-  const counts = { seams: 0, authored: 0, flat: 0, pressed: 0 };
-  const authoredSeen = new Set<string>();
-  const onTint: string[] = [];
-  for (const [compatibility, drawnAt] of DEPTHS) {
-    const bar = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
-    try {
-      for (const theme of THEMES) {
-        const palette = getThemePalette(theme)!;
-        const flat = flatShades(palette, drawnAt);
-        const noneToGive = pressesWithNoneToGive(palette, drawnAt);
-        const alerts = new Set((["warning", "error"] as const).map((role) => paletteRole(palette, role).hex));
-        bar.pick("theme", theme);
-        for (const [frame, show] of FRAMES) {
-          show(bar);
-          const { text, segments } = bar.render(AT);
-          // An authored cell as the frame draws it: its visible text.
-          const authored = new Set(
-            Object.keys(AUTHORED).flatMap((name) => {
-              const cells = segments.get(name);
-              if (cells === undefined) return [];
-              authoredSeen.add(name);
-              if (!cells.every((cell) => alerts.has(dealt(cell)?.hex ?? "")))
-                onTint.push(`${theme} at ${compatibility}, ${frame}: ${name} wears ${cells.map((cell) => dealt(cell)?.hex).join()}`);
-              return [visible(cells.map((cell) => cell.plain).join(""))];
-            }),
-          );
-          // What the cells of the frame wear, by visible text and drawn colour.
-          const worn = new Map<string, Set<string>>();
-          const known = (text: string, ground: string | undefined): string => `${text}|${ground}`;
-          for (const cell of [...segments.values()].flat()) {
-            const bg = dealt(cell);
-            if (bg === undefined) continue;
-            const key = known(visible(cell.plain), drawnColour(bg, drawnAt).hex);
-            worn.set(key, new Set([...(worn.get(key) ?? []), bg.hex]));
-          }
-          const wearsOnly = (text: string, ground: string | undefined, shades: ReadonlySet<string>): boolean => {
-            const bgs = worn.get(known(text, ground));
-            return bgs !== undefined && [...bgs].every((bg) => shades.has(bg));
-          };
-          const chars = drawnChars(text);
-          for (const { left, right, at } of seams(chars)) {
-            // A tail enters the terminal's own ground: no neighbour.
-            if (right === undefined) continue;
-            counts.seams++;
-            const [before, after] = [cellBefore(chars, at), cellAfter(chars, at)];
-            if (authored.has(before) || authored.has(after)) {
-              counts.authored++;
-              continue;
-            }
-            const ground = shown(left);
-            if (ground !== shown(right)) continue;
-            if (wearsOnly(before, ground, flat) && wearsOnly(after, ground, flat)) {
-              counts.flat++;
-              continue;
-            }
-            if (wearsOnly(before, ground, noneToGive) || wearsOnly(after, ground, noneToGive)) {
-              counts.pressed++;
-              continue;
-            }
-            alike.push(`${theme} at ${compatibility}, ${frame}: "${before}" | "${after}" both on ${ground}`);
-          }
-        }
-      }
-    } finally {
-      bar.dispose();
-    }
-  }
-  expect(alike).toEqual([]);
-  // Every listed cell is drawn, so the list names nothing that is not there,
-  // and wears an alert wherever it is drawn, so no seam of the policy's own
-  // hides behind the list.
-  expect([...authoredSeen].sort()).toEqual(Object.keys(AUTHORED).sort());
-  expect(onTint).toEqual([]);
-  // Non-vacuous: every frame of every theme at every depth draws seams, and
-  // the flat ladders the rule reads are textual-ansi's.
-  expect(counts.seams).toBeGreaterThan(DEPTHS.length * THEMES.length * FRAMES.length * 10);
-  expect(counts.flat).toBeGreaterThan(0);
+test.each(SHIPPED)("under %s, no seam on any bundled frame joins two grounds drawn as one colour, under every theme at truecolor, 256 colours and ansi", (variation) => {
+  expectEverySeamHeld(rigs, variation);
 });
