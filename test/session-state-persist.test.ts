@@ -173,8 +173,10 @@ describe("SessionState disk persistence", () => {
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
-  // A flush that lands before the debounced write reaches its rename: the
-  // write removes its own temp file and says it was superseded.
+  // [LAW:no-ambient-temporal-coupling] Shutdown's synchronous flush writes the
+  // newest state; a debounced write already on its way is older, and must not
+  // land over it. Here the flush lands before that write reaches its rename:
+  // the write removes its own temp file and says it was superseded.
   it("a synchronous flush before the debounced rename supersedes it", async () => {
     const logged: string[] = [];
     const ss = new SessionState(
