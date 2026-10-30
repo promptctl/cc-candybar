@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-501",
+      "ref": "refs/pull/501/merge",
+      "sha": "28bd849ad9ed0e0b795dce732449dc6582916451",
+      "timestamp": "2026-10-30T16:40:05.588Z",
+      "commits": [
+        {
+          "sha": "28bd849ad9ed0e0b795dce732449dc6582916451",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:38:10Z",
+          "message": "Merge e80cf3598b1ee21165a0b7a4709a744137b8f13a into db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f\n"
+        },
+        {
+          "sha": "e80cf3598b1ee21165a0b7a4709a744137b8f13a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:58:54-06:00",
+          "message": "test(watchers): the unreadable-folder test skips under root, which ignores directory permissions (brandon-unfiled-3248.0mvx)\n"
+        },
+        {
+          "sha": "e5dfdaceb4e334ade528c0a985a2edd56b027371",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:53:52-06:00",
+          "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
       "sha": "2aa0a47758874969a8f46a2ecad3c6b1981334b1",
@@ -92,35 +121,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-501",
-      "ref": "refs/pull/501/merge",
-      "sha": "b6b67e8fc7a180cafce4c25582ffa33d3109759f",
-      "timestamp": "2026-10-30T16:07:47.681Z",
-      "commits": [
-        {
-          "sha": "b6b67e8fc7a180cafce4c25582ffa33d3109759f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:07:01Z",
-          "message": "Merge ff1a58e6fb5c466053cf38e365cd0c5300029e77 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
-        },
-        {
-          "sha": "ff1a58e6fb5c466053cf38e365cd0c5300029e77",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:58:54-06:00",
-          "message": "test(watchers): the unreadable-folder test skips under root, which ignores directory permissions (brandon-unfiled-3248.0mvx)\n"
-        },
-        {
-          "sha": "5e5ad47422b05dd1f22049441c1aa8b7fc2d5458",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:53:52-06:00",
-          "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n"
         }
       ]
     }

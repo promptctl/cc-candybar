@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.166.0";
+var PACKAGE_VERSION = "1.166.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -37529,7 +37529,6 @@ var ladderWindow = (from) => ({
   // rungs up a ladder of seven; the `!`s state that, they do not guard it.
   tones: [LADDER[from], LADDER[from + 2], LADDER[from + 1]],
   text: poleText,
-  quantize: "point",
   activated: "muted"
 });
 var centredWindow = (apart) => ({
@@ -37537,13 +37536,11 @@ var centredWindow = (apart) => ({
   // three rungs each side stays on the ladder.
   tones: [LADDER[3 - apart], LADDER[3 + apart], LADDER[3]],
   text: poleText,
-  quantize: "point",
   activated: "muted"
 });
 var pairWindow = (apart) => ({
   tones: [LADDER[3 - apart], LADDER[3 + apart]],
   text: poleText,
-  quantize: "bin",
   activated: "muted"
 });
 var TRIAL_SHADES = {
@@ -37555,9 +37552,8 @@ var TRIAL_SHADES = {
 var TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES);
 var SHADES = {
   muted: {
-    tones: ["muted"],
+    tones: ["muted", "base"],
     text: roleText,
-    quantize: "point",
     activated: "lighten-2"
   },
   deepest: ladderWindow(0),
@@ -37618,6 +37614,12 @@ var TRIAL_VARIATION_NAMES = Object.keys(
 var vocabularyOf = (decor) => decor.variation.hues.flatMap(
   (hue) => decor.shade.tones.map((shade) => ({ hue, shade }))
 );
+var inBin = (placement, size) => Math.floor(placement * size);
+var inHalves = (placement, size) => {
+  let entry = size - 1;
+  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
+  return entry;
+};
 var PHI = 0.6180339887498949;
 var vanDerCorput = (index) => {
   let value = 0;
@@ -37634,38 +37636,41 @@ var DISTRIBUTION_NAMES = [
 ];
 var isDistributionName = (value) => typeof value === "string" && DISTRIBUTION_NAMES.includes(value);
 var DISTRIBUTIONS = {
-  "van-der-corput": vanDerCorput,
-  "golden-angle": (index) => index * PHI % 1,
-  "ends-interleaved": (index, count) => {
-    const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
-    return (slot + 0.5) / count;
+  "van-der-corput": { place: vanDerCorput, quantize: inHalves },
+  "golden-angle": { place: (index) => index * PHI % 1, quantize: inBin },
+  "ends-interleaved": {
+    place: (index, count) => {
+      const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
+      return (slot + 0.5) / count;
+    },
+    quantize: inBin
   },
-  monotonic: (index, count) => (index + 0.5) / count,
-  uniform: () => 0.5
+  monotonic: {
+    place: (index, count) => (index + 0.5) / count,
+    quantize: inBin
+  },
+  uniform: { place: () => 0.5, quantize: inHalves }
 };
 var DEFAULT_DISTRIBUTION = "van-der-corput";
 var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-var inBin = (placement, size) => Math.floor(placement * size);
-var nearestPoint = (placement, size) => Math.round(placement * size) % size;
-var QUANTIZE = {
-  bin: inBin,
-  point: nearestPoint
-};
-function placementOf(step4) {
-  return step4 === void 0 ? 0 : step4.distribution(step4.index, step4.count);
+function entryOf2(step4, size) {
+  if (step4 === void 0) return 0;
+  const { place, quantize } = step4.distribution;
+  return quantize(place(step4.index, step4.count), size);
 }
-function vocabularySelect(vocabulary, step4, quantize) {
-  const entry = vocabulary[quantize(placementOf(step4), vocabulary.length)];
+function vocabularySelect(vocabulary, step4) {
+  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
   if (entry === void 0)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
 }
 function rowAndCell(address) {
-  const at = address.findIndex((step4) => step4.axis === "cell");
+  const isCell = (step4) => step4.axis === "cell";
+  const at = address.findIndex(isCell);
   const rows = at === -1 ? address : address.slice(0, at);
-  return { row: rows.at(-1), cell: address[rows.length] };
+  return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
-var rowStart = (variation, row2) => inBin(placementOf(row2), variation.hues.length);
+var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
 function decorEntryFor(decor, address) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
   const { hues, run: run3, keystones } = decor.variation;
@@ -37674,17 +37679,13 @@ function decorEntryFor(decor, address) {
   if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
   return {
     hue: keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2,
-    shade: vocabularySelect(
-      decor.shade.tones,
-      cell3,
-      QUANTIZE[decor.shade.quantize]
-    )
+    shade: vocabularySelect(decor.shade.tones, cell3)
   };
 }
 var KEYSTONE_AT = {
   "bar-start": (row2, cell3) => (row2?.index ?? 0) === 0 && (cell3?.index ?? 0) === 0,
-  "line-start": (_row, cell3) => (cell3?.index ?? 0) === 0,
-  "line-end": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.count - 1
+  "line-start": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineStart,
+  "line-end": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineEnd
 };
 var PLANE_ROLE = "surface";
 function paletteRole(palette, role) {
@@ -37738,11 +37739,7 @@ function bandFor(palette, disclosure) {
   };
 }
 function bandItemFor(palette, disclosure, place) {
-  return vocabularySelect(
-    bandFor(palette, disclosure).items,
-    place,
-    QUANTIZE[disclosure.decor.shade.quantize]
-  );
+  return vocabularySelect(bandFor(palette, disclosure).items, place);
 }
 function bandItem(palette, disclosure, place, drawnAt) {
   const tint = bandItemFor(palette, disclosure, place);
@@ -37765,7 +37762,14 @@ function sameRegion(a, b) {
   }
 }
 var sameAddress = sameEach(
-  sameBy({ index: is, count: is, distribution: is, axis: is })
+  sameBy({
+    index: is,
+    count: is,
+    distribution: is,
+    axis: is,
+    lineStart: is,
+    lineEnd: is
+  })
 );
 var sameDecor = sameBy({ variation: is, shade: is });
 var sameDisclosure = sameBy({
@@ -54662,10 +54666,23 @@ function prependAnchor(node) {
       children: [anchorRef, node]
     };
   }
-  return node.kind === "container" && node.when === void 0 ? { ...node, children: [anchorRef, ...node.children] } : {
-    kind: "container",
-    direction: "horizontal",
-    children: [anchorRef, node]
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.when === void 0) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  const { when: when2, children: children2, ...row2 } = node;
+  return {
+    ...row2,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row2.direction, when: when2, children: children2 }
+    ]
   };
 }
 function withAnchor(node) {
@@ -55291,7 +55308,8 @@ function spliceContainer(node, ctx) {
     const unit = {
       kind: "container",
       direction: "horizontal",
-      children: cells
+      children: cells,
+      unit: true
     };
     children2.push(
       node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
@@ -58243,7 +58261,7 @@ function templateInstants(basis) {
 
 // src/config/loader/cross-ref.ts
 var UNREAD_DISTRIBUTION = {
-  cell: (nodePath2) => `${nodePath2} sets "distribution" on a container inside a cell \u2014 everything inside a cell wears that cell's colour, so it would place nothing. Set it on the row whose children are the cells (the horizontal container), or, on the bar, on the root, which places the rows.`,
+  nested: (nodePath2) => `${nodePath2} sets "distribution" on a container inside a row \u2014 the row's own container places every cell along it, through any { h } or { v } nested in it, so this one would place nothing. Set it on the row (the outermost horizontal container), or, on the bar, on the root, which places the rows.`,
   bar: (nodePath2) => `${nodePath2} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container \u2014 a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
   band: (nodePath2) => `${nodePath2} sets "distribution" on a vertical container in a disclosure body \u2014 a body's items are placed along their rows, never by which row they sit on, so it would place nothing. Set it on the row whose children are the items (the horizontal container), or give a group \`direction: 'horizontal'\`.`
 };
@@ -58379,13 +58397,13 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   function unreadAt(node, where) {
     if (node.kind === "segment" || node.distribution === void 0)
       return void 0;
-    if (where === "cell") return "cell";
+    if (where === "nested") return "nested";
     const placesRows = where === "bar" && node.children.some(
       (child) => child.kind === "segment" || AXIS_OF[child.direction] === "cell"
     );
     return AXIS_OF[node.direction] === "row" && !placesRows ? where : void 0;
   }
-  const whereBelow = (node, where) => node.kind === "segment" ? "band" : AXIS_OF[node.direction] === "cell" ? "cell" : where;
+  const whereBelow = (node, where) => node.kind === "segment" ? "band" : AXIS_OF[node.direction] === "cell" ? "nested" : where;
   const childPaths = (node, path41) => node.kind === "container" ? node.children.map((child, i) => [child, childPath(path41, i)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path41)]];
   function* unreadBelow(children2, where) {
     for (const [child, path41] of children2) {
@@ -61645,8 +61663,9 @@ var RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "model" },
-          // One cell unit: the auto-compact window reads against the context
-          // use beside it, and hidden it takes no colour slot from the row.
+          // The auto-compact window reads against the context use beside it,
+          // so the two are placed together; like any two cells side by side,
+          // each takes its own place in the row's colours.
           {
             kind: "container",
             direction: "horizontal",
@@ -66627,7 +66646,7 @@ function jsonLine(line) {
     return { kind: "unparsed", reason: String(parseError) };
   }
 }
-function entryOf2(line) {
+function entryOf3(line) {
   const read2 = jsonLine(line);
   if (read2.kind === "unparsed") {
     debug(`Failed to parse JSONL line: ${read2.reason}`);
@@ -66644,7 +66663,7 @@ function entryOf2(line) {
 function parseJsonlLines(text4) {
   const entries = [];
   for (const line of text4.split("\n")) {
-    const entry = entryOf2(line);
+    const entry = entryOf3(line);
     if (entry) entries.push(entry);
   }
   return entries;
@@ -76334,22 +76353,60 @@ function layoutRows(node, shown) {
   return lines2(node, []).map((line) => [...line.cells]);
 }
 function childStep(node, index) {
-  return {
+  return node.steps[index];
+}
+function spanOf(node) {
+  if (node.kind === "segment" || node.unit === true) {
+    return { width: 1, reach: 1 };
+  }
+  const laid = laidOut(node);
+  return { width: widthOf2(laid), reach: reachOf(laid) };
+}
+function laidOut(node) {
+  const spans = node.children.map(spanOf);
+  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
+  if (node.direction === "vertical" || node.unit === true) {
+    return spans.map((span, i) => ({ start: 0, span, ownLine: ownLine(i) }));
+  }
+  let start = 0;
+  return spans.map((span, i) => {
+    const at = start;
+    start += span.width;
+    return { start: at, span, ownLine: ownLine(i) };
+  });
+}
+var widthOf2 = (laid) => laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
+var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
+function placeChildren(node, at) {
+  const laid = laidOut(node);
+  if (at?.axis === "cell") {
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
+    });
+  }
+  const axis = AXIS_OF[node.direction];
+  const distribution = placedBy(node.distribution);
+  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
+  return places.map((index) => ({
     index,
-    count: node.children.length,
-    distribution: node.distribution,
-    axis: AXIS_OF[node.direction]
-  };
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd
+  }));
 }
 var containerType = {
   compile(node, cctx) {
+    const steps2 = placeChildren(node, cctx.at);
     return {
       kind: "container",
       direction: node.direction,
       when: cctx.when,
-      distribution: placedBy(node.distribution),
+      steps: steps2,
       children: node.children.map(
-        (child, i) => cctx.compileChild(child, childPath(cctx.path, i))
+        (child, i) => cctx.compileChild(child, childPath(cctx.path, i), steps2[i])
       )
     };
   },
@@ -76387,7 +76444,12 @@ var segmentType = {
       ...node.opens !== void 0 && {
         opens: {
           open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          body: cctx.compileChild(node.opens.body, bodyPath(cctx.path)),
+          // A body roots a band: its first step is placed afresh.
+          body: cctx.compileChild(
+            node.opens.body,
+            bodyPath(cctx.path),
+            void 0
+          ),
           key: node.opens.ref.key,
           placement: node.opens.placement
         }
@@ -77548,9 +77610,10 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
     }
     return Object.freeze(out);
   };
-  const compileNode = (node, path41) => {
+  const compileNode = (node, path41, at) => {
     const cctx = {
       path: path41,
+      at,
       when: node.when === void 0 ? void 0 : parseNodeField(node.when, path41, "when"),
       parse: (src, field) => parseNodeField(src, path41, field),
       compileChild: compileNode,
@@ -77561,7 +77624,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   const roots = /* @__PURE__ */ new Map();
   for (const name of presetOptions) {
     const { node, path: path41 } = presetRoot(config2, name);
-    roots.set(name, compileNode(node, path41));
+    roots.set(name, compileNode(node, path41, void 0));
   }
   const globalExpressions = new Map(
     EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
