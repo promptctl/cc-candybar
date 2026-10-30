@@ -29,8 +29,9 @@
 // the baseline) and with one session's feed open (`on`), both at 1 Hz:
 //   pnpm load-gate --sessions 20 --period-ms 1000 --feed off > off.json
 //   pnpm load-gate --sessions 20 --period-ms 1000 --feed on --baseline off.json
-// The `on` run adds two checks: the feed holds its pace on its summary line,
-// and the statusline's `took=` p90 is within 2x of the baseline's.
+// The `on` run adds two checks: the moving feed draws at its ceiling on its
+// summary line, and the statusline's `took=` p90 is within 2x of the
+// baseline's.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -106,8 +107,8 @@ const FEED: FeedWorld =
 // How long the feed runs before the steady phase, so its first frames (the
 // lane's setup) are not scored.
 const FEED_SETTLE_MS = 3000;
-// The share of its pace a feed must draw at to hold it: frames are paced,
-// so a feed drawing on every beat lands a frame or two short of the pace.
+// The share of its ceiling a moving feed must draw at: frames are spaced, so
+// a feed drawing on every beat lands a frame or two short of the ceiling.
 const FEED_PACE_SHARE = 0.95;
 // How far the statusline's p90 may rise with a feed open: the epic's
 // criterion.
@@ -818,7 +819,8 @@ async function run(): Promise<{
   // After the last sample: a feed closing is a view's observers going, which
   // the held counts would read as churn.
   stream?.close();
-  // The feed's closing summary: what it drew over its whole life, at its pace.
+  // The feed's closing summary: what it drew over its whole life, and its
+  // ceiling.
   const feedClosed = stream === null ? null : await feedSummary("closed");
   if (samples.length === 0) {
     throw new Error(
@@ -1080,17 +1082,24 @@ async function feedSummary(state: "closed"): Promise<string> {
   throw new Error(`the feed wrote no ${state} summary within 10 s`);
 }
 
-// [LAW:verifiable-goals] A feed holds its pace when the rate it drew at over
-// its life, as its summary states it, is the pace it set.
+// [LAW:verifiable-goals] The feed's world moves every moment (an effect), so
+// a feed holds its pace when the rate it drew at over its life, as its
+// summary states it, is its ceiling: the most frames a second it may draw.
+// [LAW:no-silent-failure] A field the summary does not state fails the gate
+// by name, never as a comparison against NaN.
 function feedPaceCheck(summary: string): Check {
-  const field = (name: string): number =>
-    Number(new RegExp(` ${name}=([\\d.]+)`).exec(summary)?.[1]);
+  const field = (name: string): number => {
+    const value = new RegExp(` ${name}=([\\d.]+)`).exec(summary)?.[1];
+    if (value === undefined)
+      throw new Error(`the feed summary states no ${name}=: ${summary}`);
+    return Number(value);
+  };
   const achieved = field("achieved");
-  const pace = field("pace");
+  const ceiling = field("ceiling");
   return {
     name: "feed holds its pace",
-    pass: Number.isFinite(achieved) && achieved >= FEED_PACE_SHARE * pace,
-    detail: `drew ${field("drawn")} frames in ${field("for")} s at ${achieved} fps of ${pace} (at least ${FEED_PACE_SHARE * 100}%)`,
+    pass: achieved >= FEED_PACE_SHARE * ceiling,
+    detail: `drew ${field("drawn")} frames in ${field("for")} s at ${achieved} fps of its ${ceiling} fps ceiling (at least ${FEED_PACE_SHARE * 100}%)`,
   };
 }
 
