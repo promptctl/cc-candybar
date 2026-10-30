@@ -4,53 +4,53 @@
     {
       "version": "pr-497",
       "ref": "refs/pull/497/merge",
-      "sha": "1620d71e2dd2caf40b72224430dff17844919926",
-      "timestamp": "2026-10-30T14:15:13.943Z",
+      "sha": "8460eca114df0f89a50a580d16c93df7b037e2cd",
+      "timestamp": "2026-10-30T14:16:07.916Z",
       "commits": [
         {
-          "sha": "1620d71e2dd2caf40b72224430dff17844919926",
+          "sha": "8460eca114df0f89a50a580d16c93df7b037e2cd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T14:14:30Z",
-          "message": "Merge 5823fa77dde77c770c0bee3fb90ca2e1b15489bf into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+          "timestamp": "2026-10-30T14:15:14Z",
+          "message": "Merge 1164af9a899239a81860312c54e6883396870453 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
         },
         {
-          "sha": "5823fa77dde77c770c0bee3fb90ca2e1b15489bf",
+          "sha": "1164af9a899239a81860312c54e6883396870453",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:14:13-06:00",
           "message": "docs(click): the copy-diagnostic verb's args name the renderer that drew the link (candybar-plugins-vf6g.odm)\n"
         },
         {
-          "sha": "42163a0a835437e08e0625c67776c160612b4605",
+          "sha": "8669979b8abd9bc6a8291dd1b102ef7a28e40569",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:12:49-06:00",
           "message": "fix(plugins): a copy click names the renderer whose frame it reads, held across a view's successor and recorded once delivered; an insert entry places its segment for the unused check; absent placements are a linear fixpoint (candybar-plugins-vf6g.odm)\n"
         },
         {
-          "sha": "e795be7abb37765bb358bf799c9d8ddf855d05c8",
+          "sha": "bbaeebfc0a06b9c949090fd92200c32b2ee92637",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T07:56:10-06:00",
           "message": "fix(plugins): an insert cell is absent through any chain of absent anchors, its own typo is reported whatever it stands on, and a closed feed's copies retire with it (candybar-plugins-vf6g.odm)\n"
         },
         {
-          "sha": "aead04de4f3662abe06783149093ab3fe4b171c1",
+          "sha": "314aab7546f899b242f0e695ed77d0feeda98215",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T07:48:10-06:00",
           "message": "fix(plugins): a copy click finds its message in whichever renderer delivered it, and an id anchor on an absent placement is absent with it (candybar-plugins-vf6g.odm)\n\nA request and a feed frame list different diagnostics, so each renderer's\ncopies are kept apart and recorded only once its frame exists. An insert\ncell's anchor is a placement id, so the segments placed under it are what\nits absence is judged by.\n"
         },
         {
-          "sha": "42d4ff839b25f5220607b0c1011c752e8fa97e08",
+          "sha": "358f5688f23e2e09a86c6f8f32e249dff26617e4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T07:34:46-06:00",
           "message": "fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n"
         },
         {
-          "sha": "c1b636055f63ec1c3ce69e13996bfddc719dde33",
+          "sha": "74f9ff9de94d41a431c8018cf91f8b4a3cbfac02",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T07:17:46-06:00",
