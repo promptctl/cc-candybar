@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-491",
+      "ref": "refs/pull/491/merge",
+      "sha": "737579895badda9f7e4f728a8b43e11e9a1ea9d3",
+      "timestamp": "2026-10-30T11:30:51.420Z",
+      "commits": [
+        {
+          "sha": "737579895badda9f7e4f728a8b43e11e9a1ea9d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:30:04-06:00",
+          "message": "Merge 17921a72bef53ac4d2e5167cc8fd0395e713d22f into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+        },
+        {
+          "sha": "17921a72bef53ac4d2e5167cc8fd0395e713d22f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:29:42-06:00",
+          "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n"
+        }
+      ]
+    },
+    {
       "version": "pr-490",
       "ref": "refs/pull/490/merge",
       "sha": "c48b9dc9f669d0e4c1fc78d619d74aab5091cfca",
