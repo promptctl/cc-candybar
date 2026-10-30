@@ -955,8 +955,9 @@ describe("the preview is the bar's own colours", () => {
     );
 
   // A depth deals a closed cell its hue's window there, which can hold a rung
-  // the dial does not name (catppuccin-mocha and default at ansi widen both
-  // of the default's hues; dracula at 256 narrows one).
+  // the dial does not name: where the depth draws two of the dial's tones
+  // alike, the window widens back to the dial's count (catppuccin-mocha and
+  // default at ansi widen both of the default's hues, dracula at 256 one).
   test.each([
     ["nord", "truecolor"],
     ["gruvbox", "truecolor"],
@@ -987,6 +988,21 @@ describe("the preview is the bar's own colours", () => {
       rt.dispose();
     },
   );
+
+  // [LAW:verifiable-goals] candybar-joiners-e5r4.cfm: the preview deals every
+  // tone of each hue's window, so where a depth widens a window back to the
+  // dial's count the preview shows that count.
+  test("dracula at 256: the accent's window, two of whose tones the depth draws alike, widens back to three, and the preview shows all three", () => {
+    const rt = rig(`{ globals: { palette: 'dracula', colorCompatibility: '256' } }`);
+    openPicker(rt, "theme");
+    const palette = transposePalette(getThemePalette("dracula")!, IDENTITY);
+    const window = windowAt(palette, "accent", DEFAULT_DECOR.shade, ColorDepth.EIGHT_BIT);
+    const named: readonly string[] = DEFAULT_DECOR.shade.tones;
+    expect([window.length, window.filter((tone) => !named.includes(tone)).length]).toEqual([named.length, 1]);
+    const drawn = backgrounds(rt.sink.get("candybar.list.theme.1")!);
+    expect(window.map((shade) => decorEntryColour(palette, { hue: "accent", shade }).hex).filter((hex) => !drawn.has(hex))).toEqual([]);
+    rt.dispose();
+  });
 
   test("under alt the open swatch is still the door's colour, though the door's row turns between two roles", () => {
     // textual-dark's navy secondary and orange accent: the pure accent stands

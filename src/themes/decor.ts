@@ -413,7 +413,8 @@ export interface DecorEntry {
  * The decorations a theme's preview samples of a closed cell under `decor`
  * in `palette` at `drawnAt`: each of its roles at the tones of that role's
  * window there (`windowAt`), in the window's order, dealt across as many
- * places as the dial position names tones. The count is the
+ * places as the dial position names tones: every tone of the window, which
+ * holds that count wherever the role has it drawn apart. The count is the
  * dial's at every depth, so a frame keeps its shape at every depth, while
  * the colours are the ones the depth deals; and a window of two or more
  * tones never puts one colour on two places side by side. The roles sit side
@@ -446,7 +447,8 @@ export const vocabularyOf = (
 
 /**
  * The tones a row of one hue deals at one depth, in the order a cell's place
- * selects them, no two of them drawn as one colour there.
+ * selects them, no two of them drawn as one colour there, and as many as the
+ * dial position names wherever the role has that many drawn apart.
  * [LAW:types-are-the-program] Never empty, and one tone only where the role's
  * whole ladder draws as one colour at the depth: there is no second rung to
  * deal, so the row wears that one and the joiner shows each seam, which is
@@ -459,14 +461,22 @@ export type Tones = readonly [RoleShade, ...RoleShade[]];
 
 /**
  * The window a row of `hue` deals under the dial position `shade`, drawn at
- * `drawnAt`: the position's tones the depth draws as distinct colours, in the
- * position's order; and where it draws all of them as one, that tone and the
- * nearest rung of the ladder the depth draws apart from it. At 256 colours
- * neighbouring rungs round onto one table entry, at ansi onto one of the
- * hue's slots, and a theme can name two rungs alike at any depth, so a window
- * that kept them would deal two neighbours one colour where the role had
- * another to give. It widens rather than shrinking to one tone, because one
- * tone puts every pair of neighbours on one shade under any distribution.
+ * `drawnAt`: as many tones as the position names, wherever the role has that
+ * many the depth draws as distinct colours. First the position's tones the
+ * depth draws apart, in the position's order; then, for each tone it drew
+ * like one already held, the nearest rung of the ladder drawn as none of the
+ * tones the window holds (`widen`). At 256 colours neighbouring rungs round
+ * onto one table entry, at ansi onto one of the hue's slots, and a theme can
+ * name two rungs alike at any depth, so a window that kept them would deal
+ * two neighbours one colour where the role had another to give.
+ *
+ * It widens back to the position's count rather than settling for fewer,
+ * because the count is what a distribution keeps neighbours apart over: van
+ * der Corput by halves over two or more, golden angle by bins only over three
+ * (`DISTRIBUTIONS`). A window of three narrowed to two would leave golden
+ * angle's neighbours on one colour, and one tone puts every pair of
+ * neighbours on one shade under any distribution. It holds fewer only where
+ * the role's ladder has nothing left the depth draws apart.
  *
  * Alike means drawn as one colour: rich-js's `drawnColour`, the ground the
  * writer emits at that depth, compared for identity. No distance between two
@@ -491,9 +501,19 @@ export function windowAt(
     for (const tone of rest) {
       if (kept.every((held) => drawn(held) !== drawn(tone))) kept.push(tone);
     }
-    if (kept.length > 1) return kept;
-    const wider = widen(palette, hue, shade.tones, [drawn(first)], drawnAt);
-    return wider === undefined ? kept : [first, wider];
+    // [LAW:single-enforcer] One widening per tone the depth drew alike, each
+    // taking every colour the window already holds: where the ladder has
+    // nothing left, `widen` answers nothing for this tone and every one after.
+    return shade.tones.slice(kept.length).reduce<Tones>((window) => {
+      const wider = widen(
+        palette,
+        hue,
+        shade.tones,
+        window.map(drawn),
+        drawnAt,
+      );
+      return wider === undefined ? window : [...window, wider];
+    }, kept);
   });
 }
 
