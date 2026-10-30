@@ -253,25 +253,48 @@ describe("WatcherRegistry", () => {
     expect(counters.watchersClosed).toBe(1);
   });
 
+  // fs.watch refuses a folder it cannot read, except Linux's recursive watch
+  // on Node 20 and 22, which swallows the error and never fires. The registry
+  // refuses it on every platform and Node, as a tree or not. Root ignores
+  // directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a folder the daemon cannot open is refused, watched as a tree or not",
+    () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
+      fs.chmodSync(dir, 0o000);
+      const reg = new WatcherRegistry({ logger: () => {} });
+      try {
+        const refusal = {
+          kind: "refused",
+          path: dir,
+          reason: expect.stringContaining("EACCES"),
+        };
+        expect(reg.acquire("dir", { dirs: [{ path: dir }] }, () => {}).deaf)
+          .toEqual([refusal]);
+        expect(
+          reg.acquire("tree", { dirs: [{ path: dir, recursive: true }] }, () => {})
+            .deaf,
+        ).toEqual([refusal]);
+        expect(reg.dirWatches()).toBe(0);
+      } finally {
+        reg.closeAll();
+        fs.chmodSync(dir, 0o700);
+        rmrf(dir);
+      }
+    },
+  );
+
   test("an error after open reaches the consumer and the stats", async () => {
-    const fake = new EventEmitter() as EventEmitter & { close(): void };
-    fake.close = () => {};
-    const watch = jest
-      .spyOn(fs, "watch")
-      .mockImplementation((() => fake) as unknown as typeof fs.watch);
+    const fake = standIn();
     try {
-      const counters = {
-        watchersOpened: 0,
-        watchersClosed: 0,
-        watchRefusals: 0,
-        watchErrors: 0,
-        dirWatchesOpened: 0,
-        dirWatchesClosed: 0,
-      };
+      const counters = zeroCounters();
       const reg = new WatcherRegistry({ counters, logger: () => {} });
       const seen: Invalidation[] = [];
       reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => seen.push(inv));
-      fake.emit("error", new Error("EMFILE: too many open files"));
+      fake.opensOf("/w")[0]!.handle.emit(
+        "error",
+        new Error("EMFILE: too many open files"),
+      );
       await until(() => seen.length > 0, "the error's invalidation");
       expect(seen).toEqual([
         { kind: "failed", reason: "/w: EMFILE: too many open files" },
@@ -285,13 +308,14 @@ describe("WatcherRegistry", () => {
       });
       reg.closeAll();
     } finally {
-      watch.mockRestore();
+      fake.restore();
     }
   });
 
-  // A stand-in for fs.watch the test drives: every handle it opens, with the
-  // directory, the listener the registry gave it, and whether it was closed.
-  // No real directory can be made to report or fail on demand.
+  // A stand-in for the OS's side of a watch the test drives: every directory
+  // opens, and every handle fs.watch opens is recorded with the directory, the
+  // listener the registry gave it, and whether it was closed. No real
+  // directory can be made to report or fail on demand.
   function standIn() {
     type Opened = {
       dir: string;
@@ -312,8 +336,20 @@ describe("WatcherRegistry", () => {
       opened.push(record);
       return record.handle;
     }) as unknown as typeof fs.watch);
+    const opendir = jest
+      .spyOn(fs, "opendirSync")
+      .mockImplementation(
+        (() => ({ closeSync: () => {} })) as unknown as typeof fs.opendirSync,
+      );
     const opensOf = (dir: string) => opened.filter((o) => o.dir === dir);
-    return { opened, opensOf, restore: () => watch.mockRestore() };
+    return {
+      opened,
+      opensOf,
+      restore: () => {
+        watch.mockRestore();
+        opendir.mockRestore();
+      },
+    };
   }
 
   const zeroCounters = () => ({

@@ -493,6 +493,13 @@ export class WatcherRegistry {
     const at = where.path;
     const bound = boundKey(boundOf(at));
     try {
+      // [LAW:no-silent-failure] A directory the daemon cannot open is
+      // refused. fs.watch refuses it itself, except Linux's recursive watch
+      // on Node 20 and 22 (Node's own walk), which swallows the error and
+      // returns a watch that never fires.
+      // [LAW:dataflow-not-control-flow] So every open opens the directory
+      // first, recursive or not, and its error is the refusal's reason.
+      fs.opendirSync(at).closeSync();
       const handle = fs.watch(
         at,
         { persistent: false, recursive: where.recursive },
