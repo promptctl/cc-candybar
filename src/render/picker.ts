@@ -633,10 +633,12 @@ export function pickerFuncs(
         // drops on its plane (node-registry's `trigger` and `band`); each is
         // painted on the ground it is drawn on, read from the same band.
         const band = bandFor(active.palette, active.disclosure, drawnAt);
-        const opens = apply.library !== undefined;
-        const [line] = draw(opens ? band.state : active.bg);
-        if (opens) active.drops.push(...draw(band.plane).slice(1));
-        return line!;
+        // A catalogue page laid out as one line drops nothing, so its segment
+        // stays closed and the line is drawn on the segment's own ground.
+        const [, ...rows] = apply.library === undefined ? [] : draw(band.plane);
+        if (rows.length === 0) return draw(active.bg)[0]!;
+        active.drops.push(...rows);
+        return draw(band.state)[0]!;
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },
