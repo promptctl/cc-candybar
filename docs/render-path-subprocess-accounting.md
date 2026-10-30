@@ -38,8 +38,7 @@ handleRequest (server.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
   └─ settlePayload / payloadOf          — reads provider snapshots, no spawn
   └─ renderDsl(...)                  — pure CPU
-  └─ diagnosticDump.sync(...)            — the one synchronous fs write, taken only when the diagnostic text changed
-  └─ composeWithDiagnostics(...)         — string assembly
+  └─ collectDiagnostics / viewerRows     — string assembly
 ```
 
 ### Where subprocess work actually happens

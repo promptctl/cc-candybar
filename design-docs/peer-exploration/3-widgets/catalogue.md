@@ -330,7 +330,7 @@ claude-statusline-powerline, **claudia** = claudia-statusline, **YAS** = Yet Ano
   (`_get_status_indicator` in `claude_statusline/statusline.py`), Claude HUD
   (`src/render/lines/cost.ts`), spences10 (`src/segments/usage.ts`).
 - **cc-candybar today:** adjacent, at the wrong altitude. A source that fails loudly reaches the
-  diagnostic strip (`src/render/diagnostic-strip.ts`) and a document that failed to parse errors the
+  diagnostics indicator and viewer (`src/render/diagnostics.ts`) and a document that failed to parse errors the
   segment that reads it (`src/var-system/sources.ts`), but a shell or file source that simply has
   not re-run keeps publishing its last value with no mark on the cell, and `registry.settled()`
   exists only for `cc-candybar check`.
@@ -701,9 +701,9 @@ claude-statusline-powerline, **claudia** = claudia-statusline, **YAS** = Yet Ano
 - **Seen in:** YAS (`README.md`), claude-carbon (`scripts/statusline.sh:216-231`,
   `scripts/statusline.sh:233-266`), usage-bar (`src/claude_statusbar/styles.py`), CCometixLine
   (`src/updater.rs`).
-- **cc-candybar today:** has all of it, more thoroughly. The diagnostic strip
-  (`src/render/diagnostic-strip.ts`) word-wraps warnings and errors at the client's real width with a
-  `↳` trailer only when there is something to open, and the update notice
+- **cc-candybar today:** has all of it, more thoroughly. The diagnostics viewer
+  (`src/render/diagnostics.ts`) shows any one warning or error whole, word-wrapped at the client's
+  real width, behind a `⚠ N` indicator beside the settings door, and the update notice
   (`src/daemon/update-notice.ts`) compares the running bundle's source digest to the `src/` beside it
   — an identity comparison rather than an mtime, which is a stronger version of claude-carbon's
   drift check.
