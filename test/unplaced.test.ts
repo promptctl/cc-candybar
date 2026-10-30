@@ -3,8 +3,10 @@
 // is the load's error; any other issue still refuses the config, with the drop
 // beside it.
 
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   inheritableSegmentNames,
+  loadConfigChain,
   mergeWithDefault,
   parseDslConfig,
   validateConfig,
@@ -76,5 +78,27 @@ describe("a placement of an undeclared segment", () => {
     const { config, dropped } = validateRenderable(clean, "<test>");
     expect(dropped).toBeNull();
     expect(config.root).toBe(clean.config.root);
+  });
+});
+
+describe("a chain whose merge fails", () => {
+  // The lower file places a segment nothing declares, which the bar draws
+  // past; the upper file names an action nothing declares, which refuses it.
+  const FILES: Record<string, string> = {
+    "/lower.json5": `{ segments: { a: { template: "a" } }, root: { h: ["a", "ghost"] } }`,
+    "/upper.json5": `{ segments: { t: { template: '{{ action "nope" "x" }}' } }, root: { h: ["t"] } }`,
+  };
+  test("is blamed on the error that refused it, not on a lower file's undeclared placement", () => {
+    const load = () =>
+      loadConfigChain(
+        ["/lower.json5", "/upper.json5"],
+        DEFAULT_DSL_CONFIG,
+        { warned: () => {} },
+        { repo: null, cwd: null },
+        (p) => FILES[p]!,
+      );
+    expect(load).toThrow(ConfigError);
+    expect(load).toThrow(/upper\.json5[\s\S]*nope/);
+    expect(load).not.toThrow(/ghost/);
   });
 });

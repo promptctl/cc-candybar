@@ -505,7 +505,7 @@ export async function prepareConfig(
   const loaded = loadConfigChain(
     layers,
     DEFAULT_DSL_CONFIG,
-    { entered: () => {}, warned: (w) => warnings.push(...w) },
+    { warned: (w) => warnings.push(...w) },
     { repo, cwd },
   );
   // [LAW:no-silent-failure] The bar draws past a placement of an undeclared

@@ -529,7 +529,7 @@ function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   return loadConfigChain(
     text !== null ? [home.path, ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
-    { entered: () => {}, warned: () => {} },
+    { warned: () => {} },
     { repo: home.repo, cwd: home.cwd },
     (p) =>
       p === home.path && text !== null ? text : fs.readFileSync(p, "utf8"),

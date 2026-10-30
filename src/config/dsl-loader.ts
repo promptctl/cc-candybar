@@ -340,8 +340,8 @@ function statKey(file: string): string {
  *
  * `read` is the one content read of each file — a writer proving the text it
  * is about to write passes that text for its own layer. `trace` hears each
- * path as its load starts and each layer's advisories before its validation
- * runs, so a caller still holds both when a layer throws.
+ * layer's advisories before its validation runs, so a caller still holds them
+ * when a layer throws; the throw itself names the file it is blamed on.
  *
  * [LAW:dataflow-not-control-flow] One fold; an empty chain validates the
  * bundled default through the same `loadConfig(null)` every no-file load
@@ -379,7 +379,6 @@ export function loadConfigChain(
   const base = plugins.config;
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
   for (const path of paths) {
-    trace.entered(path);
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
@@ -439,11 +438,13 @@ export function loadConfigChain(
       ...validateRenderable(top, top.path, allowedPalettes),
     };
   } catch (e) {
-    for (const layer of layers.slice(0, -1)) {
-      trace.entered(layer.path);
-      validateConfig(layer, layer.path, allowedPalettes);
-    }
-    trace.entered(top.path);
+    // [LAW:single-enforcer] Blame goes to the lowest layer that fails on its
+    // own, judged by the same tolerant validation the merged chain failed
+    // under: a placement a lower layer leaves undeclared only drops its cell
+    // there too, so it cannot stand in for the error that actually refused
+    // the chain.
+    for (const layer of layers.slice(0, -1))
+      validateRenderable(layer, layer.path, allowedPalettes);
     throw e;
   }
 }
@@ -456,8 +457,6 @@ export interface SessionDirs {
 }
 
 export interface ChainTrace {
-  // The file a throw is to be blamed on, as the chain learns it.
-  readonly entered: (path: string) => void;
   readonly warned: (warnings: readonly string[]) => void;
 }
 
@@ -578,7 +577,10 @@ const NO_FILE: LoadedFile = {
 /**
  * Promote a merged DslConfig to a ValidatedConfig by running cross-references
  * and cycle detection, refusing it outright on any issue — a placement of an
- * undeclared segment included. What `check` and every write judge a file by.
+ * undeclared segment included. What a plugin replacing one its layer held is
+ * judged by (checkPlugin). The bar, `check` and every write load through
+ * loadConfigChain's tolerant validateRenderable instead; `check` then refuses
+ * the placements it dropped.
  *
  * Throws ConfigError aggregating every issue.
  */

@@ -725,7 +725,7 @@ export function buildRenderState(
   const { layers, config, installed, dropped } = loadConfigChain(
     chain.layers,
     DEFAULT_DSL_CONFIG,
-    { entered: () => {}, warned: (w) => warnings.push(...w) },
+    { warned: (w) => warnings.push(...w) },
     { repo: chain.repo, cwd },
   );
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
