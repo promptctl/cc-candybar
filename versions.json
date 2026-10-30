@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-487",
-      "ref": "refs/pull/487/merge",
-      "sha": "da6eac0ab291d009e0a477a9bf8a9db6896c239a",
-      "timestamp": "2026-10-30T09:55:24.192Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
+      "timestamp": "2026-10-30T10:02:09.763Z",
       "commits": [
         {
-          "sha": "da6eac0ab291d009e0a477a9bf8a9db6896c239a",
+          "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:54:28Z",
-          "message": "Merge c6e418f4f5535800353ecea103f26651c54691cb into 059a45e0880e4967c0f0fee60def00a4f4153ac0\n"
+          "timestamp": "2026-10-30T04:01:16-06:00",
+          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) (#487)\n\n* fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n\n* fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated."
         },
         {
-          "sha": "c6e418f4f5535800353ecea103f26651c54691cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:52:09-06:00",
-          "message": "fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated.\n"
-        },
-        {
-          "sha": "4429c4744e1e5419a6ebe4a19987a155f01a699f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:48:13-06:00",
-          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n"
+          "sha": "059a45e0880e4967c0f0fee60def00a4f4153ac0",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T09:48:48Z",
+          "message": "chore(release): set `package.json` to 1.163.0 [skip ci]\n\n## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)\n\n### Features\n\n* **diagnostics:** every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) ([#483](https://github.com/promptctl/cc-candybar/issues/483)) ([4363d2a](https://github.com/promptctl/cc-candybar/commit/4363d2a7982c76c6f6ada1028f154dd9a498309c))\n\n### Bug Fixes\n\n* **daemon:** one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) ([#485](https://github.com/promptctl/cc-candybar/issues/485)) ([5a804ba](https://github.com/promptctl/cc-candybar/commit/5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad))\n"
         }
       ]
     },
@@ -70,21 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:11:46-06:00",
           "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad",
-      "timestamp": "2026-10-30T09:35:24.812Z",
-      "commits": [
-        {
-          "sha": "5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:34:38-06:00",
-          "message": "fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) (#485)\n\n* fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h)\n\nThe daemon writes a probe into a folder of its own each period and judges\ndelivery for every watch it holds: delivering, stalled, or unmeasured with a\nreason. A stall or an unmeasured span draws an amber row naming the span's\nstart, daemon-stats prints a fileEvents line, and the span's close reloads\nevery config entry under events-resumed and re-reads every held plugin file.\nPlugin storage reads that one owner in place of a probe per folder, and keeps\njudging each folder's identity on the owner's period.\n\n* fix(daemon): a catch-up re-reads watch_file sources, and the row stands while the span is open (brandon-unfiled-3248.y66h)\n\nA `watch_file` source watches through its directory on the same OS stream\nthe probe tests, so a stall silenced it too, and nothing re-read it when\nevents resumed. Every registry now subscribes to the delivery owner's\ncatch-ups, and a catch-up fires each watched file's subscribers as its own\nwatch would have.\n\nThe bar's row and daemon-stats' line derive from the unvouched span, not\nthe state's label: a probe that landed after a stall is not one heard, so\ndelivering with the span open still warns, and the stats line names the\nspan's start in every state.\n\nThe causes that reload every entry are their own type, so a single entry's\ncause cannot be batched."
         }
       ]
     }
