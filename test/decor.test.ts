@@ -41,8 +41,6 @@ import {
   shadeRole,
   vocabularyOf,
   vocabularySelect,
-  inBin,
-  nearestPoint,
   type Address,
   type Decor,
   type Lineage,
@@ -114,7 +112,7 @@ describe("the shade dial", () => {
 
   test("runs muted, then a window of three rungs from the deepest to the brightest, each one rung above the last", () => {
     expect(SHADE_NAMES.slice(0, DIAL.length)).toEqual([...DIAL]);
-    expect(SHADES.muted.tones).toEqual(["muted"]);
+    expect(SHADES.muted.tones).toEqual(["muted", "base"]);
     const windows = DIAL.slice(1).map((name) => SHADES[name].tones);
     for (const [p, tones] of windows.entries()) {
       // The window is three neighbouring rungs, from rung p.
@@ -126,19 +124,11 @@ describe("the shade dial", () => {
     }
   });
 
-  test("a jump candidate is the role's window widened, or two tones the whole width apart, each read by the rule under which neighbours never share a tone", () => {
+  test("a jump candidate is the role's window widened, or two tones the whole width apart", () => {
     expect(SHADES.wide.tones.map(rung).sort()).toEqual([1, 3, 5]);
     expect(SHADES.widest.tones.map(rung).sort()).toEqual([0, 3, 6]);
     expect(SHADES.pair.tones.map(rung).sort()).toEqual([1, 5]);
     expect(SHADES["pair-wide"].tones.map(rung).sort()).toEqual([0, 6]);
-    // Over three tones the nearest point keeps van der Corput's neighbours
-    // apart; over two, the bin does — and every row of the table says which.
-    for (const name of SHADE_NAMES) {
-      const { tones, quantize } = SHADES[name];
-      const picks = Array.from({ length: 8 }, (_, index) => QUANTIZE[quantize](VDC(index, 8), tones.length));
-      const alike = picks.slice(1).filter((pick, i) => tones.length > 1 && pick === picks[i]);
-      expect([name, alike]).toEqual([name, []]);
-    }
   });
 
   test("rests on middle: one darkening, the role itself, one lightening", () => {
@@ -246,8 +236,8 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   });
 
   test("the row chooses the hue and the place in the row chooses the shade", () => {
-    // Row 1 of 2 (vdc 0.5 × 2 = 1 -> secondary), cell 3 of 6 (vdc 0.75 × 3 =
-    // 2.25 -> entry 2 of the middle window, the role itself).
+    // Row 1 of 2 (vdc 0.5 × 2 = 1 -> secondary), cell 3 of 6 (vdc 0.75, in
+    // the upper half -> entry 2 of the middle window, the role itself).
     expect(decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6)])).toEqual({ hue: "secondary", shade: "base" });
     // Only the innermost row counts: a row stacked above the whole bar (edit
     // mode's reset banner wraps the content as row 1 of 2) recolours nothing.
@@ -268,42 +258,54 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   });
 
   test("the shade step is placed by its OWN distribution", () => {
-    // Cell 1 of 4: vdc 0.5 × 3 = 1.5 -> entry 2; monotonic 0.375 × 3 = 1.125 -> entry 1.
+    // Cell 1 of 4: vdc 0.5, in [½, 1) -> entry 2; monotonic 0.375, in [¼, ½) -> entry 1.
     expect(decorEntryFor(TWO_STEP, [cell(1, 4)]).shade).toBe(SHADES.middle.tones[2]);
     expect(
       decorEntryFor(TWO_STEP, [{ ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic }]).shade,
     ).toBe(SHADES.middle.tones[1]);
   });
 
-  test("a row walks up and down its window a rung at a time, never two cells side by side alike", () => {
-    // Van der Corput lands a row's first eight cells on entries 0, 2, 1, 2, 0,
-    // 2, 1, 0 of three; the window is listed low, high, middle, so the row reads
-    // low, middle, high, middle, low, middle, high, low.
+  test("a row walks up and down its window a rung at a time", () => {
+    // Van der Corput read by halves lands a row's cells on entries 0, 2, 1, 2
+    // of three, over and over; the window is listed low, high, middle, so the
+    // row reads low, middle, high, middle, low, … however long it runs.
     const walk = (shade: ShadeName): RoleShade[] =>
-      [0, 1, 2, 3, 4, 5, 6, 7].map(
-        (i) => decorEntryFor({ ...TWO_STEP, shade: SHADES[shade] }, [row(0, 2), cell(i, 8)]).shade,
+      Array.from(
+        { length: 16 },
+        (_, i) => decorEntryFor({ ...TWO_STEP, shade: SHADES[shade] }, [row(0, 2), cell(i, 16)]).shade,
       );
     for (const shade of ["deepest", "deeper", "middle", "brighter", "brightest"] as const) {
       const low = rung(SHADES[shade].tones[0]);
-      expect([shade, walk(shade).map((s) => rung(s) - low)]).toEqual([shade, [0, 1, 2, 1, 0, 1, 2, 0]]);
-    }
-    // Every window, under its own rule: the tone its placement picks, and
-    // never the tone of the cell before it.
-    for (const shade of SHADE_NAMES) {
-      const { tones, quantize } = SHADES[shade];
-      if (tones.length === 1) continue;
-      const shades = walk(shade);
-      expect([shade, shades]).toEqual([shade, shades.map((_, i) => tones[QUANTIZE[quantize](VDC(i, 8), tones.length)])]);
-      expect([shade, shades.filter((s, i) => i > 0 && s === shades[i - 1])]).toEqual([shade, []]);
+      expect([shade, walk(shade).map((s) => rung(s) - low)]).toEqual([
+        shade,
+        Array.from({ length: 16 }, (_, i) => [0, 1, 2, 1][i % 4]),
+      ]);
     }
   });
 
-  test("a muted row is one colour: every cell wears its role's muted form", () => {
+  // [LAW:verifiable-goals] candybar-joiners-e5r4.tx7: the property, stated
+  // once. The mechanism reads the position alone, so a row's length is only
+  // how far the property is checked, never an input to the tone.
+  test("under every dial position, no two cells side by side select one tone, in any row up to sixteen long", () => {
+    const tone = (shade: ShadeName, index: number, count: number): RoleShade =>
+      decorEntryFor({ ...TWO_STEP, shade: SHADES[shade] }, [row(0, 2), cell(index, count)]).shade;
+    const alike: string[] = [];
+    for (const shade of SHADE_NAMES) {
+      for (let count = 2; count <= 16; count++) {
+        for (let i = 0; i + 1 < count; i++) {
+          if (tone(shade, i, count) === tone(shade, i + 1, count)) alike.push(`${shade}, ${count} cells: ${i} and ${i + 1}`);
+        }
+      }
+    }
+    expect(alike).toEqual([]);
+  });
+
+  test("a muted row alternates its role's muted form with the role itself, in one hue", () => {
     const muted: Decor = { ...TWO_STEP, shade: SHADES.muted };
     for (const r of [0, 1]) {
-      const shades = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(muted, [row(r, 2), cell(i, 8)]));
-      expect(new Set(shades.map((e) => `${e.hue}|${e.shade}`)).size).toBe(1);
-      expect(shades[0]!.shade).toBe("muted");
+      const entries = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => decorEntryFor(muted, [row(r, 2), cell(i, 8)]));
+      expect(new Set(entries.map((e) => e.hue)).size).toBe(1);
+      expect(entries.map((e) => e.shade)).toEqual(["muted", "base", "muted", "base", "muted", "base", "muted", "base"]);
     }
   });
 
@@ -525,14 +527,16 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     }
     expect(steps.size).toBeGreaterThan(ALL_NAMES.length);
     for (const step of steps.values()) {
-      for (const quantize of [inBin, nearestPoint]) {
+      for (const quantize of Object.values(QUANTIZE)) {
         expect(vocabularySelect([only], step, quantize)).toBe(only);
       }
     }
   });
 
   test("an empty vocabulary has nothing to select and says so", () => {
-    expect(() => vocabularySelect([], undefined, nearestPoint)).toThrow(/empty vocabulary/);
+    for (const quantize of Object.values(QUANTIZE)) {
+      expect(() => vocabularySelect([], undefined, quantize)).toThrow(/empty vocabulary/);
+    }
   });
 });
 

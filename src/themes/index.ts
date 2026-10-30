@@ -67,7 +67,7 @@ export {
   placedBy,
   vocabularySelect,
   inBin,
-  nearestPoint,
+  inHalves,
   decorEntryFor,
   paletteRole,
   decorFor,

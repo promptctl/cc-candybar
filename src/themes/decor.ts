@@ -105,10 +105,11 @@ const poleText: DecorText = (palette, _hue, background, drawnAt) =>
   textOn(palette, background, drawnAt);
 
 /**
- * On a muted role: Textual's own text colour for that role, `$text-primary`
- * on `$primary-muted`, with its hue kept and its lightness slid until it
- * clears TEXT_MIN_CONTRAST — so a muted row's text is coloured the way
- * Textual's labels are, and reads.
+ * On the `muted` position's cells, the role's muted form and the role itself:
+ * Textual's own text colour for that role, `$text-primary` on
+ * `$primary-muted`, with its hue kept and its lightness slid until it clears
+ * TEXT_MIN_CONTRAST — so a muted row's text is coloured the way Textual's
+ * labels are, and reads on both.
  */
 const roleText: DecorText = (palette, hue, background, drawnAt) =>
   legibleOn(palette, paletteRole(palette, `text-${hue}`), background, drawnAt);
@@ -125,8 +126,8 @@ export interface Shade {
   readonly text: DecorText;
   /**
    * How a cell's placement picks among `tones`: the rule under which van der
-   * Corput's neighbours never land on one tone — `point` over three tones,
-   * `bin` over two (`inBin`, `nearestPoint`). [LAW:dataflow-not-control-flow]
+   * Corput's neighbours never land on one tone — `halves` over three tones,
+   * `bin` over two (`inHalves`, `inBin`). [LAW:dataflow-not-control-flow]
    * A value in the row, not a branch on the tone count.
    */
   readonly quantize: QuantizeName;
@@ -144,10 +145,10 @@ export interface Shade {
 
 /**
  * Three neighbouring rungs of the ladder from `from`: one position of the dial.
- * Listed low, high, middle because a row's first eight cells take entries 0, 2,
- * 1, 2, 0, 2, 1, 0 of three (van der Corput, read by `nearestPoint`): the row
- * walks up and down its window a rung at a time — low, middle, high, middle,
- * low — and turning the dial one position moves every cell exactly one rung.
+ * Listed low, high, middle because a row's cells take entries 0, 2, 1, 2 of
+ * three, over and over (van der Corput, read by `inHalves`): the row walks up
+ * and down its window a rung at a time — low, middle, high, middle, low — and
+ * turning the dial one position moves every cell exactly one rung.
  * The order is the one Brandon compared the positions in
  * (candybar-theme-colours-6fq5.e5n).
  */
@@ -156,7 +157,7 @@ const ladderWindow = (from: number): Shade => ({
   // rungs up a ladder of seven; the `!`s state that, they do not guard it.
   tones: [LADDER[from]!, LADDER[from + 2]!, LADDER[from + 1]!],
   text: poleText,
-  quantize: "point",
+  quantize: "halves",
   activated: "muted",
 });
 
@@ -170,7 +171,7 @@ const centredWindow = (apart: number): Shade => ({
   // three rungs each side stays on the ladder.
   tones: [LADDER[3 - apart]!, LADDER[3 + apart]!, LADDER[3]!],
   text: poleText,
-  quantize: "point",
+  quantize: "halves",
   activated: "muted",
 });
 
@@ -206,17 +207,16 @@ export const TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES) as ReadonlyArray<
  * it to, lowest first (candybar-theme-colours-6fq5.e5n). The window of three
  * rungs slides up the ladder from the role's deepest shades to its brightest,
  * and `middle` — centred on the role itself — is where it rests. Below the
- * deepest window the dial reaches `muted`: every cell of a row in the role's
- * muted form under the role's own text, one colour per row, its cells parted
- * by the joiner's divider. A new position is one row here: the option domain,
- * the loader's enum and the settings control derive from this table, and the
- * row names what a pressed button wears there.
+ * deepest window the dial reaches `muted`: a row's cells alternate the role's
+ * muted form and the role itself, under the role's own text. A new position is
+ * one row here: the option domain, the loader's enum and the settings control
+ * derive from this table, and the row names what a pressed button wears there.
  */
 export const SHADES = {
   muted: {
-    tones: ["muted"],
+    tones: ["muted", "base"],
     text: roleText,
-    quantize: "point",
+    quantize: "bin",
     activated: "lighten-2",
   },
   deepest: ladderWindow(0),
@@ -531,9 +531,9 @@ export type Address = readonly AddressStep[];
 
 /**
  * How a placement in [0, 1) picks one of `size` entries. Each bar vocabulary
- * is read with the rule under which van der Corput's neighbours never land on
- * the same entry — the two sizes the bar has need different rules, so the rule
- * is a value the vocabulary is read with, not a branch on its size.
+ * is read with a rule under which van der Corput's neighbours never land on
+ * the same entry, and its row names which, so the rule is a value the
+ * vocabulary is read with, not a branch on its size.
  */
 export type Quantize = (placement: number, size: number) => number;
 
@@ -547,13 +547,21 @@ export const inBin: Quantize = (placement, size) =>
   Math.floor(placement * size);
 
 /**
- * The nearest of `size` points spaced evenly round the circle from 0. Over a
- * window of three shades a row's first eight cells take entries 0, 2, 1, 2, 0,
- * 2, 1, 0: no two neighbours alike. The bin rule puts cells 5 and 6 on one
- * entry, inside the bundled status row.
+ * The upper half of the circle is the last entry, and the lower half is shared
+ * among the rest the same way: over three entries, [0, ¼) is the first, [¼, ½)
+ * the second and [½, 1) the third. A van der Corput placement's first bit is
+ * its index's lowest bit and its second bit the next one up, so every odd
+ * place takes the last entry and the even places alternate the other two. Of
+ * two neighbouring places exactly one is odd, so they never share an entry, at
+ * any index. A rule that centres an entry on 0, as the nearest point does,
+ * fails: places 2ᵏ − 1 and 2ᵏ land either side of 0, ever closer (7 and 8 at ⅞
+ * and ¹⁄₁₆), and both round to it. Equal bins put cells 5 and 6 on one entry.
  */
-export const nearestPoint: Quantize = (placement, size) =>
-  Math.round(placement * size) % size;
+export const inHalves: Quantize = (placement, size) => {
+  let entry = size - 1;
+  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
+  return entry;
+};
 
 /**
  * [LAW:one-source-of-truth] The two rules by name — the spelling a `Shade`
@@ -561,7 +569,7 @@ export const nearestPoint: Quantize = (placement, size) =>
  */
 export const QUANTIZE = {
   bin: inBin,
-  point: nearestPoint,
+  halves: inHalves,
 } as const satisfies Record<string, Quantize>;
 export type QuantizeName = keyof typeof QUANTIZE;
 
