@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-486",
+      "ref": "refs/pull/486/merge",
+      "sha": "a33db125a7d41c169010a4401b6fcb377e30115d",
+      "timestamp": "2026-10-30T09:13:10.021Z",
+      "commits": [
+        {
+          "sha": "a33db125a7d41c169010a4401b6fcb377e30115d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:12:17-06:00",
+          "message": "Merge 3de9afea2984fe93871460f954c6860ea18a376c into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+        },
+        {
+          "sha": "3de9afea2984fe93871460f954c6860ea18a376c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:11:46-06:00",
+          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4363d2a7982c76c6f6ada1028f154dd9a498309c",
