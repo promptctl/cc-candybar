@@ -156,8 +156,8 @@ export function leasePath(): string {
   return leasePathFor(socketPath());
 }
 
-export function sessionStatePath(): string {
-  return path.join(stateDir(), "session-state.json");
+export function sessionStatePath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(stateDir(env), "session-state.json");
 }
 
 // [LAW:one-source-of-truth] Each session's undo/redo history over every

@@ -57,7 +57,9 @@ export function pageOf(rendered: string): ViewerPage {
 }
 
 // Every message a session's bar shows, read through the viewer: `bar` is the
-// rendered bar whose indicator is clicked. Leaves the viewer closed.
+// rendered bar whose indicator is clicked. Leaves the viewer closed. A bar
+// already showing the viewer is refused: it has no indicator, and reading it
+// as "no messages" hides whatever left the viewer open.
 export async function readDiagnostics(
   sockPath: string,
   sessionId: string,
@@ -66,6 +68,8 @@ export async function readDiagnostics(
   hints: ClientHints = {},
   args: string[] = [],
 ): Promise<ViewerPage[]> {
+  if (viewerLink(bar, "✕") !== undefined)
+    throw new Error(`readDiagnostics: the viewer is already open on ${bar}`);
   const open = viewerLink(bar, "open");
   if (open === undefined) return [];
   const draw = (): Promise<string> =>
