@@ -71515,6 +71515,12 @@ var GitDataProvider = class {
       )
     };
   }
+  // A watch's window: a failed one is kept for the next pass's follow.
+  heard(root, heard) {
+    const state = this.repos.get(root);
+    if (state && heard.kind === "failed") state.failed = heard;
+    this.changed(root);
+  }
   // A watch fire: the repo changed since any read in flight began.
   changed(root) {
     const state = this.repos.get(root);
@@ -71542,13 +71548,14 @@ var GitDataProvider = class {
     const state = {
       root,
       refresh: new TrailingEdge(),
-      watch: this.followWatch(root, null).watch,
+      watch: this.followWatch(root, null, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
       values: /* @__PURE__ */ new Map(),
       holders: 0,
       asked: /* @__PURE__ */ new Set(),
+      failed: null,
       pr: null
     };
     this.repos.set(root, state);
@@ -71558,7 +71565,7 @@ var GitDataProvider = class {
   // state's build and for every pass: the git directories resolved from the
   // root as they stand now, followed by the registry's one rule. A pass calls
   // it first, before any await, so the watch follows the repo's paths.
-  followWatch(root, held) {
+  followWatch(root, held, after) {
     const gitDir = this.inner.resolveGitDir(root);
     const spec = watchSpec(
       root,
@@ -71568,8 +71575,8 @@ var GitDataProvider = class {
     const followed = this.watchers.follow(
       held,
       spec,
-      () => this.changed(root),
-      null
+      (heard) => this.heard(root, heard),
+      after
     );
     if (followed.move === "rebound") {
       this.logger(
@@ -71680,7 +71687,8 @@ var GitDataProvider = class {
     const startedAt = Date.now();
     const asked2 = [...state.asked];
     state.asked.clear();
-    const followed = this.followWatch(state.root, state.watch);
+    const followed = this.followWatch(state.root, state.watch, state.failed);
+    state.failed = null;
     state.watch = followed.watch;
     const values2 = [];
     for (const value of state.values.values()) {
@@ -78316,7 +78324,7 @@ var heardField = (heard) => {
       return `failed:${heard.reason}`;
   }
 };
-var heardOf = (cause) => cause.kind === "config-watch" || cause.kind === "answers-watch" ? cause.heard : null;
+var heardOf = (cause) => cause.kind === "config-watch" ? cause.heard : null;
 var causeField = (cause) => {
   switch (cause.kind) {
     case "open":
