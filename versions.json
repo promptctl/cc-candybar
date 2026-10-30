@@ -4,18 +4,18 @@
     {
       "version": "pr-491",
       "ref": "refs/pull/491/merge",
-      "sha": "737579895badda9f7e4f728a8b43e11e9a1ea9d3",
-      "timestamp": "2026-10-30T11:30:51.420Z",
+      "sha": "9c799eb80edc60128be914a345f46da2ed4ded4d",
+      "timestamp": "2026-10-30T11:31:44.585Z",
       "commits": [
         {
-          "sha": "737579895badda9f7e4f728a8b43e11e9a1ea9d3",
+          "sha": "9c799eb80edc60128be914a345f46da2ed4ded4d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:30:04-06:00",
-          "message": "Merge 17921a72bef53ac4d2e5167cc8fd0395e713d22f into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+          "timestamp": "2026-10-30T11:30:51Z",
+          "message": "Merge 440a7d2993e17cefbe8cd518924ceeffc59a2775 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
         },
         {
-          "sha": "17921a72bef53ac4d2e5167cc8fd0395e713d22f",
+          "sha": "440a7d2993e17cefbe8cd518924ceeffc59a2775",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:29:42-06:00",
