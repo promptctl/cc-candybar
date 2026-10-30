@@ -406,6 +406,22 @@ describe("the flash on the bar", () => {
     expect(rt.draw(DARK, SINCE).nextChange).toBe(1024.5);
   });
 
+  // The flash counts down to the moment the daemon's timer closes the menus,
+  // so its holds are on the host clock however fast the session animates.
+  test("the flash begins and turns at the same host instant at every animation speed", () => {
+    for (const speed of ["1x", "5x", "20x"]) {
+      const rt = buildRuntime(
+        `{ globals: { animationSpeed: "${speed}" }, root: { h: ['directory', 'model'] } }`,
+      );
+      rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+      expect([speed, rt.draw(BEFORE, SINCE).nextChange]).toEqual([
+        speed,
+        1022.5,
+      ]);
+      expect([speed, rt.draw(DARK, SINCE).nextChange]).toEqual([speed, 1024.5]);
+    }
+  });
+
   test("a menu the frame first draws, its idle period not begun, can move but says no change", () => {
     const rt = buildRuntime(BUNDLED);
     rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);

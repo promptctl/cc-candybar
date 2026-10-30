@@ -599,7 +599,7 @@ export class FrameFeeds<Req> {
     if (seen < still && shown) feed.moving++;
     if (seen < still && !shown) feed.unseen++;
     const period = shown ? seen : still;
-    this.arm(feed, (at + period / 1000) as Instant);
+    this.arm(feed, (at + period / 1000) as Instant, this.deps.instant());
   }
 
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
@@ -626,17 +626,19 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
-    this.arm(feed, (this.deps.instant() + (at - now) / 1000) as Instant);
+    const wall = this.deps.instant();
+    this.arm(feed, (wall + (at - now) / 1000) as Instant, wall);
     return true;
   }
 
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
-  // that is. Its wait is read off one wall reading, and its monotonic due time
-  // is what a wake compares against.
-  private arm(feed: Feed, due: Instant): void {
+  // that is. Its wait is measured from `wall`, the caller's own reading, so
+  // the instant a caller set is never rebuilt from a second, truncated one;
+  // its monotonic due time is what a wake compares against.
+  private arm(feed: Feed, due: Instant, wall: Instant): void {
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
-    const delay = Math.max(0, (due - this.deps.instant()) * 1000);
+    const delay = Math.max(0, (due - wall) * 1000);
     feed.phase = {
       kind: "due",
       at: this.deps.now() + delay,

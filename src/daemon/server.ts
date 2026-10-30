@@ -2594,6 +2594,23 @@ function drawRender(
     sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
     diagnostics,
   );
+  // [LAW:one-source-of-truth] The body says when it next changes. The viewer
+  // in the bar's place is still text, so a feed drawing it waits a still
+  // period, not the hidden bar's beat; that bar can move again once it closes.
+  const body: { text: string; nextChange: number; motion: DrawnMotion } =
+    viewing === null
+      ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion }
+      : {
+          text: viewerRows(
+            diagnostics,
+            viewing,
+            sessionId,
+            drawing.by,
+            geometry,
+          ),
+          nextChange: Infinity,
+          motion: frame.motion === "still" ? "still" : "can-move",
+        };
   const g = gitService.getStats();
   const u = usageStore.getStats();
   const fx = effects.lastFrame();
@@ -2642,8 +2659,8 @@ function drawRender(
     stateRev: String(fx.revision),
     fades: passages(fx.fades),
     leaves: passages(fx.leaves),
-    // What the frame drew: whether anything on it changes without new data.
-    motion: frame.motion,
+    // What the body drew: whether anything on it changes without new data.
+    motion: body.motion,
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(frame.evaluated),
@@ -2671,16 +2688,13 @@ function drawRender(
   });
   return {
     drawn: {
-      body:
-        viewing === null
-          ? frame.text
-          : viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
+      body: body.text,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
     },
-    motion: frame.motion,
-    nextChange: frame.nextChange,
+    motion: body.motion,
+    nextChange: body.nextChange,
     evaluated: frame.evaluated,
     clickShown,
     delivered,

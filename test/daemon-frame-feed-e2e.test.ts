@@ -368,6 +368,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect(glyphs[i]).not.toBe(glyphs[i - 1]);
   });
 
+  test("the viewer open over a moving bar is drawn a still period apart, not at the bar's beat", async () => {
+    const sid = "feed-viewer-still";
+    const bar = await render(sockPath, sid, projectDir, {}, args("warned"));
+    await click(sockPath, viewerLink(bar, "open")!.url);
+    let drawn = 0;
+    await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(
+        () => outputs(received).some((o) => /\[1\/1\]/u.test(stripAnsi(o))),
+        "a frame showing the viewer",
+      );
+      const before = await feedStats();
+      await sleep(2000);
+      drawn = (await feedStats()).drawn - before.drawn;
+    });
+    // The viewer is still text: two still periods, not sixty moving ones.
+    expect(drawn).toBeLessThanOrEqual(4);
+  });
+
   test("a click on a still bar is pushed at once, not when the next frame falls due", async () => {
     const shut = await render(
       sockPath,
