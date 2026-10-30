@@ -2407,6 +2407,30 @@ describe("templateReads", () => {
 });
 
 describe("findKeyLine", () => {
+  test("a numeric key on an object is a key, not an element", () => {
+    const src = `{
+  themeDefaults: {
+    "16": {
+      palette: "x",
+    },
+  },
+  variables: { "0": {
+    kind: "shell" } },
+}`;
+    expect(findKeyLine(src, ["themeDefaults", "16", "palette"])).toBe(4);
+    expect(findKeyLine(src, ["variables", "0", "kind"])).toBe(8);
+  });
+
+  test("a numeric part indexes a list's elements", () => {
+    const src = `{
+  insert: [
+    { seg: "a", after: "b" },
+    { seg: "c", after: "d" },
+  ],
+}`;
+    expect(findKeyLine(src, ["insert", "1"])).toBe(4);
+  });
+
   test("locates a top-level key", () => {
     const src = "{\n  globals: {},\n  variables: {}\n}";
     expect(findKeyLine(src, ["variables"])).toBe(3);
@@ -2555,5 +2579,71 @@ describe("loadConfig — the advisory survives a structural failure", () => {
       throw new Error("expected ConfigError");
     expect(caught.message).toContain("JSON5 syntax error");
     expect(caught.warnings).toEqual([]);
+  });
+});
+
+// ─── insert ──────────────────────────────────────────────────────────────────
+
+describe("loadDslConfig — insert", () => {
+  test("a cell naming no side is an issue at its entry", () => {
+    expectIssue(`{ insert: [{ seg: "model" }] }`, {
+      path: "insert.0",
+      message: "got neither",
+    });
+  });
+
+  test("a cell naming both sides is an issue at its entry", () => {
+    expectIssue(
+      `{ insert: [{ seg: "model", before: "a", after: "b" }] }`,
+      { path: "insert.0", message: "got both" },
+    );
+  });
+
+  test("a cell naming an undeclared segment is an issue at its entry", () => {
+    expectIssue(`{ insert: [{ seg: "nosuchsegment", after: "model" }] }`, {
+      path: "insert.0",
+      message: /does not match any declared segment/,
+    });
+  });
+
+  test("a cell naming the settings door or other chrome is an issue", () => {
+    expectIssue(`{ insert: [{ seg: "candybar.menu", after: "model" }] }`, {
+      path: "insert.0.seg",
+      message: "the bar's own chrome",
+    });
+  });
+
+  test("an issue in the second cell points at the second cell's line", () => {
+    const err = expectError(
+      `{\n  insert: [\n    { seg: "model", after: "context" },\n    { seg: "nosuchsegment", after: "model" },\n  ],\n}`,
+    );
+    const issue = err.issues.find((i) => i.path === "insert.1")!;
+    expect(issue.message).toMatch(/does not match any declared segment/);
+    expect(issue.line).toBe(4);
+  });
+
+  test("a cell anchored on the bar's own chrome is an issue at its side", () => {
+    expectIssue(`{ insert: [{ seg: "model", after: "candybar.menu" }] }`, {
+      path: "insert.0.after",
+      message: "the bar's own chrome",
+    });
+  });
+
+  test("an empty segment name is reported on its own entry's line, in a file with no root", () => {
+    const rootless = expectError(`{ insert: [{ seg: "", after: "model" }] }`);
+    const issue = rootless.issues.find((i) => i.path === "insert.0.seg")!;
+    expect(issue.message).toContain("non-empty segment name");
+    expect(issue.line).toBe(1);
+    const err = expectError(
+      `{\n  root: { h: ["model"] },\n  insert: [\n    { seg: "", after: "model" },\n  ],\n}`,
+    );
+    expect(err.issues.find((i) => i.path === "insert.0.seg")!.line).toBe(4);
+  });
+
+  test("insert must be a list", () => {
+    expectIssue(`{ insert: { seg: "model", after: "a" } }`, {
+      path: "insert",
+      message: "must be a list",
+    });
   });
 });

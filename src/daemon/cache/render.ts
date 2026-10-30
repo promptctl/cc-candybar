@@ -830,6 +830,9 @@ function loadKey(inputs: LoadInputs): string {
       // diagnostics the drops ride the state, positions and all, so a state
       // kept across an edit that moved a drop would name the old line.
       dropped: loaded.dropped.map((e) => e.message),
+      // Not keyed: placed from the layers' own configs and inserts, keyed
+      // above.
+      placed: null,
     } satisfies Projection<LoadedChain>,
     sources: [...inputs.sources]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -989,11 +992,13 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain.layers.includes(chain.home) ? chain.home : null,
-      // One entry per declaration, however many layers declare it.
+      // One entry per declaration, however many layers declare it, judged
+      // over the trees as placed, so a segment only an insert entry places
+      // is used.
       unused: [
         ...new Map(
           layers
-            .flatMap((l) => unusedDeclarations(l.raw, merged))
+            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed))
             .map((u) => [`${u.kind}:${u.name}`, u] as const),
         ).values(),
       ],

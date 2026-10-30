@@ -1042,6 +1042,44 @@ add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads
 the bar.
 
+### Adding your segment to the user's bar from a repo
+
+A repository's `.cc-candybar.json5` merges over the user's config, so it
+could restate a row, but that replaces the user's row. To add a cell to
+whatever the user already has, list it under `insert`, beside a placement
+id the user's bar holds (a bare placement's id is its segment's name):
+
+```json5 check:pass
+{
+  segments: { lit: { template: "lit" } },
+  root: { rows: { status: { h: ["model", "context"] } } },
+  insert: [{ seg: "lit", after: "model" }],
+}
+```
+
+Here the file stands alone, so the row it inserts into is its own. In a
+repository, leave `root` out and the cell lands in the user's row. Each
+cell takes exactly one of `before` or `after`, and an optional `id`. The
+anchor must be a placement: the bar's own chrome, such as the settings
+door, is refused. Every
+arrangement places the cell in its own tree, presets included, and one
+whose tree lacks the anchor doesn't draw it. When that tree is a root or a
+preset some config file writes, the bar warns once per cell, naming your
+file, the cell, the anchor and every tree that lacks it. A root or preset only
+cc-candybar ships has no such placement to sit beside, so it simply draws
+without the cell. A cell a tree already places is not drawn twice: a cell
+without an `id` is already placed by any placement of its segment, whatever
+its id and however deep; a cell with an `id` only by a placement with that
+id. A cell whose id the tree holds under another segment, or that would
+clash with the bar once placed, is not drawn, and the bar warns naming your
+file and the entry. The cell shows only where its anchor does: a `when` that
+hides the anchor hides the cell too. Like the rest of the file, `insert` takes effect only once the
+user has approved the repository. In edit mode the cell shows which file
+placed it, and offers no remove or move: it is an `insert` entry, and edit
+mode's clicks don't rewrite those, even in the user's own file. To change
+one, edit the `insert` list by hand. The cell stays beside its anchor, and if the user removes their
+own copy of it, yours comes back.
+
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The

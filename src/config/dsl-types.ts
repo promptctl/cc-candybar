@@ -141,6 +141,30 @@ export interface SegmentNode {
   // is made and `💾 save` writes it into the placement.
   // Synthesis-only, like `opens`: edit chrome mints one per declared setting.
   readonly drafts?: Readonly<Record<string, DraftSlot>>;
+  // The layer that placed this cell through its `insert` list rather than
+  // authoring it in a root: the file and the entry. Synthesis-only, like
+  // `opens`: the loader's one insert pass stamps it and no config can write
+  // it. Edit mode reads it to offer no edit on a cell that is an insert entry,
+  // which no click rewrites.
+  readonly insertedBy?: InsertedBy;
+}
+
+export interface InsertedBy {
+  readonly file: string;
+  readonly entry: string;
+}
+
+// [LAW:types-are-the-program] One cell a layer adds beside a placement its
+// bar already has: the edit-mode insert's addressing (an anchor placement id
+// and a side), so a layer never restates a row to add to it. Stamped at
+// parse with the file and entry that wrote it, which the loader's insert
+// pass carries onto the cell it places.
+export interface InsertCell {
+  readonly seg: string;
+  readonly id?: string;
+  readonly anchor: string;
+  readonly relation: "before" | "after";
+  readonly by: InsertedBy;
 }
 
 // One setting's unsaved value: the session key it is held at, and the `state`
@@ -396,6 +420,10 @@ export interface RawDslConfig {
   // A fragment over the bundled default's root — see RootFragment: a tree
   // replaces the default's rows, a rows map merges over them by name.
   readonly root?: RootFragment;
+  // Cells added beside placements of the bar this layer merges over. The
+  // loader places every layer's cells once, into each root that renders
+  // (presets.ts's placeInserts); the merged config holds only the result.
+  readonly insert?: readonly InsertCell[];
   readonly actions?: Readonly<Record<string, ActionDecl>>;
   // Named config fragments ("presets"): each an alternative `root`/`globals`
   // arrangement selected per session, the exact twin of `styles` one level up

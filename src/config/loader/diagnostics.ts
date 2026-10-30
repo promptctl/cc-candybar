@@ -4,7 +4,12 @@
 // what the config-file editor would refuse. Changes here are display/source-
 // mapping changes; the schema validators never touch this file.
 
-import { Json5EditError, parseDocument } from "../json5-edit.js";
+import {
+  entryOf,
+  Json5EditError,
+  parseDocument,
+  type Node,
+} from "../json5-edit.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -61,6 +66,43 @@ export function findKeyLine(
   source: string,
   pathParts: readonly string[],
 ): number | undefined {
+  return keyLocator(source)(pathParts);
+}
+
+// findKeyLine over one source, for a caller that looks up several paths in
+// it: the document is parsed at most once, and only if a path needs it.
+export function keyLocator(
+  source: string,
+): (pathParts: readonly string[]) => number | undefined {
+  let parsed: { readonly node: Node | undefined } | undefined;
+  const document = (): Node | undefined => {
+    parsed ??= { node: parseOrUndefined(source) };
+    return parsed.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+
+function parseOrUndefined(source: string): Node | undefined {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return undefined;
+    throw e;
+  }
+}
+
+function keyLine(
+  source: string,
+  document: () => Node | undefined,
+  pathParts: readonly string[],
+): number | undefined {
+  // [LAW:single-enforcer] A path through an array (`insert.1.seg`) is placed
+  // by the config editor's own document model, which knows where element 1
+  // starts; the key scanner below cannot count elements.
+  const indexed = pathParts.some((p) => /^\d+$/.test(p))
+    ? elementPathLine(source, document(), pathParts)
+    : undefined;
+  if (indexed !== undefined) return indexed;
   let cursor = 0;
   let foundCursor: number | undefined;
   for (const part of pathParts) {
@@ -77,6 +119,38 @@ export function findKeyLine(
   return foundCursor !== undefined
     ? lineFromOffset(source, foundCursor)
     : undefined;
+}
+
+// The line of the deepest node the path reaches through the parsed document,
+// or undefined when the path indexes no array on the way there (the key
+// scanner places that), the document does not parse, or its first step is
+// absent. A numeric part indexes an array only where the node is one; on an
+// object it is a key like any other (`themeDefaults: { "16": … }`).
+function elementPathLine(
+  source: string,
+  document: Node | undefined,
+  pathParts: readonly string[],
+): number | undefined {
+  if (document === undefined) return undefined;
+  let node = document;
+  let reached: Node | undefined;
+  let indexed = false;
+  for (const part of pathParts) {
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next: Node | undefined =
+      node.kind === "array"
+        ? element
+          ? node.elements[Number(part)]
+          : undefined
+        : entryOf(node, part)?.value;
+    if (next === undefined) break;
+    indexed ||= element;
+    node = next;
+    reached = next;
+  }
+  return reached === undefined || !indexed
+    ? undefined
+    : lineFromOffset(source, reached.span.start);
 }
 
 function findKeyOccurrence(source: string, from: number, key: string): number {
