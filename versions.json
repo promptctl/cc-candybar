@@ -4,15 +4,22 @@
     {
       "version": "pr-485",
       "ref": "refs/pull/485/merge",
-      "sha": "fd4d556d7298f615d29d7f77517f32b68dfd3833",
-      "timestamp": "2026-10-30T09:14:50.827Z",
+      "sha": "8c93d1dafe953410a772c89b3bb4c6eb5f7deff9",
+      "timestamp": "2026-10-30T09:29:53.801Z",
       "commits": [
         {
-          "sha": "fd4d556d7298f615d29d7f77517f32b68dfd3833",
+          "sha": "8c93d1dafe953410a772c89b3bb4c6eb5f7deff9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:14:07Z",
-          "message": "Merge 315a3feeddef3025027a6322ece1a0ee8f9acf97 into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+          "timestamp": "2026-10-30T09:29:03Z",
+          "message": "Merge a89c51aeba227f3e75d84a25d4316547bd41d93f into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+        },
+        {
+          "sha": "a89c51aeba227f3e75d84a25d4316547bd41d93f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:28:50-06:00",
+          "message": "fix(daemon): a catch-up re-reads watch_file sources, and the row stands while the span is open (brandon-unfiled-3248.y66h)\n\nA `watch_file` source watches through its directory on the same OS stream\nthe probe tests, so a stall silenced it too, and nothing re-read it when\nevents resumed. Every registry now subscribes to the delivery owner's\ncatch-ups, and a catch-up fires each watched file's subscribers as its own\nwatch would have.\n\nThe bar's row and daemon-stats' line derive from the unvouched span, not\nthe state's label: a probe that landed after a stall is not one heard, so\ndelivering with the span open still warns, and the stats line names the\nspan's start in every state.\n\nThe causes that reload every entry are their own type, so a single entry's\ncause cannot be batched.\n"
         },
         {
           "sha": "315a3feeddef3025027a6322ece1a0ee8f9acf97",

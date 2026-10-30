@@ -48170,6 +48170,15 @@ var WatchManager = class {
       return null;
     }
   }
+  // [LAW:no-silent-failure] Events the watches may have missed: each watch
+  // re-derives its target, since a directory may have appeared unheard, and
+  // every subscriber re-reads as if its own watch had reported.
+  caughtUp() {
+    for (const [filePath2, entry] of this.watchers) {
+      this.rearm(filePath2, entry);
+      for (const cb of entry.subscribers.keys()) cb();
+    }
+  }
   unsubscribe(filePath2, callback) {
     const entry = this.watchers.get(filePath2);
     if (!entry) return;
@@ -48271,6 +48280,8 @@ function zeroValue(type3) {
   if (type3 === "boolean") return false;
   return "";
 }
+var NO_CATCH_UPS = () => () => {
+};
 var SourceRegistry = class _SourceRegistry {
   // defaultEmptyValue is the global fallback of last resort — the config-level
   // `default_empty_value` from the proposal. Defaults to empty string.
@@ -48278,17 +48289,20 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState2, parent = null, ledger = new RefreshLedger()) {
+  constructor(store, defaultEmptyValue = "", sessionState2, parent = null, ledger = new RefreshLedger(), catchUps = NO_CATCH_UPS) {
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
     this.ledger = ledger;
+    this.catchUps = catchUps;
     this.sessionState = sessionState2;
+    this.cleanups.push(catchUps(() => this.watchMgr.caughtUp()));
   }
   store;
   defaultEmptyValue;
   parent;
   ledger;
+  catchUps;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -48382,7 +48396,8 @@ var SourceRegistry = class _SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
-      this.ledger
+      this.ledger,
+      this.catchUps
     );
   }
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -66809,29 +66824,19 @@ var FileEventDelivery = class {
   }
 };
 function fileEventsWarnings(d) {
-  switch (d.kind) {
-    case "delivering":
-      return [];
-    case "stalled":
-      return [
-        {
-          kind: "file-events",
-          state: "stalled",
-          message: `file events stopped at ${iso(d.missedSince)}: the OS has delivered no file event since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume`
-        }
-      ];
-    // With no span open nothing can have gone unheard: only an owner never
-    // started is unmeasured without one, and its host (the page's simulated
-    // machine) watches nothing that an edit could depend on.
-    case "unmeasured":
-      return d.missedSince === null ? [] : [
-        {
-          kind: "file-events",
-          state: "unmeasured",
-          message: `the daemon cannot check whether file events are arriving: ${d.reason}, since ${iso(d.missedSince)}`
-        }
-      ];
-  }
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message = () => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+      case "stalled":
+        return `file events stopped at ${since}: the OS has delivered no file event since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume`;
+      case "unmeasured":
+        return `the daemon cannot check whether file events are arriving: ${d.reason}, since ${since}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message() }];
 }
 
 // src/daemon/client-stats.ts
@@ -76247,7 +76252,8 @@ function buildRenderState(load, deps) {
     config2.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
-    deps.ledger
+    deps.ledger,
+    deps.catchUps
   );
   let registration;
   try {
@@ -79948,6 +79954,11 @@ var renderCache = new RenderCache(
     storage: managedStorage,
     signer: linkSigner2,
     ledger: refreshLedger,
+    // [LAW:single-enforcer] The delivery owner's catch-ups, which a
+    // `watch_file` source's watch, riding the same OS stream, may have missed.
+    catchUps: (caughtUp) => fileEvents.subscribe((notice) => {
+      if (notice.kind === "caught-up") caughtUp();
+    }),
     declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
     // derived over its declaration, its picks and its histories' depths.
