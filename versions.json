@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5b44ba9e047f7fd59d83562b39c5d23776c81d14",
+      "timestamp": "2026-10-30T18:47:31.288Z",
+      "commits": [
+        {
+          "sha": "5b44ba9e047f7fd59d83562b39c5d23776c81d14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:46:37-06:00",
+          "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014) (#505)\n\n* feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n\n* fix(feed): the viewer over a moving bar is drawn as the still text it is, and a wake's timer is set from one wall reading (candybar-animation-wbxz.014)\n\n- The diagnostics viewer takes the body's place, so the body's next change is\n  the viewer's (never) rather than the hidden bar's beat; a feed no longer\n  redraws an open viewer 30 times a second.\n- `arm` measures its wait from the caller's wall reading, so `hasten` no longer\n  rebuilds its due instant from a second, truncated one.\n- A test pins the closing flash's start and turns to the same host instant at\n  1x, 5x and 20x.\n- The rendering memory line names the concept, not the template functions.\n\n* fix(config): the effort gauge evaluates max's climbing colour only where it draws it, so a still rung never claims to move (candybar-animation-wbxz.014)\n\nA stepped colour tells the frame its next change when it is evaluated, drawn\nor not. The gauge computed max's climbing colour at every level, so the\nbundled bar at any effort below max reported motion: the doctor called it\nmoving, and a feed at 5x or 20x redrew it at that beat. Max's colour and\nframes now sit in max's branch; the bubble is still computed at every level.\n\nAlso renames the feed's clamped on-screen period, which read as a boolean.\n\n* docs(feed): the rate cell reads as a ceiling in the README, the authoring guide and the feed's comments (candybar-animation-wbxz.014)\n\n* fix(load-gate): the feed criterion reads the feed's ceiling, and a summary field it lacks fails the gate by name (candybar-animation-wbxz.014)"
+        }
+      ]
+    },
+    {
       "version": "pr-506",
       "ref": "refs/pull/506/merge",
       "sha": "0e03131977dec82e57d7e0939d21b997d1f77518",
@@ -52,56 +67,6 @@
       ]
     },
     {
-      "version": "pr-505",
-      "ref": "refs/pull/505/merge",
-      "sha": "f054ace71591756bd6044137fd50a481527d6cdd",
-      "timestamp": "2026-10-30T18:42:10.404Z",
-      "commits": [
-        {
-          "sha": "f054ace71591756bd6044137fd50a481527d6cdd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:41:29Z",
-          "message": "Merge d8a570fc9372136922cfa30e1233ac165180d95a into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
-        },
-        {
-          "sha": "d8a570fc9372136922cfa30e1233ac165180d95a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:41:17-06:00",
-          "message": "fix(load-gate): the feed criterion reads the feed's ceiling, and a summary field it lacks fails the gate by name (candybar-animation-wbxz.014)\n"
-        },
-        {
-          "sha": "154dc8ed0773f229988ae12db7eb44a489b9eb50",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:32:52-06:00",
-          "message": "docs(feed): the rate cell reads as a ceiling in the README, the authoring guide and the feed's comments (candybar-animation-wbxz.014)\n"
-        },
-        {
-          "sha": "a0173d2d14d610d5fb1289b970e18f66cd6c74e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:24:05-06:00",
-          "message": "fix(config): the effort gauge evaluates max's climbing colour only where it draws it, so a still rung never claims to move (candybar-animation-wbxz.014)\n\nA stepped colour tells the frame its next change when it is evaluated, drawn\nor not. The gauge computed max's climbing colour at every level, so the\nbundled bar at any effort below max reported motion: the doctor called it\nmoving, and a feed at 5x or 20x redrew it at that beat. Max's colour and\nframes now sit in max's branch; the bubble is still computed at every level.\n\nAlso renames the feed's clamped on-screen period, which read as a boolean.\n"
-        },
-        {
-          "sha": "1d116f3a0ad82886f5adde98862ca1e42f38963e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:12:56-06:00",
-          "message": "fix(feed): the viewer over a moving bar is drawn as the still text it is, and a wake's timer is set from one wall reading (candybar-animation-wbxz.014)\n\n- The diagnostics viewer takes the body's place, so the body's next change is\n  the viewer's (never) rather than the hidden bar's beat; a feed no longer\n  redraws an open viewer 30 times a second.\n- `arm` measures its wait from the caller's wall reading, so `hasten` no longer\n  rebuilds its due instant from a second, truncated one.\n- A test pins the closing flash's start and turns to the same host instant at\n  1x, 5x and 20x.\n- The rendering memory line names the concept, not the template functions.\n"
-        },
-        {
-          "sha": "6e7fa0d4cd6556b9a61f82d0801b45ced042e297",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:53:27-06:00",
-          "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-507",
       "ref": "refs/pull/507/merge",
       "sha": "36f7f114b505326a6ba6b92f542e7ed4585e614a",
@@ -127,28 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T12:31:45-06:00",
           "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7cc276c0c16ac5e07c5f963f30318fa6c43d9370",
-      "timestamp": "2026-10-30T18:22:29.043Z",
-      "commits": [
-        {
-          "sha": "7cc276c0c16ac5e07c5f963f30318fa6c43d9370",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:21:37-06:00",
-          "message": "refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl) (#504)\n\n* refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl)\n\nEach chain layer is {path, scope}, the scope decided once where discovery\nfinds the file. repoLayers is gone from the resolution, the durable home,\nthe session, the render cache's chain and its load key, and the loader\nreads layer.scope instead of testing path membership. Hand-built chains\n(check's explicit file, demo, gallery, bench, the durable writer's home)\nstate the user's scope through one helper, homeLayer.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(config): check reports scoped layers, and a load reports the chain it loaded (candybar-plugins-vf6g.chl)\n\nReview: the check outcome dropped each layer's scope, so callers rebuilt a\ndifferent chain from it; an explicit check took its layer by hand instead of\nthe resolution's; the load frame carried a second copy of the chain's paths.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(check): a cwd config in an approved repository is a repo layer (candybar-plugins-vf6g.chl)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(check): an explicit target is one layer, spelled once (candybar-plugins-vf6g.chl)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "f4289b24e290bb2dc07824ccd2014938750a5c6e",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T18:15:35Z",
-          "message": "chore(release): set `package.json` to 1.167.1 [skip ci]\n\n## [1.167.1](https://github.com/promptctl/cc-candybar/compare/v1.167.0...v1.167.1) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30) ([#503](https://github.com/promptctl/cc-candybar/issues/503)) ([e03723c](https://github.com/promptctl/cc-candybar/commit/e03723ccfd5e2ed7bcd921e08ab6228dc1949671))\n"
         }
       ]
     },
