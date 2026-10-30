@@ -2154,10 +2154,11 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const { targets, unresolved, key: bound } = watchTargetsFor(entry);
+    const paths = watchTargetsFor(entry);
+    const { targets, unresolved } = paths;
     // [LAW:one-source-of-truth] The key names the target set and the folders
     // it binds, so the registry's `follow` rebinds exactly when either moved.
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${bound}`;
+    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths.key}`;
     // [LAW:single-enforcer] One reload dispatcher per cache entry: any
     // change the entry's watch hears re-resolves its whole chain (so a
     // higher-precedence file appearing supersedes a lower one) and reloads.
@@ -2166,7 +2167,7 @@ export class RenderCache<
     // on the reload's cause.
     const { watch, move } = this.deps.watchers.follow(
       entry.watch,
-      { key, targets },
+      { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
     );
     entry.watch = watch;

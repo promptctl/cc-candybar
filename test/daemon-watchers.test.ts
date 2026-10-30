@@ -83,7 +83,7 @@ describe("WatcherRegistry", () => {
     const reg = new WatcherRegistry({ counters });
     const first = reg.follow(
       null,
-      { key: "a", targets: { dirs: [] } },
+      { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
     );
     expect(first.move).toBe("rebound");
@@ -91,7 +91,7 @@ describe("WatcherRegistry", () => {
 
     const kept = reg.follow(
       first.watch,
-      { key: "a", targets: { dirs: [] } },
+      { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
     );
     expect(kept.move).toBe("kept");
@@ -100,11 +100,21 @@ describe("WatcherRegistry", () => {
 
     const rebound = reg.follow(
       kept.watch,
-      { key: "b", targets: { dirs: [] } },
+      { key: "b", targets: { dirs: [] }, unbound: false },
       () => {},
     );
     expect(rebound.move).toBe("rebound");
     expect(rebound.watch.key).toBe("b");
+
+    // A spec naming a directory that binds nothing yet keeps the watch held,
+    // whatever its key: the derive that finds the directory there rebinds.
+    const unbound = reg.follow(
+      rebound.watch,
+      { key: "c", targets: { dirs: [] }, unbound: true },
+      () => {},
+    );
+    expect(unbound.move).toBe("kept");
+    expect(unbound.watch).toBe(rebound.watch);
     // The watch under the old key is released; one slot is held, the new one.
     expect(reg.size()).toBe(1);
     expect(counters).toEqual({
@@ -249,6 +259,39 @@ describe("WatcherRegistry", () => {
         { kind: "failed", reason: "/w: EMFILE: too many open files" },
       ]);
       expect(counters).toMatchObject({ watchersOpened: 1, watchErrors: 1 });
+      reg.closeAll();
+    } finally {
+      watch.mockRestore();
+    }
+  });
+
+  // The OS reports a watched directory's own removal or rename under its own
+  // name, which no name filter lists; without it, a watch bound to a removed
+  // directory never tells its consumer to derive the watch again.
+  test("a name-filtered directory hears its own removal, and no write to a child of its name", async () => {
+    let listener: (event: string, changed: string | null) => void = () => {};
+    const fake = Object.assign(new EventEmitter(), { close: () => {} });
+    const watch = jest.spyOn(fs, "watch").mockImplementation(((
+      _dir: string,
+      _opts: unknown,
+      l: typeof listener,
+    ) => {
+      listener = l;
+      return fake;
+    }) as unknown as typeof fs.watch);
+    try {
+      const reg = new WatcherRegistry({ logger: () => {} });
+      const seen: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: "/w/conf", filenames: ["config.json5"] }] }, (inv) => seen.push(inv));
+      listener("change", "conf");
+      listener("rename", "config.json5");
+      await until(() => seen.length === 1, "the watched name's invalidation");
+      listener("rename", "conf");
+      await until(() => seen.length === 2, "the removal's invalidation");
+      expect(seen).toEqual([
+        { kind: "changed", paths: new Set(["/w/conf/config.json5"]) },
+        { kind: "changed", paths: new Set(["/w/conf/conf"]) },
+      ]);
       reg.closeAll();
     } finally {
       watch.mockRestore();

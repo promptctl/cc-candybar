@@ -305,7 +305,7 @@ type DirState =
   | {
       readonly kind: "open";
       readonly handle: FSWatcher;
-      readonly bound: string;
+      readonly bound: string | null;
     }
   | { readonly kind: "failed"; readonly reason: string };
 
@@ -346,36 +346,36 @@ class WatchManager {
 
   private arm(filePath: string): WatchEntry {
     const entry: WatchEntry = {
-      watch: {
-        targets: { dirs: [] },
-        bound: new Map(),
-        key: "",
-        reached: false,
-        unresolved: [],
-      },
+      watch: derived(filePath),
       dirs: new Map(),
       subscribers: new Map(),
     };
     this.entries.set(filePath, entry);
-    this.rederive(filePath, entry);
+    this.settle(filePath, entry);
     return entry;
   }
 
-  // Derive where the path can change from disk ONCE, and bring the
-  // directories to it: one in the set and not listening to the folder at its
-  // path now (new, failed, or bound to one since removed and made again) is
-  // opened; one no longer in the set is closed; one listening to it keeps its
-  // handle, since opening and closing a directory watch is not free on macOS
-  // (see the watcher registry). A refusal is the watch's standing fault, and
-  // a failed directory is tried again only here — at an event on another of
-  // the entry's directories, or the daemon's catch-up — never in a loop: the
-  // OS refuses an immediate retry the same way.
   private rederive(filePath: string, entry: WatchEntry): void {
-    entry.watch = watchTargetsOf({ named: [filePath], whole: [filePath] });
+    entry.watch = derived(filePath);
+    this.settle(filePath, entry);
+  }
+
+  // Bring the directories to where the path can change, as last derived: one
+  // in the set and not listening to the folder at its path now (new, failed,
+  // or bound to one since removed and made again) is opened; one no longer in
+  // the set is closed; one listening to it keeps its handle, since opening and
+  // closing a directory watch is not free on macOS (see the watcher registry),
+  // and so does one whose folder binds nothing right now, as the registry's
+  // `follow` keeps a held watch. A refusal is the watch's standing fault, and
+  // a failed directory is tried again only at a re-derive — an event on
+  // another of the entry's directories, or the daemon's catch-up — never in a
+  // loop: the OS refuses an immediate retry the same way.
+  private settle(filePath: string, entry: WatchEntry): void {
     const wanted = entry.watch.bound;
     for (const [dir, bound] of wanted) {
       const held = entry.dirs.get(dir);
-      if (held?.kind === "open" && held.bound === bound) continue;
+      if (held?.kind === "open" && (bound === null || held.bound === bound))
+        continue;
       if (held?.kind === "open") held.handle.close();
       entry.dirs.set(dir, this.open(filePath, entry, dir, bound));
     }
@@ -393,13 +393,15 @@ class WatchManager {
     filePath: string,
     entry: WatchEntry,
     dir: string,
-    bound: string,
+    bound: string | null,
   ): DirState {
     const self = path.basename(dir);
     try {
       const handle = fs.watch(dir, (_event, changed) => {
         // A platform that reports no name could be reporting anything here.
-        // The directory's own removal or rename reports its own name.
+        // The directory's own removal or rename reports its own name, as a
+        // rename on Linux and as a change on macOS, where a child coming or
+        // going reports the same and costs a re-derive.
         if (changed !== null && changed !== self && !hears(entry, dir, changed))
           return;
         const wasLeaf = entry.watch.reached;
@@ -465,6 +467,11 @@ class WatchManager {
     return this.entries.size;
   }
 }
+
+// Where the path can change: every hop of its link chain by name, and the
+// path itself when it is a directory.
+const derived = (filePath: string): PathsWatch =>
+  watchTargetsOf({ named: [filePath], whole: [filePath] });
 
 // Whether `changed`, a name the OS reported in `dir`, is one the entry
 // watches there now: a link re-pointed to a new name beside the old one
