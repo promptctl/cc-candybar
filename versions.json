@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-489",
+      "ref": "refs/pull/489/merge",
+      "sha": "80ab2cbae420b1dd36996f1b3cfd3d550f107653",
+      "timestamp": "2026-10-30T10:51:59.041Z",
+      "commits": [
+        {
+          "sha": "80ab2cbae420b1dd36996f1b3cfd3d550f107653",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:51:06-06:00",
+          "message": "Merge 40228c191e06cf02de583f93a1b92e350d654a82 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
+        },
+        {
+          "sha": "40228c191e06cf02de583f93a1b92e350d654a82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:49:53-06:00",
+          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-488",
       "ref": "refs/pull/488/merge",
       "sha": "fb224891913c5ec7d0616afa2844db749e1c358e",
