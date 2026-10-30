@@ -3,6 +3,7 @@
 // transport (site/transport.ts) that runs the daemon's own modules in the page
 // over a simulated Node (site/shims).
 import { build } from "esbuild";
+import { landscapeDir } from "./landscape-dir.mjs";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,12 +37,8 @@ mkdirSync(dist, { recursive: true });
 const page = path.join(here, "..", "scripts", "bar-web");
 for (const f of ["index.html", "rich-powerline.woff2", "FONT-LICENSE"]) copyFileSync(path.join(page, f), path.join(dist, f));
 
-// Where the deploy publishes the landscape explorer below this page; unset, the page links to none.
-// [LAW:no-silent-failure] a path that is not plain folders below this page would link outside it.
-const landscapeDir = process.env.LANDSCAPE_DIR;
-if (landscapeDir !== undefined && !/^[a-z0-9-]+(\/[a-z0-9-]+)*$/.test(landscapeDir))
-  throw new Error(`LANDSCAPE_DIR must be folders below the live bar, like "landscape"; got ${JSON.stringify(landscapeDir)}`);
-const landscape = landscapeDir === undefined ? null : landscapeDir + "/";
+const explorer = landscapeDir();
+const landscape = explorer === null ? null : explorer + "/";
 
 const result = await build({
   entryPoints: [path.join(here, "transport.ts")],
