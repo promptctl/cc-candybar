@@ -4,65 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1925439a3e6f32b37877fb421b084c970ac4ae7f",
-      "timestamp": "2026-10-30T15:40:26.522Z",
+      "sha": "fe783f48728a83116d74cf3674e4695aff77fd76",
+      "timestamp": "2026-10-30T15:46:34.330Z",
       "commits": [
         {
-          "sha": "1925439a3e6f32b37877fb421b084c970ac4ae7f",
+          "sha": "fe783f48728a83116d74cf3674e4695aff77fd76",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:39:33-06:00",
-          "message": "refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr) (#498)\n\n* refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr)\n\nThe var-system's own watch manager opened, filtered, failed and closed its\nfs.watch handles beside the watcher registry, so its handles never reached\nthe daemon's counters or log. It is gone: a watch_file path follows its\nspec through the registry's `follow`, as the config and git watches do.\n\nThe registry gains what that needed, as rules for every consumer:\n- one OS handle per directory, refcounted by the slots on it, and `follow`\n  acquires before it releases, so a key move (a link re-pointed to a new\n  name) keeps every directory both keys name open;\n- a directory made again at its path is reopened in place when a slot\n  acquires it; a deaf one is reopened only through `listening`, which only\n  watch_file calls, at a real event on a kept watch, never on a failed one;\n- every holder of a key hears each window; a directory going deaf is told\n  to every slot on it; the handle's `deaf` list is live;\n- a directory's own name under a name filter is judged by the folder at the\n  path, not the event type; an unnamed event under a filter is `unknown`;\n- daemon-stats counts directory handles opened, closed and open beside the\n  slots, and the registry logs every open, close and reopen with its cause.\n\n* fix(watchers): a directory watch follows the folder at its path, and every slot on it hears it recover (brandon-unfiled-3248.pijr)\n\nReview of #498:\n- An event naming a directory whose folder was made again moves the handle\n  onto the new folder, so later own-name events (macOS: a child came or went)\n  no longer pass every name filter.\n- A reopen that listens tells every slot an unknown window, so a shared\n  directory's other holders re-read what went unheard and clear their fault.\n- Joining a slot refreshes its directories as opening one does, so a rebind\n  onto a key another holder owns retries its deaf directory.\n- Managed storage judges an unknown window against the disk: it may hold the\n  folder's own event.\n- watch_file's follow-then-retry is one step, the window's cause its input.\n\n* fix(watchers): a directory's state is its current handle's to change (brandon-unfiled-3248.pijr)\n\nReview of #498 (medium):\n- An error or event from a handle a reopen replaced no longer marks the\n  directory deaf or fires its slots; the bound folder is read from the\n  current state, not a closure copy.\n- One predicate says whether a path binds a folder, for the watch key and\n  the refresh.\n- The follow comment says where a deaf directory is retried; the memory\n  lines say the handle follows a folder made again, and why storage still\n  recovers through a reload.\n\n* fix(watchers): a retry reopens deaf directories and judges no folder's identity (brandon-unfiled-3248.pijr)\n\nReview of #498 (second high):\n- listening retries deaf directories only. Judging identity there gave the\n  reopen's unknown window a path back to another reopen wherever a folder's\n  identity is unstable; a moved folder is the next derive's new key, which\n  acquires and refreshes.\n- The config and git bind log lines say deaf=, which counts directories\n  that failed after opening as well as those refused.\n\n* test(git-cache): a looped git directory's open count is the platform's, as its deaf count is (brandon-unfiled-3248.pijr)\n\nLinux's recursive watcher swallows the symlink loop under refs/heads and\nopens it; macOS refuses it. The directory watches opened are the targets\nless the deaf ones, read from the bind line."
-        }
-      ]
-    },
-    {
-      "version": "pr-492",
-      "ref": "refs/pull/492/merge",
-      "sha": "7d5e55ba3b727b5fd9ca37e7ab754ec412f8fa59",
-      "timestamp": "2026-10-30T15:39:40.316Z",
-      "commits": [
-        {
-          "sha": "7d5e55ba3b727b5fd9ca37e7ab754ec412f8fa59",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:38:47Z",
-          "message": "Merge 0f84912385290c52e9afd3f038ba9c36b05df507 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
-        },
-        {
-          "sha": "0f84912385290c52e9afd3f038ba9c36b05df507",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:18:47-06:00",
-          "message": "test(colour): the menu bytes draw the named activated shades over rich-js 0.25's arrows (candybar-joiners-e5r4.dg6)\n"
-        },
-        {
-          "sha": "8e67e21adcb1551569bcffe0a5768edbb766bbd1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:02:23-06:00",
-          "message": "test(colour): drop the DecorEntry import the deleted row-ground test left unread (candybar-joiners-e5r4.dg6)\n"
-        },
-        {
-          "sha": "beb730cb0ddf5572d4fc57d3d1c9ec9925db633b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:02:20-06:00",
-          "message": "docs(colour): the colour design doc states the open menu's named shades, not the search they replaced (candybar-joiners-e5r4.dg6)\n\nCOLOUR-FROM-THEME-VOCABULARY.md is ACTIVE and is where the colour memory\nsends a reader for the rationale, but its rule, region table and\ndisclosure rules still described the state search, the plane's\nrecession and the floors as current. They now state the selected\nshades; a dg6 entry in Decisions says what it supersedes and points to\nPROPOSAL-joiners.md for why, and \"What was deleted\" lists the symbols.\n"
-        },
-        {
-          "sha": "51907687182fe24e818c5b1114d0d38bdf2387e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:46:46-06:00",
-          "message": "test(colour): the palette-identity walk names its one exemption, and why authored backgrounds need none (candybar-joiners-e5r4.dg6)\n"
-        },
-        {
-          "sha": "2cdc592b01318c57cacc20530c0b16e019233dc4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:38:08-06:00",
-          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
+          "timestamp": "2026-10-30T09:45:45-06:00",
+          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6) (#492)\n\n* fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n\n* test(colour): the palette-identity walk names its one exemption, and why authored backgrounds need none (candybar-joiners-e5r4.dg6)\n\n* docs(colour): the colour design doc states the open menu's named shades, not the search they replaced (candybar-joiners-e5r4.dg6)\n\nCOLOUR-FROM-THEME-VOCABULARY.md is ACTIVE and is where the colour memory\nsends a reader for the rationale, but its rule, region table and\ndisclosure rules still described the state search, the plane's\nrecession and the floors as current. They now state the selected\nshades; a dg6 entry in Decisions says what it supersedes and points to\nPROPOSAL-joiners.md for why, and \"What was deleted\" lists the symbols.\n\n* test(colour): drop the DecorEntry import the deleted row-ground test left unread (candybar-joiners-e5r4.dg6)\n\n* test(colour): the menu bytes draw the named activated shades over rich-js 0.25's arrows (candybar-joiners-e5r4.dg6)"
         }
       ]
     },

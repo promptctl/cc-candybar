@@ -37529,19 +37529,22 @@ var ladderWindow = (from) => ({
   // rungs up a ladder of seven; the `!`s state that, they do not guard it.
   tones: [LADDER[from], LADDER[from + 2], LADDER[from + 1]],
   text: poleText,
-  quantize: "point"
+  quantize: "point",
+  activated: "muted"
 });
 var centredWindow = (apart) => ({
   // [LAW:no-defensive-null-guards] The role is rung 3 of seven; a window up to
   // three rungs each side stays on the ladder.
   tones: [LADDER[3 - apart], LADDER[3 + apart], LADDER[3]],
   text: poleText,
-  quantize: "point"
+  quantize: "point",
+  activated: "muted"
 });
 var pairWindow = (apart) => ({
   tones: [LADDER[3 - apart], LADDER[3 + apart]],
   text: poleText,
-  quantize: "bin"
+  quantize: "bin",
+  activated: "muted"
 });
 var TRIAL_SHADES = {
   wide: centredWindow(2),
@@ -37551,7 +37554,12 @@ var TRIAL_SHADES = {
 };
 var TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES);
 var SHADES = {
-  muted: { tones: ["muted"], text: roleText, quantize: "point" },
+  muted: {
+    tones: ["muted"],
+    text: roleText,
+    quantize: "point",
+    activated: "lighten-2"
+  },
   deepest: ladderWindow(0),
   deeper: ladderWindow(1),
   middle: ladderWindow(2),
@@ -37660,9 +37668,6 @@ function rowAndCell(address) {
 var rowStart = (variation, row2) => inBin(placementOf(row2), variation.hues.length);
 function decorEntryFor(decor, address) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
-  return entryAt(decor, row2, cell3);
-}
-function entryAt(decor, row2, cell3) {
   const { hues, run: run3, keystones } = decor.variation;
   const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
   const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
@@ -37681,17 +37686,7 @@ var KEYSTONE_AT = {
   "line-start": (_row, cell3) => (cell3?.index ?? 0) === 0,
   "line-end": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.count - 1
 };
-function rowGround(decor, address) {
-  const { row: row2, cell: cell3 } = rowAndCell(address);
-  const cells = cell3 === void 0 ? [void 0] : Array.from({ length: cell3.count }, (_, index) => ({ ...cell3, index }));
-  const worn = new Map(
-    cells.map((c) => entryAt(decor, row2, c)).map((entry) => [shadeRole(entry.hue, entry.shade), entry])
-  );
-  return [...worn.values()].sort(
-    (a, b) => DECOR_HUES.indexOf(a.hue) - DECOR_HUES.indexOf(b.hue) || ROLE_SHADES.indexOf(a.shade) - ROLE_SHADES.indexOf(b.shade)
-  );
-}
-var ROLE_SHADES = [...LADDER, "muted"];
+var PLANE_ROLE = "surface";
 function paletteRole(palette, role) {
   const colour = palette.get(role);
   if (colour === void 0) {
@@ -37702,110 +37697,6 @@ function paletteRole(palette, role) {
   return colour;
 }
 var decorEntryColour = (palette, entry) => paletteRole(palette, shadeRole(entry.hue, entry.shade));
-var STATE_FLOOR = 2.2;
-var STATE_STEPS = 12;
-var RAY_HALVINGS = 24;
-var groundCells = (palette, ground) => ground.map((entry) => decorEntryColour(palette, entry));
-var shownAt2 = (drawnAt) => (c) => drawnColour(c, drawnAt);
-var shownTrue = shownAt2(ColorDepth.TRUECOLOR);
-var toldFrom = (c, others) => others.every((other) => deltaE(c, other) >= SEAM_MIN_DELTA_E);
-function stateFor(palette, hue, cells, apart, drawnAt) {
-  return STATES(
-    palette,
-    `${hue}|${cells.map((c) => c.hex).join("+")}|${apart.map((c) => c.hex).join("+")}|${drawnAt}`,
-    () => searchState(palette, hue, cells, apart, drawnAt)
-  );
-}
-var STATES = memoPerPalette();
-function searchState(palette, hue, among, apart, drawnAt) {
-  const cells = among.map(shownTrue);
-  const told = apart.map(shownTrue);
-  const pure = paletteRole(palette, hue);
-  const black = Oklch.fromRgba(new ColorRgba(0, 0, 0));
-  const white = Oklch.fromRgba(new ColorRgba(255, 255, 255));
-  const hueLch = Oklch.fromRgba(pure);
-  const along = (end, t2) => hueLch.mixAxes(end, { l: t2, c: 0, h: 0, alpha: 0 }).toRgba();
-  const ray = (end) => Array.from(
-    { length: STATE_STEPS },
-    (_, k) => along(end, (k + 1) / STATE_STEPS)
-  );
-  const toBlack = ray(black);
-  const candidates = [
-    pure,
-    // [LAW:no-defensive-null-guards] Both rays are one length by construction.
-    ...ray(white).flatMap((c, k) => [c, toBlack[k]])
-  ];
-  const standsAt = (depth) => {
-    const shown2 = shownAt2(depth);
-    const drawn = cells.map(shown2);
-    return (c) => Math.min(Infinity, ...drawn.map((cell3) => contrastRatio(shown2(c), cell3)));
-  };
-  const standsTrue = standsAt(ColorDepth.TRUECOLOR);
-  const standsAsDrawn = standsAt(drawnAt);
-  const shown = shownAt2(drawnAt);
-  const cellsDrawn = cells.map(shown);
-  const drawnClear = (these) => {
-    const theseDrawn = these.map(shown);
-    return (c) => ensureDrawn(
-      c,
-      drawnAt,
-      (candidate) => cellsDrawn.every(
-        (cell3) => contrastRatio(candidate, cell3) >= STATE_FLOOR
-      ) && toldFrom(candidate, theseDrawn)
-    );
-  };
-  const clears = (these) => {
-    const drawn = drawnClear(these);
-    return (c) => standsTrue(c) >= STATE_FLOOR && toldFrom(shownTrue(c), these) && drawn(c) !== void 0;
-  };
-  const stepsApart = (a, b) => Math.abs(a.red - b.red) + Math.abs(a.green - b.green) + Math.abs(a.blue - b.blue);
-  const drawable3 = (end, sign) => {
-    const start = along(end, 0);
-    const offers = [{ s: 0, colour: start }];
-    const walk3 = (t0, c0, t1, c1, depth) => {
-      if (stepsApart(c0, c1) > 1 && depth < RAY_HALVINGS) {
-        const tm = (t0 + t1) / 2;
-        const cm = along(end, tm);
-        walk3(t0, c0, tm, cm, depth + 1);
-        walk3(tm, cm, t1, c1, depth + 1);
-      } else if (stepsApart(c0, c1) > 0) {
-        offers.push({ s: sign * t1, colour: c1 });
-      }
-    };
-    walk3(0, start, 1, along(end, 1), 0);
-    return offers;
-  };
-  const fine = () => {
-    const offered = new Set(candidates.map((c) => c.hex));
-    const colours = [];
-    for (const { colour } of [
-      ...drawable3(white, 1),
-      ...drawable3(black, -1)
-    ].sort((a, b) => Math.abs(a.s) - Math.abs(b.s))) {
-      if (!offered.has(colour.hex)) {
-        offered.add(colour.hex);
-        colours.push(colour);
-      }
-    }
-    return colours;
-  };
-  let fineOffers;
-  const fineOnce = () => fineOffers ??= fine();
-  const meeting = (these) => {
-    const ok3 = clears(these);
-    return candidates.find(ok3) ?? fineOnce().find(ok3);
-  };
-  const chosen = meeting(told) ?? meeting([]) ?? [...candidates, ...fineOnce()].reduce(
-    (a, b) => standsAsDrawn(b) > standsAsDrawn(a) ? b : a
-  );
-  const state = drawnClear(told)(chosen) ?? drawnClear([])(chosen) ?? chosen;
-  const stands = standsAsDrawn(state);
-  return {
-    anchor: chosen,
-    state,
-    short: stands >= STATE_FLOOR ? null : stands
-  };
-}
 var TEXT_MIN_CONTRAST = 4.5;
 function textOn(palette, background, drawnAt) {
   return POLE_TEXT(palette, `${background.hex}|${drawnAt}`, () => {
@@ -37830,249 +37721,31 @@ var bandEntries = (disclosure) => disclosure.decor.shade.tones.map((shade) => ({
   hue: hueOf2(disclosure),
   shade
 }));
-function standsAmong(palette, disclosure, drawnAt) {
-  return disclosure.depth === 0 ? groundCells(palette, disclosure.ground) : [
-    ...enclosingPlane(palette, disclosure, drawnAt),
-    searchOf(
-      palette,
-      { ...disclosure, depth: disclosure.depth - 1 },
-      drawnAt
-    ).state
-  ];
-}
-var enclosingPlane = (palette, disclosure, drawnAt) => disclosure.depth === 0 ? [] : [
-  unroundedBand(
-    palette,
-    { ...disclosure, depth: disclosure.depth - 1 },
-    drawnAt
-  ).plane
-];
-var searchOf = (palette, disclosure, drawnAt) => stateFor(
-  palette,
-  hueOf2(disclosure),
-  standsAmong(palette, disclosure, drawnAt),
-  toldApart(palette, disclosure),
-  drawnAt
-);
-var toldApart = (palette, disclosure) => [
-  disclosure,
-  ...disclosure.depth === 0 ? [] : [{ ...disclosure, depth: disclosure.depth - 1 }]
-].flatMap((band) => groundCells(palette, bandEntries(band)));
 var nestedIn = (disclosure) => ({
   ...disclosure,
   depth: disclosure.depth + 1
 });
-var stateShortfall = (palette, disclosure, { short }, drawnAt) => short === null ? [] : [
-  `theme "${palette.name}": no open-trigger colour stands ${STATE_FLOOR}:1 off every cell beside it \u2014 the nearest stands ${short.toFixed(2)}:1 as drawn at depth ${ColorDepth[drawnAt]}; ${STATE_REMEDY[disclosure.depth === 0 ? "bar" : "band"]} clears it`
-];
-var STATE_REMEDY = {
-  bar: "another shade or variation",
-  band: "another shade or style"
-};
-var planeShortfall = (palette, apart, drawnAt) => apart >= BAND_FLOORS.triggerPlane ? [] : [
-  `theme "${palette.name}": an open band's plane stands \u0394E ${apart.toFixed(3)} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the ${BAND_FLOORS.triggerPlane} that tells them apart; another style clears it`
-];
-var BAND_RECESSION = {
-  base: 0.42,
-  perDepth: 0.14,
-  cap: 0.75
-};
-var BAND_FLOORS = {
-  triggerPlane: 0.1,
-  nestedPlane: 0.035
-};
-function bandFor(palette, disclosure, drawnAt) {
-  return BANDS(palette, `${disclosureKey(disclosure)}|${drawnAt}`, () => {
-    const search = searchOf(palette, disclosure, drawnAt);
-    const { state } = search;
-    const nested = searchOf(palette, nestedIn(disclosure), drawnAt);
-    const floors = planeFloors(palette, disclosure, state, nested, drawnAt);
-    const plane = ensureDrawn(
-      unroundedBand(palette, disclosure, drawnAt).plane,
-      drawnAt,
-      (candidate, drawn) => floors.every((holds2) => holds2(candidate, drawn))
-    );
-    if (plane === void 0) {
-      throw new Error(
-        `palette "${palette.name}": the ${hueOf2(disclosure)} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`
-      );
-    }
-    const items = drawnItems(
-      palette,
-      disclosure,
-      { state, plane },
-      nested,
-      drawnAt
-    );
-    const asDrawn = shownAt2(drawnAt);
-    return {
-      state,
-      plane,
-      items,
-      // No floor is measurable where nothing is drawn in colour (`none` draws
-      // at DEFAULT, `drawnDepth`), so nothing there stands short of one.
-      shortfalls: drawnAt === ColorDepth.DEFAULT ? [] : [
-        ...stateShortfall(palette, disclosure, search, drawnAt),
-        ...planeShortfall(
-          palette,
-          deltaE(asDrawn(state), asDrawn(plane)),
-          drawnAt
-        ),
-        ...seamShortfalls(
-          palette,
-          drawnSeams(
-            palette,
-            disclosure,
-            { state, plane, items },
-            drawnAt
-          ),
-          drawnAt
-        )
-      ]
-    };
-  });
-}
-var BANDS = memoPerPalette();
-var disclosureKey = ({ decor, depth, ground }) => `${decorKey(decor)}|${depth}|${ground.map((e) => shadeRole(e.hue, e.shade)).join("+")}`;
-var decorKey = ({ variation, shade }) => [
-  variation.hues.join(","),
-  variation.run,
-  variation.keystones.join(","),
-  variation.open.join(","),
-  shade.tones.join(","),
-  shade.quantize
-].join("/");
-var deltaE = (a, b) => Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
-var drawnSeams = (palette, disclosure, { state, plane, items }, drawnAt) => {
-  const row2 = (b) => [
-    ["trigger", b.state],
-    ...b.items.map((item, i) => [`item ${i + 1}`, item])
-  ];
-  const own2 = row2({ state, items });
-  const enclosing = disclosure.depth === 0 ? [] : row2(
-    bandFor(
-      palette,
-      { ...disclosure, depth: disclosure.depth - 1 },
-      drawnAt
-    )
-  );
-  return [
-    ...own2.flatMap(
-      ([na, a], i) => own2.slice(i + 1).map(([nb, b]) => ({
-        between: `an open band's ${na} and ${nb}`,
-        a,
-        b
-      }))
-    ),
-    ...items.map((item, i) => ({
-      between: `an open band's plane and item ${i + 1}`,
-      a: plane,
-      b: item
-    })),
-    ...enclosing.map(([n, b]) => ({
-      between: `a trigger open in a band and that band's ${n}`,
-      a: state,
-      b
-    }))
-  ];
-};
-var seamShortfalls = (palette, seams, drawnAt) => {
-  const asDrawn = shownAt2(drawnAt);
-  return seams.flatMap(({ between, a, b }) => {
-    const apart = deltaE(asDrawn(a), asDrawn(b));
-    return apart >= SEAM_MIN_DELTA_E ? [] : [
-      `theme "${palette.name}": ${between} stand \u0394E ${apart.toFixed(3)} apart as drawn at depth ${ColorDepth[drawnAt]}, under the ${SEAM_MIN_DELTA_E} below which two cells in those colours are joined by a divider and read as one`
-    ];
-  });
-};
-function drawnItems(palette, disclosure, drawnBand, nested, drawnAt) {
-  const asDrawn = shownAt2(drawnAt);
-  const seen = (others) => (candidate, drawn) => others.every(
-    (other) => deltaE(candidate, drawn(other)) >= SEAM_MIN_DELTA_E
-  );
-  return groundCells(palette, bandEntries(disclosure)).reduce(
-    (placed, item) => [
-      ...placed,
-      ensureDrawn(
-        item,
-        drawnAt,
-        seen([drawnBand.plane, drawnBand.state, nested.state, ...placed])
-      ) ?? asDrawn(item)
-    ],
-    []
-  );
-}
-function unroundedBand(palette, disclosure, drawnAt) {
-  return UNROUNDED_BANDS(
-    palette,
-    `${disclosureKey(disclosure)}|${drawnAt}`,
-    () => computeUnroundedBand(palette, disclosure, drawnAt)
-  );
-}
-var UNROUNDED_BANDS = memoPerPalette();
-function computeUnroundedBand(palette, disclosure, drawnAt) {
-  const { anchor: state } = searchOf(palette, disclosure, drawnAt);
-  const recession = Math.min(
-    BAND_RECESSION.cap,
-    BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth
-  );
-  const into = (pole, amount) => blendRgb(state, paletteRole(palette, pole), amount);
-  const enclosing = enclosingPlane(palette, disclosure, drawnAt);
-  const items = groundCells(palette, bandEntries(disclosure)).map(shownTrue);
-  const holds2 = (told) => (plane) => deltaE(shownTrue(state), shownTrue(plane)) >= BAND_FLOORS.triggerPlane && enclosing.every(
-    (outer) => deltaE(shownTrue(outer), shownTrue(plane)) >= BAND_FLOORS.nestedPlane
-  ) && toldFrom(shownTrue(plane), told);
-  const intoBackground = into("background", recession);
-  const planes = [
-    intoBackground,
-    into("foreground", recession),
-    into("background", BAND_RECESSION.cap),
-    into("foreground", BAND_RECESSION.cap),
-    ...PLANE_STEPS.toSorted(
-      (a, b) => Math.abs(a - recession) - Math.abs(b - recession)
-    ).flatMap((amount) => [
-      into("background", amount),
-      into("foreground", amount)
-    ])
-  ];
+function bandFor(palette, disclosure) {
   return {
-    state,
-    plane: planes.find(holds2(items)) ?? planes.find(holds2([])) ?? intoBackground
+    state: paletteRole(
+      palette,
+      shadeRole(hueOf2(disclosure), disclosure.decor.shade.activated)
+    ),
+    plane: paletteRole(palette, PLANE_ROLE),
+    items: bandEntries(disclosure).map(
+      (entry) => decorEntryColour(palette, entry)
+    )
   };
 }
-var PLANE_STEPS = Array.from({ length: 12 }, (_, i) => (i + 1) / 12);
-function planeFloors(palette, disclosure, state, nested, drawnAt) {
-  const { depth } = disclosure;
-  const unroundedState = (d) => unroundedBand(palette, { ...disclosure, depth: d }, drawnAt).state;
-  const unroundedPlane = (d) => unroundedBand(palette, { ...disclosure, depth: d }, drawnAt).plane;
-  const plane = unroundedPlane(depth);
-  const keptApart = (floor2, other) => deltaE(shownTrue(plane), shownTrue(other)) >= floor2 ? floor2 : 0;
-  const shown = shownAt2(drawnAt);
-  const keptUnder = contrastRatio(shown(nested.state), shown(plane)) >= STATE_FLOOR ? STATE_FLOOR : 0;
-  const apart = (other, floor2) => (candidate, drawn) => deltaE(candidate, drawn(other)) >= floor2;
-  return [
-    apart(state, keptApart(BAND_FLOORS.triggerPlane, unroundedState(depth))),
-    (candidate, drawn) => contrastRatio(candidate, drawn(nested.state)) >= keptUnder,
-    ...groundCells(palette, bandEntries(disclosure)).map(
-      (item) => apart(item, keptApart(SEAM_MIN_DELTA_E, item))
-    ),
-    ...depth > 0 ? [
-      apart(
-        bandFor(palette, { ...disclosure, depth: depth - 1 }, drawnAt).plane,
-        keptApart(BAND_FLOORS.nestedPlane, unroundedPlane(depth - 1))
-      )
-    ] : []
-  ];
-}
-function bandItemFor(palette, disclosure, place, drawnAt) {
+function bandItemFor(palette, disclosure, place) {
   return vocabularySelect(
-    bandFor(palette, disclosure, drawnAt).items,
+    bandFor(palette, disclosure).items,
     place,
     QUANTIZE[disclosure.decor.shade.quantize]
   );
 }
 function bandItem(palette, disclosure, place, drawnAt) {
-  const tint = bandItemFor(palette, disclosure, place, drawnAt);
+  const tint = bandItemFor(palette, disclosure, place);
   return {
     tint,
     text: disclosure.decor.shade.text(
@@ -38097,8 +37770,7 @@ var sameAddress = sameEach(
 var sameDecor = sameBy({ variation: is, shade: is });
 var sameDisclosure = sameBy({
   decor: sameDecor,
-  depth: is,
-  ground: sameEach(sameBy({ hue: is, shade: is }))
+  depth: is
 });
 var sameBarRegion = sameBy({
   kind: is,
@@ -38130,17 +37802,10 @@ function decorationFor(palette, region, drawnAt) {
       const { decor, address } = region;
       const entry = decorEntryFor(decor, address);
       const tint = decorEntryColour(palette, entry);
-      let ground;
       return {
         tint,
         text: decor.shade.text(palette, entry.hue, tint, drawnAt),
-        disclosure: {
-          decor,
-          depth: 0,
-          get ground() {
-            return ground ??= rowGround(decor, address);
-          }
-        }
+        disclosure: { decor, depth: 0 }
       };
     }
     case "band": {
@@ -76150,7 +75815,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
 // src/render/theme-preview.ts
 var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
 function previewRows(palette, decor, opens, drawnAt) {
-  const band = bandFor(palette, opens, drawnAt);
+  const band = bandFor(palette, opens);
   const chosen = (text4, colour) => ({
     text: text4,
     colour,
@@ -76328,11 +75993,7 @@ function renderMenu(applyName, displays, options, runtime) {
   );
   const body = () => {
     const drawnAt = runtime.activeSegment.drawnAt();
-    const plane = bandFor(
-      placement.palette,
-      placement.disclosure,
-      drawnAt
-    ).plane;
+    const plane = bandFor(placement.palette, placement.disclosure).plane;
     const apply = requireOptionKind(action2, applyName, "menu");
     return renderPicker(
       applyName,
@@ -77512,7 +77173,7 @@ function placeOf(node, colours) {
     text: colours.text
   };
 }
-var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
+var bandOf = (colours) => bandFor(colours.palette, colours.disclosure);
 function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
   const dealt = {
     palette,
@@ -77569,10 +77230,7 @@ function evaluated(colours, body, affixes) {
     lead: affixes.lead,
     trail: affixes.trail,
     drops: [...body.drops, ...affixes.drops],
-    open: body.open,
-    // [LAW:no-silent-failure] A floor the band stands short of is drawn as
-    // near as it comes, and said so.
-    shortfalls: body.open ? bandOf(colours).shortfalls : []
+    open: body.open
   };
 }
 function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
@@ -78022,7 +77680,6 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
   try {
     const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
     const warn = (warning) => onRenderWarning?.(warning);
-    const shortfalls = /* @__PURE__ */ new Set();
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
     const _clock = __using(_stack, bindClock(at, clock.anim));
@@ -78114,18 +77771,6 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     );
     perSegmentSink?.clear();
     const lookupSegment = (name) => config2.segments[name];
-    const collected = (evaluated2) => {
-      for (const shortfall of evaluated2.shortfalls) shortfalls.add(shortfall);
-      return evaluated2;
-    };
-    const placement = (node) => {
-      const own2 = parts.placement(node);
-      return {
-        gate: () => own2.gate(),
-        bodyGate: () => own2.bodyGate(),
-        evaluate: (palette2, region) => collected(own2.evaluate(palette2, region))
-      };
-    };
     const renderNode = (node, parent, region) => {
       const evaluated2 = parent.kind === "hidden" ? parent : within2(parent, parts.gate(node));
       const gate2 = evaluated2.kind === "failed" ? {
@@ -78148,17 +77793,15 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         region,
         perSegmentSink,
         onSegmentError,
-        placement,
-        evaluateOnce: (node2, scope, palette2, body) => collected(
-          evaluateOnce(
-            compiled.activeSegment,
-            node2,
-            palette2,
-            region,
-            registry.drawnAt(),
-            body,
-            scope
-          )
+        placement: (node2) => parts.placement(node2),
+        evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
+          compiled.activeSegment,
+          node2,
+          palette2,
+          region,
+          registry.drawnAt(),
+          body,
+          scope
         ),
         lookupSegment,
         renderChild: (child, held, step4) => renderNode(child, held, descend(region, step4)),
@@ -78208,7 +77851,6 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
     );
     const frameMotion = rendered.some((row2) => row2.moves) ? "moves" : armed() ? "can-move" : "still";
-    for (const message of shortfalls) warn({ kind: "band-floor", message });
     for (const [variable, fault2] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
@@ -83310,7 +82952,6 @@ function drawRender(setup, drawing2) {
         return `${w.kind}:${w.state}`;
       case "load":
       case "lifeline":
-      case "band-floor":
       case "when":
         return w.kind;
     }
