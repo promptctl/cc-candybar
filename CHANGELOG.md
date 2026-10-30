@@ -1,3 +1,10 @@
+## [1.168.1](https://github.com/promptctl/cc-candybar/compare/v1.168.0...v1.168.1) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1) ([#508](https://github.com/promptctl/cc-candybar/issues/508)) ([b51f005](https://github.com/promptctl/cc-candybar/commit/b51f00510c4bcca14fc9ff4177320380f9052873))
+* **site:** the live bar and the landscape explorer link to each other ([#509](https://github.com/promptctl/cc-candybar/issues/509)) ([19183e1](https://github.com/promptctl/cc-candybar/commit/19183e1e39371f3a80b53ee9182655ebec2787f9))
+
 ## [1.168.0](https://github.com/promptctl/cc-candybar/compare/v1.167.1...v1.168.0) (2026-10-30)
 
 ### Features
