@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-483",
+      "ref": "refs/pull/483/merge",
+      "sha": "7ca81be2ce9e5cd34bf36441cbef083fac3990b4",
+      "timestamp": "2026-10-30T07:52:08.971Z",
+      "commits": [
+        {
+          "sha": "7ca81be2ce9e5cd34bf36441cbef083fac3990b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:51:16Z",
+          "message": "Merge 18f3040cc9cbfa100d6da40e56597c6750282d98 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+        },
+        {
+          "sha": "18f3040cc9cbfa100d6da40e56597c6750282d98",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:47:08-06:00",
+          "message": "docs(diagnostics): describe the indicator and viewer where the strip was (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "44a1b46b53c75592a92632111904be26bfe3c46c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:46:49-06:00",
+          "message": "fix(config): a failed chain's lower layers are judged by the tolerant validation, and the dead trace seam goes (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "31e24f427869c53b5d6ad37aed1a28e3b3b98077",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:45:33-06:00",
+          "message": "feat(diagnostics): the statusline's handoff line carries the indicator and opens the viewer (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "fcdddaff552cfd169baf2245d3faa3072e6e2852",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:44:19-06:00",
+          "message": "fix(diagnostics): the viewer holds its message's key, not a position (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "d8affcc5b2ca1e8b276d3bdbfbc62e3c5c63af40",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:42:21-06:00",
+          "message": "fix(diagnostics): every frame records its render warnings by value, and a moved record wakes the feed (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "0c8ae0d0ac085c080635ebeb89fabe8537814962",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:31:26-06:00",
+          "message": "feat(diagnostics): every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i)\n\nThe red and amber strip above the bar is gone. The settings door's own cell\ncarries an indicator (⚠ N, red if any error, amber otherwise, 9+ cap) that\nreads a per-draw diagnostics projection; clicking it opens a viewer that takes\nthe body's place and shows one message in full with ✕, ‹ ›, [k/N] and ⧉ copy.\nRender warnings are recorded per session and renderer, rewritten only when a\nframe is drawn from a new source. A placement of an undeclared segment drops\nonly its own cell and is reported as an error; check and the demo still refuse\nit. The handed-off statusline is the handoff line alone, so an error shows\nonce. The diagnostic dump, its file:// links and the show-config verbs are\ndeleted.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0fecc7dac290bccba99b620d1915bd2d7219f366",
