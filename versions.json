@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-509",
-      "ref": "refs/pull/509/merge",
-      "sha": "f9066b5549583cb1c238951bcf430024f7b0688b",
-      "timestamp": "2026-10-30T21:28:49.672Z",
-      "commits": [
-        {
-          "sha": "f9066b5549583cb1c238951bcf430024f7b0688b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T21:27:44Z",
-          "message": "Merge 8d46261b823c28716c62424dda6760ca863f20e9 into b51f00510c4bcca14fc9ff4177320380f9052873\n"
-        },
-        {
-          "sha": "8d46261b823c28716c62424dda6760ca863f20e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:27:33-06:00",
-          "message": "refactor(site): one reading of LANDSCAPE_DIR, shared by both builds\n"
-        },
-        {
-          "sha": "c6cc10571306c8e788d5a4674f5af0312b17b524",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:26:45-06:00",
-          "message": "fix(site): the explorer path is checked and built as an element, the toolbar passes the graph its pointer, and a test holds the link\n"
-        },
-        {
-          "sha": "66b8d70d9781a6e726e7cce6bdc66024e469e5e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:24:26-06:00",
-          "message": "fix(site): the deploy says where the explorer sits and both pages derive their links from it; the toolbar stays one row\n"
-        },
-        {
-          "sha": "291927a94edf2b7d1040dccd75d76539f52312ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:19:48-06:00",
-          "message": "fix(site): the live bar and the landscape explorer link to each other\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "b51f00510c4bcca14fc9ff4177320380f9052873",
-      "timestamp": "2026-10-30T21:10:29.266Z",
+      "sha": "19183e1e39371f3a80b53ee9182655ebec2787f9",
+      "timestamp": "2026-10-30T21:33:48.711Z",
       "commits": [
         {
-          "sha": "b51f00510c4bcca14fc9ff4177320380f9052873",
+          "sha": "19183e1e39371f3a80b53ee9182655ebec2787f9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:09:40-06:00",
-          "message": "fix(colour): the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1) (#508)\n\n* fix(colour): the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1)\n\nA dial window keeps one hue's tones apart and the distribution keeps\nneighbours of one hue on different tones, but where a row turns hue\n(alt every three cells, either side of a keystone) each cell takes a\ntone from its own hue's window, and at 256 colours and ansi two hues'\nrungs often round onto one colour.\n\nA line of cells is now read as a whole: where the cells either side of\na turn are drawn alike, by identity after rounding, the cell after the\nturn takes the first tone of its window drawn as neither neighbour,\nelse the nearest rung of its ladder through the one widening; where it\nhas none, the cell before the turn does; where neither has one, the\njoiner's lift draws the seam. Each line is memoised by its address, so\na cell's entry is a lookup, and the theme preview's role groups meet\nby the same rule.\n\nThe unit property holds it over every variation, dial position,\nbundled theme and depth, rows to 16. Policy item 4 in the joiners\nproposal.\n\n* test(colour): the closing sweep holds under every shipped variation, and nightly under every trial tuning (candybar-joiners-e5r4.5x1)\n\nThe sweep moves into a helper so the suite sweeps the four variations\non the dial and the nightly audits sweep the twelve trial tunings\nthrough the same reader. The three rigs are shared across variations,\nand the press exemption is computed under the variation swept.\n\n* docs(colour): the preview's meeting swatch can stand in for a window tone, and why the cell after a turn moves first (candybar-joiners-e5r4.5x1)\n\nvocabularyOf and the preview header said every tone of each role's window is sampled; where the swatch at the meeting moves and its role has no other swatch in the tone it was dealt, the sample does not show that tone. The hue-turn rule now states why the cell after the turn moves first and what that means for a keystone at either end of a line. The turn property rounds each entry once per palette and depth.\n\n* test(colour): a cell moves at a turn only where the cell across it is drawn like it (candybar-joiners-e5r4.5x1)\n\nThe turn property and the preview test held that a cell leaves its dealt tone only beside a turn, so a rule that moved cells at every turn passed them. Both now hold that a moved cell was dealt the colour of the cell across the turn, as dealt or as it stands. The preview's docs say it samples the decorations a closed cell wears, not every one it can.\n\n* refactor(colour): a line is memoised by its whole row and line steps, not a copy of what its deal reads (candybar-joiners-e5r4.5x1)\n\nThe line memo's key named the row's starting step and whether it is the bar's first row, which is what the keystones and the deal read today. A keystone that came to read another field of the row would have folded two lines into one answer with no error. The key now holds every field of the row step and of the line's cell step, and a field a step gains without a place in the key is a compile error."
-        },
-        {
-          "sha": "7e5b89a141178df3755ef8ff6b31eec91352e91d",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T20:01:16Z",
-          "message": "chore(release): set `package.json` to 1.168.0 [skip ci]\n\n## [1.168.0](https://github.com/promptctl/cc-candybar/compare/v1.167.1...v1.168.0) (2026-10-30)\n\n### Features\n\n* **feed:** a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014) ([#505](https://github.com/promptctl/cc-candybar/issues/505)) ([5b44ba9](https://github.com/promptctl/cc-candybar/commit/5b44ba9e047f7fd59d83562b39c5d23776c81d14))\n\n### Bug Fixes\n\n* **colour:** a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686) ([#506](https://github.com/promptctl/cc-candybar/issues/506)) ([35846ae](https://github.com/promptctl/cc-candybar/commit/35846ae8042324805c53b14c0c5fc02d669edcd3))\n* **diagnostics:** what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk) ([#507](https://github.com/promptctl/cc-candybar/issues/507)) ([38412c6](https://github.com/promptctl/cc-candybar/commit/38412c68e7a12dce2557dc35449033e18226bae2))\n* **test:** the build-currency e2e waits on the daemon's own signal, so a loaded runner cannot fail it (brandon-unfiled-3248.cuvv) ([#502](https://github.com/promptctl/cc-candybar/issues/502)) ([b100e43](https://github.com/promptctl/cc-candybar/commit/b100e4391f45deea8b68df49f4ebdd4a6ee988cb))\n"
+          "timestamp": "2026-10-30T15:33:00-06:00",
+          "message": "fix(site): the live bar and the landscape explorer link to each other (#509)\n\n* fix(site): the live bar and the landscape explorer link to each other\n\n* fix(site): the deploy says where the explorer sits and both pages derive their links from it; the toolbar stays one row\n\n* fix(site): the explorer path is checked and built as an element, the toolbar passes the graph its pointer, and a test holds the link\n\n* refactor(site): one reading of LANDSCAPE_DIR, shared by both builds"
         }
       ]
     }
