@@ -182,17 +182,12 @@ describe("the settings door and its frame-rate cell take two places of the first
     return span === undefined ? undefined : resolvedStyle(span.style).bgcolor?.value?.hex;
   };
 
-  test("under every dial position whose window holds more than one tone, they wear two", () => {
+  test("under every dial position, they wear two", () => {
     const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
-    // `muted` is the one window of one tone, which wears it on every cell, so
-    // it can part no two. candybar-joiners-e5r4.tx7 gives it a second tone;
-    // this guard then fails, and the exemption goes with it.
-    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length === 1)).toEqual(["muted"]);
-    const parting = SHADE_NAMES.filter((shade) => shade !== "muted");
     try {
       bar.pick("theme", THEME);
       VIEWS[0]!.show(bar);
-      for (const shade of parting) {
+      for (const shade of SHADE_NAMES) {
         for (const hue of DECOR_HUES) {
           const named = SHADES[shade].tones.map((tone) => paletteRole(palette, shadeRole(hue, tone)).hex);
           expect([shade, hue, new Set(named).size]).toEqual([shade, hue, named.length]);

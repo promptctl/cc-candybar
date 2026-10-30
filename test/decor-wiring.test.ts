@@ -152,11 +152,6 @@ const SRC = `{
 }`;
 
 const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
-// The one dial position whose window holds a single tone, so it parts no two
-// neighbours and the adjacency checks pass over it. candybar-joiners-e5r4.tx7
-// gives it a second tone; the guard in the adjacency test then fails, and the
-// exemption goes with it.
-const ONE_TONE: ShadeName = "muted";
 const FIVE = ["a", "b", "c", "d", "e"];
 
 /**
@@ -699,15 +694,16 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
   test("a row authored as a, { h: [b, c, d] }, e draws five places: each cell wears what a flat row of five wears there, and no two neighbours share a tone", () => {
     const grouped = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] }, 'e' ]"));
     const flat = build(groupedRow("[ 'a', 'b', 'c', 'd', 'e' ]"));
-    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length === 1)).toEqual([ONE_TONE]);
+    // No dial position deals one tone, which would put every pair of
+    // neighbours on it.
+    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length < 2)).toEqual([]);
     for (const shade of SHADE_NAMES) {
       grouped.render({}, undefined, shade);
       flat.render({}, undefined, shade);
       expect([shade, tints(grouped, FIVE)]).toEqual([shade, tints(flat, FIVE)]);
-      // The tone each cell's place selects, as the walk drew it. Only the
-      // one-tone position wears one tone everywhere.
+      // The tone each cell's place selects, as the walk drew it.
       const tones = FIVE.map((n) => decorEntryFor(decorOf(undefined, shade), addressOf(grouped.root, n)).shade);
-      const alike = FIVE.slice(1).filter((n, i) => shade !== ONE_TONE && tones[i + 1] === tones[i]);
+      const alike = FIVE.slice(1).filter((n, i) => tones[i + 1] === tones[i]);
       expect([shade, alike]).toEqual([shade, []]);
     }
     grouped.dispose();
