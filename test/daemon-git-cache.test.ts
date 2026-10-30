@@ -1641,26 +1641,19 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       await until(() => passes(logs).length >= 2, "a period pass landed");
       expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
       expect(passes(logs)[0]).toMatch(/ watch=kept /);
-      // The git directory is refused on every platform. The refs tree under it
-      // is refused on macOS; Linux's recursive watcher (Node's own walk)
-      // swallows the loop and watches nothing, so its count is the
-      // platform's.
-      const bound = logs
-        .map((l) =>
-          l.match(
-            /^git watch bound root=.* dirs=.*\.git,.*refs\/heads deaf=([12])$/,
-          ),
-        )
-        .find((m) => m !== null);
-      expect(bound).toBeDefined();
-      // Each of the two directories either listens or is deaf.
-      const deaf = Number(bound![1]);
+      // The git directory and the refs tree under it are both refused, on
+      // every platform.
+      expect(
+        logs.some((l) =>
+          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads deaf=2$/.test(l),
+        ),
+      ).toBe(true);
       expect(counters).toEqual({
         watchersOpened: 0,
         watchersClosed: 0,
         watchRefusals: 1,
         watchErrors: 0,
-        dirWatchesOpened: 2 - deaf,
+        dirWatchesOpened: 0,
         dirWatchesClosed: 0,
       });
     } finally {
