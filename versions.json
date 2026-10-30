@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-498",
+      "ref": "refs/pull/498/merge",
+      "sha": "0b6163cb8eb206f332ee117ff4819272e4b452b3",
+      "timestamp": "2026-10-30T14:33:27.559Z",
+      "commits": [
+        {
+          "sha": "0b6163cb8eb206f332ee117ff4819272e4b452b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:32:38-06:00",
+          "message": "Merge 4b49a716cc0ab681fd73b794459e790c727e8927 into 5577ddd8731d529e5500113fe2febc34aff9f5b2\n"
+        },
+        {
+          "sha": "4b49a716cc0ab681fd73b794459e790c727e8927",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:32:12-06:00",
+          "message": "refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr)\n\nThe var-system's own watch manager opened, filtered, failed and closed its\nfs.watch handles beside the watcher registry, so its handles never reached\nthe daemon's counters or log. It is gone: a watch_file path follows its\nspec through the registry's `follow`, as the config and git watches do.\n\nThe registry gains what that needed, as rules for every consumer:\n- one OS handle per directory, refcounted by the slots on it, and `follow`\n  acquires before it releases, so a key move (a link re-pointed to a new\n  name) keeps every directory both keys name open;\n- a directory made again at its path is reopened in place when a slot\n  acquires it; a deaf one is reopened only through `listening`, which only\n  watch_file calls, at a real event on a kept watch, never on a failed one;\n- every holder of a key hears each window; a directory going deaf is told\n  to every slot on it; the handle's `deaf` list is live;\n- a directory's own name under a name filter is judged by the folder at the\n  path, not the event type; an unnamed event under a filter is `unknown`;\n- daemon-stats counts directory handles opened, closed and open beside the\n  slots, and the registry logs every open, close and reopen with its cause.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-496",
       "ref": "refs/pull/496/merge",
       "sha": "fb96a4fae64e0bd334b5dc1167950ad52e5dd8eb",
