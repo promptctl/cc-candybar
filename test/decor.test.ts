@@ -45,7 +45,6 @@ import {
   nearestPoint,
   type Address,
   type Decor,
-  type DecorEntry,
   type Lineage,
   type DecorHue,
   type Disclosure,
