@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { applyLayoutOp } from "../src/daemon/config-file-store";
+import { applyLayoutOp, writeValues } from "../src/daemon/config-file-store";
 import type { ConfigHome } from "../src/config/loader/discovery";
 
 const store = {
@@ -52,4 +52,12 @@ test("a file that already drops a placement still takes a click", () => {
     relation: "after",
   });
   expect(fs.readFileSync(home.path, "utf8")).toContain('"b"');
+});
+
+test("a click that repairs a file that would not load is not blamed for the file's own drop", () => {
+  const home = homeWith(
+    `{ globals: { palette: "no-such-theme" }, segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`,
+  );
+  writeValues(store, home, [["palette", "nord"]]);
+  expect(fs.readFileSync(home.path, "utf8")).toContain("nord");
 });
