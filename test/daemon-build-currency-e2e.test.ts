@@ -15,6 +15,7 @@ import path from "node:path";
 
 import { DIAGNOSTICS_VIEWING } from "../src/config/door";
 import { sessionStatePath } from "../src/daemon/paths";
+import type { SessionSnapshot } from "../src/daemon/session-state";
 import { sourceDigest } from "../src/source-digest";
 import { PACKAGE_VERSION } from "../src/version";
 import {
@@ -62,20 +63,18 @@ const RELEASE_ROW = new RegExp(
 // saved as open, and the next daemon restores it open. A test that kills
 // waits until the viewer's close is on disk, so the successor's bar is the
 // one this test means.
-async function viewerClosedOnDisk(sock: string, sid: string): Promise<void> {
-  const file = sessionStatePath({
-    XDG_STATE_HOME: path.dirname(path.dirname(sock)),
-  });
+async function viewerClosedOnDisk(
+  env: NodeJS.ProcessEnv,
+  sid: string,
+): Promise<void> {
+  const file = sessionStatePath(env);
   // Before the first save there is no file; the write is a rename, so a file
   // that is there is whole.
   const closed = (): boolean =>
     fs.existsSync(file) &&
-    (
-      JSON.parse(fs.readFileSync(file, "utf8")) as Record<
-        string,
-        Record<string, string>
-      >
-    )[sid]?.[DIAGNOSTICS_VIEWING] === "0";
+    (JSON.parse(fs.readFileSync(file, "utf8")) as SessionSnapshot)[sid]?.[
+      DIAGNOSTICS_VIEWING
+    ] === "0";
   await until(closed, () => `the viewer's close saved in ${file}`, 5_000);
 }
 
@@ -418,7 +417,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
         try {
           const before = noticeOf(await pagesOf(sockPath, sid, s.projectDir))!;
           await click(sockPath, affordance(before.rendered, "apply-update"));
-          await viewerClosedOnDisk(sockPath, sid);
+          await viewerClosedOnDisk(env, sid);
         } finally {
           await killAndWait(starter, "SIGKILL");
         }
