@@ -58,10 +58,9 @@ export interface LinkWalk {
 // last entry a non-link or a path that does not exist. The writer wants the
 // last; a watcher wants them all, because a chain's content changes wherever
 // any one of its links is re-pointed, and a directory watch reports only its
-// own children. A walk the kernel stops (a loop, an unreadable component, a
-// link removed between its lstat and its readlink) keeps the hops it reached,
-// so a watcher still hears the directories it got to, among them the one a
-// re-pointed link is about to reappear in. A linked directory on the way
+// own children. A walk the kernel stops (a loop, an unreadable component)
+// keeps the hops it reached, so a watcher still hears the directories it got
+// to. A linked directory on the way
 // needs resolving only where a relative link is read against it.
 export function walkLinks(at: string): LinkWalk {
   const hops = [at];
@@ -83,23 +82,22 @@ export function walkLinks(at: string): LinkWalk {
 // Where the link at `file` points, or null when there is no link there to
 // follow.
 function linkTarget(file: string): string | null {
-  let stat: fs.Stats;
   try {
-    stat = fs.lstatSync(file);
+    if (!fs.lstatSync(file).isSymbolicLink()) return null;
+    // The kernel reads a relative link against the directory the link really
+    // sits in, which a linked parent moves.
+    return path.resolve(
+      fs.realpathSync(path.dirname(file)),
+      fs.readlinkSync(file),
+    );
   } catch (e) {
-    // Absent, or under an ancestor that is a regular file: either way the
-    // path does not exist, so there is no link to follow and the chain ends.
+    // [LAW:one-source-of-truth] Absent, or under an ancestor that is a
+    // regular file, is one fact whichever call finds it: a link removed
+    // after its lstat ends the chain exactly as one already gone does.
     const { code } = e as NodeJS.ErrnoException;
     if (code === "ENOENT" || code === "ENOTDIR") return null;
     throw e;
   }
-  if (!stat.isSymbolicLink()) return null;
-  // The kernel reads a relative link against the directory the link really
-  // sits in, which a linked parent moves.
-  return path.resolve(
-    fs.realpathSync(path.dirname(file)),
-    fs.readlinkSync(file),
-  );
 }
 
 // Linux's MAXSYMLINKS: past it the kernel calls a path a loop (ELOOP).

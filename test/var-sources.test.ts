@@ -1594,6 +1594,47 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         cleanup();
       }
     });
+
+    // Linux's inotify follows the inode, so a handle on a directory removed
+    // and made again at its path hears nothing more, with no error to say so;
+    // the stand-in handles let every platform see that the watch moves to the
+    // new directory, and hears the file through it.
+    it("a watched directory removed and made again is watched again", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      const opened: Array<{ dir: string; closed: boolean; listener: (event: string, changed: string | null) => void }> = [];
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, listener: (event: string, changed: string | null) => void) => {
+        const record = { dir: d, closed: false, listener };
+        opened.push(record);
+        return Object.assign(new EventEmitter(), { close: () => void (record.closed = true) });
+      }) as unknown as typeof fs.watch);
+      try {
+        const one = path.join(fs.realpathSync(dir), "one");
+        fs.mkdirSync(one);
+        const state = path.join(one, "state");
+        fs.writeFileSync(state, "v1");
+        const { store, registry } = make();
+        registry.declareFile("val", state, { parse: TEXT, cache: { kind: "watch_file", path: state } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+        expect(opensOf(one)).toHaveLength(1);
+
+        // `rm -rf one && mkdir one`: the handle reports its own directory's name.
+        fs.rmSync(one, { recursive: true });
+        fs.mkdirSync(one);
+        opensOf(one)[0]!.listener("rename", "one");
+        expect(opensOf(one)).toHaveLength(2);
+        expect(opensOf(one)[0]!.closed).toBe(true);
+
+        fs.writeFileSync(state, "v2");
+        opensOf(one)[1]!.listener("rename", "state");
+        await until(() => store.read("val") === "v2", "the store reading v2");
+        expect(store.read("val")).toBe("v2");
+      } finally {
+        watch.mockRestore();
+        cleanup();
+      }
+    });
   });
 });
 

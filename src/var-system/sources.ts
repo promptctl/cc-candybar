@@ -15,6 +15,7 @@ import { readFile as fsReadFile } from "fs/promises";
 import fs, { type FSWatcher } from "fs";
 import path from "path";
 import { watchTargetsOf, type PathsWatch } from "../daemon/cache/watchers.js";
+import { boundKey, boundOf } from "../utils/folder-identity.js";
 import { setInterval, clearInterval } from "timers";
 import {
   computed,
@@ -299,9 +300,14 @@ type WatchFault = (fault: string | null) => void;
 
 // [LAW:types-are-the-program] A watched directory is listening or failed,
 // never both: the OS refused it at open, or its handle reported an error
-// after.
+// after. A listening handle hears the directory it bound (`bound`), which is
+// the one at its path only until that is removed and made again.
 type DirState =
-  | { readonly kind: "open"; readonly handle: FSWatcher }
+  | {
+      readonly kind: "open";
+      readonly handle: FSWatcher;
+      readonly bound: string;
+    }
   | { readonly kind: "failed"; readonly reason: string };
 
 interface WatchEntry {
@@ -351,19 +357,28 @@ class WatchManager {
   }
 
   // Derive where the path can change from disk ONCE, and bring the
-  // directories to it: one in the set and not listening (new, or failed) is
-  // opened; one no longer in the set is closed; one listening and still in
-  // the set keeps its handle, since opening and closing a directory watch is
-  // not free on macOS (see the watcher registry). New handles open before old
-  // ones close, so a refusal leaves the rest listening, and a failed
-  // directory is tried again only here — at an event on another of the
-  // entry's directories, or the daemon's catch-up — never in a loop.
+  // directories to it: one in the set and not listening to the directory at
+  // its path now (new, failed, or bound to one since removed) is opened; one
+  // no longer in the set is closed; one listening to it keeps its handle,
+  // since opening and closing a directory watch is not free on macOS (see the
+  // watcher registry). New handles open before old ones close, so a refusal
+  // leaves the rest listening, and a failed directory is tried again only
+  // here — at an event on another of the entry's directories, or the
+  // daemon's catch-up — never in a loop.
   private rederive(filePath: string, entry: WatchEntry): void {
     entry.watch = watchTargetsOf({ named: [filePath], whole: [filePath] });
     const wanted = new Set(entry.watch.targets.dirs.map((d) => d.path));
-    for (const dir of wanted)
-      if (entry.dirs.get(dir)?.kind !== "open")
-        entry.dirs.set(dir, this.open(filePath, entry, dir));
+    for (const dir of wanted) {
+      // [LAW:one-source-of-truth] Whether a handle still hears its path is
+      // the identity every watch owner judges by (`boundOf`): Linux's inotify
+      // follows the inode, so a directory recreated at the path is deaf to
+      // the handle opened on the one before, with no event to say so.
+      const held = entry.dirs.get(dir);
+      if (held?.kind === "open" && held.bound === boundKey(boundOf(dir)))
+        continue;
+      if (held?.kind === "open") held.handle.close();
+      entry.dirs.set(dir, this.open(filePath, entry, dir));
+    }
     for (const [dir, state] of entry.dirs) {
       if (wanted.has(dir)) continue;
       if (state.kind === "open") state.handle.close();
@@ -374,6 +389,9 @@ class WatchManager {
 
   private open(filePath: string, entry: WatchEntry, dir: string): DirState {
     const self = path.basename(dir);
+    // Read before the open, so a directory replaced while it opens reads as
+    // moved at the next re-derive, never as the one the handle bound.
+    const bound = boundKey(boundOf(dir));
     try {
       const handle = fs.watch(dir, (_event, changed) => {
         // A platform that reports no name could be reporting anything here.
@@ -399,7 +417,7 @@ class WatchManager {
         this.report(filePath, entry);
         for (const cb of entry.subscribers.keys()) cb();
       });
-      return { kind: "open", handle };
+      return { kind: "open", handle, bound };
     } catch (e) {
       return {
         kind: "failed",
@@ -647,8 +665,9 @@ export class SourceRegistry {
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A watch the OS
-  // refused lives until the registry does; a key template that throws lives
+  // source will ever run again, so no read outcome clears it. A watch that
+  // cannot hear every place its path changes lives until it can again (its
+  // own re-derive says so); a key template that throws lives
   // until the key evaluates again. One map, since a variable has one policy.
   // Observable, since the bar draws each fault as a refresh warning.
   private readonly policyFaults = observable.map<string, LastError>(undefined, {
