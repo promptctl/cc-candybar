@@ -25,10 +25,13 @@
 //   the pressed state: at sixteen colours a ladder of three slots, two of them
 //   on the band's items and one on the press a depth up, has nothing left.
 //   Computed below from what the design stands beside a press, never listed.
-// A cell is known by its visible text, and what it wears by the shade the
-// render dealt it before the writer rounded it (the per-segment record).
+// A cell is known by its visible text and the colour it is drawn in, and what
+// it wears by the shade the render dealt it before the writer rounded it (the
+// per-segment record). A seam is exempt only where every cell that could be
+// the one it joins wears an exempt shade, so two cells of one text (every ✕,
+// every blank lead) never lend each other an exemption.
 
-import { ColorDepth, drawnColour, getThemePalette, listThemePalettes, type Palette, type RichText } from "@promptctl/rich-js";
+import { ColorDepth, drawnColour, getThemePalette, listThemePalettes, type ColorRgba, type Palette, type RichText } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
@@ -115,7 +118,7 @@ function pressesWithNoneToGive(palette: Palette, drawnAt: ColorDepth): ReadonlyS
 }
 
 // A cell's background as the render dealt it, before the writer rounds it.
-const dealt = (cell: RichText): string | undefined => resolvedStyle(cell.style).bgcolor?.value?.hex;
+const dealt = (cell: RichText): ColorRgba | undefined => resolvedStyle(cell.style).bgcolor?.value;
 const visible = (text: string): string => text.replace(/\s/g, "");
 
 // The visible text of the cell a seam leaves and the one it enters: the
@@ -154,20 +157,24 @@ test("no seam on any bundled frame joins two grounds drawn as one colour, under 
               const cells = segments.get(name);
               if (cells === undefined) return [];
               authoredSeen.add(name);
-              if (!cells.every((cell) => alerts.has(dealt(cell) ?? "")))
-                onTint.push(`${theme} at ${compatibility}, ${frame}: ${name} wears ${cells.map(dealt).join()}`);
+              if (!cells.every((cell) => alerts.has(dealt(cell)?.hex ?? "")))
+                onTint.push(`${theme} at ${compatibility}, ${frame}: ${name} wears ${cells.map((cell) => dealt(cell)?.hex).join()}`);
               return [visible(cells.map((cell) => cell.plain).join(""))];
             }),
           );
-          // What each cell of the frame wears, by its visible text.
+          // What the cells of the frame wear, by visible text and drawn colour.
           const worn = new Map<string, Set<string>>();
+          const known = (text: string, ground: string | undefined): string => `${text}|${ground}`;
           for (const cell of [...segments.values()].flat()) {
             const bg = dealt(cell);
-            if (bg !== undefined) worn.set(visible(cell.plain), new Set([...(worn.get(visible(cell.plain)) ?? []), bg]));
+            if (bg === undefined) continue;
+            const key = known(visible(cell.plain), drawnColour(bg, drawnAt).hex);
+            worn.set(key, new Set([...(worn.get(key) ?? []), bg.hex]));
           }
-          const wearsOnly = (cell: string, shades: ReadonlySet<string>): boolean =>
-            worn.has(cell) && [...worn.get(cell)!].every((bg) => shades.has(bg));
-          const wearsAny = (cell: string, shades: ReadonlySet<string>): boolean => [...(worn.get(cell) ?? [])].some((bg) => shades.has(bg));
+          const wearsOnly = (text: string, ground: string | undefined, shades: ReadonlySet<string>): boolean => {
+            const bgs = worn.get(known(text, ground));
+            return bgs !== undefined && [...bgs].every((bg) => shades.has(bg));
+          };
           const chars = drawnChars(text);
           for (const { left, right, at } of seams(chars)) {
             // A tail enters the terminal's own ground: no neighbour.
@@ -180,11 +187,11 @@ test("no seam on any bundled frame joins two grounds drawn as one colour, under 
             }
             const ground = shown(left);
             if (ground !== shown(right)) continue;
-            if (wearsOnly(before, flat) && wearsOnly(after, flat)) {
+            if (wearsOnly(before, ground, flat) && wearsOnly(after, ground, flat)) {
               counts.flat++;
               continue;
             }
-            if (wearsAny(before, noneToGive) || wearsAny(after, noneToGive)) {
+            if (wearsOnly(before, ground, noneToGive) || wearsOnly(after, ground, noneToGive)) {
               counts.pressed++;
               continue;
             }
