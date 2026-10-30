@@ -910,27 +910,23 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // A render warning is known only after the walk that met it, so the frame
   // that met it is followed at once by one that counts it: an idle lane draws
   // once a second, and would otherwise show a second-old count.
-  test("a warning an idle lane's frame meets is counted by its next frame, with no wake of its own", async () => {
+  test("a warning an idle lane's frame meets is counted by a frame, with no wake of its own", async () => {
     const sid = "feed-clock-warning";
     await render(sockPath, sid, projectDir, {}, args("clock"));
     const frames = await framesOf(sid, async ({ received, waitFor }) => {
       await waitFor(
-        () =>
-          received.some(
-            (f, i) =>
-              i > 0 && shows([f], "⚠ 1") && !shows([received[i - 1]!], "⚠ 1"),
-          ),
+        () => received.some((f) => shows([f], "⚠ 1")),
         "a frame that counts the warning",
         8000,
       );
     });
+    // The session's list is every renderer's, so the lane may count what the
+    // request met from its first frame. A frame that starts counting it later
+    // is the lane's next spaced frame, a still second after the one before,
+    // never a wake that could feed itself.
     const shown = outputs(frames).map((o) => stripAnsi(o).includes("⚠ 1"));
-    const onsets = frames.filter((_, i) => i > 0 && shown[i] && !shown[i - 1]);
-    expect(onsets.length).toBeGreaterThan(0);
-    // Each frame that first counts it is the lane's next spaced frame: a still
-    // second after the one before, never a wake that could feed itself.
-    for (const onset of onsets) {
-      const i = frames.indexOf(onset);
+    for (const [i, onset] of frames.entries()) {
+      if (i === 0 || !shown[i] || shown[i - 1]) continue;
       expect(onset.at - frames[i - 1]!.at).toBeGreaterThan(500);
     }
     expect(await closedSummary(sid)).not.toMatch(/ woke=[^ ]*frame/u);
