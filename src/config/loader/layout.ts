@@ -23,6 +23,7 @@ import {
   DIRECTIONS,
   type ContainerNode,
   type Direction,
+  type InsertCell,
   type LayoutNode,
   type RawDslConfig,
   type Root,
@@ -191,11 +192,12 @@ function childrenSpec(
 // [LAW:types-are-the-program] The AUTHORABLE segment node: `opens` — the
 // disclosure body a trigger hangs (candybar-render-ai7.9) — and `lead` /
 // `trail` — edit mode's configure and remove buttons — and `drafts` — configure mode's unsaved
-// values — are deliberately not fields here. Records reject unknown keys, so
+// values — and `insertedBy` — the merge's stamp on an inserted cell — are
+// deliberately not fields here. Records reject unknown keys, so
 // a config spelling one is a load error, and `disclosureNode` (src/config/disclosure.ts) stays the only
 // producer of a body. The Omit is the statement, checked by the field map.
 const SEGMENT_NODE_SCHEMA: RecordSchema<
-  Omit<SegmentNode, "opens" | "lead" | "trail" | "drafts">
+  Omit<SegmentNode, "opens" | "lead" | "trail" | "drafts" | "insertedBy">
 > = {
   noun: "layout-node key",
   fields: {
@@ -506,7 +508,79 @@ export function rootFragmentJson(): JsonNode {
   return { anyOf: [{ $ref: LAYOUT_NODE_REF }, recordJson(ROWS_SCHEMA)] };
 }
 
-// ─── Group sugar (`kind: "group"`) ───────────────────────────────────────────
+// ─── Insert (`insert:` — cells beside placements the bar already has) ───────
+
+interface InsertArm {
+  readonly seg: string;
+  readonly id?: string;
+  readonly before?: string;
+  readonly after?: string;
+}
+
+// [LAW:one-source-of-truth] A cell is the seg arm's own `seg` and `id` fields
+// (the same specs, so the same name and id rules) plus exactly one side.
+const INSERT_SCHEMA: RecordSchema<InsertArm> = {
+  noun: "insert key",
+  fields: {
+    seg: segArmSpec(),
+    id: placementIdSpec(),
+    before: optionalStringSpec(),
+    after: optionalStringSpec(),
+  },
+};
+
+// [LAW:parse-dont-validate] `insert:` → InsertCells, each carrying its side
+// as a discriminant rather than two optional anchors. A malformed entry is an
+// issue at `insert.<i>`; parseDslConfig throws once any issue exists.
+export function validateInsert(
+  ctx: ValidateCtx,
+  raw: unknown,
+): readonly InsertCell[] {
+  if (!Array.isArray(raw)) {
+    ctx.issues.push({
+      path: "insert",
+      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["insert"]),
+    });
+    return [];
+  }
+  return raw.flatMap((entry: unknown, i): InsertCell[] => {
+    const path = `insert.${i}`;
+    const arm = record(ctx, INSERT_SCHEMA, path, entry);
+    if (arm === null) return [];
+    const sides = (["before", "after"] as const).filter(
+      (side) => arm[side] !== undefined,
+    );
+    if (sides.length !== 1) {
+      ctx.issues.push({
+        path,
+        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
+        line: findKeyLine(ctx.source, ["insert"]),
+      });
+      return [];
+    }
+    const relation = sides[0]!;
+    return [
+      {
+        seg: arm.seg,
+        ...(arm.id !== undefined && { id: arm.id }),
+        anchor: arm[relation]!,
+        relation,
+      },
+    ];
+  });
+}
+
+export function insertJson(): JsonNode {
+  return {
+    type: "array",
+    items: recordJson(INSERT_SCHEMA),
+    description:
+      "Cells this file adds beside placements the bar it merges over already has: each { seg, id?, before | after: <placement id> }",
+  };
+}
+
+// ─── Group sugar (`kind: "group"`)───────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The closed sentinel and ▸/▾ glyphs are the shared
 // disclosure primitive (src/config/disclosure.ts) — a group is one of its two

@@ -1042,6 +1042,31 @@ add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads
 the bar.
 
+### Adding your segment to the user's bar from a repo
+
+A repository's `.cc-candybar.json5` merges over the user's config, so it
+could restate a row, but that replaces the user's row. To add a cell to
+whatever the user already has, list it under `insert`, beside a placement
+id the user's bar holds (a bare placement's id is its segment's name):
+
+```json5 check:pass
+{
+  segments: { lit: { template: "lit" } },
+  root: { rows: { status: { h: ["model", "context"] } } },
+  insert: [{ seg: "lit", after: "model" }],
+}
+```
+
+Here the file stands alone, so the row it inserts into is its own. In a
+repository, leave `root` out and the cell lands in the user's row. Each
+cell takes exactly one of `before` or `after`, and an optional `id`. A cell
+whose anchor the user's bar doesn't have is not drawn, and the bar warns
+naming your file, the cell and the anchor. A cell the user already places
+is not drawn twice. Like the rest of the file, `insert` takes effect only
+once the user has approved the repository. In edit mode the cell shows
+which file placed it, and offers no remove or move, because it lives in
+your file, not the user's.
+
 ## Mistakes and the errors they produce
 
 Each entry: the wrong config, then the text `cc-candybar check` prints. The

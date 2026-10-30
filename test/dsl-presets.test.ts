@@ -492,7 +492,7 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
   // Asked of the MERGED tree, before validateConfig materializes an explicit
   // root for every preset (the same seam RenderCache's authoredRoots reads).
   const merged = (src: string) =>
-    mergeWithDefault(parseDslConfig("<presets>", src, ALLOWED), DEFAULT_DSL_CONFIG);
+    mergeWithDefault(parseDslConfig("<presets>", src, ALLOWED), DEFAULT_DSL_CONFIG, "<test>").config;
 
   test("an empty rows map restages nothing: the preset renders the config's root, authored at `root`", () => {
     const cfg = merged(`{ presets: { P: { root: { rows: {} } } } }`);

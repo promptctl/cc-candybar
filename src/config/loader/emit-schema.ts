@@ -19,6 +19,7 @@ import { actionsJson } from "./actions.js";
 import { stylesJson } from "./styles.js";
 import { presetsJson } from "./presets.js";
 import {
+  insertJson,
   layoutNodeJson,
   LAYOUT_NODE_DEF_NAME,
   rootFragmentJson,
@@ -56,6 +57,7 @@ export function emitConfigSchema(
       variables: variablesMapJson(),
       segments: segmentsJson(inheritedSegments),
       root: { $ref: ROOT_FRAGMENT_REF },
+      insert: insertJson(),
       actions: actionsJson(),
       styles: stylesJson(),
       themeDefaults: themeDefaultsJson(),

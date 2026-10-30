@@ -652,6 +652,33 @@
     "root": {
       "$ref": "#/definitions/RootFragment"
     },
+    "insert": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seg": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seg"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Cells this file adds beside placements the bar it merges over already has: each { seg, id?, before | after: <placement id> }"
+    },
     "actions": {
       "type": "object",
       "additionalProperties": {

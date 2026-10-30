@@ -143,7 +143,8 @@ describe("themeDefaults merge", () => {
     const merged = mergeWithDefault(
       { themeDefaults: { nord: { shade: "brightest" }, monokai: { variation: "mono" } } },
       base,
-    );
+      "<test>",
+    ).config;
     expect(merged.themeDefaults).toEqual({
       nord: { shade: "brightest", variation: "duo", style: "muted" },
       dracula: { shade: "brighter" },

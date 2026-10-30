@@ -689,7 +689,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       { h: ["model","context","cacheTimer","block","weekly","activity"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
-    const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
+    const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG, "<test>").config;
     const configA = validateConfig(
       { config: mergedA, raw: rawA, source: A_SRC },
       "<test>",
@@ -1605,7 +1605,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const source = userSource ?? "{}";
       const raw = parseDslConfig("<user>", source);
       const config = validateConfig(
-        { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source },
+        { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG, "<test>").config, raw, source },
         "<user>",
       );
       const sessionOnly = narrowToSegment(config, "session", settings);

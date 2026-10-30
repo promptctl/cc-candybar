@@ -32,6 +32,7 @@ import {
   type ContainerNode,
   type DisclosureRef,
   type DslConfig,
+  type InsertedBy,
   type LayoutNode,
   type PresetDecl,
   type SegmentDecl,
@@ -464,13 +465,7 @@ function labelChrome(
   ctx: SpliceCtx,
   configure: ConfigureParts,
 ): SegmentNode {
-  const { artifacts } = ctx;
-  const id = placementId(child);
-  const name = `${LABEL_NS}${id}:${child.name}`;
-  artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(id)}" }}`,
-    ...(decl.palette !== undefined && { palette: decl.palette }),
-  };
+  const name = labelSegment(ctx, child, decl, placementId(child));
   // [LAW:one-source-of-truth] Every implied setting rides across — the theme
   // and the effect the placement wears, saved and unsaved — so a name moves as
   // its placement would.
@@ -493,6 +488,98 @@ function labelChrome(
       IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]!]),
     ),
   };
+}
+
+// [LAW:one-source-of-truth] THE declaration of a placement's names-view label,
+// reading `text`, shared by the label that opens configure and the bare one an
+// inserted cell wears. Returns the segment name it declared.
+function labelSegment(
+  ctx: SpliceCtx,
+  child: SegmentNode,
+  decl: SegmentDecl,
+  text: string,
+): string {
+  const name = `${LABEL_NS}${placementId(child)}:${child.name}`;
+  ctx.artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(text)}" }}`,
+    ...(decl.palette !== undefined && { palette: decl.palette }),
+  };
+  return name;
+}
+
+// The unit an editable content cell gets: the leading `+` when it is the
+// row's first content, its label (opening configure), the cell wearing `✖`
+// and configure, and the `+` after it.
+function editableUnit(
+  child: SegmentNode,
+  spliced: SegmentNode,
+  first: boolean,
+  ctx: SpliceCtx,
+): LayoutNode[] {
+  const id = placementId(child);
+  const leading = first
+    ? [insertTerm(ctx, String(ctx.posCounter.n++), id, "before")]
+    : [];
+  const afterPos = String(ctx.posCounter.n++);
+  const after = insertTerm(ctx, afterPos, id, "after");
+  // Every content segment has exactly one `after` insertion, so its
+  // position names its removal and its configuration too.
+  const remove = removeTerm(ctx, afterPos, id);
+  // Every placement has settings — `theme` at least (settingsOf) — so
+  // every placement configures. [LAW:no-defensive-null-guards] cross-ref
+  // proved every placed segment is declared.
+  const decl = ctx.segments[child.name]!;
+  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  // The buttons are drawn inside the cell of the placement they act on, in
+  // whichever of the two views shows it, so nothing sits between them.
+  const lead = inArrangeMode(remove);
+  const trail = inArrangeMode(configure.term);
+  return [
+    ...leading.map((lead) =>
+      chromeCell(lead.host, lead.template, ctx.artifacts),
+    ),
+    // Labelled by the placement's id: two placements of one segment are
+    // told apart by it, and a bare placement's id is its segment's name.
+    { ...labelChrome(child, decl, ctx, configure), lead, trail },
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+      lead,
+      trail,
+      drafts: configure.drafts,
+    },
+    chromeCell(after.host, after.template, ctx.artifacts),
+  ];
+}
+
+// The unit an inserted cell gets: the cell, and in the names view a label
+// naming the file and entry that placed it. No `+`, `✖` or configure: no file
+// a click writes holds the cell, so there is nothing such a click could edit.
+// [LAW:types-are-the-program] The click is not refused; it is never drawn.
+function insertedUnit(
+  child: SegmentNode,
+  insertedBy: InsertedBy,
+  spliced: SegmentNode,
+  ctx: SpliceCtx,
+): LayoutNode[] {
+  const decl = ctx.segments[child.name]!;
+  const label: SegmentNode = {
+    kind: "segment",
+    name: labelSegment(
+      ctx,
+      child,
+      decl,
+      `${placementId(child)} · ${insertedBy.file} ${insertedBy.entry}`,
+    ),
+    when: `{{ ${namesView(ctx.presetIdent)} }}`,
+  };
+  return [
+    label,
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+    },
+  ];
 }
 
 // The `+` affordance for one gap: an `insertSegmentFrom` action over this
@@ -592,8 +679,13 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
   // chrome — the settings door, where it defaults — would otherwise anchor on
   // a segment no layout op may move. The trailing insert point needs no such
   // rule: every content segment's gap cell carries its own `after`.
+  // An inserted cell is not content a `+` may anchor on either: no file a
+  // click writes holds it.
   const firstContent = node.children.findIndex(
-    (child) => child.kind === "segment" && !isChromeExempt(child.name),
+    (child) =>
+      child.kind === "segment" &&
+      !isChromeExempt(child.name) &&
+      child.insertedBy === undefined,
   );
   const splice = (body: ContainerNode): ContainerNode =>
     spliceContainer(body, ctx);
@@ -607,41 +699,13 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       children.push(spliced);
       continue;
     }
-    const id = placementId(child);
-    const leading =
-      i === firstContent
-        ? [insertTerm(ctx, String(ctx.posCounter.n++), id, "before")]
-        : [];
-    const afterPos = String(ctx.posCounter.n++);
-    const after = insertTerm(ctx, afterPos, id, "after");
-    // Every content segment has exactly one `after` insertion, so its
-    // position names its removal and its configuration too.
-    const remove = removeTerm(ctx, afterPos, id);
-    // Every placement has settings — `theme` at least (settingsOf) — so
-    // every placement configures. [LAW:no-defensive-null-guards] cross-ref
-    // proved every placed segment is declared.
-    const decl = ctx.segments[child.name]!;
-    const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
-    // The buttons are drawn inside the cell of the placement they act on, in
-    // whichever of the two views shows it, so nothing sits between them.
-    const lead = inArrangeMode(remove);
-    const trail = inArrangeMode(configure.term);
-    const cells: LayoutNode[] = [
-      ...leading.map((lead) =>
-        chromeCell(lead.host, lead.template, ctx.artifacts),
-      ),
-      // Labelled by the placement's id: two placements of one segment are
-      // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(child, decl, ctx, configure), lead, trail },
-      {
-        ...spliced,
-        when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
-        lead,
-        trail,
-        drafts: configure.drafts,
-      },
-      chromeCell(after.host, after.template, ctx.artifacts),
-    ];
+    // [LAW:dataflow-not-control-flow] Which unit a cell gets is read off the
+    // cell: one a file a click writes holds is editable, one a layer's
+    // `insert` placed is shown and labelled only.
+    const cells =
+      child.insertedBy === undefined
+        ? editableUnit(child, spliced, i === firstContent, ctx)
+        : insertedUnit(child, child.insertedBy, spliced, ctx);
     // [LAW:one-type-per-behavior] A content segment and its affordances are
     // ONE unit of the row: a horizontal container holding them, so the row
     // places its content cells and nothing else. Each child's position in its

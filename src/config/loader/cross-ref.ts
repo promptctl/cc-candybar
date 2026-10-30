@@ -497,6 +497,19 @@ export function validateCrossReferences(
       checkLayoutTree(preset.root, `presets.${name}.root`);
     }
   }
+  // [LAW:one-type-per-behavior] An insert cell is a placement the file wrote,
+  // checked as one where the file wrote it — a cell naming no declared
+  // segment is reported at `insert.<i>`, not at a row of a tree it merged into.
+  for (const [i, cell] of (authored.insert ?? []).entries()) {
+    checkLayoutTree(
+      {
+        kind: "segment",
+        name: cell.seg,
+        ...(cell.id !== undefined && { id: cell.id }),
+      },
+      `insert.${i}`,
+    );
+  }
   // [LAW:one-source-of-truth] Placement counts run over the tree each preset
   // RENDERS, keyed by the path presetRoot reports it authored at — so a
   // fragment that is the merge identity collapses onto `root` by data and is

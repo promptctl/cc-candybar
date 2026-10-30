@@ -60,7 +60,7 @@ export function parseAndValidate(
     inheritableSegmentNames(dflt),
   );
   return validateConfig(
-    { config: mergeWithDefault(raw, dflt), raw, source },
+    { config: mergeWithDefault(raw, dflt, "<test>").config, raw, source },
     filePath,
     allowedPalettes,
   );

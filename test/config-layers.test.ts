@@ -17,6 +17,9 @@ import { resolveDslConfig } from "../src/config/loader/discovery";
 import { instantOf } from "../src/utils/instant";
 import { repoConfigs } from "../src/daemon/repo-configs";
 import { answerRepo } from "./helpers/repo-approval";
+import { applyLayoutOp } from "../src/daemon/config-file-store";
+import { walkNodes } from "../src/config/dsl-types";
+import { fragmentNode } from "../src/config/root";
 
 let dir: string;
 let project: string;
@@ -171,4 +174,162 @@ test("a first durable write with no user file succeeds beside an installed plugi
     if (saved === undefined) delete process.env.XDG_DATA_HOME;
     else process.env.XDG_DATA_HOME = saved;
   }
+});
+
+// A project layer's `insert` adds a cell beside a placement the user's bar
+// already has, without restating the user's row.
+describe("a project layer inserting into the user's row", () => {
+  const userRow = (row: string, extra = "") =>
+    fs.writeFileSync(
+      userFile,
+      `{ segments: { mine: { template: "USERSEG" }, other: { template: "OTHERSEG" }${extra} }, root: ${row} }`,
+    );
+  const writeProject = (
+    insert: string,
+    segments = `theirs: { template: "THEIRSEG" }`,
+  ) =>
+    fs.writeFileSync(
+      projectFile,
+      `{ segments: { ${segments} }, insert: ${insert} }`,
+    );
+  const order = (rendered: string, ...marks: string[]) =>
+    marks.map((m) => rendered.indexOf(m));
+  const warnedFor = (warnings: readonly string[], entry: string) =>
+    warnings.filter((w) => w.includes(entry));
+
+  test("an approved repo's cell lands beside its anchor and the user's file is untouched", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    const before = fs.readFileSync(userFile, "utf8");
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    const [u, t, o] = order(outcome.rendered, "USERSEG", "THEIRSEG", "OTHERSEG");
+    expect(u).toBeGreaterThanOrEqual(0);
+    expect(u).toBeLessThan(t!);
+    expect(t).toBeLessThan(o!);
+    expect(warnedFor(outcome.warnings, "insert[")).toEqual([]);
+    expect(fs.readFileSync(userFile, "utf8")).toBe(before);
+  });
+
+  test("an unapproved repo's cell is not drawn and its file is never named", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    answerRepo(project, "declined");
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(outcome.rendered).toContain("USERSEG");
+    expect(outcome.rendered).not.toContain("THEIRSEG");
+    expect(warnedFor(outcome.warnings, projectFile)).toEqual([]);
+  });
+
+  test("an anchor the bar does not have is a warning naming the file, the cell and the anchor", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "theirs", after: "nope" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(outcome.rendered).toContain("USERSEG");
+    expect(outcome.rendered).not.toContain("THEIRSEG");
+    const warned = warnedFor(outcome.warnings, "insert[0]");
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain(projectFile);
+    expect(warned[0]).toContain('"theirs"');
+    expect(warned[0]).toContain('"nope"');
+  });
+
+  test("a cell the user already places is drawn once, with no warning", async () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", "theirs"] } } }`,
+      `, theirs: { template: "THEIRSEG" }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(outcome.rendered.split("THEIRSEG")).toHaveLength(2);
+    expect(warnedFor(outcome.warnings, "insert[0]")).toEqual([]);
+  });
+
+  test("a cell whose id another segment holds is not drawn, and the warning names both", async () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", { seg: "other", id: "theirs" }] } } }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(outcome.rendered).toContain("OTHERSEG");
+    expect(outcome.rendered).not.toContain("THEIRSEG");
+    const warned = warnedFor(outcome.warnings, "insert[0]");
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain(projectFile);
+    expect(warned[0]).toContain('"theirs"');
+    expect(warned[0]).toContain('"other"');
+  });
+
+  test("a whole-tree user root is addressed by placement id the same way", async () => {
+    userRow(`{ h: ["mine", "other"] }`);
+    writeProject(`[{ seg: "theirs", before: "other" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    const [u, t, o] = order(outcome.rendered, "USERSEG", "THEIRSEG", "OTHERSEG");
+    expect(u).toBeGreaterThanOrEqual(0);
+    expect(u).toBeLessThan(t!);
+    expect(t).toBeLessThan(o!);
+  });
+
+  test("before places to the left, and a later cell may anchor on an earlier one", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(
+      `[{ seg: "theirs", before: "mine" }, { seg: "second", after: "theirs" }]`,
+      `theirs: { template: "THEIRSEG" }, second: { template: "SECONDSEG" }`,
+    );
+    const outcome = clean(await checkConfig(undefined, project));
+    const [t, s, u] = order(outcome.rendered, "THEIRSEG", "SECONDSEG", "USERSEG");
+    expect(t).toBeGreaterThanOrEqual(0);
+    expect(t).toBeLessThan(s!);
+    expect(s).toBeLessThan(u!);
+  });
+
+  test("edit mode offers no edit on an inserted cell and labels it with the file that placed it", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "theirs", before: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    const prepared = await prepareConfig(
+      outcome.layers,
+      null,
+      project,
+      [],
+      instantOf(new Date()),
+    );
+    try {
+      const { config } = prepared;
+      const nodes = [
+        ...walkNodes(fragmentNode(config.presets.default!.root!)),
+      ].flatMap((n) => (n.kind === "segment" ? [n] : []));
+      const acts = Object.values(config.actions) as unknown as Array<
+        Record<string, unknown>
+      >;
+      // Nothing removes, anchors on or configures the inserted placement;
+      // the user's cells keep theirs.
+      expect(acts.filter((a) => a.removeSegment === "theirs")).toEqual([]);
+      expect(acts.filter((a) => a.anchor === "theirs")).toEqual([]);
+      expect(acts.filter((a) => a.removeSegment === "mine")).toHaveLength(1);
+      // The leading `+` sits before the first cell the user's file holds.
+      expect(
+        acts.filter((a) => a.anchor === "mine" && a.relation === "before"),
+      ).toHaveLength(1);
+      const cell = nodes.find((n) => n.name === "theirs")!;
+      expect(cell.lead).toBeUndefined();
+      expect(cell.trail).toBeUndefined();
+      expect(cell.drafts).toBeUndefined();
+      const label = nodes.find((n) => n.name === "edit.label:theirs:theirs")!;
+      expect(label.opens).toBeUndefined();
+      expect(config.segments[label.name]!.template).toBe(
+        `{{ "theirs · ${outcome.layers[1]} insert[0]" }}`,
+      );
+      // A layout op aimed at the inserted id writes nothing.
+      const before = fs.readFileSync(userFile, "utf8");
+      expect(() =>
+        applyLayoutOp(noRecord, projectHome(), "presets.default.root", {
+          op: "remove",
+          target: "theirs",
+        }),
+      ).toThrow();
+      expect(fs.readFileSync(userFile, "utf8")).toBe(before);
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
 });

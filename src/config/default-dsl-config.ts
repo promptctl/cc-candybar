@@ -1707,4 +1707,6 @@ export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
     AUTHORED_PALETTE_NAMES,
   ),
   RAW_DEFAULT_DSL_CONFIG,
-);
+  // The bundled default authors no `insert`, so nothing is ever unplaced.
+  "<default>",
+).config;

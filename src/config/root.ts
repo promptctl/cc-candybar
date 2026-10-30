@@ -12,9 +12,13 @@
 // the floor preset all run the same expression [LAW:dataflow-not-control-flow].
 
 import {
+  placementId,
   walkNodePaths,
+  walkNodes,
   type ContainerNode,
+  type InsertCell,
   type LayoutNode,
+  type SegmentNode,
   type Root,
   type RootFragment,
 } from "./dsl-types.js";
@@ -122,6 +126,155 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
   return isRowsFragment(fragment)
     ? { ...base, ...fragment, rows: { ...base.rows, ...fragment.rows } }
     : rootOf(fragment);
+}
+
+// A cell a layer's `insert` list could not place, and why — the layer's
+// loader turns each into a warning naming its file.
+export interface Unplaced {
+  readonly entry: string;
+  readonly seg: string;
+  readonly reason: string;
+}
+
+// [LAW:one-source-of-truth] THE placement of a layer's `insert` cells, folded
+// over the root that layer's own `root` merged into, in list order (a later
+// cell may anchor on an earlier one). A cell lands beside the placement its
+// anchor names, wherever in the tree that is, so a whole-tree root and a rows
+// map are addressed alike. A cell whose id the tree already holds under the
+// same segment is satisfied as it stands; under another segment it would make
+// the id ambiguous, so it is refused like a missing anchor.
+// [LAW:no-silent-failure] Every cell that does not land comes back unplaced.
+export function insertCells(
+  root: Root,
+  cells: readonly InsertCell[],
+  file: string,
+): { readonly root: Root; readonly unplaced: readonly Unplaced[] } {
+  return cells.reduce<{ root: Root; unplaced: readonly Unplaced[] }>(
+    (acc, cell, i) => {
+      const entry = `insert[${i}]`;
+      const id = cell.id ?? cell.seg;
+      const held = segmentWithId(rootNode(acc.root), id);
+      if (held !== undefined) {
+        return held.name === cell.seg
+          ? acc
+          : refuse(
+              acc,
+              entry,
+              cell,
+              `as "${id}", but placement "${id}" is already segment "${held.name}" — give the cell its own id`,
+            );
+      }
+      const node: SegmentNode = {
+        kind: "segment",
+        name: cell.seg,
+        ...(cell.id !== undefined && { id: cell.id }),
+        insertedBy: { file, entry },
+      };
+      const rows = Object.entries(acc.root.rows);
+      const placed = rows.map(
+        ([name, row]) =>
+          [name, besideRow(row, cell.anchor, node, cell.relation)] as const,
+      );
+      return placed.some(([, row]) => row !== null)
+        ? {
+            ...acc,
+            root: {
+              ...acc.root,
+              rows: Object.fromEntries(
+                placed.map(([name, row], r) => [name, row ?? rows[r]![1]]),
+              ),
+            },
+          }
+        : refuse(
+            acc,
+            entry,
+            cell,
+            `${cell.relation} "${cell.anchor}", but the bar has no placement "${cell.anchor}"`,
+          );
+    },
+    { root, unplaced: [] },
+  );
+}
+
+function refuse(
+  acc: { root: Root; unplaced: readonly Unplaced[] },
+  entry: string,
+  cell: InsertCell,
+  reason: string,
+): { root: Root; unplaced: readonly Unplaced[] } {
+  return {
+    ...acc,
+    unplaced: [...acc.unplaced, { entry, seg: cell.seg, reason }],
+  };
+}
+
+function segmentWithId(tree: LayoutNode, id: string): SegmentNode | undefined {
+  for (const node of walkNodes(tree)) {
+    if (node.kind === "segment" && placementId(node) === id) return node;
+  }
+  return undefined;
+}
+
+// A row that IS the anchor becomes a horizontal row of the two cells; any
+// other row places the cell inside it. null: the anchor is not in this row.
+function besideRow(
+  row: LayoutNode,
+  anchor: string,
+  cell: SegmentNode,
+  relation: "before" | "after",
+): LayoutNode | null {
+  if (row.kind === "segment" && placementId(row) === anchor) {
+    const { when, ...rest } = row;
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: relation === "before" ? [cell, rest] : [rest, cell],
+      ...(when !== undefined && { when }),
+    };
+  }
+  return beside(row, anchor, cell, relation);
+}
+
+// The node with `cell` spliced beside the anchor among its siblings, or null
+// when no sibling list under `node` holds the anchor. Disclosure bodies are
+// searched like containers.
+function beside(
+  node: LayoutNode,
+  anchor: string,
+  cell: SegmentNode,
+  relation: "before" | "after",
+): LayoutNode | null {
+  if (node.kind === "segment") {
+    if (node.opens === undefined) return null;
+    const body = beside(node.opens.body, anchor, cell, relation);
+    return body === null
+      ? null
+      : { ...node, opens: { ...node.opens, body: body as ContainerNode } };
+  }
+  const at = node.children.findIndex(
+    (child) => child.kind === "segment" && placementId(child) === anchor,
+  );
+  if (at >= 0) {
+    const cut = relation === "before" ? at : at + 1;
+    return {
+      ...node,
+      children: [
+        ...node.children.slice(0, cut),
+        cell,
+        ...node.children.slice(cut),
+      ],
+    };
+  }
+  for (const [i, child] of node.children.entries()) {
+    const next = beside(child, anchor, cell, relation);
+    if (next !== null) {
+      return {
+        ...node,
+        children: node.children.map((c, j) => (j === i ? next : c)),
+      };
+    }
+  }
+  return null;
 }
 
 // Whether a fragment restages anything at all — false exactly for the merge's

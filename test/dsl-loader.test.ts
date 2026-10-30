@@ -2557,3 +2557,35 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     expect(caught.warnings).toEqual([]);
   });
 });
+
+// ─── insert ──────────────────────────────────────────────────────────────────
+
+describe("loadDslConfig — insert", () => {
+  test("a cell naming no side is an issue at its entry", () => {
+    expectIssue(`{ insert: [{ seg: "model" }] }`, {
+      path: "insert.0",
+      message: "got neither",
+    });
+  });
+
+  test("a cell naming both sides is an issue at its entry", () => {
+    expectIssue(
+      `{ insert: [{ seg: "model", before: "a", after: "b" }] }`,
+      { path: "insert.0", message: "got both" },
+    );
+  });
+
+  test("a cell naming an undeclared segment is an issue at its entry", () => {
+    expectIssue(`{ insert: [{ seg: "nosuchsegment", after: "model" }] }`, {
+      path: "insert.0",
+      message: /does not match any declared segment/,
+    });
+  });
+
+  test("insert must be a list", () => {
+    expectIssue(`{ insert: { seg: "model", after: "a" } }`, {
+      path: "insert",
+      message: "must be a list",
+    });
+  });
+});

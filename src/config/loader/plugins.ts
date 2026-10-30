@@ -262,7 +262,10 @@ export function applyPlugins(
             ctx,
           ),
           under,
-        );
+          // A definition may not declare `insert` (DEFINITION_KEYS), so
+          // nothing is ever unplaced.
+          file,
+        ).config;
         requireOneSourcePerFile(file, plugin, config);
         validate(config, plugin, under !== layer.config);
         return config;

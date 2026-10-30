@@ -57,7 +57,11 @@ import {
   inheritableSegmentNames,
   validateSegments,
 } from "./loader/segments.js";
-import { synthesizeGroupDecls, validateRootFragment } from "./loader/layout.js";
+import {
+  synthesizeGroupDecls,
+  validateInsert,
+  validateRootFragment,
+} from "./loader/layout.js";
 import {
   checkMenuDecls,
   synthesizePlacementMenus,
@@ -174,7 +178,11 @@ export function loadConfig(
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
   return path === null
-    ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) }
+    ? // No file authors no `insert`, so nothing is ever unplaced.
+      {
+        ...NO_FILE,
+        config: mergeWithDefault(NO_FILE.raw, dflt, "<default>").config,
+      }
     : loadConfigSource(
         path,
         fs.readFileSync(path, "utf-8"),
@@ -239,14 +247,20 @@ export function loadConfigSource(
     };
   });
   const { plugins, owning } = parsed.layer;
-  const standing = withDroppedPlacements(
-    mergeWithDefault(parsed.raw, plugins.config),
-    owning,
-  );
+  const merged = mergeWithDefault(parsed.raw, plugins.config, path);
+  const standing = withDroppedPlacements(merged.config, owning);
   return {
     source,
     raw: parsed.raw,
-    warnings: [...parsed.warnings, ...plugins.dropped.map(droppedPluginNotice)],
+    // [LAW:no-silent-failure] A cell this file's `insert` could not place is
+    // a warning on this file: the bar still draws, and says what it left out.
+    warnings: [
+      ...parsed.warnings,
+      ...plugins.dropped.map(droppedPluginNotice),
+      ...merged.unplaced.map(
+        (u) => `${path}: ${u.entry} places "${u.seg}" ${u.reason}`,
+      ),
+    ],
     plugins: {
       loaded: plugins.loaded,
       dropped: plugins.dropped,
@@ -884,6 +898,7 @@ function validateTopLevel(
   }
   if (raw.root !== undefined)
     out.root = validateRootFragment(ctx, "root", raw.root);
+  if (raw.insert !== undefined) out.insert = validateInsert(ctx, raw.insert);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions, home);
   // [LAW:no-silent-failure] `looks:` was renamed `styles:` (brandon-menu-ia-
@@ -957,6 +972,7 @@ const TOP_LEVEL_KEYS = new Set([
   "layout",
   "looks",
   "root",
+  "insert",
   "actions",
   "styles",
   "themeDefaults",

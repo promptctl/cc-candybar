@@ -19,7 +19,7 @@ import {
   type RawDslConfig,
   type SegmentDecl,
 } from "../dsl-types.js";
-import { EMPTY_ROWS, mergeRoot } from "../root.js";
+import { EMPTY_ROWS, insertCells, mergeRoot, type Unplaced } from "../root.js";
 
 /**
  * Merge a RawDslConfig on top of a default DslConfig. Pure function.
@@ -34,7 +34,9 @@ import { EMPTY_ROWS, mergeRoot } from "../root.js";
  *   root       : merge by row name (user wins per-name) when the user wrote a
  *                `{ rows }` map; a whole tree replaces the default's rows
  *                (root.ts's mergeRoot — the one fold presets reuse); absent
- *                → the empty rows map, the merge's identity.
+ *                → the empty rows map, the merge's identity. Then the
+ *                file's `insert` cells land beside their anchors; the ones
+ *                that cannot come back as `unplaced`.
  *                [LAW:one-source-of-truth] `layout:` is rejected at parse time
  *                with a migration error (removed in 2de.19), so only `root`
  *                ever reaches this function.
@@ -42,6 +44,25 @@ import { EMPTY_ROWS, mergeRoot } from "../root.js";
 export function mergeWithDefault(
   raw: RawDslConfig,
   dflt: DslConfig,
+  // The file `raw` was read from: stamped on every cell its `insert` places,
+  // and named by the warning for every cell it does not.
+  file: string,
+): { readonly config: DslConfig; readonly unplaced: readonly Unplaced[] } {
+  // [LAW:one-source-of-truth] A layer's `insert` cells land on the root its
+  // own `root` merged into — the same fold, one step further; the absent list
+  // is the identity [LAW:dataflow-not-control-flow].
+  const { root, unplaced } = insertCells(
+    mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
+    raw.insert ?? [],
+    file,
+  );
+  return { config: mergeSections(raw, dflt, root), unplaced };
+}
+
+function mergeSections(
+  raw: RawDslConfig,
+  dflt: DslConfig,
+  root: DslConfig["root"],
 ): DslConfig {
   return {
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
@@ -50,7 +71,7 @@ export function mergeWithDefault(
       dflt.segments,
       segmentDeltas(dflt.segments, raw.segments ?? {}),
     ),
-    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
+    root,
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
     // ships none).

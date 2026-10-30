@@ -116,7 +116,8 @@ describe("a preset's globals as a write target", () => {
     const merged = mergeWithDefault(
       { presets: { wide: { globals: { padding: 2 } } } },
       base,
-    );
+      "<test>",
+    ).config;
     expect(presetGlobals(merged, "wide")).toMatchObject({
       padding: 2,
       endcaps: "plain",

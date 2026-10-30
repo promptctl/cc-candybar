@@ -55,7 +55,7 @@ function render(n: number): string {
   }`;
   const raw = parseDslConfig("<test>", source);
   const config = validateConfig(
-    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: source },
+    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG, "<test>").config, raw, source: source },
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore();

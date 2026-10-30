@@ -48,7 +48,7 @@ const EMPTY_DEFAULT: DslConfig = {
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig("<test>", source);
   const config = validateConfig(
-    { config: mergeWithDefault(raw, dflt), raw, source: source },
+    { config: mergeWithDefault(raw, dflt, "<test>").config, raw, source: source },
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore();
@@ -153,7 +153,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       ...EMPTY_DEFAULT,
       helpers: { money: "DFLT-money", tokens: "DFLT-tokens" },
     };
-    const merged = mergeWithDefault({ helpers: { money: "USER-money" } }, dflt);
+    const merged = mergeWithDefault({ helpers: { money: "USER-money" } }, dflt, "<test>").config;
     expect(merged.helpers).toEqual({
       money: "USER-money", // user override
       tokens: "DFLT-tokens", // inherited
