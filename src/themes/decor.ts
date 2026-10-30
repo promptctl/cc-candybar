@@ -516,6 +516,14 @@ export type Axis = "row" | "cell";
 /** One step down the bar's tree: a placed position, and which axis it steps along. */
 export interface AddressStep extends PlacedStep {
   readonly axis: Axis;
+  /**
+   * The first and last places of the line the step's node is drawn on, so
+   * the keystones find the ends of every drawn line: a row's own line, or a
+   * line a `{ v }` inside it draws below, which starts where the `{ v }`
+   * sits. A row step's are the ends of its stack.
+   */
+  readonly lineStart: number;
+  readonly lineEnd: number;
 }
 
 /** The steps from the root to a node. The root's address is empty. */
@@ -653,20 +661,21 @@ export function decorEntryFor(decor: Decor, address: Address): DecorEntry {
   };
 }
 
-// Whether a cell stands at a keystone place, read off its authored place on
-// its row's line: the line's last place is the last leaf the row lays, through
-// any group nested in it. A node alone on an axis (an absent step) is that
-// axis's first child and its last. [LAW:dataflow-not-control-flow] One
-// predicate per place, in a table the variation's list indexes.
+// Whether a cell stands at a keystone place, read off its authored place and
+// the ends of the line it is drawn on: a line's last place is the last leaf
+// laid along it, through any group nested in the row. A node alone on an axis
+// (an absent step) is that axis's first child and its last.
+// [LAW:dataflow-not-control-flow] One predicate per place, in a table the
+// variation's list indexes.
 const KEYSTONE_AT: Record<
   Keystone,
   (row: AddressStep | undefined, cell: AddressStep | undefined) => boolean
 > = {
   "bar-start": (row, cell) =>
     (row?.index ?? 0) === 0 && (cell?.index ?? 0) === 0,
-  "line-start": (_row, cell) => (cell?.index ?? 0) === 0,
-  "line-end": (_row, cell) =>
-    cell === undefined || cell.index === cell.count - 1,
+  "line-start": (_row, cell) =>
+    cell === undefined || cell.index === cell.lineStart,
+  "line-end": (_row, cell) => cell === undefined || cell.index === cell.lineEnd,
 };
 
 /**
@@ -963,7 +972,14 @@ export function sameRegion(a: Region, b: Region): boolean {
 }
 
 const sameAddress = sameEach(
-  sameBy<AddressStep>({ index: is, count: is, distribution: is, axis: is }),
+  sameBy<AddressStep>({
+    index: is,
+    count: is,
+    distribution: is,
+    axis: is,
+    lineStart: is,
+    lineEnd: is,
+  }),
 );
 
 export const sameDecor = sameBy<Decor>({ variation: is, shade: is });

@@ -549,10 +549,13 @@ interface Span {
   readonly reach: number;
 }
 
-// A child's span, and the place it starts at, counted from its container's.
+// A child's span, the place it starts at, counted from its container's, and
+// whether it is drawn on a line of its own: every child of a vertical
+// container but its first.
 interface Laid {
   readonly start: number;
   readonly span: Span;
+  readonly ownLine: boolean;
 }
 
 function spanOf(node: LayoutNode): Span {
@@ -576,14 +579,16 @@ function spanOf(node: LayoutNode): Span {
 // a line.
 function laidOut(node: ContainerNode): Laid[] {
   const spans = node.children.map(spanOf);
+  const ownLine = (index: number): boolean =>
+    node.direction === "vertical" && index > 0;
   if (node.direction === "vertical" || node.unit === true) {
-    return spans.map((span) => ({ start: 0, span }));
+    return spans.map((span, i) => ({ start: 0, span, ownLine: ownLine(i) }));
   }
   let start = 0;
-  return spans.map((span) => {
+  return spans.map((span, i) => {
     const at = start;
     start += span.width;
-    return { start: at, span };
+    return { start: at, span, ownLine: ownLine(i) };
   });
 }
 
@@ -599,25 +604,41 @@ const reachOf = (laid: readonly Laid[]): number =>
 // the line: a container nested in a row is layout, not a colour unit, because
 // the cells in it sit side by side with the row's other cells, and two cells
 // side by side must differ. Under a row every step is a cell step at a place
-// on its line, carrying the row's count and distribution, which is why the
-// loader refuses a `distribution` written inside a row. A unit — edit chrome
-// around one content cell — is the one container that keeps its children on
-// one place, so entering edit mode recolours nothing.
+// on its line. It carries the row's count and distribution, which is why the
+// loader refuses a `distribution` written inside a row, and the ends of the
+// line it is drawn on (the row's own, or one a `{ v }` starts below it), so
+// the keystones find the first and last leaf of every drawn line. A unit —
+// edit chrome around one content cell — is the one container that keeps its
+// children on one place, so entering edit mode recolours nothing.
 export function placeChildren(
   node: ContainerNode,
   at: AddressStep | undefined,
 ): AddressStep[] {
   const laid = laidOut(node);
   if (at?.axis === "cell") {
-    return laid.map(({ start }) => ({ ...at, index: at.index + start }));
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine
+        ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 }
+        : { ...at, index };
+    });
   }
   const axis = AXIS_OF[node.direction];
   const distribution = placedBy(node.distribution);
-  const [places, count] =
+  // Rows are a stack, from the first to the last; a row's cells are on its
+  // line, which ends at the last place its first line holds.
+  const [places, count, lineEnd] =
     axis === "row"
-      ? [laid.map((_, index) => index), laid.length]
-      : [laid.map(({ start }) => start), reachOf(laid)];
-  return places.map((index) => ({ index, count, distribution, axis }));
+      ? [laid.map((_, index) => index), laid.length, laid.length - 1]
+      : [laid.map(({ start }) => start), reachOf(laid), spanOf(node).width - 1];
+  return places.map((index) => ({
+    index,
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd,
+  }));
 }
 
 const containerType: NodeType<"container"> = {

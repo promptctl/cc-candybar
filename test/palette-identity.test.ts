@@ -184,8 +184,11 @@ describe("the settings door and its frame-rate cell take two places of the first
 
   test("under every dial position whose window holds more than one tone, they wear two", () => {
     const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
-    // A window of one tone wears it on every cell, so it can part no two.
-    const parting = SHADE_NAMES.filter((shade) => SHADES[shade].tones.length > 1);
+    // `muted` is the one window of one tone, which wears it on every cell, so
+    // it can part no two. candybar-joiners-e5r4.tx7 gives it a second tone;
+    // this guard then fails, and the exemption goes with it.
+    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length === 1)).toEqual(["muted"]);
+    const parting = SHADE_NAMES.filter((shade) => shade !== "muted");
     try {
       bar.pick("theme", THEME);
       VIEWS[0]!.show(bar);
@@ -204,6 +207,5 @@ describe("the settings door and its frame-rate cell take two places of the first
     } finally {
       bar.dispose();
     }
-    expect(parting.length).toBeGreaterThan(1);
   });
 });

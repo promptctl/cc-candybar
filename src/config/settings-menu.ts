@@ -721,6 +721,14 @@ function prependAnchor(node: LayoutNode): LayoutNode {
     : {
         kind: "container",
         direction: "horizontal",
+        // [LAW:no-silent-failure] The gated row's cells are laid on this
+        // line, and a row nested in a row places nothing, so its authored
+        // distribution places them from here, as an ungated row's places the
+        // door beside its cells.
+        ...(node.kind === "container" &&
+          node.distribution !== undefined && {
+            distribution: node.distribution,
+          }),
         children: [anchorRef, node],
       };
 }
