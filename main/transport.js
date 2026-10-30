@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.167.1";
+var PACKAGE_VERSION = "1.168.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -37616,13 +37616,18 @@ var VARIATIONS = {
 var TRIAL_VARIATION_NAMES = Object.keys(
   TUNINGS
 );
-var vocabularyOf = (palette, decor, drawnAt) => decor.variation.hues.flatMap((hue) => {
-  const window2 = windowAt(palette, hue, decor.shade, drawnAt);
-  return decor.shade.tones.map((_, at) => ({
-    hue,
-    shade: window2[at % window2.length]
-  }));
-});
+var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
+  palette,
+  decor.shade,
+  decor.variation.hues.flatMap((hue) => {
+    const window2 = windowAt(palette, hue, decor.shade, drawnAt);
+    return decor.shade.tones.map((_, at) => ({
+      hue,
+      shade: window2[at % window2.length]
+    }));
+  }),
+  drawnAt
+);
 function windowAt(palette, hue, shade, drawnAt) {
   return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
     const drawn = drawnIn(palette, hue, drawnAt);
@@ -37713,6 +37718,10 @@ function rowAndCell(address) {
 var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
 function decorEntryFor(palette, decor, address, drawnAt) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
+  if (cell3 === void 0) return dealtAt(palette, decor, row2, cell3, drawnAt);
+  return lineAt(palette, decor, row2, cell3, drawnAt)[cell3.index - cell3.lineStart];
+}
+function dealtAt(palette, decor, row2, cell3, drawnAt) {
   const { hues, run: run3, keystones } = decor.variation;
   const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
   const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
@@ -37722,6 +37731,90 @@ function decorEntryFor(palette, decor, address, drawnAt) {
     hue,
     shade: vocabularySelect(windowAt(palette, hue, decor.shade, drawnAt), cell3)
   };
+}
+function lineAt(palette, decor, row2, cell3, drawnAt) {
+  const { hues, run: run3, keystones } = decor.variation;
+  const key = [
+    hues.join(","),
+    run3,
+    keystones.join(","),
+    decor.shade.tones.join(","),
+    row2 === void 0 ? "" : stepKey(row2),
+    // One answer for every place along the line, so the cell is keyed at
+    // the line's first.
+    stepKey(cell3, cell3.lineStart),
+    drawnAt
+  ].join("|");
+  return LINES(
+    palette,
+    key,
+    () => turnsHeld(
+      palette,
+      decor.shade,
+      Array.from(
+        { length: cell3.lineEnd - cell3.lineStart + 1 },
+        (_, at) => dealtAt(
+          palette,
+          decor,
+          row2,
+          { ...cell3, index: cell3.lineStart + at },
+          drawnAt
+        )
+      ),
+      drawnAt
+    )
+  );
+}
+var LINES = memoPerPalette();
+function stepKey({
+  axis,
+  index,
+  count,
+  distribution,
+  lineStart,
+  lineEnd,
+  ...unkeyed
+}, at = index) {
+  const none = unkeyed;
+  void none;
+  return `${axis},${at},${count},${distributionName(distribution)},${lineStart},${lineEnd}`;
+}
+function distributionName(distribution) {
+  const name = DISTRIBUTION_NAME.get(distribution);
+  if (name === void 0)
+    throw new Error("decorEntryFor: a cell placed outside DISTRIBUTIONS");
+  return name;
+}
+var DISTRIBUTION_NAME = new Map(
+  DISTRIBUTION_NAMES.map((name) => [DISTRIBUTIONS[name], name])
+);
+function turnsHeld(palette, shade, dealt, drawnAt) {
+  const line = [...dealt];
+  const drawn = (at) => {
+    const entry = line[at];
+    return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
+  };
+  const apart = (at) => {
+    const { hue } = line[at];
+    const taken = [drawn(at - 1), drawn(at + 1)].filter(
+      (colour) => colour !== void 0
+    );
+    const window2 = windowAt(palette, hue, shade, drawnAt);
+    const tone = window2.find((t2) => !taken.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken, drawnAt);
+    return tone === void 0 ? void 0 : { hue, shade: tone };
+  };
+  for (let at = 1; at < line.length; at++) {
+    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
+      continue;
+    const after = apart(at);
+    if (after !== void 0) {
+      line[at] = after;
+      continue;
+    }
+    const before = apart(at - 1);
+    if (before !== void 0) line[at - 1] = before;
+  }
+  return line;
 }
 var KEYSTONE_AT = {
   "bar-start": (row2, cell3) => (row2?.index ?? 0) === 0 && (cell3?.index ?? 0) === 0,
