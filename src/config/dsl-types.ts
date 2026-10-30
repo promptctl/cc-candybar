@@ -561,7 +561,7 @@ export type AuthoredVariableDecl =
 
 // [LAW:no-silent-failure] A plugin's data variable when the plugin did not
 // load: a DOCUMENT whose one outcome is the drop, so every template reading
-// `.plugins.<plugin>.data…` renders ⚠ naming why rather than failing the
+// `.<scope>.<plugin>.data…` renders ⚠ naming why rather than failing the
 // config that reads it. Synthesized by the plugin loader, never authored —
 // the variable loader accepts no `kind: "dropped"`.
 export interface DroppedVarDecl {
@@ -761,16 +761,31 @@ export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
 }
 
 // [LAW:one-source-of-truth] The templates a variable's declaration carries,
-// by field: a template variable's body and a source's cache key.
+// by field: a template variable's body and a source's cache key — listed once,
+// here, for the walk that reads them and the one that rewrites them.
+export function mapVariableTemplates(
+  v: VariableDecl,
+  f: (template: string, field: "template" | "cache.key") => string,
+): VariableDecl {
+  const body: VariableDecl =
+    v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
+  return hasCacheField(body) && "key" in body.cache
+    ? ({
+        ...body,
+        cache: { ...body.cache, key: f(body.cache.key, "cache.key") },
+      } as VariableDecl)
+    : body;
+}
+
 export function variableTemplates(
   v: VariableDecl,
 ): ReadonlyArray<readonly [field: "template" | "cache.key", template: string]> {
-  return [
-    ...(v.kind === "template" ? [["template", v.template] as const] : []),
-    ...(hasCacheField(v) && "key" in v.cache
-      ? [["cache.key", v.cache.key] as const]
-      : []),
-  ];
+  const found: Array<readonly [field: "template" | "cache.key", string]> = [];
+  mapVariableTemplates(v, (template, field) => {
+    found.push([field, template]);
+    return template;
+  });
+  return found;
 }
 
 export interface SegmentDecl {

@@ -1019,14 +1019,14 @@ declares the program that moves it beside the source it reads:
   },
   segments: {
     limit: {
-      when: '{{ hasKey .plugins.limit "status" }}',
-      template: 'limit {{ .plugins.limit.status.value }} {{ action "plugins.limit.raise" "[+]" }}',
+      when: '{{ hasKey .self "status" }}',
+      template: 'limit {{ .self.status.value }} {{ action "self.raise" "[+]" }}',
     },
   },
   actions: {
     raise: {
       run: ["./limit", "raise", "--session", "{{ .session.id }}"],
-      env: { LIMIT_HOME: "{{ .plugins.limit.status.home }}" },
+      env: { LIMIT_HOME: "{{ .self.status.home }}" },
       refreshes: ["status"],
     },
   },

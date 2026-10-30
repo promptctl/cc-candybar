@@ -158,7 +158,7 @@ describe("persistValueText", () => {
     expect(() =>
       writeValues(
         { record: () => {}, logger: () => {} },
-        { path: impossiblePath, above: [], repo: null, cwd: null },
+        { path: impossiblePath, above: [], repoLayers: [], repo: null, cwd: null },
         [["palette", "nord"]],
       ),
     ).toThrow();

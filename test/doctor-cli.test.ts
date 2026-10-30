@@ -358,7 +358,7 @@ describe("doctorPlan over a real config", () => {
     fs.writeFileSync(
       path.join(plugin, "plugin.json5"),
       `{ sources: { status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } } },
-         segments: { s: { template: "{{ .plugins.p.status }}" } } }`,
+         segments: { s: { template: "{{ .repo.p.status }}" } } }`,
     );
     // A session's file nobody has written for 31 days.
     const old = path.join(storage, "s.json");
@@ -367,11 +367,11 @@ describe("doctorPlan over a real config", () => {
     fs.utimesSync(old, at, at);
     fs.writeFileSync(
       projectConfig(),
-      `{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.s"] } }`,
+      `{ plugins: ["./p/plugin.json5"], root: { h: ["repo.p.s"] } }`,
     );
     const load = loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
     expect(load.error).toBeNull();
-    expect(Object.keys(load.config.variables)).toContain("plugins.p.status");
+    expect(Object.keys(load.config.variables)).toContain("repo.p.status");
     // Long enough for a sweep the load started to have unlinked it.
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fs.existsSync(old)).toBe(true);

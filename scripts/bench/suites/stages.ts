@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  NO_REPO,
   prepareConfig,
   renderEffective,
   type PreparedConfig,
@@ -49,7 +50,7 @@ async function prepared(
   const warnings: string[] = [];
   const config = await prepareConfig(
     layers,
-    null,
+    NO_REPO,
     cwd,
     warnings,
     instantOf(new Date()),
@@ -152,7 +153,7 @@ export const STAGES: readonly Benchmark[] = [
             [],
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },
-            { repo: null, cwd },
+            { repo: null, cwd, repoLayers: [] },
           );
         });
         return measured([{ name: "load", samples: ms }]);

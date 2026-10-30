@@ -26,7 +26,7 @@
 
 import { linkSignerFromKeyFile } from "./daemon/link-key.js";
 import { repoConfigs } from "./daemon/repo-configs.js";
-import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
+import { repoGateLines } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
 import type { CliPlan } from "./cli-plan.js";
@@ -39,6 +39,7 @@ import {
   ConfigError,
   refuseDrops,
   type DroppedPlugin,
+  type SessionDirs,
 } from "./config/dsl-loader.js";
 import { cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
@@ -291,7 +292,7 @@ export function checkPayload(
     // its program first writes. So a segment gated on `hasKey` is hidden, and
     // an unguarded read fails the check with the missing-field error that
     // session's bar would draw.
-    plugins: projectSources(
+    ...projectSources(
       Object.entries(config.variables).flatMap(([name, decl]) =>
         decl.kind === "source" ? [name] : [],
       ),
@@ -428,7 +429,10 @@ export async function checkConfig(
   try {
     const rendered = await loadRegisterRender(
       layers,
-      resolution.repos.plugins,
+      {
+        repo: resolution.repos.plugins,
+        repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
+      },
       cwd,
       warnings,
       settleMs,
@@ -491,9 +495,16 @@ export interface PreparedConfig {
   readonly registry: SourceRegistry;
 }
 
+// The repository a chain loads with: its approved project, and the layers it
+// supplies.
+export type RepoSession = Omit<SessionDirs, "cwd">;
+
+// A chain no repository supplies a layer of, and no approved project.
+export const NO_REPO: RepoSession = { repo: null, repoLayers: [] };
+
 export async function prepareConfig(
   layers: readonly string[],
-  repo: ApprovedRepo | null,
+  repo: RepoSession,
   cwd: string,
   warnings: string[],
   // The instant the view's first payload is stamped at: the one its renders
@@ -507,7 +518,7 @@ export async function prepareConfig(
     layers,
     DEFAULT_DSL_CONFIG,
     { warned: (w) => warnings.push(...w) },
-    { repo, cwd },
+    { ...repo, cwd },
   );
   // [LAW:no-silent-failure] The bar draws past a placement of an undeclared
   // segment; a check refuses it, as the file's author has to fix it.
@@ -669,7 +680,7 @@ export async function renderEffective(
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
   layers: readonly string[],
-  repo: ApprovedRepo | null,
+  repo: RepoSession,
   cwd: string,
   warnings: string[],
   settleMs: number,

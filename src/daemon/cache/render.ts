@@ -84,10 +84,10 @@ import { digestOf, type Projection } from "../../utils/plain.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
 import {
-  ownedBy,
   pluginDataVar,
-  pluginNameOf,
+  type PluginDefinition,
 } from "../../config/loader/plugins.js";
+import { ownedBy, pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -337,6 +337,8 @@ type LoadedPlugins = LoadedChain["installed"];
 // one.
 export interface ConfigChain {
   readonly layers: readonly string[];
+  // The layers a repository supplies (`ConfigResolution`).
+  readonly repoLayers: readonly string[];
   readonly home: string;
   // The session's project, once approved: where the plugins it ships live.
   readonly repo: ApprovedRepo | null;
@@ -362,30 +364,28 @@ export function pluginLoadLine(
     checkout === null
       ? "-"
       : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
-  const dataOf = (definition: string): string => {
-    const name = pluginNameOf(definition);
+  const dataOf = (definition: PluginDefinition): string => {
     const data =
-      name === undefined ? undefined : config.variables[pluginDataVar(name)];
+      definition.name === undefined
+        ? undefined
+        : config.variables[pluginDataVar(pluginNs(definition))];
     return data?.kind === "file" ? data.path : "none";
   };
   // What the merged plugins declare, by kind: a source is synthesized from
   // `sources:`, every other name under a namespace but the data file's came
   // from `variables:`.
   const declared = loaded
-    .flatMap((definition) => {
-      const name = pluginNameOf(definition);
-      return name === undefined ? [] : [name];
-    })
-    .flatMap((name) =>
+    .flatMap((d) => (d.name === undefined ? [] : [pluginNs(d)]))
+    .flatMap((ns) =>
       Object.entries(config.variables).filter(
-        ([v]) => ownedBy(name)(v) && v !== pluginDataVar(name),
+        ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns),
       ),
     );
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
   return (
     `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` +
-    loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
+    loaded.map((p) => ` +${p.path} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
   );
@@ -665,7 +665,7 @@ function watchTargetsFor(entry: CacheEntry): {
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
     ...roots,
-    ...loaded,
+    ...loaded.map((d) => d.path),
     ...[...dropped, ...unreached].map((d) => d.path),
     // [LAW:single-enforcer] A declared storage folder is watched by name in
     // its plugin folder, by the follower that already watches the definition:
@@ -799,6 +799,7 @@ function loadKey(inputs: LoadInputs): string {
     cwd: inputs.cwd,
     chain: {
       layers: chain.layers,
+      repoLayers: chain.repoLayers,
       home: chain.home,
       repo: chain.repo,
     } satisfies Projection<ConfigChain>,
@@ -875,7 +876,7 @@ export function resolveLoad(
       chain.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain.repo, cwd },
+      { repo: chain.repo, cwd, repoLayers: chain.repoLayers },
     );
     const inputs = {
       cwd,
@@ -1006,7 +1007,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         checkout: installed.checkout,
         roots: installed.roots,
         // What renders, as the loader decided it: a nearer layer's load or
-        // drop replaces a farther one's of the same name.
+        // drop replaces a farther one's of the same namespace.
         loaded: [...installed.rendering.values()],
         dropped: [
           ...installed.dropped,
@@ -1121,6 +1122,7 @@ export function loadFromDisk(
   // default — what distinguishes them is a notice, below, not a load path.
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
+    repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
     home: resolution.home,
     repo: repos.plugins,
   };
@@ -1165,7 +1167,7 @@ export function fallbackState(
   // as the load would have.
   const resolved = resolveLoad(
     cwd,
-    { layers: [], home: "", repo },
+    { layers: [], repoLayers: [], home: "", repo },
     deps.storage,
   );
   const built =

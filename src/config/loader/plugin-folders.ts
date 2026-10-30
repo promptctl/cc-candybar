@@ -6,7 +6,13 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DEFINITION_FILE, type DroppedPlugin } from "./plugins.js";
+import {
+  DEFINITION_FILE,
+  pluginDefinition,
+  type DroppedPlugin,
+  type PluginDefinition,
+} from "./plugins.js";
+import type { PluginScope } from "./plugin-scope.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "./repo-gate.js";
 
@@ -15,24 +21,38 @@ import type { ApprovedRepo } from "./repo-gate.js";
  * (package managers — Homebrew's `share/` — the first entry the most
  * important, so it comes last), then `$XDG_DATA_HOME` (the user's), then
  * `<repo>/.cc-candybar/plugins` (a repo's own, for sessions working there,
- * once the user approved it). A nearer root's plugin replaces a farther
- * one's of the same name. Read from the daemon's environment, as the XDG
- * config location is.
+ * once the user approved it). Each root carries its scope: the repo's is
+ * `repo`, every other `plugins`. Within a scope a nearer root's plugin
+ * replaces a farther one's of the same name. Read from the daemon's
+ * environment, as the XDG config location is.
  */
-export function pluginRoots(repo: ApprovedRepo | null): readonly string[] {
+// [LAW:one-source-of-truth] The scope is decided here, where the root is
+// found, and travels with every definition the root holds.
+export interface PluginRoot {
+  readonly dir: string;
+  readonly scope: PluginScope;
+}
+
+export function pluginRoots(repo: ApprovedRepo | null): readonly PluginRoot[] {
   const dataDirs = (process.env.XDG_DATA_DIRS || defaultDataDirs())
     .split(":")
     .filter((d) => d !== "");
-  const roots = [
+  const installed = [
     ...[...dataDirs]
       .reverse()
       .map((d) => path.join(d, "cc-candybar", "plugins")),
     userPluginRoot(),
-    ...(repo === null ? [] : [path.join(repo, REPO_PLUGIN_DIR)]),
   ];
   // A root listed twice keeps its NEAREST position: `$XDG_DATA_HOME` named in
   // `$XDG_DATA_DIRS` too still outranks every package manager's root.
-  return roots.filter((r, i) => roots.lastIndexOf(r) === i);
+  return [
+    ...installed
+      .filter((r, i) => installed.lastIndexOf(r) === i)
+      .map((dir) => ({ dir, scope: "plugins" as const })),
+    ...(repo === null
+      ? []
+      : [{ dir: path.join(repo, REPO_PLUGIN_DIR), scope: "repo" as const }]),
+  ];
 }
 
 // The user's plugin root, `$XDG_DATA_HOME/cc-candybar/plugins`: where
@@ -62,8 +82,8 @@ export interface InstalledPlugins {
   // The roots searched, lowest first — every one is watched, so a plugin
   // installed into any of them, or a root created, reloads.
   readonly roots: readonly string[];
-  // One definition path per plugin name, the nearest root's, in root order.
-  readonly definitions: readonly string[];
+  // One definition per plugin namespace, the nearest root's, in root order.
+  readonly definitions: readonly PluginDefinition[];
   // Roots a listing could not see into (anything but absence).
   readonly unchecked: readonly Unchecked[];
   // Files sitting directly in a root: a plugin is a folder, so each is a drop
@@ -75,28 +95,43 @@ export interface InstalledPlugins {
 // one that cannot be listed is a fact the caller reports, never absence.
 export function installedPlugins(repo: ApprovedRepo | null): InstalledPlugins {
   const roots = pluginRoots(repo);
-  const byName = new Map<string, string>();
+  // [LAW:single-enforcer] The one place same-scope precedence applies: keyed
+  // by namespace, so a repo's `lit` and an installed `lit` both survive.
+  const byNs = new Map<string, PluginDefinition>();
   const unchecked: Unchecked[] = [];
   const strays: DroppedPlugin[] = [];
-  for (const root of roots) {
+  for (const { dir: root, scope } of roots) {
     const listed = listFolders(root);
     if ("error" in listed) {
       unchecked.push(listed);
       continue;
     }
     for (const name of listed.folders) {
-      byName.delete(name);
-      byName.set(name, path.join(root, name, DEFINITION_FILE));
+      const definition = pluginDefinition(
+        path.join(root, name, DEFINITION_FILE),
+        scope,
+      );
+      // Keyed by scope and folder alike for a folder whose name is no
+      // plugin's: it still loads, once, and drops naming why.
+      const key = `${scope}\0${name}`;
+      byNs.delete(key);
+      byNs.set(key, definition);
     }
     for (const file of listed.files) {
       strays.push({
         path: path.join(root, file),
-        plugin: undefined,
+        scope,
+        name: undefined,
         reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${path.join(root, "<name>", DEFINITION_FILE)}`,
       });
     }
   }
-  return { roots, definitions: [...byName.values()], unchecked, strays };
+  return {
+    roots: roots.map((r) => r.dir),
+    definitions: [...byNs.values()],
+    unchecked,
+    strays,
+  };
 }
 
 export function listFolders(

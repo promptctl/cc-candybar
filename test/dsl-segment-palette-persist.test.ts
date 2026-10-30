@@ -468,7 +468,7 @@ describe("config-file-store: segment-palette placement", () => {
     }`;
     durable.write(text);
     expect(() =>
-      writeValues(store(), { path: durable.configPath, above: [], repo: null, cwd: null }, [["segments.ghost.palette", "nord"]]),
+      writeValues(store(), { path: durable.configPath, above: [], repoLayers: [], repo: null, cwd: null }, [["segments.ghost.palette", "nord"]]),
     ).toThrow(
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
@@ -539,7 +539,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       await reloads.after(entry, () =>
         writeValues(
           store(),
-          { path: durable.configPath, above: [], repo: null, cwd: null },
+          { path: durable.configPath, above: [], repoLayers: [], repo: null, cwd: null },
           [["segments.sidebar.palette", "nord"]],
         ),
       );
@@ -571,7 +571,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], repo: null, cwd: null },
+      { path: durable.configPath, above: [], repoLayers: [], repo: null, cwd: null },
       [["segments.sidebar.palette", "gruvbox"]],
     );
 
@@ -610,7 +610,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], repo: null, cwd: null },
+      { path: durable.configPath, above: [], repoLayers: [], repo: null, cwd: null },
       [["segments.directory.palette", "nord"]],
     );
 

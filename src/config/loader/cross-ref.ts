@@ -82,6 +82,7 @@ import {
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
+import { otherScopeHint } from "./plugin-scope.js";
 import {
   retiredReadHint,
   retiredVariableMessage,
@@ -187,8 +188,24 @@ export function authoredPlacement(
 
 // The message a placement of an undeclared segment is reported with, at the
 // layout key that places it.
-export const unplacedMessage = (layoutKey: string, name: string): string =>
-  `${layoutKey} entry "${name}" does not match any declared segment${renamedHint(name)}`;
+export const unplacedMessage = (
+  layoutKey: string,
+  name: string,
+  segments: Readonly<Record<string, unknown>>,
+): string =>
+  `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+
+// Why a placed name is missing, when the config can say: a built-in segment
+// renamed, or a plugin segment declared under the other plugin scope.
+function missingSegmentHint(
+  name: string,
+  segments: Readonly<Record<string, unknown>>,
+): string {
+  return (
+    renamedHint(name) +
+    otherScopeHint(name, (other) => Object.hasOwn(segments, other))
+  );
+}
 
 export function validateCrossReferences(
   ctx: ValidateCtx,
@@ -484,7 +501,7 @@ export function validateCrossReferences(
         reported.add(node.name);
         ctx.unplaced.push({
           path,
-          message: unplacedMessage(layoutKey, node.name),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments),
           line,
         });
       }
@@ -529,7 +546,7 @@ export function validateCrossReferences(
       ctx.inherited.push({
         name: node.name,
         path: key,
-        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
+        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${missingSegmentHint(node.name, cfg.segments)}`,
         line: findKeyLine(ctx.source, key.split(".")),
       });
     }
@@ -1340,7 +1357,7 @@ export function validateDeclarations(
       if (decl?.kind === "source") continue;
       ctx.issues.push({
         path: `actions.${name}.refreshes`,
-        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, plugins.<plugin>.<source>; a plugin names its own sources bare)`,
+        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, <scope>.<plugin>.<source> where the scope is plugins or repo; a plugin names its own sources bare)`,
         line: findKeyLine(ctx.source, ["actions", name, "refreshes"]),
       });
     }

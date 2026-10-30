@@ -297,17 +297,43 @@ export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
 // program, arguments and environment values, each evaluated where the action
 // is realized. Every walk of an action's text asks this, so an arm's templates
 // are listed once.
+// The walk that rewrites them is the same list (`mapActionTemplates`).
 export function* actionTemplates(
   a: ActionDecl,
 ): IterableIterator<readonly [field: string, source: string]> {
-  if ("copy" in a) yield ["copy", a.copy];
-  if ("open" in a) yield ["open", a.open];
-  if ("preset" in a && a.preset === "delete") yield ["name", a.name];
+  const found: Array<readonly [string, string]> = [];
+  mapActionTemplates(a, (source, field) => {
+    found.push([field, source]);
+    return source;
+  });
+  yield* found;
+}
+
+export function mapActionTemplates(
+  a: ActionDecl,
+  f: (source: string, field: string) => string,
+): ActionDecl {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
   if ("run" in a) {
-    for (const [i, item] of a.run.entries()) yield [`run.${i}`, item];
-    for (const [name, value] of Object.entries(a.env))
-      yield [`env.${name}`, value];
+    const run = a.run.map((item, i) => f(item, `run.${i}`)) as [
+      string,
+      ...string[],
+    ];
+    return {
+      ...a,
+      run,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`),
+        ]),
+      ),
+    };
   }
+  return a;
 }
 
 // [LAW:types-are-the-program] Does this action take the value it writes from

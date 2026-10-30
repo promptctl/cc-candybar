@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
+import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
 import { durableConfig, loadConfigChain } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
@@ -74,7 +74,7 @@ test("a project file that places one segment renders over the user's whole confi
   expect(outcome.layers).toEqual([userFile, projectFile]);
   expect(outcome.rendered).toContain("USERSEG");
   expect(outcome.rendered).toContain("PROJSEG");
-  const prepared = await prepareConfig(outcome.layers, null, project, [], instantOf(new Date()));
+  const prepared = await prepareConfig(outcome.layers, NO_REPO, project, [], instantOf(new Date()));
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {
@@ -92,7 +92,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [projectFile], repo: project, cwd: project });
+  expect(home).toEqual({ path: userFile, above: [projectFile], repoLayers: [projectFile], repo: project, cwd: project });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -209,7 +209,7 @@ describe("a project layer inserting into the user's row", () => {
     const outcome = clean(await checkConfig(undefined, project));
     const prepared = await prepareConfig(
       outcome.layers,
-      null,
+      NO_REPO,
       project,
       [],
       instantOf(new Date()),
@@ -365,7 +365,7 @@ describe("a project layer inserting into the user's row", () => {
     const outcome = clean(await checkConfig(undefined, project));
     const prepared = await prepareConfig(
       outcome.layers,
-      null,
+      NO_REPO,
       project,
       [],
       instantOf(new Date()),
@@ -418,7 +418,7 @@ describe("a project layer inserting into the user's row", () => {
       [userFile, projectFile],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: null, cwd: project },
+      { repo: null, cwd: project, repoLayers: [projectFile] },
     );
     const drawn = (preset: string) =>
       [...walkNodes(fragmentNode(loaded.config.presets[preset]!.root!))]

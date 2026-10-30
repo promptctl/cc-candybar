@@ -67,16 +67,20 @@ export function dslConfigCandidatePaths(
     ...new Set([
       ...(projectDir
         ? CONFIG_EXTENSIONS.map((ext) =>
-            path.join(projectDir, `.cc-candybar.${ext}`),
+            path.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`),
           )
         : []),
       ...CONFIG_EXTENSIONS.map((ext) =>
-        path.join(effectiveCwd, `.cc-candybar.${ext}`),
+        path.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`),
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`),
     ]),
   ];
 }
+
+// [LAW:one-source-of-truth] The base name a repository's own config file
+// carries, at a project or working directory.
+const REPO_CONFIG_BASE = ".cc-candybar";
 
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
@@ -121,6 +125,11 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
   | {
       readonly kind: "chain";
       readonly layers: readonly string[];
+      // [LAW:one-source-of-truth] The layers a repository supplies — found at
+      // a project or working directory, the ones the gate answers for — so
+      // the plugins each lists are `repo` plugins. The user's file and an
+      // explicit one, whatever their name, are never among them.
+      readonly repoLayers: readonly string[];
       readonly home: string;
       readonly unchecked: readonly Unchecked[];
     }
@@ -209,18 +218,26 @@ export function resolveDslConfig(
     found.flatMap((f) => (f.repo === null ? [] : [f.repo])),
     repoProject(projectDir),
   );
-  const layers = found
+  const kept = found
     .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
-    .map((f) => f.file)
     .reverse();
+  const layers = kept.map((f) => f.file);
+  const repoLayers = kept.flatMap((f) => (f.repo === null ? [] : [f.file]));
   if (configFile === undefined) {
-    return { kind: "chain", layers, home: userHome(layers), unchecked, repos };
+    return {
+      kind: "chain",
+      layers,
+      repoLayers,
+      home: userHome(layers),
+      unchecked,
+      repos,
+    };
   }
   // An explicit path is the sole candidate: its one probe is the verdict.
   const [own] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
+    return { kind: "chain", layers, repoLayers, home, unchecked, repos };
   }
   return own === undefined
     ? { kind: "missing", path: configFile, home, repos }
@@ -279,6 +296,8 @@ export interface ConfigHome {
   // The chain's layers over `path`, lowest first. The home is the chain's
   // bottom, so a layer is either the home or above it.
   readonly above: readonly string[];
+  // The chain's layers a repository supplies (`ConfigResolution`).
+  readonly repoLayers: readonly string[];
   // The approved project whose plugins the chain loads, and the working
   // directory their checkout data paths resolve against.
   readonly repo: ApprovedRepo | null;
@@ -296,6 +315,7 @@ export function durableConfig(
   return {
     path: resolved.home,
     above: layers.filter((l) => l !== resolved.home),
+    repoLayers: resolved.kind === "chain" ? resolved.repoLayers : [],
     repo: resolved.repos.plugins,
     cwd: cwd ?? null,
   };
