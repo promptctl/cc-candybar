@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-489",
+      "ref": "refs/pull/489/merge",
+      "sha": "d4814d1f4822f813f97e9f07f08656e34540cd0a",
+      "timestamp": "2026-10-30T12:49:17.156Z",
+      "commits": [
+        {
+          "sha": "d4814d1f4822f813f97e9f07f08656e34540cd0a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:48:29Z",
+          "message": "Merge 5adec4f1f9b8016612816a01f8861e325182a4b2 into 3ac1f0ebd17dcc49615d30cb2f79602aa362240d\n"
+        },
+        {
+          "sha": "5adec4f1f9b8016612816a01f8861e325182a4b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:55:47-06:00",
+          "message": "fix(plugins): self binds in an action's segment names, and the scope check reads every name an action or segment var carries, once (candybar-plugins-vf6g.3gg)\n"
+        },
+        {
+          "sha": "ced247d28d5beb305b451fed59ffd88e18df63cb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:43:33-06:00",
+          "message": "fix(config): a segment's own var named into a plugin scope is refused, so a segment named repo cannot shadow repo.<plugin> (candybar-plugins-vf6g.3gg)\n"
+        },
+        {
+          "sha": "fe6b75a5f584deffca99106d9f6d019daaf3202e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:34:29-06:00",
+          "message": "fix(plugins): a cache's depends_on names its plugin through self, and one predicate answers which names a namespace owns (candybar-plugins-vf6g.3gg)\n"
+        },
+        {
+          "sha": "d3a0c9bd39960953e2bcb82f4cdce56b2c517b37",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:16:56-06:00",
+          "message": "fix(plugins): a plugin names itself scope-free, so one definition loads alike from a repo and an install (candybar-plugins-vf6g.3gg)\n\nA definition names itself `self` (`.self.data`, `template \"self.state\"`,\n`action \"self.go\"`, `do: [\"self.go\", …]`); the loader binds it to the\nnamespace the plugin loads under, as it binds bare session keys and\nrefreshes. A plugin spelling its own name under the other scope drops,\nnaming the `self` form. A config's plugins are the repository's when\ndiscovery found the file at the project or working directory, not by its\nname. A placement missing from one scope names the other's spelling.\nUnnamed drops answer only within their own scope. Both plugin roots are\nrefused to every config file's own declarations. Plugin identity is a\ntyped { scope, name } with one namespace function.\n\nAbsorbs candybar-plugins-vf6g.3tv.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "231dfc1d5faf5bc24b5330f48547f893f7143637",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:49:53-06:00",
+          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-495",
       "ref": "refs/pull/495/merge",
       "sha": "032c680bb74be3a3a5e9c57b4ebe7b88f7610645",
@@ -78,56 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:38:08-06:00",
           "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-489",
-      "ref": "refs/pull/489/merge",
-      "sha": "33f8b5da9929d4fb644411530c1ba713f66ebb38",
-      "timestamp": "2026-10-30T11:57:46.820Z",
-      "commits": [
-        {
-          "sha": "33f8b5da9929d4fb644411530c1ba713f66ebb38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:56:29-06:00",
-          "message": "Merge db4823e7726f20ef94a9b30b712b6c5be6646948 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
-        },
-        {
-          "sha": "db4823e7726f20ef94a9b30b712b6c5be6646948",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:55:47-06:00",
-          "message": "fix(plugins): self binds in an action's segment names, and the scope check reads every name an action or segment var carries, once (candybar-plugins-vf6g.3gg)\n"
-        },
-        {
-          "sha": "9e957aec1d32d050efa9c5be99dadd7ded0f07b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:43:33-06:00",
-          "message": "fix(config): a segment's own var named into a plugin scope is refused, so a segment named repo cannot shadow repo.<plugin> (candybar-plugins-vf6g.3gg)\n"
-        },
-        {
-          "sha": "85be5f59886f75a92906e36775b1a402a09822d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:34:29-06:00",
-          "message": "fix(plugins): a cache's depends_on names its plugin through self, and one predicate answers which names a namespace owns (candybar-plugins-vf6g.3gg)\n"
-        },
-        {
-          "sha": "cd8477a0940c974b49f0409129ff3925f241774b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:16:56-06:00",
-          "message": "fix(plugins): a plugin names itself scope-free, so one definition loads alike from a repo and an install (candybar-plugins-vf6g.3gg)\n\nA definition names itself `self` (`.self.data`, `template \"self.state\"`,\n`action \"self.go\"`, `do: [\"self.go\", …]`); the loader binds it to the\nnamespace the plugin loads under, as it binds bare session keys and\nrefreshes. A plugin spelling its own name under the other scope drops,\nnaming the `self` form. A config's plugins are the repository's when\ndiscovery found the file at the project or working directory, not by its\nname. A placement missing from one scope names the other's spelling.\nUnnamed drops answer only within their own scope. Both plugin roots are\nrefused to every config file's own declarations. Plugin identity is a\ntyped { scope, name } with one namespace function.\n\nAbsorbs candybar-plugins-vf6g.3tv.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "2a0e2f8bd23f39a3ffb5456a36cd3b2e8e379697",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:49:53-06:00",
-          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
         }
       ]
     }
