@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-512",
+      "ref": "refs/pull/512/merge",
+      "sha": "2d899a5795737a851430d6ec8feb4974d7cfc85a",
+      "timestamp": "2026-10-30T23:18:12.494Z",
+      "commits": [
+        {
+          "sha": "2d899a5795737a851430d6ec8feb4974d7cfc85a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:17:13-06:00",
+          "message": "Merge e2f67df1435ec8911d3ced1341e8f9aad9977205 into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+        },
+        {
+          "sha": "e2f67df1435ec8911d3ced1341e8f9aad9977205",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:16:28-06:00",
+          "message": "fix(colour): a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r)\n\nThe turn rule moves a cell either side of a hue turn to the nearest rung\nof its ladder drawn apart from both neighbours, and that rung can lie\npast its window. The pressed shade keeps apart only from the tones the\nwindows deal, so an open trigger standing at a turn could wear the very\ncolour the moved cell beside it wears. The press cannot learn its\nneighbours: a band's colours never depend on where its trigger stands.\nThe turn side can. Every trigger on the bar opens its lineage at depth\n0, so the colour it wears is one per bar, and the turn rule now takes it\nas a member of the moved cell's taken set, read through `pressedAt` and\ncompared by `drawnColour` identity.\n\nOrder of the search: the cell after the turn, then the one before it,\neach kept off its neighbours and the press; then the same two kept off\ntheir neighbours alone. Trying the cell before the turn against the\npress ahead of the neighbours-only fallback is what holds the authored\nframes: under alt on rose-pine-moon and solarized-*, and under\nstart-secondary on catppuccin-frappe and rose-pine-dawn, the cell after\nthe turn has no rung apart from both neighbours and the press, while\nthe cell before has one. The line memo now keys on the lineage and the\ndial's pressed shade, which the rule reads.\n\nThe pressed shade's rule and its three sets are unchanged. The sweep\nreader's cell-text helpers move into test/helpers/seams.ts, and the\nsweep's press exemption is exported for the new frame test.\n\ntest/trigger-at-turn.test.ts draws an authored row with a `{{ menu }}`\ntrigger at a turn, open, under alt (trigger at cell 5 of the second row)\nand start-secondary (trigger at the line-start keystone), every bundled\ntheme at 256 and ansi. On main it fails at ansi in rose-pine-moon,\nsolarized-dark and solarized-light (alt) and catppuccin-frappe and\nrose-pine-dawn (start-secondary). The policy 4 unit property states the\npress as a member of the taken set; two pinned cases show a window tone\npassed over for the press and the cell before the turn moving.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0ed75d194e35c845f139e257b73bd2118c63d722",
