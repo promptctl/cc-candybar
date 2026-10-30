@@ -34,7 +34,10 @@ import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { declaredVariables } from "../config/loader/refs.js";
-import { PLUGIN_SCOPES, type PluginScope } from "../config/loader/plugins.js";
+import {
+  PLUGIN_SCOPES,
+  type PluginScope,
+} from "../config/loader/plugin-scope.js";
 import { payloadPathOf, valueReadsOf } from "../config/loader/value-reads.js";
 import {
   prOfHead,
@@ -1582,27 +1585,22 @@ export function projectSources<P>(
   read: (name: string) => Outcome<JsonValue> | P,
 ): Record<PluginScope, SourcesPayload<P>> {
   // [LAW:dataflow-not-control-flow] Every scope is a key, empty or not, and
-  // every source nests under its own: no branch on which scope it is.
-  const scoped = Object.fromEntries(
-    PLUGIN_SCOPES.map((scope) => [
-      scope,
-      {} as Record<string, Record<string, Outcome<JsonValue> | P>>,
-    ]),
-  ) as Record<
-    PluginScope,
-    Record<string, Record<string, Outcome<JsonValue> | P>>
-  >;
+  // every source lands at its own payload path (`payloadPathOf`: the name it
+  // is declared under), nested one object per dot — no branch on which scope
+  // or plugin it is.
+  const payload: Record<string, unknown> = Object.fromEntries(
+    PLUGIN_SCOPES.map((scope) => [scope, {}]),
+  );
   for (const name of names) {
-    // [LAW:types-are-the-program] A source's name is
-    // `<scope>.<plugin>.<source>`, each one identifier (the plugin loader).
-    const [scope, plugin, source] = name.split(".") as [
-      PluginScope,
-      string,
-      string,
-    ];
-    (scoped[scope][plugin] ??= {})[source] = read(name);
+    const keys = name.split(".");
+    const leaf = keys.pop()!;
+    const parent = keys.reduce<Record<string, unknown>>(
+      (at, key) => (at[key] ??= {}) as Record<string, unknown>,
+      payload,
+    );
+    parent[leaf] = read(name);
   }
-  return scoped;
+  return payload as Record<PluginScope, SourcesPayload<P>>;
 }
 
 function burnOf(

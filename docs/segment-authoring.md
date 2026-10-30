@@ -771,8 +771,8 @@ writes a DEFINITION once:
   segments: {
     status: {
       description: "The current deploy: its environment and state",
-      when: '{{ hasKey .plugins.deploy.data "env" }}',
-      template: '⇪ {{ .plugins.deploy.data.env }} {{ template "plugins.deploy.state" .plugins.deploy.data }}',
+      when: '{{ hasKey .self.data "env" }}',
+      template: '⇪ {{ .self.data.env }} {{ template "self.state" .self.data }}',
     },
   },
   helpers: {
@@ -804,18 +804,28 @@ What the definition can say, and what follows from it:
   `<name>` — one lowercase identifier — is the plugin's name; the file does
   not repeat it.
 - **Every name is the plugin's, under `plugins.`.** A segment, helper or
-  action declared as `status` is `plugins.deploy.status` everywhere else — in `root`, in edit mode's
-  add-segment library (where the plugin's segments appear with their
-  `description`), and in templates, which is why the segment above calls
-  `{{ template "plugins.deploy.state" }}`. A plugin replaces, whole, any
-  plugin of its name beneath it (a listed one replaces an installed one);
-  listing one name twice is refused. A repository's own plugins sit under
-  `repo.` instead (see below), so they never replace yours.
-- **The data is `.plugins.<plugin>.data`.** `data` is optional; a
+  action declared as `status` is `plugins.deploy.status` everywhere outside
+  the definition — in `root`, in edit mode's add-segment library (where the
+  plugin's segments appear with their `description`), and in your templates.
+  A plugin replaces, whole, any plugin of its name beneath it (a listed one
+  replaces an installed one); listing one name twice is refused. A
+  repository's own plugins sit under `repo.` instead (see below), so they
+  never replace yours.
+- **The definition calls itself `self`.** Inside it, `.self.data`,
+  `{{ template "self.state" }}`, `{{ action "self.go" "…" }}` and
+  `do: ["self.go", …]` name the plugin's own data, helpers and actions, and
+  the loader binds `self` to the namespace the plugin loads under. So one
+  definition loads alike installed (`plugins.deploy`) and shipped in a
+  repository (`repo.deploy`), and `cc-candybar plugin install` changes
+  nothing about it. A definition that spells its own name under the scope
+  it did not load in (`.plugins.deploy.data` in a repository's `deploy`) is
+  dropped, naming the `self` spelling to write instead.
+- **The data is `.self.data`** — `.plugins.<plugin>.data` from your own
+  file. `data` is optional; a
   definition without it has no data variable. It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
-  so gate the segment with `when: '{{ hasKey .plugins.<plugin>.data "<field>" }}'`;
+  so gate the segment with `when: '{{ hasKey .self.data "<field>" }}'`;
   blank data reads the same way, and data that is not JSON is a `⚠` on every
   segment reading it. The app may create the file late and rewrite it any
   way it likes: a read caught mid-rewrite keeps the last document showing.
@@ -828,12 +838,12 @@ What the definition can say, and what follows from it:
   each optional.** A definition never edits `root` — placing a segment is your
   choice. Its `variables` are a config's `variables:`, every kind, checked the
   same way, and named under the plugin: `greeting` is read as
-  `.plugins.<plugin>.greeting`. A segment's `vars` may be of any kind too; a
+  `.self.greeting`. A segment's `vars` may be of any kind too; a
   `state` one reads what the session's own clicks wrote, so a segment can
   open a detail row of its own (`{ kind: "state", key, default }` beside a
-  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`).
+  `{ set: key, cycle: [...] }` action, read as `.self.<segment>.<var>`).
   A `state` variable's `key` and an action's `set` are written
-  bare and meet under `plugins.<plugin>.` — a plugin's session keys are
+  bare and meet under the plugin's namespace — a plugin's session keys are
   namespaced as its names are, so none can clash with the bar's or your file's.
   No variable or source may be named `data`, the data file's name.
   The plugin name is one lowercase identifier.
@@ -848,10 +858,10 @@ A plugin with no data file derives what it shows from variables of its own:
 {
   variables: {
     model: { kind: "input", path: "model.display_name" },
-    greeting: { kind: "template", template: "hello, {{ .plugins.hello.model }}" },
+    greeting: { kind: "template", template: "hello, {{ .self.model }}" },
   },
   segments: {
-    greeting: { template: "{{ .plugins.hello.greeting }}" },
+    greeting: { template: "{{ .self.greeting }}" },
   },
 }
 ```
@@ -882,8 +892,8 @@ plugin's folder:
   segments: {
     ticket: {
       description: "The ticket this session works on",
-      when: '{{ hasKey .plugins.focus "status" }}',
-      template: '◎ {{ .plugins.focus.status.ticket }}',
+      when: '{{ hasKey .self "status" }}',
+      template: '◎ {{ .self.status.ticket }}',
     },
   },
 }
@@ -896,8 +906,9 @@ plugin's folder:
 }
 ```
 
-- **The source is the session's document.** A template reads it as
-  `.plugins.<plugin>.<source>`, its fields by dotted path. The one source
+- **The source is the session's document.** The plugin's templates read it
+  as `.self.<source>` (`.plugins.<plugin>.<source>` from your own file), its
+  fields by dotted path. The one source
   built is the one above — `scope: "session"`, `refresh: { watch: true }`,
   `read: { file: { json: true } }`, with no path — and anything else drops
   the plugin with an error naming the field and what is built. Its name is
@@ -915,7 +926,7 @@ plugin's folder:
   written for 30 days belongs to a session that is gone, and is deleted —
   unless a session's bar holds it now.
 - **Until the program writes, there is nothing to read.** No file, or a
-  blank one, reads as absent: `hasKey .plugins.<plugin> "<source>"` is
+  blank one, reads as absent: `hasKey .self "<source>"` is
   false, so a segment gated on it hides. That gate is the only safe read
   before the first write. An unguarded read is the missing-field error —
   the segment draws `⚠` and `check` fails — and a file that is not JSON
@@ -934,7 +945,7 @@ plugin's folder:
     status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
   segments: {
-    ticket: { template: '◎ {{ .plugins.bare.status.ticket }}' },
+    ticket: { template: '◎ {{ .self.status.ticket }}' },
   },
 }
 ```
@@ -956,7 +967,7 @@ segment "plugins.bare.ticket": field "plugins.bare.status.ticket" not found on r
     ticket: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
     title: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
-  segments: { ticket: { template: '◎ {{ .plugins.twice.ticket.id }}' } },
+  segments: { ticket: { template: '◎ {{ .self.ticket.id }}' } },
 }
 ```
 
@@ -1032,12 +1043,13 @@ because it sits in a plugin root:
   `/opt/homebrew/share`);
 - `<repo>/.cc-candybar/plugins/<name>/` — a repository's own, there only in
   sessions working in that repo, once the user has approved the repository
-  in the bar (as its `.cc-candybar.json5` is). Its plugins are named under
-  `repo.`, not `plugins.`: a repo's `lit` folder declares `repo.lit.ticket`,
-  read as `.repo.lit.data` and `.repo.lit.<source>`, beside an installed
-  `lit` whose names stay `plugins.lit.*`. Both load side by side, and a name
-  missing from one is never looked up in the other. A plugin a repository's
-  `.cc-candybar.json5` lists is a `repo.` plugin too.
+  in the bar (as its `.cc-candybar.json5` is). Its plugins load under
+  `repo.`, not `plugins.`: a repo's `lit` folder's `ticket` is placed as
+  `repo.lit.ticket`, beside an installed `lit` whose names stay
+  `plugins.lit.*`. Both load side by side, and a name missing from one is
+  never looked up in the other. A plugin a repository's `.cc-candybar.json5`
+  lists is a `repo.` plugin too. The definition itself is the same file an
+  install would copy: it names itself `self`, never `repo.lit`.
 
 A plugin is a folder: a file sitting directly in a root is a drop naming
 where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A

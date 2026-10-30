@@ -181,6 +181,7 @@ describe("resolveDslConfig", () => {
       expect(resolved).toEqual({
         kind: "chain",
         layers: [jsonPath],
+        repoLayers: [],
         home: jsonPath,
         unchecked: [],
         repos: NOTHING_GATED,
@@ -206,6 +207,7 @@ describe("resolveDslConfig", () => {
       expect(resolved).toEqual({
         kind: "chain",
         layers: [json5Path],
+        repoLayers: [],
         home: json5Path,
         unchecked: [],
         repos: NOTHING_GATED,
@@ -237,6 +239,7 @@ describe("resolveDslConfig", () => {
       expect(resolved).toEqual({
         kind: "chain",
         layers: [xdgJson5, projJson],
+        repoLayers: [projJson],
         home: xdgJson5,
         unchecked: [],
         repos: {
@@ -248,6 +251,7 @@ describe("resolveDslConfig", () => {
       expect(durableConfig(approving(proj), proj, dir)).toEqual({
         path: xdgJson5,
         above: [projJson],
+        repoLayers: [projJson],
         repo,
         cwd: dir,
       });
@@ -267,6 +271,7 @@ describe("resolveDslConfig", () => {
       expect(resolved).toEqual({
         kind: "chain",
         layers: [],
+        repoLayers: [],
         home,
         unchecked: [],
         repos: NOTHING_GATED,
@@ -276,6 +281,7 @@ describe("resolveDslConfig", () => {
       expect(durableConfig(approving(), undefined, dir)).toEqual({
         path: home,
         above: [],
+        repoLayers: [],
         repo: null,
         cwd: dir,
       });
@@ -296,6 +302,7 @@ describe("resolveDslConfig", () => {
       expect(resolveDslConfig(approving(), dir, dir, named)).toEqual({
         kind: "chain",
         layers: [named],
+        repoLayers: [],
         home: named,
         unchecked: [],
         repos: NOTHING_GATED,
@@ -303,6 +310,7 @@ describe("resolveDslConfig", () => {
       expect(durableConfig(approving(), dir, dir, named)).toEqual({
         path: named,
         above: [],
+        repoLayers: [],
         repo: null,
         cwd: dir,
       });
@@ -337,6 +345,7 @@ describe("resolveDslConfig", () => {
       expect(durableConfig(approving(), dir, dir, named)).toEqual({
         path: named,
         above: [],
+        repoLayers: [],
         repo: null,
         cwd: dir,
       });
@@ -405,6 +414,7 @@ describe("resolveDslConfig", () => {
         expect(resolved).toEqual({
           kind: "chain",
           layers: [cwdFile],
+          repoLayers: [cwdFile],
           home: join(dir, "cc-candybar", "config.json5"),
           unchecked: [
             {

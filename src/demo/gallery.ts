@@ -44,7 +44,8 @@ const repos = repoGateAt(process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
   named === undefined ? [] : [named],
-  repos.plugins,
+  // The file named is explicit: no repository supplies it.
+  { repo: repos.plugins, repoLayers: [] },
   process.cwd(),
   warnings,
   at,

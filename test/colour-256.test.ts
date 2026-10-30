@@ -18,7 +18,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { listThemePalettes, ColorRgba, SEAM_MIN_DELTA_E } from "@promptctl/rich-js";
 import { deltaE as deltaERgba } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
-import { prepareConfig, renderEffective } from "../src/check";
+import { NO_REPO, prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
   listResolvablePaletteNames,
@@ -219,7 +219,7 @@ async function closedBars(): Promise<{
   render: (theme: string, colorCompatibility: ColorCompatibility) => Promise<Chars>;
   dispose: () => void;
 }> {
-  const prepared = await prepareConfig([], null, process.cwd(), [], instantOf(new Date()));
+  const prepared = await prepareConfig([], NO_REPO, process.cwd(), [], instantOf(new Date()));
   return {
     render: async (theme, colorCompatibility) =>
       drawnChars(

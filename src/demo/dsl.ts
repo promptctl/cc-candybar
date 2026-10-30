@@ -120,7 +120,13 @@ const sessionState = new SessionState();
 // and `cc-candybar check` report them.
 function loadState(): DslRenderState {
   const repos = repoGateAt(cwd);
-  const chain = { layers: [configPath], home: configPath, repo: repos.plugins };
+  // The file it was given is named explicitly: no repository supplies it.
+  const chain = {
+    layers: [configPath],
+    repoLayers: [],
+    home: configPath,
+    repo: repos.plugins,
+  };
   // [LAW:single-enforcer] The daemon's own load and settle: the advisories
   // come out of the one place every load composes them.
   const loaded = loadChain(

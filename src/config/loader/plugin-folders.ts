@@ -11,8 +11,8 @@ import {
   pluginDefinition,
   type DroppedPlugin,
   type PluginDefinition,
-  type PluginScope,
 } from "./plugins.js";
+import type { PluginScope } from "./plugin-scope.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "./repo-gate.js";
 
@@ -113,14 +113,15 @@ export function installedPlugins(repo: ApprovedRepo | null): InstalledPlugins {
       );
       // Keyed by scope and folder alike for a folder whose name is no
       // plugin's: it still loads, once, and drops naming why.
-      const key = `${scope}.${name}`;
+      const key = `${scope}\0${name}`;
       byNs.delete(key);
       byNs.set(key, definition);
     }
     for (const file of listed.files) {
       strays.push({
         path: path.join(root, file),
-        plugin: undefined,
+        scope,
+        name: undefined,
         reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${path.join(root, "<name>", DEFINITION_FILE)}`,
       });
     }

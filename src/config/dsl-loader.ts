@@ -72,6 +72,7 @@ import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
 import {
+  pluginScopeCollisions,
   reservedNamespaceCollisions,
   SETTINGS_NS,
 } from "./loader/reserved-namespace.js";
@@ -102,9 +103,11 @@ import {
   withDroppedPlacements,
   dropsOwning,
   type DroppedPlugin,
+  type NamedDefinition,
   type PluginDefinition,
   type PluginLayer,
 } from "./loader/plugins.js";
+import type { PluginScope } from "./loader/plugin-scope.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
 import { withoutUnplaced } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
@@ -128,7 +131,6 @@ export {
   durableConfig,
   detectConfigCollisions,
 } from "./loader/discovery.js";
-import { layerScope } from "./loader/discovery.js";
 export type { ConfigHome, ConfigResolution } from "./loader/discovery.js";
 export type { Unchecked } from "../utils/presence.js";
 export { mergeWithDefault } from "./loader/merge.js";
@@ -198,15 +200,20 @@ export function loadConfig(
 // that no plugin owns stands in naming the unnamed ones), and which definition
 // renders each plugin name.
 export interface LoadContext extends PluginContext {
+  // [LAW:one-source-of-truth] The scope of the plugins the file lists, as
+  // discovery found the file: `repo` for a repository's own config, `plugins`
+  // for every other.
+  readonly scope: PluginScope;
   readonly beneath: {
     readonly dropped: readonly DroppedPlugin[];
-    readonly rendering: ReadonlyMap<string, string>;
+    readonly rendering: ReadonlyMap<string, NamedDefinition>;
   };
 }
 
 // A load with no session and nothing beneath the bundled default: a
 // `data: { checkout }` plugin drops, naming why.
 export const NO_PROJECT: LoadContext = {
+  scope: "plugins",
   repo: null,
   checkout: null,
   beneath: { dropped: [], rendering: new Map() },
@@ -234,7 +241,7 @@ export function loadConfigSource(
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path, layerScope(path)),
+      listedPlugins(refs, path, ctx.scope),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) =>
@@ -286,7 +293,7 @@ function installedLayer(
 ): PluginLayer {
   const key = JSON.stringify([
     [...(allowedPalettes ?? [])].sort(),
-    definitions.map((d) => [d.path, d.ns, statKey(d.path)]),
+    definitions.map((d) => [d.path, d.scope, statKey(d.path)]),
   ]);
   const byProject = installedMemo.get(dflt) ?? new Map();
   installedMemo.set(dflt, byProject);
@@ -400,6 +407,9 @@ export function loadConfigChain(
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
+        // [LAW:one-source-of-truth] A layer's scope is where discovery found
+        // it, carried here as data — never read off the file's name.
+        scope: session.repoLayers.includes(path) ? "repo" : "plugins",
         beneath: {
           dropped: [
             ...plugins.dropped,
@@ -492,6 +502,9 @@ export function loadConfigChain(
 export interface SessionDirs {
   readonly repo: ApprovedRepo | null;
   readonly cwd: string | null;
+  // The chain's layers a repository supplies, as discovery found them: the
+  // plugins each lists are `repo` plugins.
+  readonly repoLayers: readonly string[];
 }
 
 export interface ChainTrace {
@@ -539,7 +552,7 @@ export interface LoadedFile {
     // stands for.
     readonly reached: ReadonlySet<string>;
     // Each plugin namespace rendering at this layer, and its definition.
-    readonly rendering: ReadonlyMap<string, string>;
+    readonly rendering: ReadonlyMap<string, NamedDefinition>;
   };
 }
 
@@ -762,7 +775,7 @@ function judgeRenderable(
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped = droppedByFile(filePath, ctx, beneath, filed);
+  const dropped = droppedByFile(filePath, merged.segments, ctx, beneath, filed);
   // A config with nothing to drop is the merged one itself, so its trees keep
   // their identity.
   const config = dropped.length === 0 ? merged : withoutUnplaced(merged);
@@ -846,7 +859,11 @@ function layerInserts(
           file: layer.path,
           issue: {
             path: cell.by.entry,
-            message: unplacedMessage(cell.by.entry, cell.seg),
+            message: unplacedMessage(
+              cell.by.entry,
+              cell.seg,
+              top.config.segments,
+            ),
             line: lineOf(cell.by.entry.split(".")),
           },
         }));
@@ -867,6 +884,8 @@ export function refuseDrops(dropped: readonly ConfigError[]): void {
 // it.
 function droppedByFile(
   filePath: string,
+  // The segments the merged config declares.
+  segments: DslConfig["segments"],
   ctx: ValidateCtx,
   beneath: readonly AuthoredLayer[],
   // Insert cells already filed against the file that wrote them.
@@ -887,7 +906,7 @@ function droppedByFile(
     else
       add(author.layer.path, {
         path: author.path,
-        message: unplacedMessage(author.layoutKey, name),
+        message: unplacedMessage(author.layoutKey, name, segments),
         line: findKeyLine(author.layer.source, author.path.split(".")),
       });
   }
@@ -1132,6 +1151,7 @@ function validateTopLevel(
     SETTINGS_NS,
     "the global settings menu",
   );
+  pluginScopeCollisions(ctx, out, inheritedSegments);
   return out;
 }
 

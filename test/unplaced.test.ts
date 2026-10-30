@@ -105,7 +105,7 @@ describe("a chain whose merge fails", () => {
         ["/lower.json5", "/upper.json5"],
         DEFAULT_DSL_CONFIG,
         { warned: () => {} },
-        { repo: null, cwd: null },
+        { repo: null, cwd: null, repoLayers: [] },
         (p) => FILES[p]!,
       );
     expect(load).toThrow(ConfigError);
@@ -120,7 +120,7 @@ describe("a lower layer's undeclared placement", () => {
       Object.keys(files),
       DEFAULT_DSL_CONFIG,
       { warned: () => {} },
-      { repo: null, cwd: null },
+      { repo: null, cwd: null, repoLayers: [] },
       (p) => files[p]!,
     );
   const LOWER = `{ segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`;

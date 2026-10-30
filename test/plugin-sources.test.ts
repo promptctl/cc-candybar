@@ -342,7 +342,7 @@ describe("a source's declaration", () => {
       signer: TEST_SIGNER,
     });
     try {
-      expect(loaded.state!.plugins.dropped.map((d) => d.plugin)).toEqual(["plugins.p"]);
+      expect(loaded.state!.plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
       expect(loaded.state!.sources.size).toBe(0);
       expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
       expect(r.providers.managedStorage.stats().folders).toBe(0);
@@ -372,7 +372,7 @@ describe("a source's declaration", () => {
     try {
       expect(loaded.error).toBeNull();
       const { config, plugins } = loaded.state!;
-      expect(plugins.dropped.map((d) => d.plugin)).toEqual(["plugins.p"]);
+      expect(plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
       // The namespace is the drop, so every name under it reads it.
       expect(config.variables["plugins.p"]).toMatchObject({ kind: "dropped" });
       expect(config.actions.raise).toMatchObject({ refreshes: [] });

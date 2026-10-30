@@ -88,6 +88,7 @@ import {
   pluginDataVar,
   type PluginDefinition,
 } from "../../config/loader/plugins.js";
+import { pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -337,6 +338,8 @@ type LoadedPlugins = LoadedChain["installed"];
 // one.
 export interface ConfigChain {
   readonly layers: readonly string[];
+  // The layers a repository supplies (`ConfigResolution`).
+  readonly repoLayers: readonly string[];
   readonly home: string;
   // The session's project, once approved: where the plugins it ships live.
   readonly repo: ApprovedRepo | null;
@@ -362,16 +365,18 @@ export function pluginLoadLine(
     checkout === null
       ? "-"
       : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
-  const dataOf = ({ ns }: PluginDefinition): string => {
+  const dataOf = (definition: PluginDefinition): string => {
     const data =
-      ns === undefined ? undefined : config.variables[pluginDataVar(ns)];
+      definition.name === undefined
+        ? undefined
+        : config.variables[pluginDataVar(pluginNs(definition))];
     return data?.kind === "file" ? data.path : "none";
   };
   // What the merged plugins declare, by kind: a source is synthesized from
   // `sources:`, every other name under a namespace but the data file's came
   // from `variables:`.
   const declared = loaded
-    .flatMap(({ ns }) => (ns === undefined ? [] : [ns]))
+    .flatMap((d) => (d.name === undefined ? [] : [pluginNs(d)]))
     .flatMap((ns) =>
       Object.entries(config.variables).filter(
         ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns),
@@ -795,6 +800,7 @@ function loadKey(inputs: LoadInputs): string {
     cwd: inputs.cwd,
     chain: {
       layers: chain.layers,
+      repoLayers: chain.repoLayers,
       home: chain.home,
       repo: chain.repo,
     } satisfies Projection<ConfigChain>,
@@ -871,7 +877,7 @@ export function resolveLoad(
       chain.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain.repo, cwd },
+      { repo: chain.repo, cwd, repoLayers: chain.repoLayers },
     );
     const inputs = {
       cwd,
@@ -1003,7 +1009,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         roots: installed.roots,
         // What renders, as the loader decided it: a nearer layer's load or
         // drop replaces a farther one's of the same namespace.
-        loaded: [...installed.rendering].map(([ns, path]) => ({ path, ns })),
+        loaded: [...installed.rendering.values()],
         dropped: [
           ...installed.dropped,
           ...layers.flatMap((l) => l.plugins.dropped),
@@ -1117,6 +1123,7 @@ export function loadFromDisk(
   // default — what distinguishes them is a notice, below, not a load path.
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
+    repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
     home: resolution.home,
     repo: repos.plugins,
   };
@@ -1161,7 +1168,7 @@ export function fallbackState(
   // as the load would have.
   const resolved = resolveLoad(
     cwd,
-    { layers: [], home: "", repo },
+    { layers: [], repoLayers: [], home: "", repo },
     deps.storage,
   );
   const built =
