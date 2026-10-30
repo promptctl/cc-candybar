@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-489",
-      "ref": "refs/pull/489/merge",
-      "sha": "d4814d1f4822f813f97e9f07f08656e34540cd0a",
-      "timestamp": "2026-10-30T12:49:17.156Z",
-      "commits": [
-        {
-          "sha": "d4814d1f4822f813f97e9f07f08656e34540cd0a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:48:29Z",
-          "message": "Merge 5adec4f1f9b8016612816a01f8861e325182a4b2 into 3ac1f0ebd17dcc49615d30cb2f79602aa362240d\n"
-        },
-        {
-          "sha": "5adec4f1f9b8016612816a01f8861e325182a4b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:55:47-06:00",
-          "message": "fix(plugins): self binds in an action's segment names, and the scope check reads every name an action or segment var carries, once (candybar-plugins-vf6g.3gg)\n"
-        },
-        {
-          "sha": "ced247d28d5beb305b451fed59ffd88e18df63cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:43:33-06:00",
-          "message": "fix(config): a segment's own var named into a plugin scope is refused, so a segment named repo cannot shadow repo.<plugin> (candybar-plugins-vf6g.3gg)\n"
-        },
-        {
-          "sha": "fe6b75a5f584deffca99106d9f6d019daaf3202e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:34:29-06:00",
-          "message": "fix(plugins): a cache's depends_on names its plugin through self, and one predicate answers which names a namespace owns (candybar-plugins-vf6g.3gg)\n"
-        },
-        {
-          "sha": "d3a0c9bd39960953e2bcb82f4cdce56b2c517b37",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:16:56-06:00",
-          "message": "fix(plugins): a plugin names itself scope-free, so one definition loads alike from a repo and an install (candybar-plugins-vf6g.3gg)\n\nA definition names itself `self` (`.self.data`, `template \"self.state\"`,\n`action \"self.go\"`, `do: [\"self.go\", …]`); the loader binds it to the\nnamespace the plugin loads under, as it binds bare session keys and\nrefreshes. A plugin spelling its own name under the other scope drops,\nnaming the `self` form. A config's plugins are the repository's when\ndiscovery found the file at the project or working directory, not by its\nname. A placement missing from one scope names the other's spelling.\nUnnamed drops answer only within their own scope. Both plugin roots are\nrefused to every config file's own declarations. Plugin identity is a\ntyped { scope, name } with one namespace function.\n\nAbsorbs candybar-plugins-vf6g.3tv.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "231dfc1d5faf5bc24b5330f48547f893f7143637",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:49:53-06:00",
-          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-495",
       "ref": "refs/pull/495/merge",
-      "sha": "032c680bb74be3a3a5e9c57b4ebe7b88f7610645",
-      "timestamp": "2026-10-30T12:45:57.523Z",
+      "sha": "2c437f6f51441d471b2b60f45238daac632592bc",
+      "timestamp": "2026-10-30T12:56:36.775Z",
       "commits": [
         {
-          "sha": "032c680bb74be3a3a5e9c57b4ebe7b88f7610645",
+          "sha": "2c437f6f51441d471b2b60f45238daac632592bc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:45:09-06:00",
-          "message": "Merge ea683468bfebe2ecb183b086b1afae0937f86626 into 3ac1f0ebd17dcc49615d30cb2f79602aa362240d\n"
+          "timestamp": "2026-10-30T12:55:47Z",
+          "message": "Merge b565e2c120226b165a4d47a6de2bc25291af6cc8 into 3ac1f0ebd17dcc49615d30cb2f79602aa362240d\n"
+        },
+        {
+          "sha": "b565e2c120226b165a4d47a6de2bc25291af6cc8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T06:55:31-06:00",
+          "message": "fix(var-system): a watch_file directory recreated at its path is watched again, and a link gone before its readlink ends the chain (brandon-unfiled-3248.sy24)\n\nLinux's inotify follows the inode, so a handle on a directory removed and\nmade again at its path heard nothing more and said nothing. Each open\nhandle now carries the folder identity it bound, and a re-derive reopens\nany whose directory has moved.\n\nA link removed between its lstat and its readlink is the chain ending,\nthe same fact as a link already gone, not a stopped walk: a non-atomic\n`ln -sf` no longer flashes a watch fault.\n"
         },
         {
           "sha": "ea683468bfebe2ecb183b086b1afae0937f86626",

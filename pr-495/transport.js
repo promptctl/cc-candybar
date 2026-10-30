@@ -34688,19 +34688,17 @@ function walkLinks(at) {
   }
 }
 function linkTarget(file) {
-  let stat3;
   try {
-    stat3 = fs_default.lstatSync(file);
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path4.default.resolve(
+      fs_default.realpathSync(import_node_path4.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
   } catch (e) {
     const { code } = e;
     if (code === "ENOENT" || code === "ENOTDIR") return null;
     throw e;
   }
-  if (!stat3.isSymbolicLink()) return null;
-  return import_node_path4.default.resolve(
-    fs_default.realpathSync(import_node_path4.default.dirname(file)),
-    fs_default.readlinkSync(file)
-  );
 }
 var MAX_LINK_HOPS = 40;
 
@@ -38146,6 +38144,29 @@ var WatcherRegistry = class {
     this.slots.clear();
   }
 };
+
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code = e.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+    throw e;
+  }
+};
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity3) => identity3 === "gone" ? "gone" : `${identity3.dev}:${identity3.ino}:${identity3.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
 
 // src/var-system/sources.ts
 init_timers();
@@ -48534,19 +48555,24 @@ var WatchManager = class {
     return entry;
   }
   // Derive where the path can change from disk ONCE, and bring the
-  // directories to it: one in the set and not listening (new, or failed) is
-  // opened; one no longer in the set is closed; one listening and still in
-  // the set keeps its handle, since opening and closing a directory watch is
-  // not free on macOS (see the watcher registry). New handles open before old
-  // ones close, so a refusal leaves the rest listening, and a failed
-  // directory is tried again only here — at an event on another of the
-  // entry's directories, or the daemon's catch-up — never in a loop.
+  // directories to it: one in the set and not listening to the directory at
+  // its path now (new, failed, or bound to one since removed) is opened; one
+  // no longer in the set is closed; one listening to it keeps its handle,
+  // since opening and closing a directory watch is not free on macOS (see the
+  // watcher registry). New handles open before old ones close, so a refusal
+  // leaves the rest listening, and a failed directory is tried again only
+  // here — at an event on another of the entry's directories, or the
+  // daemon's catch-up — never in a loop.
   rederive(filePath2, entry) {
     entry.watch = watchTargetsOf({ named: [filePath2], whole: [filePath2] });
     const wanted2 = new Set(entry.watch.targets.dirs.map((d) => d.path));
-    for (const dir of wanted2)
-      if (entry.dirs.get(dir)?.kind !== "open")
-        entry.dirs.set(dir, this.open(filePath2, entry, dir));
+    for (const dir of wanted2) {
+      const held = entry.dirs.get(dir);
+      if (held?.kind === "open" && held.bound === boundKey(boundOf(dir)))
+        continue;
+      if (held?.kind === "open") held.handle.close();
+      entry.dirs.set(dir, this.open(filePath2, entry, dir));
+    }
     for (const [dir, state] of entry.dirs) {
       if (wanted2.has(dir)) continue;
       if (state.kind === "open") state.handle.close();
@@ -48556,6 +48582,7 @@ var WatchManager = class {
   }
   open(filePath2, entry, dir) {
     const self2 = import_path2.default.basename(dir);
+    const bound = boundKey(boundOf(dir));
     try {
       const handle = fs_default.watch(dir, (_event, changed) => {
         if (changed !== null && changed !== self2 && !hears(entry, dir, changed))
@@ -48573,7 +48600,7 @@ var WatchManager = class {
         this.report(filePath2, entry);
         for (const cb of entry.subscribers.keys()) cb();
       });
-      return { kind: "open", handle };
+      return { kind: "open", handle, bound };
     } catch (e) {
       return {
         kind: "failed",
@@ -48740,8 +48767,9 @@ var SourceRegistry = class _SourceRegistry {
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A watch the OS
-  // refused lives until the registry does; a key template that throws lives
+  // source will ever run again, so no read outcome clears it. A watch that
+  // cannot hear every place its path changes lives until it can again (its
+  // own re-derive says so); a key template that throws lives
   // until the key evaluates again. One map, since a variable has one policy.
   // Observable, since the bar draws each fault as a refresh warning.
   policyFaults = observable.map(void 0, {
@@ -67364,31 +67392,6 @@ var RuntimeStats = class _RuntimeStats {
 // src/daemon/cache/file-events.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
-
-// src/utils/folder-identity.ts
-init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity3) => identity3 === "gone" ? "gone" : `${identity3.dev}:${identity3.ino}:${identity3.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
-
-// src/daemon/cache/file-events.ts
 var PROBE_EVERY_MS = 3e4;
 var STALL_AFTER = 2;
 var PROBE_FILE = "probe";
