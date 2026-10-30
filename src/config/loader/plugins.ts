@@ -769,12 +769,9 @@ function boundToSelf(ns: string, fragment: RawDslConfig): RawDslConfig {
       }),
     })),
     helpers: each(fragment.helpers, bind),
-    actions: each(fragment.actions, (a) => {
-      const bound = mapActionTemplates(a, bind);
-      return "do" in bound
-        ? { ...bound, do: bound.do.map(named) as [string, ...string[]] }
-        : bound;
-    }),
+    actions: each(fragment.actions, (a) =>
+      mapActionNames(mapActionTemplates(a, bind), named),
+    ),
   };
 }
 
@@ -790,6 +787,25 @@ function selfDepends(
         cache: { depends_on: v.cache.depends_on.map(named) },
       } as VariableDecl)
     : v;
+}
+
+// [LAW:one-source-of-truth] Every field of an action that names an action or
+// a segment — a `do` member, a layout edit's segment and anchor, a persist
+// path into `segments.` — mapped through `f`: `self` binds there, and the
+// wrong-scope check reads the same fields.
+function mapActionNames(
+  a: ActionDecl,
+  f: (name: string, field: string) => string,
+): ActionDecl {
+  const seg = "segments.";
+  const out: Record<string, unknown> = { ...a };
+  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
+  for (const field of ["removeSegment", "insertSegment", "anchor"] as const)
+    if (field in a)
+      out[field] = f((a as Record<string, string>)[field]!, field);
+  if ("persist" in a && a.persist.startsWith(seg))
+    out.persist = seg + f(a.persist.slice(seg.length), "persist");
+  return out as ActionDecl;
 }
 
 // The template fields a segment declaration carries.
@@ -831,16 +847,30 @@ function wrongScopeRefs(
       if (via === null) check(where, ref, true);
     for (const { name, via } of templateActionRefs(template, helpers))
       if (via === null) check(where, name, false);
-    for (const name of templateHelperCalls(template, helpers))
+    // Its own calls only: a call inside a helper's body is that helper's.
+    for (const name of templateHelperCalls(template, {}))
       check(where, name, false);
   }
   for (const [name, a] of Object.entries(fragment.actions ?? {})) {
-    if ("do" in a) for (const m of a.do) check(`actions.${name}.do`, m, false);
+    mapActionNames(a, (ref, field) => {
+      check(`actions.${name}.${field}`, ref, false);
+      return ref;
+    });
   }
-  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
+  const variables = [
+    ...Object.entries(fragment.variables ?? {}).map(
+      ([name, v]) => [`variables.${name}`, v] as const,
+    ),
+    ...Object.entries(fragment.segments ?? {}).flatMap(([seg, decl]) =>
+      Object.entries(decl.vars ?? {}).map(
+        ([name, v]) => [`segments.${seg}.vars.${name}`, v] as const,
+      ),
+    ),
+  ];
+  for (const [where, v] of variables) {
     if (hasCacheField(v) && "depends_on" in v.cache)
       for (const d of v.cache.depends_on)
-        check(`variables.${name}.cache.depends_on`, d, false);
+        check(`${where}.cache.depends_on`, d, false);
   }
   return [...issues.values()];
 }

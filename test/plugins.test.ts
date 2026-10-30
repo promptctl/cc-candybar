@@ -1381,6 +1381,26 @@ describe("a plugin names itself without its scope", () => {
     expect(cells(await checkConfig(write("config.json5", `{ root: { h: ["plugins.deploy.s"] } }`), dir))).toBe("⇪y[go]");
   });
 
+  test("a layout edit names the plugin's segments through self", async () => {
+    write(
+      path.join(userRoot, "plugin.json5"),
+      `{ segments: { s: { template: "⇪{{ action \\"self.add\\" \\"[go]\\" }}" } }, actions: { add: { persist: "presets.default.root", insertSegment: "self.s", anchor: "self.s", relation: "after" }} }`,
+    );
+    expect(cells(await checkConfig(write("config.json5", `{ root: { h: ["plugins.deploy.s"] } }`), dir))).toBe("⇪[go]");
+  });
+
+  test("a segment var's depends_on under the other scope drops the plugin", async () => {
+    write(
+      "repo/.cc-candybar/plugins/lit/plugin.json5",
+      `{ segments: { t: { template: "x", vars: { v: { kind: "shell", command: "echo hi", cache: { depends_on: ["plugins.lit.x"] } } } } }, actions: { add: { persist: "presets.default.root", removeSegment: "plugins.lit.t" } } }`,
+    );
+    write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.t"] } }`);
+    answerRepo(path.join(dir, "repo"));
+    const message = fatal(await checkConfig(undefined, path.join(dir, "repo")));
+    expect(message).toContain(`segments.repo.lit.t.vars.v.cache.depends_on names plugins.lit.x`);
+    expect(message).toContain(`actions.repo.lit.add.removeSegment names plugins.lit.t`);
+  });
+
   test("an explicit config named like a repository's lists installed plugins", async () => {
     write("elsewhere/deploy/plugin.json5", SELF_DEFINITION);
     write("elsewhere/deploy/state.json", STATE);
