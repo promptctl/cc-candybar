@@ -252,7 +252,6 @@ export type ReloadedEntry = Readonly<
     | "configFile"
     | "configLayers"
     | "repos"
-    | "failedFile"
     | "lastError"
     | "lastWarning"
   >
@@ -276,6 +275,9 @@ export type ReloadedEntry = Readonly<
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
+  // [LAW:no-silent-failure] The placements of undeclared segments the load
+  // dropped to draw the rest of the bar, as one error; null for none.
+  readonly dropped: ConfigError | null;
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
   // it was compiled from): states carrying one key carry one compile.
   readonly compileKey: string;
@@ -327,8 +329,8 @@ export interface ConfigChain {
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
 // they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
-// session — which it dropped, and how long the load took: a drop is also on
-// the strip, but the rest is said nowhere else. The daemon's own sink —
+// session — which it dropped, and how long the load took: a drop is also the
+// bar's message, but the rest is said nowhere else. The daemon's own sink —
 // buildRenderState is shared with the demo.
 export function pluginLoadLine(
   layers: readonly string[],
@@ -475,9 +477,8 @@ export interface CacheEntry {
   // The file durable clicks write (resolveDslConfig's home).
   configHome: string;
   // What the session's repositories contribute, as the last load's answers
-  // decided it: the strip asks for each one awaiting.
+  // decided it: the bar asks for each one awaiting.
   repos: RepoGate;
-  failedFile: string | null;
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
@@ -672,8 +673,8 @@ function watchTargetsFor(entry: CacheEntry): {
   };
 }
 
-// The warning channel is ONE string (composeWithDiagnostics splits it into
-// rows); absent advisories are nulls in the list, an empty list is null.
+// The load's warning is ONE message (the bar's diagnostics show it whole);
+// absent advisories are nulls in the list, an empty list is null.
 function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
   return parts.filter(Boolean).join("\n") || null;
 }
@@ -693,14 +694,7 @@ export type LoadOutcome = {
   readonly ms: number;
 } & (
   | { readonly state: DslRenderState; readonly error: null }
-  | {
-      readonly state: null;
-      readonly error: string;
-      // The layer whose load threw — the file the strip links to. Null when
-      // the throw was not a file's (the bundled default by program
-      // invariant never is).
-      readonly failedFile: string | null;
-    }
+  | { readonly state: null; readonly error: string }
 );
 
 // [LAW:single-enforcer] Construct the full new state — parsed config,
@@ -716,7 +710,6 @@ export function buildRenderState(
   chain: ConfigChain,
   warnings: Array<string | null>,
   deps: StateDeps,
-  entered: (path: string | null) => void = () => {},
 ): DslRenderState {
   // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
   // straight-line composition. `loadConfig(null)` returns the bundled
@@ -729,15 +722,12 @@ export function buildRenderState(
   // file's own paths and lines. A layer's advisories are appended before its
   // validation, so a cross-ref failure still carries them (a duplicate key
   // names its line beside the error).
-  const { layers, config, installed } = loadConfigChain(
+  const { layers, config, installed, dropped } = loadConfigChain(
     chain.layers,
     DEFAULT_DSL_CONFIG,
-    { entered, warned: (w) => warnings.push(...w) },
+    { entered: () => {}, warned: (w) => warnings.push(...w) },
     { repo: chain.repo, cwd },
   );
-  // Past the chain, a failure is the one file's when there is one, and no
-  // file's when several merged into what failed.
-  entered(layers.length === 1 ? layers[0]!.path : null);
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
 
@@ -805,6 +795,7 @@ export function buildRenderState(
   // from the effective theme (resolveThemeSelection, settled by renderDsl).
   return {
     config,
+    dropped,
     compileKey: registration.compileKey,
     store,
     registry,
@@ -912,18 +903,15 @@ export function loadFromDisk(
   // registration, palette resolution — is the `error` arm; the caller's
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
-  // plus the error strip (composeWithDiagnostics reads `lastError` and
-  // `lastWarning`). The build appends the advisories it earns along the
-  // way (the file's editability notice, the register pass's partial-load
-  // warnings) to `advisories` as it goes, so every warning produced before
-  // a failure still reaches the strip beside the error — the same channel,
-  // the same ordering, that `cc-candybar check` reports.
+  // and its diagnostics count `lastError` and `lastWarning`. The build
+  // appends the advisories it earns along the way (the file's editability
+  // notice, the register pass's partial-load warnings) to `advisories` as it
+  // goes, so every warning produced before a failure still reaches the bar
+  // beside the error — the same channel, the same ordering, that
+  // `cc-candybar check` reports.
   let state: DslRenderState;
-  let failing: string | null = null;
   try {
-    state = buildRenderState(cwd, chain, advisories, deps, (path) => {
-      failing = path;
-    });
+    state = buildRenderState(cwd, chain, advisories, deps);
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
     return {
@@ -931,7 +919,6 @@ export function loadFromDisk(
       home: chain.home,
       ms: Math.round(performance.now() - started),
       repos,
-      failedFile: failing,
       warning: joinWarnings(advisories),
       state: null,
       error:
@@ -956,7 +943,7 @@ export function loadFromDisk(
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
 // bundled default. The render cache seeds an entry with it, and
 // `cc-candybar doctor`, which has no cache, reads the same bar from it. The
-// seed's own advisories go nowhere: the strip already carries the failed
+// seed's own advisories go nowhere: the bar already carries the failed
 // load's, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
@@ -1376,8 +1363,8 @@ export class RenderCache<
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
-    // rides the diagnostic strip above it, loud, and the settings menu is the
-    // door back to the file. The default validates by program invariant
+    // is counted by the indicator beside its settings door, loud, and the
+    // settings menu is the door back to the file. The default validates by program invariant
     // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
@@ -1387,7 +1374,6 @@ export class RenderCache<
       configLayers: [],
       configHome: "",
       repos: loaded.repos,
-      failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
       state:
@@ -1968,7 +1954,6 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    entry.failedFile = loaded.error === null ? null : loaded.failedFile;
     const { targets, unresolved } = watchTargetsFor(entry);
     // [LAW:one-source-of-truth] The key names the target set, so the
     // registry's `follow` rebinds exactly when the set changed.

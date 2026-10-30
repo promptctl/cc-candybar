@@ -1108,7 +1108,7 @@ export function realize(
 // member positionally (the toggle/N-state-cycler form: `{{ action "t" "▸" "▾"
 // }}`) or one static display for all states; every other kind binds one display
 // plus an optional boundValue (the option-picker form). Wrong arity is an author
-// error surfaced loudly at render (composeWithDiagnostics shows it), never a
+// error surfaced loudly at render (the bar's diagnostics show it), never a
 // silently dropped argument.
 function selectDisplay(
   name: string,

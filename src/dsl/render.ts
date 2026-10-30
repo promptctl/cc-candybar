@@ -113,6 +113,7 @@ import {
   type ViewParts,
 } from "./parts.js";
 import { fixedSource, type Selections } from "./view-source.js";
+import type { FrameSource } from "../render/frame-memory.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   authoredRules,
@@ -1130,8 +1131,8 @@ export interface RenderObservers {
   //
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
-  // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a globals rule, a gate or a
+  // callers listen — the daemon records each for the bar's diagnostics
+  // (src/daemon/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
   // variable that cannot refresh, so each is visible whether or not anyone is
   // looking at a bar. Check lists
   // a band-floor shortfall only where its own renders open a trigger — one open
@@ -1163,6 +1164,9 @@ export interface DrawnFrame {
   // turn what it reads moved (outside any draw), or `per-draw`, a rule that
   // reads the instant, evaluated by this frame. A decided slot is absent.
   readonly rules: ReadonlyMap<ExpressionSlot, "kept" | "per-draw">;
+  // What the frame was drawn from: the identity transitions compare frames by
+  // (src/render/frame-memory.ts), and a renderer's warning record follows.
+  readonly source: FrameSource;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1666,5 +1670,6 @@ export function drawDsl(
     evaluated: parts.evaluated - evaluatedBefore,
     pending: [...waited].sort(),
     rules,
+    source,
   };
 }

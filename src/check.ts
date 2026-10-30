@@ -1,7 +1,8 @@
 // [LAW:verifiable-goals] `cc-candybar check [--render] [path]` — the authoring
 // agent's eyes.
-// Config diagnostics otherwise surface VISUALLY (composeWithDiagnostics renders
-// error/warning icons into the bar), a channel a blind config author never sees.
+// Config diagnostics otherwise surface VISUALLY (an indicator beside the bar's
+// settings door, read in its viewer), a channel a blind config author never
+// sees.
 // This command runs the production pipeline and projects its verdict onto a
 // text + exit-code contract a script can close its own loop on:
 //   0 — config loads and renders (warnings, if any, on stderr)
@@ -453,8 +454,8 @@ export async function checkConfig(
     }
     // Same classification RenderCache.reloadInto applies: ConfigError and
     // register/render throws (template parse, MissingFieldError, action arity)
-    // are all author-facing diagnostics — the daemon would surface each via
-    // composeWithDiagnostics, so check surfaces each as fatal text.
+    // are all author-facing diagnostics — the daemon would surface each as
+    // the bar's error, so check surfaces each as fatal text.
     if (e instanceof ConfigError) warnings.push(...e.warnings);
     const message =
       e instanceof ConfigError
@@ -507,6 +508,9 @@ export async function prepareConfig(
     { entered: () => {}, warned: (w) => warnings.push(...w) },
     { repo, cwd },
   );
+  // [LAW:no-silent-failure] The bar draws past a placement of an undeclared
+  // segment; a check refuses it, as the file's author has to fix it.
+  if (loaded.dropped !== null) throw loaded.dropped;
   const { config } = loaded;
 
   const store = new VariableStore();
@@ -610,7 +614,7 @@ export async function renderEffective(
       // [LAW:no-silent-failure] A globals rule the render could not honour —
       // its template threw, or a palette rule named no installed theme — is a
       // real finding for a headless pass: the bar would render that slot's
-      // floor with nobody watching the strip. Keyed by its slot so two failing
+      // floor with nobody watching the bar. Keyed by its slot so two failing
       // slots are two findings; the message names the path(s) the rule was
       // written at, which may be a preset's globals rather than the config's.
       case "rule":

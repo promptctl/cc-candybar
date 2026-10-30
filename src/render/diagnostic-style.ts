@@ -1,6 +1,6 @@
 // The cc-candybar diagnostic visual identity: the ANSI style constants for
 // every error/warning surface we draw (the client's permanent-failure glyph
-// and the daemon's per-render diagnostic strip).
+// and the daemon's diagnostics indicator and viewer).
 //
 // [LAW:one-source-of-truth] This leaf module is the single TS definition of
 // the diagnostic style. Recoloring diagnostics is an edit here, nowhere else
@@ -24,7 +24,7 @@ export const ANSI_RESET = "\x1b[0m";
 
 // [LAW:one-source-of-truth] The SGR literals above are the canonical (and
 // Rust-mirrored) statement of each color; the hex pairs the rich-js render
-// path needs (src/render/diagnostic-strip.ts builds `Style`s) are DERIVED
+// path needs (src/render/diagnostics.ts builds `Style`s) are DERIVED
 // from them here, so a recolor is still one edit and the two spellings
 // cannot drift. The parser is total over the 24-bit SGR shape the literals
 // use; a literal that stops matching it fails at module load, loudly.

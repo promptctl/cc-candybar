@@ -36,9 +36,15 @@ A session view's payload is derived from its declaration, the session's picks an
 
 ## Failures draw; they don't throw
 
-Nothing a config authors can make a render throw. A failing rule falls back to its slot's floor and warns. A failing placement draws ⚠. A container whose `when` throws hides its children and warns, naming them. Warnings go to the diagnostic strip and the render event. The check command handles warning kinds in an exhaustive switch, so a new kind is a compile error there until someone decides what it means.
+Nothing a config authors can make a render throw. A failing rule falls back to its slot's floor and warns. A failing placement draws ⚠. A placement of a segment nothing declares is dropped at load and reported as an error, so one bad name costs one cell, not the whole bar; the check command and the demo still refuse it, since the author has to fix it. A container whose `when` throws hides its children and warns, naming them. Warnings go to the bar's diagnostics and the render event. The check command handles warning kinds in an exhaustive switch, so a new kind is a compile error there until someone decides what it means.
 
-The strip links to the full error text with a file:// URL. It can't depend on the `cc-candybar://` handler, since that handler may be what's broken.
+## Diagnostics
+
+Every error, warning, notice and question reaches the screen one way: an indicator in the settings door's own cell, and a viewer that takes the body's place and shows one message whole. The indicator lives in the door's cell because the door is the one position every bar is guaranteed, so no layout can leave it out. While a lane draws the bar elsewhere, the statusline is the handoff line alone, so a message shows once.
+
+The list is built once per draw, before the draw, and the indicator and the viewer read that one value, so they can't disagree within a frame. A render warning is known only after the walk, so a draw counts the warnings its renderer recorded from an earlier frame. Each renderer (a request's answer, the feed's frames) keeps its own record, because they draw at different widths and roots; one shared record would be overwritten by whichever drew last, and the count would flip between them. A record is rewritten only when a frame is drawn from another source (the identity transitions compare frames by), so a frame never re-records from what its own indicator changed. The trap: a fault that starts while the source stays the same, such as a refresh that begins failing, is counted only once the source next changes.
+
+The viewer's clicks write absolute indices, and the shown index is clamped into the list at draw, so a list that shrank shows its last message rather than nothing.
 
 ## Effects
 

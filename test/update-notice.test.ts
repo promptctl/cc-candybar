@@ -4,7 +4,7 @@
 // and how the act's state changes the row — measured on the channels and on
 // the composed strip, by what each click DOES.
 
-import { composeWithDiagnostics, UPDATE_SEVERITY } from "../src/render/diagnostic-strip";
+import { messageRows, UPDATE_SEVERITY } from "../src/render/diagnostics";
 import {
   describeStamp,
   factsOf,
@@ -19,8 +19,11 @@ import {
 } from "../src/daemon/update-notice";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
 import type { Currency } from "../src/install/currency";
-import { effectsOf } from "./helpers/click";
+import { effectsOf as decode } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/daemon-e2e";
+
+// A span's click, decoded; a plain span has none.
+const clicksOf = (link: string | null) => (link === null ? [] : decode(link));
 
 const NEWER: SourceStamp = { version: "9.9.9", digest: "abcdef0123456789".repeat(4) };
 const RUNNING: SourceStamp = { version: "1.0.0", digest: "0123456789abcdef".repeat(4) };
@@ -102,14 +105,13 @@ describe("updateNotice", () => {
       "[disable]",
     ]);
     const [sentence, act, dismiss, disable] = line;
-    expect(effectsOf(sentence!.link)).toEqual([
-      { verb: "show-config-warning", args: [ch!.message] },
-    ]);
-    expect(effectsOf(act!.link)).toEqual([{ verb: "apply-update", args: [SID] }]);
-    expect(effectsOf(dismiss!.link)).toEqual([
+    // The sentence is plain text: the viewer's ⧉ copies it.
+    expect(sentence!.link).toBeNull();
+    expect(clicksOf(act!.link)).toEqual([{ verb: "apply-update", args: [SID] }]);
+    expect(clicksOf(dismiss!.link)).toEqual([
       { verb: "set-state", args: [SID, UPDATE_DISMISSED_KEY, NEWER.digest] },
     ]);
-    expect(effectsOf(disable!.link)).toEqual([
+    expect(clicksOf(disable!.link)).toEqual([
       { verb: "set-config", args: [SID, UPDATE_NOTICE_FIELD, "false"] },
       { verb: "set-state", args: [SID, UPDATE_NOTICE_SESSION_KEY, "false"] },
     ]);
@@ -119,13 +121,13 @@ describe("updateNotice", () => {
     const [ch] = updateNotice(RELEASE, { kind: "idle" }, ctx());
     expect(ch!.message).toBe("Newer release: 99.0.0. You're on 1.2.3.");
     expect(ch!.lines[0][1]!.text).toBe("[upgrade]");
-    expect(effectsOf(ch!.lines[0][2]!.link)[0]!.args[2]).toBe("99.0.0");
+    expect(clicksOf(ch!.lines[0][2]!.link)[0]!.args[2]).toBe("99.0.0");
   });
 
   test("while the act runs its affordance is a busy label with no apply click", () => {
     const [ch] = updateNotice(SOURCE, { kind: "running" }, ctx());
     expect(ch!.lines[0][1]!.text).toBe("[rebuilding…]");
-    const verbs = ch!.lines.flat().flatMap((s) => effectsOf(s.link).map((e) => e.verb));
+    const verbs = ch!.lines.flat().flatMap((s) => clicksOf(s.link).map((e) => e.verb));
     expect(verbs).not.toContain("apply-update");
   });
 
@@ -155,21 +157,13 @@ describe("updateNotice", () => {
     expect(ch!.message).toBe("Newer source: 9.9.10 [fedcba9]. You're on 1.0.0 [0123456].");
   });
 
-  test("composed: the row reads as the sentence and its three clicks, each word linked to its own effect", () => {
-    const channels = updateNotice(SOURCE, { kind: "idle" }, ctx());
-    const out = composeWithDiagnostics(
-      "BODY",
-      { channels: [channels[0]!] },
-      { fullText: { kind: "file", path: "/tmp/full.txt" }, failedConfigFile: null },
-      { width: 200, rowCap: 20, colorCompatibility: "truecolor" },
-    );
+  test("drawn: the row reads as the sentence and its three clicks, each linked to its own effect", () => {
+    const [message] = updateNotice(SOURCE, { kind: "idle" }, ctx());
+    const out = messageRows(message!, { width: 200, colorCompatibility: "truecolor" });
     expect(out.split("\n").map(stripAnsi)).toEqual([
       "⬆ Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456]. [rebuild] [dismiss] [disable] ",
-      "BODY",
     ]);
-    const verbs = linkUrls(out).flatMap((u) => effectsOf(u).map((e) => e.verb));
-    expect(new Set(verbs)).toEqual(
-      new Set(["show-config-warning", "apply-update", "set-state", "set-config"]),
-    );
+    const verbs = linkUrls(out).flatMap((u) => clicksOf(u).map((e) => e.verb));
+    expect(new Set(verbs)).toEqual(new Set(["apply-update", "set-state", "set-config"]));
   });
 });

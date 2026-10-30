@@ -36,7 +36,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Configure mode](#configure-mode) | Change one placement's settings | Edit mode's `🔧` | Synthesized |
 | [Bundled segments with clicks](#bundled-segments-with-clicks) | Git detail, autocompact, trays, theme switcher, PR link | Default rows and opt-in | `segments:` in the default config |
 | [State-showing segments](#state-showing-segments) | Colour or glyph that tracks a value | Default rows and opt-in | `bg:` ramps, `cascade`, `gauge`, `sparkline` |
-| [Diagnostic strip](#diagnostic-strip) | Errors, warnings, update notice, above the bar | Any bar with something to say | Composed by the daemon |
+| [Diagnostics](#diagnostics) | Errors, warnings, update notice, repository questions: one indicator and a viewer | Any bar with something to say | The door's own cell; the viewer composed by the daemon |
 
 ## Beside the pickers proposal
 
@@ -57,7 +57,7 @@ These are the existing pieces each part of the proposal touches. They are facts 
 
 Every clickable span is an OSC-8 link, `cc-candybar://dispatch/…`, carrying an ordered list of effects (`src/click/wire.ts`, `effectsUrl`). Clicking it runs the URL handler app, which sends the effects to the daemon. The daemon runs each effect through its verb table (`src/daemon/verbs/index.ts`, `VERBS`), and the next render shows the result.
 
-An effect writes in one of two places: the **session** (state that lasts as long as this Claude Code session), or the **config file** (durable; the daemon reloads it). Settings changed in the menu are session drafts until `💾 save` writes them to the file. One click is one step of the session's undo history. A click the daemon refuses shows its reason once, in the red strip above the bar:
+An effect writes in one of two places: the **session** (state that lasts as long as this Claude Code session), or the **config file** (durable; the daemon reloads it). Settings changed in the menu are session drafts until `💾 save` writes them to the file. One click is one step of the session's undo history. A click the daemon refuses is counted by the red indicator beside the door for a few seconds, and its reason is read in the viewer the indicator opens:
 
 ```
 ⚠ slash: /compact was not typed: this session's statusline client reports no tmux facts (it predates this daemon) —
@@ -660,36 +660,32 @@ These have no click. They show a value by glyph or colour, and each is a place a
 
 Every other bundled segment (`directory`, `model`, `version`, `sessionId`, `session`, `today`, `speed`, `tmux`) is plain text on its decoration colour.
 
-## Diagnostic strip
+## Diagnostics
 
-Rows above the bar for errors (red), warnings (amber) and the update notice. Each line wraps at the client's width; the strip is capped at 20 rows (or the terminal's height), and a `↳` row closes it when it has something to open. `src/render/diagnostic-strip.ts`.
-
-An invalid config, with a duplicate key as a second (warning) channel, at 80 columns:
+Every error, warning, update notice and repository question is one message, and they reach the screen one way. The settings door's own cell carries an indicator after its glyph: `⚠ N`, red when any message is an error, amber when none is, absent when there are none; past nine it reads `⚠ 9+`. Because it is the door's cell, it sits beside the door wherever the door is placed, in the statusline, in every lane, and in the tmux status line. `src/render/diagnostics.ts`.
 
 ```
-⚠ Invalid config in
-/var/folders/80/071_2pk11ms1qftgqxswr2p40000gn/T/ccb-bar-hvxkaD/config.json5
-(1 issue):
-  [line 1 • root.h] a container must have a "children" array of layout nodes,
-got number
-⚠
-/var/folders/80/071_2pk11ms1qftgqxswr2p40000gn/T/ccb-bar-hvxkaD/config.json5:
-1: duplicate key "h" — the settings menu cannot edit this file until it is
-fixed
-↳ open /var/folders/80/071_2pk11ms1qftgqxs…000gn/T/ccb-bar-hvxkaD/config.json5
- 🍫  ~/c/cc-candybar  ⎇ docs/ui-elements-inventory +1 ? ▸
- ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
+ 🍫 ⚠ 2  polled  ~/c/cc-candybar  ⎇ main
+```
+
+Clicking it opens the viewer, which takes the bar's place: a header, then one message in full, wrapped at the client's width, with no row cap.
+
+```
+✕ ‹ [2/2]   ⧉ copy
+⚠ /Users/someone/.config/cc-candybar/config.json5:1: duplicate key "h" — the
+settings menu cannot edit this file until it is fixed
 ```
 
 | Region | Click |
 |---|---|
-| Any word of an error or warning | copies the whole message (`show-config-error` / `show-config-warning`) |
-| `↳ open <path>` | `file://` link to the failing config file |
-| `↳ N more rows · open full text` | `file://` link to the complete text, when the cap dropped rows |
+| `⚠ N` | opens the viewer at the first message (session `candybar.diagnostics` ← `1`) |
+| `✕` | closes the viewer (session `candybar.diagnostics` ← `0`) |
+| `‹` / `›` | the previous or next message; drawn only where there is one, and only when there is more than one message |
+| `⧉ copy` | copies the message shown, whole |
 
-The bar under a failing config is the bundled default, so the settings menu is still there.
+A config that fails to load draws the bundled default under its error, so the settings menu is still there. A placement of a segment nothing declares drops only that cell; the rest of the bar draws, and the drop is an error message. While a lane draws the bar elsewhere, Claude Code's statusline is the handoff line alone, so a message shows once, on the lane's bar.
 
-**Update notice.** It shows when the code rendering the bar is older than the source checkout beside it, or than the latest release. That condition is not reproduced here; this is from `updateNotice` in `src/daemon/update-notice.ts`:
+**Update notice.** A message whose clicks work inside the viewer. It shows when the code rendering the bar is older than the source checkout beside it, or than the latest release. That condition is not reproduced here; this is from `updateNotice` in `src/daemon/update-notice.ts`:
 
 ```
 ⬆ Newer source: 1.48.0 [abc1234]. You're on 1.47.0 [def5678]. [rebuild] [dismiss] [disable]
@@ -697,7 +693,6 @@ The bar under a failing config is the bundled default, so the settings menu is s
 
 | Region | Click |
 |---|---|
-| The sentence | copies it |
 | `[rebuild]` / `[upgrade]` | rebuilds the checkout, or installs the release; reads `[rebuilding…]` while it runs. A failure adds a row `rebuild failed: <reason>` |
 | `[dismiss]` | hides it for this session, until something newer appears |
 | `[disable]` | turns the notice off in the config file and the session |
@@ -711,17 +706,16 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | Verb | Emitted by |
 |---|---|
 | `dispatch` | every rendered click: the wrapper around the list below |
-| `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, `[dismiss]` |
+| `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, `[dismiss]`, the diagnostics indicator and viewer |
 | `set-config`, `step-config` | `persist` actions (author configs); `[disable]` |
 | `reset-config` | every `↺`, `⟲ reset all`, `↺ reset layout` |
 | `save` | `💾 save`, `✓ save` |
 | `save-preset`, `delete-preset` | `+ preset`, `🚮 delete` |
 | `apply-layout-op` | edit mode's `✖` and `✚` |
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
-| `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config` |
+| `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config`, the viewer's `⧉ copy` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
 | `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
-| `show-config-error`, `show-config-warning` | the diagnostic strip's words |
 | `apply-update` | `[rebuild]` / `[upgrade]` |
 | `toolbar-toggle` | nothing |
 | `load-config` | nothing |

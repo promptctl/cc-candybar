@@ -1,0 +1,80 @@
+// Reading a real daemon's diagnostics the way a person does: the indicator
+// beside the settings door, a click on it, and the viewer paged with › until
+// the last message, then ✕. Every click is found in the rendered bytes by
+// what it writes, never built, so the test clicks exactly what the bar drew.
+
+import { DIAGNOSTICS_VIEWING } from "../../src/config/door";
+import type { ClientHints } from "../../src/daemon/protocol";
+import { links, stripAnsi } from "./ansi";
+import { effectsOf } from "./click";
+import { click, render } from "./daemon-e2e";
+
+// The indicator's text in a rendered bar (`⚠ N`), or null when it shows none.
+export function indicatorOf(rendered: string): string | null {
+  const link = viewerLink(rendered, "1");
+  return link === undefined ? null : stripAnsi(link.text).trim();
+}
+
+// The rendered link that writes `value` to the viewer's key.
+export function viewerLink(
+  rendered: string,
+  value: string,
+): { url: string; text: string } | undefined {
+  return links(rendered).find((l) =>
+    effectsOf(l.url).some(
+      (e) =>
+        e.verb === "set-state" &&
+        e.args[1] === DIAGNOSTICS_VIEWING &&
+        e.args[2] === value,
+    ),
+  );
+}
+
+// One page of the viewer: its position and the message's text, its words
+// joined by single spaces whatever rows they wrapped onto.
+export interface ViewerPage {
+  readonly position: string;
+  readonly text: string;
+  readonly rendered: string;
+}
+
+export function pageOf(rendered: string): ViewerPage {
+  const [header = "", ...body] = rendered.replace(/\n$/, "").split("\n");
+  const position = /\[(\d+\/\d+)\]/.exec(stripAnsi(header))?.[1];
+  if (position === undefined)
+    throw new Error(`not the viewer: ${stripAnsi(rendered)}`);
+  return {
+    position,
+    text: body.map(stripAnsi).join(" ").replace(/\s+/g, " ").trim(),
+    rendered,
+  };
+}
+
+// Every message a session's bar shows, read through the viewer: `bar` is the
+// rendered bar whose indicator is clicked. Leaves the viewer closed.
+export async function readDiagnostics(
+  sockPath: string,
+  sessionId: string,
+  cwd: string,
+  bar: string,
+  hints: ClientHints = {},
+  args: string[] = [],
+): Promise<ViewerPage[]> {
+  const open = viewerLink(bar, "1");
+  if (open === undefined) return [];
+  const draw = (): Promise<string> =>
+    render(sockPath, sessionId, cwd, hints, args);
+  await click(sockPath, open.url);
+  const pages: ViewerPage[] = [];
+  let shown = await draw();
+  for (;;) {
+    const page = pageOf(shown);
+    pages.push(page);
+    const [at, of] = page.position.split("/").map(Number);
+    if (at! >= of!) break;
+    await click(sockPath, viewerLink(shown, String(at! + 1))!.url);
+    shown = await draw();
+  }
+  await click(sockPath, viewerLink(shown, "0")!.url);
+  return pages;
+}

@@ -25,7 +25,6 @@ import {
   VERB_APPLY_UPDATE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
-  VERB_SHOW_CONFIG_WARNING,
 } from "../click/wire";
 import {
   assessCurrency,
@@ -39,9 +38,9 @@ import { launch, type LaunchOpts, type LaunchResult } from "../proc/launch";
 import {
   diagnosticSpan,
   UPDATE_SEVERITY,
-  type DiagnosticChannel,
   type DiagnosticLine,
-} from "../render/diagnostic-strip";
+  type DiagnosticMessage,
+} from "../render/diagnostics";
 import { shortDigest } from "../source-digest";
 import { PACKAGE_VERSION } from "../version";
 import {
@@ -163,15 +162,15 @@ export interface NoticeContext {
 }
 
 // [LAW:dataflow-not-control-flow] One update becomes zero or one channel —
-// the list IS the answer, so the strip composer folds it beside the error
-// and warning channels with no "is there a notice" branch. Line one is the
+// the list IS the answer, so the diagnostics fold it beside the errors and
+// warnings with no "is there a notice" branch. Line one is the
 // sentence and the three affordances; a failed act adds a second line naming
 // the failure, and while the act runs its affordance is a busy label.
 export function updateNotice(
   update: Update | null,
   act: ActState,
   ctx: NoticeContext,
-): DiagnosticChannel[] {
+): DiagnosticMessage[] {
   if (update === null) return [];
   const identity = updateIdentity(update);
   if (!ctx.enabled || ctx.dismissed === identity) return [];
@@ -182,20 +181,17 @@ export function updateNotice(
       ? [`${facts.act} failed: ${act.reason}`]
       : [];
   const message = [sentence, ...failure].join("\n");
-  // The sentence copies itself (the warning verb's clipboard), like every
-  // other diagnostic row; the affordances each carry their own effect.
-  const copy = effectsUrl([
-    { verb: VERB_SHOW_CONFIG_WARNING, args: [message] },
-  ]);
+  // The sentence is plain text (the viewer's ⧉ copies it); the affordances
+  // each carry their own effect.
   const actSpan =
     act.kind === "running"
-      ? diagnosticSpan(`[${facts.busy}]`, copy)
+      ? diagnosticSpan(`[${facts.busy}]`, null)
       : diagnosticSpan(
           `[${facts.act}]`,
           effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }]),
         );
   const first: DiagnosticLine = [
-    diagnosticSpan(sentence, copy),
+    diagnosticSpan(sentence, null),
     actSpan,
     diagnosticSpan(
       "[dismiss]",
@@ -220,7 +216,7 @@ export function updateNotice(
       ]),
     ),
   ];
-  const rest = failure.map((f): DiagnosticLine => [diagnosticSpan(f, copy)]);
+  const rest = failure.map((f): DiagnosticLine => [diagnosticSpan(f, null)]);
   return [{ severity: UPDATE_SEVERITY, message, lines: [first, ...rest] }];
 }
 
@@ -272,7 +268,7 @@ export interface UpdateWatchOptions {
 
 export interface UpdateWatch {
   arm(): void;
-  notice(ctx: NoticeContext): DiagnosticChannel[];
+  notice(ctx: NoticeContext): DiagnosticMessage[];
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
   // to apply or an act is already running.
   act(): void;

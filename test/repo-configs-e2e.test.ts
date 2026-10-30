@@ -29,6 +29,11 @@ import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { logPath } from "../src/daemon/paths";
 import { repoConfigs, repoConfigsPath } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
+import {
+  indicatorOf,
+  readDiagnostics,
+  type ViewerPage,
+} from "./helpers/diagnostics-viewer";
 import { until } from "./helpers/until";
 
 jest.setTimeout(60_000);
@@ -66,6 +71,18 @@ function repoConfig(marker: string, label: string): string {
 // compiles the repository's config first, which the source daemon can take
 // seconds over on a loaded machine.
 const ANSWER_REPLY_MS = 20_000;
+
+// The question the bar asks of a session, read in the viewer its indicator
+// opens: the page whose message asks it, or none.
+async function questionOf(
+  sockPath: string,
+  sessionId: string,
+  cwd: string,
+  bar: string,
+): Promise<ViewerPage | undefined> {
+  const pages = await readDiagnostics(sockPath, sessionId, cwd, bar);
+  return pages.find((p) => p.text.includes("a cc-candybar config for"));
+}
 
 // The rendered link that answers `answer` for a repository.
 function answerUrl(rendered: string, answer: string): string {
@@ -114,12 +131,14 @@ describe("a repository's config waits for the user's one answer", () => {
 
   test("unanswered: nothing runs, the user's config draws, and the bar asks", async () => {
     await start();
-    const rendered = await draw("repo-ask");
-    // The strip wraps to the client's width: read it as one run of words.
-    const text = stripAnsi(rendered).replace(/\s+/g, " ");
+    const bar = await draw("repo-ask");
+    const text = stripAnsi(bar);
     expect(text).toContain("USERSEG");
     expect(text).not.toContain("REPOSEG");
-    expect(text).toContain(`a cc-candybar config for ${project}`);
+    // The question is a message the indicator offers, its answers in it.
+    const question = await questionOf(isolated.sockPath, "repo-ask", project, bar);
+    expect(question!.text).toContain(`a cc-candybar config for ${project}`);
+    const rendered = question!.rendered;
     expect(fs.existsSync(marker)).toBe(false);
     // [LAW:nothing-unseen] The load says which repository it left waiting.
     const loadedLine = ` awaiting=${project} declined=- `;
@@ -144,10 +163,15 @@ describe("a repository's config waits for the user's one answer", () => {
 
   test("approve: the config loads and runs, and stays approved across a restart and an edit", async () => {
     await start();
-    const asked = await draw("repo-yes");
+    const asked = await questionOf(
+      isolated.sockPath,
+      "repo-yes",
+      project,
+      await draw("repo-yes"),
+    );
     const resp = await sendClick(
       isolated.sockPath,
-      answerUrl(asked, "approved"),
+      answerUrl(asked!.rendered, "approved"),
       ANSWER_REPLY_MS,
     );
     expect(resp.ok).toBe(true);
@@ -158,15 +182,19 @@ describe("a repository's config waits for the user's one answer", () => {
       (r) => stripAnsi(r).includes("REPOSEGran"),
       "the approved repository's config",
     );
-    expect(stripAnsi(approved)).not.toContain("a cc-candybar config for");
+    expect(
+      await questionOf(isolated.sockPath, "repo-yes", project, approved),
+    ).toBeUndefined();
     expect(fs.existsSync(marker)).toBe(true);
 
     // A restart reads the answer back from the state directory.
     await killAndWait(daemon!, "SIGTERM");
     await start();
-    const restarted = stripAnsi(await draw("repo-yes-2"));
-    expect(restarted).toContain("REPOSEG");
-    expect(restarted).not.toContain("a cc-candybar config for");
+    const restartedBar = await draw("repo-yes-2");
+    expect(stripAnsi(restartedBar)).toContain("REPOSEG");
+    expect(
+      await questionOf(isolated.sockPath, "repo-yes-2", project, restartedBar),
+    ).toBeUndefined();
 
     // An edit reloads into the edited config, and never asks again.
     fs.writeFileSync(projectFile, repoConfig(marker, "EDITED"));
@@ -177,23 +205,32 @@ describe("a repository's config waits for the user's one answer", () => {
       (r) => stripAnsi(r).includes("EDITED"),
       "the edited config",
     );
-    expect(stripAnsi(edited)).not.toContain("a cc-candybar config for");
+    expect(
+      await questionOf(isolated.sockPath, "repo-yes-2", project, edited),
+    ).toBeUndefined();
   });
 
   test("decline: the user's config draws, nothing runs, and nothing asks again", async () => {
     await start();
-    const asked = await draw("repo-no");
+    const asked = await questionOf(
+      isolated.sockPath,
+      "repo-no",
+      project,
+      await draw("repo-no"),
+    );
     const resp = await sendClick(
       isolated.sockPath,
-      answerUrl(asked, "declined"),
+      answerUrl(asked!.rendered, "declined"),
       ANSWER_REPLY_MS,
     );
     expect(resp.ok).toBe(true);
+    // The user's config draws nothing else to say, so no question is no
+    // indicator at all.
     const declined = await renderUntil(
       isolated.sockPath,
       "repo-no",
       project,
-      (r) => !stripAnsi(r).includes("a cc-candybar config for"),
+      (r) => indicatorOf(r) === null,
       "the bar without the question",
     );
     expect(stripAnsi(declined)).toContain("USERSEG");
@@ -201,9 +238,9 @@ describe("a repository's config waits for the user's one answer", () => {
 
     await killAndWait(daemon!, "SIGTERM");
     await start();
-    const restarted = stripAnsi(await draw("repo-no-2"));
-    expect(restarted).toContain("USERSEG");
-    expect(restarted).not.toContain("a cc-candybar config for");
+    const restartedBar = await draw("repo-no-2");
+    expect(stripAnsi(restartedBar)).toContain("USERSEG");
+    expect(indicatorOf(restartedBar)).toBeNull();
     expect(fs.existsSync(marker)).toBe(false);
   });
 
@@ -240,13 +277,16 @@ describe("a repository's config waits for the user's one answer", () => {
     }));
     try {
       await start();
-      const asked = await render(isolated.sockPath, "repo-wt", wt);
-      expect(stripAnsi(asked).replace(/\s+/g, " ")).toContain(
-        `a cc-candybar config for ${project}`,
+      const asked = await questionOf(
+        isolated.sockPath,
+        "repo-wt",
+        wt,
+        await render(isolated.sockPath, "repo-wt", wt),
       );
+      expect(asked!.text).toContain(`a cc-candybar config for ${project}`);
       const resp = await sendClick(
         isolated.sockPath,
-        answerUrl(asked, "approved"),
+        answerUrl(asked!.rendered, "approved"),
         ANSWER_REPLY_MS,
       );
       expect(resp.ok).toBe(true);
@@ -272,9 +312,9 @@ describe("a repository's config waits for the user's one answer", () => {
         value: { [project]: "approved" },
       });
       // The main worktree is approved by the same answer.
-      const main = stripAnsi(await draw("repo-main"));
-      expect(main).toContain("REPOSEG");
-      expect(main).not.toContain("a cc-candybar config for");
+      const main = await draw("repo-main");
+      expect(stripAnsi(main)).toContain("REPOSEG");
+      expect(indicatorOf(main)).toBeNull();
     } finally {
       fs.rmSync(wt, { recursive: true, force: true });
     }

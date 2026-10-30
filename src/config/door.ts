@@ -28,3 +28,10 @@ export const SETTINGS_REF: DisclosureRef = {
   key: SETTINGS_ANCHOR,
   member: SETTINGS_OPEN,
 };
+
+// [LAW:one-source-of-truth] The session key the diagnostics viewer is open
+// under, written by the indicator the door carries (its `set`-int action, so
+// every config's gate holds it) and by the viewer's own ‹ › ✕: the 1-based
+// index of the message it shows, or closed at anything below 1, the key absent
+// included (src/render/diagnostics.ts).
+export const DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;

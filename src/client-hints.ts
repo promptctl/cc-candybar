@@ -39,8 +39,7 @@ export function detectClientHints(
 ): Omit<ClientHints, "client"> {
   return {
     termCols: detectTermExtent(env.COLUMNS, tty.columns),
-    // The diagnostic strip's row cap reads this
-    // (src/render/diagnostic-strip.ts).
+    // The terminal's height, as the render event reports it.
     termRows: detectTermExtent(env.LINES, tty.rows),
     // [LAW:dataflow-not-control-flow] A fold over the vocabulary — adding a
     // name is a data edit. TOTAL, unlike the extents: "no SSH var set" is the

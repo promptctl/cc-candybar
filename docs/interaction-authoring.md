@@ -2033,7 +2033,7 @@ globals.palette
 
 The bar still renders — a theme chosen from live data must not be able to blank
 your statusline when the data reaches a branch you typo'd — but you will see the
-reason on the diagnostic strip until you fix it. A **per-segment** `palette:` will
+reason behind the diagnostics indicator beside the settings door until you fix it. A **per-segment** `palette:` will
 not take a template at all: that pin is resolved once when the config loads, so a
 rule there could never be evaluated.
 

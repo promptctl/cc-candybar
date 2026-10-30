@@ -14,7 +14,7 @@
 // There is no demo-only payload: a field the daemon's payload gains is in the
 // demo's.
 // The config is the one file named here, loaded or refused; the daemon's
-// search for a config and its diagnostic strip are not part of the demo.
+// search for a config and its diagnostics viewer are not part of the demo.
 //
 // [LAW:dataflow-not-control-flow] The body is straight-line: load → frames →
 // dispose. The config file and the hook event are data; swapping either
@@ -134,6 +134,12 @@ function loadState(): ReturnType<typeof buildRenderState> {
 
 async function renderFrames(): Promise<void> {
   const state = loadState();
+  // [LAW:no-silent-failure] The daemon draws past a placement of an undeclared
+  // segment; the demo, like `check`, refuses it with the loader's message.
+  if (state.dropped !== null) {
+    state.registry.dispose();
+    throw state.dropped;
+  }
   // The session's view of the state, as the daemon opens one per session,
   // declared with the one request the demo's frames draw by.
   const view = openView(

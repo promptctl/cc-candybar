@@ -119,7 +119,7 @@ const GROUNDS = {
   light: { background: "#f4f4f7", foreground: "#343b58", cursor: "#f4f4f7" },
 };
 // The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
-// which is what caps its diagnostic strip.
+// as a real client would report.
 const REPORTED_ROWS = 40;
 // Claude Code's fastest status-line cadence (`statusLine.refreshInterval: 1`):
 // the page asks for a render this often, so whatever the bar shows of the time

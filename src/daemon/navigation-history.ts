@@ -15,6 +15,7 @@
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "./settings-history";
 import { UPDATE_DISMISSED_KEY } from "./update-notice";
+import { DIAGNOSTICS_VIEWING } from "../config/door";
 import { observable, runInAction } from "mobx";
 import { recordingView, type SessionStateRW } from "./session-state";
 import type { Gate } from "./verbs/validator-registry";
@@ -35,9 +36,14 @@ const MAX_SESSIONS = 32;
 
 // [LAW:one-source-of-truth] The keys going back restores: everything those
 // verbs write except a DECISION — a setting (undo's), a dismissed update
-// notice, or a confirm's arming, which would come back one click from firing.
+// notice, or a confirm's arming, which would come back one click from firing —
+// and the diagnostics viewer, which is paged and closed by its own ‹ › ✕, so
+// a step through the messages never fills the history ◁ walks.
 const isNavigationKey = (key: string): boolean =>
-  !isSettingKey(key) && !isConfirmKey(key) && key !== UPDATE_DISMISSED_KEY;
+  !isSettingKey(key) &&
+  !isConfirmKey(key) &&
+  key !== UPDATE_DISMISSED_KEY &&
+  key !== DIAGNOSTICS_VIEWING;
 
 // Records one click's navigation. Writes through `sessionState` land in the
 // store it wraps and are recorded; `commit` turns them into one step.

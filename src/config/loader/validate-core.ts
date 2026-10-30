@@ -25,6 +25,10 @@ export interface ValidateCtx {
   // walk synthesis: the walk owns positions, the synthesis owns cross-section
   // emission.
   readonly groups: GroupSugarDecl[];
+  // Placements of a segment nothing declares: each is an error, but one the
+  // loader can draw past by dropping that cell (loader/unplaced.ts), so it is
+  // kept apart from the issues that refuse the config.
+  readonly unplaced: ConfigIssue[];
 }
 
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };

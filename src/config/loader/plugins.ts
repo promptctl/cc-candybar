@@ -13,7 +13,8 @@
 //
 // [LAW:no-silent-failure] A definition that does not load drops ONLY that
 // plugin, and the drop is a typed fact on the result (`dropped`), which the
-// daemon shows on the diagnostic strip and `cc-candybar check` fails on.
+// daemon offers as a message beside the settings door and `cc-candybar check`
+// fails on.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -96,7 +97,7 @@ export interface PluginContext {
   readonly checkout: Checkout | null;
 }
 
-// The spelling of a drop, shared by the diagnostic strip and `check`.
+// The spelling of a drop, shared by the bar's diagnostics and `check`.
 export function droppedPluginNotice(d: DroppedPlugin): string {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }
@@ -617,6 +618,7 @@ function fragmentOf(
     issues,
     allowedPalettes: new Set(listResolvablePaletteNames()),
     groups: [],
+    unplaced: [],
   };
   // [LAW:one-source-of-truth] The data variable is parsed by the validator
   // every `file` source goes through, from the declaration a user would write.

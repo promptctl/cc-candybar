@@ -28,6 +28,17 @@ export interface FrameSource {
   readonly width: number;
 }
 
+// [LAW:one-source-of-truth] Whether two frames were drawn from one source: the
+// one comparison transitions and a renderer's warning record both make.
+export function sameSource(a: FrameSource, b: FrameSource): boolean {
+  return (
+    a.config === b.config &&
+    a.preset === b.preset &&
+    a.revision === b.revision &&
+    a.width === b.width
+  );
+}
+
 // [LAW:types-are-the-program] What a placement drew in one frame: its own
 // rows, whether a menu it dropped or a body it opened hangs under them — a
 // placement that leaves with one open goes at once with what it opened rather
@@ -88,13 +99,7 @@ export class FrameMemory<Line> {
   // against.
   from(source: FrameSource): FrameRecord<Line> | null {
     const { last } = this;
-    return last !== null &&
-      last.source.config === source.config &&
-      last.source.preset === source.preset &&
-      last.source.revision === source.revision &&
-      last.source.width === source.width
-      ? last
-      : null;
+    return last !== null && sameSource(last.source, source) ? last : null;
   }
 
   begin(

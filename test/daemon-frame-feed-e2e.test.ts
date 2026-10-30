@@ -89,7 +89,7 @@ const CONFIGS = {
   // The band lane switched off, which a test switches on by rewriting the file
   // as another session's save would.
   fileLane: `{ segments: { mark: { template: 'a file-switched mark' } }, root: { h: ['mark'] } }`,
-  // Moves, and carries a load warning (a duplicate key) the diagnostic strip
+  // Moves, and carries a load warning (a duplicate key) the indicator
   // shows on every frame.
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
@@ -636,29 +636,28 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(laneLines(sid)).toEqual([expect.stringContaining("lane: band off")]);
   });
 
-  // Only the body is handed off: what the strip says above it stays.
-  test("a handed-off statusline still carries the strip: a load warning stays above the handoff line", async () => {
+  // The bar is handed off whole: the lane drawing it carries the indicator,
+  // and the statusline is the handoff line alone, so an error shows once.
+  test("a handed-off statusline is the handoff line alone: a load warning shows once, on the lane's bar", async () => {
     const sid = "feed-handoff-warned";
     await render(sockPath, sid, projectDir, {}, args("warned"));
     const band = subscribeUntilEnd(sid, "band");
-    await until(() => band.live().length > 0, "the band's frame");
-    const lines = stripAnsi(
+    await until(
+      () => band.live().some((f) => String(barText(f)).includes("⚠ 1")),
+      "a band frame carrying the indicator",
+    );
+    const statusline = stripAnsi(
       await render(sockPath, sid, projectDir, {}, args("warned")),
-    )
-      .trim()
-      .split("\n");
-    expect(lines.at(-1)).toBe(
+    );
+    expect(statusline.trim().split("\n")).toEqual([
       `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
-    );
-    expect(lines.slice(0, -1).join("\n")).toContain('duplicate key "effect"');
-    expect(lines.join("\n")).not.toContain("a warned mark");
-    // A strip over its row cap is cut to it; the handoff line, in the body's
-    // place, is not.
-    const capped = stripAnsi(
-      await render(sockPath, sid, projectDir, { termRows: 2, termCols: 50 }, args("warned")),
-    );
-    expect(capped).toMatch(/more\s+rows/);
-    expect(capped.replace(/\s+/g, " ")).toContain(HANDOFF_BUTTON);
+    ]);
+    expect(statusline).not.toContain("⚠");
+    expect(statusline).not.toContain('duplicate key "effect"');
+    const last = String(barText(band.live().at(-1)!));
+    expect(last).toContain("a warned mark");
+    expect(last.match(/⚠/g)).toHaveLength(1);
+    expect(last).not.toContain("duplicate key");
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to
@@ -794,13 +793,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     });
   });
 
-  test("a frame records nothing: no session-state write and no dump write, which the session's next request makes", async () => {
+  test("a frame records nothing: no session-state write", async () => {
     const sid = "feed-frame-records-nothing";
-    const dumpFile = path.join(
-      path.dirname(sockPath),
-      "diagnostics",
-      `${sid}.txt`,
-    );
     const revision = async (): Promise<number> =>
       (await stats()).sessionState.revision;
     await render(sockPath, sid, projectDir, {}, args("still"));
@@ -821,12 +815,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect((await feedStats()).drawn - drawnBefore).toBeGreaterThan(0);
     const shown = outputs(frames).map(stripAnsi);
     expect(shown.length).toBeGreaterThan(0);
-    expect(shown.every((text) => /duplicate key/.test(text))).toBe(true);
+    // Every frame counts the warned config's load warning.
+    expect(shown.every((text) => text.includes("⚠ 1"))).toBe(true);
     expect(after).toBe(before);
-    expect(existsSync(dumpFile)).toBe(false);
-    // The session's next request is where both are written.
-    await render(sockPath, sid, projectDir, {}, args("still"));
-    expect(readFileSync(dumpFile, "utf8")).toMatch(/duplicate key/);
   });
 
   test("a failed click's error shows on the pushed frames and Claude Code's bar for the hold, and leaves by time alone", async () => {
@@ -834,7 +825,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const bad = effectsUrl([
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
     ]);
-    const shows = (text: string): boolean => /bogus/.test(text);
+    // The error is the one message the bar holds, so the indicator counts it.
+    const shows = (text: string): boolean => text.includes("⚠ 1");
     // The bar, the bar with the error for the hold, the bar: where the error
     // first shows, and the first frame after it that no longer does.
     const hold = (frames: ReadonlyArray<Frame>) => {

@@ -21,11 +21,13 @@ import {
   click,
   hookData,
   killAndWait,
-  render,
+  render as renderBar,
   renderRequest,
   runRealClient,
   stripAnsi,
 } from "./helpers/daemon-e2e";
+import { readDiagnostics } from "./helpers/diagnostics-viewer";
+import type { ClientHints } from "../src/daemon/protocol";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -36,6 +38,20 @@ jest.setTimeout(30_000);
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
+
+// What a person reads of a session's bar: the bar, then every message its
+// indicator offers, each read in the viewer.
+async function render(
+  sockPath: string,
+  sessionId: string,
+  cwd: string,
+  hints: ClientHints = {},
+  args: string[] = [],
+): Promise<string> {
+  const bar = await renderBar(sockPath, sessionId, cwd, hints, args);
+  const pages = await readDiagnostics(sockPath, sessionId, cwd, bar, hints, args);
+  return [bar, ...pages.map((p) => p.text)].join("\n");
+}
 
 describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running daemon", () => {
   let sockPath: string;
@@ -80,7 +96,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   // Four renders, four different bars:
   //   • no override — the bundled default, no strip;
   //   • an override naming a valid file — that file's own bar, no strip;
-  //   • an override naming a file the loader rejects — the red strip naming
+  //   • an override naming a file the loader rejects — the bar's error naming
   //     the file and its first issue, enough to send the user to `check`;
   //   • an override naming a file that does not exist — the bar says so, and
   //     names the path, instead of the silent default the ticket measured.
@@ -189,7 +205,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
 
   // brandon-unfiled-3248.8bz: a bare `--config` (only ever the last token —
   // the flag takes whatever follows it) was read as no override, silently,
-  // even when an earlier `--config` named a file. It is refused on the strip
+  // even when an earlier `--config` named a file. It is refused as the bar's error
   // and on the render event, like an unknown flag or a stray word, and the
   // bar renders with no --config.
   test("a bare --config is refused on the bar and the render event, not silently dropped", async () => {
@@ -241,8 +257,13 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       {},
       configFlag(override),
     );
-    const badArgsOf = async (sid: string) =>
-      (await renderLines(env, sid)).map((l) => l.match(/ badArgs=(\S+) /)?.[1]);
+    // Each distinct value its renders' events name: reading the bar's messages
+    // renders it again, and every render names the same.
+    const badArgsOf = async (sid: string) => [
+      ...new Set(
+        (await renderLines(env, sid)).map((l) => l.match(/ badArgs=(\S+) /)?.[1]),
+      ),
+    ];
     expect(await badArgsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
     expect(await badArgsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
     expect(await badArgsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
@@ -287,7 +308,10 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     });
     const refusedOf = async (sid: string) =>
       (await renderLines(env, sid)).map((l) => l.match(/ refused=(\S+) /)?.[1]);
-    expect(await refusedOf("cfg-env-stale-client")).toEqual(["configEnv"]);
+    // Reading the bar's messages renders it again: every render refused it.
+    expect(new Set(await refusedOf("cfg-env-stale-client"))).toEqual(
+      new Set(["configEnv"]),
+    );
     expect(await refusedOf("cfg-env-taken")).toEqual(["-"]);
   });
 

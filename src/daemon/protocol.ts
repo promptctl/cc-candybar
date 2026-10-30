@@ -50,8 +50,8 @@ export interface RenderRequest {
   hookData: ClaudeHookData;
   // The client's own path, then the flags the statusline command gave it —
   // the native binary's, the Node script's, never the node interpreter's.
-  // Anything after the path that is not `--config <file>` is refused on the
-  // strip (parseRenderArgs, server.ts).
+  // Anything after the path that is not `--config <file>` is refused as the
+  // bar's error (parseRenderArgs, server.ts).
   args: string[];
   cwd: string;
   // When the client hangs up, in epoch milliseconds: the daemon's wait for
@@ -80,7 +80,7 @@ export interface RenderRequest {
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
 // the session it is rendering for". `termCols` established the pattern; `ssh`
-// and `termRows` (the diagnostic strip's row cap) followed it, and the
+// and `termRows` (the terminal's height) followed it, and the
 // documented-but-unbuilt client-aware `colorCompatibility: "auto"` is the
 // next. Naming the set as ONE type is what keeps each addition a field
 // rather than another sanitizer, another wire read, and another parameter
@@ -209,7 +209,7 @@ export function refusedHints(
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
 
-// The red strip's line for the refused hints, null when every sent hint was
+// The error message for the refused hints, null when every sent hint was
 // taken.
 export function refusedHintsError(
   refused: readonly RefusedHint[],
@@ -246,7 +246,7 @@ const REFUSAL_LINES: Readonly<
   positional: (args) => `Unexpected arguments: ${args}`,
 };
 
-// The red strip's lines for the refused arguments, null when every argument
+// The error message for the refused arguments, null when every argument
 // was taken. Either way the bar renders without them.
 export function refusedArgsError(
   refused: readonly RefusedArg[],

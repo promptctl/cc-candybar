@@ -2,8 +2,8 @@
 // any diagnostic text we embed inside a single-line, ANSI-styled envelope.
 // Two callers today:
 //   - src/render/error-glyph.ts (permanent client-side glyph; budget 60)
-//   - src/render/diagnostic-strip.ts (per-render diagnostic strip carrying
-//     the actual config error/warning message; sanitize only — it wraps)
+//   - src/render/diagnostics.ts (the diagnostics viewer, carrying the actual
+//     config error/warning message; sanitize only — it wraps)
 // A third copy in the daemon would duplicate the security-critical
 // control-char neutralization rules; sharing the primitive guarantees the
 // rules cannot drift between callers.
@@ -61,7 +61,7 @@ export function isControlChar(code: number): boolean {
 // Sanitize control characters (→ single space) and collapse whitespace runs
 // to one space so multi-line indented messages don't display as awkwardly-
 // spaced single lines. The envelope-safety half of the contract, on its own:
-// the diagnostic strip (src/render/diagnostic-strip.ts) wraps to the
+// the diagnostics viewer (src/render/diagnostics.ts) wraps to the
 // terminal instead of clipping, so it needs the neutralization without the
 // cap.
 export function sanitizeText(text: string): string {

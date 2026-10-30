@@ -95,6 +95,7 @@ import {
   type PluginLayer,
 } from "./loader/plugins.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
+import { withoutUnplaced } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
@@ -423,7 +424,7 @@ export function loadConfigChain(
       layers,
       base,
       installed,
-      config: validateConfig(
+      ...validateRenderable(
         loadConfig(null, base, NO_PROJECT),
         "<default>",
         allowedPalettes,
@@ -435,7 +436,7 @@ export function loadConfigChain(
       layers,
       base,
       installed,
-      config: validateConfig(top, top.path, allowedPalettes),
+      ...validateRenderable(top, top.path, allowedPalettes),
     };
   } catch (e) {
     for (const layer of layers.slice(0, -1)) {
@@ -478,7 +479,10 @@ export interface LoadedChain {
     // Installed drops no layer reaches: logged, never a warning.
     readonly unreached: readonly DroppedPlugin[];
   };
+  // The merged config the bar draws, and the placements it dropped
+  // (validateRenderable).
   readonly config: ValidatedConfig;
+  readonly dropped: ConfigError | null;
 }
 
 export interface LoadedFile {
@@ -486,7 +490,7 @@ export interface LoadedFile {
   readonly source: string;
   readonly warnings: readonly string[];
   // The plugin definitions the file listed: those merged, and those dropped
-  // with why. A drop is also a `warnings` line (the strip shows it); `check`
+  // with why. A drop is also a `warnings` line (the bar shows it); `check`
   // reads this to fail its verdict.
   readonly plugins: {
     readonly loaded: readonly string[];
@@ -538,6 +542,7 @@ function checkPlugin(
     issues,
     allowedPalettes: new Set(),
     groups: [],
+    unplaced: [],
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
@@ -572,26 +577,67 @@ const NO_FILE: LoadedFile = {
 
 /**
  * Promote a merged DslConfig to a ValidatedConfig by running cross-references
- * and cycle detection. Sole producer of ValidatedConfig in the codebase — the
- * phantom brand makes "the renderer never receives an unvalidated config" a
- * compile-time invariant, not a runtime convention.
+ * and cycle detection, refusing it outright on any issue — a placement of an
+ * undeclared segment included. What `check` and every write judge a file by.
  *
  * Throws ConfigError aggregating every issue.
- *
- * [LAW:single-enforcer] One cast site, here, exclusive.
  */
 export function validateConfig(
-  { config, raw, source }: AuthoredConfig,
+  authored: AuthoredConfig,
   filePath = "<config>",
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
 ): ValidatedConfig {
+  const { config, dropped } = validateRenderable(
+    authored,
+    filePath,
+    allowedPalettes,
+  );
+  if (dropped !== null) throw dropped;
+  return config;
+}
+
+// A config the bar can draw, and the placements it dropped to draw it.
+export interface Renderable {
+  readonly config: ValidatedConfig;
+  // [LAW:no-silent-failure] Each placement of an undeclared segment, as the
+  // error the strict load would have refused the config with; null for none.
+  readonly dropped: ConfigError | null;
+}
+
+/**
+ * The same validation, except that a placement of an undeclared segment drops
+ * only its own cell (loader/unplaced.ts) and is returned as `dropped`, rather
+ * than refusing the whole config: the bar draws everything else the author
+ * placed. Any other issue still refuses it, reported together with the drops.
+ * Sole producer of ValidatedConfig in the codebase — the phantom brand makes
+ * "the renderer never receives an unvalidated config" a compile-time
+ * invariant, not a runtime convention.
+ *
+ * [LAW:single-enforcer] One cast site, here, exclusive.
+ */
+export function validateRenderable(
+  { config: merged, raw, source }: AuthoredConfig,
+  filePath = "<config>",
+  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+): Renderable {
   const issues: ConfigIssue[] = [];
-  const ctx: ValidateCtx = { source, issues, allowedPalettes, groups: [] };
-  validateCrossReferences(ctx, config, raw);
-  validateNoCycles(ctx, config);
+  const ctx: ValidateCtx = {
+    source,
+    issues,
+    allowedPalettes,
+    groups: [],
+    unplaced: [],
+  };
+  validateCrossReferences(ctx, merged, raw);
+  validateNoCycles(ctx, merged);
   if (issues.length > 0) {
-    throw new ConfigError(filePath, issues);
+    throw new ConfigError(filePath, [...issues, ...ctx.unplaced]);
   }
+  const dropped =
+    ctx.unplaced.length === 0 ? null : new ConfigError(filePath, ctx.unplaced);
+  // A config with nothing to drop is the merged one itself, so its trees keep
+  // their identity.
+  const config = dropped === null ? merged : withoutUnplaced(merged);
   // [LAW:one-source-of-truth] A menu's keys are its PLACEMENT's, so they are
   // minted over the trees that render — which exist only now, merged and
   // cross-referenced — before the settings menu and edit chrome add their own.
@@ -629,7 +675,7 @@ export function validateConfig(
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);
   }
-  return withChrome as ValidatedConfig;
+  return { config: withChrome as ValidatedConfig, dropped };
 }
 
 /**
@@ -665,8 +711,8 @@ export function parseDslConfig(
 // stages: the editability notice is computed once the text is JSON5 (so a
 // syntax error is reported once, by stage 1, never again by the scanner on
 // the same defect) and BEFORE structural validation, whose ConfigError
-// carries it — a duplicate key beside an unknown top-level key is named on
-// the strip beside that error, not after it is fixed.
+// carries it — a duplicate key beside an unknown top-level key is named
+// beside that error, not after it is fixed.
 function parseDslFile<L>(
   filePath: string,
   source: string,
@@ -694,6 +740,7 @@ function parseDslFile<L>(
     issues,
     allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
+    unplaced: [],
   };
 
   // ── Stage 2: top-level shape + per-record shape. Absence survives as

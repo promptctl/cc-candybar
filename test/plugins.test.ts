@@ -877,7 +877,10 @@ describe("an installed plugin", () => {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
       answerRepo(repo);
-      const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
+      const p = write(
+        "config.json5",
+        `{ segments: { s: { template: "{{ .plugins.lit.nope }}" } }, root: { h: ["s"] } }`,
+      );
       const entry = cache.getOrCreate(repo, repo, p);
       expect(entry.lastError).not.toBeNull();
       expect(entry.state.plugins.roots).toContain(path.join(repo, ".cc-candybar", "plugins"));

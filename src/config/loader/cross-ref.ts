@@ -447,7 +447,7 @@ export function validateCrossReferences(
         continue;
       }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
-        ctx.issues.push({
+        ctx.unplaced.push({
           path,
           message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
           line,

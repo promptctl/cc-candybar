@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import { inspect, parseArgs } from "node:util";
 import {
   daemonDir,
-  diagnosticsDir,
   ensureSocketParentSafe,
   leasePath,
   leasePathFor,
@@ -196,15 +195,14 @@ import { productionLaneEdge } from "./lane-edge.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
-  diagnosticRows,
-  composeWithDiagnostics,
-  diagnosticRowCap,
-  formatDiagnosticDump,
+  diagnosticsProjection,
+  messageRows,
+  viewedIndex,
+  viewerRows,
   type DiagnosticGeometry,
-  type Diagnostics,
-  type FullTextLink,
-} from "../render/diagnostic-strip.js";
-import { DiagnosticDump } from "./diagnostic-dump.js";
+} from "../render/diagnostics.js";
+import { DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { MenuIdle } from "./menu-idle.js";
 import {
@@ -403,14 +401,9 @@ function tmuxServersOf({
 }: CheckedRenderRequest): readonly string[] {
   return tmux === null || tmux === undefined ? [] : [tmux.socket];
 }
-// [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
-// free; the daemon wipes it in onListening() (reset), once the bind is
-// won, and is the only writer.
-// [LAW:single-enforcer] A dump link moving is a data wake like any other: a
-// frame drawn before its request's sync shows the old link until then.
-const diagnosticDump = new DiagnosticDump(diagnosticsDir(), (sessionId) =>
-  frameFeeds.wake(sessionId, "data"),
-);
+// [LAW:single-enforcer] What each session's renderers could not honour, as
+// their frames recorded it (src/daemon/render-warnings.ts).
+const renderWarnings = new RenderWarningRecords();
 const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
   {
     sessionState,
@@ -450,7 +443,7 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
       onReload: (entry, sessions, cause) => {
         dlog("info", configLoadedLine(entry, cause));
         // A reload changes the bar of every session drawn from the entry,
-        // even one that failed and kept the old config: its strip says so.
+        // even one that failed and kept the old config: its indicator says so.
         for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
       },
       // [LAW:single-enforcer] What a session's view draws from moved: its
@@ -815,13 +808,6 @@ function onListening(sockPath: string): void {
   // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
   // longer applies once a daemon is actually serving.
   resetSpawnBackoff();
-  // The dump directory is a cold-rebuilt cache like every other: whatever a
-  // previous daemon wrote there is unnamed by any strip this one renders.
-  // After the bind win, like every other "we are the daemon" effect: a
-  // process that loses the race must never touch the winner's files.
-  const wipeFailure = diagnosticDump.reset();
-  if (wipeFailure !== null)
-    dlog("warn", `diagnostic dump wipe failed: ${wipeFailure}`);
   binaryWatch.arm();
   updateWatch.arm();
   establishedLimits().arm();
@@ -1436,13 +1422,7 @@ export async function replyTo(
       delivered: () => void;
     } = !checked.ok
       ? refusedRender(checked.problems)
-      : await answerRequest(
-          checked.req,
-          order,
-          at,
-          waitFor(checked.req),
-          facts,
-        ).then(
+      : await answerRequest(checked.req, at, waitFor(checked.req), facts).then(
           ({ answer, motion, clickShown }) => {
             sighted(checked.req, motion);
             return {
@@ -1579,8 +1559,8 @@ export async function replyTo(
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag, a `--config` with no path after it,
-// and a positional word are refused arguments the caller shows on the strip
-// and the render event.
+// and a positional word are refused arguments the caller shows as the bar's
+// error and on the render event.
 // The `--config` value crosses `explicitConfigPath` against the CLIENT's cwd
 // (the request's, brandon-config-nuq6), the rule the client applies to its
 // `configEnv` hint: empty is no override, `~` is expanded once, here.
@@ -1915,11 +1895,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       by: "feed",
       fps,
     });
-    // [LAW:effects-at-boundaries] A frame only draws: the dump is the
-    // session's requests' to write, and the frame links it only when it holds
-    // this frame's text.
-    const link = diagnosticDump.linkFor(sessionId, dumpTextOf(drawn));
-    const output = composeBar(drawn, link);
+    const output = composeBar(drawn);
     return {
       at,
       resp: { ok: true, output },
@@ -1928,7 +1904,6 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
         output: statuslineOf(
           sessionId,
           drawn,
-          link,
           output,
           handedOffTo(lanes, frameFeeds.following(sessionId)),
         ),
@@ -2138,7 +2113,7 @@ interface RenderSetup extends Disposable {
   readonly payloadInputs: PayloadInputs;
 }
 
-// What a render notes of the request it draws by, and the strip's line for
+// What a render notes of the request it draws by, and the error message for
 // the hints that request refused.
 function requestFacts(
   req: CheckedRenderRequest,
@@ -2320,13 +2295,57 @@ function drawRender(
   // reserve — the same request its payload carries as `term.cols`.
   const { hints } = view.facts();
   const width = renderWidth(hints);
-  const rowCap = diagnosticRowCap(hints.termRows);
   noteFacts(facts, { width: String(width) });
   // [LAW:one-source-of-truth] What the view keeps, and the facts of this
   // draw's own instant (DRAW_PROJECTIONS): who it is for, the frames each
   // lane was sent in the second up to it, and the day `today` sums.
   const payload = view.source.payload();
+  // [LAW:no-ambient-temporal-coupling] The click error dispatch held for this
+  // session, at this draw's instant and for whom it draws: shown by every
+  // render inside its hold, and past it by a request until an answer has
+  // carried it.
+  const clickHold = clickErrorAt(sessionState, sessionId, at, drawing.by);
+  const clickShown =
+    clickHold.kind === "held" || clickHold.kind === "owed"
+      ? clickHold.error
+      : null;
+  // [LAW:one-source-of-truth] The daemon-wide update notice, read for
+  // THIS session: what it dismissed and whether its config allows the
+  // notice — both values, folded by the notice into zero or one message.
+  const updates = updateWatch.notice({
+    sessionId,
+    dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
+    enabled: effective.updateNotice,
+  });
+  // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
+  // in every session drawn from the entry, until one of them answers.
+  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
+  // What a load or a request could not honour: each its own message.
+  const errors = [
+    refusedArgsError(req.refusedArgs),
+    hintsError,
+    entry.lastError,
+    state.dropped?.message ?? null,
+    clickShown?.text ?? null,
+  ].filter((e): e is string => Boolean(e));
+  const loadWarnings: readonly LoadWarning[] =
+    entry.lastWarning === null
+      ? []
+      : [{ kind: "load", message: entry.lastWarning }];
+  // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
+  // indicator reads it as the `diagnostics` projection and the viewer pages
+  // the same object, so the two cannot disagree within a frame. The render
+  // warnings are this renderer's recorded ones — known only after a walk, so
+  // the frame before this one's (src/daemon/render-warnings.ts).
+  const diagnostics = collectDiagnostics(
+    errors,
+    [...updates, ...questions],
+    [...loadWarnings, ...renderWarnings.of(sessionId, drawing.by)].map(
+      (w) => w.message,
+    ),
+  );
   const projected = {
+    diagnostics: diagnosticsProjection(diagnostics),
     drawing,
     feeds: frameFeeds.feedsOf(sessionId, at),
     today: todayOf(
@@ -2349,12 +2368,9 @@ function drawRender(
     feeds: feedsFact(projected.feeds),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
-  // not honour (`RenderWarning`). Collected per render into a local, so there
-  // is no cross-render state to clear, and folded into the strip's WARNING
-  // channel below: the bar still renders, with a line above it saying why,
-  // which is this repo's answer everywhere else that a render can proceed but
-  // an author needs to know.
-  const renderWarnings: RenderWarning[] = [];
+  // not honour (`RenderWarning`): this frame's own, recorded for its renderer
+  // after the walk, so the bar still renders and the indicator counts them.
+  const drawnWarnings: RenderWarning[] = [];
   // [LAW:one-source-of-truth] The options renderDsl draws with are the SAME
   // `effective` struct the payload was just built from, projected by the one
   // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
@@ -2380,7 +2396,7 @@ function drawRender(
     // debug handler so normal renders pay no extra serializer cost.
     {
       perSegmentSink: view.lastRenderCellsBySegment,
-      onRenderWarning: (warning) => renderWarnings.push(warning),
+      onRenderWarning: (warning) => drawnWarnings.push(warning),
     },
     // [LAW:one-source-of-truth] The draw's own settings and the session's
     // effect memory. The theme, style and effect are not among them: the
@@ -2397,54 +2413,22 @@ function drawRender(
         ? "-"
         : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`,
   });
-  // [LAW:one-source-of-truth] The click error dispatch held for this session,
-  // shown by every render inside its hold, and past it by a request until an
-  // answer has carried it.
-  const clickHold = clickErrorAt(sessionState, sessionId, at, drawing.by);
-  const clickShown =
-    clickHold.kind === "held" || clickHold.kind === "owed"
-      ? clickHold.error
-      : null;
-  const clickError = clickShown?.text ?? null;
-  const combinedError = [
-    refusedArgsError(req.refusedArgs),
-    hintsError,
-    entry.lastError,
-    clickError,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  // [LAW:one-source-of-truth] The daemon-wide update notice, read for
-  // THIS session: what it dismissed and whether its config allows the
-  // notice — both values, folded by the notice into zero or one channel.
-  const updates = updateWatch.notice({
+  // A new source's warnings are recorded by its first frame, and only then.
+  const recorded = renderWarnings.drawn(
     sessionId,
-    dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
-    enabled: effective.updateNotice,
-  });
-  // [LAW:no-silent-failure] The file whose load failed rides beside its
-  // error so the strip can offer it as a file:// link — the way back into
-  // the file when our own click path may be the thing that is broken.
-  // Null when the error is not a load error, or no file resolved.
-  const failedConfigFile = entry.lastError === null ? null : entry.failedFile;
-  // [LAW:one-source-of-truth] One warning channel: the load-time warning this
-  // config carries and whatever this render could not honour, in one list.
-  // The strip's rows are its messages, joined into the one string
-  // collectDiagnostics splits; the render event's `warn=` is its kinds. A
-  // second channel would be a second place a warning could be dropped.
-  const warnings = [
-    ...(entry.lastWarning === null
-      ? []
-      : [{ kind: "load" as const, message: entry.lastWarning }]),
-    ...renderWarnings,
-  ];
-  // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
-  // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
-  const diagnostics = collectDiagnostics(
-    combinedError,
-    [...updates, ...questions],
-    warnings.map((w) => w.message).join("\n"),
+    drawing.by,
+    frame.source,
+    drawnWarnings,
+  );
+  const geometry: DiagnosticGeometry = {
+    width,
+    colorCompatibility: effective.colorCompatibility,
+  };
+  // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
+  // place: the message it shows, clamped into the list as it stands now.
+  const viewing = viewedIndex(
+    sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
+    diagnostics.length,
   );
   const g = gitService.getStats();
   const u = usageStore.getStats();
@@ -2458,13 +2442,13 @@ function drawRender(
   // `-` for none.
   const passages = (frames: readonly PassageFrame[]): string =>
     frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  // [LAW:nothing-unseen] Each warning the strip carried, in its order,
-  // including any its row cap left undrawn; `-` for none. A rule's tag names
+  // [LAW:nothing-unseen] Each warning this frame met, the load's and its own
+  // walk's, in order; `-` for none. A rule's tag names
   // the slot that fell to its floor (`rule:style`), and a refresh's the
   // variable that stopped (`refresh:stamp`), so the event says which.
   // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
   // compile error here until the event says how to name it.
-  const tagOf = (w: (typeof warnings)[number]): string => {
+  const tagOf = (w: LoadWarning | RenderWarning): string => {
     switch (w.kind) {
       case "rule":
         return `rule:${w.slot}`;
@@ -2476,7 +2460,8 @@ function drawRender(
         return w.kind;
     }
   };
-  const warned = warnings.map(tagOf).join(",") || "-";
+  const warned =
+    [...loadWarnings, ...drawnWarnings].map(tagOf).join(",") || "-";
   noteFacts(facts, {
     git: `${g.size}/${g.hits}h/${g.misses}m`,
     usage: `${u.size}/${u.hits}h/${u.misses}m`,
@@ -2501,23 +2486,26 @@ function drawRender(
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules:
       [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
-    err: combinedError ? "Y" : "N",
+    err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
-    // How many repositories the strip asked about.
+    // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
+    // What the indicator counted, and whether this frame recorded its
+    // renderer's warnings anew (a new source) or kept the record.
+    diag: String(diagnostics.length),
+    warnRecord: recorded ? "new" : "kept",
+    // The message the viewer showed in the body's place, `-` while closed.
+    viewer: viewing === null ? "-" : `${viewing}/${diagnostics.length}`,
   });
   return {
     drawn: {
-      body: frame.text,
-      diagnostics,
-      failedConfigFile,
-      geometry: {
-        width,
-        rowCap,
-        colorCompatibility: effective.colorCompatibility,
-      },
+      body:
+        viewing === null
+          ? frame.text
+          : viewerRows(diagnostics, viewing, sessionId, geometry),
+      geometry,
     },
     motion: frame.motion,
     evaluated: frame.evaluated,
@@ -2526,37 +2514,22 @@ function drawRender(
   };
 }
 
-// What one render drew, before the diagnostic strip is composed over it: the
-// strip's full-text link is the dump's to give, and only a request writes
-// the dump.
+// The warning a load carried, beside what a draw could not honour.
+interface LoadWarning {
+  readonly kind: "load";
+  readonly message: string;
+}
+
+// What one render drew: the body — the bar, or the viewer in its place — and
+// the geometry the statusline's handoff line is drawn at.
 interface DrawnBar {
   readonly body: string;
-  readonly diagnostics: Diagnostics | null;
-  // The file whose load failed, linked beside its error so the strip offers
-  // the way back into the file when our own click path may be what is broken.
-  readonly failedConfigFile: string | null;
   readonly geometry: DiagnosticGeometry;
 }
 
-// The response's bar: the strip over the body, linking the full text as
-// `fullText` says.
-function composeBar(drawn: DrawnBar, fullText: FullTextLink): string {
-  return (
-    composeWithDiagnostics(
-      drawn.body,
-      drawn.diagnostics,
-      { fullText, failedConfigFile: drawn.failedConfigFile },
-      drawn.geometry,
-    ) + "\n"
-  );
-}
-
-// The complete text the session's dump holds for `drawn`: present with the
-// full text, absent when there are no diagnostics.
-function dumpTextOf(drawn: DrawnBar): string | null {
-  return drawn.diagnostics === null
-    ? null
-    : formatDiagnosticDump(drawn.diagnostics);
+// The response's bar.
+function composeBar(drawn: DrawnBar): string {
+  return drawn.body + "\n";
 }
 
 // [LAW:effects-at-boundaries] What a render request said, recorded where the
@@ -2590,12 +2563,7 @@ function recordRequest(req: CheckedRenderRequest): void {
   }
 }
 
-// A render request's answer: what it said is recorded, the bar is drawn, and
-// the session's dump is brought in line with it before the strip that links
-// it goes out — the link is built from the write's outcome, so the trailer
-// never names a file that is not there. `order` is where the request came in
-// the order they arrived: the dump holds the newest request's text, however
-// the renders finish.
+// A render request's answer: what it said is recorded, and the bar is drawn.
 interface RequestAnswer {
   // What this request's client is answered with: the statusline's answer to
   // Claude Code's statusline, the bar to a client drawing it itself.
@@ -2606,13 +2574,12 @@ interface RequestAnswer {
 
 async function answerRequest(
   req: CheckedRenderRequest,
-  order: number,
   at: Instant,
   wait: RequestWait,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
-  return drawAnswer(req, order, at, wait, facts);
+  return drawAnswer(req, at, wait, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -2680,7 +2647,6 @@ interface RequestWait {
 
 async function drawAnswer(
   req: CheckedRenderRequest,
-  order: number,
   at: Instant,
   wait: RequestWait,
   facts: RequestFacts,
@@ -2720,20 +2686,10 @@ async function drawAnswer(
     refreshed: refreshedFact(refreshed),
   });
   const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
-  const { link, failure } = diagnosticDump.sync(
-    req.sessionId,
-    order,
-    dumpTextOf(drawn),
-  );
-  // [LAW:nothing-unseen] On the render event, not a line of its own: the
-  // strip's trailer row says it on the bar either way.
-  noteFacts(facts, {
-    dumpFailed: failure === null ? "-" : JSON.stringify(failure),
-  });
-  const output = composeBar(drawn, link);
+  const output = composeBar(drawn);
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
-  const statusline = statuslineOf(sessionId, drawn, link, output, elsewhere);
+  const statusline = statuslineOf(sessionId, drawn, output, elsewhere);
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
@@ -2751,30 +2707,18 @@ async function drawAnswer(
   };
 }
 
-// What Claude Code's statusline shows of `drawn`: the bar (`output`, as
-// composed), or — while lanes draw it `elsewhere` — the handoff line in the
-// body's place.
-// [LAW:no-silent-failure] Only the body is handed off: the strip above it — a
-// load error, the update notice, a click's failure — stays, and the line is
-// the body, so the strip's row cap never drops it.
+// What Claude Code's statusline shows of `drawn`: the bar (`output`), or —
+// while lanes draw it `elsewhere` — the handoff line alone, which says where.
+// The indicator and the viewer are the lanes' to draw, so an error shows once.
 function statuslineOf(
   sessionId: string,
   drawn: DrawnBar,
-  link: FullTextLink,
   output: string,
   elsewhere: readonly Lane[],
 ): string {
   const [first, ...rest] = elsewhere;
   return first === undefined
     ? output
-    : composeBar(
-        {
-          ...drawn,
-          body: diagnosticRows(
-            laneHandoff(sessionId, [first, ...rest]),
-            drawn.geometry,
-          ),
-        },
-        link,
-      );
+    : messageRows(laneHandoff(sessionId, [first, ...rest]), drawn.geometry) +
+        "\n";
 }

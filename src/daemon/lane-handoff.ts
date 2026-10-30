@@ -19,8 +19,8 @@ import { effectsUrl, VERB_COPY, VERB_RESET_CONFIG } from "../click/wire.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
-  type Diagnostics,
-} from "../render/diagnostic-strip.js";
+  type DiagnosticMessage,
+} from "../render/diagnostics.js";
 
 // The lanes the statusline hands the bar to: switched on, drawing it
 // elsewhere, and followed by a subscriber now — a switch alone draws nothing,
@@ -44,7 +44,7 @@ export const HANDOFF_BUTTON = "[⟲ draw it here]";
 export function laneHandoff(
   sessionId: string,
   lanes: readonly [Lane, ...Lane[]],
-): Diagnostics {
+): DiagnosticMessage {
   const where = lanes.map((lane) => LANES[lane].elsewhere).join(" and ");
   const message = `the bar is drawn in ${where}`;
   const reset = effectsUrl([
@@ -54,20 +54,16 @@ export function laneHandoff(
     },
   ]);
   return {
-    channels: [
-      {
-        severity: HANDOFF_SEVERITY,
-        message,
-        lines: [
-          [
-            diagnosticSpan(
-              message,
-              effectsUrl([{ verb: VERB_COPY, args: [message] }]),
-            ),
-            diagnosticSpan(HANDOFF_BUTTON, reset),
-          ],
-        ],
-      },
+    severity: HANDOFF_SEVERITY,
+    message,
+    lines: [
+      [
+        diagnosticSpan(
+          message,
+          effectsUrl([{ verb: VERB_COPY, args: [message] }]),
+        ),
+        diagnosticSpan(HANDOFF_BUTTON, reset),
+      ],
     ],
   };
 }
