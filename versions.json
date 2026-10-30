@@ -4,39 +4,39 @@
     {
       "version": "pr-499",
       "ref": "refs/pull/499/merge",
-      "sha": "70048deee1329bf9d03f3a81c871c2167adfd30f",
-      "timestamp": "2026-10-30T15:16:23.122Z",
+      "sha": "66547782e5fc86dca12ead03aff5ad3d2e649083",
+      "timestamp": "2026-10-30T15:17:19.909Z",
       "commits": [
         {
-          "sha": "70048deee1329bf9d03f3a81c871c2167adfd30f",
+          "sha": "66547782e5fc86dca12ead03aff5ad3d2e649083",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:15:24Z",
-          "message": "Merge 89cb1e51018b8bfe4cc629929fb9eaf228998ae2 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
+          "timestamp": "2026-10-30T15:16:06Z",
+          "message": "Merge 789b46b11fb1ada3ec8e61f23b1bf999fc1f0537 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
         },
         {
-          "sha": "89cb1e51018b8bfe4cc629929fb9eaf228998ae2",
+          "sha": "789b46b11fb1ada3ec8e61f23b1bf999fc1f0537",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:15:12-06:00",
           "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
         },
         {
-          "sha": "a9dda9a6f9889c0eb45ce55396d786bd87edf65c",
+          "sha": "3352a1835639bbda7458372763dea4f834d14582",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:10:48-06:00",
           "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
         },
         {
-          "sha": "a140c5f852d0150b3065caf6351fbbfb334795e9",
+          "sha": "c289110d877f3dc235173f6e1d93391bb2866ceb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:02:51-06:00",
           "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
         },
         {
-          "sha": "ab74d23aefa8adf9e50b569a8c200d4b4dd988e4",
+          "sha": "e6c210b69c9160b2be92da7276c1d03f9503ce91",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
