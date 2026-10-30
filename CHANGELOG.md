@@ -1,3 +1,11 @@
+## [1.166.1](https://github.com/promptctl/cc-candybar/compare/v1.166.0...v1.166.1) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7) ([#493](https://github.com/promptctl/cc-candybar/issues/493)) ([73801c6](https://github.com/promptctl/cc-candybar/commit/73801c6e3b63cf23ed6af12476e50b45a0c45333))
+* **colour:** the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6) ([#492](https://github.com/promptctl/cc-candybar/issues/492)) ([fe783f4](https://github.com/promptctl/cc-candybar/commit/fe783f48728a83116d74cf3674e4695aff77fd76))
+* **render:** bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr) ([#496](https://github.com/promptctl/cc-candybar/issues/496)) ([16ba284](https://github.com/promptctl/cc-candybar/commit/16ba284b459a5bc135c21f529414a4020a2b2b46))
+
 ## [1.166.0](https://github.com/promptctl/cc-candybar/compare/v1.165.1...v1.166.0) (2026-10-30)
 
 ### Features
