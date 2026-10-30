@@ -48992,12 +48992,24 @@ function formatterFuncs() {
 
 // src/template-engine/engine.ts
 var drawing = null;
-function bindClock(at, anim) {
+function bindClock(at, timeline) {
   if (drawing !== null) {
     throw new Error("a draw is already in progress: draws do not nest");
   }
-  drawing = { at, anim };
+  const bound = {
+    at,
+    timeline,
+    frame: {
+      time: at,
+      onHold: ({ nextChange }) => {
+        bound.soonest = Math.min(bound.soonest, nextChange);
+      }
+    },
+    soonest: Infinity
+  };
+  drawing = bound;
   return {
+    heard: () => bound.soonest,
     [Symbol.dispose]: () => {
       drawing = null;
     }
@@ -49016,10 +49028,14 @@ function drawInProgress(read2) {
 }
 var CLOCK = {
   now: () => dateOf(drawInProgress("now").at),
-  animatedAt: () => drawInProgress("animatedAt").anim
+  frame: () => drawInProgress("frame").frame,
+  timeline: () => drawInProgress("timeline").timeline
 };
-function animationPair(time) {
-  const { frames, stepped: stepped2 } = animationFuncs(() => ({ time: time() }));
+function animationPair(frame, timeline) {
+  const { frames, stepped: stepped2 } = animationFuncs(
+    frame,
+    timeline === void 0 ? {} : { timeline }
+  );
   if (frames === void 0 || stepped2 === void 0) {
     throw new Error(
       "rich-js's animationFuncs no longer registers frames and stepped"
@@ -49042,14 +49058,12 @@ var SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
 }, false);
 var CLOCK_FACTORIES = [
   (clock) => sprigDatetimeWhere(clock.now, true),
-  (clock) => animationPair(clock.animatedAt),
+  (clock) => animationPair(clock.frame, clock.timeline),
   (clock) => Object.fromEntries(
-    Object.entries(animationPair(() => clock.now().getTime() / 1e3)).map(
-      ([name, func]) => [
-        `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
-        func
-      ]
-    )
+    Object.entries(animationPair(clock.frame)).map(([name, func]) => [
+      `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
+      func
+    ])
   ),
   relativeTimeFuncs
 ];
@@ -50882,10 +50896,7 @@ var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
 var MENU_TIMEOUT_RANGE = { min: 10, max: 600, step: 5 };
 var MENU_TIMEOUT_DEFAULT = 30;
 var closesAt = (since, timeoutS) => since + timeoutS;
-function flashAt(since, timeoutS, at) {
-  const t2 = at - (closesAt(since, timeoutS) - CLOSING_FLASH_SECONDS);
-  return t2 >= 0 && t2 < CLOSING_FLASH_SECONDS ? t2 : null;
-}
+var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
 // src/config/globals-fields.ts
 var control = (label2, place, {
@@ -52784,15 +52795,16 @@ function resolvedStyle(style) {
 // src/render/effect.ts
 init_globals();
 var STILL3 = { kind: "still" };
+var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
 var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
 function isMoving(part) {
   return part.name !== EFFECT_FLOOR;
 }
-function together(rowT, parts) {
+function together(parts) {
   return (drawn) => Animation.map(
     Animation.all(
       parts.map(
-        ({ t: t2, effect }) => Timeline.run(Timeline.play(rowT - t2), effect(drawn))
+        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
       )
     ),
     (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
@@ -52820,7 +52832,7 @@ function noiseOffset(text4) {
   return hash2 / 4294967296;
 }
 var NOISE_DEPTH = 4096;
-function closingFlash(fill, text4) {
+function closingFlash(fill, text4, begins) {
   const lit = (look, { terminal }) => ({
     ...look,
     bg: terminal.bg ? look.bg : fill,
@@ -52831,7 +52843,8 @@ function closingFlash(fill, text4) {
     (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
     Animation.constant(dark)
   );
-  return () => holds2;
+  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
+  return () => idle;
 }
 var SessionEffects = class {
   constructor(key) {
@@ -52842,12 +52855,13 @@ var SessionEffects = class {
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
   inForce = null;
-  // [LAW:no-ambient-temporal-coupling] Where the session's animation clock
-  // stood at its last drawn frame, and the speed it ran at from there: the
-  // anchor every later reading is measured from, so a change of speed changes
-  // the clock's slope from the frame it lands in and never its reading, so no
-  // loop jumps phase. None before the session's first frame.
-  anchor = null;
+  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
+  // its last drawn frame left it — where the clock stood and the speed it ran
+  // at from there: the anchor every later reading is measured from, so a
+  // change of speed changes the clock's slope from the frame it lands in and
+  // never its reading, so no loop jumps phase. The host clock itself before
+  // the session's first frame.
+  anchor = Timeline.play(0);
   // The same fact for each placement wearing its own effect, by placement id,
   // kept for the placements the latest render drew: one that stopped being
   // drawn starts its effect again at t = 0 when it is drawn again, as the
@@ -52892,14 +52906,14 @@ var SessionEffects = class {
   }
   /**
    * The session's animation clock read at the wall instant `at`, running at
-   * `speed` from it on. The time since the last drawn frame passed at the
-   * speed in force then; the first frame reads `at` itself, so a session that
-   * has only ever run at 1x reads the wall instant at every frame. Reads only: the frame
+   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
+   * the last drawn frame passed at the speed in force then; before the first
+   * frame the timeline is the host clock itself, so a session that has only
+   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
    * that draws keeps it as the anchor (`drawn`).
    */
   clockAt(at, speed2) {
-    const anim = this.anchor === null ? at : this.anchor.anim + (at - this.anchor.wall) * this.anchor.speed;
-    return { wall: at, anim, speed: speed2 };
+    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
   }
   /**
    * The motion of each row of a render drawn at `clock` whose bar wears `name`,
@@ -52912,7 +52926,8 @@ var SessionEffects = class {
    * once the frame is `drawn`.
    */
   motion(name, clock, given2, flash = null) {
-    const at = clock.anim;
+    const at = animationAt(clock);
+    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
     const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
     const bar = {
       scope: BAR_SCOPE,
@@ -52941,7 +52956,7 @@ var SessionEffects = class {
     const frame = {
       effect: name,
       t: bar.t,
-      speed: clock.speed,
+      speed: clock.timeline.rate,
       made: 0,
       reused: 0,
       own: own2,
@@ -53038,13 +53053,22 @@ var SessionEffects = class {
         const passage = passages.get(id2) ?? null;
         return passage === null ? [] : [
           {
-            t: at - passage.since,
+            timeline: onSession(at - passage.since),
             effect: confined(passage.effect, ...owners)
           }
         ];
       });
     };
-    const flashPart = flash === null ? [] : [{ t: flash.t, effect: closingFlash(flash.fill, flash.text) }];
+    const flashPart = flash === null ? [] : [
+      {
+        timeline: Timeline.play(flash.idleSince),
+        effect: closingFlash(
+          flash.fill,
+          flash.text,
+          flashBegins(flash.timeoutS)
+        )
+      }
+    ];
     const flashing = (kind) => kind === "menu" ? flashPart : [];
     const row2 = (rowName, kind, items) => {
       const parts = items.some(
@@ -53058,14 +53082,14 @@ var SessionEffects = class {
       const rowKey = `${this.key}#${rowName}`;
       return {
         kind: "moving",
-        time: bar.t,
+        time: clock.wall,
         wrap: (strip) => new Effected(
           strip,
-          together(bar.t, [
+          together([
             ...moving.map((part) => {
               const effect = effectOf(rowKey, part);
               return {
-                t: part.t,
+                timeline: onSession(part.t),
                 effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
               };
             }),
@@ -53084,7 +53108,7 @@ var SessionEffects = class {
       placed: basis === "off" ? (_id, lines2) => lines2 : reached,
       row: row2,
       drawn: () => {
-        this.anchor = clock;
+        this.anchor = clock.timeline;
         this.inForce = inForce;
         this.placements = placements;
         this.made = made;
@@ -53126,6 +53150,7 @@ var UNBOUNDED_DRAW_WIDTH = 80;
 function draw(renderable, options) {
   const destination = resolveDestination(options.colorSystem);
   const { time } = options;
+  let told = Infinity;
   const segments = [
     ...render(renderable, {
       maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
@@ -53139,12 +53164,15 @@ function draw(renderable, options) {
       // throws here exactly as the cell splitter throws on it.
       onStyleError: (error) => {
         throw error;
+      },
+      onHold: ({ nextChange }) => {
+        told = Math.min(told, nextChange);
       }
     })
   ];
   return {
     text: segmentsToString(segments, destination),
-    moves: Number.isFinite(Segment.nextChange(segments))
+    nextChange: Math.min(Segment.nextChange(segments), told)
   };
 }
 var DEFAULT_TERMINAL_WIDTH = 120;
@@ -53215,7 +53243,7 @@ function stripPrivateGlyphs(options) {
   return privateGlyphsIn(drawn.text);
 }
 function drawStripCells(cells, options, motion = STILL3) {
-  if (cells.length === 0) return { text: "", moves: false };
+  if (cells.length === 0) return { text: "", nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
@@ -53229,7 +53257,7 @@ function drawStripCells(cells, options, motion = STILL3) {
       "drawStripCells: rich-js strip output did not end its last line"
     );
   }
-  return { text: out.text.slice(0, -1), moves: out.moves };
+  return { text: out.text.slice(0, -1), nextChange: out.nextChange };
 }
 function renderStripCells(cells, options) {
   return drawStripCells(cells, options).text;
@@ -53908,7 +53936,7 @@ var barsSeen = (bars) => {
   if (drawn.includes("moves")) {
     return {
       kind: "moving",
-      wearing: "the bar moves (an effect, a fade, or an animated segment)"
+      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
     };
   }
   if (drawn.includes("can-move")) {
@@ -54659,12 +54687,13 @@ var laneReadout = (lane) => {
 var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
 var FPS_SEG = `${SETTINGS_NS}fps`;
 var POLLED = "polled";
+var AT_MOST = "\u2264";
 var FPS_UNIT = " fps";
 var RATE_WIDTH = Math.max(
   POLLED.length,
-  String(MOVING_FPS).length + FPS_UNIT.length
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
 );
-var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}d" (int .${drawingVar("fps")}) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
+var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
 var TRAIL = Object.fromEntries(
   laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
 );
@@ -62207,16 +62236,17 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // `warning`/`error` — those hues keep their meaning for the cells that
     // measure danger.
     // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once,
-    // and every level computes max's bubble, colours and frames, so a render at
-    // any level evaluates the whole template (`check` renders xhigh: max moves
-    // a frame a second). The one branch is the domain's own, and it chooses
-    // only what is drawn: max draws its bubble, every other level its rung on
-    // the cell as the cell is filled — which may be no fill at all
-    // (`bg: "none"`), so below max nothing paints a background. A level
+    // and every level computes max's bubble. Max's climbing colour and frames
+    // are computed only where max draws them: a stepped colour tells the frame
+    // when it next changes as it is evaluated, drawn or not, so computed at
+    // every level it would make a still rung claim to move. The one branch is
+    // the domain's own, and it chooses what is drawn: max its bubble, every
+    // other level its rung on the cell as the cell is filled — which may be no
+    // fill at all (`bg: "none"`), so below max nothing paints a background. A level
     // outside the five known names is ordinal 0: the ladder's `?`, visible
     // rather than blank. The ladder is split on runs of spaces, so a doubled
     // space shifts no rung. Called with the scope as dot.
-    effortGauge: `{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}{{ $glyphs := compact (splitList " " .effort.glyphs) }}{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}{{ if eq $ord 5 }}{{ fg $bubble "\uE0B6" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\uE0B4" }}{{ else }}{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}{{ end }}`,
+    effortGauge: `{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}{{ $glyphs := compact (splitList " " .effort.glyphs) }}{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}{{ if eq $ord 5 }}{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}{{ fg $bubble "\uE0B6" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\uE0B4" }}{{ else }}{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}{{ end }}`,
     // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
     // it sits on: a theme's `success`/`warning`/`accent` is designed against
     // its own background, not the tint a bar cell wears (the raw role measured
@@ -77944,7 +77974,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     const warn = (warning) => onRenderWarning?.(warning);
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
-    const _clock = __using(_stack, bindClock(at, clock.anim));
+    const drawClock = __using(_stack, bindClock(at, clock.timeline));
     const parts = partsOf(compiled, store);
     const drawOpts = {
       ...opts,
@@ -78012,10 +78042,10 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     const basePalette = theme24.value;
     const palette = transposedPalette(basePalette, style.value);
     parts.publishLook({ basePalette, palette, decor });
-    const flashT = selection2.idleSince === void 0 ? null : flashAt(selection2.idleSince, selection2.menuTimeout, at);
     const flashFill = paletteRole(palette, "warning");
-    const flash = flashT === null ? null : {
-      t: flashT,
+    const flash = selection2.idleSince === void 0 ? null : {
+      idleSince: selection2.idleSince,
+      timeoutS: selection2.menuTimeout,
       fill: flashFill,
       text: textOn(palette, flashFill, registry.drawnAt())
     };
@@ -78112,7 +78142,11 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     const armed = () => menuRows > 0 || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
       ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
     );
-    const frameMotion = rendered.some((row2) => row2.moves) ? "moves" : armed() ? "can-move" : "still";
+    const nextChange = Math.min(
+      drawClock.heard(),
+      ...rendered.map((row2) => row2.nextChange)
+    );
+    const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
     for (const [variable, fault2] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
@@ -78122,6 +78156,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       });
     return {
       text: rendered.map((row2) => row2.text).join("\n"),
+      nextChange,
       motion: frameMotion,
       menuRows,
       evaluated: parts.evaluated - evaluatedBefore,
@@ -79754,6 +79789,7 @@ var FEED_PERIODS = {
   still: 1e3
 };
 var RATE_WINDOW_S = 1;
+var TIMER_RESOLUTION_S = 2e-3;
 var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
 function feedsFact(feeds) {
   return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
@@ -79929,10 +79965,6 @@ var FrameFeeds = class {
       unseen: 0,
       failed: 0,
       pushed: 0,
-      // Not yet set: the first frame is drawn at once, before any period is
-      // chosen, and shows the still pace; a moving bar's next frame, one
-      // moving period later, shows the moving pace.
-      pace: paceOf(this.deps.periods.still),
       drawMs: 0,
       evaluated: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
@@ -79967,29 +79999,44 @@ var FrameFeeds = class {
   // is logged as the feed's fault, and the feed's next frame is set as a
   // still frame's is. A frame step runs off a timer, so a throw it let go
   // would be an unhandled rejection, which exits the daemon.
-  draw(feed) {
+  // [LAW:no-ambient-temporal-coupling] The frame is drawn for the instant its
+  // timer was set for, kept within TIMER_RESOLUTION_S of the wall clock: a
+  // frame set for a change shows it however early its timer fires, and none is
+  // ever drawn further ahead of the wall than that, so nothing carries from
+  // one frame to the next. Its moment on the monotonic clock is that instant's.
+  draw(feed, due) {
     feed.phase = { kind: "drawing" };
     const started2 = this.deps.now();
+    const wall = this.deps.instant();
+    const at = Math.min(
+      Math.max(due, wall),
+      wall + TIMER_RESOLUTION_S
+    );
+    const moment2 = started2 + (at - wall) * 1e3;
     try {
-      this.step(feed, started2);
+      this.step(feed, started2, moment2, at);
     } catch (error) {
-      feed.lastStart = started2;
+      feed.lastStart = moment2;
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`
       );
       if (this.feeds.get(feed.sessionId) !== feed) return;
-      this.schedule(feed, null, started2);
+      this.schedule(feed, null, at);
     }
   }
-  step(feed, started2) {
-    const frame = this.deps.render(feed.sessionId, feed.pace);
+  step(feed, started2, moment2, at) {
+    const frame = this.deps.render(
+      feed.sessionId,
+      paceOf(this.spacingOf(feed)),
+      at
+    );
     if (frame === null) {
       feed.noView++;
       feed.phase = { kind: "waiting" };
       return;
     }
-    feed.lastStart = started2;
+    feed.lastStart = moment2;
     const finished = this.deps.now();
     this.drawn++;
     feed.drawn++;
@@ -79997,26 +80044,30 @@ var FrameFeeds = class {
     feed.evaluated += frame.evaluated;
     if (this.feeds.get(feed.sessionId) !== feed) return;
     this.countFailure(feed, frame);
-    this.push(feed, frame);
+    this.push(feed, frame, at);
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
-    this.schedule(feed, frame, started2);
+    this.schedule(feed, frame, at);
   }
-  // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
-  // this one STARTED, so the rate holds whatever a render costs, up to a
-  // render as slow as the period, when frames are drawn back to back. A frame
-  // step that faulted is followed as a still frame is.
-  // [LAW:dataflow-not-control-flow] The moving period is for a bar that moves
-  // where someone can see it, asked here, as the next frame is set.
-  schedule(feed, frame, started2) {
-    const moves = frame?.moves === true;
-    const seen = moves && this.shown(feed);
-    if (seen) feed.moving++;
-    if (moves && !seen) feed.unseen++;
-    const period = seen ? this.deps.periods.moving : this.deps.periods.still;
-    feed.pace = paceOf(period);
-    this.arm(feed, started2 + period);
+  // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
+  // next changes, measured from the instant this one was drawn for — no
+  // sooner than the feed's spacing allows and no later than the still period
+  // — so a 1 s beat is drawn once a second, for the moment it turns, and a
+  // continuous effect at the moving rate. Set as an instant, so the time this
+  // frame took to draw comes off the wait and the rate holds whatever a render
+  // costs. A frame step that faulted is followed as a still frame is.
+  // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
+  // next change is Infinity, and an unseen bar's spacing is the still period.
+  schedule(feed, frame, at) {
+    const { moving, still } = this.deps.periods;
+    const until2 = ((frame?.nextChange ?? Infinity) - at) * 1e3;
+    const shownPeriod = Math.min(Math.max(until2, moving), still);
+    const shown = this.shown(feed);
+    if (shownPeriod < still && shown) feed.moving++;
+    if (shownPeriod < still && !shown) feed.unseen++;
+    const period = shown ? shownPeriod : still;
+    this.arm(feed, at + period / 1e3, this.deps.instant());
   }
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
   // moving period while its bar is on a screen, the still period while it is
@@ -80026,31 +80077,35 @@ var FrameFeeds = class {
     return this.shown(feed) ? this.deps.periods.moving : this.deps.periods.still;
   }
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
-  // to the earliest its spacing allows after the last frame started, never
-  // later than it already falls due. Answers whether it moved anything: a
-  // wake that did not was coalesced into a frame already due.
+  // to the earliest its spacing allows after the last frame was drawn for,
+  // never later than it already falls due. Answers whether it moved anything:
+  // a wake that did not was coalesced into a frame already due. Spaced on the
+  // monotonic clock, so a wall clock stepped back cannot stall a wake.
   // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
   // turn and opens nothing, so a wake while it draws is the draw's own, and
   // the frame reads what that moved: it is coalesced into that frame.
   hasten(feed) {
     const { phase } = feed;
     if (phase.kind === "drawing") return false;
-    const at = Math.max(this.deps.now(), feed.lastStart + this.spacingOf(feed));
+    const now2 = this.deps.now();
+    const at = Math.max(now2, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
-    this.arm(feed, at);
+    const wall = this.deps.instant();
+    this.arm(feed, wall + (at - now2) / 1e3, wall);
     return true;
   }
-  // The feed's one timer, set to draw its next frame `at`, in a later turn
-  // than the caller's however soon that is.
-  arm(feed, at) {
+  // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
+  // the wall instant `due`, in a later turn than the caller's however soon
+  // that is. Its wait is measured from `wall`, the caller's own reading, so
+  // the instant a caller set is never rebuilt from a second, truncated one;
+  // its monotonic due time is what a wake compares against.
+  arm(feed, due, wall) {
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    const delay = Math.max(0, (due - wall) * 1e3);
     feed.phase = {
       kind: "due",
-      at,
-      timer: setTimeout(
-        () => this.draw(feed),
-        Math.max(0, at - this.deps.now())
-      )
+      at: this.deps.now() + delay,
+      timer: setTimeout(() => this.draw(feed, due), delay)
     };
   }
   shown(feed) {
@@ -80060,7 +80115,7 @@ var FrameFeeds = class {
   countFailure(feed, frame) {
     if (frame.failure !== null) feed.failed++;
   }
-  push(feed, frame) {
+  push(feed, frame, at) {
     const lanes = this.deps.lanes(feed.sessionId);
     if (lanes !== null) {
       for (const sub2 of [...feed.followers.keys()]) {
@@ -80085,7 +80140,7 @@ var FrameFeeds = class {
       this.deps.log(frame.failure.level, frame.failure.line);
     for (const [lane, rate] of feed.rates)
       if (before === null || answerOf3(before, lane).bytes !== answerOf3(answers, lane).bytes)
-        noteSent(rate, frame.at);
+        noteSent(rate, at);
     for (const sub2 of feed.followers.keys()) this.send(feed, sub2);
   }
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
@@ -80127,7 +80182,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
     );
     feed.summarizedAt = now2;
   }
@@ -82162,7 +82217,7 @@ var tmuxStatusLines = new TmuxStatusLines({
   log: dlog
 });
 var frameFeeds = new FrameFeeds({
-  render: (sessionId2, fps) => renderFrame(sessionId2, fps),
+  render: (sessionId2, fps, at) => renderFrame(sessionId2, fps, at),
   // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
   // which fires in a later turn, so a click's whole run of writes and its
   // journal commit land before a frame of it is drawn.
@@ -82182,6 +82237,7 @@ var frameFeeds = new FrameFeeds({
   refreshes: () => refreshLedger.totals(),
   periods: FEED_PERIODS,
   now: () => performance.now(),
+  instant: () => instantOf(/* @__PURE__ */ new Date()),
   log: dlog
 });
 var paneVisibility = new PaneVisibility({
@@ -82801,22 +82857,23 @@ function statusLineClick(value, facts) {
   );
   return { kind: "ok" };
 }
-function renderFrame(sessionId2, fps) {
-  const started2 = /* @__PURE__ */ new Date();
-  const at = instantOf(started2);
+function renderFrame(sessionId2, fps, at) {
+  const started2 = Date.now();
   const facts = [];
   try {
     var _stack = [];
     try {
       const setup = __using(_stack, setUpFrame(sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, motion, evaluated: evaluated2, delivered, lanes } = drawRender(setup, {
-        by: "feed",
-        fps
-      });
+      const { drawn, nextChange, evaluated: evaluated2, delivered, lanes } = drawRender(
+        setup,
+        {
+          by: "feed",
+          fps
+        }
+      );
       const output = composeBar(drawn);
       return {
-        at,
         resp: { ok: true, output },
         statusline: {
           ok: true,
@@ -82827,7 +82884,7 @@ function renderFrame(sessionId2, fps) {
             handedOffTo(lanes, frameFeeds.following(sessionId2))
           )
         },
-        moves: motion === "moves",
+        nextChange,
         evaluated: evaluated2,
         delivered,
         failure: null
@@ -82843,14 +82900,13 @@ function renderFrame(sessionId2, fps) {
       "render",
       facts,
       outcome,
-      Date.now() - started2.getTime()
+      Date.now() - started2
     );
     const failed2 = renderFailed(error);
     return {
-      at,
       resp: failed2,
       statusline: failed2,
-      moves: false,
+      nextChange: Infinity,
       evaluated: 0,
       delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` }
@@ -83189,6 +83245,17 @@ function drawRender(setup, drawing2) {
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
+  const body = viewing === null ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion } : {
+    text: viewerRows(
+      diagnostics,
+      viewing,
+      sessionId2,
+      drawing2.by,
+      geometry
+    ),
+    nextChange: Infinity,
+    motion: frame.motion === "still" ? "still" : "can-move"
+  };
   const g = gitService.getStats();
   const u = usageStore.getStats();
   const fx = effects.lastFrame();
@@ -83222,8 +83289,8 @@ function drawRender(setup, drawing2) {
     stateRev: String(fx.revision),
     fades: passages(fx.fades),
     leaves: passages(fx.leaves),
-    // What the frame drew: whether anything on it changes without new data.
-    motion: frame.motion,
+    // What the body drew: whether anything on it changes without new data.
+    motion: body.motion,
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(frame.evaluated),
@@ -83247,12 +83314,13 @@ function drawRender(setup, drawing2) {
   });
   return {
     drawn: {
-      body: viewing === null ? frame.text : viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry),
+      body: body.text,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry
     },
-    motion: frame.motion,
+    motion: body.motion,
+    nextChange: body.nextChange,
     evaluated: frame.evaluated,
     clickShown,
     delivered,
