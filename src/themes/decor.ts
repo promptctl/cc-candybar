@@ -8,7 +8,9 @@
 // role's SHADES — the darkenings, the lightenings and the muted form Textual
 // generates for the role in every theme — from the window of them the SHADE
 // dial is turned to, with the row and the shade chosen by the node's position
-// in the tree. An open menu selects the same way: the segment that opened it
+// in the tree; where a row turns from one hue to the next, the cells either
+// side of the turn wear shades the depth draws as two colours wherever their
+// ladders have them. An open menu selects the same way: the segment that opened it
 // wears its hue at its pressed shade — the dial's activated shade, moved along
 // the ladder where the depth draws it like what stands beside it — and its
 // rows sit on the theme's `surface`. Every background the bar draws is one its
@@ -414,22 +416,29 @@ export interface DecorEntry {
  * across as many places as the dial position names tones. The count is the
  * dial's at every depth, so a frame keeps its shape at every depth, while
  * the colours are the ones the depth deals; and a window of two or more
- * tones never puts one colour on two places side by side.
+ * tones never puts one colour on two places side by side. The roles sit side
+ * by side, so where one's places end and the next's begin they meet as a
+ * row that turns hue does (`turnsHeld`).
  */
 export const vocabularyOf = (
   palette: Palette,
   decor: Decor,
   drawnAt: ColorDepth,
 ): readonly DecorEntry[] =>
-  decor.variation.hues.flatMap((hue) => {
-    const window = windowAt(palette, hue, decor.shade, drawnAt);
-    // [LAW:no-defensive-null-guards] A window is never empty (`Tones`), so a
-    // place taken modulo its length is in range; the `!` states that.
-    return decor.shade.tones.map((_, at) => ({
-      hue,
-      shade: window[at % window.length]!,
-    }));
-  });
+  turnsHeld(
+    palette,
+    decor.shade,
+    decor.variation.hues.flatMap((hue) => {
+      const window = windowAt(palette, hue, decor.shade, drawnAt);
+      // [LAW:no-defensive-null-guards] A window is never empty (`Tones`), so
+      // a place taken modulo its length is in range; the `!` states that.
+      return decor.shade.tones.map((_, at) => ({
+        hue,
+        shade: window[at % window.length]!,
+      }));
+    }),
+    drawnAt,
+  );
 
 // --- The window at a depth ----------------------------------------------------
 
@@ -783,8 +792,10 @@ const rowStart = (variation: Variation, row: AddressStep | undefined): number =>
  * stacked above the whole bar (edit mode's reset banner) recolours no row
  * beneath it; the cell chooses the shade from its hue's window in `palette`
  * at `drawnAt` (`windowAt`), and its index how many of the variation's runs
- * it has passed along the row. A cell is a leaf of its row,
- * however the row nests it: the leaves of an authored `{ h }` inside a row
+ * it has passed along the row. Where the row turns hue beside a cell, the
+ * cells either side of the turn are held apart by the turn rule
+ * (`turnsHeld`), over the line the cell is drawn on. A cell is a leaf of its
+ * row, however the row nests it: the leaves of an authored `{ h }` inside a row
  * sit side by side with the row's other cells, so each takes its own place
  * on the line and they differ as any neighbours do. A `{ v }` inside a row
  * draws its first child on the row's line and each other on a line of its
@@ -810,9 +821,29 @@ export function decorEntryFor(
   drawnAt: ColorDepth,
 ): DecorEntry {
   const { row, cell } = rowAndCell(address);
-  // The row starts on its own step and advances one step per run along it, a
-  // keystone place wears the keystone hue instead, and the cell's place picks
-  // its shade from that hue's window at the depth drawn.
+  // A node alone on its row's axis has no neighbour on its line: it wears
+  // what its place deals.
+  if (cell === undefined) return dealtAt(palette, decor, row, cell, drawnAt);
+  // [LAW:no-defensive-null-guards] The compile places every leaf within the
+  // ends of the line it is drawn on, so its place on that line is in range.
+  return lineAt(palette, decor, row, cell, drawnAt)[
+    cell.index - cell.lineStart
+  ]!;
+}
+
+/**
+ * What a cell's place deals it, before the turn rule: the row starts on its
+ * own step and advances one step per run along it, a keystone place wears the
+ * keystone hue instead, and the cell's place picks its shade from that hue's
+ * window at the depth drawn.
+ */
+function dealtAt(
+  palette: Palette,
+  decor: Decor,
+  row: AddressStep | undefined,
+  cell: AddressStep | undefined,
+  drawnAt: ColorDepth,
+): DecorEntry {
   const { hues, run, keystones } = decor.variation;
   const turn = cell === undefined ? 0 : Math.floor(cell.index / run);
   const stepped = hues[(rowStart(decor.variation, row) + turn) % hues.length];
@@ -824,6 +855,147 @@ export function decorEntryFor(
     hue,
     shade: vocabularySelect(windowAt(palette, hue, decor.shade, drawnAt), cell),
   };
+}
+
+/**
+ * The entries every place on the line `cell` is drawn on wears, first place
+ * first: what each place deals (`dealtAt`), with the hue turns held apart
+ * (`turnsHeld`). Every neighbour is computed from `cell`'s own address — the
+ * same row, count and distribution at the next place along the same line —
+ * never read from a rendered neighbour, so a cell's colour is still a fact of
+ * its address alone, and hiding a cell recolours none.
+ *
+ * [LAW:dataflow-not-control-flow] Built once per (palette, variation, dial
+ * position, row, line, depth) and memoised, so a cell's entry is a lookup.
+ */
+function lineAt(
+  palette: Palette,
+  decor: Decor,
+  row: AddressStep | undefined,
+  cell: AddressStep,
+  drawnAt: ColorDepth,
+): readonly DecorEntry[] {
+  const { hues, run, keystones } = decor.variation;
+  const key = [
+    hues.join(","),
+    run,
+    keystones.join(","),
+    decor.shade.tones.join(","),
+    rowStart(decor.variation, row),
+    // The bar-start keystone reads whether the row is the bar's first.
+    (row?.index ?? 0) === 0,
+    distributionName(cell.distribution),
+    cell.count,
+    cell.lineStart,
+    cell.lineEnd,
+    drawnAt,
+  ].join("|");
+  return LINES(palette, key, () =>
+    turnsHeld(
+      palette,
+      decor.shade,
+      Array.from({ length: cell.lineEnd - cell.lineStart + 1 }, (_, at) =>
+        dealtAt(
+          palette,
+          decor,
+          row,
+          { ...cell, index: cell.lineStart + at },
+          drawnAt,
+        ),
+      ),
+      drawnAt,
+    ),
+  );
+}
+
+// Every cell of every frame reads its line, and the line is a pure function
+// of what the key names: one per drawn line of the bar per palette and depth.
+const LINES = memoPerPalette<readonly DecorEntry[]>();
+
+/**
+ * A distribution's name in the table, which is what a memo key can hold.
+ * [LAW:no-silent-failure] Every placer places by an entry of `DISTRIBUTIONS`
+ * (`placedBy`), so a distribution outside it is a construction error, and
+ * keying it by anything else could fold two lines into one answer.
+ */
+function distributionName(distribution: Distribution): DistributionName {
+  const name = DISTRIBUTION_NAME.get(distribution);
+  if (name === undefined)
+    throw new Error("decorEntryFor: a cell placed outside DISTRIBUTIONS");
+  return name;
+}
+
+const DISTRIBUTION_NAME = new Map<Distribution, DistributionName>(
+  DISTRIBUTION_NAMES.map((name) => [DISTRIBUTIONS[name], name]),
+);
+
+/**
+ * A line of cells as it is drawn: `dealt`, each place's entry, side by side,
+ * with every hue turn held apart. A dial window keeps one hue's tones apart
+ * at a depth, and the distribution keeps neighbours of one hue on different
+ * tones; nothing in either keeps two hues apart where a line turns from one
+ * to the other, and at 256 colours and ansi two hues' rungs often round onto
+ * one entry or slot. So where the two cells either side of a turn are drawn
+ * as one colour, the cell after the turn takes the first tone of its own
+ * window drawn as neither of its neighbours, else the nearest rung of its
+ * ladder that is (`widen`). Both neighbours, because its other neighbour is
+ * of its own hue, kept apart from it by the distribution: a tone drawn like
+ * that one would move the collision one seam over. Where its ladder has no
+ * such rung, the cell before the turn takes one by the same rule; where
+ * neither has one, both keep what they were dealt and the joiner's lift
+ * draws the seam. The line is read from its first place to its last, so a
+ * cell with a turn on each side (one cell between two keystones) is decided
+ * against the cell before it as that one finally stands, and every seam
+ * behind the place being read stays held.
+ *
+ * Alike means drawn as one colour, by identity after rounding, as the window
+ * decides it; nothing measures a distance between two colours. A cell keeps
+ * its own hue whatever it is dealt, so a row still reads in the hues its
+ * variation names.
+ *
+ * [LAW:single-enforcer] The one rule for a hue turn: a bar line
+ * (`decorEntryFor`) and the theme preview's swatches (`vocabularyOf`) both
+ * meet across hues through it. A band's items are one hue, so they have no
+ * turn to hold.
+ */
+function turnsHeld(
+  palette: Palette,
+  shade: Shade,
+  dealt: readonly DecorEntry[],
+  drawnAt: ColorDepth,
+): readonly DecorEntry[] {
+  const line = [...dealt];
+  const drawn = (at: number): string | undefined => {
+    const entry = line[at];
+    return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
+  };
+  // The entry `at` takes to stand apart from the cells either side of it:
+  // its own hue, at the first tone of its window, else the nearest rung of
+  // its ladder, drawn as neither neighbour.
+  const apart = (at: number): DecorEntry | undefined => {
+    // [LAW:no-defensive-null-guards] `at` is a place on the line.
+    const { hue } = line[at]!;
+    const taken = [drawn(at - 1), drawn(at + 1)].filter(
+      (colour): colour is string => colour !== undefined,
+    );
+    const window = windowAt(palette, hue, shade, drawnAt);
+    const tone =
+      window.find((t) => !taken.includes(drawnIn(palette, hue, drawnAt)(t))) ??
+      widen(palette, hue, window, taken, drawnAt);
+    return tone === undefined ? undefined : { hue, shade: tone };
+  };
+  for (let at = 1; at < line.length; at++) {
+    if (line[at - 1]!.hue === line[at]!.hue || drawn(at - 1) !== drawn(at))
+      continue;
+    const after = apart(at);
+    if (after !== undefined) {
+      line[at] = after;
+      continue;
+    }
+    const before = apart(at - 1);
+    if (before !== undefined) line[at - 1] = before;
+  }
+  return line;
 }
 
 // Whether a cell stands at a keystone place, read off its authored place and

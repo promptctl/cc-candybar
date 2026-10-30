@@ -270,27 +270,51 @@ describe("a dial window at a depth", () => {
     }
   });
 
-  test("what a theme's preview samples is every tone of each hue's window at the depth, over as many places as the dial names tones, no two places side by side drawn alike where the window has two", () => {
+  test("what a theme's preview samples is each hue's window at the depth, in the window's order over as many places as the dial names tones, its hue groups side by side and meeting as a row that turns hue does", () => {
     const wrong: string[] = [];
+    const seen = { moved: 0, noneToGive: 0 };
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
+        const drawn = (entry: DecorEntry): string => shown(decorEntryColour(palette, entry)).hex;
         for (const shade of SHADE_NAMES) {
-          const decor: Decor = { variation: VARIATIONS.duo, shade: SHADES[shade] };
-          const sampled = vocabularyOf(palette, decor, drawnAt);
-          for (const hue of decor.variation.hues) {
-            const window = windowAt(palette, hue, SHADES[shade], drawnAt);
-            const dealt = sampled.filter((entry) => entry.hue === hue).map((entry) => entry.shade);
-            const drawn = dealt.map((tone) => shown(paletteRole(palette, shadeRole(hue, tone))).hex);
-            const where = `${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}: ${dealt.join()}`;
-            if (dealt.length !== SHADES[shade].tones.length) wrong.push(`${where}, not one place per tone the dial names`);
-            if ([...new Set(dealt)].sort().join() !== [...window].sort().join()) wrong.push(`${where}, not the window ${window.join()}`);
-            if (window.length > 1 && drawn.some((c, i) => i > 0 && c === drawn[i - 1])) wrong.push(`${where}, two places side by side drawn alike`);
+          for (const name of ["accent", "duo", "alt"] as const) {
+            const decor: Decor = { variation: VARIATIONS[name], shade: SHADES[shade] };
+            const sampled = vocabularyOf(palette, decor, drawnAt);
+            const dealt = decor.variation.hues.flatMap((hue) => {
+              const window = windowAt(palette, hue, SHADES[shade], drawnAt);
+              return SHADES[shade].tones.map((_, at) => ({ hue, shade: window[at % window.length]! }));
+            });
+            const where = `${palette.name} ${name}/${shade} at ${ColorDepth[drawnAt]}: ${sampled.map((e) => `${e.hue} ${e.shade}`).join(", ")}`;
+            // The groups meet between the last place of the first hue and the first of the second.
+            const turn = SHADES[shade].tones.length;
+            if (sampled.length !== dealt.length) wrong.push(`${where}, not one place per tone the dial names, per hue`);
+            sampled.forEach((entry, i) => {
+              if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}, place ${i} not in ${dealt[i]!.hue}`);
+              if (entry.shade === dealt[i]!.shade) return;
+              seen.moved++;
+              if (i !== turn - 1 && i !== turn) wrong.push(`${where}, place ${i} moved beside no turn`);
+            });
+            const beside = (i: number): string[] => [sampled[i - 1], sampled[i + 1]].flatMap((e) => (e === undefined ? [] : [drawn(e)]));
+            const hasRungToGive = (i: number): boolean => LADDER.some((rung) => !beside(i).includes(drawn({ hue: sampled[i]!.hue, shade: rung })));
+            for (let i = 0; i + 1 < sampled.length; i++) {
+              const [left, right] = [sampled[i]!, sampled[i + 1]!];
+              if (drawn(left) !== drawn(right)) continue;
+              if (left.hue === right.hue && windowAt(palette, left.hue, SHADES[shade], drawnAt).length === 1) continue;
+              if (left.hue !== right.hue && !hasRungToGive(i) && !hasRungToGive(i + 1)) {
+                seen.noneToGive++;
+                continue;
+              }
+              wrong.push(`${where}, places ${i} and ${i + 1} drawn alike`);
+            }
           }
         }
       }
     }
     expect(wrong).toEqual([]);
+    // Non-vacuous: at some depth two hues' groups meet on one colour, and the
+    // turn is held by a move; and where neither has a rung, they meet.
+    expect([seen.moved > 0, seen.noneToGive > 0]).toEqual([true, true]);
   });
 });
 
@@ -533,6 +557,123 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     }
   });
 
+});
+
+// [LAW:verifiable-goals] candybar-joiners-e5r4.5x1: a window keeps one hue's
+// tones apart and the distribution keeps neighbours of one hue on different
+// tones, but where a row turns from one hue to the next (`alt` every three
+// cells, either side of a keystone) the cells either side each take a tone of
+// their own hue's window, and at 256 colours and ansi two hues' rungs often
+// round onto one colour. The rule, stated over every variation, dial
+// position, bundled theme and depth, for every row up to sixteen long, on the
+// colours the depth draws: two cells side by side are two colours wherever
+// either of them has a rung of its own ladder drawn as neither of the cells
+// beside it.
+describe("where a row turns hue", () => {
+  // The hue a place is dealt, in the test's own words: the row starts on its
+  // own step (row 0 of 2 on the first, row 1 on the second) and steps every
+  // run of cells, and a keystone place wears the keystone hue.
+  const hueAt = (variation: Variation, r: number, i: number, count: number): DecorHue => {
+    const keystone = variation.keystones.some((at) => (at === "bar-start" ? r === 0 && i === 0 : at === "line-start" ? i === 0 : i === count - 1));
+    return keystone ? KEYSTONE_HUE : variation.hues[(r + Math.floor(i / variation.run)) % variation.hues.length]!;
+  };
+  const ROWS = Array.from({ length: 15 }, (_, i) => i + 2);
+
+  test.each(VARIATION_NAMES)(
+    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only beside a turn, and leaves its window only where no tone of it stands apart from both neighbours",
+    (name) => {
+      const variation = VARIATIONS[name];
+      const wrong: string[] = [];
+      const seen = { turns: 0, dealtAlike: 0, moved: 0, widened: 0, noneToGive: 0 };
+      for (const drawnAt of DRAWN) {
+        const shown = shownAt(drawnAt);
+        for (const palette of REGISTRY) {
+          const drawn = (entry: DecorEntry): string => shown(decorEntryColour(palette, entry)).hex;
+          const ladder = (hue: DecorHue): string[] => LADDER.map((rung) => drawn({ hue, shade: rung }));
+          for (const shade of SHADE_NAMES) {
+            const decor: Decor = { variation, shade: SHADES[shade] };
+            const windowOf = (hue: DecorHue) => windowAt(palette, hue, SHADES[shade], drawnAt);
+            for (const r of [0, 1]) {
+              for (const count of ROWS) {
+                const where = `${palette.name} ${shade} at ${ColorDepth[drawnAt]}, row ${r}, ${count} cells`;
+                const line = Array.from({ length: count }, (_, i) => decorEntryFor(palette, decor, [row(r, 2), cell(i, count)], drawnAt));
+                // What each place deals before any turn is held: its hue's window, read by its place.
+                const dealt = line.map((_, i) => {
+                  const hue = hueAt(variation, r, i, count);
+                  return { hue, shade: vocabularySelect(windowOf(hue), cell(i, count)) };
+                });
+                const besideOf = (i: number): string[] => [line[i - 1], line[i + 1]].flatMap((entry) => (entry === undefined ? [] : [drawn(entry)]));
+                const hasRungToGive = (i: number): boolean => ladder(line[i]!.hue).some((c) => !besideOf(i).includes(c));
+                line.forEach((entry, i) => {
+                  if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}: ${i} wears ${entry.hue}, dealt ${dealt[i]!.hue}`);
+                  const atTurn = [dealt[i - 1], dealt[i + 1]].some((beside) => beside !== undefined && beside.hue !== entry.hue);
+                  if (entry.shade === dealt[i]!.shade) return;
+                  seen.moved++;
+                  if (!atTurn) wrong.push(`${where}: ${i} left its tone, beside no turn`);
+                  if (windowOf(entry.hue).includes(entry.shade)) return;
+                  seen.widened++;
+                  const apart = windowOf(entry.hue).filter((tone) => !besideOf(i).includes(drawn({ hue: entry.hue, shade: tone })));
+                  if (apart.length > 0) wrong.push(`${where}: ${i} wears ${entry.shade}, past its window's ${apart.join()}`);
+                });
+                for (let i = 0; i + 1 < count; i++) {
+                  const [left, right] = [line[i]!, line[i + 1]!];
+                  if (left.hue !== right.hue) {
+                    seen.turns++;
+                    if (drawn(dealt[i]!) === drawn(dealt[i + 1]!)) seen.dealtAlike++;
+                  }
+                  if (drawn(left) !== drawn(right)) continue;
+                  // One hue: only a window of one tone, a role whose whole
+                  // ladder draws as one colour (held by the window's own test).
+                  if (left.hue === right.hue && windowOf(left.hue).length === 1) continue;
+                  if (left.hue !== right.hue && !hasRungToGive(i) && !hasRungToGive(i + 1)) {
+                    seen.noneToGive++;
+                    continue;
+                  }
+                  wrong.push(`${where}: ${i} and ${i + 1} both ${drawn(left)} (${left.hue} ${left.shade} | ${right.hue} ${right.shade})`);
+                }
+              }
+            }
+          }
+        }
+      }
+      expect(wrong).toEqual([]);
+      // A whole-row variation with no keystone never turns along a row; one
+      // that turns meets two hues on one colour at some depth, and holds each
+      // such turn by moving a cell.
+      const turns = variation.run !== WHOLE_ROW || variation.keystones.length > 0;
+      expect([name, seen.turns > 0, seen.dealtAlike > 0, seen.moved > 0]).toEqual([name, turns, turns, turns]);
+    },
+  );
+
+  test("at a turn drawn as one colour the cell after it moves: to a tone of its window drawn apart from both its neighbours, else past its window along its ladder, and where neither cell has a rung to give, the seam is the joiner's", () => {
+    const ansi = ColorDepth.STANDARD;
+    const shown = shownAt(ansi);
+    // The bundled bar's second row under alt, at ansi: accent for three
+    // cells, then secondary for three, then accent.
+    const line = (theme: string, shade: ShadeName, count: number): { entries: DecorEntry[]; drawn: string[] } => {
+      const palette = getThemePalette(theme)!;
+      const entries = Array.from({ length: count }, (_, i) => decorEntryFor(palette, { variation: VARIATIONS.alt, shade: SHADES[shade] }, [row(1, 2), cell(i, count)], ansi));
+      return { entries, drawn: entries.map((entry) => shown(decorEntryColour(palette, entry)).hex) };
+    };
+    // dracula: the accent after the second turn is dealt silver beside the
+    // secondary's silver, and its window's grey stands apart from it.
+    const dracula = line("dracula", "middle", 7);
+    expect(dracula.entries[6]).toEqual({ hue: "accent", shade: "darken-2" });
+    expect(dracula.drawn.slice(5)).toEqual(["#c0c0c0", "#808080"]);
+    // catppuccin-frappe: the secondary after the first turn is dealt silver
+    // beside the accent's silver, and its window's other tone is the grey of
+    // the cell after it, so it takes the nearest rung of its ladder drawn as
+    // neither: olive.
+    const frappe = line("catppuccin-frappe", "middle", 7);
+    expect(frappe.entries[3]).toEqual({ hue: "secondary", shade: "darken-3" });
+    expect(frappe.drawn.slice(2, 5)).toEqual(["#c0c0c0", "#808000", "#808080"]);
+    expect(windowAt(getThemePalette("catppuccin-frappe"), "secondary", SHADES.middle, ansi)).not.toContain("darken-3");
+    // textual-ansi on the muted dial: the secondary's whole ladder and the
+    // accent's muted form are teal, and the accent's ladder is blue. The
+    // secondary after the turn has teal alone, and the accent before it has
+    // blue beside it on its other side: neither has a rung to give.
+    expect(line("textual-ansi", "muted", 5).drawn).toEqual(["#008080", "#0000ff", "#008080", "#008080", "#008080"]);
+  });
 });
 
 describe("distributions", () => {
