@@ -12,6 +12,7 @@
 import {
   ColorDepth,
   ColorSpec,
+  type ColorRgba,
   decodeAnsi,
   drawnColour,
   getThemePalette,
@@ -23,13 +24,16 @@ import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-m
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { SWATCH_GLYPH } from "../src/render/swatch";
-import { DECOR_HUES, SHADES, paletteRole, shadeRole, type ShadeName } from "../src/themes/decor";
+import { DECOR_HUES, SHADES, paletteRole, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { ERROR_REDS, doorClose } from "./helpers/door-close";
 import { POWERLINE } from "./helpers/powerline";
+import { LADDER } from "./helpers/decor-vocabulary";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
 
 const THEMES = listThemePalettes();
+// Every shade of a role a cell can wear: the ladder and the muted form.
+const ROLE_SHADES: readonly RoleShade[] = [...LADDER, "muted"];
 const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
 const TABS = ["session", "look", "layout", "config", "tools"] as const;
 const COLS = 200;
@@ -143,6 +147,10 @@ describe("the open door's ✖ is a red its palette names for its error role", ()
   });
 });
 
+// candybar-joiners-e5r4.686: a depth may deal a cell another shade of its role
+// than truecolor does (a window narrowed to the shades it draws apart, or
+// widened along the ladder; a pressed shade widened off what stands beside
+// it), never a colour off that role's ladder and never one rounded twice.
 describe("a lower depth draws each of those colours rounded once", () => {
   // The look the open first tab once met the ✕ beside it in at ansi, and the
   // default one.
@@ -155,7 +163,7 @@ describe("a lower depth draws each of those colours rounded once", () => {
   test.each([
     ["256 colours", "256", ColorDepth.EIGHT_BIT],
     ["ansi", "ansi", ColorDepth.STANDARD],
-  ] as const)("at %s, every background is the one truecolor draws there as the writer rounds it, under every bundled theme and view", (_name, compatibility, depth) => {
+  ] as const)("at %s, every background is the one truecolor draws there as the writer rounds it, or another shade of the same role as the writer rounds it, under every bundled theme and view", (_name, compatibility, depth) => {
     const truecolor = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
     const lower = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
     const wrong: string[] = [];
@@ -174,14 +182,24 @@ describe("a lower depth draws each of those colours rounded once", () => {
             const where = `${JSON.stringify(look)} ${theme} ${view.name}`;
             // One frame at two depths: the same characters on the same cells.
             expect([where, rounded.map((g) => `${g.at}${g.ch}`)]).toEqual([where, full.map((g) => `${g.at}${g.ch}`)]);
+            const palette = getThemePalette(theme)!;
+            const roundedOnce = (c: ColorRgba): string => ColorSpec.fromRgba(c).downgrade(depth).getAnsiCodes(false).join(";");
+            // Every shade of each role the palette names `hex` as, rounded once.
+            const shadesOf = (hex: string): Set<string> =>
+              new Set(
+                DECOR_HUES.filter((hue) => ROLE_SHADES.some((shade) => paletteRole(palette, shadeRole(hue, shade)).hex === hex)).flatMap(
+                  (hue) => ROLE_SHADES.map((shade) => roundedOnce(paletteRole(palette, shadeRole(hue, shade)))),
+                ),
+              );
             full.forEach(({ ch, at, bg }, i) => {
               if (JOINER.has(ch)) return;
               measured++;
               // [LAW:no-defensive-null-guards] A truecolor frame draws every
               // background as an RGB value.
-              const expected = ColorSpec.fromRgba(bg.value!).downgrade(depth).getAnsiCodes(false).join(";");
+              const expected = roundedOnce(bg.value!);
               const got = rounded[i]!.bg.getAnsiCodes(false).join(";");
-              if (got !== expected) wrong.push(`${where} ${at} '${ch}': ${bg.value!.hex} drawn ${got}, rounds to ${expected}`);
+              if (got !== expected && !shadesOf(bg.value!.hex).has(got))
+                wrong.push(`${where} ${at} '${ch}': ${bg.value!.hex} drawn ${got}, rounds to ${expected}, and is no shade of its role`);
             });
           }
         }

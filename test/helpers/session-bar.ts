@@ -6,6 +6,7 @@
 // session picks and the accent-looks harness (proto-looks/) draw through this
 // one rig, so a field the render path comes to need reaches them all.
 
+import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
 import { perSetting } from "../../src/config/setting-projections";
@@ -28,6 +29,8 @@ export type Payload = Record<string, unknown>;
 export interface SessionRender {
   readonly text: string;
   readonly warnings: readonly RenderWarning[];
+  /** Each segment the frame drew, by placement id: its cells before they are joined. */
+  readonly segments: ReadonlyMap<string, readonly RichText[]>;
 }
 
 export interface SessionBar {
@@ -69,14 +72,16 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
         term: { cols },
       };
       const warnings: RenderWarning[] = [];
+      const segments = new Map<string, readonly RichText[]>();
       const text = renderDsl(config, compiled, store, registry, payload, at, renderOptionsOf(effective, cols), {
+        perSegmentSink: segments,
         // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
         onSegmentError: (name, message) => {
           throw new Error(`${name}: ${message}`);
         },
         onRenderWarning: (warning) => warnings.push(warning),
       }, effective);
-      return { text, warnings };
+      return { text, warnings, segments };
     },
     dispose: () => registry.dispose(),
   };

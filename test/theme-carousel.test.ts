@@ -20,14 +20,14 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
 import { RichText as RichTextValue } from "@promptctl/rich-js";
-import type { RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
+import type { Palette, RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { listResolvablePaletteNames } from "../src/themes/policy";
+import { drawnDepth, listResolvablePaletteNames } from "../src/themes/policy";
 import type {
   ColorCompatibility,
   Endcaps,
@@ -43,7 +43,7 @@ import {
   CAROUSEL_PREV,
   neighbourLevels,
 } from "../src/render/carousel";
-import { decorEntryColour, vocabularyOf } from "../src/themes/decor";
+import { decorEntryColour, windowAt } from "../src/themes/decor";
 import { DEFAULT_DECOR } from "./helpers/decor";
 import { renderStripCells } from "../src/render/strip";
 import {
@@ -947,18 +947,35 @@ describe("the preview is the bar's own colours", () => {
     lightnessShift: 0,
   };
 
-  test.each(["nord", "gruvbox", "rose-pine-dawn", "textual-light"])(
-    "%s: the preview shows every colour a closed cell can wear, and its open swatch is the open door's",
-    (theme) => {
-      const rt = rig(`{ globals: { palette: '${theme}' } }`);
+  // Every colour a closed cell can wear under the default decor at a depth:
+  // each of its hues at every tone of that hue's window there.
+  const closedColours = (palette: Palette, drawnAt: ColorDepth): string[] =>
+    DEFAULT_DECOR.variation.hues.flatMap((hue) =>
+      windowAt(palette, hue, DEFAULT_DECOR.shade, drawnAt).map((shade) => decorEntryColour(palette, { hue, shade }).hex),
+    );
+
+  // A depth deals a closed cell its hue's window there, which can hold a rung
+  // the dial does not name (catppuccin-mocha and default at ansi widen both
+  // of the default's hues; dracula at 256 narrows one).
+  test.each([
+    ["nord", "truecolor"],
+    ["gruvbox", "truecolor"],
+    ["rose-pine-dawn", "truecolor"],
+    ["textual-light", "truecolor"],
+    ["catppuccin-mocha", "ansi"],
+    ["default", "ansi"],
+    ["dracula", "256"],
+  ] as const)(
+    "%s at %s: the preview shows every colour a closed cell can wear, and its open swatch is the open door's",
+    (theme, depth) => {
+      const rt = rig(`{ globals: { palette: '${theme}', colorCompatibility: '${depth}' } }`);
       openPicker(rt, "theme");
       const palette = transposePalette(getThemePalette(theme)!, IDENTITY);
       // Row 0 is the swatch row; the demo is row 1.
       const preview = rt.sink.get("candybar.list.theme.1")!;
       const drawn = backgrounds(preview);
-      // Every decoration a closed cell can wear is a swatch.
-      const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
-      expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
+      // Every decoration a closed cell can wear at the depth is a swatch.
+      expect(closedColours(palette, drawnDepth(depth)).filter((hex) => !drawn.has(hex))).toEqual([]);
       // Its open swatch is the colour the open door is drawn in.
       expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
       // Every closed bar cell that authors no meaning wears a preview tint.
@@ -997,8 +1014,7 @@ describe("the preview is the bar's own colours", () => {
     );
     const preview = rt.sink.get("candybar.list.style.1")!;
     const drawn = backgrounds(preview);
-    const vocabulary = vocabularyOf(DEFAULT_DECOR).map((entry) => decorEntryColour(palette, entry).hex);
-    expect(vocabulary.filter((hex) => !drawn.has(hex))).toEqual([]);
+    expect(closedColours(palette, ColorDepth.TRUECOLOR).filter((hex) => !drawn.has(hex))).toEqual([]);
     expect(drawn.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
     expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
     rt.dispose();

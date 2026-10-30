@@ -15,6 +15,7 @@ import {
   TEXT_MIN_CONTRAST,
   VARIATIONS,
   lineageHue,
+  pressedAt,
   shadeRole,
   type ShadeName,
   type ShadeRole,
@@ -39,8 +40,8 @@ const groundOf = (variation: VariationName, shade: ShadeName): ShadeRole =>
 // Every dial position under the bundled variation, and every variation at the
 // first dial position that presses into each rung a pressed door can wear: so
 // every dial position and every variation is drawn, and every ground they give
-// the door. Every variation crossed with every dial position reaches no
-// ground more.
+// the door at truecolor. Every variation crossed with every dial position
+// reaches no ground more there.
 const BUNDLED = floorOf("variation");
 const PRESSING = SHADE_NAMES.filter(
   (shade, i) => SHADE_NAMES.findIndex((first) => SHADES[first].activated === SHADES[shade].activated) === i,
@@ -170,6 +171,31 @@ const FARTHEST: Readonly<Partial<Record<(typeof THEMES)[number], Partial<Record<
   },
 };
 
+// The door's ground at a lower depth: the rung the depth presses it into,
+// which is the one above unless the depth draws that like what stands beside
+// the door, and then the nearest rung of the hue it draws apart. It turns on
+// the variation's hues and the dial's tones too, so the looks there are the
+// first, over every variation crossed with every dial position, to reach each
+// ground the depth gives the door under a theme.
+const pressedGround = (theme: string, variation: VariationName, shade: ShadeName, drawnAt: ColorDepth): ShadeRole =>
+  shadeRole(
+    lineageHue(VARIATIONS[variation].open, 0),
+    pressedAt(getThemePalette(theme)!, { decor: { variation: VARIATIONS[variation], shade: SHADES[shade] }, depth: 0 }, drawnAt),
+  );
+const EVERY_LOOK: ReadonlyArray<readonly [VariationName, ShadeName]> = [
+  ...LOOKS,
+  ...VARIATION_NAMES.flatMap((variation) => SHADE_NAMES.map((shade) => [variation, shade] as const)),
+];
+function looksAt(theme: string, drawnAt: ColorDepth): ReadonlyArray<readonly [VariationName, ShadeName]> {
+  const reached = new Set<ShadeRole>();
+  return EVERY_LOOK.filter(([variation, shade]) => {
+    const ground = pressedGround(theme, variation, shade, drawnAt);
+    if (reached.has(ground)) return false;
+    reached.add(ground);
+    return true;
+  });
+}
+
 interface Door {
   readonly variation: VariationName;
   readonly shade: ShadeName;
@@ -193,10 +219,10 @@ afterAll(() => {
   for (const depth of DEPTHS) rigs[depth].dispose();
 });
 
-// The open door's ✖ under `theme` in every look above, in one order.
-function doorsUnder(bar: SessionBar, theme: string): readonly Door[] {
+// The open door's ✖ under `theme` in each of `looks`, in their order.
+function doorsUnder(bar: SessionBar, theme: string, looks: ReadonlyArray<readonly [VariationName, ShadeName]>): readonly Door[] {
   bar.pick("theme", theme);
-  return LOOKS.map(([variation, shade]) => {
+  return looks.map(([variation, shade]) => {
     bar.pick("variation", variation);
     bar.pick("shade", shade);
     bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
@@ -207,7 +233,7 @@ function doorsUnder(bar: SessionBar, theme: string): readonly Door[] {
 describe.each(THEMES)("under %s", (theme) => {
   let truecolor: readonly Door[];
   beforeAll(() => {
-    truecolor = doorsUnder(rigs.truecolor, theme);
+    truecolor = doorsUnder(rigs.truecolor, theme, LOOKS);
   });
 
   test("at truecolor, under every dial position and variation, the ✖ is a red its theme names, and clears the text floor on its ground, or no red its theme names can and it wears the one standing farthest off", () => {
@@ -252,21 +278,40 @@ describe.each(THEMES)("under %s", (theme) => {
   });
 
   test.each([
-    ["256 colours", "256"],
-    ["ansi", "ansi"],
-  ] as const)("at %s, rounding never costs the ✖ the contrast it has at truecolor, up to the text floor", (_name, depth) => {
-    const lower = doorsUnder(rigs[depth], theme);
-    const wrong = lower.flatMap(({ variation, shade, ink, ground }, i) => {
-      const was = truecolor[i]!;
-      // One sweep in one order: the same door at two depths.
-      expect([was.variation, was.shade]).toEqual([variation, shade]);
-      const held = Math.min(TEXT_MIN_CONTRAST, contrastRatio(was.ink, was.ground));
-      const ratio = contrastRatio(ink, ground);
-      return ratio >= held
-        ? []
-        : [`under ${variation} at ${shade}: ✖ ${ink.hex} on ${ground.hex} at ${ratio.toFixed(2)}:1, under the ${held.toFixed(2)}:1 it holds at truecolor`];
-    });
-    expect(wrong).toEqual([]);
-    expect(lower.length).toBe(truecolor.length);
-  });
+    ["256 colours", "256", ColorDepth.EIGHT_BIT],
+    ["ansi", "ansi", ColorDepth.STANDARD],
+  ] as const)(
+    "at %s, rounding never costs the ✖ the contrast it has on the truecolor ground, and on a rung the depth presses the door into instead it stands as far off as the rule above puts a red there, up to the text floor",
+    (_name, depth, drawnAt) => {
+      const palette = getThemePalette(theme)!;
+      const shown = (name: string) => drawnColour(palette.get(name)!, ColorDepth.TRUECOLOR);
+      const onGround = new Map(truecolor.map((door) => [groundOf(door.variation, door.shade), door]));
+      const looks = looksAt(theme, drawnAt);
+      const wrong = doorsUnder(rigs[depth], theme, looks).flatMap(({ variation, shade, ink, ground }) => {
+        const named = pressedGround(theme, variation, shade, drawnAt);
+        const ratio = contrastRatio(ink, ground);
+        const where = `under ${variation} at ${shade} (on ${named}): ✖ ${ink.hex} on ${ground.hex} at ${ratio.toFixed(2)}:1`;
+        // As at truecolor, the ground is held to the name it is measured by.
+        const drawn = drawnColour(palette.get(named)!, drawnAt);
+        if (ground.hex !== drawn.hex) return [`${where}, on a ground that is not ${named} (${drawn.hex})`];
+        const at = groundOf(variation, shade);
+        const was = onGround.get(at);
+        if (was === undefined) return [`${where}, whose truecolor ground ${at} no look at truecolor reaches`];
+        // On the truecolor ground, rounded: the contrast the ✖ has there. On
+        // another rung: what the rule gives the ✖ there as truecolor draws
+        // it, which is the floor where a red its theme names clears it and
+        // otherwise the farthest of them.
+        const reach =
+          named === at
+            ? contrastRatio(was.ink, was.ground)
+            : Math.max(...ERROR_REDS.map((red) => contrastRatio(shown(red), shown(named))));
+        const held = Math.min(TEXT_MIN_CONTRAST, reach);
+        return ratio >= held
+          ? []
+          : [`${where}, under the ${held.toFixed(2)}:1 it holds ${named === at ? "at truecolor" : `on ${named} at truecolor`}`];
+      });
+      expect(wrong).toEqual([]);
+      expect(looks.length).toBeGreaterThan(0);
+    },
+  );
 });

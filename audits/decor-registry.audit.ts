@@ -29,7 +29,6 @@ import {
   paletteRole,
   textOn,
   TEXT_MIN_CONTRAST,
-  vocabularyOf,
   type Decor,
   type DecorHue,
   type ShadeName,
@@ -65,7 +64,7 @@ describe("done-when: a decorated cell's text clears the text floor on every them
           for (const variation of VARIATION_NAMES) {
             const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
             for (const address of [[row(0, 2), cell(1, 4)], [row(1, 2), cell(2, 4)]]) {
-              const { hue } = decorEntryFor(decor, address);
+              const { hue } = decorEntryFor(palette, decor, address, drawnAt);
               const { tint, text } = decorationFor(palette, { kind: "bar", decor, address }, drawnAt);
               const where = `${palette.name} ${variation}/${shade} ${hue} at ${ColorDepth[drawnAt]}`;
               const ratio = contrastRatio(shown(tint), shown(text));
@@ -101,7 +100,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
       const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
       for (const shade of SHADE_NAMES) {
         for (const hue of DECOR_HUES) {
-          const { state } = bandFor(palette, { decor: openIn(hue, shade), depth: 0 });
+          const { state } = bandFor(palette, { decor: openIn(hue, shade), depth: 0 }, ColorDepth.TRUECOLOR);
           const text = textOn(palette, state, ColorDepth.TRUECOLOR);
           const side = contrastFor(state);
           const bestPole = poles.reduce((a, b) =>
@@ -140,13 +139,13 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
       const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
       const cells = [
         ...SHADE_NAMES.flatMap((shade) =>
-          vocabularyOf({ variation: VARIATIONS.duo, shade: SHADES[shade] })
-            .concat(vocabularyOf({ variation: VARIATIONS.accent, shade: SHADES[shade] }))
+          [...VARIATIONS.duo.hues, ...VARIATIONS.accent.hues]
+            .flatMap((hue) => SHADES[shade].tones.map((tone) => ({ hue, shade: tone })))
             .map((entry) => decorEntryColour(palette, entry)),
         ),
         ...SHADE_NAMES.flatMap((shade) =>
           DECOR_HUES.flatMap((hue) => {
-            const band = bandFor(palette, { decor: openIn(hue, shade), depth: 0 });
+            const band = bandFor(palette, { decor: openIn(hue, shade), depth: 0 }, ColorDepth.TRUECOLOR);
             return [band.state, band.plane];
           }),
         ),

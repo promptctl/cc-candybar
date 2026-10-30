@@ -9,7 +9,8 @@
 // generates for the role in every theme — from the window of them the SHADE
 // dial is turned to, with the row and the shade chosen by the node's position
 // in the tree. An open menu selects the same way: the segment that opened it
-// wears its hue at the shade the dial names for the activated state, and its
+// wears its hue at its pressed shade — the dial's activated shade, moved along
+// the ladder where the depth draws it like what stands beside it — and its
 // rows sit on the theme's `surface`. Every background the bar draws is one its
 // palette names: it SELECTS from the theme; it never synthesises a colour.
 //
@@ -17,13 +18,15 @@
 // state: any node's colour is computable from its address alone, without
 // visiting any other node. [LAW:one-way-deps] A leaf of the themes module — it
 // imports only its memo and rich-js, which owns every colour operation used
-// (`ensureContrast`, `contrastFor`, `contrastRatio`, all for text);
+// (`ensureContrast`, `contrastFor`, `contrastRatio`, all for text, and
+// `drawnColour`, to ask whether a depth draws two shades as one colour);
 // cc-candybar keeps the POLICY (which roles, which shades, which address
 // formula) and no colour arithmetic of its own.
 
 import {
   contrastFor,
   contrastRatio,
+  drawnColour,
   ensureContrast,
   type ColorDepth,
   type ColorRgba,
@@ -116,10 +119,11 @@ const roleText: DecorText = (palette, hue, background, drawnAt) =>
 
 /**
  * One position of the shade dial: the shades a row's cells wear, in the order
- * a cell's place in its row selects them (`vocabularySelect` over this list,
- * read by the rule of the distribution that placed the cell), and how text is
- * chosen on them. A band's items wear the same position of the dial, in the
- * band's hue (`bandFor`).
+ * a cell's place in its row selects them (`vocabularySelect` over the window
+ * these make at the depth drawn, `windowAt`, read by the rule of the
+ * distribution that placed the cell), and how text is chosen on them. A
+ * band's items wear the same position of the dial, in the band's hue
+ * (`bandFor`).
  */
 export interface Shade {
   /**
@@ -134,8 +138,10 @@ export interface Shade {
    * (`bandFor`). Textual's flat buttons wear their role's muted form, so a
    * window of the ladder's rungs presses into it; a row already muted
    * presses into the role's second lightening, a rung that row never deals,
-   * so the pressed button stands out of it. [LAW:dataflow-not-control-flow]
-   * A value in the row, so a new position states its own.
+   * so the pressed button stands out of it. A depth that draws it like what
+   * stands beside a pressed button moves it along the ladder (`pressedAt`).
+   * [LAW:dataflow-not-control-flow] A value in the row, so a new position
+   * states its own.
    */
   readonly activated: RoleShade;
 }
@@ -401,11 +407,140 @@ export interface DecorEntry {
   readonly shade: RoleShade;
 }
 
-/** Every decoration a closed cell can wear under `decor`: each of its roles at each of its shades. */
-export const vocabularyOf = (decor: Decor): readonly DecorEntry[] =>
-  decor.variation.hues.flatMap((hue) =>
-    decor.shade.tones.map((shade) => ({ hue, shade })),
+/**
+ * The decorations a closed cell can wear under `decor` in `palette` at
+ * `drawnAt` — what a theme's preview samples: each of its roles at every tone
+ * of that role's window there (`windowAt`), in the window's order, dealt
+ * across as many places as the dial position names tones. The count is the
+ * dial's at every depth, so a frame keeps its shape at every depth, while
+ * the colours are the ones the depth deals; and a window of two or more
+ * tones never puts one colour on two places side by side.
+ */
+export const vocabularyOf = (
+  palette: Palette,
+  decor: Decor,
+  drawnAt: ColorDepth,
+): readonly DecorEntry[] =>
+  decor.variation.hues.flatMap((hue) => {
+    const window = windowAt(palette, hue, decor.shade, drawnAt);
+    // [LAW:no-defensive-null-guards] A window is never empty (`Tones`), so a
+    // place taken modulo its length is in range; the `!` states that.
+    return decor.shade.tones.map((_, at) => ({
+      hue,
+      shade: window[at % window.length]!,
+    }));
+  });
+
+// --- The window at a depth ----------------------------------------------------
+
+/**
+ * The tones a row of one hue deals at one depth, in the order a cell's place
+ * selects them, no two of them drawn as one colour there.
+ * [LAW:types-are-the-program] Never empty, and one tone only where the role's
+ * whole ladder draws as one colour at the depth: there is no second rung to
+ * deal, so the row wears that one and the joiner shows each seam, which is
+ * the theme's look at that depth. A window never widens into the muted form,
+ * even where it draws apart (textual-ansi's does): on the ladder's positions
+ * it is the shade a pressed button wears, and a closed row in it would read
+ * as pressed.
+ */
+export type Tones = readonly [RoleShade, ...RoleShade[]];
+
+/**
+ * The window a row of `hue` deals under the dial position `shade`, drawn at
+ * `drawnAt`: the position's tones the depth draws as distinct colours, in the
+ * position's order; and where it draws all of them as one, that tone and the
+ * nearest rung of the ladder the depth draws apart from it. At 256 colours
+ * neighbouring rungs round onto one table entry, at ansi onto one of the
+ * hue's slots, and a theme can name two rungs alike at any depth, so a window
+ * that kept them would deal two neighbours one colour where the role had
+ * another to give. It widens rather than shrinking to one tone, because one
+ * tone puts every pair of neighbours on one shade under any distribution.
+ *
+ * Alike means drawn as one colour: rich-js's `drawnColour`, the ground the
+ * writer emits at that depth, compared for identity. No distance between two
+ * colours decides anything; only whether the terminal is sent one or two.
+ *
+ * [LAW:dataflow-not-control-flow] Built once per (palette, hue, position,
+ * depth) and memoised, so a cell's shade is the same lookup at every depth
+ * (`entryOf` over the window).
+ * [LAW:one-source-of-truth] The one window: a bar cell's shade
+ * (`decorEntryFor`) and a band's items (`bandEntries`) both read it here.
+ */
+export function windowAt(
+  palette: Palette,
+  hue: DecorHue,
+  shade: Shade,
+  drawnAt: ColorDepth,
+): Tones {
+  return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
+    const drawn = drawnIn(palette, hue, drawnAt);
+    const [first, ...rest] = shade.tones;
+    const kept: [RoleShade, ...RoleShade[]] = [first];
+    for (const tone of rest) {
+      if (kept.every((held) => drawn(held) !== drawn(tone))) kept.push(tone);
+    }
+    if (kept.length > 1) return kept;
+    const wider = widen(palette, hue, shade.tones, [drawn(first)], drawnAt);
+    return wider === undefined ? kept : [first, wider];
+  });
+}
+
+// Every window a render deals is read once per cell per frame, and the answer
+// is a pure function of (palette, hue, position, depth): a handful per palette.
+const WINDOWS = memoPerPalette<Tones>();
+
+/** How `drawnAt` draws `hue` at a shade: the ground the writer emits, by hex. */
+const drawnIn =
+  (palette: Palette, hue: DecorHue, drawnAt: ColorDepth) =>
+  (tone: RoleShade): string =>
+    drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;
+
+/**
+ * [LAW:single-enforcer] The one widening, for a window and for a pressed
+ * button alike: the nearest rung of `hue`'s ladder to the shades `from` that
+ * `drawnAt` draws as none of the colours in `taken`, or `undefined` where
+ * every rung is one of them. It moves along the ladder only — the role's own
+ * darkenings and lightenings, its hue kept — and decides by identity alone.
+ */
+function widen(
+  palette: Palette,
+  hue: DecorHue,
+  from: readonly RoleShade[],
+  taken: readonly string[],
+  drawnAt: ColorDepth,
+): RoleShade | undefined {
+  const drawn = drawnIn(palette, hue, drawnAt);
+  return ladderFrom(from, palette.dark).find(
+    (rung) => !taken.includes(drawn(rung)),
   );
+}
+
+/**
+ * The rungs of the ladder that are not among `from`, nearest first: by how
+ * many rungs each stands from the nearest of `from`, where the muted form,
+ * the role blended into the theme's background, stands one rung past the
+ * ladder's end on the background's side. At an equal distance the rung away
+ * from the background comes first, because the background's side is where a
+ * pressed button's muted form sits: a window widened away from the
+ * background keeps off the shade a pressed button wears.
+ */
+function ladderFrom(from: readonly RoleShade[], dark: boolean): RoleShade[] {
+  const ladder: readonly RoleShade[] = LADDER;
+  // On a dark theme the background is below the ladder's darkest rung, on a
+  // light one above its brightest.
+  const place = (shade: RoleShade): number =>
+    shade === "muted" ? (dark ? -1 : ladder.length) : ladder.indexOf(shade);
+  const away = dark ? 1 : -1;
+  return LADDER.map((rung, at) => ({
+    rung,
+    at,
+    distance: Math.min(...from.map((shade) => Math.abs(at - place(shade)))),
+  }))
+    .filter(({ distance }) => distance > 0)
+    .sort((a, b) => a.distance - b.distance || (b.at - a.at) * away)
+    .map(({ rung }) => rung);
+}
 
 // --- Distributions ------------------------------------------------------------
 
@@ -646,8 +781,9 @@ const rowStart = (variation: Variation, row: AddressStep | undefined): number =>
  * The decorative entry a bar node's address selects under `decor`: the last
  * of the rows it stacks through chooses the hue the row starts on, so a row
  * stacked above the whole bar (edit mode's reset banner) recolours no row
- * beneath it; the cell chooses the shade, and its index how many of the
- * variation's runs it has passed along the row. A cell is a leaf of its row,
+ * beneath it; the cell chooses the shade from its hue's window in `palette`
+ * at `drawnAt` (`windowAt`), and its index how many of the variation's runs
+ * it has passed along the row. A cell is a leaf of its row,
  * however the row nests it: the leaves of an authored `{ h }` inside a row
  * sit side by side with the row's other cells, so each takes its own place
  * on the line and they differ as any neighbours do. A `{ v }` inside a row
@@ -667,20 +803,26 @@ const rowStart = (variation: Variation, row: AddressStep | undefined): number =>
  * pre-order cursor's flaw, where hiding one segment recoloured others. The
  * bundled bar stacks no rows inside a row.
  */
-export function decorEntryFor(decor: Decor, address: Address): DecorEntry {
+export function decorEntryFor(
+  palette: Palette,
+  decor: Decor,
+  address: Address,
+  drawnAt: ColorDepth,
+): DecorEntry {
   const { row, cell } = rowAndCell(address);
   // The row starts on its own step and advances one step per run along it, a
   // keystone place wears the keystone hue instead, and the cell's place picks
-  // its shade.
+  // its shade from that hue's window at the depth drawn.
   const { hues, run, keystones } = decor.variation;
   const turn = cell === undefined ? 0 : Math.floor(cell.index / run);
   const stepped = hues[(rowStart(decor.variation, row) + turn) % hues.length];
   if (stepped === undefined) throw new Error("decorEntryFor: empty variation");
+  const hue = keystones.some((at) => KEYSTONE_AT[at](row, cell))
+    ? KEYSTONE_HUE
+    : stepped;
   return {
-    hue: keystones.some((at) => KEYSTONE_AT[at](row, cell))
-      ? KEYSTONE_HUE
-      : stepped,
-    shade: vocabularySelect(decor.shade.tones, cell),
+    hue,
+    shade: vocabularySelect(windowAt(palette, hue, decor.shade, drawnAt), cell),
   };
 }
 
@@ -748,7 +890,9 @@ export const decorFor = (
   palette: Palette,
   decor: Decor,
   address: Address,
-): ColorRgba => decorEntryColour(palette, decorEntryFor(decor, address));
+  drawnAt: ColorDepth,
+): ColorRgba =>
+  decorEntryColour(palette, decorEntryFor(palette, decor, address, drawnAt));
 
 // --- Text ----------------------------------------------------------------------
 
@@ -851,16 +995,84 @@ export const hueOf = ({ decor, depth }: Disclosure): DecorHue =>
 
 /**
  * The colours a band's items wear: its hue at every tone of the dial's
- * window, as the palette names each — the same entries a bar row wears in
- * its row's hue, so a menu's items are a variation on the colour of the
- * header that opened it (Brandon, brandon-menus-sjhy.4fi), and no item is
- * a colour the theme does not name. In tone order, read by `bandItemFor`.
+ * window at the depth drawn (`windowAt`), as the palette names each — the
+ * same entries a bar row wears in its row's hue, so a menu's items are a
+ * variation on the colour of the header that opened it (Brandon,
+ * brandon-menus-sjhy.4fi), and no item is a colour the theme does not name.
+ * In tone order, read by `bandItemFor`.
  */
-export const bandEntries = (disclosure: Disclosure): readonly DecorEntry[] =>
-  disclosure.decor.shade.tones.map((shade) => ({
-    hue: hueOf(disclosure),
-    shade,
-  }));
+export const bandEntries = (
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnAt: ColorDepth,
+): readonly DecorEntry[] =>
+  windowAt(palette, hueOf(disclosure), disclosure.decor.shade, drawnAt).map(
+    (shade) => ({ hue: hueOf(disclosure), shade }),
+  );
+
+/**
+ * The shade a pressed button wears in the band `disclosure` opens, drawn at
+ * `drawnAt`: the dial's activated shade in the band's hue (`Shade.activated`),
+ * widened along the ladder (`widen`) where the depth draws it as a colour the
+ * band's layout puts beside it. A pressed shade stands in two places by
+ * construction: the band's ✕ and blank leads open each of its rows, beside
+ * its items; and the trigger that opened it stands among its own neighbours —
+ * the bar's cells for a band opened from the bar, else the items and the
+ * leads of the band one depth up, whose pressed shade the leads wear. So it
+ * keeps apart from every tone of the band's own window, from every tone the
+ * trigger's neighbours are dealt, and from the pressed shade one depth up.
+ * Where the role's whole ladder draws as those colours it keeps the dial's
+ * shade: there is no other to give, and the joiner shows the seam.
+ *
+ * [LAW:one-source-of-truth] Read by `bandFor`, so the trigger, its band's
+ * leads and its ✕ wear one shade. [LAW:dataflow-not-control-flow] Built once
+ * per (palette, decor, depth, drawn depth) and memoised.
+ */
+export function pressedAt(
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnAt: ColorDepth,
+): RoleShade {
+  const { decor, depth } = disclosure;
+  const { variation, shade } = decor;
+  const key = [
+    depth,
+    variation.open.join(","),
+    variation.hues.join(","),
+    variation.keystones.length,
+    shade.tones.join(","),
+    shade.activated,
+    drawnAt,
+  ].join("|");
+  return PRESSED(palette, key, () => {
+    const hue = hueOf(disclosure);
+    const dealt = (at: DecorHue): string[] =>
+      windowAt(palette, at, shade, drawnAt).map(drawnIn(palette, at, drawnAt));
+    // Who stands beside the trigger: the bar's cells, in every hue a bar row
+    // wears, or the band one depth up — its items, and its leads in its
+    // pressed shade.
+    const keystone: readonly DecorHue[] =
+      variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
+    const besideBand = (up: Disclosure): string[] => [
+      ...dealt(hueOf(up)),
+      drawnIn(palette, hueOf(up), drawnAt)(pressedAt(palette, up, drawnAt)),
+    ];
+    const besideTrigger =
+      depth === 0
+        ? [...variation.hues, ...keystone].flatMap(dealt)
+        : besideBand({ decor, depth: depth - 1 });
+    const taken = [...dealt(hue), ...besideTrigger];
+    if (!taken.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
+      return shade.activated;
+    return (
+      widen(palette, hue, [shade.activated], taken, drawnAt) ?? shade.activated
+    );
+  });
+}
+
+// Every pressed cell of every frame asks for its shade, and the answer is a
+// pure function of what the key names.
+const PRESSED = memoPerPalette<RoleShade>();
 
 /** The band a trigger standing in `disclosure`'s band opens: one depth further. */
 const nestedIn = (disclosure: Disclosure): Disclosure => ({
@@ -873,9 +1085,9 @@ const nestedIn = (disclosure: Disclosure): Disclosure => ({
  * activated state — what the trigger that opened it wears, so a trigger is
  * drawn from what it OPENS, not from where it sits, and what the ✕ and the
  * blank leads of its rows wear; `plane` is the ground its rows sit on; `items`
- * are what the cells on that plane wear, one per tone of the dial's window
- * (`bandEntries`), which `bandItemFor` deals along a row as the bar deals its
- * shades, so neighbours differ by shade as the bar's do.
+ * are what the cells on that plane wear, one per tone of the dial's window at
+ * the depth drawn (`bandEntries`), which `bandItemFor` deals along a row as
+ * the bar deals its shades, so neighbours differ by shade as the bar's do.
  */
 export interface Band {
   readonly state: ColorRgba;
@@ -884,25 +1096,31 @@ export interface Band {
 }
 
 /**
- * The band `disclosure` opens: the lineage's hue at its depth, at the shade
- * the dial names for the activated state, on the theme's `PLANE_ROLE`. The
- * trigger of the band and the band itself are the SAME value read twice, so
- * they cannot disagree about which hue they share.
+ * The band `disclosure` opens at `drawnAt`: the lineage's hue at its depth,
+ * at its pressed shade (`pressedAt`), on the theme's `PLANE_ROLE`, its items
+ * that hue's window at the depth. The trigger of the band and the band itself
+ * are the SAME value read twice, so they cannot disagree about which hue they
+ * share.
  *
  * [LAW:one-source-of-truth] Selected, never searched: the colours are the
  * palette's own, unrounded, and the SGR writer rounds each once at the depth
  * it draws, as it does a closed cell's. Nothing here measures one colour
- * against another — text is chosen for its cell where it is drawn (`textOn`),
- * and the joiner owns every seam.
+ * against another: a shade moves along its ladder only where the depth draws
+ * it as the very colour of a neighbour, text is chosen for its cell where it
+ * is drawn (`textOn`), and the joiner owns every seam.
  */
-export function bandFor(palette: Palette, disclosure: Disclosure): Band {
+export function bandFor(
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnAt: ColorDepth,
+): Band {
   return {
     state: paletteRole(
       palette,
-      shadeRole(hueOf(disclosure), disclosure.decor.shade.activated),
+      shadeRole(hueOf(disclosure), pressedAt(palette, disclosure, drawnAt)),
     ),
     plane: paletteRole(palette, PLANE_ROLE),
-    items: bandEntries(disclosure).map((entry) =>
+    items: bandEntries(palette, disclosure, drawnAt).map((entry) =>
       decorEntryColour(palette, entry),
     ),
   };
@@ -925,8 +1143,9 @@ export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
   place: PlacedStep | undefined,
+  drawnAt: ColorDepth,
 ): ColorRgba {
-  return vocabularySelect(bandFor(palette, disclosure).items, place);
+  return vocabularySelect(bandFor(palette, disclosure, drawnAt).items, place);
 }
 
 /**
@@ -941,7 +1160,7 @@ export function bandItem(
   place: PlacedStep | undefined,
   drawnAt: ColorDepth,
 ): Pick<Decoration, "tint" | "text"> {
-  const tint = bandItemFor(palette, disclosure, place);
+  const tint = bandItemFor(palette, disclosure, place, drawnAt);
   return {
     tint,
     text: disclosure.decor.shade.text(
@@ -1073,7 +1292,7 @@ export function decorationFor(
   switch (region.kind) {
     case "bar": {
       const { decor, address } = region;
-      const entry = decorEntryFor(decor, address);
+      const entry = decorEntryFor(palette, decor, address, drawnAt);
       const tint = decorEntryColour(palette, entry);
       return {
         tint,

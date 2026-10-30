@@ -15,7 +15,7 @@
 //     one transposed palette every unpinned segment colours from.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { getThemePalette, transposePalette } from "@promptctl/rich-js";
+import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -44,6 +44,10 @@ import { DEFAULT_DECOR, decorOf } from "./helpers/decor";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
+
+// The depth every bar here is drawn at, and the one its expected tints are
+// selected at.
+const DRAWN_AT = ColorDepth.TRUECOLOR;
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -119,6 +123,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       transposePalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
       decorOf(variation, shade),
       addressOf(root, name),
+      DRAWN_AT,
     ).hex;
   return { render, root, bgOf, fgOf, expectedTint, sessionState, dispose: () => registry.dispose() };
 }
@@ -515,7 +520,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       const rePlaced: Address = address.map((step) =>
         step.axis === "cell" ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
       );
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, rePlaced).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, rePlaced, DRAWN_AT).hex]);
     }
     // The field reached the tint: the row no longer matches its unauthored self…
     plain.render();
@@ -552,7 +557,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
         name,
         [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row", lineStart: 0, lineEnd: 1 }],
       ]);
-      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, authored).hex]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, authored, DRAWN_AT).hex]);
     }
     expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
       CELLS.map((n) => plain.bgOf(n)),
@@ -702,7 +707,7 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
       flat.render({}, undefined, shade);
       expect([shade, tints(grouped, FIVE)]).toEqual([shade, tints(flat, FIVE)]);
       // The tone each cell's place selects, as the walk drew it.
-      const tones = FIVE.map((n) => decorEntryFor(decorOf(undefined, shade), addressOf(grouped.root, n)).shade);
+      const tones = FIVE.map((n) => decorEntryFor(getThemePalette(THEME), decorOf(undefined, shade), addressOf(grouped.root, n), DRAWN_AT).shade);
       const alike = FIVE.slice(1).filter((n, i) => tones[i + 1] === tones[i]);
       expect([shade, alike]).toEqual([shade, []]);
     }
@@ -715,7 +720,7 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     const grouped = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] } ]"));
     const flat = build(groupedRow("[ 'a', 'b', 'c', 'd' ]"));
     const hues = (variation: VariationName) =>
-      FOUR.map((n) => decorEntryFor(decorOf(variation), addressOf(grouped.root, n)).hue);
+      FOUR.map((n) => decorEntryFor(getThemePalette(THEME), decorOf(variation), addressOf(grouped.root, n), DRAWN_AT).hue);
     expect(hues("end-primary")).toEqual(["secondary", "secondary", "secondary", "accent"]);
     // The row under test is the bar's second, so alt starts it on its second
     // step and turns after three cells: at d, the group's last leaf.
@@ -755,7 +760,7 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     // Every drawn line has its own ends: b ends the row's line though d and e
     // reach further on the line below, and c starts that line.
     const hues = (variation: VariationName) =>
-      FIVE.map((n) => decorEntryFor(decorOf(variation), addressOf(rt.root, n)).hue);
+      FIVE.map((n) => decorEntryFor(getThemePalette(THEME), decorOf(variation), addressOf(rt.root, n), DRAWN_AT).hue);
     expect(hues("end-primary")).toEqual(["secondary", "accent", "secondary", "secondary", "accent"]);
     expect(hues("start-primary")).toEqual(["accent", "secondary", "accent", "secondary", "secondary"]);
     for (const variation of ["end-primary", "start-primary"] as const) {

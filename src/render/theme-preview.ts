@@ -1,12 +1,13 @@
 // [LAW:one-source-of-truth] `{{ themePreview }}` — a small sample of the theme
 // the bar is wearing, drawn from the colours the bar itself is drawn from
 // (brandon-theme-picker-bgw.ef6): every decoration a closed cell can wear under
-// the render's decor (each of its variation's roles at each of its shade's
-// shades), the state/plane pair of the band the preview's own lineage opens
-// from the bar — inside the settings menu, the door's, so "▾ open" is the
-// colour the open door wears — and the two alerts. Nothing here computes a
-// colour. Each swatch is a call to the SAME function the render walk calls for
-// that kind of cell (`decorEntryColour`, `bandFor`, the role lookup), on the
+// the render's decor at the depth drawn (each of its variation's roles at each
+// tone of that role's window there), the state/plane pair of the band the
+// preview's own lineage opens from the bar — inside the settings menu, the
+// door's, so "▾ open" is the colour the open door wears — and the two alerts.
+// Nothing here computes a colour. Each swatch is a call to the SAME function
+// the render walk calls for that kind of cell (`decorEntryColour` over the
+// window, `bandFor`, the role lookup), on the
 // SAME palette object the walk colours every unpinned segment from
 // (the look renderDsl publishes, `renderLook`), with its text the one the
 // walk draws there — the shade's for a closed cell, `textOn` for the rest — so
@@ -68,7 +69,7 @@ function previewRows(
   opens: Disclosure,
   drawnAt: ColorDepth,
 ): ReadonlyArray<ReadonlyArray<readonly Swatch[]>> {
-  const band = bandFor(palette, opens);
+  const band = bandFor(palette, opens, drawnAt);
   // A cell chosen its text the way the walk chooses it off its decoration.
   const chosen = (text: string, colour: ColorRgba): Swatch => ({
     text,
@@ -77,7 +78,7 @@ function previewRows(
   });
   return [
     [
-      vocabularyOf(decor).map((entry, i) => {
+      vocabularyOf(palette, decor, drawnAt).map((entry, i) => {
         const colour = decorEntryColour(palette, entry);
         return {
           text: BAR_WORDS[i % BAR_WORDS.length]!,

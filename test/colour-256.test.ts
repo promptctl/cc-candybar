@@ -14,8 +14,8 @@
 // At ansi no ratio exists, and the one floor that does is measured instead:
 // nothing is drawn on its own ground's index. At every depth an arrow's ink is
 // the cell it leaves wherever that cell's ground stands off the next one's as
-// drawn, and otherwise the colour rich-js's joiner lifts it to, with rich-js
-// itself as the oracle.
+// drawn, and otherwise lifted off the cell it enters: in truecolor to the very
+// colour rich-js's joiner lifts it to, with rich-js itself as the oracle.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
@@ -32,6 +32,7 @@ import {
   segmentsToString,
 } from "@promptctl/rich-js";
 import { POWERLINE } from "./helpers/powerline";
+import { ARROWS, DIVIDER, drawnChars, hex, isRgb, same, seams, type Char, type Drawn, type Rgb } from "./helpers/seams";
 import { NO_REPO, prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
@@ -55,23 +56,9 @@ import {
   recordRender,
   testVerbContext,
 } from "./helpers/click";
-import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { linkUrls } from "./helpers/ansi";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
-
-type Rgb = readonly [number, number, number];
-type Drawn = Rgb | { readonly ansi: number };
-
-const LEVELS = [0, 95, 135, 175, 215, 255];
-const xterm = (n: number): Drawn => {
-  if (n < 16) return { ansi: n };
-  if (n >= 232) {
-    const g = 8 + 10 * (n - 232);
-    return [g, g, g];
-  }
-  const i = n - 16;
-  return [LEVELS[Math.floor(i / 36)]!, LEVELS[Math.floor(i / 6) % 6]!, LEVELS[i % 6]!];
-};
 
 const luminance = ([r, g, b]: Rgb): number => {
   const ch = (v: number) => {
@@ -86,86 +73,6 @@ const ratio = (a: Rgb, b: Rgb): number => {
 };
 const deltaE = (a: Rgb, b: Rgb): number =>
   Oklch.fromRgba(new ColorRgba(...a)).deltaE(Oklch.fromRgba(new ColorRgba(...b)));
-
-// The joiners' glyphs, and U+E0B1, the thin divider: no joiner draws it, so
-// any divider on a row is a failure.
-const { glyph, lead, tail } = POWERLINE;
-const DIVIDER = "\u{E0B1}";
-const ARROWS = new Set([glyph, lead, tail]);
-const JOINERS = new Set([...ARROWS, "\uE0B4", "\uE0B6"]);
-
-interface Char {
-  readonly ch: string;
-  readonly fg?: Drawn;
-  readonly bg?: Drawn;
-  readonly joiner: boolean;
-  // Drawn in reverse video: a cap's notch, its ink the terminal's ground.
-  readonly reverse: boolean;
-  // The ground of the column drawn just before it on its line, spaces
-  // included: for an arrow, the cell it leaves.
-  readonly before?: Drawn;
-}
-
-/**
- * Every non-space character with the fg and bg it is drawn in. Solid joiners
- * are kept (`joiner: true`): their fg is a neighbour's bg, a shape to keep
- * seamless, not text to keep legible.
- */
-function drawnChars(rendered: string): Char[] {
-  const out: Char[] = [];
-  let fg: Drawn | undefined;
-  let bg: Drawn | undefined;
-  let reverse = false;
-  let before: Drawn | undefined;
-  let pos = 0;
-  const text = (t: string) => {
-    for (const ch of t) {
-      if (ch === "\n") {
-        before = undefined;
-        continue;
-      }
-      if (ch.trim() !== "") out.push({ ch, fg, bg, joiner: JOINERS.has(ch), reverse, before });
-      before = reverse ? fg : bg;
-    }
-  };
-  // Every zero-width escape, read by the renderer's own pattern (rich-js's
-  // OSC 8 grammar); only SGR carries colour.
-  for (const m of rendered.matchAll(INVISIBLE)) {
-    text(rendered.slice(pos, m.index));
-    pos = m.index + m[0].length;
-    const sgr = /^\x1b\[([0-9;]*)m$/.exec(m[0]);
-    if (sgr === null) continue;
-    const ps = sgr[1]!.split(";").map((p) => (p === "" ? 0 : Number(p)));
-    for (let i = 0; i < ps.length; i++) {
-      const p = ps[i]!;
-      if (p === 0) [fg, bg, reverse] = [undefined, undefined, false];
-      else if (p === 7) reverse = true;
-      else if (p === 27) reverse = false;
-      else if (p === 39) fg = undefined;
-      else if (p === 49) bg = undefined;
-      else if ((p === 38 || p === 48) && ps[i + 1] === 2) {
-        const c: Rgb = [ps[i + 2]!, ps[i + 3]!, ps[i + 4]!];
-        if (p === 38) fg = c;
-        else bg = c;
-        i += 4;
-      } else if ((p === 38 || p === 48) && ps[i + 1] === 5) {
-        const c = xterm(ps[i + 2]!);
-        if (p === 38) fg = c;
-        else bg = c;
-        i += 2;
-      } else if (p >= 30 && p <= 37) fg = { ansi: p - 30 };
-      else if (p >= 90 && p <= 97) fg = { ansi: p - 90 + 8 };
-      else if (p >= 40 && p <= 47) bg = { ansi: p - 40 };
-      else if (p >= 100 && p <= 107) bg = { ansi: p - 100 + 8 };
-    }
-  }
-  text(rendered.slice(pos));
-  return out;
-}
-
-const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
-const same = (a: Drawn | undefined, b: Drawn | undefined): boolean => JSON.stringify(a) === JSON.stringify(b);
-const hex = (c: Rgb): string => `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 
 // Whether ink stands off its ground as a depth draws the two: by the seam
 // floor between two fixed colours, by a different slot between two of the
@@ -203,7 +110,7 @@ function joinerInk(left: Rgb, right: Rgb, depth: ColorCompatibility): Drawn | un
   );
   // The seam is the arrow between the two cells' text.
   const seam = drawn[drawn.findIndex((c) => c.ch === "x") + 1];
-  if (seam === undefined || seam.ch !== glyph) throw new Error(`rich-js drew no seam between ${hex(left)} and ${hex(right)}`);
+  if (seam === undefined || seam.ch !== POWERLINE.glyph) throw new Error(`rich-js drew no seam between ${hex(left)} and ${hex(right)}`);
   inks.set(key, seam.fg);
   return seam.fg;
 }
@@ -211,37 +118,50 @@ function joinerInk(left: Rgb, right: Rgb, depth: ColorCompatibility): Drawn | un
 /**
  * Every arrow `drawn` (the bar at `depth`) leaves a cell in: its ink is that
  * cell's ground as drawn wherever the ground stands off the one it enters, and
- * otherwise the colour rich-js's joiner lifts it to from the two grounds
- * `truecolor` (the same bar, same state) drew. A tail enters no ground and
+ * otherwise lifted off the one it enters — in truecolor (`truecolor`, the same
+ * bar, same state) to the colour rich-js's joiner lifts it to from the two
+ * grounds. A tail enters no ground and
  * continues its cell; a lead is a notch drawn in reverse video and leaves no
  * cell. Returns how many seams were measured.
  */
 function seamInks(label: string, truecolor: Chars, drawn: Chars, depth: ColorCompatibility, failures: string[]): number {
   expect([label, drawn.map((c) => c.ch).join("")]).toEqual([label, truecolor.map((c) => c.ch).join("")]);
-  let seams = 0;
-  drawn.forEach(({ ch, fg, bg, reverse, before }, i) => {
-    if (!ARROWS.has(ch) || reverse || before === undefined) return;
-    const at = `${label} ${depth} ${ch}`;
-    if (bg === undefined) {
-      if (!same(fg, before)) failures.push(`${at}: tail ${JSON.stringify(fg)} after a cell on ${JSON.stringify(before)}`);
-      return;
+  let measured = 0;
+  for (const { glyph, left, right, ink, at } of seams(drawn)) {
+    const where = `${label} ${depth} ${glyph}`;
+    if (right === undefined) {
+      if (!same(ink, left)) failures.push(`${where}: tail ${JSON.stringify(ink)} after a cell on ${JSON.stringify(left)}`);
+      continue;
     }
-    seams++;
-    const from = truecolor[i]!;
-    if (standsOff(before, bg)) {
-      if (!same(fg, before))
-        failures.push(`${at}: arrow ${JSON.stringify(fg)} after a cell on ${JSON.stringify(before)}, which stands off ${JSON.stringify(bg)}`);
-      return;
+    measured++;
+    const from = truecolor[at]!;
+    if (standsOff(left, right)) {
+      if (!same(ink, left))
+        failures.push(`${where}: arrow ${JSON.stringify(ink)} after a cell on ${JSON.stringify(left)}, which stands off ${JSON.stringify(right)}`);
+      continue;
     }
     if (!isRgb(from.before) || !isRgb(from.bg)) {
-      failures.push(`${at}: arrow between grounds truecolor drew in terminal-defined ANSI colours`);
-      return;
+      failures.push(`${where}: arrow between grounds truecolor drew in terminal-defined ANSI colours`);
+      continue;
+    }
+    // The oracle is fed the colours a cell wears before the writer rounds
+    // them, which only the truecolor frame names: a lower depth can deal a
+    // cell another shade of its role than truecolor does (src/themes/decor.ts
+    // `windowAt`, `pressedAt`), and its bytes show only the rounding, which
+    // two shades can share while rich-js lifts from the unrounded colour.
+    // Asking the policy which shade it dealt would make the function under
+    // test its own oracle, so there the lift is held to what the joiner
+    // guarantees, as drawn: off the cell it enters.
+    if (depth !== "truecolor") {
+      if (!standsOff(ink, right))
+        failures.push(`${where}: arrow ${JSON.stringify(ink)} between ${JSON.stringify(left)} and ${JSON.stringify(right)}, not lifted off the cell it enters`);
+      continue;
     }
     const lifted = joinerInk(from.before, from.bg, depth);
-    if (!same(fg, lifted))
-      failures.push(`${at}: arrow ${JSON.stringify(fg)} between ${JSON.stringify(before)} and ${JSON.stringify(bg)}, where rich-js lifts it to ${JSON.stringify(lifted)}`);
-  });
-  return seams;
+    if (!same(ink, lifted))
+      failures.push(`${where}: arrow ${JSON.stringify(ink)} between ${JSON.stringify(left)} and ${JSON.stringify(right)}, where rich-js lifts it to ${JSON.stringify(lifted)}`);
+  }
+  return measured;
 }
 
 // The floors the bar's text is chosen by, highest first: body text at AA, and
@@ -249,7 +169,7 @@ function seamInks(label: string, truecolor: Chars, drawn: Chars, depth: ColorCom
 // cleared in truecolor.
 const FLOORS = [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST];
 
-type Chars = ReturnType<typeof drawnChars>;
+type Chars = readonly Char[];
 
 /**
  * Every way `quantized` (the 256 render) fails `truecolor` (the same bar, same
