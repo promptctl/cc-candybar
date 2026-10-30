@@ -408,16 +408,28 @@ export interface DecorEntry {
 }
 
 /**
- * The decorations `decor` names: each of its roles at each of its dial
- * position's tones, as the theme names them — what a theme's preview samples.
- * The same at every depth, so a frame keeps its shape at every depth; a cell
- * selects from its window at the depth drawn (`windowAt`), which a depth can
- * narrow or widen.
+ * The decorations a closed cell can wear under `decor` in `palette` at
+ * `drawnAt` — what a theme's preview samples: each of its roles at every tone
+ * of that role's window there (`windowAt`), in the window's order, dealt
+ * across as many places as the dial position names tones. The count is the
+ * dial's at every depth, so a frame keeps its shape at every depth, while
+ * the colours are the ones the depth deals; and a window of two or more
+ * tones never puts one colour on two places side by side.
  */
-export const vocabularyOf = (decor: Decor): readonly DecorEntry[] =>
-  decor.variation.hues.flatMap((hue) =>
-    decor.shade.tones.map((shade) => ({ hue, shade })),
-  );
+export const vocabularyOf = (
+  palette: Palette,
+  decor: Decor,
+  drawnAt: ColorDepth,
+): readonly DecorEntry[] =>
+  decor.variation.hues.flatMap((hue) => {
+    const window = windowAt(palette, hue, decor.shade, drawnAt);
+    // [LAW:no-defensive-null-guards] A window is never empty (`Tones`), so a
+    // place taken modulo its length is in range; the `!` states that.
+    return decor.shade.tones.map((_, at) => ({
+      hue,
+      shade: window[at % window.length]!,
+    }));
+  });
 
 // --- The window at a depth ----------------------------------------------------
 
@@ -506,9 +518,9 @@ function widen(
  * many rungs each stands from the nearest of `from`, where the muted form,
  * the role blended into the theme's background, stands one rung past the
  * ladder's end on the background's side. At an equal distance the rung away
- * from the background comes first: that side is where the pressed button's
- * muted form sits, so a window widened away from it keeps off the shade a
- * pressed button wears.
+ * from the background comes first, because the background's side is where a
+ * pressed button's muted form sits: a window widened away from the
+ * background keeps off the shade a pressed button wears.
  */
 function ladderFrom(from: readonly RoleShade[], dark: boolean): RoleShade[] {
   const ladder: readonly RoleShade[] = LADDER;

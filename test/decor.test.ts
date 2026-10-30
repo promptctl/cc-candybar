@@ -69,7 +69,7 @@ import {
   withSiblingAdded,
   type Shape,
 } from "./helpers/seeded-trees";
-import { DRAWN, LADDER, REGISTRY, SHADE_NAMES, TODAY, VARIATION_NAMES, VDC, cell, row, shownAt } from "./helpers/decor-vocabulary";
+import { DRAWN, LADDER, REGISTRY, SHADE_NAMES, TODAY, VARIATION_NAMES, VDC, besidePress, cell, row, shownAt } from "./helpers/decor-vocabulary";
 
 const DRACULA = getThemePalette("dracula");
 // The depth the placement properties are stated at. Dracula names every rung
@@ -269,6 +269,29 @@ describe("a dial window at a depth", () => {
       }
     }
   });
+
+  test("what a theme's preview samples is every tone of each hue's window at the depth, over as many places as the dial names tones, no two places side by side drawn alike where the window has two", () => {
+    const wrong: string[] = [];
+    for (const drawnAt of DRAWN) {
+      const shown = shownAt(drawnAt);
+      for (const palette of REGISTRY) {
+        for (const shade of SHADE_NAMES) {
+          const decor: Decor = { variation: VARIATIONS.duo, shade: SHADES[shade] };
+          const sampled = vocabularyOf(palette, decor, drawnAt);
+          for (const hue of decor.variation.hues) {
+            const window = windowAt(palette, hue, SHADES[shade], drawnAt);
+            const dealt = sampled.filter((entry) => entry.hue === hue).map((entry) => entry.shade);
+            const drawn = dealt.map((tone) => shown(paletteRole(palette, shadeRole(hue, tone))).hex);
+            const where = `${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}: ${dealt.join()}`;
+            if (dealt.length !== SHADES[shade].tones.length) wrong.push(`${where}, not one place per tone the dial names`);
+            if ([...new Set(dealt)].sort().join() !== [...window].sort().join()) wrong.push(`${where}, not the window ${window.join()}`);
+            if (window.length > 1 && drawn.some((c, i) => i > 0 && c === drawn[i - 1])) wrong.push(`${where}, two places side by side drawn alike`);
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
 });
 
 describe("the colour is its role at a shade, as the palette names it", () => {
@@ -276,7 +299,8 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     for (const name of listThemePalettes()) {
       const palette = getThemePalette(name);
       for (const shade of SHADE_NAMES) {
-        for (const entry of vocabularyOf({ variation: VARIATIONS.duo, shade: SHADES[shade] })) {
+        const entries = VARIATIONS.duo.hues.flatMap((hue) => SHADES[shade].tones.map((tone) => ({ hue, shade: tone })));
+        for (const entry of entries) {
           const named = entry.shade === "base" ? entry.hue : `${entry.hue}-${entry.shade}`;
           expect([name, named, decorEntryColour(palette, entry).hex]).toEqual([
             name,
@@ -792,15 +816,9 @@ describe("an open menu wears shades its theme names, selected and never searched
           const variation = VARIATIONS[name];
           for (const shade of SHADE_NAMES) {
             const decor: Decor = { variation, shade: SHADES[shade] };
-            const dealt = (hue: DecorHue): string[] => windowAt(palette, hue, SHADES[shade], drawnAt).map((tone) => drawn(hue, tone));
-            const keystone: readonly DecorHue[] = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
-            const barHues = [...variation.hues, ...keystone];
             for (const depth of [0, 1, 2, 3]) {
               const hue = lineageHue(variation.open, depth);
-              const up: Disclosure = { decor, depth: depth - 1 };
-              const beside =
-                depth === 0 ? barHues.flatMap(dealt) : [...dealt(hueOf(up)), shown(bandFor(palette, up, drawnAt).state).hex];
-              const taken = new Set([...dealt(hue), ...beside]);
+              const taken = besidePress(palette, decor, depth, drawnAt);
               const { activated } = SHADES[shade];
               const apart = [activated, ...nearestFrom([activated], palette.dark)].filter((tone) => !taken.has(drawn(hue, tone)));
               const pressed = pressedAt(palette, { decor, depth }, drawnAt);
@@ -835,8 +853,8 @@ describe("an open menu wears shades its theme names, selected and never searched
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       const pressed = [0, 1, 2, 3].map((depth) => shown(bandFor(nord, { decor, depth }, drawnAt).state).hex);
-      // The dial's shade is one colour at every depth of a one-hue lineage.
-      expect(new Set([0, 1].map((depth) => shown(paletteRole(nord, shadeRole("primary", SHADES[floorOf("shade")].activated))).hex)).size).toBe(1);
+      // One hue at every depth, so every depth's band presses into one ladder.
+      expect([0, 1, 2, 3].map((depth) => hueOf({ decor, depth }))).toEqual(["primary", "primary", "primary", "primary"]);
       for (const depth of [1, 2, 3]) {
         const ladderHasOne = LADDER.some((r) => {
           const c = shown(paletteRole(nord, shadeRole("primary", r))).hex;
