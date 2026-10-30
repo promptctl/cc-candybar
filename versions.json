@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-502",
+      "ref": "refs/pull/502/merge",
+      "sha": "5c4a3d3a42756388a28839c8b809e533fc3a5233",
+      "timestamp": "2026-10-30T19:45:24.539Z",
+      "commits": [
+        {
+          "sha": "5c4a3d3a42756388a28839c8b809e533fc3a5233",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T19:44:35Z",
+          "message": "Merge 426ec90272ce1cdfb4da6a96655b155ae04cd88f into 35846ae8042324805c53b14c0c5fc02d669edcd3\n"
+        },
+        {
+          "sha": "426ec90272ce1cdfb4da6a96655b155ae04cd88f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:34:58-06:00",
+          "message": "fix(test): the log line is spelled once, and a timed-out click's event waits on the click's reply budget (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "aa9d6e95e0b30afa6eb1d5c21c716b06fdb74abe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:29:11-06:00",
+          "message": "fix(test): a log read judges only whole lines, the reporter pairs each failure with its own block, and the click stand-in leaves no timer behind (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "ae81e9a5f383b7c7ef905f29c2af35edfa6dbf3d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:34:40-06:00",
+          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "f6a46cb97b48372bc09526e3f832d55de5613fd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:22:49-06:00",
+          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "35846ae8042324805c53b14c0c5fc02d669edcd3",
@@ -13,49 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T13:41:50-06:00",
           "message": "fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686) (#506)\n\n* fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686)\n\nA cell's shade is selected from its hue's window at the depth drawn: the\ndial position's tones the depth draws as distinct colours, by identity\nafter rounding (rich-js drawnColour), widened along the ladder to the\nnearest rung drawn apart where the depth draws them all as one. A pressed\nshade (the activated trigger, its band's leads and ✕) is the dial's\nactivated rung widened by the same function until it draws apart from its\nband's items, its trigger's neighbours and the press a depth up. Both are\nmemoised per palette and read by entryOf as before.\n\nThe closing sweep renders every bundled theme at truecolor, 256 and ansi,\nclosed and on each settings tab, through the session rig, and holds every\nseam to two grounds drawn as two colours. One seam reader in test/helpers\nserves the sweep, colour-256 and the theme-identity audit.\n\n* test(colour): the door's ✖ at a lower depth is held on the rung the depth presses it into (candybar-joiners-e5r4.686)\n\nAt 256 colours and ansi the door's ground is the pressed shade at that\ndepth, which moves along the ladder where the depth draws the dial's rung\nlike what stands beside the door. Where the ground is the truecolor one\nrounded, rounding never costs the ✖ the contrast it has at truecolor, as\nbefore. On another rung the ✖ stands as far off as the door's rule puts a\nred there at truecolor: the text floor where a named red clears it, else\nthe farthest of them. The looks at a lower depth are the first to reach\neach ground the depth gives the door, and each ground is held to its name.\n\nThe listing of grounds no named red clears, regenerated from the rendered\nbar at truecolor, is unchanged: no truecolor ground moves.\n\n* fix(colour): a theme's preview samples each hue's window at the depth drawn, so it shows what the bar deals there (candybar-joiners-e5r4.686)\n\nThe preview's bar row sampled the dial's named tones at every depth, while a\nclosed cell now wears its hue's window at the depth. At ansi a widened window\nholds a rung the dial does not name, so the preview showed one colour where the\nbar alternates two (catppuccin-mocha and default at ansi). The preview now deals\nevery tone of each hue's window across as many swatches as the dial names\ntones, so its shape is the same at every depth and its colours are the depth's.\nAt truecolor every window outside textual-ansi is the dial's own, so no\ntruecolor byte moves.\n\nWhat the design stands beside a pressed shade is stated once in the tests'\nwords (besidePress), which the pressed-shade test reads and the closing sweep\nwill. The one-hue lineage test states its premise, one hue at every depth, in\nplace of an assertion that compared a value with itself. The ladder's tie-break\ncomment now says which side the muted form sits on.\n\n* test(colour): the closing sweep exempts a seam by the cells it joins, never by the colour they share (candybar-joiners-e5r4.686)\n\nThe flat-ladder and no-rung-left exemptions matched a seam's colour, so at ansi\ntwo other cells meeting on that slot would have passed unheld. Each is now read\noff the seam's two cells, by the shade the render dealt each before rounding:\na flat seam joins two cells of a flat role, a press seam touches a cell in a\npressed shade with nothing left to give. The press rule reads its adjacencies\nfrom the tests' one statement of them. Each listed authored cell must wear an\nalert in every frame, so a cell wearing its tint is never exempt. The counts\nare unchanged: 9,660 seams, 2,484 beside an authored cell, 198 flat, 130 press.\n\ncolour-256 says why a lower-depth lift is held as drawn: an exact oracle needs\nthe shade the depth dealt, which the bytes do not show and the policy cannot\nbe asked for without being its own oracle.\n\n* test(colour): the sweep knows a cell by its text and the colour it is drawn in, and exempts a seam only where every such cell wears an exempt shade (candybar-joiners-e5r4.686)\n\nEvery ✕ and every blank lead shares one visible text, so keyed by text alone a\npress at one depth with nothing to give lent its exemption to a ✕ or lead at\nanother. A seam is now exempt only where every cell of that text drawn in that\ncolour wears a flat role's shade, or a pressed shade with nothing left to give.\nThe counts are unchanged: 2,484 authored, 198 flat, 130 press.\n\n* docs(colour): a flat role's window says why it never widens into the muted form (candybar-joiners-e5r4.686)\n\ntextual-ansi's muted form draws apart from its one-colour ladder, so a flat\nrole has a second colour; the window keeps off it because on the ladder's\npositions it is the pressed button's shade. The window's type, the sweep's flat\nrule and the adjacency test now say \"no second rung\" rather than \"no second\ncolour\"."
-        }
-      ]
-    },
-    {
-      "version": "pr-502",
-      "ref": "refs/pull/502/merge",
-      "sha": "e675b83b3fab30edc3c6e925bd01ca87d7d4d8b2",
-      "timestamp": "2026-10-30T19:38:12.066Z",
-      "commits": [
-        {
-          "sha": "e675b83b3fab30edc3c6e925bd01ca87d7d4d8b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T19:37:24Z",
-          "message": "Merge 6519e75718c86dd3b92e53e9a62ddf5732cd14cc into 38412c68e7a12dce2557dc35449033e18226bae2\n"
-        },
-        {
-          "sha": "6519e75718c86dd3b92e53e9a62ddf5732cd14cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:34:58-06:00",
-          "message": "fix(test): the log line is spelled once, and a timed-out click's event waits on the click's reply budget (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "e691580eda5df3e82de7c56de251eb2dbf0fa8cf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:29:11-06:00",
-          "message": "fix(test): a log read judges only whole lines, the reporter pairs each failure with its own block, and the click stand-in leaves no timer behind (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "8e7c05067bbfba88178b11731c45eb3fde3db427",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:34:40-06:00",
-          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "7799783b7d10a2b9ffeb83747a3eb0ee59fee107",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:22:49-06:00",
-          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
         }
       ]
     }
