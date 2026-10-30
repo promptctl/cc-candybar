@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-499",
+      "ref": "refs/pull/499/merge",
+      "sha": "b5412033d2dd836ec6ee0a224973a2dbf4bf984a",
+      "timestamp": "2026-10-30T15:03:53.540Z",
+      "commits": [
+        {
+          "sha": "b5412033d2dd836ec6ee0a224973a2dbf4bf984a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:03:02Z",
+          "message": "Merge a140c5f852d0150b3065caf6351fbbfb334795e9 into b1b30c3e8dc47d1989a6d2abe48e0e0eca3f232c\n"
+        },
+        {
+          "sha": "a140c5f852d0150b3065caf6351fbbfb334795e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:02:51-06:00",
+          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "ab74d23aefa8adf9e50b569a8c200d4b4dd988e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:43:47-06:00",
+          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-498",
       "ref": "refs/pull/498/merge",
       "sha": "ea0dbf1e0fd794c296f16442aed56807dc3e09fd",
@@ -91,28 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:17:10-06:00",
           "message": "test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-499",
-      "ref": "refs/pull/499/merge",
-      "sha": "9fb4f7c20591a281988df8670b6ffdf2a20d5126",
-      "timestamp": "2026-10-30T14:45:15.282Z",
-      "commits": [
-        {
-          "sha": "9fb4f7c20591a281988df8670b6ffdf2a20d5126",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:44:20-06:00",
-          "message": "Merge ab74d23aefa8adf9e50b569a8c200d4b4dd988e4 into b1b30c3e8dc47d1989a6d2abe48e0e0eca3f232c\n"
-        },
-        {
-          "sha": "ab74d23aefa8adf9e50b569a8c200d4b4dd988e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:43:47-06:00",
-          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
         }
       ]
     },

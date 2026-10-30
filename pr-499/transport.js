@@ -49538,27 +49538,31 @@ var RENDERERS = ["claude", "tmux"];
 var IN_TMUX = 'ne .tmux.pane ""';
 var LANES = {
   band: {
-    switch: { setting: "experimentalBand", on: true },
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "\u{1F9EA} band (A)",
-    elsewhere: "the band above the prompt",
+    handsOff: true,
     rows: null
   },
   statusline: {
-    switch: { setting: "experimentalStatusline", on: true },
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "\u{1F9EA} statusline (B)",
-    elsewhere: null,
+    handsOff: false,
     rows: null
   },
   pane: {
-    switch: { setting: "experimentalPane", on: true },
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "\u{1F9EA} tmux pane (C)",
-    elsewhere: "a tmux pane below",
+    handsOff: true,
     rows: null
   },
   tmuxStatus: {
-    switch: { setting: "renderer", on: "tmux" },
+    switch: {
+      setting: "renderer",
+      on: "tmux",
+      inTmux: true
+    },
     label: "tmux status line",
-    elsewhere: "the tmux status line",
+    handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
     rows: 5
   }
@@ -51336,6 +51340,46 @@ init_globals();
 
 // src/config/loader/globals.ts
 init_globals();
+
+// src/config/menu-places.ts
+init_globals();
+var TABS = [
+  { member: "session", label: "\u26A1 session" },
+  { member: "look", label: "\u{1F3A8} look" },
+  // `📐`, because `▦` is the preset control's glyph.
+  { member: "layout", label: "\u{1F4D0} layout" },
+  { member: "config", label: "\u2699 config" },
+  { member: "tools", label: "\u{1F9F0} tools" }
+];
+var TAB_LABEL = Object.fromEntries(
+  TABS.map((t2) => [t2.member, t2.label])
+);
+var SUBMENUS = {
+  gear: { beside: "theme", trigger: "\u2699" },
+  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" },
+  // The looks still on trial (Brandon: "put them in a separate menu"): the
+  // members of a setting's domain its row names as `trials`, each setting's
+  // in a picker of its own, off the control everyone turns.
+  trials: { beside: "shade", trigger: "\u{1F9EA} trials" }
+};
+var SUBMENU_NAMES = Object.keys(SUBMENUS);
+var PLACE = perSetting(
+  (name) => SETTINGS[name].place
+);
+var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
+var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var settingMenuPath = (name) => placePath(PLACE[name]);
+var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+  top,
+  ...SUBMENU_NAMES.filter((s) => within(s, top))
+]).map((place) => ({
+  path: placePath(place),
+  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+})).filter(({ names }) => names.length > 0);
+var laneOffReason = (lane) => `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(LANES[lane].switch.setting)}, or set globals.${LANES[lane].switch.setting}: ${JSON.stringify(LANES[lane].switch.on)}`;
+
+// src/config/loader/globals.ts
 var GLOBALS_FIELDS = Object.fromEntries(
   Object.entries(GLOBAL_FIELDS).map(([field, row2]) => [field, row2.spec])
 );
@@ -51404,7 +51448,8 @@ var REMOVED_GLOBALS = {
   progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
   // The tmux status line became a renderer the bar fully supports, so its
   // experimental toggle is a value of the renderer setting.
-  experimentalTmuxStatus: 'it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in \u2699 config \u203A renderer, from a session inside tmux)',
+  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
+  experimentalTmuxStatus: `it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} \u203A renderer, from a session inside tmux)`,
   // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
   // nerdFont check names the font that lacks them.
   charset: "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing."
@@ -51792,44 +51837,6 @@ var NODE_FLAGS = {
   version: ["-V", "--version"]
 };
 
-// src/config/menu-places.ts
-init_globals();
-var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" },
-  { member: "tools", label: "\u{1F9F0} tools" }
-];
-var TAB_LABEL = Object.fromEntries(
-  TABS.map((t2) => [t2.member, t2.label])
-);
-var SUBMENUS = {
-  gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" },
-  // The looks still on trial (Brandon: "put them in a separate menu"): the
-  // members of a setting's domain its row names as `trials`, each setting's
-  // in a picker of its own, off the control everyone turns.
-  trials: { beside: "shade", trigger: "\u{1F9EA} trials" }
-};
-var SUBMENU_NAMES = Object.keys(SUBMENUS);
-var PLACE = perSetting(
-  (name) => SETTINGS[name].place
-);
-var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
-var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
-var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
-  top,
-  ...SUBMENU_NAMES.filter((s) => within(s, top))
-]).map((place) => ({
-  path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
-})).filter(({ names }) => names.length > 0);
-var laneOffReason = (lane) => `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(LANES[lane].switch.setting)}, or set globals.${LANES[lane].switch.setting}: ${JSON.stringify(LANES[lane].switch.on)}`;
-
 // src/help-text.ts
 var LANE_PLACES = [
   ...new Set(
@@ -51996,6 +52003,7 @@ var TMUX_ENV = {
   // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
   truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
+var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
 // src/render/strip.ts
 init_globals();
@@ -53629,19 +53637,38 @@ var ARMED = "armed";
 var DISARMED = "disarmed";
 var CONFIRM_KEY_SUFFIX = ".armed";
 var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i, held) => i === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i + 1, held | 1 << i)} ${link(i + 1, held)} (${gates[i]}))`;
+  return { link: link(0, 0), actions };
+}
 function confirmStep(key, labels, fires) {
   const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
   const arm2 = `${key}.arm`;
   const disarm = `${key}.disarm`;
   const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
   return {
     // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
     // value, read back here.
-    template: `{{ if ${armed} }}{{ action "${key}" "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
     actions: {
       [arm2]: { set: stateKey, to: ARMED },
       [disarm]: { set: stateKey, to: DISARMED },
-      [key]: { do: [disarm, ...fires] }
+      ...confirm.actions
     },
     armed,
     variables: {
@@ -53676,7 +53703,7 @@ function commandTray(prefix) {
   const clear = confirmStep(
     `${prefix}clear`,
     { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
-    [typeClear]
+    [{ action: typeClear, when: "true" }]
   );
   return {
     template: COMMANDS.map(
@@ -53852,12 +53879,7 @@ var HELP_ARTIFACTS = {
 var HELP = Object.fromEntries(
   laneSettings.map(([setting, lane]) => {
     const name = `${SETTINGS_NS}help.${setting}`;
-    const node = declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS);
-    HELP_ARTIFACTS.segments[name] = {
-      ...HELP_ARTIFACTS.segments[name],
-      when: `{{ ${SETTINGS[setting].shown} }}`
-    };
-    return [setting, node];
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
   })
 );
 var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
@@ -53946,21 +53968,22 @@ var controlsUnder = (place) => MENU_CONTROLS.filter((c) => within(c.place, place
 var markedDisplay = (place) => (text3) => `(print ${templateLiteral(text3)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
   controlsUnder(place)
 )}))`;
-var controlsAt = (place) => controlsIn(place).flatMap((c) => [
-  controlNode(c),
-  ...c.help,
-  ...c.submenus.map(
-    (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
-  )
-]);
+var controlsAt = (place) => controlsIn(place).flatMap(
+  (c) => [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map(
+      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
+    )
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
+);
 var SETTINGS_WRITTEN_KEYS = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
 );
-var RESET_ALL_CONTROLS = CONTROLS.filter((c) => c.shown === "true");
 var RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "\u27F2", confirm: "\u27F2 reset all?" },
-  RESET_ALL_CONTROLS.map((c) => controlReset(c.name))
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
 );
 var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
 var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
@@ -53978,7 +54001,7 @@ var SAVE_PARTS = [
   counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
   {
     body: RESET_ALL.template,
-    shown: `(or ${anyResettable(RESET_ALL_CONTROLS)} ${RESET_ALL.armed})`
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
   }
 ];
 var SAVE_CELL = {
@@ -54301,8 +54324,7 @@ function declareSettingControls(artifacts) {
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
     artifacts.segments[controlSeg(c.id)] = {
-      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
-      when: `{{ ${c.shown} }}`
+      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
     };
     if (c.control.kind === "picker") {
       [
@@ -61563,9 +61585,10 @@ function underThemeDefault(globals, fragment) {
 }
 
 // src/config/effective-globals.ts
-var laneSwitches = (effective) => perLane(
-  (lane) => effective[LANES[lane].switch.setting] === LANES[lane].switch.on
-);
+var laneSwitches = (effective, inTmux2) => perLane((lane) => {
+  const { setting, on: on2, inTmux: needsTmux } = LANES[lane].switch;
+  return effective[setting] === on2 && (inTmux2 || !needsTmux);
+});
 function resolveValued(field, staged, sessionPick, globals) {
   const row2 = valuedRow(field);
   return effectiveGlobal(
@@ -74831,7 +74854,8 @@ function pickerFuncs(runtime, activeSegment) {
             `{{ picker }} is not available while segments.${active.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
           );
         }
-        const [line, ...rows] = renderPicker(
+        const drawnAt = activeSegment.drawnAt();
+        const draw2 = (ground) => renderPicker(
           applyName,
           apply,
           { key: page2.key, stateVar: page2.stateVar },
@@ -74850,12 +74874,15 @@ function pickerFuncs(runtime, activeSegment) {
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
             apply.paletteOf,
-            activeSegment.drawnAt(),
-            active.bg
+            drawnAt,
+            ground
           ),
-          closeOn(active.palette, active.bg, activeSegment.drawnAt())
+          closeOn(active.palette, ground, drawnAt)
         );
-        active.drops.push(...rows);
+        const band = bandFor(active.palette, active.disclosure, drawnAt);
+        const opens = apply.library !== void 0;
+        const [line, ...rows] = draw2(opens ? band.state : active.bg);
+        active.drops.push(...opens ? draw2(band.plane).slice(1) : rows);
         return line;
       },
       argTypes: ["string", "string", "bool"],
@@ -78887,7 +78914,7 @@ var sentOf = (resp) => ({
   resp,
   bytes: JSON.stringify(resp)
 });
-var answerOf3 = (answers, lane) => LANES[lane].elsewhere === null ? answers.statusline : answers.bar;
+var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.bar : answers.statusline;
 var paceOf = (period) => Math.round(1e3 / period);
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
@@ -80965,7 +80992,7 @@ function productionLaneEdge(following) {
 init_globals();
 function handedOffTo(lanes, following) {
   return LANE_NAMES.filter(
-    (lane) => lanes[lane] && LANES[lane].elsewhere !== null && following.has(lane)
+    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane)
   );
 }
 var HANDOFF_BUTTON = "[\u27F2 claude]";
@@ -81985,7 +82012,10 @@ function viewLanes(sessionId2) {
   var _stack = [];
   try {
     const hold = __using(_stack, renderCache.holdView(sessionId2));
-    return hold === null ? null : laneSwitches(hold.view.source.effective());
+    return hold === null ? null : laneSwitches(
+      hold.view.source.effective(),
+      inTmux(hold.view.facts().hints.tmux)
+    );
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -82000,7 +82030,11 @@ function lanesAt(origin, sessionId2) {
       origin.cwd,
       origin.configFile ?? void 0
     ));
-    return laneSwitches(sessionGlobals2(sessionId2, hold.state));
+    const latest = frameFeeds.latest(sessionId2);
+    return laneSwitches(
+      sessionGlobals2(sessionId2, hold.state),
+      latest === null || inTmux(latest.hints.tmux)
+    );
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -82162,7 +82196,7 @@ function setUpDraw(hold, req, hintsError, at, facts) {
 function drawRender(setup, drawing2) {
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const effective = view.source.effective();
-  const lanes = laneSwitches(effective);
+  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
   });
@@ -82422,7 +82456,10 @@ async function drawAnswer(req, at, wait, facts) {
   var _stack = [];
   try {
     const setup = __using(_stack, setUpRender(req, at, facts));
-    arrived(req, laneSwitches(setup.view.source.effective()));
+    arrived(
+      req,
+      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
+    );
     noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
     const waitFrom = performance.now();
     const refreshed = /* @__PURE__ */ new Map();
