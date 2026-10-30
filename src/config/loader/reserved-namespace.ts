@@ -104,7 +104,9 @@ export function reservedNamespaceCollisions(
 // declares — would shadow a plugin or the payload, so it is refused by every
 // config file alike, whichever scope that file's plugins load under. Only a
 // variable can shadow the payload's root itself; a segment, action or helper
-// named just `repo` sits beside every plugin's names. A segment a plugin
+// named just `repo` sits beside every plugin's names — but a segment's own
+// `vars` are variables named under it, so a segment `repo`'s var `lit` is
+// `repo.lit`, a plugin's namespace, and is refused as one. A segment a plugin
 // beneath already declares is the exception: a file retunes it by field, as
 // it retunes any inherited segment.
 export function pluginScopeCollisions(
@@ -127,6 +129,18 @@ export function pluginScopeCollisions(
         path: `${section}.${name}`,
         message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) — rename it`,
         line: findKeyLine(ctx.source, [section, name]),
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const scope = scopeOf(name);
+      if (scope === undefined || inherited.has(segment)) continue;
+      ctx.issues.push({
+        path: `segments.${segment}.vars.${v}`,
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own — rename the var or the segment`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
       });
     }
   }

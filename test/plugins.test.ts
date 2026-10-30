@@ -1426,6 +1426,7 @@ describe("a plugin names itself without its scope", () => {
     [`variables: { plugins: { kind: "literal", value: "x" } }`, `"plugins" is in "plugins", the namespace plugins own`],
     [`variables: { "repo.mine": { kind: "literal", value: "x" } }`, `"repo.mine" is in "repo"`],
     [`segments: { "repo.mine.s": { template: "x" } }`, `"repo.mine.s" is in "repo"`],
+    [`segments: { repo: { template: "x", vars: { lit: { kind: "literal", value: "y" } } } }`, `segment "repo"'s var "lit" is named "repo.lit"`],
     [`actions: { "plugins.mine.go": { copy: "x" } }`, `"plugins.mine.go" is in "plugins"`],
   ])("a config file's own %s is refused", async (decl, message) => {
     expect(fatal(await checkConfig(write("config.json5", `{ ${decl} }`), dir))).toContain(message);
