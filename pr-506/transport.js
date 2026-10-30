@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.167.0";
+var PACKAGE_VERSION = "1.167.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -37611,9 +37611,13 @@ var VARIATIONS = {
 var TRIAL_VARIATION_NAMES = Object.keys(
   TUNINGS
 );
-var vocabularyOf = (decor) => decor.variation.hues.flatMap(
-  (hue) => decor.shade.tones.map((shade) => ({ hue, shade }))
-);
+var vocabularyOf = (palette, decor, drawnAt) => decor.variation.hues.flatMap((hue) => {
+  const window2 = windowAt(palette, hue, decor.shade, drawnAt);
+  return decor.shade.tones.map((_, at) => ({
+    hue,
+    shade: window2[at % window2.length]
+  }));
+});
 function windowAt(palette, hue, shade, drawnAt) {
   return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
     const drawn = drawnIn(palette, hue, drawnAt);
@@ -60272,6 +60276,9 @@ function xdgConfigBase() {
   const xdgConfigHome = process_default.env.XDG_CONFIG_HOME ?? import_node_path21.default.join(os_default.homedir(), ".config");
   return import_node_path21.default.join(xdgConfigHome, "cc-candybar", "config");
 }
+function homeLayer(path41) {
+  return { path: path41, scope: "plugins" };
+}
 function resolveDslConfig(answers, projectDir, cwd2, configFile) {
   const unchecked = [];
   const atLocation = /* @__PURE__ */ new Map();
@@ -60305,13 +60312,16 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
     repoProject(projectDir)
   );
   const kept = found.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
-  const layers = kept.map((f) => f.file);
-  const repoLayers = kept.flatMap((f) => f.repo === null ? [] : [f.file]);
+  const layers = kept.map(
+    (f) => ({
+      path: f.file,
+      scope: f.repo === null ? "plugins" : "repo"
+    })
+  );
   if (configFile === void 0) {
     return {
       kind: "chain",
       layers,
-      repoLayers,
       home: userHome(layers),
       unchecked,
       repos
@@ -60320,7 +60330,7 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
   const [own2] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, repoLayers, home, unchecked, repos };
+    return { kind: "chain", layers, home, unchecked, repos };
   }
   return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
 }
@@ -60341,15 +60351,14 @@ function repoProject(projectDir) {
   };
 }
 function userHome(layers) {
-  return layers.find(isUserFile) ?? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`;
+  return layers.find((l) => isUserFile(l.path))?.path ?? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`;
 }
 function durableConfig(answers, projectDir, cwd2, configFile) {
   const resolved = resolveDslConfig(answers, projectDir, cwd2, configFile);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
-    above: layers.filter((l) => l !== resolved.home),
-    repoLayers: resolved.kind === "chain" ? resolved.repoLayers : [],
+    above: layers.filter((l) => l.path !== resolved.home),
     repo: resolved.repos.plugins,
     cwd: cwd2 ?? null
   };
@@ -60476,7 +60485,7 @@ function statKey(file) {
     return e.code ?? "unreadable";
   }
 }
-function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default.readFileSync(p2, "utf-8"), allowedPalettes) {
+function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_default.readFileSync(p2, "utf-8"), allowedPalettes) {
   const ctx = {
     repo: session.repo,
     checkout: session.cwd === null ? null : checkoutOf(session.cwd)
@@ -60494,7 +60503,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
   );
   const base = plugins2.config;
   const layers = [];
-  for (const path41 of paths) {
+  for (const { path: path41, scope } of chain2) {
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path41,
@@ -60504,7 +60513,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
         ...ctx,
         // [LAW:one-source-of-truth] A layer's scope is where discovery found
         // it, carried here as data — never read off the file's name.
-        scope: session.repoLayers.includes(path41) ? "repo" : "plugins",
+        scope,
         beneath: {
           dropped: [
             ...plugins2.dropped,
@@ -63472,7 +63481,7 @@ function refuseHidden(home, was, will) {
   const hidden = hiddenBy(home, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar \u2014 edit it there`
+      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar \u2014 edit it there`
     );
   }
 }
@@ -63484,7 +63493,7 @@ function homeOnly(home, read2) {
   } catch (e) {
     if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} \u2014 or it is declared by ${home.above.join(", ")}, which the bar does not edit`
+      `${e.message} \u2014 or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`
     );
   }
 }
@@ -63505,11 +63514,11 @@ function loadedOrNull(home, text4) {
 }
 function chainOver(home, text4) {
   return loadConfigChain(
-    text4 !== null ? [home.path, ...home.above] : home.above,
+    text4 !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
     { warned: () => {
     } },
-    { repo: home.repo, cwd: home.cwd, repoLayers: home.repoLayers },
+    { repo: home.repo, cwd: home.cwd },
     (p2) => p2 === home.path && text4 !== null ? text4 : fs_default.readFileSync(p2, "utf8")
   );
 }
@@ -63657,8 +63666,8 @@ function freePresetName(doc, home) {
       // Each layer above as the loader reads it (JSON5, duplicate keys and
       // all) — the editor refuses files the loader renders.
       ...home.above.flatMap(
-        (p2) => Object.keys(
-          import_json54.default.parse(fs_default.readFileSync(p2, "utf8")).presets ?? {}
+        (l) => Object.keys(
+          import_json54.default.parse(fs_default.readFileSync(l.path, "utf8")).presets ?? {}
         )
       )
     ].map(ident)
@@ -75986,7 +75995,7 @@ function previewRows(palette, decor, opens, drawnAt) {
   });
   return [
     [
-      vocabularyOf(decor).map((entry, i) => {
+      vocabularyOf(palette, decor, drawnAt).map((entry, i) => {
         const colour = decorEntryColour(palette, entry);
         return {
           text: BAR_WORDS[i % BAR_WORDS.length],
@@ -78402,7 +78411,6 @@ function loadKey(inputs) {
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,
-      repoLayers: chain2.repoLayers,
       home: chain2.home,
       repo: chain2.repo
     },
@@ -78458,7 +78466,7 @@ function resolveLoad(cwd2, chain2, storage) {
       chain2.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain2.repo, cwd: cwd2, repoLayers: chain2.repoLayers }
+      { repo: chain2.repo, cwd: cwd2 }
     );
     const inputs = {
       cwd: cwd2,
@@ -78528,7 +78536,7 @@ function buildRenderState(load, deps) {
       // What a reset clears is the home's: resets write nowhere else.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
-      configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
+      configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,
       // One entry per declaration, however many layers declare it, judged
       // over the trees as placed and every layer's insert entries, so a
       // segment only an insert entry places is used, here or not.
@@ -78555,10 +78563,11 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(frame, resolveWarnings, attempt4) {
+function settle2(frame, chain2, resolveWarnings, attempt4) {
   const common = {
-    layers: frame.layers,
-    home: frame.home,
+    // [LAW:one-source-of-truth] The files reported are the chain loaded.
+    layers: chain2.layers.map((l) => l.path),
+    home: chain2.home,
     repos: frame.repos,
     ms: Math.round(performance.now() - frame.started)
   };
@@ -78586,9 +78595,9 @@ function settle2(frame, resolveWarnings, attempt4) {
 }
 function loadChain(frame, cwd2, chain2, deps, served = null) {
   const resolved = resolveLoad(cwd2, chain2, deps.storage);
-  if (resolved.kind === "failed") return settle2(frame, [], resolved);
+  if (resolved.kind === "failed") return settle2(frame, chain2, [], resolved);
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(frame, resolved.warnings, attempt4);
+  return settle2(frame, chain2, resolved.warnings, attempt4);
 }
 function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
@@ -78601,7 +78610,6 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const { repos } = resolution;
   const chain2 = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
-    repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
     home: resolution.home,
     repo: repos.plugins
   };
@@ -78610,18 +78618,12 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
     configResolutionNotice(resolution),
     repoUnreadNotice(repos)
   ];
-  return loadChain(
-    { layers: chain2.layers, home: chain2.home, repos, advisories, started: started2 },
-    cwd2,
-    chain2,
-    deps,
-    served
-  );
+  return loadChain({ repos, advisories, started: started2 }, cwd2, chain2, deps, served);
 }
 function fallbackState(cwd2, repo2, deps) {
   const resolved = resolveLoad(
     cwd2,
-    { layers: [], repoLayers: [], home: "", repo: repo2 },
+    { layers: [], home: "", repo: repo2 },
     deps.storage
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
