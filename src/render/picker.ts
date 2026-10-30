@@ -632,7 +632,7 @@ export function pickerFuncs(
         // band, so the walk draws its first row on the band's state and the
         // drops on its plane (node-registry's `trigger` and `band`); each is
         // painted on the ground it is drawn on, read from the same band.
-        const band = bandFor(active.palette, active.disclosure, drawnAt);
+        const band = bandFor(active.palette, active.disclosure);
         // A catalogue page laid out as one line drops nothing, so its segment
         // stays closed and the line is drawn on the segment's own ground.
         const [, ...rows] = apply.library === undefined ? [] : draw(band.plane);
