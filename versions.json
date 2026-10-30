@@ -4,39 +4,39 @@
     {
       "version": "pr-488",
       "ref": "refs/pull/488/merge",
-      "sha": "0c7c034ba24c07ca5a01d5d7fceb2d41e45b2cf5",
-      "timestamp": "2026-10-30T10:56:50.555Z",
+      "sha": "631e1bbd8be89745c9bc12ecc080cdaa023a6f7b",
+      "timestamp": "2026-10-30T10:57:42.281Z",
       "commits": [
         {
-          "sha": "0c7c034ba24c07ca5a01d5d7fceb2d41e45b2cf5",
+          "sha": "631e1bbd8be89745c9bc12ecc080cdaa023a6f7b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:56:07Z",
-          "message": "Merge dadc8bfa6afe64f4c76f30237acfe0ef61ad71b2 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
+          "timestamp": "2026-10-30T10:56:47Z",
+          "message": "Merge b43976d562143771f71d20f348608a33d1133945 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
         },
         {
-          "sha": "dadc8bfa6afe64f4c76f30237acfe0ef61ad71b2",
+          "sha": "b43976d562143771f71d20f348608a33d1133945",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:55:56-06:00",
           "message": "fix(proc): a lifeline's start clears its fault only while it is the current one, and the warning names no daemon (brandon-unfiled-3248.86ga)\n\nSecond high review of the lifeline:\n\n- A spawn event from a lifeline already lost no longer clears the fault while\n  nothing guards.\n- The warning says \"their launcher\", since bar-pane and the CLI print it too.\n- The architecture memory says which children the lifeline holds (those not\n  blocking the daemon) and the one window it leaves: a daemon death while the\n  update writes the bundle tears it. The durable update act that closes it is\n  brandon-unfiled-3248.z676.\n"
         },
         {
-          "sha": "d85122577da2a3514d93fb2289e1e39068ab189d",
+          "sha": "841b92bb768219ea73d539efd8ee26209fc314a2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:42:26-06:00",
           "message": "fix(proc): the update act dies with the daemon like every child, and a lifeline change redraws every feed (brandon-unfiled-3248.86ga)\n\nMedium review of the lifeline:\n\n- Exempting the update act from the lifeline did not let it outlive the\n  daemon: its output pipes lead to the dead daemon, so a shell in it dies of\n  SIGPIPE at its next write, and the next daemon has no record of it and\n  would start a second. The act is a launch child like any other again; the\n  binary watch still holds the restart while it runs.\n- The lifeline's seam is an observer of its fault rather than a log. The\n  daemon's observer logs each change and wakes every feed, as file events'\n  delivery does, so the warning comes and goes on pushed frames too.\n"
         },
         {
-          "sha": "49442a5fcb8bb428e305b50877b17c3c9b65124d",
+          "sha": "eef9156525e04b06f71286ccde4cd1c18a4e8f09",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:35:58-06:00",
           "message": "fix(proc): the update act outlives the daemon, and a downed lifeline stands as a warning (brandon-unfiled-3248.86ga)\n\nHigh review of the lifeline:\n\n- The update act rewrites the bundle, so any daemon exit now killed it\n  half-written. A waited launch can say it outlives its launcher, and the\n  act does; the binary watch still holds the restart while it runs.\n- Why the lifeline is down is one state: the log says each change, and the\n  daemon shows it beside the file-events warning, so a broken lifeline\n  reaches the bar instead of only daemon.log.\n- awk is found on the launcher's PATH, as every launched program is, so a\n  machine without /usr/bin/awk (NixOS) is guarded.\n- The binary watch says its wait once, through the shared change logger.\n- The demo shim's resident programs are programs that answer RESIDENT, one\n  registry instead of two.\n"
         },
         {
-          "sha": "f67bf232eabeca89d06d3db58a641b84ea9b84c9",
+          "sha": "f0e04c202a4c9f4561e84b49e25901d771a696c2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:20:37-06:00",
