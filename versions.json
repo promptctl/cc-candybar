@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-485",
+      "ref": "refs/pull/485/merge",
+      "sha": "fd4d556d7298f615d29d7f77517f32b68dfd3833",
+      "timestamp": "2026-10-30T09:14:50.827Z",
+      "commits": [
+        {
+          "sha": "fd4d556d7298f615d29d7f77517f32b68dfd3833",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:14:07Z",
+          "message": "Merge 315a3feeddef3025027a6322ece1a0ee8f9acf97 into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+        },
+        {
+          "sha": "315a3feeddef3025027a6322ece1a0ee8f9acf97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:08:34-06:00",
+          "message": "fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h)\n\nThe daemon writes a probe into a folder of its own each period and judges\ndelivery for every watch it holds: delivering, stalled, or unmeasured with a\nreason. A stall or an unmeasured span draws an amber row naming the span's\nstart, daemon-stats prints a fileEvents line, and the span's close reloads\nevery config entry under events-resumed and re-reads every held plugin file.\nPlugin storage reads that one owner in place of a probe per folder, and keeps\njudging each folder's identity on the owner's period.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
       "sha": "a33db125a7d41c169010a4401b6fcb377e30115d",
