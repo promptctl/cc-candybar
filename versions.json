@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-492",
+      "ref": "refs/pull/492/merge",
+      "sha": "48450d4ebdd014a204f910498711a50015a2eb21",
+      "timestamp": "2026-10-30T12:03:17.084Z",
+      "commits": [
+        {
+          "sha": "48450d4ebdd014a204f910498711a50015a2eb21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:02:35Z",
+          "message": "Merge 0b9fc4c9d9c196a60fbf3e9a1e4b74db358c6cea into 84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9\n"
+        },
+        {
+          "sha": "0b9fc4c9d9c196a60fbf3e9a1e4b74db358c6cea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T06:02:23-06:00",
+          "message": "test(colour): drop the DecorEntry import the deleted row-ground test left unread (candybar-joiners-e5r4.dg6)\n"
+        },
+        {
+          "sha": "67bd579bce32fa219ec452c0351a18a2f7af82b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T06:02:20-06:00",
+          "message": "docs(colour): the colour design doc states the open menu's named shades, not the search they replaced (candybar-joiners-e5r4.dg6)\n\nCOLOUR-FROM-THEME-VOCABULARY.md is ACTIVE and is where the colour memory\nsends a reader for the rationale, but its rule, region table and\ndisclosure rules still described the state search, the plane's\nrecession and the floors as current. They now state the selected\nshades; a dg6 entry in Decisions says what it supersedes and points to\nPROPOSAL-joiners.md for why, and \"What was deleted\" lists the symbols.\n"
+        },
+        {
+          "sha": "30cc5846a0210a55fec753e56dd4272fb95a4bd9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:46:46-06:00",
+          "message": "test(colour): the palette-identity walk names its one exemption, and why authored backgrounds need none (candybar-joiners-e5r4.dg6)\n"
+        },
+        {
+          "sha": "f2e5c39eaa0e189d66bf48f0f0021080d76f5c20",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:38:08-06:00",
+          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9",
@@ -106,35 +149,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:29:42-06:00",
           "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-492",
-      "ref": "refs/pull/492/merge",
-      "sha": "05e40aeb6dd4616a2179881fd84c4f9b628d4e67",
-      "timestamp": "2026-10-30T11:47:46.489Z",
-      "commits": [
-        {
-          "sha": "05e40aeb6dd4616a2179881fd84c4f9b628d4e67",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:46:58Z",
-          "message": "Merge 30cc5846a0210a55fec753e56dd4272fb95a4bd9 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
-        },
-        {
-          "sha": "30cc5846a0210a55fec753e56dd4272fb95a4bd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:46:46-06:00",
-          "message": "test(colour): the palette-identity walk names its one exemption, and why authored backgrounds need none (candybar-joiners-e5r4.dg6)\n"
-        },
-        {
-          "sha": "f2e5c39eaa0e189d66bf48f0f0021080d76f5c20",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:38:08-06:00",
-          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
         }
       ]
     }
