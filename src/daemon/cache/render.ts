@@ -442,12 +442,11 @@ const heardField = (heard: Invalidation): string => {
   }
 };
 
-// What a watch heard to cause the load, whichever watch it was; `null` for a
-// load no watch caused.
+// What the entry's own config watch heard to cause the load; `null` for a
+// load it did not cause, since another watch's failure says nothing about
+// the config directories.
 const heardOf = (cause: LoadCause): Invalidation | null =>
-  cause.kind === "config-watch" || cause.kind === "answers-watch"
-    ? cause.heard
-    : null;
+  cause.kind === "config-watch" ? cause.heard : null;
 
 const causeField = (cause: LoadCause): string => {
   switch (cause.kind) {
