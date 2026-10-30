@@ -2224,4 +2224,11 @@ export class RenderCache<
     }
     return undefined;
   }
+
+  // The renderer no longer draws the session's bar (its feed closed): what
+  // its last frame listed is on no surface now, so a click naming only it is
+  // refused rather than copying a list gone stale.
+  stopDrawing(sessionId: string, by: Drawing["by"]): void {
+    this.views.get(sessionId)?.drawnCopies.delete(by);
+  }
 }

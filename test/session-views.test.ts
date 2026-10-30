@@ -523,4 +523,8 @@ test("a diagnostic a request last delivered stays copyable after a feed frame li
   expect(cache.drawnCopy("s-copy", "7")).toBe("the request's message");
   expect(cache.drawnCopy("s-copy", "9")).toBe("the feed's message");
   expect(cache.drawnCopy("s-copy", "8")).toBeUndefined();
+  // A feed that stops drawing takes its list with it.
+  cache.stopDrawing("s-copy", "feed");
+  expect(cache.drawnCopy("s-copy", "9")).toBeUndefined();
+  expect(cache.drawnCopy("s-copy", "7")).toBe("the request's message");
 });

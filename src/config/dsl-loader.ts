@@ -116,7 +116,7 @@ import { installedPlugins } from "./loader/plugin-folders.js";
 import {
   presenceOf,
   reportable,
-  segmentsPlacedAs,
+  absentPlacement,
   withoutUnplaced,
 } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
@@ -885,19 +885,16 @@ function layerInserts(
   readonly dropped: readonly FiledIssue[];
 } {
   const layers = [...beneath].reverse().concat(top);
-  const placedAs = segmentsPlacedAs(
+  // [LAW:dataflow-not-control-flow] A cell anchored on a placement whose
+  // plugin is absent is absent with it, through any chain of cells: its
+  // anchor draws nothing here, so neither does it, and neither is an error
+  // (unplaced.ts reportable).
+  const standsOnAbsent = absentPlacement(
     top.config,
     layers.flatMap((layer) => layer.raw.insert ?? []),
+    presence,
   );
-  // [LAW:dataflow-not-control-flow] A cell anchored on a placement whose
-  // plugin is absent is absent with it: its anchor draws nothing here, so
-  // neither does it, and neither is an error (unplaced.ts reportable). The
-  // anchor is a placement id, so it is the segments placed under it that are
-  // judged; an anchor naming no placement stays, and is reported missing.
-  const anchored = (cell: InsertCell): boolean => {
-    const on = placedAs(cell.anchor);
-    return on.length === 0 || on.some((seg) => presence(seg).kind !== "absent");
-  };
+  const anchored = (cell: InsertCell): boolean => !standsOnAbsent(cell.anchor);
   // [LAW:single-enforcer] A cell naming the bar's chrome (the settings menu's
   // anchor among it) never gets here: the parse refuses it (loader/layout.ts).
   const declared = (cell: InsertCell): boolean =>
@@ -916,21 +913,22 @@ function layerInserts(
     // One locator per layer, so its source is parsed at most once.
     dropped: layers.flatMap((layer) => {
       const lineOf = keyLocator(layer.source);
-      return own(layer)
-        .filter(broken)
-        .map((cell) => ({
-          file: layer.path,
-          issue: {
-            path: cell.by.entry,
-            message: unplacedMessage(
-              cell.by.entry,
-              cell.seg,
-              top.config.segments,
-              presence(cell.seg),
-            ),
-            line: lineOf(cell.by.entry.split(".")),
-          },
-        }));
+      // A cell's own segment is judged whatever it stands on: a typo under a
+      // present plugin is broken in every session, not only where its anchor
+      // draws.
+      return (layer.raw.insert ?? []).filter(broken).map((cell) => ({
+        file: layer.path,
+        issue: {
+          path: cell.by.entry,
+          message: unplacedMessage(
+            cell.by.entry,
+            cell.seg,
+            top.config.segments,
+            presence(cell.seg),
+          ),
+          line: lineOf(cell.by.entry.split(".")),
+        },
+      }));
     }),
   };
 }

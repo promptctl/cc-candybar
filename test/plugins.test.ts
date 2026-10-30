@@ -926,6 +926,26 @@ describe("an installed plugin", () => {
     expect(warnings).toEqual([]);
   });
 
+  test("an insert cell anchored on a cell that is itself absent is absent with it", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" }, three: { template: "THREE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }, { seg: "three", after: "two" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("THREE");
+    expect(rendered).not.toContain("⚠");
+    expect(warnings).toEqual([]);
+  });
+
+  test("an insert cell naming nothing is reported though its anchor's plugin is absent", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "nope", after: "repo.lit.ticket" }] }`,
+    );
+    expect(fatal(await checkConfig(p, dir))).toContain(`"nope" does not match any declared segment`);
+  });
+
   test("the settings menu's anchor is refused as an insert cell", async () => {
     const p = write(
       "config.json5",

@@ -32,8 +32,9 @@ import {
 } from "./plugin-scope.js";
 
 // [LAW:single-enforcer] The one place a placed name's presence is decided.
-// The namespaces matched are the ones that render, never parsed out of the
-// name, because a plugin's name may itself hold a dot.
+// A name is a plugin's while a namespace that renders here owns it; the scope
+// parsed from the name only tells an absent plugin's name from one nothing
+// explains.
 export function presenceOf(
   segments: Readonly<Record<string, unknown>>,
   rendering: ReadonlyMap<string, NamedDefinition>,
@@ -63,17 +64,21 @@ export function reportable(presence: SegmentPresence): boolean {
   return presence.kind === "plugin" || presence.kind === "missing";
 }
 
-// The segment each placement id names, across the config's root, every
-// preset's root and the insert cells: an anchor names a placement, not a
-// segment, so what it stands on is the segment of the placement it names.
-// One id placed under several segments (two presets alike) names them all.
-export function segmentsPlacedAs(
+// Whether a placement id stands on nothing here: every placement under it,
+// across the config's root, every preset's root and the insert cells, is of a
+// segment whose plugin is absent or is a cell anchored on such a placement,
+// at any depth. An anchor names a placement, not a segment, so it is the
+// placements it names that are judged; an id naming none is not absent, and
+// its cell is reported missing. One id placed under several segments (two
+// presets alike) is absent only when all of them are.
+export function absentPlacement(
   config: DslConfig,
   cells: readonly InsertCell[],
-): (id: string) => readonly string[] {
-  const placed = new Map<string, Set<string>>();
-  const add = (id: string, segment: string): void => {
-    placed.set(id, (placed.get(id) ?? new Set()).add(segment));
+  presence: (name: string) => SegmentPresence,
+): (id: string) => boolean {
+  const placed = new Map<string, Array<{ seg: string; anchor?: string }>>();
+  const add = (id: string, at: { seg: string; anchor?: string }): void => {
+    placed.set(id, [...(placed.get(id) ?? []), at]);
   };
   const trees = (f: RootFragment): readonly LayoutNode[] =>
     isRowsFragment(f) ? Object.values(f.rows) : [f];
@@ -85,9 +90,24 @@ export function segmentsPlacedAs(
   ];
   for (const tree of fragments.flatMap(trees))
     for (const node of walkNodes(tree))
-      if (node.kind === "segment") add(placementId(node), node.name);
-  for (const cell of cells) add(cell.id ?? cell.seg, cell.seg);
-  return (id) => [...(placed.get(id) ?? [])];
+      if (node.kind === "segment") add(placementId(node), { seg: node.name });
+  for (const cell of cells)
+    add(cell.id ?? cell.seg, { seg: cell.seg, anchor: cell.anchor });
+  // `seen` closes an anchor cycle, which places nothing and so stands on
+  // nothing absent: its cells stay and are reported missing.
+  const absent = (id: string, seen: ReadonlySet<string>): boolean => {
+    const at = placed.get(id) ?? [];
+    const on = new Set(seen).add(id);
+    return (
+      at.length > 0 &&
+      at.every(
+        (p) =>
+          presence(p.seg).kind === "absent" ||
+          (p.anchor !== undefined && !on.has(p.anchor) && absent(p.anchor, on)),
+      )
+    );
+  };
+  return (id) => absent(id, new Set());
 }
 
 // `config` with every placement of an undeclared segment removed from its

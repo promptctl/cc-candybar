@@ -381,7 +381,15 @@ const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   watch: (sessionId, onChange) =>
     reaction(() => sessionState.revision(sessionId), onChange),
   lanes: (sessionId) => viewLanes(sessionId),
-  pin: (sessionId) => renderCache.pin(sessionId),
+  // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+  // moment the feed stops drawing, so its drawn copies retire with it.
+  pin: (sessionId) => {
+    const unpin = renderCache.pin(sessionId);
+    return () => {
+      renderCache.stopDrawing(sessionId, "feed");
+      unpin();
+    };
+  },
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
   refreshes: () => refreshLedger.totals(),
