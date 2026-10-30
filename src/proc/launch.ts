@@ -383,7 +383,7 @@ export function lifelineWarnings(): LifelineWarning[] {
     : [
         {
           kind: "lifeline",
-          message: `programs the daemon runs would outlive it if it died: its launch lifeline ${fault}, and the next launch starts another`,
+          message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`,
         },
       ];
 }
@@ -409,7 +409,9 @@ function spawnLifeline(): Lifeline | null {
   statsHandle?.onEnd("lifeline", Date.now() - t0);
   // stdio[0] is "pipe", so Node hands back a socket.
   const pipe = line.stdin as Socket;
-  line.once("spawn", () => setFault(null));
+  line.once("spawn", () => {
+    if (lifeline?.process === line) setFault(null);
+  });
   line.once("error", (err) => lose(line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));

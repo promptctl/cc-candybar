@@ -512,7 +512,7 @@ describe("the lifeline", () => {
       {
         kind: "lifeline",
         message:
-          "programs the daemon runs would outlive it if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
+          "programs launched now would outlive their launcher if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
       },
     ]);
     const second = launch(grandchild("30.863"));
