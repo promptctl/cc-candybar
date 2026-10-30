@@ -3,6 +3,7 @@
 // transport (site/transport.ts) that runs the daemon's own modules in the page
 // over a simulated Node (site/shims).
 import { build } from "esbuild";
+import { landscapeDir } from "./landscape-dir.mjs";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,9 @@ mkdirSync(dist, { recursive: true });
 const page = path.join(here, "..", "scripts", "bar-web");
 for (const f of ["index.html", "rich-powerline.woff2", "FONT-LICENSE"]) copyFileSync(path.join(page, f), path.join(dist, f));
 
+const explorer = landscapeDir();
+const landscape = explorer === null ? null : explorer + "/";
+
 const result = await build({
   entryPoints: [path.join(here, "transport.ts")],
   bundle: true,
@@ -46,6 +50,7 @@ const result = await build({
   alias,
   inject: [shim("globals.ts")],
   define: { global: "globalThis", "import.meta.url": JSON.stringify("file:///app/dist/index.mjs"), __SOURCE_DIGEST__: "undefined",
+    __LANDSCAPE__: JSON.stringify(landscape),
     __PACKAGE_VERSION__: JSON.stringify(JSON.parse(readFileSync(path.join(here, "..", "package.json"), "utf8")).version) },
   logLevel: "warning",
   metafile: true,

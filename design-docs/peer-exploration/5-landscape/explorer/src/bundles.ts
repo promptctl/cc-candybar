@@ -2,6 +2,8 @@
 // 'detail' (the long text the project view shows). A bundle is a script that hands its packed
 // contents (gzip, base64) to ccBundle, so it loads from disk with no server. Each bundle loads
 // once, the first time a project in it is opened.
+import { pageUrl } from './site';
+
 export type Kind = 'bars' | 'detail';
 type Group = Record<string, unknown>;
 
@@ -43,9 +45,7 @@ export function bundle<T>(kind: Kind, n: number): Promise<Record<string, T>> {
         arrived.delete(key);
         reject(new Error(`${kind} bundle ${n} did not load`));
       };
-      // Resolved against the page's own address, not the document base: a deploy may inject a base tag
-      // pointing at its version root, and the bundles sit beside this page.
-      s.src = new URL(`${kind}/b${String(n).padStart(3, '0')}.js`, location.href).href;
+      s.src = pageUrl(`${kind}/b${String(n).padStart(3, '0')}.js`);
       document.head.append(s);
     });
     p.catch(() => {
