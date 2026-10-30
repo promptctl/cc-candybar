@@ -48,6 +48,7 @@ import {
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
+import { pageOf, viewerLink } from "./helpers/diagnostics-viewer";
 import { untilHeard } from "./helpers/reload-signal";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { until, type Condition } from "./helpers/until";
@@ -640,8 +641,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   // The bar is handed off whole: the lane drawing it carries the indicator,
-  // and the statusline is the handoff line alone, so an error shows once.
-  test("a handed-off statusline is the handoff line alone: a load warning shows once, on the lane's bar", async () => {
+  // and so does the statusline's handoff line, whose indicator opens the same
+  // viewer there. The message itself is never drawn twice.
+  test("a handed-off statusline carries the bar's indicator, which opens the viewer in the statusline", async () => {
     const sid = "feed-handoff-warned";
     await render(sockPath, sid, projectDir, {}, args("warned"));
     const band = subscribeUntilEnd(sid, "band");
@@ -649,18 +651,26 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       () => band.live().some((f) => String(barText(f)).includes("⚠ 1")),
       "a band frame carrying the indicator",
     );
-    const statusline = stripAnsi(
-      await render(sockPath, sid, projectDir, {}, args("warned")),
-    );
-    expect(statusline.trim().split("\n")).toEqual([
-      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
+    const handedOff = await render(sockPath, sid, projectDir, {}, args("warned"));
+    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
+      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON} ⚠ 1`,
     ]);
-    expect(statusline).not.toContain("⚠");
-    expect(statusline).not.toContain('duplicate key "effect"');
+    expect(stripAnsi(handedOff)).not.toContain('duplicate key "effect"');
     const last = String(barText(band.live().at(-1)!));
     expect(last).toContain("a warned mark");
     expect(last.match(/⚠/g)).toHaveLength(1);
     expect(last).not.toContain("duplicate key");
+    // The statusline's indicator opens the viewer, drawn in the statusline.
+    await click(sockPath, viewerLink(handedOff, "open")!.url);
+    const viewer = pageOf(
+      await render(sockPath, sid, projectDir, {}, args("warned")),
+    );
+    expect(viewer.position).toBe("1/1");
+    expect(viewer.text).toContain('duplicate key "effect"');
+    await click(sockPath, viewerLink(viewer.rendered, "✕")!.url);
+    expect(
+      stripAnsi(await render(sockPath, sid, projectDir, {}, args("warned"))),
+    ).toContain("the bar is drawn in the band above the prompt");
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to

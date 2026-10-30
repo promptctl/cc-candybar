@@ -231,13 +231,7 @@ export function viewerRows(
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg,
   });
-  const go = (key: string): string =>
-    effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId, DIAGNOSTICS_VIEWING, key],
-      },
-    ]);
+  const go = (key: string): string => viewerLink(sessionId, key);
   const button = (text: string, link: string | null): RichText =>
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
@@ -260,13 +254,46 @@ export function viewerRows(
   );
 }
 
-// Every row of one message, uncapped: the viewer's body, and the statusline's
-// handoff line (src/daemon/lane-handoff.ts).
+// Every row of one message, uncapped: the viewer's body.
 export function messageRows(
   message: DiagnosticMessage,
   geometry: DiagnosticGeometry,
 ): string {
-  return channelRows(message, viewerOptions(geometry)).join("\n");
+  return channelRows(message, viewerOptions(geometry), []).join("\n");
+}
+
+// [LAW:single-enforcer] The statusline's handoff line (src/daemon/lane-handoff.ts)
+// with the indicator after it: the bar it hands off carries the indicator
+// beside its door, and the statusline is what a person reads when that bar is
+// somewhere they are not looking. The indicator is the door's own — the same
+// projection, the same colours, its click opening the same viewer, which the
+// statusline then draws in the handoff line's place.
+export function handoffRows(
+  handoff: DiagnosticMessage,
+  list: DiagnosticList,
+  sessionId: string,
+  geometry: DiagnosticGeometry,
+): string {
+  const { label, fg, bg, open } = diagnosticsProjection(list);
+  const indicator =
+    label === ""
+      ? []
+      : [
+          cell(
+            label,
+            new Style({ bgcolor: bg, color: fg }).withLink(
+              viewerLink(sessionId, open),
+            ),
+          ),
+        ];
+  return channelRows(handoff, viewerOptions(geometry), indicator).join("\n");
+}
+
+// The click that shows the message whose key is `key`, or closes the viewer.
+function viewerLink(sessionId: string, key: string): string {
+  return effectsUrl([
+    { verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] },
+  ]);
 }
 
 // The viewer's own fixed shape: a plain joiner with NO separator (each word
@@ -293,14 +320,15 @@ const cell = (word: string, style: Style): RichText =>
 // how the eye tells "next issue" from "same issue, next row".
 const ISSUE_INDENT = " ";
 
-// One message → its wrapped rows. Every word is a cell carrying its span's
-// click, if any; a word wider than a row is folded at cell boundaries (rich-js
+// One message → its wrapped rows, `trailing` after its first line's words.
+// Every word is a cell carrying its span's click, if any; a word wider than a row is folded at cell boundaries (rich-js
 // chopCells, the same cell algebra FlexStrip packs by) so nothing overflows
 // the width — a long path breaks across rows rather than past the edge. Whole
 // words stay whole.
 function channelRows(
   message: DiagnosticMessage,
   opts: BuildLineOptions,
+  trailing: readonly RichText[],
 ): string[] {
   const base = new Style({
     bgcolor: message.severity.colors.bg,
@@ -320,6 +348,7 @@ function channelRows(
         .flatMap((w) => chopCells(w, fold))
         .map((w) => cell(w, styled(span.link))),
     );
-    return renderStripCells([prefix, ...cells], opts).split("\n");
+    const after = i === 0 ? trailing : [];
+    return renderStripCells([prefix, ...cells, ...after], opts).split("\n");
   });
 }

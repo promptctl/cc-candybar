@@ -196,7 +196,8 @@ import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
   diagnosticsProjection,
-  messageRows,
+  handoffRows,
+  type DiagnosticList,
   viewedIndex,
   viewerRows,
   type DiagnosticGeometry,
@@ -2507,6 +2508,8 @@ function drawRender(
         viewing === null
           ? frame.text
           : viewerRows(diagnostics, viewing, sessionId, geometry),
+      viewerOpen: viewing !== null,
+      diagnostics,
       geometry,
     },
     motion: frame.motion,
@@ -2524,9 +2527,12 @@ interface LoadWarning {
 }
 
 // What one render drew: the body — the bar, or the viewer in its place — and
-// the geometry the statusline's handoff line is drawn at.
+// what the statusline's handoff line is drawn from: whether the body is the
+// viewer, the draw's one diagnostic list, and the geometry.
 interface DrawnBar {
   readonly body: string;
+  readonly viewerOpen: boolean;
+  readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
 }
 
@@ -2711,8 +2717,10 @@ async function drawAnswer(
 }
 
 // What Claude Code's statusline shows of `drawn`: the bar (`output`), or —
-// while lanes draw it `elsewhere` — the handoff line alone, which says where.
-// The indicator and the viewer are the lanes' to draw, so an error shows once.
+// while lanes draw it `elsewhere` — the handoff line, which says where, with
+// the bar's indicator after it. [LAW:one-source-of-truth] The indicator reads
+// the draw's one list, and its click opens the one viewer: while it is open
+// the statusline shows it, the same body the lanes draw.
 function statuslineOf(
   sessionId: string,
   drawn: DrawnBar,
@@ -2720,8 +2728,12 @@ function statuslineOf(
   elsewhere: readonly Lane[],
 ): string {
   const [first, ...rest] = elsewhere;
-  return first === undefined
+  return first === undefined || drawn.viewerOpen
     ? output
-    : messageRows(laneHandoff(sessionId, [first, ...rest]), drawn.geometry) +
-        "\n";
+    : handoffRows(
+        laneHandoff(sessionId, [first, ...rest]),
+        drawn.diagnostics,
+        sessionId,
+        drawn.geometry,
+      ) + "\n";
 }
