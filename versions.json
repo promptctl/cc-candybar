@@ -4,15 +4,22 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "849c8d89047ee230e6c7f4a7393023b7e74c6eab",
-      "timestamp": "2026-10-30T07:34:12.257Z",
+      "sha": "fdaaee2d030d06243fdff48cacaa578a702a03e7",
+      "timestamp": "2026-10-30T07:39:41.210Z",
       "commits": [
         {
-          "sha": "849c8d89047ee230e6c7f4a7393023b7e74c6eab",
+          "sha": "fdaaee2d030d06243fdff48cacaa578a702a03e7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:33:20Z",
-          "message": "Merge 8e5bc1b69d4a72766909d7f660594cb56add89c9 into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+          "timestamp": "2026-10-30T07:38:56Z",
+          "message": "Merge a84477fa81a22d5bb842bf8d38d2c1b1c52e26ea into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+        },
+        {
+          "sha": "a84477fa81a22d5bb842bf8d38d2c1b1c52e26ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:38:44-06:00",
+          "message": "Merge origin/main into worktree-statusline-landscape\n"
         },
         {
           "sha": "8e5bc1b69d4a72766909d7f660594cb56add89c9",
