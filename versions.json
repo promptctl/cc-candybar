@@ -4,15 +4,22 @@
     {
       "version": "pr-510",
       "ref": "refs/pull/510/merge",
-      "sha": "08e67c5e727c6c85e253afbd78bd311e78997aa2",
-      "timestamp": "2026-10-30T21:37:26.541Z",
+      "sha": "56a42136b004710131d6de2d16733d9c1d2989a8",
+      "timestamp": "2026-10-30T21:49:13.975Z",
       "commits": [
         {
-          "sha": "08e67c5e727c6c85e253afbd78bd311e78997aa2",
+          "sha": "56a42136b004710131d6de2d16733d9c1d2989a8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:36:37-06:00",
-          "message": "Merge adb77e06d7b92db28d7f78c67aefd577d41dedb0 into 19183e1e39371f3a80b53ee9182655ebec2787f9\n"
+          "timestamp": "2026-10-30T21:48:22Z",
+          "message": "Merge 5c0fc8093b446235274a1a7c152a42c9cb368ac0 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+        },
+        {
+          "sha": "5c0fc8093b446235274a1a7c152a42c9cb368ac0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:48:09-06:00",
+          "message": "fix(colour): a window leaves its ladder's last colour to the pressed button, so a press keeps a colour at ansi (candybar-joiners-e5r4.cfm)\n\nWidening every window to its position's count at ansi took the slot a\nthree-slot ladder's pressed button needed, so press seams the sweep\ncannot hold rose. A press drawn like its neighbour breaks the rule; a\nthird closed tone is only look. A window now holds\nmax(2, min(count, colours the depth draws of the ladder - 1)) tones:\nthe position's count where the ladder draws at least one colour more,\ntwo at ansi wherever a ladder draws three slots. Still one widening\nthrough `widen`, still a memoised lookup, decided by identity alone.\n\nThe window and adjacency tests state that size in their own words, the\npinned turn example returns to catppuccin-frappe's middle row, and policy\n3, its acceptance line and the colour memory say why the window leaves\nthe press a colour.\n"
         },
         {
           "sha": "adb77e06d7b92db28d7f78c67aefd577d41dedb0",
