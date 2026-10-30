@@ -1399,6 +1399,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchersClosed: 0,
       watchRefusals: 0,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
@@ -1425,6 +1427,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchersClosed: 0,
       watchRefusals: 1,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     });
     expect(watchers.size()).toBe(1);
     svc.close();
@@ -1469,6 +1473,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 0,
         watchRefusals: 0,
         watchErrors: 0,
+        // The git directory and the refs tree, never reopened.
+        dirWatchesOpened: 2,
+        dirWatchesClosed: 0,
       });
     } finally {
       svc.close();
@@ -1516,6 +1523,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 1,
         watchRefusals: 0,
         watchErrors: 0,
+        // Both directories were made again: each handle reopens in place.
+        dirWatchesOpened: 4,
+        dirWatchesClosed: 2,
       });
       const before = svc.getStats().changes;
       await untilHeard(
@@ -1547,6 +1557,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchersClosed: 0,
       watchRefusals: 1,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     });
     expect(watchers.size()).toBe(1);
     svc.close();
@@ -1583,6 +1595,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 0,
         watchRefusals: 0,
         watchErrors: 0,
+        // The git directory and the refs tree, held while the path is empty.
+        dirWatchesOpened: 2,
+        dirWatchesClosed: 0,
       });
 
       create();
@@ -1598,6 +1613,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 1,
         watchRefusals: 0,
         watchErrors: 0,
+        // Both directories were made again: each handle reopens in place.
+        dirWatchesOpened: 4,
+        dirWatchesClosed: 2,
       });
     } finally {
       svc.close();
@@ -1637,6 +1655,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 0,
         watchRefusals: 1,
         watchErrors: 0,
+        dirWatchesOpened: 0,
+        dirWatchesClosed: 0,
       });
     } finally {
       svc.close();
@@ -1659,6 +1679,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchersClosed: 1,
       watchRefusals: 2,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     });
     svc.close();
     expect(counters.watchersClosed).toBe(2);
@@ -1682,6 +1704,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchersClosed: 0,
       watchRefusals: 1,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     });
     svc.close();
   });

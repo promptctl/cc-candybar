@@ -23,8 +23,8 @@ export type WatcherLogger = (
 const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 
 // [LAW:single-enforcer] One registry owns *all* fs watchers for any consumer
-// (git cache, config cache, ...). Scattered watchers across modules would leak
-// FDs and miss cleanup at shutdown.
+// (git cache, config cache, `watch_file` sources, ...). Scattered watchers
+// across modules would leak FDs and miss cleanup at shutdown.
 //
 // [LAW:single-enforcer] It shares and refcounts; it bounds nothing. Each
 // consumer bounds what it holds (the git cache's entries, the render cache's
@@ -102,21 +102,6 @@ export interface PathsWatch extends WatchSpec {
   readonly unresolved: readonly Refusal[];
 }
 
-// Whether an event a directory's watch reported is the directory itself
-// removed or moved. Linux's inotify reports that under the directory's own
-// name, as a rename, and it is the event that leaves a handle bound to an
-// inode no longer at its path, so a name filter must let it through for the
-// consumer to derive its watch again. macOS reports a change under the
-// directory's name whenever a child comes or goes, and its watch follows the
-// path, so a change is not let through.
-function aboutItself(
-  dir: string,
-  event: string,
-  changed: string | null,
-): boolean {
-  return event === "rename" && changed === path.basename(dir);
-}
-
 // [LAW:single-enforcer] The one rule for where a set of paths can change, for
 // every consumer that watches files (the config watcher, `watch_file`
 // sources). A `named` path is watched wherever its content changes: each hop
@@ -178,27 +163,71 @@ export function watchTargetsOf(paths: {
 }
 
 // A debounce window's invalidation while it gathers: its paths are the
-// registry's own until the window closes and hands them to the consumer.
+// registry's own until the window closes and hands them to the holders.
 type Gathering =
   | Exclude<Invalidation, { kind: "changed" }>
   | { readonly kind: "changed"; readonly paths: Set<string> };
 
-interface WatcherSlot {
-  key: string;
-  watchers: fs.FSWatcher[];
-  refcount: number;
-  // The debounce window open now, and what it has seen so far.
-  debounce: { readonly timer: NodeJS.Timeout; window: Gathering } | null;
-  onInvalidate: (invalidation: Invalidation) => void;
-  targets: WatchTargets;
-  refused: readonly Refusal[];
+// A target the OS is not listening to, and why: it refused the open, or the
+// handle reported an error after it opened.
+export interface Deafness {
+  readonly kind: "refused" | "failed";
+  readonly path: string;
+  readonly reason: string;
 }
 
-// [LAW:no-silent-failure] A handle says which of its targets the OS refused,
-// so a consumer whose only refresh is the watch can show the fault.
+// [LAW:types-are-the-program] A directory watch listens or is deaf, never
+// both. A listening one holds its handle and the folder it bound, read before
+// the open, so a folder replaced while it opens reads as moved at the next
+// judgment, never as the one the handle bound.
+type DirState =
+  | {
+      readonly kind: "listening";
+      readonly handle: fs.FSWatcher;
+      readonly bound: string;
+    }
+  | { readonly kind: "deaf"; readonly deafness: Deafness };
+
+// [LAW:single-enforcer] One OS watch per directory, shared by every slot
+// that targets it: a slot's key spells its name filters, so a link re-pointed
+// to a new name is a new slot on the same directory, and the handle stays.
+interface DirWatch {
+  readonly id: string;
+  readonly path: string;
+  readonly recursive: boolean;
+  state: DirState;
+  readonly listeners: Set<Listener>;
+}
+
+// A slot's target on a directory watch: which names there it hears (`null`:
+// every child).
+interface Listener {
+  readonly slot: WatcherSlot;
+  readonly dir: DirWatch;
+  readonly filter: ReadonlySet<string> | null;
+}
+
+interface Holder {
+  readonly onInvalidate: (invalidation: Invalidation) => void;
+}
+
+interface WatcherSlot {
+  readonly key: string;
+  readonly listeners: Listener[];
+  // [LAW:single-enforcer] Each acquire is a holder with its own callback, and
+  // every window reaches every holder: `watch_file` sources in a directory
+  // home and in each session's view share one key.
+  readonly holders: Set<Holder>;
+  // The debounce window open now, and what it has seen so far.
+  debounce: { readonly timer: NodeJS.Timeout; window: Gathering } | null;
+}
+
+// [LAW:no-silent-failure] A handle says, live, which of its targets the OS is
+// not listening to, so a consumer whose only refresh is the watch can show
+// the fault.
 export interface WatcherHandle {
   release(): void;
-  readonly refused: readonly Refusal[];
+  readonly deaf: readonly Deafness[];
 }
 
 // What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
@@ -220,20 +249,24 @@ export interface HeldWatch {
   readonly handle: WatcherHandle;
 }
 
-// What following a spec did to a held watch: kept it, or released it and
-// acquired the spec's.
+// What following a spec did to a held watch: kept it, or acquired the spec's
+// and released it.
 export type WatchMove = "kept" | "rebound";
 
-// `watchersOpened` counts slots whose every target opened, `watchRefusals`
-// slots with a target refused, and `watchErrors` errors watches reported after
-// they opened — so a refused or failed watch is never counted as a working
-// one. `watchersClosed` counts every slot released, refused or not, so the
-// slots held now are opened plus refusals less closed.
+// [LAW:nothing-unseen] Two kinds of fact. A slot is a consumer's watch:
+// `watchersOpened` counts slots whose every directory listened at acquire,
+// `watchRefusals` slots with one deaf then, and `watchersClosed` every slot
+// released, so the slots held now are opened plus refusals less closed. A
+// directory watch is an OS handle, which is what the cost scales with on
+// macOS: `dirWatchesOpened` counts each open, `dirWatchesClosed` each close (a
+// reopen's included), and `watchErrors` each error a handle reported.
 export interface WatcherCounters {
   watchersOpened: number;
   watchersClosed: number;
   watchRefusals: number;
   watchErrors: number;
+  dirWatchesOpened: number;
+  dirWatchesClosed: number;
 }
 
 // The window's fold: a failure outranks everything, an unnamed event outranks
@@ -252,8 +285,17 @@ const namedOf = (dir: string, filename: string | null): Gathering =>
     ? { kind: "unknown" }
     : { kind: "changed", paths: new Set([path.join(dir, filename)]) };
 
+const failedOf = (d: Deafness): Gathering => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`,
+});
+
+const dirId = (target: DirTarget): string =>
+  `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
+  private readonly dirs = new Map<string, DirWatch>();
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
   private closed = false;
@@ -272,11 +314,8 @@ export class WatcherRegistry {
     this.logger = opts.logger ?? defaultLogger;
   }
 
-  // Acquire (or share) a watcher set keyed by `key`. Multiple acquires on the
-  // same key share a single underlying FSWatcher set; refcount tracks active
-  // consumers. Subsequent acquires *replace* onInvalidate so the latest
-  // consumer's callback is the one that fires — by design, callers funnel into
-  // a single cache module whose callback is a stable closure over the cache map.
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
   // `targets` from the first acquire wins; subsequent acquires keep the
   // original target set (consumers must use a fresh key if they need different
   // targets). A consumer that needs no more than "something changed" ignores
@@ -291,50 +330,36 @@ export class WatcherRegistry {
       // so; releasing it is a no-op, so callers don't crash mid-shutdown.
       return {
         release: () => {},
-        refused: targets.dirs.map((d) => ({
+        deaf: targets.dirs.map((d) => ({
+          kind: "refused",
           path: d.path,
           reason: "the watcher registry is closed",
         })),
       };
     }
-
-    const existing = this.slots.get(key);
-    if (existing) {
-      existing.refcount++;
-      existing.onInvalidate = onInvalidate;
-      return this.makeHandle(existing);
-    }
-
-    const slot: WatcherSlot = {
-      key,
-      watchers: [],
-      refcount: 1,
-      debounce: null,
-      onInvalidate,
-      targets,
-      refused: [],
-    };
-    this.openWatchers(slot);
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if (slot.refused.length === 0) this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return this.makeHandle(slot);
+    const slot = this.slots.get(key) ?? this.opened(key, targets);
+    const holder: Holder = { onInvalidate };
+    slot.holders.add(holder);
+    return this.makeHandle(slot, holder);
   }
 
   // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
   // consumer derives its spec from disk again and the held watch follows it
   // exactly when the key differs. The same key is the same directories, kept;
-  // a new key releases the watch bound to directories the spec no longer
-  // names and acquires one on those it names now. Nothing held yet is a first
-  // acquire, which is a rebind from nothing.
+  // a new key acquires the spec's watch and then releases the held one, so a
+  // directory both name keeps its OS handle through the move. Nothing held
+  // yet is a first acquire, which is a rebind from nothing.
   //
   // A spec with a directory that binds nothing yet (gone, or a mount's
   // transient fault) keeps the watch held: a derive that lands between a
   // directory's removal and its making again would otherwise trade a watch
   // FSEvents keeps on its path for a slot the OS refuses. The next derive
   // that finds the directory there rebinds, since its key differs.
+  //
+  // A deaf watch under an unchanged key is kept deaf. Config and git follow
+  // on a `failed` window, so a follow that retried would retry an error that
+  // recurs on every reopen within one debounce window; a consumer that
+  // retries says when, through `listening`.
   follow(
     held: HeldWatch | null,
     spec: WatchSpec,
@@ -343,129 +368,250 @@ export class WatcherRegistry {
     if (held !== null && (held.key === spec.key || spec.unbound)) {
       return { watch: held, move: "kept" };
     }
+    const watch = {
+      key: spec.key,
+      handle: this.acquire(spec.key, spec.targets, onInvalidate),
+    };
     held?.handle.release();
-    return {
-      watch: {
-        key: spec.key,
-        handle: this.acquire(spec.key, spec.targets, onInvalidate),
-      },
-      move: "rebound",
-    };
+    return { watch, move: "rebound" };
   }
 
-  private makeHandle(slot: WatcherSlot): WatcherHandle {
-    let released = false;
-    return {
-      refused: slot.refused,
-      release: () => {
-        if (released) return;
-        released = true;
-        if (this.slots.get(slot.key) !== slot) return;
-        slot.refcount = Math.max(0, slot.refcount - 1);
-        if (slot.refcount === 0) {
-          this.closeSlot(slot);
-          this.slots.delete(slot.key);
-        }
-      },
-    };
+  // Reopen, in place, every directory of the held watch the OS is not
+  // listening to, for every slot that shares it; a listening directory keeps
+  // its handle. A reopen delivers no window of its own (inotify's mask has no
+  // open bit, and an FSEvents stream starts from now), so a consumer calling
+  // this on a window it heard cannot loop on it.
+  listening(held: HeldWatch): void {
+    const slot = this.slots.get(held.key);
+    if (slot === undefined) return;
+    for (const { dir } of slot.listeners)
+      if (dir.state.kind === "deaf") this.reopen(dir, "retry");
   }
 
-  private openWatchers(slot: WatcherSlot): void {
-    const fire = (invalidation: Gathering) => {
-      if (slot.debounce !== null) {
-        slot.debounce.window = folded(slot.debounce.window, invalidation);
-        return;
-      }
-      const debounce = {
-        window: invalidation,
-        timer: setTimeout(() => {
-          slot.debounce = null;
+  private opened(key: string, targets: WatchTargets): WatcherSlot {
+    const slot: WatcherSlot = {
+      key,
+      listeners: [],
+      holders: new Set(),
+      debounce: null,
+    };
+    for (const target of targets.dirs) {
+      const dir = this.dirFor(target);
+      const listener: Listener = {
+        slot,
+        dir,
+        filter: target.filenames ? new Set(target.filenames) : null,
+      };
+      dir.listeners.add(listener);
+      slot.listeners.push(listener);
+    }
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+
+  // The directory watch a new slot's target joins, named as the directory is
+  // now: a deaf one is opened again, and a listening one whose path holds
+  // another folder than the one it bound (removed and made again: inotify
+  // hears the old inode) is reopened in place. A path that binds nothing right
+  // now keeps the listening handle, as `follow` keeps a held watch: a macOS
+  // watch on the path hears the folder come back.
+  private dirFor(target: DirTarget): DirWatch {
+    const id = dirId(target);
+    const existing = this.dirs.get(id);
+    if (existing === undefined) {
+      const where = { path: target.path, recursive: target.recursive === true };
+      const dir: DirWatch = {
+        id,
+        ...where,
+        listeners: new Set(),
+        state: this.open(where, () => dir, "acquire"),
+      };
+      this.dirs.set(id, dir);
+      return dir;
+    }
+    if (existing.state.kind === "deaf") {
+      this.reopen(existing, "acquire");
+      return existing;
+    }
+    const now = boundOf(existing.path);
+    if (typeof now !== "string" && "ino" in now)
+      if (boundKey(now) !== existing.state.bound)
+        this.reopen(existing, "the folder at its path was made again");
+    return existing;
+  }
+
+  // [LAW:no-silent-failure] A directory moving from listening to deaf is told
+  // to every slot on it, so a shared directory's other holders see the fault
+  // as the one that reopened it does. Deaf staying deaf is no change.
+  private reopen(dir: DirWatch, cause: string): void {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    dir.state = this.open(dir, () => dir, cause);
+    if (was.kind === "listening" && dir.state.kind === "deaf")
+      this.tell(dir, failedOf(dir.state.deafness));
+  }
+
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  private open(
+    where: { readonly path: string; readonly recursive: boolean },
+    dirOf: () => DirWatch,
+    cause: string,
+  ): DirState {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      const handle = fs.watch(
+        at,
+        { persistent: false, recursive: where.recursive },
+        (_event, changed) => this.heard(dirOf(), bound, changed),
+      );
+      // [LAW:no-silent-failure] An error after open reaches every slot on
+      // the directory and the stats, not only the log: the handle behind it
+      // delivers nothing more.
+      handle.on("error", (e) => {
+        const dir = dirOf();
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        this.closeHandle(at, handle, "error");
+        const deafness: Deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message,
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`,
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = (e as Error).message;
+      this.logger("warn", `watch failed ${at}: ${reason}`);
+      return {
+        kind: "deaf",
+        deafness: { kind: "refused", path: at, reason },
+      };
+    }
+  }
+
+  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
+  // it lists, an unnamed event (the OS may be reporting the filtered child),
+  // or the directory's own name while the folder at the path is no longer the
+  // one this handle bound (its removal or replacement, which macOS reports as
+  // a change and Linux as a rename) reaches the slot. The same name with the
+  // folder unchanged is macOS reporting a child that came or went, or a chmod,
+  // and is not. Judged once per event, for every listener.
+  private heard(dir: DirWatch, bound: string, changed: string | null): void {
+    const moved =
+      changed === path.basename(dir.path) &&
+      boundKey(boundOf(dir.path)) !== bound;
+    for (const { slot, filter } of dir.listeners) {
+      if (filter === null || changed === null || filter.has(changed) || moved)
+        this.fire(slot, namedOf(dir.path, changed));
+    }
+  }
+
+  private tell(dir: DirWatch, invalidation: Gathering): void {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+
+  private fire(slot: WatcherSlot, invalidation: Gathering): void {
+    if (slot.debounce !== null) {
+      slot.debounce.window = folded(slot.debounce.window, invalidation);
+      return;
+    }
+    const debounce = {
+      window: invalidation,
+      timer: setTimeout(() => {
+        slot.debounce = null;
+        for (const holder of slot.holders) {
           try {
-            slot.onInvalidate(debounce.window);
+            holder.onInvalidate(debounce.window);
           } catch (e) {
             this.logger(
               "warn",
               `watcher invalidate threw key=${valueOf(slot.key)}: ${(e as Error).message}`,
             );
           }
-        }, DEBOUNCE_MS),
-      };
-      debounce.timer.unref();
-      slot.debounce = debounce;
+        }
+      }, DEBOUNCE_MS),
     };
-    // [LAW:no-silent-failure] An error after open reaches the consumer and the
-    // stats, not only the log: the watch behind it may deliver nothing more.
-    const failedAt = (target: string) => (e: Error) => {
-      this.logger("warn", `watcher error ${target}: ${e.message}`);
-      if (this.counters) this.counters.watchErrors++;
-      fire({ kind: "failed", reason: `${target}: ${e.message}` });
-    };
-    const refused: Refusal[] = [];
-    const refuse = (target: string, e: unknown) => {
-      const reason = (e as Error).message;
-      this.logger("warn", `watch failed ${target}: ${reason}`);
-      refused.push({ path: target, reason });
-    };
-
-    for (const target of slot.targets.dirs) {
-      try {
-        const filterSet = target.filenames ? new Set(target.filenames) : null;
-        const onDirEvent = (evt: string, filename: string | null) => {
-          // [LAW:dataflow-not-control-flow] Filter is a value (Set) — same
-          // code path every event; the Set's .has() decides whether to fire.
-          if (
-            filterSet &&
-            (!filename ||
-              (!filterSet.has(filename) &&
-                !aboutItself(target.path, evt, filename)))
-          )
-            return;
-          fire(namedOf(target.path, filename));
-        };
-        const w = fs.watch(
-          target.path,
-          { persistent: false, recursive: target.recursive === true },
-          onDirEvent,
-        );
-        w.on("error", failedAt(target.path));
-        slot.watchers.push(w);
-      } catch (e) {
-        refuse(target.path, e);
-      }
-    }
-    slot.refused = refused;
+    debounce.timer.unref();
+    slot.debounce = debounce;
   }
 
-  private closeSlot(slot: WatcherSlot): void {
+  private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
+    return {
+      get deaf() {
+        return slot.listeners.flatMap(({ dir }) =>
+          dir.state.kind === "deaf" ? [dir.state.deafness] : [],
+        );
+      },
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      },
+    };
+  }
+
+  private closeHandle(at: string, handle: fs.FSWatcher, cause: string): void {
+    try {
+      handle.close();
+    } catch {}
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`,
+    );
+  }
+
+  // A directory watch closes with the last slot on it.
+  private closeSlot(slot: WatcherSlot, cause: string): void {
     if (slot.debounce !== null) {
       clearTimeout(slot.debounce.timer);
       slot.debounce = null;
     }
-    for (const w of slot.watchers) {
-      try {
-        w.close();
-      } catch {}
+    for (const listener of slot.listeners) {
+      const { dir } = listener;
+      dir.listeners.delete(listener);
+      if (dir.listeners.size > 0) continue;
+      if (dir.state.kind === "listening")
+        this.closeHandle(dir.path, dir.state.handle, cause);
+      this.dirs.delete(dir.id);
     }
-    slot.watchers = [];
     if (this.counters) this.counters.watchersClosed++;
   }
 
+  // The slots held now.
   size(): number {
     return this.slots.size;
   }
 
+  // The OS directory watches open now.
+  dirWatches(): number {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening")
+      .length;
+  }
+
   // Every directory a held watch targets.
   watchedDirs(): string[] {
-    return [...this.slots.values()].flatMap((slot) =>
-      slot.targets.dirs.map((d) => d.path),
-    );
+    return [...this.dirs.values()].map((d) => d.path);
   }
 
   closeAll(): void {
     this.closed = true;
-    for (const slot of this.slots.values()) {
-      this.closeSlot(slot);
-    }
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
     this.slots.clear();
   }
 }

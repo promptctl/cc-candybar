@@ -121,6 +121,8 @@ function rig(): Rig {
     watchersClosed: 0,
     watchRefusals: 0,
     watchErrors: 0,
+    dirWatchesOpened: 0,
+    dirWatchesClosed: 0,
   };
   const lines: string[] = [];
   const log = (level: string, message: string): void => {

@@ -89,6 +89,8 @@ function makeCache(
       watchersClosed: 0,
       watchRefusals: 0,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     },
     logger: () => {},
   });

@@ -298,7 +298,7 @@ export class ManagedStorage {
     // First, so its reason is the one the sources read: a folder that could
     // not be made refuses its watch too.
     if (unusable !== null) this.faulted(watched, "unusable", unusable);
-    for (const refusal of watched.handle.refused) {
+    for (const refusal of watched.handle.deaf) {
       this.faulted(watched, "refused", refusal.reason);
     }
     void this.sweep(key);

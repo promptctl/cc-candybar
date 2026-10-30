@@ -74,6 +74,8 @@ describe("RuntimeStats.snapshot", () => {
     stats.watchersClosed = 3;
     stats.watchRefusals = 1;
     stats.watchErrors = 2;
+    stats.dirWatchesOpened = 9;
+    stats.dirWatchesClosed = 4;
 
     const snap = stats.snapshot({
       gitCache: {
@@ -114,6 +116,7 @@ describe("RuntimeStats.snapshot", () => {
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
+      dirWatchesActive: 5,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
       clients: [
         {
@@ -186,6 +189,7 @@ describe("RuntimeStats.snapshot", () => {
       closed: 3,
       refused: 1,
       errors: 2,
+      dirs: { active: 5, opened: 9, closed: 4 },
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -315,7 +319,14 @@ describe("formatStats", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 5, opened: 7, closed: 2, refused: 1, errors: 3 },
+      watchers: {
+        active: 5,
+        opened: 7,
+        closed: 2,
+        refused: 1,
+        errors: 3,
+        dirs: { active: 4, opened: 6, closed: 2 },
+      },
       subprocesses: {
         total: 0,
         inFlight: 0,
@@ -425,7 +436,14 @@ describe("formatStats", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 0, opened: 0, closed: 0, refused: 0, errors: 0 },
+      watchers: {
+        active: 0,
+        opened: 0,
+        closed: 0,
+        refused: 0,
+        errors: 0,
+        dirs: { active: 0, opened: 0, closed: 0 },
+      },
       subprocesses: {
         total: 0,
         inFlight: 0,
