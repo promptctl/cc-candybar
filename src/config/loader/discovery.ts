@@ -94,6 +94,27 @@ function xdgConfigBase(): string {
 }
 
 /**
+ * One chain layer: its file, and whose plugins the file lists — a
+ * repository's (`repo`) or the user's installed ones (`plugins`).
+ *
+ * [LAW:one-source-of-truth] The scope is decided where the search finds the
+ * file, from which location supplied it, and rides with the path. A second
+ * list of repository paths beside the layers drifts the moment a caller
+ * builds or filters one list and not the other, and a repository's plugin
+ * then replaces the installed one of the same name.
+ */
+export interface ConfigLayer {
+  readonly path: string;
+  readonly scope: PluginScope;
+}
+
+// The user's own file or an explicit one: never a repository's, whatever its
+// name. The one way to state a layer outside the search.
+export function homeLayer(path: string): ConfigLayer {
+  return { path, scope: "plugins" };
+}
+
+/**
  * What the config search found. Three outcomes:
  *   • `chain` — the files the config is merged from, lowest precedence
  *     first: the user's XDG file, then `<cwd>`'s, then `<projectDir>`'s, each
@@ -122,27 +143,6 @@ function xdgConfigBase(): string {
  * The path rides on `missing` so the message and the durable-write target
  * both name it without re-deriving it from the inputs.
  */
-/**
- * One chain layer: its file, and whose plugins the file lists — a
- * repository's (`repo`) or the user's installed ones (`plugins`).
- *
- * [LAW:one-source-of-truth] The scope is decided where the search finds the
- * file, from which location supplied it, and rides with the path. A second
- * list of repository paths beside the layers drifts the moment a caller
- * builds or filters one list and not the other, and a repository's plugin
- * then replaces the installed one of the same name.
- */
-export interface ConfigLayer {
-  readonly path: string;
-  readonly scope: PluginScope;
-}
-
-// The user's own file or an explicit one: never a repository's, whatever its
-// name. The one way to state a layer outside the search.
-export function homeLayer(path: string): ConfigLayer {
-  return { path, scope: "plugins" };
-}
-
 export type ConfigResolution = { readonly repos: RepoGate } & (
   | {
       readonly kind: "chain";

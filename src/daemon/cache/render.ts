@@ -997,11 +997,9 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   };
 }
 
-// What every load of one chain shares, whatever its attempt: the files it
-// resolved, the advisories its resolution earned, and when it started.
+// What every load of one chain shares, whatever its attempt: the advisories
+// its resolution earned, and when it started.
 export interface LoadFrame {
-  readonly layers: readonly string[];
-  readonly home: string;
   readonly repos: RepoGate;
   readonly advisories: ReadonlyArray<string | null>;
   readonly started: number;
@@ -1015,12 +1013,14 @@ export interface LoadFrame {
 // kept state never drops a line its build earned.
 export function settle(
   frame: LoadFrame,
+  chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
 ): LoadOutcome {
   const common = {
-    layers: frame.layers,
-    home: frame.home,
+    // [LAW:one-source-of-truth] The files reported are the chain loaded.
+    layers: chain.layers.map((l) => l.path),
+    home: chain.home,
     repos: frame.repos,
     ms: Math.round(performance.now() - frame.started),
   };
@@ -1061,14 +1061,14 @@ export function loadChain(
   served: DslRenderState | null = null,
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain, deps.storage);
-  if (resolved.kind === "failed") return settle(frame, [], resolved);
+  if (resolved.kind === "failed") return settle(frame, chain, [], resolved);
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
   const attempt: Attempt =
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, resolved.warnings, attempt);
+  return settle(frame, chain, resolved.warnings, attempt);
 }
 
 // [LAW:effects-at-boundaries] One attempt at the disk: read the user's
@@ -1118,19 +1118,7 @@ export function loadFromDisk(
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain(
-    {
-      layers: chain.layers.map((l) => l.path),
-      home: chain.home,
-      repos,
-      advisories,
-      started,
-    },
-    cwd,
-    chain,
-    deps,
-    served,
-  );
+  return loadChain({ repos, advisories, started }, cwd, chain, deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the

@@ -130,8 +130,6 @@ function loadState(): DslRenderState {
   // come out of the one place every load composes them.
   const loaded = loadChain(
     {
-      layers: [configPath],
-      home: chain.home,
       repos,
       advisories: repoGateLines(repos),
       started: performance.now(),

@@ -320,13 +320,13 @@ export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
 export type CheckOutcome =
   | {
       readonly kind: "clean";
-      readonly layers: readonly string[];
+      readonly layers: readonly ConfigLayer[];
       readonly warnings: readonly string[];
       readonly rendered: string;
     }
   | {
       readonly kind: "fatal";
-      readonly layers: readonly string[];
+      readonly layers: readonly ConfigLayer[];
       readonly message: string;
       readonly warnings: readonly string[];
     }
@@ -397,11 +397,14 @@ export async function checkConfig(
     configPath ?? undefined,
   );
   warnings.push(...repoGateLines(resolution.repos));
-  const chain =
+  // An explicit file that is absent or unreadable is still the chain: its
+  // read is what names the failure.
+  const layers =
     configPath === null
       ? searchedLayers(resolution, warnings)
-      : [homeLayer(configPath)];
-  const layers = chain.map((l) => l.path);
+      : resolution.kind === "chain"
+        ? resolution.layers
+        : [homeLayer(configPath)];
   if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
@@ -433,7 +436,7 @@ export async function checkConfig(
 
   try {
     const rendered = await loadRegisterRender(
-      chain,
+      layers,
       { repo: resolution.repos.plugins },
       cwd,
       warnings,
@@ -454,7 +457,7 @@ export async function checkConfig(
       errno !== null &&
       typeof errno.code === "string" &&
       typeof errno.path === "string" &&
-      layers.includes(errno.path) &&
+      layers.some((l) => l.path === errno.path) &&
       typeof errno.message === "string"
     ) {
       return { kind: "unreadable", path: errno.path, message: errno.message };
@@ -859,7 +862,8 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
   switch (o.kind) {
     case "clean": {
       const where =
-        o.layers.join(" < ") || "bundled default (no config file found)";
+        o.layers.map((l) => l.path).join(" < ") ||
+        "bundled default (no config file found)";
       const count =
         o.warnings.length > 0
           ? ` (${o.warnings.length} warning${o.warnings.length === 1 ? "" : "s"})`
@@ -876,7 +880,7 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
         stdout: "",
         stderr:
           warningLines(o.warnings) +
-          `✗ ${o.layers.join(" < ") || "<default>"}\n${o.message}\n`,
+          `✗ ${o.layers.map((l) => l.path).join(" < ") || "<default>"}\n${o.message}\n`,
         code: EXIT_FATAL,
       };
     case "unreadable":

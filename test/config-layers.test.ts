@@ -71,10 +71,13 @@ test("a project file that places one segment renders over the user's whole confi
     `{ segments: { proj: { template: "PROJSEG" } }, root: { h: ["mine", "proj"] } }`,
   );
   const outcome = clean(await checkConfig(undefined, project));
-  expect(outcome.layers).toEqual([userFile, projectFile]);
+  expect(outcome.layers).toEqual([
+    { path: userFile, scope: "plugins" },
+    { path: projectFile, scope: "repo" },
+  ]);
   expect(outcome.rendered).toContain("USERSEG");
   expect(outcome.rendered).toContain("PROJSEG");
-  const prepared = await prepareConfig(outcome.layers.map(homeLayer), NO_REPO, project, [], instantOf(new Date()));
+  const prepared = await prepareConfig(outcome.layers, NO_REPO, project, [], instantOf(new Date()));
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {
@@ -208,7 +211,7 @@ describe("a project layer inserting into the user's row", () => {
   const presetTree = async (preset: string) => {
     const outcome = clean(await checkConfig(undefined, project));
     const prepared = await prepareConfig(
-      outcome.layers.map(homeLayer),
+      outcome.layers,
       NO_REPO,
       project,
       [],
@@ -364,7 +367,7 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", before: "mine" }]`);
     const outcome = clean(await checkConfig(undefined, project));
     const prepared = await prepareConfig(
-      outcome.layers.map(homeLayer),
+      outcome.layers,
       NO_REPO,
       project,
       [],

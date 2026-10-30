@@ -211,7 +211,10 @@ describe("check", () => {
     const file = write(".cc-candybar.json5", shellConfig(marker));
     answerRepo(project);
     const outcome = await checkConfig(undefined, project);
-    expect(outcome).toMatchObject({ kind: "clean", layers: [file] });
+    expect(outcome).toMatchObject({
+      kind: "clean",
+      layers: [{ path: file, scope: "repo" }],
+    });
     expect(fs.existsSync(marker)).toBe(true);
   });
 
