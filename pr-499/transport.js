@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.166.1";
+var PACKAGE_VERSION = "1.166.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -37529,7 +37529,6 @@ var ladderWindow = (from) => ({
   // rungs up a ladder of seven; the `!`s state that, they do not guard it.
   tones: [LADDER[from], LADDER[from + 2], LADDER[from + 1]],
   text: poleText,
-  quantize: "point",
   activated: "muted"
 });
 var centredWindow = (apart) => ({
@@ -37537,13 +37536,11 @@ var centredWindow = (apart) => ({
   // three rungs each side stays on the ladder.
   tones: [LADDER[3 - apart], LADDER[3 + apart], LADDER[3]],
   text: poleText,
-  quantize: "point",
   activated: "muted"
 });
 var pairWindow = (apart) => ({
   tones: [LADDER[3 - apart], LADDER[3 + apart]],
   text: poleText,
-  quantize: "bin",
   activated: "muted"
 });
 var TRIAL_SHADES = {
@@ -37555,9 +37552,8 @@ var TRIAL_SHADES = {
 var TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES);
 var SHADES = {
   muted: {
-    tones: ["muted"],
+    tones: ["muted", "base"],
     text: roleText,
-    quantize: "point",
     activated: "lighten-2"
   },
   deepest: ladderWindow(0),
@@ -37618,6 +37614,12 @@ var TRIAL_VARIATION_NAMES = Object.keys(
 var vocabularyOf = (decor) => decor.variation.hues.flatMap(
   (hue) => decor.shade.tones.map((shade) => ({ hue, shade }))
 );
+var inBin = (placement, size) => Math.floor(placement * size);
+var inHalves = (placement, size) => {
+  let entry = size - 1;
+  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
+  return entry;
+};
 var PHI = 0.6180339887498949;
 var vanDerCorput = (index) => {
   let value = 0;
@@ -37634,28 +37636,30 @@ var DISTRIBUTION_NAMES = [
 ];
 var isDistributionName = (value) => typeof value === "string" && DISTRIBUTION_NAMES.includes(value);
 var DISTRIBUTIONS = {
-  "van-der-corput": vanDerCorput,
-  "golden-angle": (index) => index * PHI % 1,
-  "ends-interleaved": (index, count) => {
-    const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
-    return (slot + 0.5) / count;
+  "van-der-corput": { place: vanDerCorput, quantize: inHalves },
+  "golden-angle": { place: (index) => index * PHI % 1, quantize: inBin },
+  "ends-interleaved": {
+    place: (index, count) => {
+      const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
+      return (slot + 0.5) / count;
+    },
+    quantize: inBin
   },
-  monotonic: (index, count) => (index + 0.5) / count,
-  uniform: () => 0.5
+  monotonic: {
+    place: (index, count) => (index + 0.5) / count,
+    quantize: inBin
+  },
+  uniform: { place: () => 0.5, quantize: inHalves }
 };
 var DEFAULT_DISTRIBUTION = "van-der-corput";
 var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-var inBin = (placement, size) => Math.floor(placement * size);
-var nearestPoint = (placement, size) => Math.round(placement * size) % size;
-var QUANTIZE = {
-  bin: inBin,
-  point: nearestPoint
-};
-function placementOf(step4) {
-  return step4 === void 0 ? 0 : step4.distribution(step4.index, step4.count);
+function entryOf2(step4, size) {
+  if (step4 === void 0) return 0;
+  const { place, quantize } = step4.distribution;
+  return quantize(place(step4.index, step4.count), size);
 }
-function vocabularySelect(vocabulary, step4, quantize) {
-  const entry = vocabulary[quantize(placementOf(step4), vocabulary.length)];
+function vocabularySelect(vocabulary, step4) {
+  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
   if (entry === void 0)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -37666,7 +37670,7 @@ function rowAndCell(address) {
   const rows = at === -1 ? address : address.slice(0, at);
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
-var rowStart = (variation, row2) => inBin(placementOf(row2), variation.hues.length);
+var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
 function decorEntryFor(decor, address) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
   const { hues, run: run3, keystones } = decor.variation;
@@ -37675,11 +37679,7 @@ function decorEntryFor(decor, address) {
   if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
   return {
     hue: keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2,
-    shade: vocabularySelect(
-      decor.shade.tones,
-      cell3,
-      QUANTIZE[decor.shade.quantize]
-    )
+    shade: vocabularySelect(decor.shade.tones, cell3)
   };
 }
 var KEYSTONE_AT = {
@@ -37739,11 +37739,7 @@ function bandFor(palette, disclosure) {
   };
 }
 function bandItemFor(palette, disclosure, place) {
-  return vocabularySelect(
-    bandFor(palette, disclosure).items,
-    place,
-    QUANTIZE[disclosure.decor.shade.quantize]
-  );
+  return vocabularySelect(bandFor(palette, disclosure).items, place);
 }
 function bandItem(palette, disclosure, place, drawnAt) {
   const tint = bandItemFor(palette, disclosure, place);
@@ -66730,7 +66726,7 @@ function jsonLine(line) {
     return { kind: "unparsed", reason: String(parseError) };
   }
 }
-function entryOf2(line) {
+function entryOf3(line) {
   const read2 = jsonLine(line);
   if (read2.kind === "unparsed") {
     debug(`Failed to parse JSONL line: ${read2.reason}`);
@@ -66747,7 +66743,7 @@ function entryOf2(line) {
 function parseJsonlLines(text4) {
   const entries = [];
   for (const line of text4.split("\n")) {
-    const entry = entryOf2(line);
+    const entry = entryOf3(line);
     if (entry) entries.push(entry);
   }
   return entries;
@@ -75605,7 +75601,7 @@ function pickerFuncs(runtime, activeSegment) {
           ),
           closeOn(active2.palette, ground, drawnAt)
         );
-        const band = bandFor(active2.palette, active2.disclosure, drawnAt);
+        const band = bandFor(active2.palette, active2.disclosure);
         const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
         if (rows.length === 0) return draw2(active2.bg)[0];
         active2.drops.push(...rows);
