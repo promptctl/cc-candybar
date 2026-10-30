@@ -4616,7 +4616,7 @@ var require_lib = __commonJS({
       return out;
     };
     var extglobSource = (type3, alts, extglob, nodot, tail, segStart) => {
-      const guard = nodot && segStart ? NODOT : "";
+      const guard2 = nodot && segStart ? NODOT : "";
       const body = altsSource(alts, extglob, nodot, tail, segStart);
       switch (type3) {
         case 63:
@@ -4625,10 +4625,10 @@ var require_lib = __commonJS({
           return "(?:" + body + ")";
         case 33:
           if (alts.length === 1 && !alts[0])
-            return guard + "[^/]+";
-          return "(?!(?:" + body + ")" + tail + "$)" + guard + STAR;
+            return guard2 + "[^/]+";
+          return "(?!(?:" + body + ")" + tail + "$)" + guard2 + STAR;
       }
-      const more = guard ? altsSource(alts, extglob, nodot, tail, false) : body;
+      const more = guard2 ? altsSource(alts, extglob, nodot, tail, false) : body;
       if (more === body)
         return "(?:" + body + ")" + (type3 === 42 ? "*" : "+");
       const once2 = "(?:" + body + ")(?:" + more + ")*";
@@ -4650,7 +4650,7 @@ var require_lib = __commonJS({
           }
         }
         const atStart = start;
-        const guard = nodot && atStart ? NODOT : "";
+        const guard2 = nodot && atStart ? NODOT : "";
         start = false;
         switch (code) {
           case 42: {
@@ -4659,7 +4659,7 @@ var require_lib = __commonJS({
               j++;
             if (j === i + 1) {
               const whole = atStart && (j === length || pattern.charCodeAt(j) === 47);
-              out += guard + (whole ? "[^/]+" : STAR);
+              out += guard2 + (whole ? "[^/]+" : STAR);
               i = j;
               break;
             }
@@ -4680,16 +4680,16 @@ var require_lib = __commonJS({
                 break;
             }
             if (slash2) {
-              out += nodot ? "(?:" + guard + GLOBSTAR_NODOT + "/)?" : "(?:.*/)?";
+              out += nodot ? "(?:" + guard2 + GLOBSTAR_NODOT + "/)?" : "(?:.*/)?";
               j++;
               start = true;
             } else
-              out += nodot ? guard + GLOBSTAR_NODOT : ".*";
+              out += nodot ? guard2 + GLOBSTAR_NODOT : ".*";
             i = j;
             break;
           }
           case 63:
-            out += guard + "[^/]";
+            out += guard2 + "[^/]";
             i++;
             break;
           case 91: {
@@ -4700,7 +4700,7 @@ var require_lib = __commonJS({
               break;
             }
             const cls = classSource(pattern, i, end);
-            out += (cls.charCodeAt(0) === 91 ? guard : "") + cls;
+            out += (cls.charCodeAt(0) === 91 ? guard2 : "") + cls;
             i = end;
             break;
           }
@@ -34042,7 +34042,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.164.0";
+var PACKAGE_VERSION = "1.164.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -34119,6 +34119,7 @@ init_globals();
 init_globals();
 var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
 var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
 var Stream = class extends import_events2.EventEmitter {
@@ -34141,6 +34142,9 @@ var Stream = class extends import_events2.EventEmitter {
     return true;
   }
   resume() {
+    return this;
+  }
+  unref() {
     return this;
   }
 };
@@ -34168,6 +34172,7 @@ function spawn(cmd, args = [], opts = {}) {
       return;
     }
     const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
     if (run3.stdout) child.stdout.chunk(run3.stdout);
     if (run3.stderr) child.stderr.chunk(run3.stderr);
     child.exitCode = run3.code;
@@ -34182,6 +34187,7 @@ function spawnSync(cmd, args = [], opts = {}) {
   const program = programs.get(cmd.split("/").pop());
   if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
   const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
   return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
 }
 
@@ -34254,6 +34260,71 @@ function setLaunchStats(handle) {
   statsHandle = handle;
 }
 var TIMEOUT_KILL_GRACE_MS = 250;
+var lifelineObserver = () => lifelineWarnings().forEach((w) => process_default.emitWarning(w.message));
+function setLifelineObserver(observe) {
+  lifelineObserver = observe;
+}
+var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
+var liveGroups = /* @__PURE__ */ new Set();
+var lifeline = null;
+var fault = null;
+function setFault(next2) {
+  if (next2 === fault) return;
+  fault = next2;
+  lifelineObserver(next2);
+}
+function lose(line, reason) {
+  if (lifeline?.process !== line) return;
+  lifeline = null;
+  setFault(reason);
+}
+function lifelineWarnings() {
+  return fault === null ? [] : [
+    {
+      kind: "lifeline",
+      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`
+    }
+  ];
+}
+function spawnLifeline() {
+  statsHandle?.onStart("lifeline");
+  const t0 = Date.now();
+  let line;
+  try {
+    line = spawn("awk", [LIFELINE_PROGRAM], {
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true
+    });
+  } catch (err) {
+    statsHandle?.onEnd("lifeline", Date.now() - t0);
+    setFault(`did not start: ${spawnErrorText(err, void 0)}`);
+    return null;
+  }
+  statsHandle?.onEnd("lifeline", Date.now() - t0);
+  const pipe = line.stdin;
+  line.once("spawn", () => {
+    if (lifeline?.process === line) setFault(null);
+  });
+  line.once("error", (err) => lose(line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
+  line.unref();
+  pipe.unref();
+  for (const group of liveGroups) pipe.write(`+ ${group}
+`);
+  return { process: line, pipe };
+}
+function guard(group) {
+  liveGroups.add(group);
+  lifeline ??= spawnLifeline();
+  lifeline?.pipe.write(`+ ${group}
+`);
+}
+function unguard(group) {
+  liveGroups.delete(group);
+  lifeline?.pipe.write(`- ${group}
+`);
+}
 function signalGroup(pid2, sig) {
   try {
     process_default.kill(-pid2, sig);
@@ -34305,6 +34376,8 @@ async function launch(opts) {
       });
       return;
     }
+    const group = child.pid;
+    if (group !== void 0) guard(group);
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
@@ -34318,6 +34391,7 @@ async function launch(opts) {
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
+      if (group !== void 0) unguard(group);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
@@ -35890,6 +35964,14 @@ function debug(message, ...args) {
     console.error(`[DEBUG] ${message}`, ...args);
   }
 }
+function changeLogger(log) {
+  let last2 = null;
+  return ([level, msg]) => {
+    if (msg === last2) return;
+    last2 = msg;
+    log(level, msg);
+  };
+}
 var quietLogger = (_level, message) => debug(message);
 
 // src/utils/transcript-fs.ts
@@ -37266,14 +37348,32 @@ function runDeclaration(a) {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
 function* actionTemplates(a) {
-  if ("copy" in a) yield ["copy", a.copy];
-  if ("open" in a) yield ["open", a.open];
-  if ("preset" in a && a.preset === "delete") yield ["name", a.name];
+  const found = [];
+  mapActionTemplates(a, (source, field) => {
+    found.push([field, source]);
+    return source;
+  });
+  yield* found;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
   if ("run" in a) {
-    for (const [i, item] of a.run.entries()) yield [`run.${i}`, item];
-    for (const [name, value] of Object.entries(a.env))
-      yield [`env.${name}`, value];
+    const run3 = a.run.map((item, i) => f(item, `run.${i}`));
+    return {
+      ...a,
+      run: run3,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
   }
+  return a;
 }
 function actionBindsTemplateValue(a) {
   return "from" in a || "int" in a || "insertSegmentFrom" in a;
@@ -37336,11 +37436,20 @@ var CACHE_KEYS = [
 function hasCacheField(v) {
   return v.kind === "file" || v.kind === "shell";
 }
+function mapVariableTemplates(v, f) {
+  const body = v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
+  return hasCacheField(body) && "key" in body.cache ? {
+    ...body,
+    cache: { ...body.cache, key: f(body.cache.key, "cache.key") }
+  } : body;
+}
 function variableTemplates(v) {
-  return [
-    ...v.kind === "template" ? [["template", v.template]] : [],
-    ...hasCacheField(v) && "key" in v.cache ? [["cache.key", v.cache.key]] : []
-  ];
+  const found = [];
+  mapVariableTemplates(v, (template, field) => {
+    found.push([field, template]);
+    return template;
+  });
+  return found;
 }
 var MISSING_DATA = ["fail", "ignore"];
 function missingDataOf(seg2) {
@@ -37452,10 +37561,12 @@ function* templateBlocks(template) {
   while (open2 !== -1) {
     let block = "";
     let i = open2 + 2;
+    const spans = [[0, i]];
     while (i < template.length && !template.startsWith("}}", i)) {
       if (template.startsWith("/*", i)) {
         const close2 = template.indexOf("*/", i + 2);
         i = close2 === -1 ? template.length : close2 + 2;
+        spans.push([block.length, i]);
         continue;
       }
       const start = i;
@@ -37470,7 +37581,14 @@ function* templateBlocks(template) {
       block += template.slice(start, i);
     }
     if (i >= template.length) return;
-    yield block;
+    yield {
+      text: block,
+      at: (index) => {
+        let [from, to] = spans[0];
+        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
+        return to + index - from;
+      }
+    };
     open2 = template.indexOf("{{", i + 2);
   }
 }
@@ -37488,8 +37606,8 @@ function operandAt(text3, dot, root) {
 var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
 function* scopedBlocks(template, root) {
   const stack = [root];
-  for (const raw of templateBlocks(template)) {
-    const code = raw.replace(/^-(?=\s)/, "").trim();
+  for (const block of templateBlocks(template)) {
+    const code = block.text.replace(/^-(?=\s)/, "").trim();
     const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code) ?? [];
     const top = stack[stack.length - 1];
     const outer = stack.length > 1 ? stack[stack.length - 2] : top;
@@ -37498,12 +37616,12 @@ function* scopedBlocks(template, root) {
       continue;
     }
     if (keyword === "else") {
-      yield { code, dot: outer };
+      yield { code, dot: outer, block };
       const chained = /^with\b([\s\S]*)$/.exec(rest2);
       stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
       continue;
     }
-    yield { code, dot: top };
+    yield { code, dot: top, block };
     if (keyword === "if") stack.push(top);
     if (keyword === "with") stack.push(operandAt(rest2, top, root));
     if (keyword === "range" || keyword === "define" || keyword === "block")
@@ -37518,7 +37636,8 @@ function* helperCalls(code, dot, root) {
     if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
       yield {
         name: s[0].slice(1, -1),
-        at: operandAt(code.slice(end), dot, root)
+        at: operandAt(code.slice(end), dot, root),
+        index: s.index
       };
     }
     cursor = end;
@@ -37604,7 +37723,7 @@ function* actionBindings(code) {
       }
     }
     if (pending2 > 0 && depth === 0) {
-      yield { name: s[0].slice(1, -1), site };
+      yield { name: s[0].slice(1, -1), site, index: s.index };
       pending2--;
     }
     cursor = s.index + s[0].length;
@@ -37652,6 +37771,32 @@ function templateHelperCalls(template, helpers) {
     for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;
+}
+var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
+function bindSelf(template, self2, ns) {
+  const refRe = SELF_REF_RE(self2);
+  const named3 = (name) => name === self2 || name.startsWith(`${self2}.`);
+  const starts = [];
+  for (const { dot, block } of scopedBlocks(template, "")) {
+    const code = block.text.replace(
+      STRING_LITERAL_RE,
+      (s) => " ".repeat(s.length)
+    );
+    for (const r of code.matchAll(refRe)) {
+      const base = r[1] === "$" ? "" : dot;
+      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
+    }
+    for (const { name, index } of [
+      ...helperCalls(block.text, dot, ""),
+      ...actionBindings(block.text)
+    ]) {
+      if (named3(name)) starts.push(block.at(index + 1));
+    }
+  }
+  return [...new Set(starts)].sort((a, b) => b - a).reduce(
+    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
+    template
+  );
 }
 function* declarationsAt(config2) {
   for (const [name, decl] of Object.entries(config2.variables)) {
@@ -48786,11 +48931,11 @@ var SourceRegistry = class _SourceRegistry {
   getLastError(name) {
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read2 = this.lastErrors.get(name);
-    const fault = this.policyFaults.get(name);
-    if (fault === void 0) return read2;
-    return read2 === void 0 ? fault : {
+    const fault2 = this.policyFaults.get(name);
+    if (fault2 === void 0) return read2;
+    return read2 === void 0 ? fault2 : {
       timestamp: read2.timestamp,
-      message: `${fault.message}; ${read2.message}`
+      message: `${fault2.message}; ${read2.message}`
     };
   }
   // Every variable whose cache policy cannot fire, with why: each render
@@ -50469,6 +50614,25 @@ function ident(name) {
 
 // src/config/loader/reserved-namespace.ts
 init_globals();
+
+// src/config/loader/plugin-scope.ts
+init_globals();
+var PLUGIN_SCOPES = ["plugins", "repo"];
+function pluginNs({ scope, name }) {
+  return `${scope}.${name}`;
+}
+var SELF = "self";
+function scopeOf(name) {
+  return PLUGIN_SCOPES.find((s) => name === s || name.startsWith(`${s}.`));
+}
+function otherScopeHint(name, declared) {
+  const scope = scopeOf(name);
+  if (scope === void 0 || scope === name) return "";
+  const other = PLUGIN_SCOPES.filter((s) => s !== scope).map((s) => `${s}${name.slice(scope.length)}`).find(declared);
+  return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
+}
+
+// src/config/loader/reserved-namespace.ts
 var GROUP_NS = "groups.";
 var MENU_NS = "menus.";
 var MENU_PAGE_NS = "menupages.";
@@ -50498,6 +50662,26 @@ function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
           line: findKeyLine(ctx.source, ["root"])
         });
       }
+    }
+  }
+}
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
+      });
     }
   }
 }
@@ -56883,7 +57067,10 @@ function authoredPlacement(raw, name) {
   }
   return void 0;
 }
-var unplacedMessage = (layoutKey, name) => `${layoutKey} entry "${name}" does not match any declared segment${renamedHint(name)}`;
+var unplacedMessage = (layoutKey, name, segments) => `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+function missingSegmentHint(name, segments) {
+  return renamedHint(name) + otherScopeHint(name, (other) => Object.hasOwn(segments, other));
+}
 function validateCrossReferences(ctx, cfg, authored) {
   const styleFragments = [
     [["globals"], cfg.globals.style, "globals.endcaps"],
@@ -57023,7 +57210,7 @@ function validateCrossReferences(ctx, cfg, authored) {
         reported.add(node.name);
         ctx.unplaced.push({
           path: path41,
-          message: unplacedMessage(layoutKey, node.name),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments),
           line
         });
       }
@@ -57053,7 +57240,7 @@ function validateCrossReferences(ctx, cfg, authored) {
       ctx.inherited.push({
         name: node.name,
         path: key,
-        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
+        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${missingSegmentHint(node.name, cfg.segments)}`,
         line: findKeyLine(ctx.source, key.split("."))
       });
     }
@@ -57767,13 +57954,9 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 ]);
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
-var PLUGIN_SCOPES = ["plugins", "repo"];
 function pluginDefinition(definition, scope) {
   const name = import_node_path17.default.basename(import_node_path17.default.dirname(definition));
-  return {
-    path: definition,
-    ns: PLUGIN_NAME.test(name) ? `${scope}.${name}` : void 0
-  };
+  return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
   return `${ns}.data`;
@@ -57806,57 +57989,56 @@ function applyPlugins(definitions, ctx, base, validate) {
   const taken = /* @__PURE__ */ new Map();
   return definitions.reduce(
     (layer, definition) => {
-      const { path: file, ns: plugin } = definition;
+      const file = definition.path;
+      const ns = definition.name === void 0 ? void 0 : pluginNs(definition);
       const drop2 = (reason, config2) => {
         const rendering = new Map(layer.rendering);
-        if (plugin !== void 0 && config2 !== layer.config)
-          rendering.delete(plugin);
+        if (ns !== void 0 && config2 !== layer.config) rendering.delete(ns);
         return {
           ...layer,
           config: config2,
           rendering,
-          dropped: [...layer.dropped, { path: file, plugin, reason }]
+          dropped: [...layer.dropped, { ...definition, reason }]
         };
       };
       if (import_node_path17.default.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         return drop2(
           reason,
-          plugin === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, plugin), plugin, {
-            path: file,
-            plugin,
+          ns === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, ns), ns, {
+            ...definition,
             reason
           })
         );
       }
-      if (plugin === void 0) {
+      if (definition.name === void 0 || ns === void 0) {
         return drop2(
           `its folder "${import_node_path17.default.basename(import_node_path17.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
-      const first2 = taken.get(plugin);
+      const first2 = taken.get(ns);
       if (first2 !== void 0) {
         return drop2(
-          `plugin "${plugin.slice(plugin.indexOf(".") + 1)}" is already listed, from ${first2}`,
+          `plugin "${definition.name}" is already listed, from ${first2}`,
           layer.config
         );
       }
-      taken.set(plugin, file);
-      const under2 = withoutPlugin(layer.config, plugin);
+      taken.set(ns, file);
+      const under2 = withoutPlugin(layer.config, ns);
       const merged = attempt2(() => {
         const source = fs_default.readFileSync(file, "utf-8");
         const config2 = mergeWithDefault(
           fragmentOf(
             file,
-            plugin,
+            definition,
             { source, json: import_json52.default.parse(source) },
             ctx
           ),
           under2
         );
-        requireOneSourcePerFile(file, plugin, config2);
-        validate(config2, plugin, under2 !== layer.config);
+        requireOneSourcePerFile(file, ns, config2);
+        validate(config2, ns, under2 !== layer.config);
         return config2;
       });
       if (merged.ok) {
@@ -57864,20 +58046,17 @@ function applyPlugins(definitions, ctx, base, validate) {
           ...layer,
           config: merged.value,
           loaded: [...layer.loaded, definition],
-          rendering: new Map([...layer.rendering, [plugin, file]])
+          rendering: new Map([...layer.rendering, [ns, definition]])
         };
       }
-      const dropped2 = { path: file, plugin, reason: merged.reason };
-      return drop2(merged.reason, tombstone(under2, plugin, dropped2));
+      const dropped2 = { ...definition, reason: merged.reason };
+      return drop2(merged.reason, tombstone(under2, ns, dropped2));
     },
     { config: base.config, rendering: base.rendering, loaded: [], dropped: [] }
   );
 }
 function ownedBy(ns) {
   return (name) => name === ns || name.startsWith(`${ns}.`);
-}
-function tombstoneVar(ns) {
-  return ns;
 }
 function withoutPlugin(config2, plugin) {
   const owned = ownedBy(plugin);
@@ -57897,12 +58076,12 @@ function withoutPlugin(config2, plugin) {
     actions: keep2(config2.actions)
   };
 }
-function tombstone(config2, plugin, dropped2) {
+function tombstone(config2, ns, dropped2) {
   return {
     ...config2,
     variables: {
       ...config2.variables,
-      [tombstoneVar(plugin)]: {
+      [ns]: {
         kind: "dropped",
         reason: droppedPluginNotice(dropped2),
         definition: dropped2.path
@@ -57910,27 +58089,26 @@ function tombstone(config2, plugin, dropped2) {
     }
   };
 }
-function pluginOf(name) {
-  const [scope, plugin] = name.split(".");
-  return PLUGIN_SCOPES.includes(scope) && plugin !== void 0 ? `${scope}.${plugin}` : void 0;
+function tombstonesOf(config2) {
+  const tombstones = Object.entries(config2.variables).flatMap(
+    ([ns, v]) => v.kind === "dropped" ? [{ ns, definition: v.definition, notice: v.reason }] : []
+  );
+  return (name) => tombstones.find(({ ns }) => ownedBy(ns)(name));
 }
 function dropsOwning(layer, beneath) {
-  const owners = new Set(
-    [
-      ...Object.keys(layer.config.variables),
-      ...Object.keys(layer.config.segments),
-      ...Object.keys(layer.config.helpers),
-      ...Object.keys(layer.config.actions)
-    ].map(pluginOf)
+  const tombstoned = tombstonesOf(layer.config);
+  const rendering = [...layer.rendering.keys()].map(ownedBy);
+  const unnamed = [...beneath, ...layer.dropped].filter(
+    (d) => d.name === void 0
   );
-  const unnamed = [...beneath, ...layer.dropped].filter((d) => d.plugin === void 0).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   return (name) => {
-    const plugin = pluginOf(name);
-    if (plugin === void 0) return [];
-    const data = layer.config.variables[tombstoneVar(plugin)];
-    if (data?.kind === "dropped")
-      return [{ definition: data.definition, notice: data.reason }];
-    return owners.has(plugin) ? [] : unnamed;
+    const scope = scopeOf(name);
+    if (scope === void 0) return [];
+    const cause = tombstoned(name);
+    if (cause !== void 0)
+      return [{ definition: cause.definition, notice: cause.notice }];
+    if (rendering.some((owns) => owns(name))) return [];
+    return unnamed.filter((d) => d.scope === scope).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   };
 }
 function withDroppedPlacements(config2, owning) {
@@ -57950,16 +58128,12 @@ function withDroppedPlacements(config2, owning) {
       )
     ])
   );
-  const tombstoned = (name) => {
-    const plugin = pluginOf(name);
-    const data = plugin === void 0 ? void 0 : config2.variables[tombstoneVar(plugin)];
-    return data?.kind === "dropped" ? { definition: data.definition, notice: data.reason } : void 0;
-  };
+  const tombstoned = tombstonesOf(config2);
   const anyTombstone = Object.values(config2.variables).some(
     (v) => v.kind === "dropped"
   );
   const templates = anyTombstone ? Object.values(config2.segments).flatMap(
-    (seg2) => ["template", "bg", "fg", "when"].flatMap(
+    (seg2) => SEGMENT_TEMPLATE_FIELDS.flatMap(
       (f) => seg2[f] === void 0 ? [] : [seg2[f]]
     )
   ) : [];
@@ -58012,9 +58186,9 @@ function withDroppedPlacements(config2, owning) {
           lowered.map(({ name, action: action2 }) => [name, action2])
         ),
         ...Object.fromEntries(
-          actionStandIns.map(([name]) => [
+          actionStandIns.map(([name, { ns }]) => [
             name,
-            { copy: `{{ .${tombstoneVar(pluginOf(name) ?? "")} }}` }
+            { copy: `{{ .${ns} }}` }
           ])
         )
       },
@@ -58069,7 +58243,8 @@ function settingFor(label2, values2) {
     default: first2
   };
 }
-function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
+function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
+  const ns = pluginNs(id2);
   const issues = [];
   const fail2 = () => {
     throw new ConfigError(file, issues);
@@ -58129,7 +58304,7 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
       });
     }
   }
-  const fragment = {
+  const fragment = boundToSelf(ns, {
     variables: {
       ...data,
       ...prefixed(ns, sources),
@@ -58159,7 +58334,7 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
         })
       )
     )
-  };
+  });
   for (const [where, template] of fragmentTemplates(fragment)) {
     try {
       SYNTAX_ENGINE.parse(template);
@@ -58170,8 +58345,73 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
       });
     }
   }
+  issues.push(...wrongScopeRefs(fragment, id2));
   if (issues.length > 0) fail2();
   return fragment;
+}
+function boundToSelf(ns, fragment) {
+  const bind = (template) => bindSelf(template, SELF, ns);
+  const named3 = (name) => name === SELF || name.startsWith(`${SELF}.`) ? `${ns}${name.slice(SELF.length)}` : name;
+  const each = (table, f) => Object.fromEntries(
+    Object.entries(table ?? {}).map(([name, value]) => [name, f(value)])
+  );
+  return {
+    ...fragment,
+    variables: each(fragment.variables, (v) => mapVariableTemplates(v, bind)),
+    segments: each(fragment.segments, (seg2) => ({
+      ...seg2,
+      ...Object.fromEntries(
+        SEGMENT_TEMPLATE_FIELDS.flatMap(
+          (f) => seg2[f] === void 0 ? [] : [[f, bind(seg2[f])]]
+        )
+      ),
+      ...seg2.vars !== void 0 && {
+        vars: each(seg2.vars, (v) => mapVariableTemplates(v, bind))
+      }
+    })),
+    helpers: each(fragment.helpers, bind),
+    actions: each(fragment.actions, (a) => {
+      const bound = mapActionTemplates(a, bind);
+      return "do" in bound ? { ...bound, do: bound.do.map(named3) } : bound;
+    })
+  };
+}
+var SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"];
+function wrongScopeRefs(fragment, id2) {
+  const helpers = fragment.helpers ?? {};
+  const elsewhere = PLUGIN_SCOPES.filter((s) => s !== id2.scope).map(
+    (scope) => ({ scope, ns: pluginNs({ scope, name: id2.name }) })
+  );
+  const issues = /* @__PURE__ */ new Map();
+  const check = (where, ref, read2) => {
+    const other = elsewhere.find(({ ns }) => ownedBy(ns)(ref));
+    if (other === void 0) return;
+    const dot = read2 ? "." : "";
+    issues.set(`${where}\0${ref}`, {
+      path: where,
+      message: `${where} names ${dot}${ref}, this plugin under "${other.scope}", but it loads as ${pluginNs(id2)}: a plugin names itself without its scope \u2014 write ${dot}${SELF}${ref.slice(other.ns.length)}`
+    });
+  };
+  const templates = [
+    ...[...fragmentTemplates(fragment)].filter(
+      ([where]) => !where.startsWith("helpers.")
+    ),
+    ...Object.entries(helpers).map(
+      ([name, body]) => [`helpers.${name}`, body]
+    )
+  ];
+  for (const [where, template] of templates) {
+    for (const [ref, via] of templateReads(template, helpers))
+      if (via === null) check(where, ref, true);
+    for (const { name, via } of templateActionRefs(template, helpers))
+      if (via === null) check(where, name, false);
+    for (const name of templateHelperCalls(template, helpers))
+      check(where, name, false);
+  }
+  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
+    if ("do" in a) for (const m of a.do) check(`actions.${name}.do`, m, false);
+  }
+  return [...issues.values()];
 }
 function* fragmentTemplates(fragment) {
   for (const [name, v] of Object.entries(fragment.variables ?? {})) {
@@ -58180,7 +58420,7 @@ function* fragmentTemplates(fragment) {
     }
   }
   for (const [name, seg2] of Object.entries(fragment.segments ?? {})) {
-    for (const field of ["template", "bg", "fg", "when"]) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const t2 = seg2[field];
       if (t2 !== void 0) yield [`segments.${name}.${field}`, t2];
     }
@@ -58382,14 +58622,15 @@ function installedPlugins(repo2) {
         import_node_path18.default.join(root, name, DEFINITION_FILE),
         scope
       );
-      const key = `${scope}.${name}`;
+      const key = `${scope}\0${name}`;
       byNs.delete(key);
       byNs.set(key, definition);
     }
     for (const file of listed.files) {
       strays.push({
         path: import_node_path18.default.join(root, file),
-        plugin: void 0,
+        scope,
+        name: void 0,
         reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path18.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
@@ -58634,9 +58875,6 @@ function dslConfigCandidatePaths(projectDir, cwd2, configFile) {
   ];
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
-function layerScope(file) {
-  return import_node_path20.default.basename(file).replace(/\.(json5|json)$/, "") === REPO_CONFIG_BASE ? "repo" : "plugins";
-}
 function xdgConfigBase() {
   const xdgConfigHome = process_default.env.XDG_CONFIG_HOME ?? import_node_path20.default.join(os_default.homedir(), ".config");
   return import_node_path20.default.join(xdgConfigHome, "cc-candybar", "config");
@@ -58673,14 +58911,23 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
     found.flatMap((f) => f.repo === null ? [] : [f.repo]),
     repoProject(projectDir)
   );
-  const layers = found.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).map((f) => f.file).reverse();
+  const kept = found.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
+  const layers = kept.map((f) => f.file);
+  const repoLayers = kept.flatMap((f) => f.repo === null ? [] : [f.file]);
   if (configFile === void 0) {
-    return { kind: "chain", layers, home: userHome(layers), unchecked, repos };
+    return {
+      kind: "chain",
+      layers,
+      repoLayers,
+      home: userHome(layers),
+      unchecked,
+      repos
+    };
   }
   const [own2] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
+    return { kind: "chain", layers, repoLayers, home, unchecked, repos };
   }
   return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
 }
@@ -58709,6 +58956,7 @@ function durableConfig(answers, projectDir, cwd2, configFile) {
   return {
     path: resolved.home,
     above: layers.filter((l) => l !== resolved.home),
+    repoLayers: resolved.kind === "chain" ? resolved.repoLayers : [],
     repo: resolved.repos.plugins,
     cwd: cwd2 ?? null
   };
@@ -58764,6 +59012,7 @@ function loadConfig(path41, dflt, ctx, allowedPalettes) {
   );
 }
 var NO_PROJECT = {
+  scope: "plugins",
   repo: null,
   checkout: null,
   beneath: { dropped: [], rendering: /* @__PURE__ */ new Map() }
@@ -58773,7 +59022,7 @@ function loadConfigSource(path41, source, dflt, ctx, allowedPalettes) {
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path41, layerScope(path41)),
+      listedPlugins(refs, path41, ctx.scope),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path41, allowedPalettes)
@@ -58809,7 +59058,7 @@ var installedMemo = /* @__PURE__ */ new WeakMap();
 function installedLayer(definitions, ctx, dflt, allowedPalettes) {
   const key = JSON.stringify([
     [...allowedPalettes ?? []].sort(),
-    definitions.map((d) => [d.path, d.ns, statKey(d.path)])
+    definitions.map((d) => [d.path, d.scope, statKey(d.path)])
   ]);
   const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
   installedMemo.set(dflt, byProject);
@@ -58859,6 +59108,9 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
+        // [LAW:one-source-of-truth] A layer's scope is where discovery found
+        // it, carried here as data — never read off the file's name.
+        scope: session.repoLayers.includes(path41) ? "repo" : "plugins",
         beneath: {
           dropped: [
             ...plugins2.dropped,
@@ -59044,7 +59296,7 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped2 = droppedByFile(filePath2, ctx, beneath, filed);
+  const dropped2 = droppedByFile(filePath2, merged.segments, ctx, beneath, filed);
   const config2 = dropped2.length === 0 ? merged : withoutUnplaced(merged);
   const withMenus = synthesizePlacementMenus(config2, issues);
   refuseIfIssues();
@@ -59087,14 +59339,18 @@ function layerInserts(top, beneath) {
         file: layer.path,
         issue: {
           path: cell3.by.entry,
-          message: unplacedMessage(cell3.by.entry, cell3.seg),
+          message: unplacedMessage(
+            cell3.by.entry,
+            cell3.seg,
+            top.config.segments
+          ),
           line: lineOf(cell3.by.entry.split("."))
         }
       }));
     })
   };
 }
-function droppedByFile(filePath2, ctx, beneath, filed) {
+function droppedByFile(filePath2, segments, ctx, beneath, filed) {
   const byFile = /* @__PURE__ */ new Map();
   const add2 = (file, issue3) => {
     byFile.set(file, [...byFile.get(file) ?? [], issue3]);
@@ -59110,7 +59366,7 @@ function droppedByFile(filePath2, ctx, beneath, filed) {
     else
       add2(author.layer.path, {
         path: author.path,
-        message: unplacedMessage(author.layoutKey, name),
+        message: unplacedMessage(author.layoutKey, name, segments),
         line: findKeyLine(author.layer.source, author.path.split("."))
       });
   }
@@ -59239,6 +59495,7 @@ function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
     SETTINGS_NS,
     "the global settings menu"
   );
+  pluginScopeCollisions(ctx, out, inheritedSegments);
   return out;
 }
 var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
@@ -61816,7 +62073,7 @@ function chainOver(home, text3) {
     DEFAULT_DSL_CONFIG,
     { warned: () => {
     } },
-    { repo: home.repo, cwd: home.cwd },
+    { repo: home.repo, cwd: home.cwd, repoLayers: home.repoLayers },
     (p2) => p2 === home.path && text3 !== null ? text3 : fs_default.readFileSync(p2, "utf8")
   );
 }
@@ -63054,20 +63311,20 @@ function sessionEnv(daemonEnv, facts) {
 init_globals();
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function parseMarkBook(doc) {
-  const fault = (reason) => ({
+  const fault2 = (reason) => ({
     kind: "failed",
     reason
   });
-  if (!isRecord(doc)) return fault("is not an object");
+  if (!isRecord(doc)) return fault2("is not an object");
   for (const [check, sightings] of Object.entries(doc)) {
     if (!isRecord(sightings)) {
-      return fault(
+      return fault2(
         `holds ${JSON.stringify(check)} as something other than its sightings`
       );
     }
     for (const [id2, mark] of Object.entries(sightings)) {
       if (!GLYPH_MARKS.includes(mark)) {
-        return fault(
+        return fault2(
           `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
         );
       }
@@ -64450,8 +64707,8 @@ function readLanes(inputs) {
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
     if (!needed) return ABSENT2;
-    const fault = deps.faults.of(sessionId2, lane);
-    if (fault !== void 0) return fault;
+    const fault2 = deps.faults.of(sessionId2, lane);
+    if (fault2 !== void 0) return fault2;
     try {
       return value();
     } catch (e) {
@@ -64659,17 +64916,19 @@ function sourcesFactOf(sources) {
   };
 }
 function projectSources(names, read2) {
-  const scoped = Object.fromEntries(
-    PLUGIN_SCOPES.map((scope) => [
-      scope,
-      {}
-    ])
+  const payload = Object.fromEntries(
+    PLUGIN_SCOPES.map((scope) => [scope, {}])
   );
   for (const name of names) {
-    const [scope, plugin, source] = name.split(".");
-    (scoped[scope][plugin] ??= {})[source] = read2(name);
+    const keys2 = name.split(".");
+    const leaf = keys2.pop();
+    const parent = keys2.reduce(
+      (at, key) => at[key] ??= {},
+      payload
+    );
+    parent[leaf] = read2(name);
   }
-  return scoped;
+  return payload;
 }
 function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
@@ -68967,14 +69226,6 @@ function describeRelease(c) {
       return ["warn", `release: unchecked: ${c.reason}`];
   }
 }
-function changeLogger(log) {
-  let last2 = null;
-  return ([level, msg]) => {
-    if (msg === last2) return;
-    last2 = msg;
-    log(level, msg);
-  };
-}
 var lastLine = (text3) => text3.split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1);
 function failureReason(r) {
   const exit2 = r.exitCode === null ? "" : ` (exit ${r.exitCode})`;
@@ -69042,6 +69293,7 @@ function makeUpdateWatch(opts) {
       }
     },
     notice: (ctx) => updateNotice(current(), act, ctx),
+    running: () => act.kind === "running",
     act() {
       const update = current();
       if (update === null) {
@@ -69090,7 +69342,8 @@ function sameStamp(a, b) {
   return a.kind === "ok" && b.kind === "ok" ? a.value === b.value : a.kind === b.kind;
 }
 function makeBinaryWatch(opts) {
-  const { targets, intervalMs, stat: stat3, exit: exit2, log } = opts;
+  const { targets, intervalMs, stat: stat3, held, exit: exit2, log } = opts;
+  const logHeld = changeLogger(log);
   const boot = targets.map((path41) => ({ path: path41, stamp: mtimeOf(path41, stat3) }));
   const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
   let timer = null;
@@ -69102,10 +69355,15 @@ function makeBinaryWatch(opts) {
         continue;
       }
       if (!sameStamp(stamp, now2)) {
-        log(
-          "info",
-          `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path41}); shutting down`
-        );
+        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path41})`;
+        if (held()) {
+          logHeld([
+            "info",
+            `${what}; the restart waits for the running update`
+          ]);
+          return;
+        }
+        log("info", `${what}; shutting down`);
         if (timer) clearInterval(timer);
         exit2();
         return;
@@ -72525,8 +72783,8 @@ var ManagedStorage = class {
     }
   }
   async read(f) {
-    const fault = this.standing(f.storage);
-    if (fault !== null) return failed(fault);
+    const fault2 = this.standing(f.storage);
+    if (fault2 !== null) return failed(fault2);
     const file = fileOf(f);
     let text3;
     try {
@@ -75786,11 +76044,11 @@ function compileKey(input) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 function declareDslVariables(config2, registry, cwd2, scopes) {
-  const scopeOf = variableScopes(config2);
+  const scopeOf2 = variableScopes(config2);
   const projections = projectionsOf(config2);
   const loadWarnings = [];
   for (const [name, decl] of declaredVariables(config2)) {
-    if (!scopes.has(scopeOf.get(name))) continue;
+    if (!scopes.has(scopeOf2.get(name))) continue;
     try {
       declareOne(
         registry,
@@ -76260,12 +76518,12 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     );
     const frameMotion = rendered.some((row2) => row2.moves) ? "moves" : armed() ? "can-move" : "still";
     for (const message of shortfalls) warn({ kind: "band-floor", message });
-    for (const [variable, fault] of registry.cachePolicyFaults())
+    for (const [variable, fault2] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
         variable,
-        error: fault.message,
-        message: `variable "${variable}" cannot refresh: ${fault.message}`
+        error: fault2.message,
+        message: `variable "${variable}" cannot refresh: ${fault2.message}`
       });
     return {
       text: rendered.map((row2) => row2.text).join("\n"),
@@ -76461,11 +76719,11 @@ function pluginLoadLine(layers, {
 }, ms) {
   const { checkout, loaded, dropped: dropped2, unreached } = plugins2;
   const checkoutField = checkout === null ? "-" : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
-  const dataOf = ({ ns }) => {
-    const data = ns === void 0 ? void 0 : config2.variables[pluginDataVar(ns)];
+  const dataOf = (definition) => {
+    const data = definition.name === void 0 ? void 0 : config2.variables[pluginDataVar(pluginNs(definition))];
     return data?.kind === "file" ? data.path : "none";
   };
-  const declared = loaded.flatMap(({ ns }) => ns === void 0 ? [] : [ns]).flatMap(
+  const declared = loaded.flatMap((d) => d.name === void 0 ? [] : [pluginNs(d)]).flatMap(
     (ns) => Object.entries(config2.variables).filter(
       ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns)
     )
@@ -76580,6 +76838,7 @@ function loadKey(inputs) {
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,
+      repoLayers: chain2.repoLayers,
       home: chain2.home,
       repo: chain2.repo
     },
@@ -76635,7 +76894,7 @@ function resolveLoad(cwd2, chain2, storage) {
       chain2.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain2.repo, cwd: cwd2 }
+      { repo: chain2.repo, cwd: cwd2, repoLayers: chain2.repoLayers }
     );
     const inputs = {
       cwd: cwd2,
@@ -76715,7 +76974,7 @@ function buildRenderState(load, deps) {
         roots: installed.roots,
         // What renders, as the loader decided it: a nearer layer's load or
         // drop replaces a farther one's of the same namespace.
-        loaded: [...installed.rendering].map(([ns, path41]) => ({ path: path41, ns })),
+        loaded: [...installed.rendering.values()],
         dropped: [
           ...installed.dropped,
           ...layers.flatMap((l) => l.plugins.dropped)
@@ -76774,6 +77033,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const { repos } = resolution;
   const chain2 = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
+    repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
     home: resolution.home,
     repo: repos.plugins
   };
@@ -76793,7 +77053,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
 function fallbackState(cwd2, repo2, deps) {
   const resolved = resolveLoad(
     cwd2,
-    { layers: [], home: "", repo: repo2 },
+    { layers: [], repoLayers: [], home: "", repo: repo2 },
     deps.storage
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
@@ -76819,10 +77079,10 @@ function openView(state, cwd2, facts, { sessionState: sessionState2, declare, so
         acquired,
         released
       } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
-      for (const fault of faults) {
+      for (const fault2 of faults) {
         log(
           "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
+          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault2}`
         );
       }
       if (acquired + released > 0) {
@@ -80421,6 +80681,13 @@ fileEvents.subscribe((notice) => {
       return;
   }
 });
+setLifelineObserver((fault2) => {
+  dlog(
+    fault2 === null ? "info" : "warn",
+    fault2 === null ? "launch lifeline running again" : `launch lifeline ${fault2}; the next launch starts another`
+  );
+  frameFeeds.wakeWhere("data", () => true);
+});
 var BIN_CHECK_INTERVAL_MS = 60 * 1e3;
 var RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
 var binaryWatch = makeBinaryWatch({
@@ -80433,6 +80700,10 @@ var binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs_default.statSync,
+  // The update notice's act rewrites the bundle from a launch child, which
+  // dies with the daemon: a restart waits for it. A success samples again at
+  // once; after a failure the next tick does.
+  held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog
 });
@@ -81196,6 +81467,7 @@ function drawRender(setup, drawing2) {
   ].flatMap(({ about, text: text3 }) => about && text3 ? [{ about, text: text3 }] : []);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
+    ...lifelineWarnings(),
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
   ];
   const scope = { config: state.config };
@@ -81299,6 +81571,7 @@ function drawRender(setup, drawing2) {
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "lifeline":
       case "band-floor":
       case "when":
         return w.kind;
@@ -81719,6 +81992,7 @@ function updateRepo(next2) {
 `);
 }
 var ok2 = (stdout2) => ({ code: 0, stdout: stdout2 });
+programs.set("awk", () => RESIDENT);
 programs.set("ps", () => ok2(""));
 programs.set("git", (args) => {
   const line = args.join(" ");
