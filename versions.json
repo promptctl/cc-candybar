@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "73801c6e3b63cf23ed6af12476e50b45a0c45333",
+      "timestamp": "2026-10-30T16:13:18.748Z",
+      "commits": [
+        {
+          "sha": "73801c6e3b63cf23ed6af12476e50b45a0c45333",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:12:35-06:00",
+          "message": "fix(colour): grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7) (#493)\n\n* fix(colour): grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7)\n\nA container inside a row was one address, so every cell in it wore one\nshade: a grouped { h } drew in one colour, and so did the settings door\nand its frame-rate cell. The compile now places every leaf of a row at\nits own place on the row's line, through any nested { h }, and stores\neach child's step on its container; a cell is read as its innermost cell\nstep. A { v } in a row draws its first child on the row's line and each\nother on a line of its own below, each placed from where it sits.\n\nEdit chrome's unit around a content cell is marked `unit` (synthesis-\nonly) and shares the cell's one place, so edit mode recolours nothing.\nThe loader refuses a distribution anywhere inside a row with one\nmessage. Snapshots and doc render fences regenerate: the door's divider\nbecomes an arrow and the cells after it move one place.\n\n* fix(colour): every drawn line's ends wear its keystones, and a gated first row's distribution places its cells (candybar-joiners-e5r4.3m7)\n\nA `{ v }` inside a row draws lines below the row whose places count from\nwhere the `{ v }` sits, and the row's count is the farthest place any line\nreaches. Keystones read `count - 1` as the line's end, so the row line's last\nleaf lost line-end whenever a lower line reached further, and a lower line's\nfirst leaf never wore line-start. Every address step now carries the first\nand last place of the line its node is drawn on; the keystones read those,\nand the region memo compares them.\n\nThe default door placement wraps a gated first row in a new row after\ncross-ref has accepted the gated row's `distribution`. Nested in that row,\nit placed nothing, and the author's distribution was ignored without a word.\nThe wrapper now carries it, so a gated first row places its cells as an\nungated one does.\n\nTests: a `{ v }` in a row (the lines it draws, every leaf's place and the\nrow's count, each line's keystones, a count-reading distribution);\na gated first row; the `muted` exemption named and guarded so it cannot\nwiden and fails once that position gains a second tone; hiding through a\ngroup nested two deep.\n\n* docs(colour): the colour design doc states that a row's leaves take its places, edit chrome's unit excepted (candybar-joiners-e5r4.3m7)\n\nThe rule and two Decisions bullets still said anything nested inside a cell\nwears the cell's colour. They now state the leaf rule, and a 3m7 entry in\nDecisions says why grouping is layout, what a `{ v }` in a row places, why\nthe keystones read line ends rather than the count, and why edit chrome's\nunit shares one place and is a mark on a container rather than a node kind.\n\n* fix(colour): a `{ v }` whose first child draws nothing gives its line to the next, and a gated row's distribution moves to the row that leads it (candybar-joiners-e5r4.3m7)\n\nA vertical container's first line is drawn by the first child that draws a\nline, since an empty container draws none. Placement took the first child's\nwidth whatever it was, so in `[a, { v: [{ h: [] }, b] }, c]` b and c drew\nside by side at one place, in one shade, with a divider between them. A\nchild of a vertical container now starts a line of its own only once an\nearlier child has drawn one, and a container's width is the places of the\nchildren on its first line; the empty-container fallback goes with it.\n\nThe door placement now moves a gated row's distribution onto the row it\nbuilds around it, rather than copying it, so the synthesized tree has one\nplacer per row and no distribution inside a row, as the loader requires of\nan authored one.\n\n`placeChildren` loses its export: the compile is its only caller. The\ncomment on `distribution` says where it is read and what count a\ncount-reading distribution reads.\n\n* refactor(colour): a line's width is named once, and a gated row keeps its row and moves only its gate in (candybar-joiners-e5r4.3m7)\n\nA container's width and a row's line end now read one `widthOf` beside\n`reachOf`, over the children already laid out, instead of laying the row\nout a second time to ask its span.\n\nThe door placement led a gated row by building a new row and moving the\ndistribution onto it, one field picked by hand. A field that only a row\nreads, added later, would have stayed on the inner node and been ignored.\nNow the gated row stays the row and only its gate moves in, onto a\ncontainer around its cells, so whatever makes it a row stays where a row\nis read.\n\n* test(colour): the bar's bytes give the rate cell its own place over the named activated shades (candybar-joiners-e5r4.3m7)"
+        }
+      ]
+    },
+    {
       "version": "pr-501",
       "ref": "refs/pull/501/merge",
       "sha": "b6b67e8fc7a180cafce4c25582ffa33d3109759f",
@@ -49,78 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:55:19-06:00",
           "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-493",
-      "ref": "refs/pull/493/merge",
-      "sha": "cee7369f43ce7d3136b155df0cf84d726152d488",
-      "timestamp": "2026-10-30T15:53:19.563Z",
-      "commits": [
-        {
-          "sha": "cee7369f43ce7d3136b155df0cf84d726152d488",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:52:40Z",
-          "message": "Merge a0f4af22e2b882e636bce44c25fbdeae06fa4953 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
-        },
-        {
-          "sha": "a0f4af22e2b882e636bce44c25fbdeae06fa4953",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:47:45-06:00",
-          "message": "test(colour): the bar's bytes give the rate cell its own place over the named activated shades (candybar-joiners-e5r4.3m7)\n"
-        },
-        {
-          "sha": "a837824f3f4eeb4feba012be9378d247287df14c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:02:24-06:00",
-          "message": "refactor(colour): a line's width is named once, and a gated row keeps its row and moves only its gate in (candybar-joiners-e5r4.3m7)\n\nA container's width and a row's line end now read one `widthOf` beside\n`reachOf`, over the children already laid out, instead of laying the row\nout a second time to ask its span.\n\nThe door placement led a gated row by building a new row and moving the\ndistribution onto it, one field picked by hand. A field that only a row\nreads, added later, would have stayed on the inner node and been ignored.\nNow the gated row stays the row and only its gate moves in, onto a\ncontainer around its cells, so whatever makes it a row stays where a row\nis read.\n"
-        },
-        {
-          "sha": "56372ee906be6fd87ee5e6085f75a3340a9b8e4f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:50:28-06:00",
-          "message": "fix(colour): a `{ v }` whose first child draws nothing gives its line to the next, and a gated row's distribution moves to the row that leads it (candybar-joiners-e5r4.3m7)\n\nA vertical container's first line is drawn by the first child that draws a\nline, since an empty container draws none. Placement took the first child's\nwidth whatever it was, so in `[a, { v: [{ h: [] }, b] }, c]` b and c drew\nside by side at one place, in one shade, with a divider between them. A\nchild of a vertical container now starts a line of its own only once an\nearlier child has drawn one, and a container's width is the places of the\nchildren on its first line; the empty-container fallback goes with it.\n\nThe door placement now moves a gated row's distribution onto the row it\nbuilds around it, rather than copying it, so the synthesized tree has one\nplacer per row and no distribution inside a row, as the loader requires of\nan authored one.\n\n`placeChildren` loses its export: the compile is its only caller. The\ncomment on `distribution` says where it is read and what count a\ncount-reading distribution reads.\n"
-        },
-        {
-          "sha": "56cf59e25c3659763da81c0de38fc1b54df3a65e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:41:39-06:00",
-          "message": "docs(colour): the colour design doc states that a row's leaves take its places, edit chrome's unit excepted (candybar-joiners-e5r4.3m7)\n\nThe rule and two Decisions bullets still said anything nested inside a cell\nwears the cell's colour. They now state the leaf rule, and a 3m7 entry in\nDecisions says why grouping is layout, what a `{ v }` in a row places, why\nthe keystones read line ends rather than the count, and why edit chrome's\nunit shares one place and is a mark on a container rather than a node kind.\n"
-        },
-        {
-          "sha": "dbe89d18b92d5ed65b75c35104574f9c94c8f1d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:41:39-06:00",
-          "message": "fix(colour): every drawn line's ends wear its keystones, and a gated first row's distribution places its cells (candybar-joiners-e5r4.3m7)\n\nA `{ v }` inside a row draws lines below the row whose places count from\nwhere the `{ v }` sits, and the row's count is the farthest place any line\nreaches. Keystones read `count - 1` as the line's end, so the row line's last\nleaf lost line-end whenever a lower line reached further, and a lower line's\nfirst leaf never wore line-start. Every address step now carries the first\nand last place of the line its node is drawn on; the keystones read those,\nand the region memo compares them.\n\nThe default door placement wraps a gated first row in a new row after\ncross-ref has accepted the gated row's `distribution`. Nested in that row,\nit placed nothing, and the author's distribution was ignored without a word.\nThe wrapper now carries it, so a gated first row places its cells as an\nungated one does.\n\nTests: a `{ v }` in a row (the lines it draws, every leaf's place and the\nrow's count, each line's keystones, a count-reading distribution);\na gated first row; the `muted` exemption named and guarded so it cannot\nwiden and fails once that position gains a second tone; hiding through a\ngroup nested two deep.\n"
-        },
-        {
-          "sha": "4816d9476ebc542590d9986c29818d0fe19492ff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:19:40-06:00",
-          "message": "fix(colour): grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7)\n\nA container inside a row was one address, so every cell in it wore one\nshade: a grouped { h } drew in one colour, and so did the settings door\nand its frame-rate cell. The compile now places every leaf of a row at\nits own place on the row's line, through any nested { h }, and stores\neach child's step on its container; a cell is read as its innermost cell\nstep. A { v } in a row draws its first child on the row's line and each\nother on a line of its own below, each placed from where it sits.\n\nEdit chrome's unit around a content cell is marked `unit` (synthesis-\nonly) and shares the cell's one place, so edit mode recolours nothing.\nThe loader refuses a distribution anywhere inside a row with one\nmessage. Snapshots and doc render fences regenerate: the door's divider\nbecomes an arrow and the cells after it move one place.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "fe783f48728a83116d74cf3674e4695aff77fd76",
-      "timestamp": "2026-10-30T15:46:34.330Z",
-      "commits": [
-        {
-          "sha": "fe783f48728a83116d74cf3674e4695aff77fd76",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:45:45-06:00",
-          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6) (#492)\n\n* fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n\n* test(colour): the palette-identity walk names its one exemption, and why authored backgrounds need none (candybar-joiners-e5r4.dg6)\n\n* docs(colour): the colour design doc states the open menu's named shades, not the search they replaced (candybar-joiners-e5r4.dg6)\n\nCOLOUR-FROM-THEME-VOCABULARY.md is ACTIVE and is where the colour memory\nsends a reader for the rationale, but its rule, region table and\ndisclosure rules still described the state search, the plane's\nrecession and the floors as current. They now state the selected\nshades; a dg6 entry in Decisions says what it supersedes and points to\nPROPOSAL-joiners.md for why, and \"What was deleted\" lists the symbols.\n\n* test(colour): drop the DecorEntry import the deleted row-ground test left unread (candybar-joiners-e5r4.dg6)\n\n* test(colour): the menu bytes draw the named activated shades over rich-js 0.25's arrows (candybar-joiners-e5r4.dg6)"
         }
       ]
     },
