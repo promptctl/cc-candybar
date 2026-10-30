@@ -4,65 +4,36 @@
     {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
-      "sha": "68a0406b6c8044d8cc2e38d4b58c6b7d9583fcde",
-      "timestamp": "2026-10-30T09:32:32.434Z",
+      "sha": "d89a742002c9bff384f6d131fd424de71ae5249f",
+      "timestamp": "2026-10-30T09:34:53.970Z",
       "commits": [
         {
-          "sha": "68a0406b6c8044d8cc2e38d4b58c6b7d9583fcde",
+          "sha": "d89a742002c9bff384f6d131fd424de71ae5249f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:31:44Z",
-          "message": "Merge a014c7f7ac444c9c702acac467bdfc906d4774ab into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+          "timestamp": "2026-10-30T09:34:13Z",
+          "message": "Merge bec779a098298ac1c608210d77aa3d0abea31667 into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
         },
         {
-          "sha": "a014c7f7ac444c9c702acac467bdfc906d4774ab",
+          "sha": "bec779a098298ac1c608210d77aa3d0abea31667",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:31:32-06:00",
           "message": "fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n"
         },
         {
-          "sha": "349c86dd39ad8093c6ddacd3d149c3af2e2a76bc",
+          "sha": "a747f5058d1f570f390d3fe2752f150884e2b350",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:30:03-06:00",
           "message": "fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n"
         },
         {
-          "sha": "3de9afea2984fe93871460f954c6860ea18a376c",
+          "sha": "5a7d9cc09dcbeb25437711528d5f32f553575def",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:11:46-06:00",
           "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-485",
-      "ref": "refs/pull/485/merge",
-      "sha": "8c93d1dafe953410a772c89b3bb4c6eb5f7deff9",
-      "timestamp": "2026-10-30T09:29:53.801Z",
-      "commits": [
-        {
-          "sha": "8c93d1dafe953410a772c89b3bb4c6eb5f7deff9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:29:03Z",
-          "message": "Merge a89c51aeba227f3e75d84a25d4316547bd41d93f into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
-        },
-        {
-          "sha": "a89c51aeba227f3e75d84a25d4316547bd41d93f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:28:50-06:00",
-          "message": "fix(daemon): a catch-up re-reads watch_file sources, and the row stands while the span is open (brandon-unfiled-3248.y66h)\n\nA `watch_file` source watches through its directory on the same OS stream\nthe probe tests, so a stall silenced it too, and nothing re-read it when\nevents resumed. Every registry now subscribes to the delivery owner's\ncatch-ups, and a catch-up fires each watched file's subscribers as its own\nwatch would have.\n\nThe bar's row and daemon-stats' line derive from the unvouched span, not\nthe state's label: a probe that landed after a stall is not one heard, so\ndelivering with the span open still warns, and the stats line names the\nspan's start in every state.\n\nThe causes that reload every entry are their own type, so a single entry's\ncause cannot be batched.\n"
-        },
-        {
-          "sha": "315a3feeddef3025027a6322ece1a0ee8f9acf97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:08:34-06:00",
-          "message": "fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h)\n\nThe daemon writes a probe into a folder of its own each period and judges\ndelivery for every watch it holds: delivering, stalled, or unmeasured with a\nreason. A stall or an unmeasured span draws an amber row naming the span's\nstart, daemon-stats prints a fileEvents line, and the span's close reloads\nevery config entry under events-resumed and re-reads every held plugin file.\nPlugin storage reads that one owner in place of a probe per folder, and keeps\njudging each folder's identity on the owner's period.\n"
         }
       ]
     },
