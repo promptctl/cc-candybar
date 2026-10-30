@@ -2,52 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-495",
-      "ref": "refs/pull/495/merge",
-      "sha": "8b74697f030c44b4bbca31eeccf3384ceff4baf5",
-      "timestamp": "2026-10-30T13:24:56.325Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "592090572d8ec1c672f7c5994824e93e218f8291",
+      "timestamp": "2026-10-30T13:32:59.422Z",
       "commits": [
         {
-          "sha": "8b74697f030c44b4bbca31eeccf3384ceff4baf5",
+          "sha": "592090572d8ec1c672f7c5994824e93e218f8291",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:24:00Z",
-          "message": "Merge d7d79fda85ee10572db8bc30f2547d9a724c8b6e into de52a356dd72f020a4f914a98688bac6a27ebd13\n"
+          "timestamp": "2026-10-30T07:32:00-06:00",
+          "message": "fix(var-system): a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24) (#495)\n\n* fix(var-system): a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24)\n\nA `watch_file` source followed its symlink to the final target and watched\nonly that target's directory, so re-pointing a link (`ln -sfn`) or a dangling\nlink's target appearing refreshed nothing.\n\nThe config watcher's target builder moves whole into the watcher registry's\nmodule as the one rule for where a set of paths can change: every hop of each\npath's link chain, by name in its nearest existing directory, names unioned per\ndirectory, a directory watched whole overriding them. The config watcher and\nthe var-system watch both call it.\n\nA link walk the kernel stops (a loop, a readlink racing a delete) now keeps\nthe hops it reached instead of falling back to the spelled path, so a link\nre-pointed by delete-then-create is still heard where it reappears. The writer\nkeeps its throwing view of the same walk.\n\nThe var-system watch holds each directory as open or failed, reconciled to the\nset at every re-derive, so an unchanged directory is never reopened and a\nrefusal touches only its own directory. Its fault is derived (walk stops plus\nfailed directories), reported to every subscriber including late ones, and\nclears when the cause does. A handle error, which previously had no listener\nand would have taken the daemon down, now fails its directory, re-reads every\nsubscriber, and reopens at the next event-driven re-derive.\n\n`isDirectory` goes; plugin-install asks `canonicalDirectory`, the one answer\nto \"is this an existing directory\".\n\n* fix(var-system): a watch_file directory recreated at its path is watched again, and a link gone before its readlink ends the chain (brandon-unfiled-3248.sy24)\n\nLinux's inotify follows the inode, so a handle on a directory removed and\nmade again at its path heard nothing more and said nothing. Each open\nhandle now carries the folder identity it bound, and a re-derive reopens\nany whose directory has moved.\n\nA link removed between its lstat and its readlink is the chain ending,\nthe same fact as a link already gone, not a stopped walk: a non-atomic\n`ln -sf` no longer flashes a watch fault.\n\n* fix(daemon): the shared watch rule spells the folders a watch binds, so a config directory made again at its path rebinds (brandon-unfiled-3248.sy24)\n\nThe config watcher's key named only its target set, so on Linux a config\ndirectory removed and made again at its path (a dotfiles re-stow) kept a\nhandle on the deleted inode and heard no edit after. The rule every file\nwatcher shares now reads each directory's folder identity once and spells\nit into the watch's key; the config watcher keys on it, and the\nwatch_file manager compares against it instead of reading its own.\n\n* fix(daemon): a watch keeps what it holds while a directory binds nothing, and a name-filtered watch hears its directory's own removal (brandon-unfiled-3248.sy24)\n\nFolding folder identity into the config watcher's key left two holes. A\nderive racing a directory's replacement read it as gone, changed the key,\nand traded a working watch for a slot the OS refused; the registry's\n`follow` now keeps a held watch while any directory of the spec binds\nnothing, the rule git applied on its own, which moves into `follow`.\nAnd the registry's name filter dropped Linux's report of a watched\ndirectory's own removal (a rename under its own name), so the config\nwatcher never derived again to rebind; that event now passes. macOS\nreports a change under the directory's name whenever a child comes or\ngoes, and its watch follows the path, so a change does not.\n\nThe watch_file manager keeps a held handle the same way, and builds its\nentry from a derive rather than a placeholder.\n\n* docs(memory): why a file watch's key names each directory's identity, and which self event a name filter lets through (brandon-unfiled-3248.sy24)"
         },
         {
-          "sha": "d7d79fda85ee10572db8bc30f2547d9a724c8b6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:23:50-06:00",
-          "message": "docs(memory): why a file watch's key names each directory's identity, and which self event a name filter lets through (brandon-unfiled-3248.sy24)\n"
-        },
-        {
-          "sha": "2a7e5f7982af7decfdb571def650aea287956a58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:20:34-06:00",
-          "message": "fix(daemon): a watch keeps what it holds while a directory binds nothing, and a name-filtered watch hears its directory's own removal (brandon-unfiled-3248.sy24)\n\nFolding folder identity into the config watcher's key left two holes. A\nderive racing a directory's replacement read it as gone, changed the key,\nand traded a working watch for a slot the OS refused; the registry's\n`follow` now keeps a held watch while any directory of the spec binds\nnothing, the rule git applied on its own, which moves into `follow`.\nAnd the registry's name filter dropped Linux's report of a watched\ndirectory's own removal (a rename under its own name), so the config\nwatcher never derived again to rebind; that event now passes. macOS\nreports a change under the directory's name whenever a child comes or\ngoes, and its watch follows the path, so a change does not.\n\nThe watch_file manager keeps a held handle the same way, and builds its\nentry from a derive rather than a placeholder.\n"
-        },
-        {
-          "sha": "ab8325799bad3ff38029a66ea3b970074d3870c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:02:45-06:00",
-          "message": "fix(daemon): the shared watch rule spells the folders a watch binds, so a config directory made again at its path rebinds (brandon-unfiled-3248.sy24)\n\nThe config watcher's key named only its target set, so on Linux a config\ndirectory removed and made again at its path (a dotfiles re-stow) kept a\nhandle on the deleted inode and heard no edit after. The rule every file\nwatcher shares now reads each directory's folder identity once and spells\nit into the watch's key; the config watcher keys on it, and the\nwatch_file manager compares against it instead of reading its own.\n"
-        },
-        {
-          "sha": "6121ea0b36e982394101726cb5106fbbf0219d2e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:55:31-06:00",
-          "message": "fix(var-system): a watch_file directory recreated at its path is watched again, and a link gone before its readlink ends the chain (brandon-unfiled-3248.sy24)\n\nLinux's inotify follows the inode, so a handle on a directory removed and\nmade again at its path heard nothing more and said nothing. Each open\nhandle now carries the folder identity it bound, and a re-derive reopens\nany whose directory has moved.\n\nA link removed between its lstat and its readlink is the chain ending,\nthe same fact as a link already gone, not a stopped walk: a non-atomic\n`ln -sf` no longer flashes a watch fault.\n"
-        },
-        {
-          "sha": "4bf46032ad109a7e7e27f30779022d9ec41cf293",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:44:51-06:00",
-          "message": "fix(var-system): a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24)\n\nA `watch_file` source followed its symlink to the final target and watched\nonly that target's directory, so re-pointing a link (`ln -sfn`) or a dangling\nlink's target appearing refreshed nothing.\n\nThe config watcher's target builder moves whole into the watcher registry's\nmodule as the one rule for where a set of paths can change: every hop of each\npath's link chain, by name in its nearest existing directory, names unioned per\ndirectory, a directory watched whole overriding them. The config watcher and\nthe var-system watch both call it.\n\nA link walk the kernel stops (a loop, a readlink racing a delete) now keeps\nthe hops it reached instead of falling back to the spelled path, so a link\nre-pointed by delete-then-create is still heard where it reappears. The writer\nkeeps its throwing view of the same walk.\n\nThe var-system watch holds each directory as open or failed, reconciled to the\nset at every re-derive, so an unchanged directory is never reopened and a\nrefusal touches only its own directory. Its fault is derived (walk stops plus\nfailed directories), reported to every subscriber including late ones, and\nclears when the cause does. A handle error, which previously had no listener\nand would have taken the daemon down, now fails its directory, re-reads every\nsubscriber, and reopens at the next event-driven re-derive.\n\n`isDirectory` goes; plugin-install asks `canonicalDirectory`, the one answer\nto \"is this an existing directory\".\n"
+          "sha": "de52a356dd72f020a4f914a98688bac6a27ebd13",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T13:06:07Z",
+          "message": "chore(release): set `package.json` to 1.165.0 [skip ci]\n\n## [1.165.0](https://github.com/promptctl/cc-candybar/compare/v1.164.1...v1.165.0) (2026-10-30)\n\n### Features\n\n* **plugins:** a repo's own plugins load as repo.<name> beside installed plugins.<name> (candybar-plugins-vf6g.3gg) ([#489](https://github.com/promptctl/cc-candybar/issues/489)) ([c7c3ecd](https://github.com/promptctl/cc-candybar/commit/c7c3ecda46896168f06ef5bc176b5bb541bd0a28))\n\n### Bug Fixes\n\n* **daemon:** the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676) ([#491](https://github.com/promptctl/cc-candybar/issues/491)) ([3ac1f0e](https://github.com/promptctl/cc-candybar/commit/3ac1f0ebd17dcc49615d30cb2f79602aa362240d))\n"
         }
       ]
     },
@@ -99,21 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:17:10-06:00",
           "message": "test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c7c3ecda46896168f06ef5bc176b5bb541bd0a28",
-      "timestamp": "2026-10-30T12:56:47.665Z",
-      "commits": [
-        {
-          "sha": "c7c3ecda46896168f06ef5bc176b5bb541bd0a28",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:55:54-06:00",
-          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name> (candybar-plugins-vf6g.3gg) (#489)\n\n* feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n\n* fix(plugins): a plugin names itself scope-free, so one definition loads alike from a repo and an install (candybar-plugins-vf6g.3gg)\n\nA definition names itself `self` (`.self.data`, `template \"self.state\"`,\n`action \"self.go\"`, `do: [\"self.go\", …]`); the loader binds it to the\nnamespace the plugin loads under, as it binds bare session keys and\nrefreshes. A plugin spelling its own name under the other scope drops,\nnaming the `self` form. A config's plugins are the repository's when\ndiscovery found the file at the project or working directory, not by its\nname. A placement missing from one scope names the other's spelling.\nUnnamed drops answer only within their own scope. Both plugin roots are\nrefused to every config file's own declarations. Plugin identity is a\ntyped { scope, name } with one namespace function.\n\nAbsorbs candybar-plugins-vf6g.3tv.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(plugins): a cache's depends_on names its plugin through self, and one predicate answers which names a namespace owns (candybar-plugins-vf6g.3gg)\n\n* fix(config): a segment's own var named into a plugin scope is refused, so a segment named repo cannot shadow repo.<plugin> (candybar-plugins-vf6g.3gg)\n\n* fix(plugins): self binds in an action's segment names, and the scope check reads every name an action or segment var carries, once (candybar-plugins-vf6g.3gg)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
