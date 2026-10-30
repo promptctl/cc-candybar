@@ -57323,14 +57323,17 @@ function absentPlacement(config2, cells, presence2) {
       if (node.kind === "segment") add2(placementId(node), { seg: node.name });
   for (const cell3 of cells)
     add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
-  const absent = (id2, seen) => {
-    const at = placed.get(id2) ?? [];
-    const on2 = new Set(seen).add(id2);
-    return at.length > 0 && at.every(
-      (p2) => presence2(p2.seg).kind === "absent" || p2.anchor !== void 0 && !on2.has(p2.anchor) && absent(p2.anchor, on2)
-    );
-  };
-  return (id2) => absent(id2, /* @__PURE__ */ new Set());
+  const absent = /* @__PURE__ */ new Set();
+  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id2, at] of placed)
+      if (!absent.has(id2) && at.every(standsOnAbsent)) {
+        absent.add(id2);
+        grew = true;
+      }
+  }
+  return (id2) => absent.has(id2);
 }
 function withoutUnplaced(config2) {
   let removed = 0;
@@ -63622,7 +63625,7 @@ var HANDOFF_SEVERITY = {
 function diagnosticSpan(text3, link) {
   return { text: sanitizeText(text3), link };
 }
-function collectDiagnostics(sessionId2, errors2, notices, warnings) {
+function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
   const plainOf2 = (text3, severity) => {
     const made = plainMessage(text3, severity);
@@ -63639,7 +63642,12 @@ function collectDiagnostics(sessionId2, errors2, notices, warnings) {
     (m, i) => plain.has(m) ? {
       ...m,
       lines: [
-        [diagnosticSpan(m.lines[0][0].text, copyLink(sessionId2, keys2[i]))],
+        [
+          diagnosticSpan(
+            m.lines[0][0].text,
+            copyLink(sessionId2, by, keys2[i])
+          )
+        ],
         ...m.lines.slice(1)
       ]
     } : m
@@ -63652,8 +63660,10 @@ function plainMessage({ about, text: message, copy: copy3 }, severity) {
 function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
 }
-function copyLink(sessionId2, key) {
-  return effectsUrl([{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, key] }]);
+function copyLink(sessionId2, by, key) {
+  return effectsUrl([
+    { verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }
+  ]);
 }
 function worstLevel(list2) {
   return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
@@ -63705,7 +63715,7 @@ var MAX_VIEWER_ROWS = 20;
 function viewerRowCap(termRows, surfaceRows) {
   return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
 }
-function viewerRows(list2, at, sessionId2, geometry) {
+function viewerRows(list2, at, sessionId2, by, geometry) {
   const { index } = at;
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
@@ -63728,7 +63738,10 @@ function viewerRows(list2, at, sessionId2, geometry) {
         ...steps2 ? [step4("\u2039", back2)] : [],
         button(position, null),
         ...steps2 ? [step4("\u203A", on2)] : [],
-        button("\u29C9 copy", copyLink(sessionId2, viewerKey(list2, index - 1, 0)))
+        button(
+          "\u29C9 copy",
+          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0))
+        )
       ],
       opts
     );
@@ -68263,10 +68276,21 @@ function pbcopy(text3, ctx) {
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
+var DRAWERS = /* @__PURE__ */ new Set([
+  "request",
+  "feed"
+]);
+function requireDrawer(by) {
+  if (!DRAWERS.has(by))
+    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
+  return by;
+}
 var copyDiagnostic = (value, ctx) => {
-  const [sessionId2 = "", key = ""] = decodeWire(() => decodeSegments(value));
+  const [sessionId2 = "", by = "", key = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
   const sid = requireSessionId(sessionId2);
-  const text3 = ctx.diagnosticCopy(sid, key);
+  const text3 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text3 === void 0)
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
@@ -77205,7 +77229,7 @@ function* templatesOf(config2) {
     for (const [, source] of actionTemplates(a)) yield source;
   }
 }
-function unusedDeclarations(raw, config2) {
+function unusedDeclarations(raw, config2, inserted) {
   const fold = valueReadsOf(config2);
   const read2 = /* @__PURE__ */ new Set();
   const bound = /* @__PURE__ */ new Set();
@@ -77230,7 +77254,7 @@ function unusedDeclarations(raw, config2) {
     }
   }
   const writtenKeys = /* @__PURE__ */ new Set();
-  const placed = /* @__PURE__ */ new Set();
+  const placed = new Set(inserted);
   for (const name of clicked) {
     const action2 = config2.actions[name];
     if (action2 === void 0) continue;
@@ -77523,6 +77547,9 @@ function buildRenderState(load, deps) {
   const { layers, config: config2, installed, dropped: dropped2 } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
+  const inserted = layers.flatMap(
+    (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
+  );
   const warnings = [];
   const store = new VariableStore();
   const registry = new SourceRegistry(
@@ -77572,11 +77599,11 @@ function buildRenderState(load, deps) {
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
       // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed, so a segment only an insert entry places
-      // is used.
+      // over the trees as placed and every layer's insert entries, so a
+      // segment only an insert entry places is used, here or not.
       unused: [
         ...new Map(
-          layers.flatMap((l) => unusedDeclarations(l.raw, loaded.placed)).map((u) => [`${u.kind}:${u.name}`, u])
+          layers.flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted)).map((u) => [`${u.kind}:${u.name}`, u])
         ).values()
       ],
       plugins: {
@@ -77772,7 +77799,6 @@ function openView(state, cwd2, facts, { sessionState: sessionState2, declare, so
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
-    drawnCopies: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
       stop2();
@@ -77798,6 +77824,14 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
+  // delivered copies, by the key its copy click names (src/render/
+  // diagnostics.ts), one map per renderer, since a request and a feed frame
+  // list different messages and a click names the surface it came from. Held
+  // by session, not by view, because a frame on screen outlives the view it
+  // was drawn from (a reload's successor); dropped when the session has no
+  // view. No link carries the text it copies.
+  copies = /* @__PURE__ */ new Map();
   // Every view the cache serves or served, until reclaimed.
   viewHolds = /* @__PURE__ */ new Map();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -78078,6 +78112,7 @@ var RenderCache = class {
   retireView(view, reason) {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
+    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -78354,23 +78389,24 @@ var RenderCache = class {
   latestView() {
     return [...this.views.values()].at(-1) ?? null;
   }
-  // What the diagnostic the session's view last delivered under `key`
-  // copies, from whichever renderer drew it; undefined while it has no view
-  // or no renderer's last frame listed it. Reads,
-  // never opens, like latestView.
-  drawnCopy(sessionId2, key) {
-    const drawn = this.views.get(sessionId2)?.drawnCopies.values() ?? [];
-    for (const copies of drawn) {
-      const copy3 = copies.get(key);
-      if (copy3 !== void 0) return copy3;
-    }
-    return void 0;
+  // The renderer `by` delivered a frame of the session's bar listing
+  // `copies`. A session with no view is closed: nothing it delivers is kept.
+  delivered(sessionId2, by, copies) {
+    if (!this.views.has(sessionId2)) return;
+    const drawn = this.copies.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    this.copies.set(sessionId2, drawn.set(by, copies));
+  }
+  // What the diagnostic under `key` copies in the frame renderer `by` last
+  // delivered for the session; undefined while that renderer's last frame
+  // did not list it. Reads, never opens, like latestView.
+  drawnCopy(sessionId2, by, key) {
+    return this.copies.get(sessionId2)?.get(by)?.get(key);
   }
   // The renderer no longer draws the session's bar (its feed closed): what
-  // its last frame listed is on no surface now, so a click naming only it is
+  // its last frame listed is on no surface now, so a click naming it is
   // refused rather than copying a list gone stale.
   stopDrawing(sessionId2, by) {
-    this.views.get(sessionId2)?.drawnCopies.delete(by);
+    this.copies.get(sessionId2)?.delete(by);
   }
 };
 
@@ -79101,6 +79137,7 @@ var FrameFeeds = class {
       }
     }
     if (feed.followers.size === 0) return;
+    frame.delivered();
     const answers = {
       bar: sentOf(frame.resp),
       statusline: sentOf(frame.statusline)
@@ -80892,9 +80929,6 @@ function laneHandoff(sessionId2, lanes) {
   ]);
   return {
     severity: HANDOFF_SEVERITY,
-    about: "lane-handoff",
-    message,
-    copy: message,
     lines: [
       [
         diagnosticSpan(
@@ -81544,7 +81578,7 @@ async function replyTo(req, timedOut, accepted) {
       return { stated: req2.deadline.kind, ms, endsAt: t0 + ms };
     };
     const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(checked.req, at, waitFor(checked.req), facts).then(
-      ({ answer: answer2, motion, clickShown }) => {
+      ({ answer: answer2, motion, clickShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -81552,11 +81586,15 @@ async function replyTo(req, timedOut, accepted) {
           // [LAW:single-enforcer] An answer carrying the click error that
           // reaches its client is the one that delivered it
           // (src/daemon/click-error.ts).
-          delivered: clickShown === null ? NOTHING_DELIVERED : () => answeredClickError(
-            sessionState,
-            checked.req.sessionId,
-            clickShown
-          )
+          delivered: () => {
+            delivered();
+            if (clickShown !== null)
+              answeredClickError(
+                sessionState,
+                checked.req.sessionId,
+                clickShown
+              );
+          }
         };
       },
       (error) => {
@@ -81723,7 +81761,7 @@ var verbCtx = {
       origin.configFile ?? void 0
     )
   },
-  diagnosticCopy: (sessionId2, key) => renderCache.drawnCopy(sessionId2, key)
+  diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
 };
 var reloadConfig = verbCtx.reloadConfig;
 var RENDER_OPTS_BASE = {
@@ -81848,7 +81886,7 @@ function renderFrame(sessionId2, fps) {
     try {
       const setup = __using(_stack, setUpFrame(sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, motion, evaluated: evaluated2, lanes } = drawRender(setup, {
+      const { drawn, motion, evaluated: evaluated2, delivered, lanes } = drawRender(setup, {
         by: "feed",
         fps
       });
@@ -81867,6 +81905,7 @@ function renderFrame(sessionId2, fps) {
         },
         moves: motion === "moves",
         evaluated: evaluated2,
+        delivered,
         failure: null
       };
     } catch (_) {
@@ -81889,6 +81928,7 @@ function renderFrame(sessionId2, fps) {
       statusline: failed2,
       moves: false,
       evaluated: 0,
+      delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` }
     };
   }
@@ -82125,6 +82165,7 @@ function drawRender(setup, drawing2) {
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
     sessionId2,
+    drawing2.by,
     errors2,
     [...updates, ...questions],
     [
@@ -82187,10 +82228,8 @@ function drawRender(setup, drawing2) {
     { ...effective, effects, idleSince }
   );
   const keys2 = copyKeys(diagnostics);
-  view.drawnCopies.set(
-    drawing2.by,
-    new Map(diagnostics.map((m, i) => [keys2[i], m.copy]))
-  );
+  const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
+  const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
   menuIdle.observe(sessionId2, at, frame.menuRows > 0, effective.menuTimeout);
   const menusSince = menuIdle.since(sessionId2, at);
   noteFacts(facts, {
@@ -82278,7 +82317,7 @@ function drawRender(setup, drawing2) {
   });
   return {
     drawn: {
-      body: viewing === null ? frame.text : viewerRows(diagnostics, viewing, sessionId2, geometry),
+      body: viewing === null ? frame.text : viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry),
       viewerOpen: viewing !== null,
       diagnostics,
       geometry
@@ -82286,6 +82325,7 @@ function drawRender(setup, drawing2) {
     motion: frame.motion,
     evaluated: frame.evaluated,
     clickShown,
+    delivered,
     lanes
   };
 }
@@ -82364,7 +82404,10 @@ async function drawAnswer(req, at, wait, facts) {
       ended,
       refreshed: refreshedFact(refreshed)
     });
-    const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
+    const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+      setup,
+      ANSWERING
+    );
     const output = composeBar(drawn);
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
@@ -82377,7 +82420,8 @@ async function drawAnswer(req, at, wait, facts) {
     return {
       answer: toStatusline ? statusline : output,
       motion,
-      clickShown
+      clickShown,
+      delivered
     };
   } catch (_) {
     var _error = _, _hasError = true;

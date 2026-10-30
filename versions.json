@@ -4,15 +4,22 @@
     {
       "version": "pr-497",
       "ref": "refs/pull/497/merge",
-      "sha": "a3299fa5d53a7afa5067bb2a26ebe18e422fdf15",
-      "timestamp": "2026-10-30T13:57:10.746Z",
+      "sha": "964728db3eeb21f03ebeda24d1fc51abb00ddfbc",
+      "timestamp": "2026-10-30T14:13:58.227Z",
       "commits": [
         {
-          "sha": "a3299fa5d53a7afa5067bb2a26ebe18e422fdf15",
+          "sha": "964728db3eeb21f03ebeda24d1fc51abb00ddfbc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:56:20Z",
-          "message": "Merge e795be7abb37765bb358bf799c9d8ddf855d05c8 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+          "timestamp": "2026-10-30T14:13:02Z",
+          "message": "Merge 42163a0a835437e08e0625c67776c160612b4605 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+        },
+        {
+          "sha": "42163a0a835437e08e0625c67776c160612b4605",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:12:49-06:00",
+          "message": "fix(plugins): a copy click names the renderer whose frame it reads, held across a view's successor and recorded once delivered; an insert entry places its segment for the unused check; absent placements are a linear fixpoint (candybar-plugins-vf6g.odm)\n"
         },
         {
           "sha": "e795be7abb37765bb358bf799c9d8ddf855d05c8",
