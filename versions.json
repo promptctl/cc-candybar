@@ -4,15 +4,22 @@
     {
       "version": "pr-497",
       "ref": "refs/pull/497/merge",
-      "sha": "964728db3eeb21f03ebeda24d1fc51abb00ddfbc",
-      "timestamp": "2026-10-30T14:13:58.227Z",
+      "sha": "1620d71e2dd2caf40b72224430dff17844919926",
+      "timestamp": "2026-10-30T14:15:13.943Z",
       "commits": [
         {
-          "sha": "964728db3eeb21f03ebeda24d1fc51abb00ddfbc",
+          "sha": "1620d71e2dd2caf40b72224430dff17844919926",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T14:13:02Z",
-          "message": "Merge 42163a0a835437e08e0625c67776c160612b4605 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+          "timestamp": "2026-10-30T14:14:30Z",
+          "message": "Merge 5823fa77dde77c770c0bee3fb90ca2e1b15489bf into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+        },
+        {
+          "sha": "5823fa77dde77c770c0bee3fb90ca2e1b15489bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:14:13-06:00",
+          "message": "docs(click): the copy-diagnostic verb's args name the renderer that drew the link (candybar-plugins-vf6g.odm)\n"
         },
         {
           "sha": "42163a0a835437e08e0625c67776c160612b4605",
