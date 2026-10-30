@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-486",
+      "ref": "refs/pull/486/merge",
+      "sha": "912f6cdd3d3e32fe3d6ba4e56ef0919d39e28481",
+      "timestamp": "2026-10-30T09:53:07.622Z",
+      "commits": [
+        {
+          "sha": "912f6cdd3d3e32fe3d6ba4e56ef0919d39e28481",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:52:17Z",
+          "message": "Merge 8727efdabcf0e728f4c5478891980b3a40b26b65 into 059a45e0880e4967c0f0fee60def00a4f4153ac0\n"
+        },
+        {
+          "sha": "8727efdabcf0e728f4c5478891980b3a40b26b65",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:52:06-06:00",
+          "message": "fix(config): the loader places every layer's insert cells once, and the merged config holds none (candybar-plugins-vf6g.99v)\n\nInsert cells were a second carrier of placements on the merged config,\nre-placed by every walk of a preset's tree, including over trees the load\nhad already pruned. The loader now places every layer's cells once, into the\nconfig's root and each restaging preset's tree, before cross-ref and\nsynthesis, and collects the missed-anchor notices from that same pass.\n\n- A cell naming an undeclared segment is dropped and reported at the\n  writing file's insert.<i>, from any layer, instead of crashing edit chrome.\n- An anchor on the bar's own chrome is refused at parse, like a chrome seg.\n- An inserted cell's names-view label is keyed by preset, so it no longer\n  overwrites another preset's editable label of the same id.\n- A numeric path part indexes only arrays; on an object the key scanner\n  places it as before.\n- Insert validation looks up a line only for an issue.\n- Docs: an inserted cell is an insert entry, which clicks don't rewrite,\n  in any file.\n"
+        },
+        {
+          "sha": "bec779a098298ac1c608210d77aa3d0abea31667",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:31:32-06:00",
+          "message": "fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n"
+        },
+        {
+          "sha": "a747f5058d1f570f390d3fe2752f150884e2b350",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:30:03-06:00",
+          "message": "fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n"
+        },
+        {
+          "sha": "5a7d9cc09dcbeb25437711528d5f32f553575def",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:11:46-06:00",
+          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-487",
       "ref": "refs/pull/487/merge",
       "sha": "c899f1909def30d3c5affb54f1f52e24964246c9",
@@ -42,42 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:34:38-06:00",
           "message": "fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) (#485)\n\n* fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h)\n\nThe daemon writes a probe into a folder of its own each period and judges\ndelivery for every watch it holds: delivering, stalled, or unmeasured with a\nreason. A stall or an unmeasured span draws an amber row naming the span's\nstart, daemon-stats prints a fileEvents line, and the span's close reloads\nevery config entry under events-resumed and re-reads every held plugin file.\nPlugin storage reads that one owner in place of a probe per folder, and keeps\njudging each folder's identity on the owner's period.\n\n* fix(daemon): a catch-up re-reads watch_file sources, and the row stands while the span is open (brandon-unfiled-3248.y66h)\n\nA `watch_file` source watches through its directory on the same OS stream\nthe probe tests, so a stall silenced it too, and nothing re-read it when\nevents resumed. Every registry now subscribes to the delivery owner's\ncatch-ups, and a catch-up fires each watched file's subscribers as its own\nwatch would have.\n\nThe bar's row and daemon-stats' line derive from the unvouched span, not\nthe state's label: a probe that landed after a stall is not one heard, so\ndelivering with the span open still warns, and the stats line names the\nspan's start in every state.\n\nThe causes that reload every entry are their own type, so a single entry's\ncause cannot be batched."
-        }
-      ]
-    },
-    {
-      "version": "pr-486",
-      "ref": "refs/pull/486/merge",
-      "sha": "d89a742002c9bff384f6d131fd424de71ae5249f",
-      "timestamp": "2026-10-30T09:34:53.970Z",
-      "commits": [
-        {
-          "sha": "d89a742002c9bff384f6d131fd424de71ae5249f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:34:13Z",
-          "message": "Merge bec779a098298ac1c608210d77aa3d0abea31667 into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
-        },
-        {
-          "sha": "bec779a098298ac1c608210d77aa3d0abea31667",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:31:32-06:00",
-          "message": "fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n"
-        },
-        {
-          "sha": "a747f5058d1f570f390d3fe2752f150884e2b350",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:30:03-06:00",
-          "message": "fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n"
-        },
-        {
-          "sha": "5a7d9cc09dcbeb25437711528d5f32f553575def",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:11:46-06:00",
-          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
         }
       ]
     }
