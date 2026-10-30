@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-499",
+      "ref": "refs/pull/499/merge",
+      "sha": "70048deee1329bf9d03f3a81c871c2167adfd30f",
+      "timestamp": "2026-10-30T15:16:23.122Z",
+      "commits": [
+        {
+          "sha": "70048deee1329bf9d03f3a81c871c2167adfd30f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:15:24Z",
+          "message": "Merge 89cb1e51018b8bfe4cc629929fb9eaf228998ae2 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
+        },
+        {
+          "sha": "89cb1e51018b8bfe4cc629929fb9eaf228998ae2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:15:12-06:00",
+          "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "a9dda9a6f9889c0eb45ce55396d786bd87edf65c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:10:48-06:00",
+          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "a140c5f852d0150b3065caf6351fbbfb334795e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:02:51-06:00",
+          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "ab74d23aefa8adf9e50b569a8c200d4b4dd988e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:43:47-06:00",
+          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-498",
       "ref": "refs/pull/498/merge",
       "sha": "84e2efb5e47c1a0a202143b985237b05df84c78d",
@@ -41,42 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:32:12-06:00",
           "message": "refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr)\n\nThe var-system's own watch manager opened, filtered, failed and closed its\nfs.watch handles beside the watcher registry, so its handles never reached\nthe daemon's counters or log. It is gone: a watch_file path follows its\nspec through the registry's `follow`, as the config and git watches do.\n\nThe registry gains what that needed, as rules for every consumer:\n- one OS handle per directory, refcounted by the slots on it, and `follow`\n  acquires before it releases, so a key move (a link re-pointed to a new\n  name) keeps every directory both keys name open;\n- a directory made again at its path is reopened in place when a slot\n  acquires it; a deaf one is reopened only through `listening`, which only\n  watch_file calls, at a real event on a kept watch, never on a failed one;\n- every holder of a key hears each window; a directory going deaf is told\n  to every slot on it; the handle's `deaf` list is live;\n- a directory's own name under a name filter is judged by the folder at the\n  path, not the event type; an unnamed event under a filter is `unknown`;\n- daemon-stats counts directory handles opened, closed and open beside the\n  slots, and the registry logs every open, close and reopen with its cause.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-499",
-      "ref": "refs/pull/499/merge",
-      "sha": "82675f14af44b9039252c43c5f5e457286ea21fd",
-      "timestamp": "2026-10-30T15:11:48.504Z",
-      "commits": [
-        {
-          "sha": "82675f14af44b9039252c43c5f5e457286ea21fd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:10:57Z",
-          "message": "Merge a9dda9a6f9889c0eb45ce55396d786bd87edf65c into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
-        },
-        {
-          "sha": "a9dda9a6f9889c0eb45ce55396d786bd87edf65c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:10:48-06:00",
-          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "a140c5f852d0150b3065caf6351fbbfb334795e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:02:51-06:00",
-          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "ab74d23aefa8adf9e50b569a8c200d4b4dd988e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:43:47-06:00",
-          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
         }
       ]
     },

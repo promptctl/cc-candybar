@@ -75815,10 +75815,10 @@ function pickerFuncs(runtime, activeSegment) {
           closeOn(active2.palette, ground, drawnAt)
         );
         const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const opens = apply.library !== void 0;
-        const [line] = draw2(opens ? band.state : active2.bg);
-        if (opens) active2.drops.push(...draw2(band.plane).slice(1));
-        return line;
+        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        if (rows.length === 0) return draw2(active2.bg)[0];
+        active2.drops.push(...rows);
+        return draw2(band.state)[0];
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },
