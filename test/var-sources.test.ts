@@ -8,6 +8,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
+import { EventEmitter } from "events";
 import {
   VariableStore,
   SourceRegistry,
@@ -1434,6 +1435,165 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     } finally {
       cleanup();
     }
+  });
+
+  // A linked path changes wherever any link in its chain is re-pointed, and
+  // where the file at its end is replaced or first appears; each lives in a
+  // directory of its own here, so only the watch on that directory can hear it.
+  describe("through a chain of links", () => {
+    // `ln -sfn`: a new link renamed over the old one.
+    const relink = (link: string, to: string) => {
+      fs.symlinkSync(to, `${link}.new`);
+      fs.renameSync(`${link}.new`, link);
+    };
+
+    // dir/a → dir/hop/b → dir/one/state
+    function chain(dir: string) {
+      for (const d of ["hop", "one", "two"]) fs.mkdirSync(path.join(dir, d));
+      const a = path.join(dir, "a");
+      const b = path.join(dir, "hop", "b");
+      fs.symlinkSync(b, a);
+      fs.symlinkSync(path.join(dir, "one", "state"), b);
+      return { a, b };
+    }
+
+    it("re-pointing a link partway along the chain re-reads the var", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { a, b } = chain(dir);
+        fs.writeFileSync(path.join(dir, "one", "state"), "v1");
+        fs.writeFileSync(path.join(dir, "two", "state"), "v2");
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        await repeatUntil(
+          registry,
+          () => store.read("val") === "v2",
+          () => relink(b, path.join(dir, "two", "state")),
+          "the store reading v2",
+        );
+        expect(store.read("val")).toBe("v2");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("replacing the file at the chain's end re-reads the var", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { a } = chain(dir);
+        const state = path.join(dir, "one", "state");
+        fs.writeFileSync(state, "v1");
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        await repeatUntil(
+          registry,
+          () => store.read("val") === "v2",
+          () => {
+            fs.writeFileSync(`${state}.new`, "v2");
+            fs.renameSync(`${state}.new`, state);
+          },
+          "the store reading v2",
+        );
+        expect(store.read("val")).toBe("v2");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("a dangling chain's file appearing re-reads the var", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { a } = chain(dir);
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: text("(none)"), cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("(none)");
+        await repeatUntil(
+          registry,
+          () => store.read("val") === "v1",
+          () => fs.writeFileSync(path.join(dir, "one", "state"), "v1"),
+          "the store reading v1",
+        );
+        expect(store.read("val")).toBe("v1");
+      } finally {
+        cleanup();
+      }
+    });
+
+    // A shell source never reads its trigger path, so only the watch can say
+    // the chain cannot be walked; it says so for as long as that holds.
+    it("a trigger chain that loops is the variable's refresh fault until it is broken", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const x = path.join(dir, "x");
+        const y = path.join(dir, "y");
+        fs.symlinkSync(y, x);
+        fs.symlinkSync(x, y);
+        fs.writeFileSync(path.join(dir, "real"), "");
+        const { registry } = make();
+        registry.declareShell("val", "echo hi", {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache: { kind: "watch_file", path: x },
+        });
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/symbolic links/);
+        await repeatUntil(
+          registry,
+          () => !registry.cachePolicyFaults().has("val"),
+          () => relink(y, path.join(dir, "real")),
+          "the loop's fault clearing",
+        );
+        expect(registry.cachePolicyFaults().has("val")).toBe(false);
+      } finally {
+        cleanup();
+      }
+    });
+
+    // No real directory can be made to fail its watch on demand, so each
+    // directory's handle is a stand-in the test can make fail.
+    it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only at the next event", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      const opened: Array<{ dir: string; handle: EventEmitter; listener: (event: string, changed: string | null) => void }> = [];
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, listener: (event: string, changed: string | null) => void) => {
+        const handle = Object.assign(new EventEmitter(), { close: () => {} });
+        opened.push({ dir: d, handle, listener });
+        return handle;
+      }) as unknown as typeof fs.watch);
+      try {
+        const real = fs.realpathSync(dir);
+        fs.mkdirSync(path.join(dir, "one"));
+        const state = path.join(dir, "one", "state");
+        const a = path.join(dir, "a");
+        fs.writeFileSync(state, "v1");
+        fs.symlinkSync(state, a);
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+        const one = path.join(real, "one");
+        expect(opensOf(one)).toHaveLength(1);
+        expect(registry.cachePolicyFaults().has("val")).toBe(false);
+
+        fs.writeFileSync(state, "v2");
+        opensOf(one)[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
+        await until(() => store.read("val") === "v2", "the store reading v2");
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
+        expect(opensOf(one)).toHaveLength(1);
+
+        // An event on the link's own directory re-derives, which opens it again.
+        opensOf(real)[0]!.listener("rename", "a");
+        expect(opensOf(one)).toHaveLength(2);
+        expect(registry.cachePolicyFaults().has("val")).toBe(false);
+      } finally {
+        watch.mockRestore();
+        cleanup();
+      }
+    });
   });
 });
 

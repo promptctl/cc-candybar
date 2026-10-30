@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
-import { linkChain } from "../../utils/atomic-write.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
@@ -71,12 +70,13 @@ import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry, type CatchUps } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateReader, SessionStateRW } from "../session-state.js";
-import type {
-  WatcherRegistry,
-  WatcherHandle,
-  HeldWatch,
-  Invalidation,
-  WatchTargets,
+import {
+  watchTargetsOf,
+  type WatcherRegistry,
+  type WatcherHandle,
+  type HeldWatch,
+  type Invalidation,
+  type PathsWatch,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { valueOf } from "../../utils/logfmt.js";
@@ -625,32 +625,15 @@ function authoredRoots(
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
 // covers the exact set of paths the next reload would consult — an explicit
 // `configFile` collapses to one candidate; absent, the precedence chain unfolds
-// in full. A candidate that is a symbolic link (a dotfiles-managed config) is
-// watched in every place it changes (`linkChain`): its own directory by its
-// name, and each link's target's directory by the target's name, down to the
-// file a write lands in. Directories are deduped with their filename filters
-// unioned, and the whole set is sorted so equal sets spell equal signatures.
+// in full. Where each of those paths can change is the watch rule every file
+// watcher shares (`watchTargetsOf`): a dotfiles-managed config is heard
+// wherever a link in its chain is re-pointed.
 //
-// [LAW:no-silent-failure] A candidate whose chain the kernel refuses to walk
-// (a loop, an unreadable component) is watched as spelled and reported in
-// `unresolved` with the refusal, so the caller can say which path hears less
-// than it should. Nothing here throws: it runs inside watcher callbacks.
-function watchTargetsFor(entry: CacheEntry): {
-  readonly targets: WatchTargets;
-  readonly unresolved: ReadonlyArray<{ path: string; reason: string }>;
-} {
-  const unresolved: Array<{ path: string; reason: string }> = [];
-  const everywhere = (candidate: string): readonly string[] => {
-    try {
-      return linkChain(candidate);
-    } catch (e) {
-      unresolved.push({ path: candidate, reason: (e as Error).message });
-      return [candidate];
-    }
-  };
-  // [LAW:types-are-the-program] A directory watched for named children, or
-  // for every child (`null`): a plugin root holds folders no load has seen.
-  const byDir = new Map<string, Set<string> | null>();
+// [LAW:no-silent-failure] A candidate whose chain the kernel stopped walking
+// (a loop, an unreadable component) is watched as far as the walk got and
+// reported in `unresolved` with the reason, so the caller can say which path
+// hears less than it should.
+function watchTargetsFor(entry: CacheEntry): PathsWatch {
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
   const { loaded, dropped, unreached } = entry.state.plugins;
@@ -662,41 +645,23 @@ function watchTargetsFor(entry: CacheEntry): {
       path.join(entry.projectDir, REPO_PLUGIN_DIR),
     ]),
   ];
-  for (const candidate of [
-    ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
-    ...roots,
-    ...loaded.map((d) => d.path),
-    ...[...dropped, ...unreached].map((d) => d.path),
-    // [LAW:single-enforcer] A declared storage folder is watched by name in
-    // its plugin folder, by the follower that already watches the definition:
-    // its removal, recreation or replacement reloads the config, whose build
-    // recreates the folder and takes a new generation from the storage owner
-    // — which never re-arms a watch itself.
-    ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
-  ].flatMap(everywhere)) {
-    const { dir, name } = nearestWatchTarget(candidate);
-    const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
-    names?.add(name);
-    byDir.set(dir, names);
-  }
-  // An existing root is watched for every child: a folder created in it is a
-  // plugin installed.
-  for (const root of roots) {
-    const { dir, name, leaf } = nearestWatchTarget(path.join(root, "_"));
-    if (leaf && name === "_") byDir.set(dir, null);
-  }
-  return {
-    targets: {
-      dirs: [...byDir.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dirPath, names]) =>
-          names === null
-            ? { path: dirPath }
-            : { path: dirPath, filenames: [...names].sort() },
-        ),
-    },
-    unresolved,
-  };
+  return watchTargetsOf({
+    named: [
+      ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+      ...roots,
+      ...loaded.map((d) => d.path),
+      ...[...dropped, ...unreached].map((d) => d.path),
+      // [LAW:single-enforcer] A declared storage folder is watched by name in
+      // its plugin folder, by the follower that already watches the
+      // definition: its removal, recreation or replacement reloads the
+      // config, whose build recreates the folder and takes a new generation
+      // from the storage owner — which never re-arms a watch itself.
+      ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
+    ],
+    // An existing root is watched for every child: a folder created in it is
+    // a plugin installed.
+    whole: roots,
+  });
 }
 
 // The load's warning is ONE message (the bar's diagnostics show it whole);

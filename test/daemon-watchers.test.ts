@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   WatcherRegistry,
+  watchTargetsOf,
   type Invalidation,
 } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -359,6 +360,46 @@ async function hearsRefOnlyMove(
     svc.close();
   }
 }
+
+describe("watchTargetsOf", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-targets-")));
+  });
+  afterEach(() => rmrf(dir));
+
+  test("a chain the kernel stops walking is watched as far as it got, and says why", () => {
+    // one/x → two/y → one/x: a loop across two directories.
+    for (const d of ["one", "two"]) fs.mkdirSync(path.join(dir, d));
+    const x = path.join(dir, "one", "x");
+    const y = path.join(dir, "two", "y");
+    fs.symlinkSync(y, x);
+    fs.symlinkSync(x, y);
+    const { targets, reached, unresolved } = watchTargetsOf({ named: [x], whole: [] });
+    expect(targets.dirs).toEqual([
+      { path: path.join(dir, "one"), filenames: ["x"] },
+      { path: path.join(dir, "two"), filenames: ["y"] },
+    ]);
+    expect(reached).toBe(true);
+    expect(unresolved).toEqual([{ path: x, reason: expect.stringMatching(/symbolic links/) }]);
+  });
+
+  test("a directory watched whole hears every child, whatever names are watched in it", () => {
+    const d = path.join(dir, "d");
+    fs.mkdirSync(d);
+    const { targets } = watchTargetsOf({ named: [d, path.join(d, "f")], whole: [d] });
+    expect(targets.dirs).toEqual([
+      { path: dir, filenames: ["d"] },
+      { path: d },
+    ]);
+  });
+
+  test("a hop under a directory that does not exist yet has not reached it", () => {
+    const { targets, reached } = watchTargetsOf({ named: [path.join(dir, "later", "f")], whole: [] });
+    expect(targets.dirs).toEqual([{ path: dir, filenames: ["later"] }]);
+    expect(reached).toBe(false);
+  });
+});
 
 describe("GitDataProvider + watchers integration", () => {
   test("a ref-only move on a slash-named branch is heard in a main checkout (brandon-unfiled-3248.1x2q)", async () => {

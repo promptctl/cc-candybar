@@ -12,10 +12,9 @@
 import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
-import { watch as fsWatch, type FSWatcher } from "fs";
-import { realpathSync, statSync } from "fs";
+import fs, { type FSWatcher } from "fs";
 import path from "path";
-import { nearestWatchTarget } from "../utils/watch-target.js";
+import { watchTargetsOf, type PathsWatch } from "../daemon/cache/watchers.js";
 import { setInterval, clearInterval } from "timers";
 import {
   computed,
@@ -294,165 +293,183 @@ function firstThenChange(
 
 // ─── WatchManager ─────────────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One fs.watch handle per path regardless of subscriber
-// count.  Multiple shell/file variables can share one watcher on the same path.
-//
-// A file is watched through its DIRECTORY, filtered to its name: a watch on
-// the file itself binds its inode, so it never sees a file created after it
-// (an app that has not written yet) and goes deaf after the first atomic
-// rename (write-then-rename, the safe way to rewrite a file). A directory
-// that does not exist yet is watched through its nearest existing ancestor
-// (`nearestWatchTarget`), and each directory that appears re-arms the watch
-// one level deeper.
-function resolvedPath(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    // Absent: watched by name until it appears.
-    return p;
-  }
-}
+// What a watch says to each subscriber: why it may be missing changes to its
+// path right now, or `null` when it hears every place the path can change.
+type WatchFault = (fault: string | null) => void;
 
-export function isDirectory(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    // Absent (or unreadable): watched as a file that may appear.
-    return false;
-  }
-}
-
-// What one subscription watches right now: the directory itself when the
-// path is one, else the (dir, name) tuple of its nearest existing ancestor.
-// `leaf` is true once the watch reaches the path's own directory — only then
-// can an event be about the path itself.
-interface WatchTarget {
-  readonly dir: string;
-  readonly name: string | null;
-  readonly leaf: boolean;
-}
-
-function watchTargetOf(filePath: string): WatchTarget {
-  // A symlink is followed: the writes land on its target.
-  const target = resolvedPath(filePath);
-  return isDirectory(target)
-    ? { dir: target, name: null, leaf: true }
-    : nearestWatchTarget(target);
-}
-
-const targetKey = (t: WatchTarget): string => `${t.dir}\0${t.name ?? ""}`;
-
-// A watch the OS refused (ENOSPC on inotify, EMFILE, EACCES, the directory
-// removed under the walk): reported to every subscriber, never thrown — a
-// throw out of a watcher callback would take the daemon down.
-type WatchFailed = (message: string) => void;
+// [LAW:types-are-the-program] A watched directory is listening or failed,
+// never both: the OS refused it at open, or its handle reported an error
+// after.
+type DirState =
+  | { readonly kind: "open"; readonly handle: FSWatcher }
+  | { readonly kind: "failed"; readonly reason: string };
 
 interface WatchEntry {
-  // null while the OS refuses the watch; `failure` then says why.
-  watcher: FSWatcher | null;
-  failure: string;
-  target: WatchTarget;
-  // Each subscriber's update, and where its watch failures are recorded.
-  readonly subscribers: Map<() => void, WatchFailed>;
+  // Where the path can change, as last derived from disk.
+  watch: PathsWatch;
+  // Each directory of `watch`, and its state.
+  readonly dirs: Map<string, DirState>;
+  // Each subscriber's update, and where it hears the watch's fault.
+  readonly subscribers: Map<() => void, WatchFault>;
 }
 
+// [LAW:single-enforcer] One watch per path regardless of subscriber count:
+// several shell/file variables can share it.
+//
+// A path is watched wherever it can change (`watchTargetsOf`, the rule the
+// config watcher shares): each directory through which its link chain passes,
+// filtered to the names there, and the path itself when it is a directory. A
+// directory, never a file, because a watch on a file binds its inode: it
+// never sees a file created after it (an app that has not written yet) and
+// goes deaf after the first atomic rename (write-then-rename, the safe way to
+// rewrite a file). A directory that does not exist yet is watched through its
+// nearest existing ancestor, and each one that appears moves the watch one
+// level deeper.
 class WatchManager {
-  private readonly watchers = new Map<string, WatchEntry>();
+  private readonly entries = new Map<string, WatchEntry>();
 
   subscribe(
     filePath: string,
     callback: () => void,
-    onFailed: WatchFailed,
+    onFault: WatchFault,
   ): () => void {
-    const entry = this.watchers.get(filePath) ?? this.arm(filePath);
-    entry.subscribers.set(callback, onFailed);
-    if (entry.watcher === null) onFailed(entry.failure);
+    const entry = this.entries.get(filePath) ?? this.arm(filePath);
+    entry.subscribers.set(callback, onFault);
+    onFault(faultOf(filePath, entry));
     return () => this.unsubscribe(filePath, callback);
   }
 
   private arm(filePath: string): WatchEntry {
     const entry: WatchEntry = {
-      watcher: null,
-      failure: "",
-      target: watchTargetOf(filePath),
+      watch: { targets: { dirs: [] }, reached: false, unresolved: [] },
+      dirs: new Map(),
       subscribers: new Map(),
     };
-    entry.watcher = this.open(filePath, entry, entry.target);
-    this.watchers.set(filePath, entry);
+    this.entries.set(filePath, entry);
+    this.rederive(filePath, entry);
     return entry;
   }
 
-  // An event under the watched ancestor may mean a missing directory
-  // appeared (or the watched one vanished): re-derive the target ONCE, and
-  // move the watch when it moved. The new watch opens before the old one
-  // closes, so a refusal leaves the old watch listening for the next event.
-  private rearm(filePath: string, entry: WatchEntry): void {
-    const target = watchTargetOf(filePath);
-    if (entry.watcher !== null && targetKey(target) === targetKey(entry.target))
-      return;
-    const watcher = this.open(filePath, entry, target);
-    if (watcher === null) return;
-    entry.watcher?.close();
-    entry.watcher = watcher;
-    entry.target = target;
+  // Derive where the path can change from disk ONCE, and bring the
+  // directories to it: one in the set and not listening (new, or failed) is
+  // opened; one no longer in the set is closed; one listening and still in
+  // the set keeps its handle, since opening and closing a directory watch is
+  // not free on macOS (see the watcher registry). New handles open before old
+  // ones close, so a refusal leaves the rest listening, and a failed
+  // directory is tried again only here — at an event on another of the
+  // entry's directories, or the daemon's catch-up — never in a loop.
+  private rederive(filePath: string, entry: WatchEntry): void {
+    entry.watch = watchTargetsOf({ named: [filePath], whole: [filePath] });
+    const wanted = new Set(entry.watch.targets.dirs.map((d) => d.path));
+    for (const dir of wanted)
+      if (entry.dirs.get(dir)?.kind !== "open")
+        entry.dirs.set(dir, this.open(filePath, entry, dir));
+    for (const [dir, state] of entry.dirs) {
+      if (wanted.has(dir)) continue;
+      if (state.kind === "open") state.handle.close();
+      entry.dirs.delete(dir);
+    }
+    this.report(filePath, entry);
   }
 
-  private open(
-    filePath: string,
-    entry: WatchEntry,
-    target: WatchTarget,
-  ): FSWatcher | null {
-    const { dir, name } = target;
+  private open(filePath: string, entry: WatchEntry, dir: string): DirState {
     const self = path.basename(dir);
     try {
-      return fsWatch(dir, (_event, changed) => {
+      const handle = fs.watch(dir, (_event, changed) => {
         // A platform that reports no name could be reporting anything here.
-        const aboutName = changed === null || name === null || changed === name;
-        // The watched directory's own removal or rename reports its own name.
-        if (!aboutName && changed !== self) return;
-        const wasLeaf = entry.target.leaf;
-        this.rearm(filePath, entry);
+        // The directory's own removal or rename reports its own name.
+        if (changed !== null && changed !== self && !hears(entry, dir, changed))
+          return;
+        const wasLeaf = entry.watch.reached;
+        this.rederive(filePath, entry);
         // Ancestor churn on the way DOWN is not a change to the path; a move
         // up from the leaf is its removal, which the subscribers must read.
-        if (!wasLeaf && !entry.target.leaf) return;
+        if (!wasLeaf && !entry.watch.reached) return;
         for (const cb of entry.subscribers.keys()) cb();
       });
+      // [LAW:no-silent-failure] An error after open is the OS saying the
+      // handle stopped listening (and, uncaught, would take the daemon down).
+      // The directory is failed until the next re-derive opens it again, and
+      // every subscriber re-reads, since changes there may have gone unheard.
+      handle.on("error", (e) => {
+        entry.dirs.set(dir, {
+          kind: "failed",
+          reason: `watching ${dir} failed — ${e.message}`,
+        });
+        this.report(filePath, entry);
+        for (const cb of entry.subscribers.keys()) cb();
+      });
+      return { kind: "open", handle };
     } catch (e) {
-      const message = `watch_file ${filePath}: cannot watch ${dir} — ${e instanceof Error ? e.message : String(e)}`;
-      entry.failure = message;
-      for (const report of entry.subscribers.values()) report(message);
-      return null;
+      return {
+        kind: "failed",
+        reason: `cannot watch ${dir} — ${e instanceof Error ? e.message : String(e)}`,
+      };
     }
   }
 
+  private report(filePath: string, entry: WatchEntry): void {
+    const fault = faultOf(filePath, entry);
+    for (const onFault of entry.subscribers.values()) onFault(fault);
+  }
+
   // [LAW:no-silent-failure] Events the watches may have missed: each watch
-  // re-derives its target, since a directory may have appeared unheard, and
-  // every subscriber re-reads as if its own watch had reported.
+  // re-derives where its path can change, since a directory may have
+  // appeared unheard, and every subscriber re-reads as if its own watch had
+  // reported.
   caughtUp(): void {
-    for (const [filePath, entry] of this.watchers) {
-      this.rearm(filePath, entry);
+    for (const [filePath, entry] of this.entries) {
+      this.rederive(filePath, entry);
       for (const cb of entry.subscribers.keys()) cb();
     }
   }
 
   private unsubscribe(filePath: string, callback: () => void): void {
-    const entry = this.watchers.get(filePath);
+    const entry = this.entries.get(filePath);
     if (!entry) return;
     entry.subscribers.delete(callback);
     if (entry.subscribers.size === 0) {
-      entry.watcher?.close();
-      this.watchers.delete(filePath);
+      close(entry);
+      this.entries.delete(filePath);
     }
   }
 
   dispose(): void {
-    for (const { watcher } of this.watchers.values()) watcher?.close();
-    this.watchers.clear();
+    for (const entry of this.entries.values()) close(entry);
+    this.entries.clear();
   }
 
   size(): number {
-    return this.watchers.size;
+    return this.entries.size;
   }
+}
+
+// Whether `changed`, a name the OS reported in `dir`, is one the entry
+// watches there now: a link re-pointed to a new name beside the old one
+// changes the names, not the handle.
+function hears(entry: WatchEntry, dir: string, changed: string): boolean {
+  const target = entry.watch.targets.dirs.find((d) => d.path === dir);
+  return target !== undefined && (target.filenames?.includes(changed) ?? true);
+}
+
+// The watch's fault, derived from what it holds now: the link chain it could
+// not walk, and every directory that is not listening.
+function faultOf(filePath: string, entry: WatchEntry): string | null {
+  const reasons = [
+    ...entry.watch.unresolved.map(
+      (u) => `cannot follow its links — ${u.reason}`,
+    ),
+    ...[...entry.dirs.values()].flatMap((d) =>
+      d.kind === "failed" ? [d.reason] : [],
+    ),
+  ];
+  return reasons.length === 0
+    ? null
+    : `watch_file ${filePath}: ${reasons.join("; ")}`;
+}
+
+function close(entry: WatchEntry): void {
+  for (const d of entry.dirs.values()) if (d.kind === "open") d.handle.close();
 }
 
 // ─── TtlBucketManager ────────────────────────────────────────────────────────
@@ -1384,7 +1401,11 @@ export class SourceRegistry {
         const unsub = this.watchMgr.subscribe(
           policy.path,
           () => update("re-read", "change"),
-          (message) => this.notePolicy(name, failed(message)),
+          (fault) =>
+            this.notePolicy(
+              name,
+              fault === null ? ok(undefined) : failed(fault),
+            ),
         );
         this.cleanups.push(unsub);
         break;

@@ -2,6 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
+import { walkLinks } from "../../utils/atomic-write";
+import {
+  canonicalDirectory,
+  nearestWatchTarget,
+} from "../../utils/watch-target";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects `dlog` (writes to daemon.log at the requested level); other
@@ -82,6 +87,63 @@ export type Invalidation =
 export interface Refusal {
   readonly path: string;
   readonly reason: string;
+}
+
+// What watching a set of paths takes: the directories to watch, whether every
+// hop reached its own directory (`reached`: none waits on a missing directory
+// to appear, so an event can be about the path itself), and the paths whose
+// link chain the kernel stopped walking, with why.
+export interface PathsWatch {
+  readonly targets: WatchTargets;
+  readonly reached: boolean;
+  readonly unresolved: readonly Refusal[];
+}
+
+// [LAW:single-enforcer] The one rule for where a set of paths can change, for
+// every consumer that watches files (the config watcher, `watch_file`
+// sources). A `named` path is watched wherever its content changes: each hop
+// of its link chain (`walkLinks`), by name in its nearest existing directory,
+// so re-pointing any link in the chain is heard where that link sits. A
+// `whole` path that is a directory is watched for every child, which
+// overrides any name filter on it; one that is not adds nothing. Directories
+// are deduped with their names unioned, and the set is sorted so equal sets
+// spell equal keys. Nothing here throws: it runs inside watcher callbacks.
+export function watchTargetsOf(paths: {
+  readonly named: readonly string[];
+  readonly whole: readonly string[];
+}): PathsWatch {
+  const unresolved: Refusal[] = [];
+  let reached = true;
+  // [LAW:types-are-the-program] A directory watched for named children, or
+  // for every child (`null`).
+  const byDir = new Map<string, Set<string> | null>();
+  for (const at of paths.named) {
+    const { hops, stopped } = walkLinks(at);
+    if (stopped !== null)
+      unresolved.push({ path: at, reason: stopped.message });
+    for (const hop of hops) {
+      const { dir, name, leaf } = nearestWatchTarget(hop);
+      reached &&= leaf;
+      const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
+      names?.add(name);
+      byDir.set(dir, names);
+    }
+  }
+  for (const dir of paths.whole.map(canonicalDirectory))
+    if (dir !== null) byDir.set(dir, null);
+  return {
+    targets: {
+      dirs: [...byDir.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([dirPath, names]) =>
+          names === null
+            ? { path: dirPath }
+            : { path: dirPath, filenames: [...names].sort() },
+        ),
+    },
+    reached,
+    unresolved,
+  };
 }
 
 // A debounce window's invalidation while it gathers: its paths are the

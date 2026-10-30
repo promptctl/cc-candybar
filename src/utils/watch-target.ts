@@ -39,7 +39,7 @@ export function nearestWatchTarget(candidate: string): {
 // stop at — absent, unreadable, a file, or removed mid-walk (the walk runs
 // inside watcher callbacks, during exactly the churn that races it, so one
 // call answers both questions and nothing here can throw).
-function canonicalDirectory(p: string): string | null {
+export function canonicalDirectory(p: string): string | null {
   try {
     return fs.statSync(p).isDirectory() ? fs.realpathSync(p) : null;
   } catch {
