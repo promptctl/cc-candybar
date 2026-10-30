@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-499",
+      "ref": "refs/pull/499/merge",
+      "sha": "2a62401c6410718b21f218dddcb807005e14bf5c",
+      "timestamp": "2026-10-30T16:34:26.854Z",
+      "commits": [
+        {
+          "sha": "2a62401c6410718b21f218dddcb807005e14bf5c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:33:37Z",
+          "message": "Merge 21b81be13c3d6816d245f2987c2972a12d653ccf into 79eac595257ef87be616ea19c3ea787386d26db6\n"
+        },
+        {
+          "sha": "21b81be13c3d6816d245f2987c2972a12d653ccf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:33:26-06:00",
+          "message": "test(tmux): the default menu's toggles bytes drop the retired tmux toggle (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "35303f8f44e965d195d04fb6796702c208d0ebe8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:15:12-06:00",
+          "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "32777408173d3f4744c1049613f5bcbe68fafd92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:10:48-06:00",
+          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "cd606f7b1afd2c7347a5c88a567ad7901066417a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:02:51-06:00",
+          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "2e1552ee9350bb7ab14332f1033610f418794b87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:43:47-06:00",
+          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "79eac595257ef87be616ea19c3ea787386d26db6",
@@ -67,56 +117,6 @@
       ]
     },
     {
-      "version": "pr-494",
-      "ref": "refs/pull/494/merge",
-      "sha": "df982eec9879c68c075562574e287dde8ae65692",
-      "timestamp": "2026-10-30T16:21:38.680Z",
-      "commits": [
-        {
-          "sha": "df982eec9879c68c075562574e287dde8ae65692",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:20:45Z",
-          "message": "Merge 65b8e63f3bf177955ac836ee70129bb534d8fc4f into 4f90c928ea159b91f00da76cd04a08140a27cb0e\n"
-        },
-        {
-          "sha": "65b8e63f3bf177955ac836ee70129bb534d8fc4f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:15:12-06:00",
-          "message": "test(colour): no dial position is exempt from parting neighbours, now that muted deals two tones (candybar-joiners-e5r4.tx7)\n\nThe grouped-row adjacency test and the door/rate test were written while\n`muted` had one tone, so each named it as the one exemption and guarded\nthat it stayed the only one. With `muted` dealing its muted form and the\nrole itself, that state no longer exists: the guard now asserts no\nposition deals fewer than two tones, and both tests hold every position\nto parting its neighbours, so a one-tone shade cannot come back unseen.\nThe theme-identity audit needed nothing: main's divider reversal already\nremoved its muted-row clause.\n"
-        },
-        {
-          "sha": "272b7b7fd5d549c8c707c4ebe83a927ea214472c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:15:12-06:00",
-          "message": "test(colour): the menu bytes put the toggles row's eighth item on the middle rung over grouped places (candybar-joiners-e5r4.tx7)\n"
-        },
-        {
-          "sha": "cced958765d6d07b74d734957b8a2b5b16f562b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:08:30-06:00",
-          "message": "docs(colour): the memory line claims equal bins for golden angle, not that nothing else separates it (candybar-joiners-e5r4.tx7)\n"
-        },
-        {
-          "sha": "458aab00045d88b98e375305658ab0a369a777db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:04:32-06:00",
-          "message": "fix(colour): each distribution reads its placements by its own rule, so golden angle and the even spreads keep their promises (candybar-joiners-e5r4.tx7)\n\nWhether two neighbours ever select one tone is a property of the pair\n(distribution, rule), not of the window. Van der Corput keeps neighbours\napart only read by halves; golden angle only by equal bins (halves put\nplaces 8 and 9 on one tone); and the even spreads ramp evenly in order\nonly by equal bins (halves dealt a five-option monotonic menu 0, 1, 2, 2,\n2). No one rule serves both van der Corput's rung-at-a-time walk and\ngolden angle, so the rule moves from the dial's rows onto each\ndistribution, and the Shade quantize column, the QUANTIZE table and its\nname type go. A row's hue reads the same selection; under every\ndistribution it picks what it picked before.\n\nThe bundled bar authors no distribution, so no rendered byte changes.\n\nAlso: a dial position's tones are two at least by type; the walk test\ncovers every window; the adjacency test states its scope (van der Corput\nat every position, golden angle over three tones); the even spreads and\nthe activated rung are pinned; the authoring doc, design doc, memory and\naudit comment stop saying a muted row is one colour or read to the\nnearest point.\n"
-        },
-        {
-          "sha": "5105a1b28e68b25c2c782efbec5171549b77609f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:37:15-06:00",
-          "message": "fix(colour): adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7)\n\nA three-tone window is read by halves instead of by nearest point: the\nupper half of the circle is the window's last entry (its middle rung) and\nthe lower half is split the same way between its ends. Van der Corput's\nfirst bit is the index's parity, so every odd place wears the middle rung\nand the even places alternate low and high. Of two neighbours exactly one\nis odd, so no two neighbours share a tone at any index, and every step is\none rung. Nearest point centred a tone on 0, where places 2^k - 1 and 2^k\nland either side ever closer, so 7 and 8, 15 and 16, ... shared it.\n\nThe muted position deals the role's muted form and the role itself, read\nby bin, so its neighbours alternate too.\n\nOne property test states it for every dial position over rows of 2 to 16\ncells; it replaces the adjacency checks that were spread over three tests.\nThe 🧪 toggles row's eighth item moves from the low rung to the middle one.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-501",
       "ref": "refs/pull/501/merge",
       "sha": "b6b67e8fc7a180cafce4c25582ffa33d3109759f",
@@ -142,49 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:53:52-06:00",
           "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-499",
-      "ref": "refs/pull/499/merge",
-      "sha": "66547782e5fc86dca12ead03aff5ad3d2e649083",
-      "timestamp": "2026-10-30T15:17:19.909Z",
-      "commits": [
-        {
-          "sha": "66547782e5fc86dca12ead03aff5ad3d2e649083",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:16:06Z",
-          "message": "Merge 789b46b11fb1ada3ec8e61f23b1bf999fc1f0537 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
-        },
-        {
-          "sha": "789b46b11fb1ada3ec8e61f23b1bf999fc1f0537",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:15:12-06:00",
-          "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "3352a1835639bbda7458372763dea4f834d14582",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:10:48-06:00",
-          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "c289110d877f3dc235173f6e1d93391bb2866ceb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:02:51-06:00",
-          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "e6c210b69c9160b2be92da7276c1d03f9503ce91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:43:47-06:00",
-          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
         }
       ]
     }
