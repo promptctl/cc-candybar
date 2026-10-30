@@ -84047,8 +84047,7 @@ setInterval(() => {
 startAt(0);
 var transport = {
   about: `This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>'s own daemon, compiled for the browser and running in this page against a simulated machine. The bar replays a few turns of a Claude Code session. Every click is real: open the \u{1F36B} menu, switch themes, arrange segments.`,
-  // The Pages site publishes the landscape explorer beside this page.
-  nav: '<a href="landscape/">Statusline landscape \u2192</a>',
+  nav: false ? void 0 : `<a href="${"landscape/"}">Statusline landscape \u2192</a>`,
   render: render2,
   click,
   // A new session over the bundled config: what the visitor's clicks wrote is

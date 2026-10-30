@@ -4,15 +4,22 @@
     {
       "version": "pr-509",
       "ref": "refs/pull/509/merge",
-      "sha": "d8654a2442501a688a245bff122362f05471d953",
-      "timestamp": "2026-10-30T21:20:50.385Z",
+      "sha": "1a56eef7436f6019eecb01f6ab9044f7ac43dd38",
+      "timestamp": "2026-10-30T21:25:21.104Z",
       "commits": [
         {
-          "sha": "d8654a2442501a688a245bff122362f05471d953",
+          "sha": "1a56eef7436f6019eecb01f6ab9044f7ac43dd38",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:19:59-06:00",
-          "message": "Merge 291927a94edf2b7d1040dccd75d76539f52312ac into b51f00510c4bcca14fc9ff4177320380f9052873\n"
+          "timestamp": "2026-10-30T21:24:37Z",
+          "message": "Merge 66b8d70d9781a6e726e7cce6bdc66024e469e5e8 into b51f00510c4bcca14fc9ff4177320380f9052873\n"
+        },
+        {
+          "sha": "66b8d70d9781a6e726e7cce6bdc66024e469e5e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:24:26-06:00",
+          "message": "fix(site): the deploy says where the explorer sits and both pages derive their links from it; the toolbar stays one row\n"
         },
         {
           "sha": "291927a94edf2b7d1040dccd75d76539f52312ac",
