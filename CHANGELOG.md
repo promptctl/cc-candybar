@@ -1,3 +1,9 @@
+## [1.167.0](https://github.com/promptctl/cc-candybar/compare/v1.166.3...v1.167.0) (2026-10-30)
+
+### Features
+
+* **tmux:** the tmux status line is a renderer the config menu offers inside tmux (candybar-plugins-vf6g.qzx) ([#499](https://github.com/promptctl/cc-candybar/issues/499)) ([4674510](https://github.com/promptctl/cc-candybar/commit/46745100f446a07971644e712c1ae93efc7f4a04))
+
 ## [1.166.3](https://github.com/promptctl/cc-candybar/compare/v1.166.2...v1.166.3) (2026-10-30)
 
 ### Bug Fixes
