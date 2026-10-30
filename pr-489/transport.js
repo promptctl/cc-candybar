@@ -37555,6 +37555,28 @@ var TRUNCATE_MODES = [
 
 // src/config/loader/refs.ts
 init_globals();
+
+// src/config/loader/plugin-scope.ts
+init_globals();
+var PLUGIN_SCOPES = ["plugins", "repo"];
+function pluginNs({ scope, name }) {
+  return `${scope}.${name}`;
+}
+function ownedBy(ns) {
+  return (name) => name === ns || name.startsWith(`${ns}.`);
+}
+var SELF = "self";
+function scopeOf(name) {
+  return PLUGIN_SCOPES.find((s) => name === s || name.startsWith(`${s}.`));
+}
+function otherScopeHint(name, declared) {
+  const scope = scopeOf(name);
+  if (scope === void 0 || scope === name) return "";
+  const other = PLUGIN_SCOPES.filter((s) => s !== scope).map((s) => `${s}${name.slice(scope.length)}`).find(declared);
+  return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
+}
+
+// src/config/loader/refs.ts
 var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 function* templateBlocks(template) {
   let open2 = template.indexOf("{{");
@@ -37775,7 +37797,7 @@ function templateHelperCalls(template, helpers) {
 var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
 function bindSelf(template, self2, ns) {
   const refRe = SELF_REF_RE(self2);
-  const named3 = (name) => name === self2 || name.startsWith(`${self2}.`);
+  const named3 = ownedBy(self2);
   const starts = [];
   for (const { dot, block } of scopedBlocks(template, "")) {
     const code = block.text.replace(
@@ -50614,25 +50636,6 @@ function ident(name) {
 
 // src/config/loader/reserved-namespace.ts
 init_globals();
-
-// src/config/loader/plugin-scope.ts
-init_globals();
-var PLUGIN_SCOPES = ["plugins", "repo"];
-function pluginNs({ scope, name }) {
-  return `${scope}.${name}`;
-}
-var SELF = "self";
-function scopeOf(name) {
-  return PLUGIN_SCOPES.find((s) => name === s || name.startsWith(`${s}.`));
-}
-function otherScopeHint(name, declared) {
-  const scope = scopeOf(name);
-  if (scope === void 0 || scope === name) return "";
-  const other = PLUGIN_SCOPES.filter((s) => s !== scope).map((s) => `${s}${name.slice(scope.length)}`).find(declared);
-  return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
-}
-
-// src/config/loader/reserved-namespace.ts
 var GROUP_NS = "groups.";
 var MENU_NS = "menus.";
 var MENU_PAGE_NS = "menupages.";
@@ -58055,9 +58058,6 @@ function applyPlugins(definitions, ctx, base, validate) {
     { config: base.config, rendering: base.rendering, loaded: [], dropped: [] }
   );
 }
-function ownedBy(ns) {
-  return (name) => name === ns || name.startsWith(`${ns}.`);
-}
 function withoutPlugin(config2, plugin) {
   const owned = ownedBy(plugin);
   const keep2 = (r) => Object.fromEntries(Object.entries(r).filter(([name]) => !owned(name)));
@@ -58304,7 +58304,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
       });
     }
   }
-  const fragment = boundToSelf(ns, {
+  const authored = {
     variables: {
       ...data,
       ...prefixed(ns, sources),
@@ -58334,7 +58334,9 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
         })
       )
     )
-  });
+  };
+  issues.push(...wrongScopeRefs(authored, id2));
+  const fragment = boundToSelf(ns, authored);
   for (const [where, template] of fragmentTemplates(fragment)) {
     try {
       SYNTAX_ENGINE.parse(template);
@@ -58345,19 +58347,21 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
       });
     }
   }
-  issues.push(...wrongScopeRefs(fragment, id2));
   if (issues.length > 0) fail2();
   return fragment;
 }
 function boundToSelf(ns, fragment) {
   const bind = (template) => bindSelf(template, SELF, ns);
-  const named3 = (name) => name === SELF || name.startsWith(`${SELF}.`) ? `${ns}${name.slice(SELF.length)}` : name;
+  const named3 = (name) => ownedBy(SELF)(name) ? `${ns}${name.slice(SELF.length)}` : name;
   const each = (table, f) => Object.fromEntries(
     Object.entries(table ?? {}).map(([name, value]) => [name, f(value)])
   );
   return {
     ...fragment,
-    variables: each(fragment.variables, (v) => mapVariableTemplates(v, bind)),
+    variables: each(
+      fragment.variables,
+      (v) => selfDepends(mapVariableTemplates(v, bind), named3)
+    ),
     segments: each(fragment.segments, (seg2) => ({
       ...seg2,
       ...Object.fromEntries(
@@ -58366,7 +58370,10 @@ function boundToSelf(ns, fragment) {
         )
       ),
       ...seg2.vars !== void 0 && {
-        vars: each(seg2.vars, (v) => mapVariableTemplates(v, bind))
+        vars: each(
+          seg2.vars,
+          (v) => selfDepends(mapVariableTemplates(v, bind), named3)
+        )
       }
     })),
     helpers: each(fragment.helpers, bind),
@@ -58375,6 +58382,12 @@ function boundToSelf(ns, fragment) {
       return "do" in bound ? { ...bound, do: bound.do.map(named3) } : bound;
     })
   };
+}
+function selfDepends(v, named3) {
+  return hasCacheField(v) && "depends_on" in v.cache ? {
+    ...v,
+    cache: { depends_on: v.cache.depends_on.map(named3) }
+  } : v;
 }
 var SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"];
 function wrongScopeRefs(fragment, id2) {
@@ -58410,6 +58423,11 @@ function wrongScopeRefs(fragment, id2) {
   }
   for (const [name, a] of Object.entries(fragment.actions ?? {})) {
     if ("do" in a) for (const m of a.do) check(`actions.${name}.do`, m, false);
+  }
+  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
+    if (hasCacheField(v) && "depends_on" in v.cache)
+      for (const d of v.cache.depends_on)
+        check(`variables.${name}.cache.depends_on`, d, false);
   }
   return [...issues.values()];
 }
