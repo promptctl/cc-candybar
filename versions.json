@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-505",
+      "ref": "refs/pull/505/merge",
+      "sha": "e917a09e716e182e12dbb20f0b68099e1f7d8c55",
+      "timestamp": "2026-10-30T18:25:07.632Z",
+      "commits": [
+        {
+          "sha": "e917a09e716e182e12dbb20f0b68099e1f7d8c55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T18:24:23Z",
+          "message": "Merge a0173d2d14d610d5fb1289b970e18f66cd6c74e3 into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
+        },
+        {
+          "sha": "a0173d2d14d610d5fb1289b970e18f66cd6c74e3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:24:05-06:00",
+          "message": "fix(config): the effort gauge evaluates max's climbing colour only where it draws it, so a still rung never claims to move (candybar-animation-wbxz.014)\n\nA stepped colour tells the frame its next change when it is evaluated, drawn\nor not. The gauge computed max's climbing colour at every level, so the\nbundled bar at any effort below max reported motion: the doctor called it\nmoving, and a feed at 5x or 20x redrew it at that beat. Max's colour and\nframes now sit in max's branch; the bubble is still computed at every level.\n\nAlso renames the feed's clamped on-screen period, which read as a boolean.\n"
+        },
+        {
+          "sha": "1d116f3a0ad82886f5adde98862ca1e42f38963e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:12:56-06:00",
+          "message": "fix(feed): the viewer over a moving bar is drawn as the still text it is, and a wake's timer is set from one wall reading (candybar-animation-wbxz.014)\n\n- The diagnostics viewer takes the body's place, so the body's next change is\n  the viewer's (never) rather than the hidden bar's beat; a feed no longer\n  redraws an open viewer 30 times a second.\n- `arm` measures its wait from the caller's wall reading, so `hasten` no longer\n  rebuilds its due instant from a second, truncated one.\n- A test pins the closing flash's start and turns to the same host instant at\n  1x, 5x and 20x.\n- The rendering memory line names the concept, not the template functions.\n"
+        },
+        {
+          "sha": "6e7fa0d4cd6556b9a61f82d0801b45ced042e297",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:53:27-06:00",
+          "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7cc276c0c16ac5e07c5f963f30318fa6c43d9370",
@@ -49,35 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:21:13-06:00",
           "message": "fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686)\n\nA cell's shade is selected from its hue's window at the depth drawn: the\ndial position's tones the depth draws as distinct colours, by identity\nafter rounding (rich-js drawnColour), widened along the ladder to the\nnearest rung drawn apart where the depth draws them all as one. A pressed\nshade (the activated trigger, its band's leads and ✕) is the dial's\nactivated rung widened by the same function until it draws apart from its\nband's items, its trigger's neighbours and the press a depth up. Both are\nmemoised per palette and read by entryOf as before.\n\nThe closing sweep renders every bundled theme at truecolor, 256 and ansi,\nclosed and on each settings tab, through the session rig, and holds every\nseam to two grounds drawn as two colours. One seam reader in test/helpers\nserves the sweep, colour-256 and the theme-identity audit.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-505",
-      "ref": "refs/pull/505/merge",
-      "sha": "04bd2f84d4d6f86c427453140d97c3691b050a48",
-      "timestamp": "2026-10-30T18:14:19.531Z",
-      "commits": [
-        {
-          "sha": "04bd2f84d4d6f86c427453140d97c3691b050a48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:13:17Z",
-          "message": "Merge 4f86f4b4f77ff54c6fd2cf2c328e125c511db91d into e03723ccfd5e2ed7bcd921e08ab6228dc1949671\n"
-        },
-        {
-          "sha": "4f86f4b4f77ff54c6fd2cf2c328e125c511db91d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:12:56-06:00",
-          "message": "fix(feed): the viewer over a moving bar is drawn as the still text it is, and a wake's timer is set from one wall reading (candybar-animation-wbxz.014)\n\n- The diagnostics viewer takes the body's place, so the body's next change is\n  the viewer's (never) rather than the hidden bar's beat; a feed no longer\n  redraws an open viewer 30 times a second.\n- `arm` measures its wait from the caller's wall reading, so `hasten` no longer\n  rebuilds its due instant from a second, truncated one.\n- A test pins the closing flash's start and turns to the same host instant at\n  1x, 5x and 20x.\n- The rendering memory line names the concept, not the template functions.\n"
-        },
-        {
-          "sha": "7977ee8052e38fe15442d3b9a05b4455bfac80b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:53:27-06:00",
-          "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
         }
       ]
     },
