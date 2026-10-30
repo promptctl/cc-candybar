@@ -154,10 +154,11 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 // severity and the message's first line, digested — what a message is about,
 // which a later line it gains (an update act's failure) does not change — and
 // which of the list's messages of that identity it is, so two alike are two
-// stops. The page of the message shown rides in the same key.
-const IDENTITY_BITS = 38;
+// stops. The page of the message shown rides in the same key, so a message has
+// at most PAGES pages: the viewer never draws a page its key cannot name.
+const IDENTITY_BITS = 32;
 const OCCURRENCES = 256;
-const PAGES = 64;
+export const PAGES = 4096;
 function identityOf(message: DiagnosticMessage): number {
   const headline = message.message.split(/\r\n|\r|\n/, 1)[0];
   const digest = createHash("sha256")
@@ -188,7 +189,7 @@ export function viewerKey(
   at: number,
   page: number,
 ): string {
-  return String(stopsOf(list)[at]! * PAGES + Math.min(page, PAGES - 1) + 1);
+  return String(stopsOf(list)[at]! * PAGES + page + 1);
 }
 
 // Where the viewer stands: the message (1-based) and its page (0-based).
@@ -276,12 +277,7 @@ export function viewerRows(
   const { index } = at;
   const shown = list[index - 1]!;
   const opts = viewerOptions(geometry);
-  // A header too wide for one row still leaves the message a row.
-  const perPage = Math.max(1, geometry.rows - 1);
   const body = channelRows(shown, opts, []);
-  const pages = Math.ceil(body.length / perPage);
-  // A message that shrank under an open viewer shows its last page.
-  const page = Math.min(at.page, pages - 1);
   const style = new Style({
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg,
@@ -295,34 +291,72 @@ export function viewerRows(
     to === null
       ? button(" ", null)
       : button(glyph, go(viewerKey(list, to.index - 1, to.page)));
-  const back =
-    page > 0
-      ? { index, page: page - 1 }
-      : index > 1
-        ? { index: index - 1, page: 0 }
-        : null;
-  const on =
-    page < pages - 1
-      ? { index, page: page + 1 }
-      : index < list.length
-        ? { index: index + 1, page: 0 }
-        : null;
-  const steps = list.length > 1 || pages > 1;
-  const position =
-    pages > 1
-      ? `[${index}/${list.length} ${page + 1}/${pages}]`
-      : `[${index}/${list.length}]`;
-  const header = [
-    button("✕", go(VIEWER_CLOSED)),
-    ...(steps ? [step("‹", back)] : []),
-    button(position, null),
-    ...(steps ? [step("›", on)] : []),
-    button("⧉ copy", effectsUrl([{ verb: VERB_COPY, args: [shown.message] }])),
-  ];
-  return [
-    renderStripCells(header, opts),
-    ...body.slice(page * perPage, (page + 1) * perPage),
-  ].join("\n");
+  // The header for a message of `pages` pages, shown at `page`.
+  const headerOf = (pages: number, page: number): string => {
+    const back =
+      page > 0
+        ? { index, page: page - 1 }
+        : index > 1
+          ? { index: index - 1, page: 0 }
+          : null;
+    const on =
+      page < pages - 1
+        ? { index, page: page + 1 }
+        : index < list.length
+          ? { index: index + 1, page: 0 }
+          : null;
+    const steps = list.length > 1 || pages > 1;
+    const position =
+      pages > 1
+        ? `[${index}/${list.length} ${page + 1}/${pages}]`
+        : `[${index}/${list.length}]`;
+    return renderStripCells(
+      [
+        button("✕", go(VIEWER_CLOSED)),
+        ...(steps ? [step("‹", back)] : []),
+        button(position, null),
+        ...(steps ? [step("›", on)] : []),
+        button(
+          "⧉ copy",
+          effectsUrl([{ verb: VERB_COPY, args: [shown.message] }]),
+        ),
+      ],
+      opts,
+    );
+  };
+  // [LAW:one-source-of-truth] The page is what the rows left by the header
+  // hold, the header measured as drawn: a narrow pane wraps it, and its
+  // position text grows with the page count, so the two settle together.
+  // Fewer rows per page only adds pages, so the header only grows, and the
+  // settling ends. A header too tall for the cap still leaves the page a row.
+  let headerRows = 1;
+  for (;;) {
+    const perPage = Math.max(1, geometry.rows - headerRows);
+    const pages = Math.min(PAGES, Math.ceil(body.length / perPage));
+    // A message that shrank under an open viewer shows its last page.
+    const page = Math.min(at.page, pages - 1);
+    const header = headerOf(pages, page);
+    const measured = header.split("\n").length;
+    if (measured > headerRows) {
+      headerRows = measured;
+      continue;
+    }
+    const rows = body.slice(page * perPage, (page + 1) * perPage);
+    // [LAW:no-silent-failure] Past the pages a key can name, the last page
+    // says how much it leaves out, and ⧉ copies the whole message.
+    const left = body.length - (page + 1) * perPage;
+    const shownRows =
+      page === pages - 1 && left > 0
+        ? [
+            ...rows.slice(0, -1),
+            renderStripCells(
+              [button(`… ${left + 1} more rows: ⧉ copy has them all`, null)],
+              { ...opts, wrap: false },
+            ),
+          ]
+        : rows;
+    return [header, ...shownRows].join("\n");
+  }
 }
 
 // Every row of one message, unpaged: what the viewer pages.

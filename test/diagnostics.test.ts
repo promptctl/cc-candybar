@@ -17,6 +17,7 @@ import {
   viewerKey,
   viewedIndex,
   viewerRows,
+  PAGES,
   WARNING_SEVERITY,
   worstLevel,
   type DiagnosticMessage,
@@ -192,6 +193,33 @@ describe("the viewer", () => {
         .map((e) => viewedIndex(e.args[2] as string, list));
     expect(onward(at(1))).toEqual([{ index: 1, page: 1 }]);
     expect(onward({ index: 1, page: 7 })).toEqual([at(2)]);
+  });
+
+  test("a header a narrow pane wraps still leaves the viewer within its rows", () => {
+    const long = Array.from({ length: 30 }, (_, i) => `i${i}`).join("\n");
+    const list = collectDiagnostics([long, "next"], [], []);
+    const narrow = { ...geometry(14), rows: 5 };
+    for (const page of [0, 3])
+      expect(
+        rowsOf(viewerRows(list, { index: 1, page }, SID, narrow)).length,
+      ).toBeLessThanOrEqual(5);
+  });
+
+  test("past the pages a key can name, the last page says what it leaves out and › still moves on", () => {
+    const long = Array.from({ length: PAGES + 10 }, (_, i) => `r${i}`).join(
+      "\n",
+    );
+    const list = collectDiagnostics([long, "next"], [], []);
+    const tiny = { ...geometry(80), rows: 2 };
+    const last = { index: 1, page: PAGES - 1 };
+    const rows = rowsOf(viewerRows(list, last, SID, tiny));
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatch(/… 11 more rows: ⧉ copy has them all/);
+    const onward = links(viewerRows(list, last, SID, tiny))
+      .filter((l) => stripAnsi(l.text).trim() === "›")
+      .flatMap((l) => effectsOf(l.url))
+      .map((e) => viewedIndex(e.args[2] as string, list));
+    expect(onward).toEqual([at(2)]);
   });
 
   test("one message: ✕, its position and ⧉, then the message", () => {
