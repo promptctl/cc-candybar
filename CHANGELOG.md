@@ -1,3 +1,13 @@
+## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)
+
+### Features
+
+* **diagnostics:** every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) ([#483](https://github.com/promptctl/cc-candybar/issues/483)) ([4363d2a](https://github.com/promptctl/cc-candybar/commit/4363d2a7982c76c6f6ada1028f154dd9a498309c))
+
+### Bug Fixes
+
+* **daemon:** one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) ([#485](https://github.com/promptctl/cc-candybar/issues/485)) ([5a804ba](https://github.com/promptctl/cc-candybar/commit/5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad))
+
 ## [1.162.5](https://github.com/promptctl/cc-candybar/compare/v1.162.4...v1.162.5) (2026-10-30)
 
 ### Bug Fixes
