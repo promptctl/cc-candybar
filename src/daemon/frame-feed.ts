@@ -594,11 +594,11 @@ export class FrameFeeds<Req> {
   private schedule(feed: Feed, frame: FeedFrame | null, at: Instant): void {
     const { moving, still } = this.deps.periods;
     const until = ((frame?.nextChange ?? Infinity) - at) * 1000;
-    const seen = Math.min(Math.max(until, moving), still);
+    const shownPeriod = Math.min(Math.max(until, moving), still);
     const shown = this.shown(feed);
-    if (seen < still && shown) feed.moving++;
-    if (seen < still && !shown) feed.unseen++;
-    const period = shown ? seen : still;
+    if (shownPeriod < still && shown) feed.moving++;
+    if (shownPeriod < still && !shown) feed.unseen++;
+    const period = shown ? shownPeriod : still;
     this.arm(feed, (at + period / 1000) as Instant, this.deps.instant());
   }
 

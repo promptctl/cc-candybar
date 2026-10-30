@@ -140,6 +140,16 @@ describe("a drawn frame says when it next changes, on the wall clock", () => {
     expect(motionOf(stepped)).toBe("moves");
   });
 
+  // A stepped colour is heard when it is evaluated, drawn or not, so the
+  // bundled gauge evaluates its climbing colour only where it draws it.
+  test("the bundled effort gauge moves at max, and below it is still", () => {
+    const gauge = (level: string): string =>
+      `{{ template "effortGauge" (dict "effort" (dict "level" "${level}" "glyphs" "? a b c d")) }}`;
+    for (const level of ["low", "medium", "high", "xhigh"])
+      expect([level, nextOf(gauge(level))]).toEqual([level, Infinity]);
+    expect(nextOf(gauge("max"))).toBe(AT + 1);
+  });
+
   test("the soonest of a frame's changes is its next", () => {
     expect(
       nextOf(
