@@ -24,6 +24,7 @@ import {
   AXIS_OF,
   bodyPath,
   childPath,
+  walkNodePaths,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
@@ -400,10 +401,11 @@ export function validateCrossReferences(
   }
   // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
   // fragment at this key, never the merged root — so a node is reported at
-  // the path, and on the line, the author would look for it, and a row they
-  // inherited is not theirs to be told about. The tree that renders is checked
-  // below (placement counts); an inherited row names only bundled segments,
-  // which no file can remove.
+  // the path, and on the line, the author would look for it. The tree that
+  // renders is checked below: placement counts, and a placement a lower layer
+  // wrote that names no declared segment. The undeclared names reported, so
+  // each is told once.
+  const reported = new Set<string>();
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root)
@@ -447,6 +449,7 @@ export function validateCrossReferences(
         continue;
       }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+        reported.add(node.name);
         ctx.unplaced.push({
           path,
           message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
@@ -473,6 +476,28 @@ export function validateCrossReferences(
   }
   for (const [key, tree] of rendered) {
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
+  }
+  // [LAW:no-silent-failure] Every placement the bar drops (loader/unplaced.ts)
+  // is reported: one this file wrote above, at its own line; one a layer below
+  // wrote, here, under the tree that renders it — a home config's typo is
+  // still the user's to fix when a repo config sits above it.
+  for (const [key, tree] of rendered) {
+    for (const [node] of walkNodePaths(tree, key)) {
+      if (
+        node.kind !== "segment" ||
+        isSettingsAnchor(node.name) ||
+        Object.prototype.hasOwnProperty.call(cfg.segments, node.name) ||
+        reported.has(node.name)
+      ) {
+        continue;
+      }
+      reported.add(node.name);
+      ctx.unplaced.push({
+        path: key,
+        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
+        line: findKeyLine(ctx.source, key.split(".")),
+      });
+    }
   }
 
   validateDeclarations(ctx, cfg, templateScope, () => true);

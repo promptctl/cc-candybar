@@ -520,7 +520,10 @@ export interface AuthoredConfig {
  * held is checked whole — the layer's own references and placements into that
  * namespace were checked against the plugin it replaces, and only a full check
  * sees them break, so the replacement drops alone rather than failing the file.
- * The full validateConfig of the file listing it still runs over the result.
+ * The file listing it is validated over the result, so the check is the same
+ * tolerant one the bar loads by: a placement of a segment nothing declares
+ * drops its cell and is reported by the file's own validation, never blamed
+ * on the plugin.
  */
 function checkPlugin(
   config: DslConfig,
@@ -530,7 +533,8 @@ function checkPlugin(
   allowedPalettes: ReadonlySet<string> | undefined,
 ): void {
   if (replaces) {
-    validateConfig(unauthored(config), filePath, allowedPalettes);
+    // [LAW:single-enforcer] The bar's own judgment of what fails a config.
+    validateRenderable(unauthored(config), filePath, allowedPalettes);
     return;
   }
   const owned = ownedBy(plugin);

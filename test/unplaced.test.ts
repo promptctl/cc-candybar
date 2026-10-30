@@ -102,3 +102,31 @@ describe("a chain whose merge fails", () => {
     expect(load).not.toThrow(/ghost/);
   });
 });
+
+describe("a lower layer's undeclared placement", () => {
+  const chain = (files: Record<string, string>) =>
+    loadConfigChain(
+      Object.keys(files),
+      DEFAULT_DSL_CONFIG,
+      { warned: () => {} },
+      { repo: null, cwd: null },
+      (p) => files[p]!,
+    );
+  const LOWER = `{ segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`;
+
+  test("is dropped and reported under the file above it, whether or not that file drops its own", () => {
+    for (const upper of [
+      `{ segments: { u: { template: "u" } } }`,
+      `{ segments: { u: { template: "u" } }, presets: { p: { root: { h: ["u", "bar"] } } } }`,
+    ]) {
+      const { config, dropped } = chain({
+        "/lower.json5": LOWER,
+        "/upper.json5": upper,
+      });
+      expect(placementIds(rootNode(config.root))).not.toContain("gti");
+      expect(dropped?.message).toMatch(
+        /"gti" that does not match any declared segment/,
+      );
+    }
+  });
+});

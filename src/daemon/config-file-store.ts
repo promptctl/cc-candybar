@@ -37,7 +37,7 @@ import {
   type ConfigHome,
   type LoadedChain,
 } from "../config/dsl-loader.js";
-import { ConfigError } from "../config/loader/diagnostics.js";
+import { ConfigError, type ConfigIssue } from "../config/loader/diagnostics.js";
 import type {
   DslConfig,
   Globals,
@@ -457,7 +457,9 @@ function commit(
   after: string,
   refuse: (home: ConfigHome, before: string | null, will: LoadedChain) => void,
 ): void {
-  refuse(home, before, loadOrRefuse(home, after));
+  const will = loadOrRefuse(home, after);
+  refuseNewDrops(home, before, will);
+  refuse(home, before, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
@@ -576,6 +578,41 @@ function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
     throw new BadVerbArgs(
       `refused: the config file would not load after this click — ${e.message}`,
     );
+  }
+}
+
+// [LAW:no-silent-failure] The bar draws past a placement of a segment nothing
+// declares, but a click never writes one: a write whose result drops a
+// placement the file before it did not is refused with the loader's own
+// diagnosis. A drop the file already held is the author's, and refusing every
+// click over it would lock the bar's own controls.
+function refuseNewDrops(
+  home: ConfigHome,
+  before: string | null,
+  will: LoadedChain,
+): void {
+  const held = new Set(dropsOf(home, before).map((i) => i.message));
+  const added = (will.dropped?.issues ?? []).filter(
+    (i) => !held.has(i.message),
+  );
+  if (added.length > 0) {
+    throw new BadVerbArgs(
+      `refused: this click would leave a placement of a segment nothing declares — ${new ConfigError(home.path, added).message}`,
+    );
+  }
+}
+
+// The placements `text` drops as the home. A text that does not load drew
+// none of its placements, so it drops none.
+function dropsOf(
+  home: ConfigHome,
+  text: string | null,
+): readonly ConfigIssue[] {
+  try {
+    return chainOver(home, text).dropped?.issues ?? [];
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    return [];
   }
 }
 
