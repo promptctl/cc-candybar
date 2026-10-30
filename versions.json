@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-501",
+      "ref": "refs/pull/501/merge",
+      "sha": "52c9ba30020e0e769cbc13ad7e472948c254e688",
+      "timestamp": "2026-10-30T15:55:00.331Z",
+      "commits": [
+        {
+          "sha": "52c9ba30020e0e769cbc13ad7e472948c254e688",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:54:13-06:00",
+          "message": "Merge f5c08779603afa54dd7ba0f6cbe00a0c4d5a680f into fe783f48728a83116d74cf3674e4695aff77fd76\n"
+        },
+        {
+          "sha": "f5c08779603afa54dd7ba0f6cbe00a0c4d5a680f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:53:52-06:00",
+          "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-493",
       "ref": "refs/pull/493/merge",
       "sha": "cee7369f43ce7d3136b155df0cf84d726152d488",
