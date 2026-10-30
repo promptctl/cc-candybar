@@ -3,7 +3,7 @@ import path from "node:path";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { walkLinks } from "../../utils/atomic-write";
-import { boundKey, boundOf } from "../../utils/folder-identity";
+import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import {
   canonicalDirectory,
   nearestWatchTarget,
@@ -148,8 +148,7 @@ export function watchTargetsOf(paths: {
   const bound = new Map(
     targets.dirs.map((d) => {
       const at = boundOf(d.path);
-      const bindable = typeof at !== "string" && "ino" in at;
-      return [d.path, bindable ? boundKey(at) : null] as const;
+      return [d.path, bindsFolder(at) ? boundKey(at) : null] as const;
     }),
   );
   return {
@@ -290,6 +289,15 @@ const failedOf = (d: Deafness): Gathering => ({
   reason: `${d.path}: ${d.reason}`,
 });
 
+// [LAW:one-source-of-truth] A directory's state is its current handle's to
+// speak for. A reopen closes and replaces the handle, and an event or error
+// already on its way from the closed one reports a directory that is gone.
+const heldBy = (
+  state: DirState,
+  handle: fs.FSWatcher,
+): state is Extract<DirState, { kind: "listening" }> =>
+  state.kind === "listening" && state.handle === handle;
+
 const dirId = (target: DirTarget): string =>
   `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 
@@ -361,10 +369,11 @@ export class WatcherRegistry {
   // FSEvents keeps on its path for a slot the OS refuses. The next derive
   // that finds the directory there rebinds, since its key differs.
   //
-  // A deaf watch under an unchanged key is kept deaf. Config and git follow
-  // on a `failed` window, so a follow that retried would retry an error that
-  // recurs on every reopen within one debounce window; a consumer that
-  // retries says when, through `listening`.
+  // A deaf watch under an unchanged key is kept deaf: config and git follow
+  // on a `failed` window, and a follow that retried would retry an error that
+  // recurs on every reopen within one debounce window. A deaf directory is
+  // retried when a holder names it instead: an acquire that joins it, or a
+  // consumer's `listening`.
   follow(
     held: HeldWatch | null,
     spec: WatchSpec,
@@ -453,9 +462,8 @@ export class WatcherRegistry {
       return;
     }
     const now = boundOf(dir.path);
-    if (typeof now !== "string" && "ino" in now)
-      if (boundKey(now) !== dir.state.bound)
-        this.reopen(dir, "the folder at its path was made again");
+    if (bindsFolder(now) && boundKey(now) !== dir.state.bound)
+      this.reopen(dir, "the folder at its path was made again");
   }
 
   // [LAW:no-silent-failure] Every slot on the directory hears it change
@@ -485,15 +493,16 @@ export class WatcherRegistry {
       const handle = fs.watch(
         at,
         { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), bound, changed),
+        (_event, changed) => this.heard(dirOf(), handle, changed),
       );
       // [LAW:no-silent-failure] An error after open reaches every slot on
       // the directory and the stats, not only the log: the handle behind it
       // delivers nothing more.
       handle.on("error", (e) => {
-        const dir = dirOf();
         this.logger("warn", `watcher error ${at}: ${e.message}`);
         if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
         this.closeHandle(at, handle, "error");
         const deafness: Deafness = {
           kind: "failed",
@@ -529,10 +538,16 @@ export class WatcherRegistry {
   // refreshed, so a handle never stays bound to a folder no longer at its
   // path and every later event naming the directory is judged against the
   // folder there.
-  private heard(dir: DirWatch, bound: string, changed: string | null): void {
+  private heard(
+    dir: DirWatch,
+    handle: fs.FSWatcher,
+    changed: string | null,
+  ): void {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
     const moved =
       changed === path.basename(dir.path) &&
-      boundKey(boundOf(dir.path)) !== bound;
+      boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));

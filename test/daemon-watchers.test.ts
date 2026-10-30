@@ -558,6 +558,38 @@ describe("WatcherRegistry", () => {
     }
   });
 
+  // A reopen replaces the handle; an error or event still on its way from
+  // the closed one speaks for no directory.
+  test("an error or event from a handle a reopen replaced changes nothing", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-stale-"));
+    const dir = path.join(root, "d");
+    fs.mkdirSync(dir);
+    const fake = standIn();
+    try {
+      const counters = zeroCounters();
+      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const seen: Invalidation[] = [];
+      const a = reg.acquire("a", { dirs: [{ path: dir, filenames: ["x"] }] }, (inv) => seen.push(inv));
+      fs.rmSync(dir, { recursive: true });
+      fs.mkdirSync(dir);
+      reg.acquire("b", { dirs: [{ path: dir }] }, () => {});
+      await until(() => seen.length === 1, "the reopen's window");
+      const [stale, current] = fake.opensOf(dir);
+      stale!.handle.emit("error", new Error("EBADF: bad file descriptor"));
+      stale!.listener("rename", "x");
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(seen).toEqual([{ kind: "unknown" }]);
+      expect(a.deaf).toEqual([]);
+      expect(current!.closed).toBe(false);
+      expect(reg.dirWatches()).toBe(1);
+      expect(counters.dirWatchesClosed).toBe(1);
+      reg.closeAll();
+    } finally {
+      fake.restore();
+      rmrf(root);
+    }
+  });
+
   // Every acquire names its directories as they are now: a holder joining a
   // slot retries its deaf directory as one opening a slot does.
   test("acquiring a slot another holder holds reopens its deaf directory", () => {
