@@ -58,7 +58,6 @@ const DFLT: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
-  insert: [],
 };
 
 describe("mergeWithDefault", () => {

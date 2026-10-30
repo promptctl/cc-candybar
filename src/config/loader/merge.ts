@@ -35,7 +35,6 @@ import { EMPTY_ROWS, mergeRoot } from "../root.js";
  *                `{ rows }` map; a whole tree replaces the default's rows
  *                (root.ts's mergeRoot — the one fold presets reuse); absent
  *                → the empty rows map, the merge's identity.
- *   insert     : appended in chain order (lower layers first)
  *                [LAW:one-source-of-truth] `layout:` is rejected at parse time
  *                with a migration error (removed in 2de.19), so only `root`
  *                ever reaches this function.
@@ -52,11 +51,6 @@ export function mergeWithDefault(
       segmentDeltas(dflt.segments, raw.segments ?? {}),
     ),
     root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
-    // [LAW:one-source-of-truth] insert cells accumulate in chain order, each
-    // already stamped with the file and entry that wrote it. They stay data:
-    // every rendered tree places them itself (presets.ts's presetRoot), so a
-    // preset's own tree gets its own anchor and clash decisions.
-    insert: [...dflt.insert, ...(raw.insert ?? [])],
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
     // ships none).

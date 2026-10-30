@@ -496,11 +496,7 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
 
   test("an empty rows map restages nothing: the preset renders the config's root, authored at `root`", () => {
     const cfg = merged(`{ presets: { P: { root: { rows: {} } } } }`);
-    expect(presetRoot(cfg, "P")).toEqual({
-      node: rootNode(cfg.root),
-      path: "root",
-      unplaced: [],
-    });
+    expect(presetRoot(cfg, "P")).toEqual({ node: rootNode(cfg.root), path: "root" });
   });
 
   test("a rows fragment restages: the inherited rows keep their place and the new row appends, authored at the preset", () => {

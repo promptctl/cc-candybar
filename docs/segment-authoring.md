@@ -1059,7 +1059,9 @@ id the user's bar holds (a bare placement's id is its segment's name):
 
 Here the file stands alone, so the row it inserts into is its own. In a
 repository, leave `root` out and the cell lands in the user's row. Each
-cell takes exactly one of `before` or `after`, and an optional `id`. Every
+cell takes exactly one of `before` or `after`, and an optional `id`. The
+anchor must be a placement: the bar's own chrome, such as the settings
+door, is refused. Every
 arrangement places the cell in its own tree, presets included, and one
 whose tree lacks the anchor doesn't draw it. When that is the user's own
 root, or a preset some config file writes, the bar warns naming your file,
@@ -1067,8 +1069,9 @@ the cell, the anchor and the preset. A preset only cc-candybar ships has
 no such placement to sit beside, so it simply draws without the cell. A cell the user already places is not
 drawn twice. Like the rest of the file, `insert` takes effect only once the
 user has approved the repository. In edit mode the cell shows which file
-placed it, and offers no remove or move, because it lives in your file, not
-the user's. The cell stays beside its anchor, and if the user removes their
+placed it, and offers no remove or move: it is an `insert` entry, and edit
+mode's clicks don't rewrite those, even in the user's own file. To change
+one, edit the `insert` list by hand. The cell stays beside its anchor, and if the user removes their
 own copy of it, yours comes back.
 
 ## Mistakes and the errors they produce

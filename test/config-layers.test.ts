@@ -7,7 +7,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
-import { durableConfig } from "../src/config/dsl-loader";
+import { durableConfig, loadConfigChain } from "../src/config/dsl-loader";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   deleteValues,
   writePreset,
@@ -385,7 +386,9 @@ describe("a project layer inserting into the user's row", () => {
       expect(cell.lead).toBeUndefined();
       expect(cell.trail).toBeUndefined();
       expect(cell.drafts).toBeUndefined();
-      const label = nodes.find((n) => n.name === "edit.label:theirs:theirs")!;
+      const label = nodes.find(
+        (n) => n.name === "edit.label:theirs/default:theirs",
+      )!;
       expect(label.opens).toBeUndefined();
       expect(config.segments[label.name]!.template).toBe(
         `{{ "theirs · ${outcome.layers[1]} insert.0" }}`,
@@ -402,5 +405,78 @@ describe("a project layer inserting into the user's row", () => {
     } finally {
       prepared.registry.dispose();
     }
+  });
+  // The bar's own load of the chain: what it draws, and what it dropped.
+  const barLoad = () => {
+    const warnings: string[] = [];
+    const loaded = loadConfigChain(
+      [userFile, projectFile],
+      DEFAULT_DSL_CONFIG,
+      { warned: (w) => warnings.push(...w) },
+      { repo: null, cwd: project },
+    );
+    const drawn = (preset: string) =>
+      [...walkNodes(fragmentNode(loaded.config.presets[preset]!.root!))]
+        .flatMap((n) => (n.kind === "segment" ? [n.name] : []));
+    return { ...loaded, warnings, drawn };
+  };
+
+  test("a repo's cell naming no declared segment is dropped and blamed on the repo's entry; the rest draws", () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "ghost", after: "mine" }, { seg: "theirs", after: "other" }]`);
+    const { dropped, drawn } = barLoad();
+    expect(dropped.map((e) => [e.file, e.issues.map((i) => i.path)])).toEqual([
+      [projectFile, ["insert.0"]],
+    ]);
+    expect(dropped[0]!.issues[0]!.message).toContain('"ghost"');
+    expect(dropped[0]!.issues[0]!.line).toBe(1);
+    const names = drawn("default");
+    expect(names).not.toContain("ghost");
+    expect(names).toEqual(expect.arrayContaining(["mine", "other", "theirs"]));
+  });
+
+  test("the user's own cell naming no declared segment is blamed on the user's entry, under a repo layer", () => {
+    fs.writeFileSync(
+      userFile,
+      `{\n  segments: { mine: { template: "USERSEG" } },\n  root: { h: ["mine"] },\n  insert: [\n    { seg: "ghost", after: "mine" },\n  ],\n}`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const { dropped, drawn } = barLoad();
+    expect(dropped.map((e) => [e.file, e.issues.map((i) => i.path)])).toEqual([
+      [userFile, ["insert.0"]],
+    ]);
+    expect(dropped[0]!.issues[0]!.line).toBe(5);
+    const names = drawn("default");
+    expect(names).not.toContain("ghost");
+    expect(names).toEqual(expect.arrayContaining(["mine", "theirs"]));
+  });
+
+  test("a cell anchored on the bar's chrome is refused at its anchor and never drawn", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "theirs", after: "candybar.menu" }]`);
+    const outcome = await checkConfig(undefined, project);
+    expect(outcome.kind).toBe("fatal");
+    if (outcome.kind === "fatal") {
+      expect(outcome.message).toContain(projectFile);
+      expect(outcome.message).toContain("insert.0.after");
+    }
+    expect(() => barLoad()).toThrow(/insert\.0\.after/);
+  });
+
+  test("an inserted cell's label and another preset's editable label of the same id each read their own text", () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", "other"] } } }`,
+      `, theirs: { template: "THEIRSEG" } }, presets: { mine2: { root: { h: ["mine", "theirs"] } }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const { config } = barLoad();
+    const labels = (preset: string) =>
+      [...walkNodes(fragmentNode(config.presets[preset]!.root!))].flatMap((n) =>
+        n.kind === "segment" && n.name.startsWith("edit.label:theirs")
+          ? [config.segments[n.name]!.template]
+          : [],
+      );
+    expect(labels("default")).toEqual([`{{ "theirs · ${projectFile} insert.0" }}`]);
+    expect(labels("mine2")).toEqual([`{{ "theirs" }}`]);
   });
 });

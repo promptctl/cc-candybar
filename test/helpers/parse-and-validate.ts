@@ -27,7 +27,6 @@ export const EMPTY_DEFAULT: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
-  insert: [],
 };
 
 // The judgment `check` makes: the bar's own validation, refusing every

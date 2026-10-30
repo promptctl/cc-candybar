@@ -43,7 +43,6 @@ const EMPTY_DEFAULT: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
-  insert: [],
 };
 
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {

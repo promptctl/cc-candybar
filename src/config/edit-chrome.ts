@@ -465,7 +465,8 @@ function labelChrome(
   ctx: SpliceCtx,
   configure: ConfigureParts,
 ): SegmentNode {
-  const name = labelSegment(ctx, child, decl, placementId(child));
+  const id = placementId(child);
+  const name = labelSegment(ctx, id, child, decl, id);
   // [LAW:one-source-of-truth] Every implied setting rides across — the theme
   // and the effect the placement wears, saved and unsaved — so a name moves as
   // its placement would.
@@ -492,14 +493,17 @@ function labelChrome(
 
 // [LAW:one-source-of-truth] THE declaration of a placement's names-view label,
 // reading `text`, shared by the label that opens configure and the bare one an
-// inserted cell wears. Returns the segment name it declared.
+// inserted cell wears. Returns the segment name it declared,
+// `edit.label:<key>:<segment>`: `key` names one text, so two labels that read
+// differently never share a declaration.
 function labelSegment(
   ctx: SpliceCtx,
+  key: string,
   child: SegmentNode,
   decl: SegmentDecl,
   text: string,
 ): string {
-  const name = `${LABEL_NS}${placementId(child)}:${child.name}`;
+  const name = `${LABEL_NS}${key}:${child.name}`;
   ctx.artifacts.segments[name] = {
     template: `{{ "${escapeTemplateLiteral(text)}" }}`,
     ...(decl.palette !== undefined && { palette: decl.palette }),
@@ -553,8 +557,8 @@ function editableUnit(
 }
 
 // The unit an inserted cell gets: the cell, and in the names view a label
-// naming the file and entry that placed it. No `+`, `✖` or configure: no file
-// a click writes holds the cell, so there is nothing such a click could edit.
+// naming the file and entry that placed it. No `+`, `✖` or configure: the
+// cell is an insert entry, which no click rewrites.
 // [LAW:types-are-the-program] The click is not refused; it is never drawn.
 function insertedUnit(
   child: SegmentNode,
@@ -563,13 +567,18 @@ function insertedUnit(
   ctx: SpliceCtx,
 ): LayoutNode[] {
   const decl = ctx.segments[child.name]!;
+  const id = placementId(child);
   const label: SegmentNode = {
     kind: "segment",
+    // Keyed by the preset too: another preset may hold the same id as an
+    // editable placement, whose label reads only the id. An id holds no
+    // `/` and a preset ident no `:`, so the two names never meet.
     name: labelSegment(
       ctx,
+      `${id}/${ctx.presetIdent}`,
       child,
       decl,
-      `${placementId(child)} · ${insertedBy.file} ${insertedBy.entry}`,
+      `${id} · ${insertedBy.file} ${insertedBy.entry}`,
     ),
     when: `{{ ${namesView(ctx.presetIdent)} }}`,
   };
@@ -679,8 +688,8 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
   // chrome — the settings door, where it defaults — would otherwise anchor on
   // a segment no layout op may move. The trailing insert point needs no such
   // rule: every content segment's gap cell carries its own `after`.
-  // An inserted cell is not content a `+` may anchor on either: no file a
-  // click writes holds it.
+  // An inserted cell is not content a `+` may anchor on either: it is an
+  // insert entry, which no click rewrites.
   const firstContent = node.children.findIndex(
     (child) =>
       child.kind === "segment" &&
@@ -700,8 +709,8 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       continue;
     }
     // [LAW:dataflow-not-control-flow] Which unit a cell gets is read off the
-    // cell: one a file a click writes holds is editable, one a layer's
-    // `insert` placed is shown and labelled only.
+    // cell: one a root holds is editable, one a layer's `insert` placed is
+    // shown and labelled only.
     const cells =
       child.insertedBy === undefined
         ? editableUnit(child, spliced, i === firstContent, ctx)

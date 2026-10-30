@@ -92,7 +92,10 @@ export function findKeyLine(
 }
 
 // The line of the deepest node the path reaches through the parsed document,
-// or undefined when the document does not parse or its first step is absent.
+// or undefined when the path indexes no array on the way there (the key
+// scanner places that), the document does not parse, or its first step is
+// absent. A numeric part indexes an array only where the node is one; on an
+// object it is a key like any other (`themeDefaults: { "16": … }`).
 function elementPathLine(
   source: string,
   pathParts: readonly string[],
@@ -105,17 +108,21 @@ function elementPathLine(
     throw e;
   }
   let reached: Node | undefined;
+  let indexed = false;
   for (const part of pathParts) {
-    const next: Node | undefined = /^\d+$/.test(part)
-      ? node.kind === "array"
-        ? node.elements[Number(part)]
-        : undefined
-      : entryOf(node, part)?.value;
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next: Node | undefined =
+      node.kind === "array"
+        ? element
+          ? node.elements[Number(part)]
+          : undefined
+        : entryOf(node, part)?.value;
     if (next === undefined) break;
+    indexed ||= element;
     node = next;
     reached = next;
   }
-  return reached === undefined
+  return reached === undefined || !indexed
     ? undefined
     : lineFromOffset(source, reached.span.start);
 }

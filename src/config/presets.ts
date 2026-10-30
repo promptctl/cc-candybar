@@ -47,8 +47,8 @@ import type {
   ContainerNode,
   DslConfig,
   Globals,
+  InsertCell,
   PresetDecl,
-  RootFragment,
 } from "./dsl-types.js";
 import {
   EMPTY_ROWS,
@@ -165,72 +165,79 @@ export function presetByName(
 // tree together with where it came from makes that drift unrepresentable rather
 // than merely fixed [FRAMING:representation].
 export function presetRoot(
-  config: Pick<DslConfig, "presets" | "root" | "insert">,
+  config: Pick<DslConfig, "presets" | "root">,
   name: string,
-): {
-  readonly node: ContainerNode;
-  readonly path: string;
-  readonly unplaced: readonly Unplaced[];
-} {
+): { readonly node: ContainerNode; readonly path: string } {
   // [LAW:dataflow-not-control-flow] One merge for every preset — the floor's
   // empty fragment is the identity, not an arm — and the path is a projection
   // of the same fact the merge folds over (does the fragment restage anything?).
   const fragment = presetByName(config.presets, name).root ?? EMPTY_ROWS;
-  const { node, unplaced } = renderedRoot(config, fragment);
   return {
-    node,
+    node: rootNode(mergeRoot(fragment, config.root)),
     path: restages(fragment) ? `presets.${name}.root` : "root",
-    unplaced,
   };
 }
 
-// [LAW:no-silent-failure] Every `insert` cell some rendered tree could not
-// place, as the warning the bar shows: the file and entry that wrote it, why,
-// and the preset whose tree it missed when that is not the config's own root.
-// Each tree is asked once — every preset that restages nothing renders the
-// config's own root and shares its answer.
-// [LAW:no-silent-failure] exception: a preset only the bundled default
-// declares is not asked. Its tree is ours, not the user's, so a cell whose
-// anchor it lacks has no "beside" there — like a `when` that is false, not a
-// broken state — and warning would put a standing ⚠ on every bar a repo
-// adds to. `authored` names the presets some config file declares.
-export function unplacedNotices(
+// [LAW:single-enforcer] THE placement of every layer's `insert` cells, run
+// once by the loader before anything walks a tree: into the config's own
+// root, and into each preset that restages, over the tree that preset
+// renders — so a preset's whole tree decides its own anchors and clashes,
+// and a preset that restages nothing renders the config's root, cells and
+// all. The result holds no cells to place, so no later pass can place one
+// again. A preset that restages carries its placed tree as a whole tree.
+// [LAW:no-silent-failure] Each cell a tree could not place comes back as the
+// warning the bar shows: the file and entry that wrote it, why, and the
+// preset whose tree it missed.
+// [LAW:no-silent-failure] exception: a preset no config file declares is not
+// warned for. Its tree is ours, not the user's, so a cell whose anchor it
+// lacks has no "beside" there — like a `when` that is false, not a broken
+// state — and warning would put a standing ⚠ on every bar a repo adds to.
+export function placeInserts(
   config: DslConfig,
+  cells: readonly InsertCell[],
+  // The presets some config file declares.
   authored: ReadonlySet<string>,
-): readonly string[] {
-  const trees = [
-    { path: "root", where: "", ...renderedRoot(config, EMPTY_ROWS) },
-    ...presetNames(config.presets)
-      .filter((name) => authored.has(name))
-      .map((name) => ({
-        ...presetRoot(config, name),
-        where: ` in preset "${name}"`,
-      })),
-  ];
-  return trees
-    .filter((tree, i) => trees.findIndex((t) => t.path === tree.path) === i)
-    .flatMap(({ where, unplaced }) =>
-      unplaced.map(
-        ({ cell, reason }) =>
-          `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${reason}${where}`,
-      ),
-    );
-}
-
-// [LAW:one-source-of-truth] THE tree that renders for a fragment over the
-// config's root: the fragment merged, then every layer's `insert` cells
-// placed in it. Each rendered tree places the cells itself, so a preset's
-// whole tree decides its own anchors, and a cell its tree already holds is
-// never placed twice.
-export function renderedRoot(
-  config: Pick<DslConfig, "root" | "insert">,
-  fragment: RootFragment,
-): { readonly node: ContainerNode; readonly unplaced: readonly Unplaced[] } {
-  const { root, unplaced } = insertCells(
-    mergeRoot(fragment, config.root),
-    config.insert,
-  );
-  return { node: rootNode(root), unplaced };
+): { readonly config: DslConfig; readonly notices: readonly string[] } {
+  const own = insertCells(config.root, cells);
+  const restaged = Object.entries(config.presets).flatMap(([name, preset]) => {
+    const fragment = preset.root ?? EMPTY_ROWS;
+    return restages(fragment)
+      ? [
+          {
+            name,
+            preset,
+            ...insertCells(mergeRoot(fragment, config.root), cells),
+          },
+        ]
+      : [];
+  });
+  const notice =
+    (where: string) =>
+    ({ cell, reason }: Unplaced): string =>
+      `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${reason}${where}`;
+  return {
+    config: {
+      ...config,
+      root: own.root,
+      presets: {
+        ...config.presets,
+        ...Object.fromEntries(
+          restaged.map(({ name, preset, root }) => [
+            name,
+            { ...preset, root: rootNode(root) },
+          ]),
+        ),
+      },
+    },
+    notices: [
+      ...own.unplaced.map(notice("")),
+      ...restaged
+        .filter(({ name }) => authored.has(name))
+        .flatMap(({ name, unplaced }) =>
+          unplaced.map(notice(` in preset "${name}"`)),
+        ),
+    ],
+  };
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

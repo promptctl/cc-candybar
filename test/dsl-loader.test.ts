@@ -2407,6 +2407,30 @@ describe("templateReads", () => {
 });
 
 describe("findKeyLine", () => {
+  test("a numeric key on an object is a key, not an element", () => {
+    const src = `{
+  themeDefaults: {
+    "16": {
+      palette: "x",
+    },
+  },
+  variables: { "0": {
+    kind: "shell" } },
+}`;
+    expect(findKeyLine(src, ["themeDefaults", "16", "palette"])).toBe(4);
+    expect(findKeyLine(src, ["variables", "0", "kind"])).toBe(8);
+  });
+
+  test("a numeric part indexes a list's elements", () => {
+    const src = `{
+  insert: [
+    { seg: "a", after: "b" },
+    { seg: "c", after: "d" },
+  ],
+}`;
+    expect(findKeyLine(src, ["insert", "1"])).toBe(4);
+  });
+
   test("locates a top-level key", () => {
     const src = "{\n  globals: {},\n  variables: {}\n}";
     expect(findKeyLine(src, ["variables"])).toBe(3);
@@ -2596,6 +2620,13 @@ describe("loadDslConfig — insert", () => {
     const issue = err.issues.find((i) => i.path === "insert.1")!;
     expect(issue.message).toMatch(/does not match any declared segment/);
     expect(issue.line).toBe(4);
+  });
+
+  test("a cell anchored on the bar's own chrome is an issue at its side", () => {
+    expectIssue(`{ insert: [{ seg: "model", after: "candybar.menu" }] }`, {
+      path: "insert.0.after",
+      message: "the bar's own chrome",
+    });
   });
 
   test("insert must be a list", () => {

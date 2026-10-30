@@ -557,12 +557,12 @@ export function validateInsert(
     const sides = (["before", "after"] as const).filter(
       (side) => arm[side] !== undefined,
     );
-    const line = findKeyLine(ctx.source, path.split("."));
+    // Lines are found only for an issue: the lookup parses the document.
     if (sides.length !== 1) {
       ctx.issues.push({
         path,
         message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line,
+        line: findKeyLine(ctx.source, path.split(".")),
       });
       return [];
     }
@@ -578,11 +578,23 @@ export function validateInsert(
       return [];
     }
     const relation = sides[0]!;
+    const anchor = arm[relation]!;
+    // [LAW:no-silent-failure] The same holds for an anchor: chrome is placed
+    // by the bar itself, after layers' cells are, so a cell beside it has no
+    // place to land.
+    if (isReservedName(anchor)) {
+      ctx.issues.push({
+        path: `${path}.${relation}`,
+        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome — anchor on a placement id instead`,
+        line: findKeyLine(ctx.source, [...path.split("."), relation]),
+      });
+      return [];
+    }
     return [
       {
         seg: arm.seg,
         ...(arm.id !== undefined && { id: arm.id }),
-        anchor: arm[relation]!,
+        anchor,
         relation,
         by: { file, entry: path },
       },

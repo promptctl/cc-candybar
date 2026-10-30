@@ -29,6 +29,7 @@ import fs from "node:fs";
 import JSON5 from "json5";
 import {
   type DslConfig,
+  type InsertCell,
   type RawDslConfig,
   type ValidatedConfig,
 } from "./dsl-types.js";
@@ -80,7 +81,7 @@ import {
 } from "./loader/actions.js";
 import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
-import { unplacedNotices } from "./presets.js";
+import { placeInserts } from "./presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
   authoredPlacement,
@@ -426,24 +427,27 @@ export function loadConfigChain(
     rendering: layers.at(-1)?.plugins.rendering ?? plugins.rendering,
   };
   const top = layers.at(-1);
-  // [LAW:no-silent-failure] Every layer's `insert` cells are placed by each
-  // tree that renders, so whether one landed is a fact about the whole
-  // chain: asked once, over the config that renders, before it validates.
-  trace.warned(
-    unplacedNotices(
-      top?.config ?? base,
-      new Set(layers.flatMap((l) => Object.keys(l.raw.presets ?? {}))),
-    ),
-  );
+  // The advisories validation earns over the whole chain (an insert cell no
+  // tree could place) join the layers' own once it passes; a refusal carries
+  // them on its ConfigError.
+  const renderable = ({
+    warnings,
+    ...rest
+  }: Renderable): Omit<Renderable, "warnings"> => {
+    trace.warned(warnings);
+    return rest;
+  };
   if (top === undefined) {
     return {
       layers,
       base,
       installed,
-      ...validateRenderable(
-        loadConfig(null, base, NO_PROJECT),
-        "<default>",
-        allowedPalettes,
+      ...renderable(
+        validateRenderable(
+          loadConfig(null, base, NO_PROJECT),
+          "<default>",
+          allowedPalettes,
+        ),
       ),
     };
   }
@@ -452,11 +456,13 @@ export function loadConfigChain(
       layers,
       base,
       installed,
-      ...validateRenderable(
-        top,
-        top.path,
-        allowedPalettes,
-        layers.slice(0, -1).reverse(),
+      ...renderable(
+        validateRenderable(
+          top,
+          top.path,
+          allowedPalettes,
+          layers.slice(0, -1).reverse(),
+        ),
       ),
     };
   } catch (e) {
@@ -464,9 +470,14 @@ export function loadConfigChain(
     // own, judged by the same tolerant validation the merged chain failed
     // under: a placement a lower layer leaves undeclared only drops its cell
     // there too, so it cannot stand in for the error that actually refused
-    // the chain.
-    for (const layer of layers.slice(0, -1))
-      validateRenderable(layer, layer.path, allowedPalettes);
+    // the chain. Each is judged over the layers it joins, as it loads.
+    for (const [i, layer] of layers.slice(0, -1).entries())
+      validateRenderable(
+        layer,
+        layer.path,
+        allowedPalettes,
+        layers.slice(0, i).reverse(),
+      );
     throw e;
   }
 }
@@ -607,6 +618,9 @@ export interface Renderable {
   // [LAW:no-silent-failure] Each placement of an undeclared segment, as one
   // error per file that wrote one; empty for none. `check` refuses them.
   readonly dropped: readonly ConfigError[];
+  // The advisories the chain earns as a whole: each insert cell a tree that
+  // renders could not place.
+  readonly warnings: readonly string[];
 }
 
 // A file beneath the one validated, by its path.
@@ -625,12 +639,21 @@ export type AuthoredLayer = AuthoredConfig & { readonly path: string };
  * [LAW:single-enforcer] One cast site, here, exclusive.
  */
 export function validateRenderable(
-  { config: merged, raw, source }: AuthoredConfig,
+  authoredConfig: AuthoredConfig,
   filePath = "<config>",
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[] = [],
 ): Renderable {
+  const { raw, source } = authoredConfig;
+  // [LAW:single-enforcer] Every layer's `insert` cells are placed here, once,
+  // before any check or synthesis walks a tree — so each walk sees the trees
+  // that render and none places a cell again.
+  const inserted = placeLayerInserts(
+    { ...authoredConfig, path: filePath },
+    beneath,
+  );
+  const merged = inserted.config;
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = {
     source,
@@ -644,17 +667,17 @@ export function validateRenderable(
   // drops ride with whichever issue refuses the config.
   const refuseIfIssues = (): void => {
     if (issues.length > 0) {
-      throw new ConfigError(filePath, [
-        ...issues,
-        ...ctx.unplaced,
-        ...ctx.inherited,
-      ]);
+      throw new ConfigError(
+        filePath,
+        [...issues, ...ctx.unplaced, ...ctx.inherited],
+        inserted.notices,
+      );
     }
   };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped = droppedByFile(filePath, ctx, beneath);
+  const dropped = droppedByFile(filePath, ctx, beneath, inserted.dropped);
   // A config with nothing to drop is the merged one itself, so its trees keep
   // their identity.
   const config = dropped.length === 0 ? merged : withoutUnplaced(merged);
@@ -691,7 +714,57 @@ export function validateRenderable(
     authored: (name) => authored.has(name),
   });
   refuseIfIssues();
-  return { config: withChrome as ValidatedConfig, dropped };
+  return {
+    config: withChrome as ValidatedConfig,
+    dropped,
+    warnings: inserted.notices,
+  };
+}
+
+// An issue, and the file it is reported against.
+interface FiledIssue {
+  readonly file: string;
+  readonly issue: ConfigIssue;
+}
+
+// The top layer's config with every layer's `insert` cells placed
+// (placeInserts), lowest layer first so a later cell may anchor on an earlier
+// one. A cell naming no declared segment draws nothing, like any placement
+// of one: it is left out and reported against the file and entry that wrote
+// it, whichever layer that is.
+function placeLayerInserts(
+  top: AuthoredLayer,
+  // The files it merges over, nearest first.
+  beneath: readonly AuthoredLayer[],
+): {
+  readonly config: DslConfig;
+  readonly notices: readonly string[];
+  readonly dropped: readonly FiledIssue[];
+} {
+  const layers = [...beneath].reverse().concat(top);
+  const written = layers.flatMap((layer) =>
+    (layer.raw.insert ?? []).map((cell) => ({ cell, layer })),
+  );
+  const declared = ({ cell }: { cell: InsertCell }): boolean =>
+    Object.prototype.hasOwnProperty.call(top.config.segments, cell.seg);
+  const placed = placeInserts(
+    top.config,
+    written.filter(declared).map(({ cell }) => cell),
+    new Set(layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {}))),
+  );
+  return {
+    ...placed,
+    dropped: written
+      .filter((w) => !declared(w))
+      .map(({ cell, layer }) => ({
+        file: layer.path,
+        issue: {
+          path: cell.by.entry,
+          message: unplacedMessage(cell.by.entry, cell.seg),
+          line: findKeyLine(layer.source, cell.by.entry.split(".")),
+        },
+      })),
+  };
 }
 
 // [LAW:single-enforcer] What `check` and the demo refuse that the bar draws
@@ -709,11 +782,14 @@ function droppedByFile(
   filePath: string,
   ctx: ValidateCtx,
   beneath: readonly AuthoredLayer[],
+  // Insert cells already filed against the file that wrote them.
+  filed: readonly FiledIssue[],
 ): ConfigError[] {
   const byFile = new Map<string, ConfigIssue[]>();
   const add = (file: string, issue: ConfigIssue): void => {
     byFile.set(file, [...(byFile.get(file) ?? []), issue]);
   };
+  for (const { file, issue } of filed) add(file, issue);
   for (const issue of ctx.unplaced) add(filePath, issue);
   for (const { name, ...issue } of ctx.inherited) {
     const author = beneath.flatMap((layer) => {

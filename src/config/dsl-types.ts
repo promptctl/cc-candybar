@@ -143,8 +143,9 @@ export interface SegmentNode {
   readonly drafts?: Readonly<Record<string, DraftSlot>>;
   // The layer that placed this cell through its `insert` list rather than
   // authoring it in a root: the file and the entry. Synthesis-only, like
-  // `opens`: the merge stamps it and no config can write it. Edit mode reads
-  // it to offer no edit on a cell that no file it writes holds.
+  // `opens`: the loader's one insert pass stamps it and no config can write
+  // it. Edit mode reads it to offer no edit on a cell that is an insert entry,
+  // which no click rewrites.
   readonly insertedBy?: InsertedBy;
 }
 
@@ -156,8 +157,8 @@ export interface InsertedBy {
 // [LAW:types-are-the-program] One cell a layer adds beside a placement its
 // bar already has: the edit-mode insert's addressing (an anchor placement id
 // and a side), so a layer never restates a row to add to it. Stamped at
-// parse with the file and entry that wrote it, which every rendered tree
-// carries onto the cell it places.
+// parse with the file and entry that wrote it, which the loader's insert
+// pass carries onto the cell it places.
 export interface InsertCell {
   readonly seg: string;
   readonly id?: string;
@@ -419,8 +420,9 @@ export interface RawDslConfig {
   // A fragment over the bundled default's root — see RootFragment: a tree
   // replaces the default's rows, a rows map merges over them by name.
   readonly root?: RootFragment;
-  // Cells added beside placements of the bar this layer merges over, after
-  // its own `root` merges (root.ts's insertCells).
+  // Cells added beside placements of the bar this layer merges over. The
+  // loader places every layer's cells once, into each root that renders
+  // (presets.ts's placeInserts); the merged config holds only the result.
   readonly insert?: readonly InsertCell[];
   readonly actions?: Readonly<Record<string, ActionDecl>>;
   // Named config fragments ("presets"): each an alternative `root`/`globals`
@@ -465,10 +467,6 @@ export interface DslConfig {
   // this field — the loader rejects `layout:` and `kind:"cells"` with
   // migration errors. Consumers that walk a tree take `rootNode(root)`.
   readonly root: Root;
-  // Every layer's `insert` cells, in chain order. Not applied to `root`:
-  // each tree that renders places them (presets.ts's presetRoot), so the
-  // config's own root and every preset's decide anchors and clashes alike.
-  readonly insert: readonly InsertCell[];
   // [LAW:locality-or-seam] The named seam between click BEHAVIOR and the
   // clickable REPRESENTATION. Each entry is a statically-declared effect a
   // segment template binds a region to via `{{ action "name" … }}`. The
