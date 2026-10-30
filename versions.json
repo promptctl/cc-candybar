@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-495",
+      "ref": "refs/pull/495/merge",
+      "sha": "032c680bb74be3a3a5e9c57b4ebe7b88f7610645",
+      "timestamp": "2026-10-30T12:45:57.523Z",
+      "commits": [
+        {
+          "sha": "032c680bb74be3a3a5e9c57b4ebe7b88f7610645",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T06:45:09-06:00",
+          "message": "Merge ea683468bfebe2ecb183b086b1afae0937f86626 into 3ac1f0ebd17dcc49615d30cb2f79602aa362240d\n"
+        },
+        {
+          "sha": "ea683468bfebe2ecb183b086b1afae0937f86626",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T06:44:51-06:00",
+          "message": "fix(var-system): a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24)\n\nA `watch_file` source followed its symlink to the final target and watched\nonly that target's directory, so re-pointing a link (`ln -sfn`) or a dangling\nlink's target appearing refreshed nothing.\n\nThe config watcher's target builder moves whole into the watcher registry's\nmodule as the one rule for where a set of paths can change: every hop of each\npath's link chain, by name in its nearest existing directory, names unioned per\ndirectory, a directory watched whole overriding them. The config watcher and\nthe var-system watch both call it.\n\nA link walk the kernel stops (a loop, a readlink racing a delete) now keeps\nthe hops it reached instead of falling back to the spelled path, so a link\nre-pointed by delete-then-create is still heard where it reappears. The writer\nkeeps its throwing view of the same walk.\n\nThe var-system watch holds each directory as open or failed, reconciled to the\nset at every re-derive, so an unchanged directory is never reopened and a\nrefusal touches only its own directory. Its fault is derived (walk stops plus\nfailed directories), reported to every subscriber including late ones, and\nclears when the cause does. A handle error, which previously had no listener\nand would have taken the daemon down, now fails its directory, re-reads every\nsubscriber, and reopens at the next event-driven re-derive.\n\n`isDirectory` goes; plugin-install asks `canonicalDirectory`, the one answer\nto \"is this an existing directory\".\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3ac1f0ebd17dcc49615d30cb2f79602aa362240d",
