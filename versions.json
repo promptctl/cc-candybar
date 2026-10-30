@@ -4,46 +4,46 @@
     {
       "version": "pr-510",
       "ref": "refs/pull/510/merge",
-      "sha": "d4d164cf76b2833e89809d5675839ee4cf29116c",
-      "timestamp": "2026-10-30T22:24:53.938Z",
+      "sha": "0c9b84a188d69f2c3d6f87dfc352a61eb6e6d5f3",
+      "timestamp": "2026-10-30T22:30:17.608Z",
       "commits": [
         {
-          "sha": "d4d164cf76b2833e89809d5675839ee4cf29116c",
+          "sha": "0c9b84a188d69f2c3d6f87dfc352a61eb6e6d5f3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T22:24:06Z",
-          "message": "Merge df74cdc645e9758296c3aa2521d7b02299847fff into 7fa9b112cc7061c7e0e1a63a7955c56987054064\n"
+          "timestamp": "2026-10-30T22:29:29Z",
+          "message": "Merge 477bdb636431a04fc59ffaca014df5ff56f00aaa into 7fa9b112cc7061c7e0e1a63a7955c56987054064\n"
         },
         {
-          "sha": "df74cdc645e9758296c3aa2521d7b02299847fff",
+          "sha": "477bdb636431a04fc59ffaca014df5ff56f00aaa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T16:23:54-06:00",
           "message": "fix(colour): the walk order keeps every tone of a window longer than three (candybar-joiners-e5r4.cfm)\n"
         },
         {
-          "sha": "c6df7a2dfbe56c92eca04752283f6f8ff9e31984",
+          "sha": "7b61d379a81d0bf10a96156dfc7156670191bb19",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T16:18:28-06:00",
           "message": "docs(colour): the walk order keeps a row a rung at a time as the depth draws it, and a dial step moves every cell one rung only where the depth draws every rung apart (candybar-joiners-e5r4.cfm)\n"
         },
         {
-          "sha": "92abec87d19bbbbd7f95f8f1cce32d924a3e470f",
+          "sha": "513488fd072fa8ceefbfc959d4d75ae790b9767e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T16:05:26-06:00",
           "message": "fix(colour): a window of three is listed lowest, highest, then between, so a rung widened past the dial's tones stands at an end of the walk (candybar-joiners-e5r4.cfm)\n\nReview of PR #510: a widened rung was appended into the slot van der Corput deals at every other cell, so a deepest row at 256 wore a lightening on half its cells. The window test now states the order, that a ladder of more than two keeps a colour no window tone wears, and each edge of the size rule.\n"
         },
         {
-          "sha": "5c0fc8093b446235274a1a7c152a42c9cb368ac0",
+          "sha": "cd0c71f51d3f943be9f0c967d0d89bdeebfe9f3b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T15:48:09-06:00",
           "message": "fix(colour): a window leaves its ladder's last colour to the pressed button, so a press keeps a colour at ansi (candybar-joiners-e5r4.cfm)\n\nWidening every window to its position's count at ansi took the slot a\nthree-slot ladder's pressed button needed, so press seams the sweep\ncannot hold rose. A press drawn like its neighbour breaks the rule; a\nthird closed tone is only look. A window now holds\nmax(2, min(count, colours the depth draws of the ladder - 1)) tones:\nthe position's count where the ladder draws at least one colour more,\ntwo at ansi wherever a ladder draws three slots. Still one widening\nthrough `widen`, still a memoised lookup, decided by identity alone.\n\nThe window and adjacency tests state that size in their own words, the\npinned turn example returns to catppuccin-frappe's middle row, and policy\n3, its acceptance line and the colour memory say why the window leaves\nthe press a colour.\n"
         },
         {
-          "sha": "adb77e06d7b92db28d7f78c67aefd577d41dedb0",
+          "sha": "3f50fee940f4a542bcf5c23b1fd04a269026a802",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T15:34:15-06:00",
