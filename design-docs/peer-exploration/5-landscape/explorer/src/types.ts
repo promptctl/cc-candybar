@@ -27,8 +27,9 @@ export interface RawProject {
   tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
   live: boolean;
   // The bundles holding this project's frames and its long text, or null when it has neither.
-  bar: number | null;
-  detail: number | null;
+  // the bundles holding its bar and its long text; absent when it has none
+  bar?: number;
+  detail?: number;
   created?: string;
   size?: string;
   sources?: string;

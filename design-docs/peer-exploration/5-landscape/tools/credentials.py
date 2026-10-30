@@ -64,7 +64,10 @@ def check(by_repo):
 
 if __name__ == '__main__':
     for path in sys.argv[1:]:
-        packed = re.search(r'"([A-Za-z0-9+/=]{100,})"', open(path).read()).group(1)
+        found = re.search(r'"([A-Za-z0-9+/=]{100,})"', open(path).read())
+        if found is None:
+            raise SystemExit('%s: not a bundle (no packed contents); it cannot be checked' % path)
+        packed = found.group(1)
         try:
             check(json.loads(gzip.decompress(base64.b64decode(packed))))
         except SystemExit as e:

@@ -131,9 +131,12 @@ def bundle(kind, folder, by_repo, per):
 credentials.check(bars)
 bar_at = bundle('bars', BARS_DIR, bars, 10)
 detail_at = bundle('detail', DETAIL_DIR, details, 50)
+# A project with no bundle of a kind has no key for it, as every absent link is written.
 for p in projects:
-    p['bar'] = bar_at.get(p['repo'])
-    p['detail'] = detail_at.get(p['repo'])
+    if p['repo'] in bar_at:
+        p['bar'] = bar_at[p['repo']]
+    if p['repo'] in detail_at:
+        p['detail'] = detail_at[p['repo']]
 data = {'projects': projects, 'families': families, 'fnames': fnames, 'motives': motives, 'groups': groups}
 json.dump(data, open(DEST, 'w'), separators=(',', ':'))
 print(len(projects), 'projects;', sum(p['boring'] for p in projects), 'just print fields;',

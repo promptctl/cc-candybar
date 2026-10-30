@@ -17,7 +17,7 @@
     attempt;
     detail = {};
     detailError = null;
-    if (b.detail === null) return;
+    if (b.detail === undefined) return;
     let current = true;
     bundle<Partial<RawProject>>('detail', b.detail).then(
       (g) => {
