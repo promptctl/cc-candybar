@@ -33,7 +33,7 @@ import { laneOffReason } from "../config/menu-places";
 // What one frame of the feed drew: the response its subscribers receive,
 // when the bar it drew next changes, and — for a render that threw — the render
 // event describing it, logged when that failure is first pushed. It is drawn
-// for the feed (`drawing.by` "feed"), so it shows the feed's pace where a
+// for the feed (`drawing.by` "feed"), so it shows the feed's ceiling where a
 // render request's answer shows that it is polled.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
@@ -341,7 +341,7 @@ export class FrameFeeds<Req> {
     // a view included.
     // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
     // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
-    // feed's pace): the request's own answer is its client's alone.
+    // feed's ceiling): the request's own answer is its client's alone.
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
