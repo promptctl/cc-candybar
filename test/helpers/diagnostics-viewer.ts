@@ -57,10 +57,7 @@ export function pageOf(rendered: string): ViewerPage {
 }
 
 // Every message a session's bar shows, read through the viewer: `bar` is the
-// rendered bar whose indicator is clicked. Leaves the viewer closed. A bar
-// that already shows the viewer is closed first: the viewer's place is session
-// state, which a daemon restores at boot, so a daemon killed inside the
-// state's write window comes back showing whatever page was last saved.
+// rendered bar whose indicator is clicked. Leaves the viewer closed.
 export async function readDiagnostics(
   sockPath: string,
   sessionId: string,
@@ -69,15 +66,10 @@ export async function readDiagnostics(
   hints: ClientHints = {},
   args: string[] = [],
 ): Promise<ViewerPage[]> {
-  const draw = (): Promise<string> =>
-    render(sockPath, sessionId, cwd, hints, args);
-  const shut = viewerLink(bar, "✕");
-  if (shut !== undefined) {
-    await click(sockPath, shut.url);
-    bar = await draw();
-  }
   const open = viewerLink(bar, "open");
   if (open === undefined) return [];
+  const draw = (): Promise<string> =>
+    render(sockPath, sessionId, cwd, hints, args);
   await click(sockPath, open.url);
   const pages: ViewerPage[] = [];
   let shown = await draw();
