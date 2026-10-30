@@ -109,19 +109,24 @@ function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> 
   );
 }
 
-// Every pressed shade under `decor`, as the palette names it, whose role's
-// ladder `drawnAt` draws only in colours the design stands beside the press
-// (`besidePress`). The sweep's press exemption, read by every frame that
-// holds a seam beside an open trigger.
-export function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDepth): ReadonlySet<string> {
+// Whether the pressed shade of the band `depth` deep under `decor` has none to
+// give: its role's ladder `drawnAt` draws only in colours the design stands
+// beside the press (`besidePress`). The press exemption, read by every frame
+// that holds a seam beside an open trigger.
+export function pressHasNoneToGive(palette: Palette, decor: Decor, depth: number, drawnAt: ColorDepth): boolean {
+  const hue = hueOf({ decor, depth });
+  const taken = besidePress(palette, decor, depth, drawnAt);
+  return LADDER.every((rung) => taken.has(drawnColour(paletteRole(palette, shadeRole(hue, rung)), drawnAt).hex));
+}
+
+// Every pressed shade under `decor`, as the palette names it, that has none to
+// give at its depth. The sweep knows a cell by its text and colour, not by the
+// depth of the band it presses, so it reads every depth's at once.
+function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDepth): ReadonlySet<string> {
   return new Set(
     [0, 1, 2, 3].flatMap((depth) => {
       const disclosure: Disclosure = { decor, depth };
-      const hue = hueOf(disclosure);
-      const taken = besidePress(palette, decor, depth, drawnAt);
-      return LADDER.every((rung) => taken.has(drawnColour(paletteRole(palette, shadeRole(hue, rung)), drawnAt).hex))
-        ? [bandFor(palette, disclosure, drawnAt).state.hex]
-        : [];
+      return pressHasNoneToGive(palette, decor, depth, drawnAt) ? [bandFor(palette, disclosure, drawnAt).state.hex] : [];
     }),
   );
 }

@@ -654,7 +654,9 @@ describe("the colour is its role at a shade, as the palette names it", () => {
 // beside it. candybar-joiners-e5r4.34r: and a cell the rule moves is drawn
 // apart from what an open trigger on the bar wears, wherever its ladder has a
 // rung drawn as neither of its neighbours nor that, because a trigger can
-// stand beside it and the press keeps apart only from what the windows deal.
+// stand beside it and the press keeps apart only from what the windows deal;
+// both cells of a turn are tried apart from the press before either falls
+// back to its neighbours alone.
 describe("where a row turns hue", () => {
   // The hue a place is dealt, in the test's own words: the row starts on its
   // own step (row 0 of 2 on the first, row 1 on the second) and steps every
@@ -666,7 +668,7 @@ describe("where a row turns hue", () => {
   const ROWS = Array.from({ length: 15 }, (_, i) => i + 2);
 
   test.each(VARIATION_NAMES)(
-    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn was drawn like it, is drawn apart from an open trigger's pressed shade wherever its ladder has a rung apart from both neighbours and the press, and leaves its window only where no tone of it stands apart from all it keeps off",
+    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn was drawn like it, is drawn apart from an open trigger's pressed shade wherever its ladder has a rung apart from both neighbours and the press, falls back onto it only where the cell across the turn has no such rung either, and leaves its window only where no tone of it stands apart from all it keeps off",
     (name) => {
       const variation = VARIATIONS[name];
       const wrong: string[] = [];
@@ -703,10 +705,15 @@ describe("where a row turns hue", () => {
                 });
                 const besideOf = (i: number): string[] => [line[i - 1], line[i + 1]].flatMap((entry) => (entry === undefined ? [] : [drawn(entry)]));
                 const hasRungToGive = (i: number): boolean => ladder(line[i]!.hue).some((c) => !besideOf(i).includes(c));
+                // What stood beside a cell when its turn was read. The rule
+                // reads the line from its first place to its last, so each
+                // neighbour then wore what it was dealt or what it wears now,
+                // and the cell is judged against both.
+                const whenRead = (i: number): string[] => [i - 1, i + 1].flatMap((j) => (line[j] === undefined ? [] : [drawn(dealt[j]!), drawn(line[j]!)]));
+                const rungApart = (i: number, off: readonly string[]): boolean => ladder(line[i]!.hue).some((c) => !off.includes(c));
                 // What a moved cell keeps off: its neighbours, and the press
-                // as well wherever its ladder has a rung apart from all three.
-                const keptOff = (i: number): string[] =>
-                  ladder(line[i]!.hue).some((c) => ![...besideOf(i), pressed].includes(c)) ? [...besideOf(i), pressed] : besideOf(i);
+                // as well wherever its ladder has a rung apart from all of them.
+                const keptOff = (i: number): string[] => (rungApart(i, [...whenRead(i), pressed]) ? [...whenRead(i), pressed] : whenRead(i));
                 line.forEach((entry, i) => {
                   if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}: ${i} wears ${entry.hue}, dealt ${dealt[i]!.hue}`);
                   if (entry.shade === dealt[i]!.shade) return;
@@ -720,6 +727,18 @@ describe("where a row turns hue", () => {
                   if (keptOff(i).includes(pressed)) {
                     seen.offPress++;
                     if (drawn(entry) === pressed) wrong.push(`${where}: ${i} wears ${entry.shade}, drawn as the press ${pressed}`);
+                  }
+                  // The order the rule moves in: both cells of a turn are
+                  // tried apart from the press before either is tried apart
+                  // from its neighbours alone. So a moved cell falls back onto
+                  // the press only where the cell across the turn had no rung
+                  // apart from its own neighbours and the press either. When
+                  // that turn was read the two were drawn alike, so the cell
+                  // across is judged against its own colour too.
+                  if (drawn(entry) === pressed) {
+                    const across = [i - 1, i + 1].filter((j) => line[j] !== undefined && line[j]!.hue !== entry.hue);
+                    if (across.every((j) => rungApart(j, [...whenRead(j), drawn(dealt[j]!), drawn(line[j]!), pressed])))
+                      wrong.push(`${where}: ${i} fell back onto the press ${pressed}, though the cell across its turn had a rung apart from it`);
                   }
                   if (windowOf(entry.hue).includes(entry.shade)) return;
                   seen.widened++;

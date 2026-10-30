@@ -14,7 +14,7 @@ import { resolvedStyle } from "../src/render/rich-theme";
 import { SHADES, VARIATIONS, bandFor, decorEntryColour, windowAt, type Decor, type DecorHue, type VariationName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { cellAfter, cellBefore, drawnChars, seams, shown } from "./helpers/seams";
-import { pressesWithNoneToGive } from "./helpers/seam-sweep";
+import { pressHasNoneToGive } from "./helpers/seam-sweep";
 import { sessionBar } from "./helpers/session-bar";
 
 const CELLS = 8;
@@ -87,9 +87,10 @@ describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
         // Where the turn rule reached past the window of the cell across it.
         const window = windowAt(palette, frame.hue, decor.shade, drawnAt).map((tone) => decorEntryColour(palette, { hue: frame.hue, shade: tone }).hex);
         if (!window.includes(worn(across) ?? "")) seen.pastWindow++;
-        // The sweep's press exemption: a press whose ladder the depth draws
-        // only in colours the design stands beside it has none to give.
-        const noneToGive = pressesWithNoneToGive(palette, decor, drawnAt).has(worn(TRIGGER) ?? "");
+        // The sweep's press exemption, for the band every bar trigger opens:
+        // a press whose ladder the depth draws only in colours the design
+        // stands beside it has none to give.
+        const noneToGive = pressHasNoneToGive(palette, decor, 0, drawnAt);
         const [trigger, other] = [visible(onBar(TRIGGER).plain), visible(onBar(across).plain)] as const;
         const chars = drawnChars(text);
         for (const { left, right, at } of seams(chars)) {
