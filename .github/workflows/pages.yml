@@ -60,7 +60,10 @@ jobs:
           mkdir -p published/landscape
           cp -R design-docs/peer-exploration/5-landscape/site/. published/landscape/
 
+      # A fork's pull request gets a read-only token whatever `permissions:` says, so it can neither
+      # push gh-pages nor comment: it builds, which is the check, and publishes nothing.
       - name: Deploy with gh-pages-multiplexer
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: brandon-fryslie/gh-pages-multiplexer@v1
         with:
           source-dir: published
