@@ -87,7 +87,7 @@ import {
   type SessionHold,
   type SessionView,
 } from "./cache/render";
-import { WatcherRegistry } from "./cache/watchers";
+import { WatcherRegistry, watchFault } from "./cache/watchers";
 import { RuntimeStats, type SourceSnapshots } from "./stats";
 import {
   makeLimits,
@@ -2453,13 +2453,18 @@ function drawRender(
     about && text && copy ? [{ about, text, copy }] : [],
   );
   // What stands before the draw: whether the daemon can vouch that a config
-  // edit reloads and that what it launches dies with it, and the warning this
-  // config's load carried.
-  const standing: ReadonlyArray<
-    FileEventsWarning | LifelineWarning | LoadWarning
-  > = [
+  // edit reloads and that what it launches dies with it, what this config's
+  // watch cannot hear, and the warning this config's load carried.
+  // [LAW:no-silent-failure] A config whose link chain the watch cannot walk,
+  // or whose folder the OS will not watch, may miss an edit: the bar says so.
+  const configWatch =
+    entry.watch === null ? null : watchFault("config", entry.watch);
+  const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...lifelineWarnings(),
+    ...(configWatch === null
+      ? []
+      : [{ kind: "config-watch" as const, message: configWatch }]),
     ...(entry.lastWarning === null
       ? []
       : [{ kind: "load" as const, message: entry.lastWarning }]),
@@ -2629,9 +2634,7 @@ function drawRender(
   // variable that stopped (`refresh:stamp`), so the event says which.
   // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
   // compile error here until the event says how to name it.
-  const tagOf = (
-    w: FileEventsWarning | LifelineWarning | LoadWarning | RenderWarning,
-  ): string => {
+  const tagOf = (w: StandingWarning | RenderWarning): string => {
     switch (w.kind) {
       case "rule":
         return `rule:${w.slot}`;
@@ -2640,6 +2643,7 @@ function drawRender(
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "config-watch":
       case "lifeline":
       case "when":
         return w.kind;
@@ -2702,11 +2706,15 @@ function drawRender(
   };
 }
 
-// The warning a load carried, beside what a draw could not honour.
+// The warning a load carried, or what the config's watch cannot hear,
+// beside what a draw could not honour.
 interface LoadWarning {
-  readonly kind: "load";
+  readonly kind: "load" | "config-watch";
   readonly message: string;
 }
+
+// What stands before a draw, whatever the draw then meets.
+type StandingWarning = FileEventsWarning | LifelineWarning | LoadWarning;
 
 // What one render drew: the body — the bar, or the viewer in its place — and
 // what the statusline's handoff line is drawn from: whether the body is the

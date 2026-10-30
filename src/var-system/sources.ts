@@ -14,6 +14,7 @@ import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import {
   WatcherRegistry,
+  watchFault,
   watchTargetsOf,
   type HeldWatch,
   type Invalidation,
@@ -431,23 +432,12 @@ class PathWatches {
 const derived = (filePath: string): PathsWatch =>
   watchTargetsOf({ named: [filePath], whole: [filePath] });
 
-// The watch's fault, derived from what it holds now: the link chain it could
-// not walk, and every directory the OS is not listening to.
-function faultOf(filePath: string, entry: WatchEntry): string | null {
-  const reasons = [
-    ...entry.watch.unresolved.map(
-      (u) => `cannot follow its links — ${u.reason}`,
-    ),
-    ...entry.held.handle.deaf.map((d) =>
-      d.kind === "refused"
-        ? `cannot watch ${d.path} — ${d.reason}`
-        : `watching ${d.path} failed — ${d.reason}`,
-    ),
-  ];
-  return reasons.length === 0
-    ? null
-    : `watch_file ${filePath}: ${reasons.join("; ")}`;
-}
+// The watch's fault, derived from what it holds now.
+const faultOf = (filePath: string, entry: WatchEntry): string | null =>
+  watchFault(`watch_file ${filePath}`, {
+    derived: entry.watch,
+    held: entry.held,
+  });
 
 // ─── TtlBucketManager ────────────────────────────────────────────────────────
 

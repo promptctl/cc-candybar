@@ -8,11 +8,22 @@
 // walk, so the bar counts it from the frame after the one that met it, and a
 // renderer records every frame's warnings by value.
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
+import {
+  killAndWait,
+  render,
+  renderUntil,
+  stripAnsi,
+} from "./helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
 import {
   prepareIsolatedDaemonEnv,
@@ -195,5 +206,49 @@ describe("a daemon render's event names every warning, and the indicator offers 
     const records = (await renderLines(env, sid, 5)).map(fieldOf("warnRecord"));
     // The last four: met, counted, stopped, cleared.
     expect(records.slice(-4)).toEqual(["new", "kept", "new", "kept"]);
+  });
+
+  // Two facts about one loop: the load cannot tell whether the candidate
+  // applies, and the watch cannot hear an edit made through it. Each shows
+  // until the chain can be walked, and the edit that breaks the loop is heard.
+  test("a config candidate whose link chain loops shows in the indicator until the loop is broken", async () => {
+    const dir = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "cc-candybar-loop-e2e-")),
+    );
+    try {
+      const sid = "config-loop";
+      const link = path.join(dir, ".cc-candybar.json5");
+      symlinkSync(`${link}.other`, link);
+      symlinkSync(link, `${link}.other`);
+      const draw = () => render(sockPath, sid, dir);
+      const bar = await draw();
+      expect(indicatorOf(bar)).toBe("⚠ 2");
+      const pages = await readDiagnostics(sockPath, sid, dir, bar, {}, []);
+      expect(pages.map((p) => p.text)).toEqual([
+        expect.stringContaining(`config: cannot follow the links of ${link}`),
+        expect.stringContaining(`could not be checked: ${link}`),
+      ]);
+      const events = (await renderLines(env, sid, 1)).map(fieldOf("warn"));
+      expect(events[0]).toBe("config-watch,load");
+
+      // A real file where the loop was: the watch hears it and reloads, and
+      // the bar is left asking only whether to run the repository's config.
+      rmSync(link);
+      rmSync(`${link}.other`);
+      writeFileSync(link, `{ segments: {} }`);
+      const healed = await renderUntil(
+        sockPath,
+        sid,
+        dir,
+        (b) => indicatorOf(b) === "⚠ 1",
+        "the bar once the loop is broken",
+      );
+      const left = await readDiagnostics(sockPath, sid, dir, healed, {}, []);
+      expect(left.map((p) => p.text)).toEqual([
+        expect.stringContaining("run it?"),
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

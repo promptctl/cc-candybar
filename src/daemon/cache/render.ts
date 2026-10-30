@@ -77,7 +77,7 @@ import {
   watchTargetsOf,
   type WatcherRegistry,
   type WatcherHandle,
-  type HeldWatch,
+  type BoundWatch,
   type Invalidation,
   type PathsWatch,
 } from "./watchers.js";
@@ -513,9 +513,11 @@ export interface CacheEntry {
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
-  // The watch the registry holds for the entry, under the key naming its
-  // target set; null until the first bind.
-  watch: HeldWatch | null;
+  // [LAW:one-source-of-truth] The entry's watch: where its config can change,
+  // as the last load derived it, and the registry's watch held for that, set
+  // as one so the fault it shows reads both from the same bind. Null until the
+  // first bind.
+  watch: BoundWatch | null;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -1933,7 +1935,7 @@ export class RenderCache<
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    entry.watch?.handle.release();
+    entry.watch?.held.handle.release();
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
   }
@@ -2183,11 +2185,13 @@ export class RenderCache<
     // cwd) tuple already scopes the entry's watch set; what was heard rides
     // on the reload's cause.
     const { watch, move } = this.deps.watchers.follow(
-      entry.watch,
+      entry.watch?.held ?? null,
       { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
     );
-    entry.watch = watch;
+    // Re-derived on every load, kept or rebound, so what the bar says the
+    // watch cannot hear is what the disk says now.
+    entry.watch = { derived: paths, held: watch };
     if (move === "kept") return;
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the

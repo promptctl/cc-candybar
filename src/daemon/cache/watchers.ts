@@ -161,6 +161,31 @@ export function watchTargetsOf(paths: {
   };
 }
 
+// A watch as a consumer holds it: where its paths can change, as last derived
+// from disk, and the registry's watch held for that.
+export interface BoundWatch {
+  readonly derived: PathsWatch;
+  readonly held: HeldWatch;
+}
+
+// [LAW:single-enforcer] Why a watch may be missing changes, for every
+// consumer that shows it: each path whose link chain it could not walk, and
+// each directory the OS is not listening to (read live from the handle).
+// `null` while it hears every place its paths can change.
+export function watchFault(label: string, watch: BoundWatch): string | null {
+  const reasons = [
+    ...watch.derived.unresolved.map(
+      (u) => `cannot follow the links of ${u.path} — ${u.reason}`,
+    ),
+    ...watch.held.handle.deaf.map((d) =>
+      d.kind === "refused"
+        ? `cannot watch ${d.path} — ${d.reason}`
+        : `watching ${d.path} failed — ${d.reason}`,
+    ),
+  ];
+  return reasons.length === 0 ? null : `${label}: ${reasons.join("; ")}`;
+}
+
 // A debounce window's invalidation while it gathers: its paths are the
 // registry's own until the window closes and hands them to the holders.
 type Gathering =

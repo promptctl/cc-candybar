@@ -5,7 +5,9 @@ import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   WatcherRegistry,
+  watchFault,
   watchTargetsOf,
+  type Deafness,
   type Invalidation,
 } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -804,6 +806,42 @@ describe("watchTargetsOf", () => {
     const { targets, reached } = watchTargetsOf({ named: [path.join(dir, "later", "f")], whole: [] });
     expect(targets.dirs).toEqual([{ path: dir, filenames: ["later"] }]);
     expect(reached).toBe(false);
+  });
+});
+
+// What a watch says it cannot hear, from the watch alone: the bar shows this
+// for a config and for a `watch_file` path alike.
+describe("watchFault", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-fault-")));
+  });
+  afterEach(() => rmrf(dir));
+
+  const held = (deaf: readonly Deafness[]) => ({
+    key: "k",
+    handle: { release: () => {}, deaf },
+  });
+
+  test("a watch that hears every place its paths can change has no fault", () => {
+    const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
+    expect(watchFault("config", { derived, held: held([]) })).toBeNull();
+  });
+
+  test("names each path whose links it cannot follow, and each directory the OS is not listening to", () => {
+    const x = path.join(dir, "x");
+    fs.symlinkSync(`${x}.other`, x);
+    fs.symlinkSync(x, `${x}.other`);
+    const derived = watchTargetsOf({ named: [x, path.join(dir, "f")], whole: [] });
+    const fault = watchFault("config", {
+      derived,
+      held: held([
+        { kind: "refused", path: "/r", reason: "EMFILE" },
+        { kind: "failed", path: "/f", reason: "gone" },
+      ]),
+    });
+    expect(fault).toMatch(new RegExp(`^config: cannot follow the links of ${x} — .*symbolic links`));
+    expect(fault).toContain("; cannot watch /r — EMFILE; watching /f failed — gone");
   });
 });
 
