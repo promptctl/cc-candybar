@@ -394,7 +394,7 @@ describe("config probe", () => {
 // whether Claude Code redraws it every second is what its settings files say.
 describe("effectRefresh probe", () => {
   const MOVES = drew("moves");
-  const MOVING = "the bar moves (an effect, a fade, or an animated segment)";
+  const MOVING = "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
   const ELSEWHERE =
     'the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": 1 beside its command there';
   const ok = (value: readonly SettingsSource[]) =>

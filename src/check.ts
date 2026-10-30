@@ -215,7 +215,7 @@ export function checkPayload(
     // template checked. Not max: max climbs a frame a second, and `check`
     // renders at the wall clock, so its bar (and every doc fence pinned to
     // it) would change from one second to the next. Every level computes
-    // max's bubble, colours and frames, so xhigh evaluates them too.
+    // max's bubble, so xhigh evaluates it too.
     effort: { level: "xhigh" },
     workspace,
     git: {

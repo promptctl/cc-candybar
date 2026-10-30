@@ -124,7 +124,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 
-Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `30 fps` while an animation lane draws it and it moves where you can see it, ` 1 fps` while that lane's bar is still or off screen, and `polled` when Claude Code reruns the statusline itself. It sits wherever the door does, so no layout has to place it, and none can leave it out.
+Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `≤30 fps` while an animation lane draws it where you can see it, ` ≤1 fps` while that lane's bar is off screen, and ` polled` when Claude Code reruns the statusline itself. The number is the most frames a second the lane draws; a lane redraws the bar only when it changes, so a still bar is redrawn far less often. It sits wherever the door does, so no layout has to place it, and none can leave it out.
 
 The lit ticket a checkout is working on is not bundled: it is a plugin, installed with `cc-candybar plugin install promptctl/links-issue-tracker`, whose one segment (`plugins.lit.ticket`, each of its parts a setting) is in edit mode's add-segment library. It reads the `.lit/statusline.json` lit keeps in each checkout, so no lit process runs for the bar.
 

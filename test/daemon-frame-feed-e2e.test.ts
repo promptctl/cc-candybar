@@ -86,6 +86,9 @@ const CONFIGS = {
   // does, so every frame the daemon draws while it moves is a new one.
   turning: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames ${1 / 30} "a" ${1 / 30} "b" ${1 / 30} "c" }}' } }, root: { h: ['mark'] } }`,
   still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  // A glyph that turns once a second, the bar's only motion, as the effort
+  // gauge at max does.
+  beat: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   // The band lane alone, which draws the bar elsewhere: its own file, since
   // the statusline's reset button rewrites the file it names.
@@ -264,8 +267,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const pushed = outputs(frames);
     for (const output of pushed) {
       expect(stripAnsi(output)).toContain("a moving mark");
-      // candybar-animation-wbxz.829: a frame the feed drew shows its pace.
-      expect(stripAnsi(output)).toMatch(/ \d+ fps /u);
+      // candybar-animation-wbxz.829, .014: a frame the feed drew shows its
+      // ceiling.
+      expect(stripAnsi(output)).toMatch(/ ≤\d+ fps /u);
     }
     // An unchanged frame is never sent twice.
     for (let i = 1; i < pushed.length; i++)
@@ -319,14 +323,67 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         drawn = (await feedStats()).drawn - before;
       },
     );
-    // Its pace, one a second, is part of the frame and does not change it.
+    // Its ceiling is part of the frame and does not change it.
     expect(outputs(frames).map(stripAnsi)).toEqual([
-      expect.stringMatching(/ 1 fps .*a still mark/su),
+      expect.stringMatching(/ ≤30 fps .*a still mark/su),
     ]);
     // brandon-unfiled-3248.8ro6 §4e: and it is drawn once a second. A draw
     // that wrote something its view reads would wake the next frame, and the
     // still bar would be redrawn at the moving rate, its bytes never pushed.
     expect(drawn).toBeLessThanOrEqual(3);
+  });
+
+  // candybar-animation-wbxz.014: a bar is drawn when it next changes, so one
+  // whose only motion turns once a second is drawn about once a second, each
+  // frame a new one, not thirty times a second with twenty-nine dropped.
+  test("a bar that turns once a second is drawn about once a second, every frame new", async () => {
+    await render(sockPath, "feed-beat", projectDir, {}, args("beat"));
+    let drawn = 0;
+    let pushed = 0;
+    const frames = await framesOf(
+      "feed-beat",
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length > 0, "the first frame");
+        const before = await feedStats();
+        await sleep(3000);
+        const after = await feedStats();
+        drawn = after.drawn - before.drawn;
+        pushed = after.pushed - before.pushed;
+        await waitFor(
+          () => received.length >= pushed + 1,
+          "every counted frame arrived",
+        );
+      },
+    );
+    // Three turns in three seconds: a draw for each, and each pushed. A draw
+    // a moment before its turn would show the last glyph again and be drawn
+    // twice; the moving rate would draw about ninety.
+    expect(drawn).toBeGreaterThanOrEqual(2);
+    expect(drawn).toBeLessThanOrEqual(4);
+    expect(pushed).toBe(drawn);
+    const glyphs = outputs(frames).map(
+      (o) => /(tick|tock)/u.exec(stripAnsi(o))![1],
+    );
+    for (let i = 1; i < glyphs.length; i++)
+      expect(glyphs[i]).not.toBe(glyphs[i - 1]);
+  });
+
+  test("the viewer open over a moving bar is drawn a still period apart, not at the bar's beat", async () => {
+    const sid = "feed-viewer-still";
+    const bar = await render(sockPath, sid, projectDir, {}, args("warned"));
+    await click(sockPath, viewerLink(bar, "open")!.url);
+    let drawn = 0;
+    await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(
+        () => outputs(received).some((o) => /\[1\/1\]/u.test(stripAnsi(o))),
+        "a frame showing the viewer",
+      );
+      const before = await feedStats();
+      await sleep(2000);
+      drawn = (await feedStats()).drawn - before.drawn;
+    });
+    // The viewer is still text: two still periods, not sixty moving ones.
+    expect(drawn).toBeLessThanOrEqual(4);
   });
 
   test("a click on a still bar is pushed at once, not when the next frame falls due", async () => {

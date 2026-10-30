@@ -22,16 +22,17 @@ import { STILL, type RowMotion } from "./effect.js";
 // Strip is drawn at, so a row drawn here is the bytes it always was.
 const UNBOUNDED_DRAW_WIDTH = 80;
 
-// [LAW:types-are-the-program] A drawn row: its bytes, and whether anything on
-// it changes without new data — a looping effect, a transition in flight, a
-// template's `frames`. Read off the drawn cells (rich-js `Segment.nextChange`)
-// rather than inferred from what the config asked for, so motion a template
-// draws counts exactly as an effect does. The answer is a time on the clock of
-// whoever drew each cell — an effect's own, the epoch for a template — so the
-// one fact a row of mixed cells can state is whether it is finite.
+// [LAW:types-are-the-program] A drawn row: its bytes, and the moment, in wall
+// seconds, at which something on it next changes without new data — a looping
+// effect, a transition in flight, the closing flash, a template's `frames` —
+// or Infinity when nothing will. Read off what was drawn (rich-js
+// `Segment.nextChange`, and the holds the render was told) rather than
+// inferred from what the config asked for, so motion a template draws counts
+// exactly as an effect does. Every animation on a row is drawn on the host
+// clock (`FrameClock`), so its cells, whatever drew them, say one time.
 export interface DrawnRow {
   readonly text: string;
-  readonly moves: boolean;
+  readonly nextChange: number;
 }
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
@@ -41,6 +42,9 @@ export interface DrawnRow {
 // twice: encoded as bytes, and asked when they next change. A row drawn under
 // motion is drawn for its frame's `time`, the one moment rich-js hands every
 // animation placed in it; a still row is drawn for none.
+// [LAW:one-source-of-truth] rich-js's hold of a frame is its cells' holds and
+// the holds it was told that no cell carries (`RenderOptions.onHold`), so the
+// row's next change is the soonest of both.
 function draw(
   renderable: Renderable,
   options: {
@@ -51,6 +55,7 @@ function draw(
 ): DrawnRow {
   const destination = resolveDestination(options.colorSystem);
   const { time } = options;
+  let told = Infinity;
   const segments = [
     ...render(renderable, {
       maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
@@ -67,11 +72,14 @@ function draw(
       onStyleError: (error) => {
         throw error;
       },
+      onHold: ({ nextChange }) => {
+        told = Math.min(told, nextChange);
+      },
     }),
   ];
   return {
     text: segmentsToString(segments, destination),
-    moves: Number.isFinite(Segment.nextChange(segments)),
+    nextChange: Math.min(Segment.nextChange(segments), told),
   };
 }
 
@@ -271,7 +279,7 @@ export function drawStripCells(
   options: BuildLineOptions,
   motion: RowMotion = STILL,
 ): DrawnRow {
-  if (cells.length === 0) return { text: "", moves: false };
+  if (cells.length === 0) return { text: "", nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
@@ -296,7 +304,7 @@ export function drawStripCells(
       "drawStripCells: rich-js strip output did not end its last line",
     );
   }
-  return { text: out.text.slice(0, -1), moves: out.moves };
+  return { text: out.text.slice(0, -1), nextChange: out.nextChange };
 }
 
 // A row's bytes alone, for a caller that draws no motion.

@@ -1316,7 +1316,8 @@ const barsSeen = (bars: readonly FrameSighting[]): BarsSeen => {
   if (drawn.includes("moves")) {
     return {
       kind: "moving",
-      wearing: "the bar moves (an effect, a fade, or an animated segment)",
+      wearing:
+        "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
     };
   }
   if (drawn.includes("can-move")) {

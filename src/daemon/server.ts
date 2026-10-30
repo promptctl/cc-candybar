@@ -375,7 +375,7 @@ const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
 // click — brings its next frame forward.
 const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-  render: (sessionId, fps) => renderFrame(sessionId, fps),
+  render: (sessionId, fps, at) => renderFrame(sessionId, fps, at),
   // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
   // which fires in a later turn, so a click's whole run of writes and its
   // journal commit land before a frame of it is drawn.
@@ -396,6 +396,7 @@ const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   refreshes: () => refreshLedger.totals(),
   periods: FEED_PERIODS,
   now: () => performance.now(),
+  instant: () => instantOf(new Date()),
   log: dlog,
 });
 // Which watched sessions' panes are on a screen, asked of their tmux servers
@@ -1961,20 +1962,25 @@ function statusLineClick(value: string, facts: RequestFacts): RequestOutcome {
 // as its owner stored it (the view's payload), so it performs no I/O and
 // refreshes no source — the request it is drawn from made those refreshes,
 // and an event, never a frame, opened the view it draws.
-function renderFrame(sessionId: string, fps: number): FeedFrame | null {
-  const started = new Date();
-  const at = instantOf(started);
+function renderFrame(
+  sessionId: string,
+  fps: number,
+  at: Instant,
+): FeedFrame | null {
+  const started = Date.now();
   const facts: RequestFacts = [];
   try {
     using setup = setUpFrame(sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, motion, evaluated, delivered, lanes } = drawRender(setup, {
-      by: "feed",
-      fps,
-    });
+    const { drawn, nextChange, evaluated, delivered, lanes } = drawRender(
+      setup,
+      {
+        by: "feed",
+        fps,
+      },
+    );
     const output = composeBar(drawn);
     return {
-      at,
       resp: { ok: true, output },
       statusline: {
         ok: true,
@@ -1985,7 +1991,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
           handedOffTo(lanes, frameFeeds.following(sessionId)),
         ),
       },
-      moves: motion === "moves",
+      nextChange,
       evaluated,
       delivered,
       failure: null,
@@ -1996,14 +2002,13 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       "render",
       facts,
       outcome,
-      Date.now() - started.getTime(),
+      Date.now() - started,
     );
     const failed = renderFailed(error);
     return {
-      at,
       resp: failed,
       statusline: failed,
-      moves: false,
+      nextChange: Infinity,
       evaluated: 0,
       delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` },
@@ -2365,6 +2370,8 @@ function drawRender(
 ): {
   drawn: DrawnBar;
   motion: DrawnMotion;
+  // When the drawn frame next changes without new data, in wall seconds.
+  nextChange: number;
   evaluated: number;
   clickShown: ClickErrorRecord | null;
   // Records what the frame's copy clicks copy, once it reached its client.
@@ -2587,6 +2594,23 @@ function drawRender(
     sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
     diagnostics,
   );
+  // [LAW:one-source-of-truth] The body says when it next changes. The viewer
+  // in the bar's place is still text, so a feed drawing it waits a still
+  // period, not the hidden bar's beat; that bar can move again once it closes.
+  const body: { text: string; nextChange: number; motion: DrawnMotion } =
+    viewing === null
+      ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion }
+      : {
+          text: viewerRows(
+            diagnostics,
+            viewing,
+            sessionId,
+            drawing.by,
+            geometry,
+          ),
+          nextChange: Infinity,
+          motion: frame.motion === "still" ? "still" : "can-move",
+        };
   const g = gitService.getStats();
   const u = usageStore.getStats();
   const fx = effects.lastFrame();
@@ -2635,8 +2659,8 @@ function drawRender(
     stateRev: String(fx.revision),
     fades: passages(fx.fades),
     leaves: passages(fx.leaves),
-    // What the frame drew: whether anything on it changes without new data.
-    motion: frame.motion,
+    // What the body drew: whether anything on it changes without new data.
+    motion: body.motion,
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(frame.evaluated),
@@ -2664,15 +2688,13 @@ function drawRender(
   });
   return {
     drawn: {
-      body:
-        viewing === null
-          ? frame.text
-          : viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
+      body: body.text,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
     },
-    motion: frame.motion,
+    motion: body.motion,
+    nextChange: body.nextChange,
     evaluated: frame.evaluated,
     clickShown,
     delivered,

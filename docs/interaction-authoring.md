@@ -1407,7 +1407,7 @@ the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
 is shared by every preset). Place the reserved `candybar.menu` segment name
 yourself to move it anywhere else. The cell beside it, saying how the bar is
-redrawn (`30 fps`, ` 1 fps` or `polled`), goes wherever the door goes, and
+redrawn (`≤30 fps`, ` ≤1 fps` or ` polled`), goes wherever the door goes, and
 stays on the bar while the menu is open.
 
 ```json5 check:pass
@@ -1736,7 +1736,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  polled  ✱ Opus 4.8 󰶼 
+ 🍫   polled  ✱ Opus 4.8 󰶼 
  ◀ nord ▀▀▀ ▶ 
 ```
 
