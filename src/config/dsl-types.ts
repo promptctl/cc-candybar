@@ -561,7 +561,7 @@ export type AuthoredVariableDecl =
 
 // [LAW:no-silent-failure] A plugin's data variable when the plugin did not
 // load: a DOCUMENT whose one outcome is the drop, so every template reading
-// `.plugins.<plugin>.data…` renders ⚠ naming why rather than failing the
+// `.<scope>.<plugin>.data…` renders ⚠ naming why rather than failing the
 // config that reads it. Synthesized by the plugin loader, never authored —
 // the variable loader accepts no `kind: "dropped"`.
 export interface DroppedVarDecl {

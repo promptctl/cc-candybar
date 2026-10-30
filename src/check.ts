@@ -291,7 +291,7 @@ export function checkPayload(
     // its program first writes. So a segment gated on `hasKey` is hidden, and
     // an unguarded read fails the check with the missing-field error that
     // session's bar would draw.
-    plugins: projectSources(
+    ...projectSources(
       Object.entries(config.variables).flatMap(([name, decl]) =>
         decl.kind === "source" ? [name] : [],
       ),

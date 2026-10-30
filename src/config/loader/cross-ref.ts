@@ -1340,7 +1340,7 @@ export function validateDeclarations(
       if (decl?.kind === "source") continue;
       ctx.issues.push({
         path: `actions.${name}.refreshes`,
-        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, plugins.<plugin>.<source>; a plugin names its own sources bare)`,
+        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, <scope>.<plugin>.<source> where the scope is plugins or repo; a plugin names its own sources bare)`,
         line: findKeyLine(ctx.source, ["actions", name, "refreshes"]),
       });
     }

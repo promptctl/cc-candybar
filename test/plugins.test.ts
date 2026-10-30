@@ -388,7 +388,9 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     sessionState: new SessionState(),
   });
   try {
-    expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
+    expect(loaded.state?.plugins.loaded).toEqual([
+      { path: path.join(dir, "deploy/plugin.json5"), ns: "plugins.deploy" },
+    ]);
     expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([
       path.join(dir, "q/plugin.json5"),
     ]);
@@ -432,7 +434,9 @@ describe("a plugin's own variables", () => {
     expect(warnings).toEqual([]);
     const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
-      expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "hello/plugin.json5")]);
+      expect(loaded.state?.plugins.loaded).toEqual([
+        { path: path.join(dir, "hello/plugin.json5"), ns: "plugins.hello" },
+      ]);
       expect(Object.keys(loaded.state!.config.variables).filter((v) => v.startsWith("plugins.hello."))).toEqual([]);
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
         ` +${path.join(dir, "hello/plugin.json5")} data=none`,
@@ -544,7 +548,7 @@ describe("an installed plugin", () => {
       instantOf(new Date()),
     );
     try {
-      return Object.keys(prepared.config.segments).filter((n) => n.startsWith("plugins."));
+      return Object.keys(prepared.config.segments).filter((n) => /^(plugins|repo)\./.test(n));
     } finally {
       prepared.registry.dispose();
     }
@@ -570,9 +574,10 @@ describe("an installed plugin", () => {
   });
 
   test("a repo-shipped plugin is there only in sessions rooted in that repo", async () => {
-    repoInstall("a", "deploy", DEFINITION);
+    // Its own templates spell its own namespace, `repo.deploy.`.
+    repoInstall("a", "deploy", DEFINITION.replaceAll("plugins.deploy", "repo.deploy"));
     fs.mkdirSync(path.join(dir, "b"));
-    expect(await segmentsIn(path.join(dir, "a"))).toEqual(["plugins.deploy.status"]);
+    expect(await segmentsIn(path.join(dir, "a"))).toEqual(["repo.deploy.status"]);
     expect(await segmentsIn(path.join(dir, "b"))).toEqual([]);
   });
 
@@ -716,12 +721,17 @@ describe("an installed plugin", () => {
   test("a nearer root replaces a farther one's plugin of the same name, whole", async () => {
     install("share", "deploy", `{ data: "./d.json", segments: { status: { template: "machine" }, extra: { template: "x" } } }`);
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "user" } } }`);
-    repoInstall("repo", "deploy", `{ data: "./d.json", segments: { status: { template: "repo" } } }`);
     expect(clean(await checkConfig(placing("plugins.deploy.status"), dir)).rendered).toContain("user");
     expect(await segmentsIn(dir)).toEqual(["plugins.deploy.status"]);
-    expect(clean(await checkConfig(placing("plugins.deploy.status"), path.join(dir, "repo"))).rendered).toContain(
-      "repo",
-    );
+  });
+
+  test("a repo's plugin of an installed one's name loads beside it, under repo.", async () => {
+    install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "user" } } }`);
+    repoInstall("repo", "deploy", `{ data: "./d.json", segments: { status: { template: "mine-repo" } } }`);
+    const repo = path.join(dir, "repo");
+    expect(await segmentsIn(repo)).toEqual(["plugins.deploy.status", "repo.deploy.status"]);
+    expect(clean(await checkConfig(placing("plugins.deploy.status"), repo)).rendered).toContain("user");
+    expect(clean(await checkConfig(placing("repo.deploy.status"), repo)).rendered).toContain("mine-repo");
   });
 
   test("a plugin the config lists replaces an installed one of its name", async () => {
@@ -864,7 +874,9 @@ describe("an installed plugin", () => {
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
     const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
-      expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
+      expect(loaded.state?.plugins.loaded).toEqual([
+        { path: path.join(dir, "deploy/plugin.json5"), ns: "plugins.deploy" },
+      ]);
     } finally {
       loaded.state?.registry.dispose();
     }
@@ -911,7 +923,7 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.actions["plugins.lit.open"]).toBeDefined();
-      expect(prepared.droppedPlugins.map((d) => d.plugin)).toEqual(["lit"]);
+      expect(prepared.droppedPlugins.map((d) => d.plugin)).toEqual(["plugins.lit"]);
     } finally {
       prepared.registry.dispose();
     }
@@ -1005,9 +1017,19 @@ describe("plugin roots", () => {
     process.env.XDG_DATA_HOME = "/home/u/.local/share";
     process.env.XDG_DATA_DIRS = "/usr/share:/home/u/.local/share:/opt/share";
     expect(pluginRoots(null)).toEqual([
-      "/opt/share/cc-candybar/plugins",
-      "/usr/share/cc-candybar/plugins",
-      "/home/u/.local/share/cc-candybar/plugins",
+      { dir: "/opt/share/cc-candybar/plugins", scope: "plugins" },
+      { dir: "/usr/share/cc-candybar/plugins", scope: "plugins" },
+      { dir: "/home/u/.local/share/cc-candybar/plugins", scope: "plugins" },
+    ]);
+  });
+
+  test("an approved repo's root comes last, scoped repo", () => {
+    process.env.XDG_DATA_HOME = "/home/u/.local/share";
+    process.env.XDG_DATA_DIRS = "/usr/share";
+    expect(pluginRoots("/w/repo" as Parameters<typeof pluginRoots>[0])).toEqual([
+      { dir: "/usr/share/cc-candybar/plugins", scope: "plugins" },
+      { dir: "/home/u/.local/share/cc-candybar/plugins", scope: "plugins" },
+      { dir: "/w/repo/.cc-candybar/plugins", scope: "repo" },
     ]);
   });
 });
@@ -1156,5 +1178,105 @@ describe("a plugin segment's state variable", () => {
     const stepped = await bar.click("+");
     expect(stepped.refused).toBeNull();
     expect(stripAnsi(stepped.rendered)).toContain("n=4");
+  });
+});
+
+// A repository's own plugins are named under `repo.`, installed ones under
+// `plugins.`: a repo's `lit` never replaces the user's installed `lit`, so the
+// user's placements of it keep drawing in that repo, beside the repo's own.
+describe("a repo's plugin beside an installed one of its name", () => {
+  let saved: { home?: string; dirs?: string; config?: string };
+  let repo: string;
+  beforeEach(() => {
+    saved = {
+      home: process.env.XDG_DATA_HOME,
+      dirs: process.env.XDG_DATA_DIRS,
+      config: process.env.XDG_CONFIG_HOME,
+    };
+    process.env.XDG_DATA_HOME = path.join(dir, "data");
+    process.env.XDG_DATA_DIRS = path.join(dir, "share");
+    process.env.XDG_CONFIG_HOME = path.join(dir, "xdg");
+    write(
+      "data/cc-candybar/plugins/lit/plugin.json5",
+      `{ segments: {
+          phase: { template: "user-phase" },
+          next: { template: "user-next" },
+          ticket: { template: "user-ticket" },
+        } }`,
+    );
+    write(
+      "xdg/cc-candybar/config.json5",
+      `{ root: { rows: { status: { h: ["model", "plugins.lit.phase", "plugins.lit.next"] } } } }`,
+    );
+    write("repo/.cc-candybar/plugins/lit/plugin.json5", `{ segments: { ticket: { template: "repo-ticket" } } }`);
+    write("repo/.cc-candybar.json5", `{ insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.phase" }] }`);
+    repo = path.join(dir, "repo");
+  });
+  afterEach(() => {
+    process.env.XDG_DATA_HOME = saved.home;
+    process.env.XDG_DATA_DIRS = saved.dirs;
+    if (saved.config === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = saved.config;
+  });
+
+  test("approved, both load and all three cells draw with no warning", async () => {
+    answerRepo(repo);
+    const { rendered, warnings } = clean(await checkConfig(undefined, repo));
+    expect(warnings).toEqual([]);
+    expect(rendered).not.toContain("⚠");
+    expect(rendered).toContain("user-phase");
+    expect(rendered).toContain("user-next");
+    expect(rendered).toContain("repo-ticket");
+    expect(rendered.indexOf("user-phase")).toBeLessThan(rendered.indexOf("repo-ticket"));
+    const loaded = loadFromDisk(repo, repo, undefined, {
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      sessionState: new SessionState(),
+    });
+    try {
+      expect(loaded.error).toBeNull();
+      expect(loaded.state!.plugins.dropped).toEqual([]);
+      expect(loaded.state!.dropped).toEqual([]);
+      expect(Object.fromEntries(loaded.state!.plugins.rendering)).toEqual({
+        "plugins.lit": path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5"),
+        "repo.lit": path.join(repo, ".cc-candybar/plugins/lit/plugin.json5"),
+      });
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("unapproved, only the installed one loads and the user's placements draw", async () => {
+    answerRepo(repo, "declined");
+    const { rendered, warnings } = clean(await checkConfig(undefined, repo));
+    // Only the gate's own line: the repo's config does not run.
+    expect(warnings).toEqual([expect.stringMatching(/^declined: .* its cc-candybar config does not run$/)]);
+    expect(rendered).not.toContain("⚠");
+    expect(rendered).toContain("user-phase");
+    expect(rendered).toContain("user-next");
+    expect(rendered).not.toContain("repo-ticket");
+  });
+
+  test("a plugin the repo's config lists is repo-scoped too, leaving the installed one", async () => {
+    fs.rmSync(path.join(repo, ".cc-candybar"), { recursive: true });
+    write("repo/vendor/lit/plugin.json5", `{ segments: { ticket: { template: "listed-ticket" } } }`);
+    write(
+      "repo/.cc-candybar.json5",
+      `{ plugins: ["./vendor/lit/plugin.json5"], insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.next" }] }`,
+    );
+    answerRepo(repo);
+    const { rendered, warnings } = clean(await checkConfig(undefined, repo));
+    expect(warnings).toEqual([]);
+    expect(rendered).toContain("user-phase");
+    expect(rendered).toContain("user-next");
+    expect(rendered).toContain("listed-ticket");
+  });
+
+  test("a repo. name is never resolved through the installed plugin of its name", async () => {
+    answerRepo(repo);
+    write("repo/.cc-candybar.json5", `{ insert: [{ seg: "repo.lit.phase", after: "plugins.lit.phase" }] }`);
+    const outcome = await checkConfig(undefined, repo);
+    expect(outcome.kind).not.toBe("clean");
+    expect(JSON.stringify(outcome)).toContain("repo.lit.phase");
   });
 });

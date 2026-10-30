@@ -1253,7 +1253,7 @@ describe("RenderCache", () => {
       mkdirSync(root, { recursive: true });
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(
-        entry.state.config.segments["plugins.deploy.status"],
+        entry.state.config.segments["repo.deploy.status"],
       ).toBeUndefined();
       // Staged then renamed in, so every repetition is an event in the root.
       const staging = join(dir, "staging");
@@ -1268,7 +1268,7 @@ describe("RenderCache", () => {
       });
       expect(entry.lastError).toBeNull();
       expect(
-        entry.state.config.segments["plugins.deploy.status"],
+        entry.state.config.segments["repo.deploy.status"],
       ).toBeDefined();
     } finally {
       cleanup();

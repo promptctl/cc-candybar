@@ -14,7 +14,7 @@ import {
   REPO_PLUGIN_DIR,
   userPluginRoot,
 } from "./config/loader/plugin-folders.js";
-import { DEFINITION_FILE } from "./config/loader/plugins.js";
+import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
 import { launchSync } from "./proc/launch.js";
 import { isDirectory } from "./var-system/sources.js";
 import { resolveUserPath } from "./utils/user-path.js";
@@ -221,7 +221,10 @@ export function installFromRepo(
       return folder;
     });
     const problems = definitionProblems(
-      staged.map((f) => path.join(f, DEFINITION_FILE)),
+      // Installed into the user's root, where it becomes `plugins.<name>`.
+      staged.map((f) =>
+        pluginDefinition(path.join(f, DEFINITION_FILE), "plugins"),
+      ),
       DEFAULT_DSL_CONFIG,
       { root: repo, git: false },
     );

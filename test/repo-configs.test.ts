@@ -155,7 +155,10 @@ describe("the gate over a project's plugins", () => {
     expect(approved.repos.awaiting).toEqual([]);
     expect(approved.repos.plugins).toBe(project);
     expect(approved.state!.plugins.loaded).toEqual([
-      path.join(project, ".cc-candybar/plugins/deploy/plugin.json5"),
+      {
+        path: path.join(project, ".cc-candybar/plugins/deploy/plugin.json5"),
+        ns: "repo.deploy",
+      },
     ]);
     approved.state!.registry.dispose();
   });

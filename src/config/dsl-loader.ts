@@ -102,6 +102,7 @@ import {
   withDroppedPlacements,
   dropsOwning,
   type DroppedPlugin,
+  type PluginDefinition,
   type PluginLayer,
 } from "./loader/plugins.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
@@ -127,6 +128,7 @@ export {
   durableConfig,
   detectConfigCollisions,
 } from "./loader/discovery.js";
+import { layerScope } from "./loader/discovery.js";
 export type { ConfigHome, ConfigResolution } from "./loader/discovery.js";
 export type { Unchecked } from "../utils/presence.js";
 export { mergeWithDefault } from "./loader/merge.js";
@@ -192,7 +194,7 @@ export function loadConfig(
 }
 
 // What one file's load needs from beyond the file: the session's project, and
-// the plugins of the layers beneath it — every drop (a name under `plugins.`
+// the plugins of the layers beneath it — every drop (a name under a plugin scope
 // that no plugin owns stands in naming the unnamed ones), and which definition
 // renders each plugin name.
 export interface LoadContext extends PluginContext {
@@ -230,7 +232,9 @@ export function loadConfigSource(
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
   const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(
-      listedPlugins(refs, path),
+      // [LAW:one-source-of-truth] The layer's scope, decided where the
+      // layer was discovered, rides on every definition it lists.
+      listedPlugins(refs, path, layerScope(path)),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) =>
@@ -275,14 +279,14 @@ const installedMemo = new WeakMap<
 >();
 
 function installedLayer(
-  definitions: readonly string[],
+  definitions: readonly PluginDefinition[],
   ctx: PluginContext,
   dflt: DslConfig,
   allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
   const key = JSON.stringify([
     [...(allowedPalettes ?? [])].sort(),
-    definitions.map((d) => [d, statKey(d)]),
+    definitions.map((d) => [d.path, d.ns, statKey(d.path)]),
   ]);
   const byProject = installedMemo.get(dflt) ?? new Map();
   installedMemo.set(dflt, byProject);
@@ -313,7 +317,7 @@ function installedLayer(
 // [LAW:single-enforcer] The install's verdict is the loader's own, so a
 // definition the bar would drop is never installed.
 export function definitionProblems(
-  definitions: readonly string[],
+  definitions: readonly PluginDefinition[],
   dflt: DslConfig,
   checkout: Checkout,
 ): readonly DroppedPlugin[] {
@@ -529,12 +533,12 @@ export interface LoadedFile {
   // with why. A drop is also a `warnings` line (the bar shows it); `check`
   // reads this to fail its verdict.
   readonly plugins: {
-    readonly loaded: readonly string[];
+    readonly loaded: readonly PluginDefinition[];
     readonly dropped: readonly DroppedPlugin[];
     // The definition path of every drop a stand-in in this file's config
     // stands for.
     readonly reached: ReadonlySet<string>;
-    // Each plugin name rendering at this layer, and its definition.
+    // Each plugin namespace rendering at this layer, and its definition.
     readonly rendering: ReadonlyMap<string, string>;
   };
 }
@@ -564,7 +568,7 @@ export interface AuthoredConfig {
  */
 function checkPlugin(
   config: DslConfig,
-  plugin: string,
+  ns: string,
   replaces: boolean,
   filePath: string,
   allowedPalettes: ReadonlySet<string> | undefined,
@@ -574,7 +578,7 @@ function checkPlugin(
     validateRenderable(unauthored(config), filePath, allowedPalettes);
     return;
   }
-  const owned = ownedBy(plugin);
+  const owned = ownedBy(ns);
   const issues: ConfigIssue[] = [];
   // Neither check below reads a palette name: only the structural pass does.
   const ctx: ValidateCtx = {

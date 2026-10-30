@@ -86,7 +86,7 @@ import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
 import {
   ownedBy,
   pluginDataVar,
-  pluginNameOf,
+  type PluginDefinition,
 } from "../../config/loader/plugins.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
@@ -362,30 +362,26 @@ export function pluginLoadLine(
     checkout === null
       ? "-"
       : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
-  const dataOf = (definition: string): string => {
-    const name = pluginNameOf(definition);
+  const dataOf = ({ ns }: PluginDefinition): string => {
     const data =
-      name === undefined ? undefined : config.variables[pluginDataVar(name)];
+      ns === undefined ? undefined : config.variables[pluginDataVar(ns)];
     return data?.kind === "file" ? data.path : "none";
   };
   // What the merged plugins declare, by kind: a source is synthesized from
   // `sources:`, every other name under a namespace but the data file's came
   // from `variables:`.
   const declared = loaded
-    .flatMap((definition) => {
-      const name = pluginNameOf(definition);
-      return name === undefined ? [] : [name];
-    })
-    .flatMap((name) =>
+    .flatMap(({ ns }) => (ns === undefined ? [] : [ns]))
+    .flatMap((ns) =>
       Object.entries(config.variables).filter(
-        ([v]) => ownedBy(name)(v) && v !== pluginDataVar(name),
+        ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns),
       ),
     );
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
   return (
     `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` +
-    loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
+    loaded.map((p) => ` +${p.path} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
   );
@@ -665,7 +661,7 @@ function watchTargetsFor(entry: CacheEntry): {
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
     ...roots,
-    ...loaded,
+    ...loaded.map((d) => d.path),
     ...[...dropped, ...unreached].map((d) => d.path),
     // [LAW:single-enforcer] A declared storage folder is watched by name in
     // its plugin folder, by the follower that already watches the definition:
@@ -1006,8 +1002,8 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         checkout: installed.checkout,
         roots: installed.roots,
         // What renders, as the loader decided it: a nearer layer's load or
-        // drop replaces a farther one's of the same name.
-        loaded: [...installed.rendering.values()],
+        // drop replaces a farther one's of the same namespace.
+        loaded: [...installed.rendering].map(([ns, path]) => ({ path, ns })),
         dropped: [
           ...installed.dropped,
           ...layers.flatMap((l) => l.plugins.dropped),

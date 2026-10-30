@@ -34,6 +34,7 @@ import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { declaredVariables } from "../config/loader/refs.js";
+import { PLUGIN_SCOPES, type PluginScope } from "../config/loader/plugins.js";
 import { payloadPathOf, valueReadsOf } from "../config/loader/value-reads.js";
 import {
   prOfHead,
@@ -287,11 +288,13 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
   readonly autocompact?: AutoCompactPayload | P;
   // [LAW:types-are-the-program] Each plugin source the view declared, by
-  // plugin then source — `.plugins.<plugin>.<source>`, the source variable's
-  // own name — as the managed storage owner read the session's file: ok,
-  // absent or failed, or not answered yet. Required: a payload builder that
-  // leaves the sources out does not compile (`projectSources`).
+  // scope, plugin then source — `.plugins.<plugin>.<source>` for an installed
+  // plugin, `.repo.<plugin>.<source>` for a repository's, the source
+  // variable's own name — as the managed storage owner read the session's
+  // file: ok, absent or failed, or not answered yet. Required: a payload
+  // builder that leaves the sources out does not compile (`projectSources`).
   readonly plugins: SourcesPayload<P>;
+  readonly repo: SourcesPayload<P>;
 }
 
 // The readings of a view's sources, nested by plugin and source.
@@ -1540,7 +1543,7 @@ function projectPayload(
     ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    plugins: projectSources(lanes.sources.keys(), (name) => {
+    ...projectSources(lanes.sources.keys(), (name) => {
       const reading = lanes.sources.get(name)!;
       return reading.kind === "pending" ? PENDING : reading;
     }),
@@ -1570,22 +1573,36 @@ export function sourcesFactOf(sources: ReadonlyMap<string, Lane<JsonValue>>): {
 }
 
 // [LAW:one-source-of-truth] The one projection of a view's sources into its
-// payload: each at `.plugins.<plugin>.<source>`, its variable's own name, as
+// payload: each at `.<scope>.<plugin>.<source>`, its variable's own name, as
 // `read` answers it — the daemon reads the storage owner's lanes, `check`
 // reads every source absent (what a session reads before its program first
 // writes). No second spelling of the path exists.
 export function projectSources<P>(
   names: Iterable<string>,
   read: (name: string) => Outcome<JsonValue> | P,
-): SourcesPayload<P> {
-  const plugins: Record<string, Record<string, Outcome<JsonValue> | P>> = {};
+): Record<PluginScope, SourcesPayload<P>> {
+  // [LAW:dataflow-not-control-flow] Every scope is a key, empty or not, and
+  // every source nests under its own: no branch on which scope it is.
+  const scoped = Object.fromEntries(
+    PLUGIN_SCOPES.map((scope) => [
+      scope,
+      {} as Record<string, Record<string, Outcome<JsonValue> | P>>,
+    ]),
+  ) as Record<
+    PluginScope,
+    Record<string, Record<string, Outcome<JsonValue> | P>>
+  >;
   for (const name of names) {
     // [LAW:types-are-the-program] A source's name is
-    // `plugins.<plugin>.<source>`, each one identifier (the plugin loader).
-    const [, plugin, source] = name.split(".") as [string, string, string];
-    (plugins[plugin] ??= {})[source] = read(name);
+    // `<scope>.<plugin>.<source>`, each one identifier (the plugin loader).
+    const [scope, plugin, source] = name.split(".") as [
+      PluginScope,
+      string,
+      string,
+    ];
+    (scoped[scope][plugin] ??= {})[source] = read(name);
   }
-  return plugins;
+  return scoped;
 }
 
 function burnOf(

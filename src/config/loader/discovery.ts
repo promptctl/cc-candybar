@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
+import type { PluginScope } from "./plugins.js";
 import { worktreeLink } from "../../utils/git-root.js";
 import {
   gateRepos,
@@ -67,15 +68,29 @@ export function dslConfigCandidatePaths(
     ...new Set([
       ...(projectDir
         ? CONFIG_EXTENSIONS.map((ext) =>
-            path.join(projectDir, `.cc-candybar.${ext}`),
+            path.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`),
           )
         : []),
       ...CONFIG_EXTENSIONS.map((ext) =>
-        path.join(effectiveCwd, `.cc-candybar.${ext}`),
+        path.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`),
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`),
     ]),
   ];
+}
+
+// [LAW:one-source-of-truth] The base name a repository's own config file
+// carries, at a project or working directory.
+const REPO_CONFIG_BASE = ".cc-candybar";
+
+// [LAW:one-source-of-truth] The scope of the plugins a layer lists: a
+// repository's config file brings `repo` plugins, every other layer (the
+// user's own file, an explicit one) `plugins` — so a repo's config listing a
+// plugin named like an installed one adds beside it, never replaces it.
+export function layerScope(file: string): PluginScope {
+  return path.basename(file).replace(/\.(json5|json)$/, "") === REPO_CONFIG_BASE
+    ? "repo"
+    : "plugins";
 }
 
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the

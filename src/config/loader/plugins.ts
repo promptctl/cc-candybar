@@ -7,7 +7,7 @@
 //
 // [LAW:one-type-per-behavior] A plugin is not a new kind of anything. Its data
 // is the existing `file` source with `parse: { json: true }`, watched, read in
-// templates as `.plugins.<plugin>.data.*`; its variables, segments, helpers and
+// templates as `.<scope>.<plugin>.data.*`; its variables, segments, helpers and
 // actions are parsed by the same validators a config's are; it joins the
 // config through the same `mergeWithDefault` the user's file does.
 //
@@ -53,8 +53,9 @@ import {
 import { presetNames, presetRoot } from "../presets.js";
 import { templateActionRefs, templateHelperCalls } from "./refs.js";
 
-// A plugin that could not be loaded: its definition's path, its name (its
-// folder's, undefined when the folder's name cannot be one), and why. The rest of the config renders without it.
+// A plugin that could not be loaded: its definition's path, its namespace
+// (`<scope>.<folder name>`, undefined when the folder's name cannot be a
+// plugin's), and why. The rest of the config renders without it.
 export interface DroppedPlugin {
   readonly path: string;
   readonly plugin: string | undefined;
@@ -65,9 +66,9 @@ export interface PluginLayer {
   // The base with every plugin that loaded merged over it, in listed order,
   // and a tombstone for every named one that did not.
   readonly config: DslConfig;
-  readonly loaded: readonly string[];
+  readonly loaded: readonly PluginDefinition[];
   readonly dropped: readonly DroppedPlugin[];
-  // Each plugin name the config renders, and the definition rendering it —
+  // Each plugin namespace the config renders, and the definition rendering it —
   // the layers beneath this one included, a nearer load or drop replacing a
   // farther one.
   readonly rendering: ReadonlyMap<string, string>;
@@ -122,24 +123,42 @@ export const DEFINITION_FILE = "plugin.json5";
 // template path cannot spell.
 const PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 
-// [LAW:one-source-of-truth] A plugin's name is the name of the folder its
-// definition sits in — installed or listed alike — so even a definition that
-// cannot be read has one, and nothing inside the file can disagree with it.
-// Undefined when the folder's name cannot be a plugin's.
-export function pluginNameOf(definition: string): string | undefined {
-  const name = path.basename(path.dirname(definition));
-  return PLUGIN_NAME.test(name) ? name : undefined;
+// [LAW:one-source-of-truth] Every name a plugin declares lives under its
+// namespace, `<scope>.<plugin>.`: no plugin can collide with a name the bar or
+// the user declares, and nothing outside one is ever a plugin's. The scope is
+// where the definition was found — `plugins` for an installed one (the user's
+// or a package manager's root, or a list in the user's own config), `repo` for
+// one a repository brings (its plugin root, or a list in its config) — so a
+// repo's plugin never replaces an installed one of the same name.
+export const PLUGIN_SCOPES = ["plugins", "repo"] as const;
+export type PluginScope = (typeof PLUGIN_SCOPES)[number];
+
+// A definition and the namespace it declares under; `ns` is undefined when
+// its folder's name cannot be a plugin's.
+export interface PluginDefinition {
+  readonly path: string;
+  readonly ns: string | undefined;
 }
 
-// [LAW:one-source-of-truth] Every name a plugin declares lives under
-// `plugins.<plugin>.`: no plugin can collide with a name the bar or the user
-// declares, and nothing outside it is ever a plugin's.
-export const PLUGIN_NS = "plugins.";
+// [LAW:single-enforcer] The one place a plugin's namespace is minted. Its name
+// is the name of the folder its definition sits in — installed or listed
+// alike — so even a definition that cannot be read has one, and nothing
+// inside the file can disagree with it; its scope is decided where the root
+// or the listing config was found, and arrives here as data.
+export function pluginDefinition(
+  definition: string,
+  scope: PluginScope,
+): PluginDefinition {
+  const name = path.basename(path.dirname(definition));
+  return {
+    path: definition,
+    ns: PLUGIN_NAME.test(name) ? `${scope}.${name}` : undefined,
+  };
+}
 
-// The variable a plugin's data file publishes, read as
-// `.plugins.<plugin>.data.*`.
-export function pluginDataVar(plugin: string): string {
-  return `${PLUGIN_NS}${plugin}.data`;
+// The variable a plugin's data file publishes, read as `.<ns>.data.*`.
+export function pluginDataVar(ns: string): string {
+  return `${ns}.data`;
 }
 
 // The folder a plugin's managed storage lives in: its program writes
@@ -187,31 +206,33 @@ function reasonOf(err: unknown): string {
 export function listedPlugins(
   refs: readonly string[],
   from: string,
-): readonly string[] {
-  return refs.map((ref) => resolveUserPath(path.dirname(from), ref));
+  scope: PluginScope,
+): readonly PluginDefinition[] {
+  return refs.map((ref) =>
+    pluginDefinition(resolveUserPath(path.dirname(from), ref), scope),
+  );
 }
 
 /**
  * Lay every definition over `base`, in order. A plugin replaces whatever a
- * layer beneath it declared under its name — a listed plugin replaces an
- * installed one, a project's installed plugin a machine's — so the nearest
- * declaration wins whole and two copies never merge; within one list a name
- * is taken once.
+ * layer beneath it declared under its namespace — a listed plugin replaces an
+ * installed one of the same scope — so the nearest declaration wins whole and
+ * two copies never merge; within one list a namespace is taken once.
  */
 export function applyPlugins(
-  definitions: readonly string[],
+  definitions: readonly PluginDefinition[],
   ctx: PluginContext,
   base: PluginBase,
-  // `replaces`: the layer held declarations under this plugin's name.
-  validate: (config: DslConfig, plugin: string, replaces: boolean) => unknown,
+  // `replaces`: the layer held declarations under this plugin's namespace.
+  validate: (config: DslConfig, ns: string, replaces: boolean) => unknown,
 ): PluginLayer {
   // [LAW:dataflow-not-control-flow] One fold, every definition: each step
   // either merges its plugin or records why not, and the next step sees the
   // result.
   const taken = new Map<string, string>();
   return definitions.reduce<PluginLayer>(
-    (layer, file) => {
-      const plugin = pluginNameOf(file);
+    (layer, definition) => {
+      const { path: file, ns: plugin } = definition;
       const drop = (reason: string, config: DslConfig): PluginLayer => {
         const rendering = new Map(layer.rendering);
         if (plugin !== undefined && config !== layer.config)
@@ -246,7 +267,7 @@ export function applyPlugins(
       const first = taken.get(plugin);
       if (first !== undefined) {
         return drop(
-          `plugin "${plugin}" is already listed, from ${first}`,
+          `plugin "${plugin.slice(plugin.indexOf(".") + 1)}" is already listed, from ${first}`,
           layer.config,
         );
       }
@@ -271,7 +292,7 @@ export function applyPlugins(
         return {
           ...layer,
           config: merged.value,
-          loaded: [...layer.loaded, file],
+          loaded: [...layer.loaded, definition],
           rendering: new Map([...layer.rendering, [plugin, file]]),
         };
       }
@@ -282,18 +303,17 @@ export function applyPlugins(
   );
 }
 
-// Whether a declared name is the plugin's: its namespace, `plugins.<plugin>`,
+// Whether a declared name is the plugin's: its namespace, `<scope>.<plugin>`,
 // where a dropped plugin's tombstone stands, and everything under it.
-export function ownedBy(plugin: string): (name: string) => boolean {
-  const ns = tombstoneVar(plugin);
+export function ownedBy(ns: string): (name: string) => boolean {
   return (name) => name === ns || name.startsWith(`${ns}.`);
 }
 
 // [LAW:one-source-of-truth] Where a dropped plugin's tombstone is declared:
 // its namespace itself, so every read under it — its data, its sources, its
 // variables — lands on the drop.
-function tombstoneVar(plugin: string): string {
-  return `${PLUGIN_NS}${plugin}`;
+function tombstoneVar(ns: string): string {
+  return ns;
 }
 
 // The config with nothing of the plugin's left.
@@ -339,17 +359,22 @@ function tombstone(
   };
 }
 
-// The plugin a name is declared under, if any.
+// The namespace of the plugin a name is declared under, if any.
+// [LAW:dataflow-not-control-flow] Every scope reads alike: no fallback from
+// one scope to another, so a missing `repo.lit.x` never resolves through
+// `plugins.lit`.
 function pluginOf(name: string): string | undefined {
-  return name.startsWith(PLUGIN_NS)
-    ? name.slice(PLUGIN_NS.length).split(".")[0]
+  const [scope, plugin] = name.split(".");
+  return (PLUGIN_SCOPES as readonly string[]).includes(scope!) &&
+    plugin !== undefined
+    ? `${scope}.${plugin}`
     : undefined;
 }
 
-// Why a name under `plugins.` names nothing: the drop notice of the plugin
+// Why a name under a plugin scope names nothing: the drop notice of the plugin
 // whose namespace it is — its tombstone — or, when no plugin owns that
 // namespace at all, every drop that has no name (a folder whose name is not
-// a plugin's). A name outside `plugins.`, or under a plugin that loaded,
+// a plugin's). A name outside every plugin scope, or under a plugin that loaded,
 // belongs to no drop.
 export function dropsOwning(
   layer: PluginLayer,
@@ -598,7 +623,7 @@ function fragmentOf(
         path: key,
         message:
           key === "plugin"
-            ? `a plugin definition does not name itself: its name is its folder's ("${ns}") — remove "plugin"`
+            ? `a plugin definition does not name itself: its name is its folder's ("${path.basename(path.dirname(file))}") — remove "plugin"`
             : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`,
       });
     }
@@ -641,7 +666,7 @@ function fragmentOf(
   // [LAW:one-type-per-behavior] A plugin's variables are a user config's
   // `variables:`, parsed by the same validator, named under its namespace.
   const variables = validateVariables(ctx, "variables", json.variables);
-  // [LAW:one-source-of-truth] `.plugins.<plugin>.data` is the data file's,
+  // [LAW:one-source-of-truth] `.<ns>.data` is the data file's,
   // whether or not `data` is declared.
   for (const [table, names] of [
     ["variables", Object.keys(variables)],
@@ -655,12 +680,12 @@ function fragmentOf(
     }
   }
   // [LAW:one-source-of-truth] A source's name is its variable's: one name
-  // under `plugins.<plugin>.` is one declaration.
+  // under `<ns>.` is one declaration.
   for (const name of Object.keys(sources)) {
     if (Object.hasOwn(variables, name)) {
       issues.push({
         path: `sources.${name}`,
-        message: `source "${name}" and variable "${name}" are one name (.${PLUGIN_NS}${ns}.${name}): give one of them another name`,
+        message: `source "${name}" and variable "${name}" are one name (.${ns}.${name}): give one of them another name`,
       });
     }
   }
@@ -745,7 +770,7 @@ function prefixed<T>(
   decls: Readonly<Record<string, T>>,
 ): Record<string, T> {
   return Object.fromEntries(
-    Object.entries(decls).map(([name, d]) => [`${PLUGIN_NS}${ns}.${name}`, d]),
+    Object.entries(decls).map(([name, d]) => [`${ns}.${name}`, d]),
   );
 }
 
@@ -755,11 +780,11 @@ function prefixed<T>(
 // with a session key the user's file or another plugin declares (a kind clash
 // there would fail the whole load, not drop the plugin) nor write one the bar
 // owns (`edit.mode`, `candybar.tab`). The author writes the bare key on both
-// sides and the two meet under `plugins.<ns>.`; a `set` outside the namespace is
+// sides and the two meet under `<ns>.`; a `set` outside the namespace is
 // unrepresentable, not refused. A `persist`'s or `reset`'s target is a path in
 // the user's config file, not a session key, and is left as written.
 function keyUnder(ns: string, key: string): string {
-  return `${PLUGIN_NS}${ns}.${key}`;
+  return `${ns}.${key}`;
 }
 
 function stateKeyUnder(ns: string, decl: VariableDecl): VariableDecl {
@@ -809,7 +834,7 @@ function setKeysUnder(
   );
 }
 
-// A source's name is one identifier, like a plugin's: `plugins.<plugin>.<source>`
+// A source's name is one identifier, like a plugin's: `<scope>.<plugin>.<source>`
 // is then its full name and its payload path.
 const SOURCE_NAME = PLUGIN_NAME;
 
@@ -851,7 +876,7 @@ function sourcesOf(
     if (!SOURCE_NAME.test(name)) {
       issues.push({
         path: at,
-        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .${PLUGIN_NS}<plugin>.${name})`,
+        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .<scope>.<plugin>.${name})`,
       });
       continue;
     }
@@ -890,7 +915,7 @@ function requireOneSourcePerFile(
   const issues = [...readers]
     .filter(([, names]) => names.length > 1 && names.some(owned))
     .map(([read, names]) => ({
-      path: `sources.${names.find(owned)!.slice(`${PLUGIN_NS}${plugin}.`.length)}`,
+      path: `sources.${names.find(owned)!.slice(`${plugin}.`.length)}`,
       message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read}: a session's file is one document, read by one source`,
     }));
   if (issues.length > 0) throw new ConfigError(file, issues);

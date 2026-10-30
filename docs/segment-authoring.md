@@ -809,7 +809,8 @@ What the definition can say, and what follows from it:
   `description`), and in templates, which is why the segment above calls
   `{{ template "plugins.deploy.state" }}`. A plugin replaces, whole, any
   plugin of its name beneath it (a listed one replaces an installed one);
-  listing one name twice is refused.
+  listing one name twice is refused. A repository's own plugins sit under
+  `repo.` instead (see below), so they never replace yours.
 - **The data is `.plugins.<plugin>.data`.** `data` is optional; a
   definition without it has no data variable. It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
@@ -1031,13 +1032,19 @@ because it sits in a plugin root:
   `/opt/homebrew/share`);
 - `<repo>/.cc-candybar/plugins/<name>/` — a repository's own, there only in
   sessions working in that repo, once the user has approved the repository
-  in the bar (as its `.cc-candybar.json5` is).
+  in the bar (as its `.cc-candybar.json5` is). Its plugins are named under
+  `repo.`, not `plugins.`: a repo's `lit` folder declares `repo.lit.ticket`,
+  read as `.repo.lit.data` and `.repo.lit.<source>`, beside an installed
+  `lit` whose names stay `plugins.lit.*`. Both load side by side, and a name
+  missing from one is never looked up in the other. A plugin a repository's
+  `.cc-candybar.json5` lists is a `repo.` plugin too.
 
 A plugin is a folder: a file sitting directly in a root is a drop naming
 where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A
 `data: { checkout }` path stays inside the checkout — an absolute path, `~`
-or a `..` that leaves it is refused. A nearer root replaces a farther one's plugin of the same name (repo over
-user over package manager). An installed plugin's segments are in the
+or a `..` that leaves it is refused. The user's root replaces a package
+manager's plugin of the same name; a repository's plugins replace nothing,
+since they live under `repo.`. An installed plugin's segments are in the
 add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads
 the bar.
@@ -1056,6 +1063,11 @@ id the user's bar holds (a bare placement's id is its segment's name):
   insert: [{ seg: "lit", after: "model" }],
 }
 ```
+
+A segment of the repository's own plugin is inserted by its `repo.` name —
+`insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.phase" }]` — so it
+draws beside the user's placements of an installed plugin of the same name
+rather than replacing them.
 
 Here the file stands alone, so the row it inserts into is its own. In a
 repository, leave `root` out and the cell lands in the user's row. Each
