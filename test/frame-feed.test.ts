@@ -73,15 +73,17 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     // Runs inside the next render, once.
     duringRender: null as (() => void) | null,
     pins: new Map<string, number>(),
+    // The frames whose copy clicks were recorded as delivered.
+    delivered: [] as string[],
   };
-  const frameOf = (req: string): FeedFrame =>
-    opts.fails === true
-      ? failedFrame(req)
-      : barFrame(
-          `${req}#${state.motion === "still" ? state.n : ++state.n}`,
-          state.motion !== "still",
-          state.handoff,
-        );
+  const frameOf = (req: string): FeedFrame => {
+    if (opts.fails === true) return failedFrame(req);
+    const output = `${req}#${state.motion === "still" ? state.n : ++state.n}`;
+    return {
+      ...barFrame(output, state.motion !== "still", state.handoff),
+      delivered: () => state.delivered.push(output),
+    };
+  };
   const changes = new Map<string, () => void>();
   const log: string[] = [];
   const ledger = new RefreshLedger();
@@ -146,6 +148,7 @@ function barFrame(
     statusline: { ok: true, output: handoff ?? output },
     moves,
     evaluated: EVALUATED,
+    delivered: () => {},
     failure: null,
   };
 }
@@ -158,6 +161,7 @@ function failedFrame(req: string): FeedFrame {
     statusline: resp,
     moves: false,
     evaluated: 0,
+    delivered: () => {},
     failure: { level: "error", line: `frame ${req} threw` },
   };
 }
@@ -246,6 +250,17 @@ test("a still bar is drawn a still period apart and pushed only when it changes"
   changes.get("s")!();
   await sleep(50);
   expect(got).toEqual(["bar#0", "bar#1"]);
+  close();
+});
+
+test("a frame's copies are recorded once it goes out to a follower, never while none follows", async () => {
+  const { feeds, note, state } = harness({ motion: "still" });
+  note("s", "bar");
+  await sleep(50);
+  expect(state.delivered).toEqual([]);
+  const close = feeds.subscribe("s", sub(() => {}));
+  await sleep(100);
+  expect(state.delivered).toEqual(["bar#0"]);
   close();
 });
 

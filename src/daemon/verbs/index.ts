@@ -30,7 +30,7 @@ import {
   type DisclosureNest,
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
-import type { LaneSwitches } from "../../config/lanes";
+import type { Drawing, LaneSwitches } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -117,6 +117,7 @@ import {
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
   type EvaluatedRun,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
@@ -241,6 +242,13 @@ export interface DaemonContext {
   readonly views: {
     readonly follow: (sessionId: string, origin: RenderOrigin) => void;
   };
+  // What the diagnostic the frame renderer `by` last delivered for the
+  // session listed under `key` copies; undefined when it lists none under it.
+  readonly diagnosticCopy: (
+    sessionId: string,
+    by: Drawing["by"],
+    key: string,
+  ) => string | undefined;
 }
 
 export interface VerbContext extends DaemonContext {
@@ -338,6 +346,34 @@ function pbcopy(text: string, ctx: VerbContext): void {
 }
 
 const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
+
+// [LAW:parse-dont-validate] The renderer a copy click names: the surface it
+// was drawn on, whose last frame it copies from.
+const DRAWERS: ReadonlySet<string> = new Set<Drawing["by"]>([
+  "request",
+  "feed",
+]);
+function requireDrawer(by: string): Drawing["by"] {
+  if (!DRAWERS.has(by))
+    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
+  return by as Drawing["by"];
+}
+
+// [LAW:no-silent-failure] A key the frame the click came from does not list
+// (the message fixed since, or the session never drawn here) is refused,
+// never a clipboard silently left as it was.
+const copyDiagnostic: VerbHandler = (value, ctx) => {
+  const [sessionId = "", by = "", key = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
+  const sid = requireSessionId(sessionId);
+  const text = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  if (text === undefined)
+    throw new BadVerbArgs(
+      `that message is no longer listed in session ${sid}'s diagnostics — open ⚠ again and copy from there`,
+    );
+  pbcopy(text, ctx);
+};
 
 const openVscode: VerbHandler = (value, ctx) =>
   clickLaunch(
@@ -1669,6 +1705,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SLASH, slash],
   [VERB_RUN, run],
   [VERB_REPO_CONFIG, repoConfig],
+  [VERB_COPY_DIAGNOSTIC, copyDiagnostic],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1694,6 +1731,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1724,6 +1762,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_LOAD_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the

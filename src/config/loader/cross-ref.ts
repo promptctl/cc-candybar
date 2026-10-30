@@ -82,12 +82,18 @@ import {
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
-import { otherScopeHint } from "./plugin-scope.js";
+import {
+  otherScopeHint,
+  ownedBy,
+  pluginNs,
+  type SegmentPresence,
+} from "./plugin-scope.js";
 import {
   retiredReadHint,
   retiredVariableMessage,
 } from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
+import { reportable } from "./unplaced.js";
 import { type ValidateCtx } from "./validate-core.js";
 import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
@@ -187,13 +193,31 @@ export function authoredPlacement(
 }
 
 // The message a placement of an undeclared segment is reported with, at the
-// layout key that places it.
+// layout key that places it. One under a plugin that renders here names the
+// file that won and what it declares, so the fix is in reach of the error.
 export const unplacedMessage = (
   layoutKey: string,
   name: string,
-  segments: Readonly<Record<string, unknown>>,
+  segments: DslConfig["segments"],
+  presence: SegmentPresence,
 ): string =>
-  `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+  presence.kind === "plugin"
+    ? `${layoutKey} entry "${name}" does not match any segment plugin "${pluginNs(presence.definition)}" declares — the plugin loaded from ${presence.definition.path} declares: ${pluginDeclares(pluginNs(presence.definition), segments)}${missingSegmentHint(name, segments)}`
+    : `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+
+// Each segment a plugin's namespace declares, sorted, with the settings a
+// placement may set on it (the theme and effect every placement has go
+// unsaid).
+function pluginDeclares(ns: string, segments: DslConfig["segments"]): string {
+  const owned = Object.keys(segments).filter(ownedBy(ns)).sort();
+  if (owned.length === 0) return "no segments";
+  return owned
+    .map((seg) => {
+      const settings = Object.keys(segments[seg]!.settings ?? {});
+      return `${seg} (${settings.length === 0 ? "no settings" : `settings: ${settings.join(", ")}`})`;
+    })
+    .join(", ");
+}
 
 // Why a placed name is missing, when the config can say: a built-in segment
 // renamed, or a plugin segment declared under the other plugin scope.
@@ -211,6 +235,9 @@ export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
   authored: RawDslConfig,
+  // [LAW:single-enforcer] What a placed name is in the session the config
+  // renders for (unplaced.ts presenceOf).
+  presence: (name: string) => SegmentPresence,
 ): void {
   // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
   // block (a user's default may be a bundled style — same reason every cross-ref
@@ -377,7 +404,8 @@ export function validateCrossReferences(
     // no id: one bad name costs its own cell and is reported as a drop.
     const byId = new Map<string, SegmentNode[]>();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment" || !declared(node.name)) continue;
+      if (node.kind !== "segment" || presence(node.name).kind !== "declared")
+        continue;
       const id = placementId(node);
       byId.set(id, [...(byId.get(id) ?? []), node]);
     }
@@ -452,9 +480,6 @@ export function validateCrossReferences(
   // wrote that names no declared segment. The undeclared names reported, so
   // each is told once.
   const reported = new Set<string>();
-  const declared = (name: string): boolean =>
-    isSettingsAnchor(name) ||
-    Object.prototype.hasOwnProperty.call(cfg.segments, name);
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root)
@@ -497,11 +522,12 @@ export function validateCrossReferences(
         }
         continue;
       }
-      if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+      const placed = presence(node.name);
+      if (reportable(placed)) {
         reported.add(node.name);
         ctx.unplaced.push({
           path,
-          message: unplacedMessage(layoutKey, node.name, cfg.segments),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed),
           line,
         });
       }
@@ -534,19 +560,19 @@ export function validateCrossReferences(
   // stands when no file wrote it.
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
-      if (
-        node.kind !== "segment" ||
-        isSettingsAnchor(node.name) ||
-        Object.prototype.hasOwnProperty.call(cfg.segments, node.name) ||
-        reported.has(node.name)
-      ) {
-        continue;
-      }
+      if (node.kind !== "segment" || reported.has(node.name)) continue;
+      const placed = presence(node.name);
+      if (!reportable(placed)) continue;
       reported.add(node.name);
       ctx.inherited.push({
         name: node.name,
         path: key,
-        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${missingSegmentHint(node.name, cfg.segments)}`,
+        message: unplacedMessage(
+          `${key} inherits from a config layer below whose`,
+          node.name,
+          cfg.segments,
+          placed,
+        ),
         line: findKeyLine(ctx.source, key.split(".")),
       });
     }

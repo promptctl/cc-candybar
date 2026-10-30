@@ -19,7 +19,7 @@ import { effectsUrl, VERB_COPY, VERB_RESET_CONFIG } from "../click/wire.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
-  type DiagnosticMessage,
+  type ChannelMessage,
 } from "../render/diagnostics.js";
 
 // The lanes the statusline hands the bar to: switched on, drawing it
@@ -38,13 +38,14 @@ export function handedOffTo(
 export const HANDOFF_BUTTON = "[⟲ draw it here]";
 
 // The handoff line for `lanes` (non-empty): the sentence, which copies itself
-// like every diagnostic line, then the button. The button resets each lane's
+// (it is in no diagnostic list, so no key names it, and it is one short
+// sentence), then the button. The button resets each lane's
 // setting at every layer (the settings menu's ↺ for it); what the lane runs
 // follows the switch (src/daemon/lane-setup.ts), so a pane it opened closes.
 export function laneHandoff(
   sessionId: string,
   lanes: readonly [Lane, ...Lane[]],
-): DiagnosticMessage {
+): ChannelMessage {
   const where = lanes.map((lane) => LANES[lane].elsewhere).join(" and ");
   const message = `the bar is drawn in ${where}`;
   const reset = effectsUrl([
@@ -55,8 +56,6 @@ export function laneHandoff(
   ]);
   return {
     severity: HANDOFF_SEVERITY,
-    about: "lane-handoff",
-    message,
     lines: [
       [
         diagnosticSpan(

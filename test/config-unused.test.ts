@@ -18,15 +18,26 @@ function unusedIn(source: string): string[] {
   // The file must be one the bar would load: an unused name is an advisory
   // about a config that works, never a second spelling of a load error.
   validateConfig(loaded, "/cfg.json5");
-  return unusedDeclarations(loaded.raw, loaded.config).map(
-    (u) => `${u.kind} ${u.name}`,
-  );
+  return unusedDeclarations(
+    loaded.raw,
+    loaded.config,
+    (loaded.raw.insert ?? []).map((cell) => cell.seg),
+  ).map((u) => `${u.kind} ${u.name}`);
 }
 
 describe("unusedDeclarations", () => {
   test("no file, and an empty file, declare nothing unused", () => {
-    expect(unusedDeclarations({}, DEFAULT_DSL_CONFIG)).toEqual([]);
+    expect(unusedDeclarations({}, DEFAULT_DSL_CONFIG, [])).toEqual([]);
     expect(unusedIn("{}")).toEqual([]);
+  });
+
+  test("a segment only an insert entry places is used, even where its anchor's plugin is absent", () => {
+    expect(
+      unusedIn(`{
+        segments: { extra: { template: "extra" } },
+        insert: [{ seg: "extra", after: "repo.lit.ticket" }],
+      }`),
+    ).toEqual([]);
   });
 
   test("each kind of declaration nothing uses is named, in file order", () => {
