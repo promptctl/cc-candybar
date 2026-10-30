@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-502",
+      "ref": "refs/pull/502/merge",
+      "sha": "e675b83b3fab30edc3c6e925bd01ca87d7d4d8b2",
+      "timestamp": "2026-10-30T19:38:12.066Z",
+      "commits": [
+        {
+          "sha": "e675b83b3fab30edc3c6e925bd01ca87d7d4d8b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T19:37:24Z",
+          "message": "Merge 6519e75718c86dd3b92e53e9a62ddf5732cd14cc into 38412c68e7a12dce2557dc35449033e18226bae2\n"
+        },
+        {
+          "sha": "6519e75718c86dd3b92e53e9a62ddf5732cd14cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:34:58-06:00",
+          "message": "fix(test): the log line is spelled once, and a timed-out click's event waits on the click's reply budget (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "e691580eda5df3e82de7c56de251eb2dbf0fa8cf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:29:11-06:00",
+          "message": "fix(test): a log read judges only whole lines, the reporter pairs each failure with its own block, and the click stand-in leaves no timer behind (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "8e7c05067bbfba88178b11731c45eb3fde3db427",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:34:40-06:00",
+          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "7799783b7d10a2b9ffeb83747a3eb0ee59fee107",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:22:49-06:00",
+          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-506",
       "ref": "refs/pull/506/merge",
       "sha": "57e2f9e1be65e7b9d9b67c23d807145bfe6f717a",
@@ -70,49 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T13:03:55-06:00",
           "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk) (#507)\n\n* fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n\n* fix(diagnostics): the config watch retries a refused directory, and its warning is its own (candybar-plugins-vf6g.8uk)\n\nA kept config watch now retries its deaf directories on every load but a\nfailed window, as a watch_file path does, so the warning clears once the OS\nwill watch the directory again instead of standing until a restart. The\nwatch_file entry holds the derived and held watch as one value, the same pair\nthe cache entry holds; the watch's warning has its own type and reads as the\nconfig watch's, since its targets include plugin folders.\n\n* fix(watchers): follow retries a kept watch's deaf directories by one rule, for every consumer (candybar-plugins-vf6g.8uk)\n\nThe registry's follow takes what the watch heard and reopens deaf\ndirectories unless it answers a failed window, so config, plugin sources\nand git share the rule, and an answers-watch failure no longer retries.\nA repeated identical refusal logs once. The link-chain fault no longer\nprints its path twice. The e2e heal re-applies its write until heard.\n\n* fix(watchers): git and config follow only their own watch's failed window (candybar-plugins-vf6g.8uk)\n\nA git pass follows its watch with the failed window it heard since the\nlast pass, so a recurring handle error no longer loops reopen and pass.\nA config entry ignores the answers watch's failure, which says nothing\nabout its own directories."
-        }
-      ]
-    },
-    {
-      "version": "pr-502",
-      "ref": "refs/pull/502/merge",
-      "sha": "829558625c4940ab2721bf4e47fe786bb2e7a511",
-      "timestamp": "2026-10-30T17:38:33.969Z",
-      "commits": [
-        {
-          "sha": "829558625c4940ab2721bf4e47fe786bb2e7a511",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T17:35:34Z",
-          "message": "Merge 09de850a4468b76bae34c6ff9a7d06c4e74d3936 into 46745100f446a07971644e712c1ae93efc7f4a04\n"
-        },
-        {
-          "sha": "09de850a4468b76bae34c6ff9a7d06c4e74d3936",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:34:58-06:00",
-          "message": "fix(test): the log line is spelled once, and a timed-out click's event waits on the click's reply budget (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "c2b120555de66fffc2363071da1ba3f3f56611fb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:29:11-06:00",
-          "message": "fix(test): a log read judges only whole lines, the reporter pairs each failure with its own block, and the click stand-in leaves no timer behind (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "46d76d848e3ce4a969e3fd057d00ef89f3360d74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:34:40-06:00",
-          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "ee463d15147ef90e47603f0937c0fc5e3af5367f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:22:49-06:00",
-          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
         }
       ]
     }
