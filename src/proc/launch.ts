@@ -945,15 +945,15 @@ export function readJobEnd(status: string): JobEnd | null {
 
 // Whether anything of the job's process group is still running. The group
 // outlives its leader while the program runs, so a sh killed on its own does
-// not read as an ended job. EPERM is a group that exists under another uid.
+// not read as an ended job. A job runs as its launcher's user, so a group the
+// launcher may not signal (EPERM) is someone else's under a recycled id.
 export function jobGroupAlive(pid: number): boolean {
   try {
     process.kill(-pid, 0);
     return true;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ESRCH") return false;
-    if (code === "EPERM") return true;
+    if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
   }
 }

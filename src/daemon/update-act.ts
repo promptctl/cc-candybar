@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -35,12 +36,15 @@ export function actsDir(stateDir: string, entryPath: string): string {
 }
 
 // What `act()` started: the identity of the newer thing it applies (the
-// notice names a failure against it), the job's process identity, and when the
-// act is overdue.
+// notice names a failure against it), the job's process identity, when it
+// started, and when it is overdue.
+// [LAW:types-are-the-program] The start time is required: a job no fingerprint
+// can tell from a stranger holding its pid is never started.
 export interface ActRecord {
   readonly identity: string;
   readonly pid: number;
-  readonly startTime: string | null;
+  readonly startTime: string;
+  readonly started: number;
   readonly deadline: number;
 }
 
@@ -146,18 +150,32 @@ function lastLineOf(file: string): string | null {
   }
 }
 
-// Whether the job's group is the one the record names. A pid is never reused
-// while a process group of that id exists, so a live group whose leader has
-// gone is still the job's; only a live leader can be someone else's (a
-// reboot recycled the pid), and its start time tells.
+// When this boot began, by the wall clock the record's start is written in.
+const bootedAt = (): number => Date.now() - os.uptime() * 1000;
+
+// Whether the job's group is the one the record names. A job started before
+// this boot is gone, whatever holds its pid now. A live leader whose start
+// time differs is someone else's. A live group whose leader has gone has no
+// start time to tell by, and is taken as the job's: the sh leads it, so the
+// program outliving it is the likelier story.
 export function isRecordedJob(
   record: ActRecord,
   read: (pid: number) => StartTimeRead = readStartTime,
+  boot: number = bootedAt(),
 ): boolean {
-  if (!jobGroupAlive(record.pid)) return false;
-  if (record.startTime === null) return true;
+  if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
   const leader = read(record.pid);
   return leader.kind === "unavailable" || leader.token === record.startTime;
+}
+
+// The record of an act, or null when the act is gone.
+function readRecord(actDir: string): ActRecord | null {
+  try {
+    return JSON.parse(fs.readFileSync(recordOf(actDir), "utf8")) as ActRecord;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
 }
 
 export interface ActReader {
@@ -165,31 +183,75 @@ export interface ActReader {
   read(): ActFacts | null;
 }
 
+// The newest act as one reader knows it. `ours` turns false for good once the
+// group reads gone: a gone group never comes back as the job's, though its pid
+// may come back as someone else's. `final` holds the facts once nothing about
+// the act can change: a verdict is never rewritten, and a gone job writes none.
+interface Known {
+  readonly act: number;
+  readonly record: ActRecord;
+  ours: boolean;
+  final: ActFacts | null;
+}
+
 // [LAW:effects-at-boundaries] The edge that reads acts. Who the recorded job
 // is gets settled by a fingerprint once per act (a `ps`); after that each read
-// asks only whether its group is alive.
+// asks only whether its group is alive and whether it left a verdict, and an
+// act that ended is not read again.
 export function makeActReader(
   dir: string,
   read: (pid: number) => StartTimeRead = readStartTime,
 ): ActReader {
-  const ours = new Map<number, boolean>();
+  let known: Known | null = null;
+
+  // The act's facts, or null when the act vanished under the read.
+  function factsOf(act: number): ActFacts | null {
+    const actDir = path.join(dir, String(act));
+    if (known?.act !== act) {
+      const record = readRecord(actDir);
+      if (record === null) return null;
+      known = { act, record, ours: isRecordedJob(record, read), final: null };
+    }
+    if (known.final !== null) return known.final;
+    known.ours = known.ours && jobGroupAlive(known.record.pid);
+    const files = filesOf(actDir);
+    const end = readJobEnd(files.status);
+    const lastLine =
+      end === null
+        ? null
+        : (lastLineOf(files.stderr) ?? lastLineOf(files.stdout));
+    // An act pruned after its record was read reads as an end it never had,
+    // so what was read stands only while the record still does.
+    if (!fs.existsSync(recordOf(actDir))) return null;
+    const facts = {
+      act,
+      record: known.record,
+      alive: known.ours,
+      end,
+      lastLine,
+    };
+    if (!facts.alive || end !== null) known.final = facts;
+    return facts;
+  }
+
   return {
     read() {
-      const act = actNumbers(dir).at(-1);
-      if (act === undefined) return null;
-      const actDir = path.join(dir, String(act));
-      const record = JSON.parse(
-        fs.readFileSync(recordOf(actDir), "utf8"),
-      ) as ActRecord;
-      const files = filesOf(actDir);
-      if (!ours.has(act)) ours.set(act, isRecordedJob(record, read));
-      const alive = ours.get(act)! && jobGroupAlive(record.pid);
-      const end = readJobEnd(files.status);
-      const lastLine =
-        end === null
-          ? null
-          : (lastLineOf(files.stderr) ?? lastLineOf(files.stdout));
-      return { act, record, alive, end, lastLine };
+      // An act vanishes only when a newer one's claim prunes it, so the
+      // listing after a vanish names a newer act. The same act twice is a
+      // numbered directory no claim made.
+      let vanished: number | null = null;
+      for (;;) {
+        const act = actNumbers(dir).at(-1);
+        if (act === undefined) return null;
+        if (act === vanished) {
+          throw new Error(
+            `${path.join(dir, String(act))}: an act with no record`,
+          );
+        }
+        const facts = factsOf(act);
+        if (facts !== null) return facts;
+        vanished = act;
+      }
     },
   };
 }
@@ -225,47 +287,56 @@ export function claimAct(
     fs.rmSync(staging, { recursive: true, force: true });
     throw new Error(`apply-update: ${job.error}`);
   }
-  const start = read(job.pid);
-  const record: ActRecord = {
-    identity,
-    pid: job.pid,
-    startTime: start.kind === "start" ? start.token : null,
-    deadline: now + timeoutMs,
-  };
-  fs.writeFileSync(recordOf(staging), JSON.stringify(record));
+  // [LAW:single-enforcer] The gate opens on a standing claim and on nothing
+  // else: every other way out, a throw included, shuts it unopened.
+  let stood = false;
   try {
-    fs.renameSync(staging, actDir);
-  } catch (err) {
-    job.withdraw();
-    fs.rmSync(staging, { recursive: true, force: true });
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOTEMPTY" || code === "EEXIST") {
-      return { ok: false, reason: "another act claimed this bundle first" };
+    const start = read(job.pid);
+    if (start.kind !== "start") {
+      throw new Error(
+        `apply-update: the act's job has no fingerprint: ${start.detail}`,
+      );
     }
-    throw err;
+    const record: ActRecord = {
+      identity,
+      pid: job.pid,
+      startTime: start.token,
+      started: now,
+      deadline: now + timeoutMs,
+    };
+    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
+    try {
+      fs.renameSync(staging, actDir);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOTEMPTY" || code === "EEXIST") return CLAIMED_FIRST;
+      throw err;
+    }
+    if (actNumbers(dir).some((n) => n > act)) {
+      fs.rmSync(actDir, { recursive: true, force: true });
+      return CLAIMED_FIRST;
+    }
+    stood = true;
+  } finally {
+    if (stood) job.release();
+    else job.withdraw();
+    fs.rmSync(staging, { recursive: true, force: true });
   }
-  const acts = actNumbers(dir);
-  if (acts.some((n) => n > act)) {
-    job.withdraw();
-    fs.rmSync(actDir, { recursive: true, force: true });
-    return { ok: false, reason: "another act claimed this bundle first" };
-  }
-  job.release();
-  for (const n of acts.filter((n) => n < act)) {
+  for (const n of actNumbers(dir).filter((n) => n < act)) {
     fs.rmSync(path.join(dir, String(n)), { recursive: true, force: true });
   }
   return { ok: true, act };
 }
 
-// Ends an act past its deadline with a `timeout` verdict, once its group is
-// proven the recorded job afresh (the cached proof may predate a reboot).
-// False when the job's own verdict landed first.
-export function endOverdue(
-  dir: string,
-  facts: ActFacts,
-  read: (pid: number) => StartTimeRead = readStartTime,
-): boolean {
-  if (!isRecordedJob(facts.record, read)) return false;
+const CLAIMED_FIRST: Claim = {
+  ok: false,
+  reason: "another act claimed this bundle first",
+};
+
+// Ends an act its reader saw running past its deadline with a `timeout`
+// verdict: a running read already proved the group the recorded job. False
+// when the job's own verdict landed first.
+export function endOverdue(dir: string, facts: ActFacts): boolean {
   const status = filesOf(path.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
 }

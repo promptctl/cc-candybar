@@ -16,6 +16,7 @@ import {
 import {
   actsDir,
   claimAct,
+  isRecordedJob,
   judgeAct,
   makeActReader,
   type ActFacts,
@@ -33,7 +34,8 @@ afterEach(() => fs.rmSync(scratch, { recursive: true, force: true }));
 const RECORD: ActRecord = {
   identity: "id-1",
   pid: 1,
-  startTime: null,
+  startTime: "t",
+  started: 0,
   deadline: 0,
 };
 const facts = (over: Partial<ActFacts>): ActFacts => ({
@@ -45,7 +47,7 @@ const facts = (over: Partial<ActFacts>): ActFacts => ({
   ...over,
 });
 // The fingerprint is not under test here: every leader reads as the recorded one.
-const sameLeader = (): StartTimeRead => ({ kind: "unavailable", detail: "-" });
+const sameLeader = (): StartTimeRead => ({ kind: "start", token: "t" });
 
 describe("judgeAct: the act as every daemon sees it", () => {
   test.each([
@@ -216,7 +218,15 @@ describe("claimAct: one act per bundle", () => {
 
   test("a claim starts the job, and every daemon reading the bundle sees it running, then its verdict", async () => {
     const dir = dirOf();
-    const claim = claimAct(dir, null, "id-1", SLEEP, 60_000, 0, sameLeader);
+    const claim = claimAct(
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
     expect(claim).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
     const running = reader.read()!;
@@ -238,7 +248,15 @@ describe("claimAct: one act per bundle", () => {
 
   test("a claim onto an act that exists loses, and its program never runs", async () => {
     const dir = dirOf();
-    const first = claimAct(dir, null, "id-1", SLEEP, 60_000, 0, sameLeader);
+    const first = claimAct(
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
     expect(first.ok).toBe(true);
     ended.push(makeActReader(dir, sameLeader).read()!.record.pid);
     // A second daemon that judged the bundle idle from the same empty read.
@@ -248,7 +266,7 @@ describe("claimAct: one act per bundle", () => {
       "id-1",
       TOUCH(marker()),
       60_000,
-      0,
+      Date.now(),
       sameLeader,
     );
     expect(second).toEqual({
@@ -274,7 +292,7 @@ describe("claimAct: one act per bundle", () => {
       "id-1",
       TOUCH(marker()),
       60_000,
-      0,
+      Date.now(),
       sameLeader,
     );
     expect(stale.ok).toBe(false);
@@ -286,7 +304,15 @@ describe("claimAct: one act per bundle", () => {
   test("a new act after an ended one takes the next number and removes the ended", async () => {
     const dir = dirOf();
     expect(
-      claimAct(dir, null, "id-1", TOUCH(marker()), 60_000, 0, sameLeader),
+      claimAct(
+        dir,
+        null,
+        "id-1",
+        TOUCH(marker()),
+        60_000,
+        Date.now(),
+        sameLeader,
+      ),
     ).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
     await until(
@@ -294,13 +320,74 @@ describe("claimAct: one act per bundle", () => {
       "the first act to succeed",
     );
     expect(
-      claimAct(dir, 1, "id-2", TOUCH(marker()), 60_000, 0, sameLeader),
+      claimAct(dir, 1, "id-2", TOUCH(marker()), 60_000, Date.now(), sameLeader),
     ).toEqual({ ok: true, act: 2 });
     expect(fs.readdirSync(dir)).toEqual(["2"]);
     await until(
       () => judgeAct(reader.read()).kind === "succeeded",
       "the second act to succeed",
     );
+  });
+
+  test("a claim whose job has no fingerprint throws, its program never runs, and it leaves nothing", async () => {
+    const dir = dirOf();
+    const unreadable = (): StartTimeRead => ({
+      kind: "unavailable",
+      detail: "ps timeout",
+    });
+    expect(() =>
+      claimAct(
+        dir,
+        null,
+        "id-1",
+        TOUCH(marker()),
+        60_000,
+        Date.now(),
+        unreadable,
+      ),
+    ).toThrow(/no fingerprint: ps timeout/);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(fs.existsSync(marker())).toBe(false);
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  test("a job started before this boot is not the recorded one, whatever holds its pid", () => {
+    const dir = dirOf();
+    claimAct(dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
+    const { record } = makeActReader(dir, sameLeader).read()!;
+    ended.push(record.pid);
+    expect(isRecordedJob(record, sameLeader)).toBe(true);
+    expect(isRecordedJob({ ...record, started: 0 }, sameLeader)).toBe(false);
+  });
+
+  test("an act pruned under a read gives way to the newer act that pruned it", () => {
+    const dir = dirOf();
+    const write = (act: number, status: string) => {
+      fs.mkdirSync(path.join(dir, String(act)), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, String(act), "record.json"),
+        JSON.stringify({ ...RECORD, identity: `id-${act}` }),
+      );
+      fs.writeFileSync(path.join(dir, String(act), "status"), status);
+    };
+    write(1, "exit 0\n");
+    const real = fs.readFileSync;
+    const spy = jest.spyOn(fs, "readFileSync").mockImplementation(((
+      file: fs.PathOrFileDescriptor,
+      ...rest: never[]
+    ) => {
+      // Another daemon claims act 2 and prunes act 1 between the listing
+      // and the read of act 1's record.
+      if (String(file).endsWith(path.join("1", "record.json"))) {
+        spy.mockRestore();
+        write(2, "exit 1\n");
+        fs.rmSync(path.join(dir, "1"), { recursive: true });
+      }
+      return real(file, ...rest);
+    }) as typeof fs.readFileSync);
+    const facts = makeActReader(dir, sameLeader).read()!;
+    expect(facts.act).toBe(2);
+    expect(facts.record.identity).toBe("id-2");
   });
 
   test("acts are kept per bundle", () => {
