@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-505",
+      "ref": "refs/pull/505/merge",
+      "sha": "475749f513c2607e7920b93444d9c30ffec22fbf",
+      "timestamp": "2026-10-30T17:58:26.795Z",
+      "commits": [
+        {
+          "sha": "475749f513c2607e7920b93444d9c30ffec22fbf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:57:42Z",
+          "message": "Merge 9907893a6175e1fc0821391c0124d46b3729939c into 60d9da3ab14bbf0a4f835357c392667f7dc1a884\n"
+        },
+        {
+          "sha": "9907893a6175e1fc0821391c0124d46b3729939c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:53:27-06:00",
+          "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-504",
       "ref": "refs/pull/504/merge",
       "sha": "74f87925162bafa16851607059eb4199b7450e12",
