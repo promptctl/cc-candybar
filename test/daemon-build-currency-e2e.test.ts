@@ -20,7 +20,11 @@ import {
   UPDATE_NOTICE_FIELD,
   UPDATE_NOTICE_SESSION_KEY,
 } from "../src/daemon/update-notice";
-import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_APPLY_UPDATE,
+  VERB_SET_STATE,
+} from "../src/click/wire";
 import {
   click,
   linkUrls,
@@ -123,7 +127,10 @@ function scratchLayout(source: Source): Scratch {
   const src = path.join(root, "src");
   if (source === "edited") {
     fs.mkdirSync(src);
-    fs.writeFileSync(path.join(src, "edited.ts"), "export const edited = true;\n");
+    fs.writeFileSync(
+      path.join(src, "edited.ts"),
+      "export const edited = true;\n",
+    );
   }
   if (source === "real-with-bumped-mtimes") {
     fs.cpSync(REPO_SRC, src, { recursive: true });
@@ -166,9 +173,12 @@ async function withDaemon<T>(
 
 const affordance = (raw: string, verb: string, key?: string): string => {
   const url = findUrl(linkUrls(raw), (effects) =>
-    effects.some((e) => e.verb === verb && (key === undefined || e.args[1] === key)),
+    effects.some(
+      (e) => e.verb === verb && (key === undefined || e.args[1] === key),
+    ),
   );
-  if (url === undefined) throw new Error(`no rendered affordance for ${verb} ${key ?? ""}`);
+  if (url === undefined)
+    throw new Error(`no rendered affordance for ${verb} ${key ?? ""}`);
   return url;
 };
 
@@ -199,7 +209,10 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     await withDaemon(s, {}, async (sock) => {
       const before = noticeOf(await pagesOf(sock, "bc-dismiss", s.projectDir));
       expect(before).toBeDefined();
-      await click(sock, affordance(before!.rendered, "set-state", UPDATE_DISMISSED_KEY));
+      await click(
+        sock,
+        affordance(before!.rendered, "set-state", UPDATE_DISMISSED_KEY),
+      );
       const after = await pagesOf(sock, "bc-dismiss", s.projectDir);
       expect(hasNotice(after)).toBe(false);
       expect(after[0]!.text).toContain("config-extension collision");
@@ -214,8 +227,13 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     await withDaemon(s, { XDG_CONFIG_HOME: xdg }, async (sock) => {
       const before = noticeOf(await pagesOf(sock, "bc-disable", s.projectDir));
       expect(before).toBeDefined();
-      await click(sock, affordance(before!.rendered, "set-config", UPDATE_NOTICE_FIELD));
-      expect(fs.readFileSync(userFile, "utf8")).toMatch(/updateNotice:\s*false/);
+      await click(
+        sock,
+        affordance(before!.rendered, "set-config", UPDATE_NOTICE_FIELD),
+      );
+      expect(fs.readFileSync(userFile, "utf8")).toMatch(
+        /updateNotice:\s*false/,
+      );
       await pagesUntil(
         sock,
         "bc-disable",
@@ -231,7 +249,9 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
   test("[disable] hides the notice over a session that switched it on from the menu", async () => {
     const s = scratchLayout("edited");
     await withDaemon(s, {}, async (sock) => {
-      const before = noticeOf(await pagesOf(sock, "bc-disable-pick", s.projectDir))!;
+      const before = noticeOf(
+        await pagesOf(sock, "bc-disable-pick", s.projectDir),
+      )!;
       await click(
         sock,
         effectsUrl([
@@ -241,7 +261,10 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
           },
         ]),
       );
-      await click(sock, affordance(before.rendered, "set-config", UPDATE_NOTICE_FIELD));
+      await click(
+        sock,
+        affordance(before.rendered, "set-config", UPDATE_NOTICE_FIELD),
+      );
       await pagesUntil(
         sock,
         "bc-disable-pick",
@@ -265,7 +288,9 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
         "the rebuild failure",
         20_000,
       );
-      expect(noticeOf(failed)!.text).toMatch(/rebuild failed: non-zero \(exit \d+\): \S/);
+      expect(noticeOf(failed)!.text).toMatch(
+        /rebuild failed: non-zero \(exit \d+\): \S/,
+      );
       expect(noticeOf(failed)!.text).toMatch(SOURCE_ROW);
     });
   });
@@ -283,25 +308,158 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       { mode: 0o755 },
     );
     try {
-      await withDaemon(s, { PATH: `${binDir}:${process.env.PATH}` }, async (sock, daemon) => {
-        const before = noticeOf(await pagesOf(sock, "bc-rebuilt", s.projectDir))!;
-        await click(sock, affordance(before.rendered, "apply-update"));
-        // The rebuilt bundle is the binary watch's restart signal: `onApplied`
-        // samples it at once and the daemon exits 0 for the next client to
-        // respawn from the fresh code — no minute-long wait, no failure line.
-        const exited = await Promise.race([
-          waitForExit(daemon.child),
-          new Promise<"timeout">((resolve) => setTimeout(resolve, 20_000, "timeout").unref()),
-        ]);
-        expect(exited).toEqual({ code: 0, signal: null });
-        expect(JSON.parse(fs.readFileSync(record, "utf8"))).toEqual({
-          cwd: fs.realpathSync(s.root),
-          args: "build",
-        });
-      });
+      await withDaemon(
+        s,
+        { PATH: `${binDir}:${process.env.PATH}` },
+        async (sock, daemon) => {
+          const before = noticeOf(
+            await pagesOf(sock, "bc-rebuilt", s.projectDir),
+          )!;
+          await click(sock, affordance(before.rendered, "apply-update"));
+          // The rebuilt bundle is the binary watch's restart signal: `onApplied`
+          // samples it at once and the daemon exits 0 for the next client to
+          // respawn from the fresh code — no minute-long wait, no failure line.
+          const exited = await Promise.race([
+            waitForExit(daemon.child),
+            new Promise<"timeout">((resolve) =>
+              setTimeout(resolve, 20_000, "timeout").unref(),
+            ),
+          ]);
+          expect(exited).toEqual({ code: 0, signal: null });
+          expect(JSON.parse(fs.readFileSync(record, "utf8"))).toEqual({
+            cwd: fs.realpathSync(s.root),
+            args: "build",
+          });
+        },
+      );
     } finally {
       fs.rmSync(binDir, { recursive: true, force: true });
     }
+  });
+
+  // brandon-unfiled-3248.z676's done-when: the act is a job, not the daemon's
+  // child, so a daemon killed mid-act leaves it running; the next daemon reads
+  // it as running and refuses a second, and its verdict reaches whichever
+  // daemon is up when it lands.
+  describe("a daemon SIGKILLed mid-act", () => {
+    // A build tool stand-in, first on PATH: it waits for the test's gate and
+    // then does what a build does to a running daemon, rewriting the bundle it
+    // watches. It ends itself once the scratch checkout is gone, so a failed
+    // test leaves nothing behind: an act outlives every daemon by design.
+    function standIn(
+      s: Scratch,
+      then: string,
+    ): { binDir: string; gate: string; ran: string } {
+      const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
+      const gate = path.join(s.root, "gate");
+      const ran = path.join(binDir, "ran");
+      fs.writeFileSync(
+        path.join(binDir, "pnpm"),
+        [
+          "#!/bin/sh",
+          `while [ ! -e ${JSON.stringify(gate)} ]; do [ -d ${JSON.stringify(s.root)} ] || exit 1; sleep 0.1; done`,
+          `echo $$ > ${JSON.stringify(ran)}`,
+          then,
+          "",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+      return { binDir, gate, ran };
+    }
+
+    async function killedMidAct(
+      then: string,
+      afterGate: (
+        successor: RunningDaemon,
+        sock: string,
+        sid: string,
+        s: Scratch,
+      ) => Promise<void>,
+    ): Promise<{ ran: string }> {
+      const s = scratchLayout("edited");
+      const stub = standIn(s, then);
+      const {
+        env: isolated,
+        sockPath,
+        removeTmpDirs,
+      } = prepareIsolatedDaemonEnv("ccb-bc");
+      answerRepo(s.projectDir, "approved", isolated);
+      const env = { ...isolated, PATH: `${stub.binDir}:${process.env.PATH}` };
+      const bundle = builtBundle(path.join(s.root, "dist", "index.mjs"));
+      const sid = "bc-killed";
+      let successor: RunningDaemon | undefined;
+      try {
+        const starter = await spawnDaemonWithEnv(env, bundle);
+        try {
+          const before = noticeOf(await pagesOf(sockPath, sid, s.projectDir))!;
+          await click(sockPath, affordance(before.rendered, "apply-update"));
+        } finally {
+          await killAndWait(starter, "SIGKILL");
+        }
+        successor = await spawnDaemonWithEnv(env, bundle);
+        const busy = await pagesUntil(
+          sockPath,
+          sid,
+          s.projectDir,
+          (pages) => noticeOf(pages)?.text.includes("[rebuilding…]") ?? false,
+          "the successor showing the act as running",
+        );
+        // The busy label carries no apply click; a click built by hand is refused.
+        expect(() =>
+          affordance(noticeOf(busy)!.rendered, "apply-update"),
+        ).toThrow();
+        await expect(
+          click(
+            sockPath,
+            effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+          ),
+        ).rejects.toThrow(/already rebuilding/);
+        fs.writeFileSync(stub.gate, "");
+        await afterGate(successor, sockPath, sid, s);
+        return { ran: fs.readFileSync(stub.ran, "utf8") };
+      } finally {
+        if (successor) await killAndWait(successor);
+        removeTmpDirs();
+        s.remove();
+        fs.rmSync(stub.binDir, { recursive: true, force: true });
+      }
+    }
+
+    test("the act completes, the next daemon reports it running and refuses a second, then restarts on the whole bundle", async () => {
+      const { ran } = await killedMidAct(
+        "touch dist/index.mjs",
+        async (successor) => {
+          const exited = await Promise.race([
+            waitForExit(successor.child),
+            new Promise<"timeout">((resolve) =>
+              setTimeout(resolve, 20_000, "timeout").unref(),
+            ),
+          ]);
+          expect(exited).toEqual({ code: 0, signal: null });
+        },
+      );
+      // One program ran, once: the refused click started none.
+      expect(ran.trim()).toMatch(/^\d+$/);
+    });
+
+    test("a failed act's verdict reaches the daemon that did not start it", async () => {
+      await killedMidAct(
+        "echo 'tsdown: boom' >&2; exit 1",
+        async (_successor, sock, sid, s) => {
+          const failed = await pagesUntil(
+            sock,
+            sid,
+            s.projectDir,
+            (pages) => /rebuild failed:/.test(noticeOf(pages)?.text ?? ""),
+            "the failure the successor did not start",
+            10_000,
+          );
+          expect(noticeOf(failed)!.text).toMatch(
+            /rebuild failed: non-zero \(exit 1\): tsdown: boom/,
+          );
+        },
+      );
+    });
   });
 
   test("a published install (no src/) behind the registry renders the release notice", async () => {
@@ -309,7 +467,9 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ latest: "99.0.0" }));
     });
-    await new Promise<void>((resolve) => registry.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) =>
+      registry.listen(0, "127.0.0.1", resolve),
+    );
     const { port } = registry.address() as { port: number };
     try {
       const s = scratchLayout("none");

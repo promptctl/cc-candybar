@@ -15,7 +15,7 @@
 //
 // [LAW:effects-at-boundaries] `updateOf` / `updateNotice` are pure: (facts,
 // act state, session context) → diagnostic channels. The watch below is the
-// edge: the clocks, the registry fetch, the subprocess, the validator
+// edge: the clocks, the registry fetch, the act's record, the validator
 // registrations.
 
 import type { Globals } from "../config/dsl-types";
@@ -34,7 +34,7 @@ import {
   type Currency,
   type Version,
 } from "../install/currency";
-import { launch, type LaunchOpts, type LaunchResult } from "../proc/launch";
+import type { LaunchOpts } from "../proc/launch";
 import {
   diagnosticSpan,
   UPDATE_SEVERITY,
@@ -49,6 +49,14 @@ import {
   type BuildCurrency,
   type SourceStamp,
 } from "./build-currency";
+import {
+  claimAct,
+  endOverdue,
+  IDLE,
+  judgeAct,
+  makeActReader,
+  type ActState,
+} from "./update-act";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
@@ -135,22 +143,6 @@ export function factsOf(update: Update): UpdateFacts {
       };
   }
 }
-
-// [LAW:types-are-the-program] The act's lifecycle as a value: idle, running
-// (one child at a time — a second click is refused, not queued), or failed
-// with the reason, named against the identity it was attempted on: the
-// notice for a DIFFERENT newer thing owes the reader no line about a build
-// it never tried.
-export type ActState =
-  | { readonly kind: "idle" }
-  | { readonly kind: "running" }
-  | {
-      readonly kind: "failed";
-      readonly identity: string;
-      readonly reason: string;
-    };
-const IDLE: ActState = { kind: "idle" };
-const RUNNING: ActState = { kind: "running" };
 
 // The per-session facts the notice reads: whose clicks these are, what this
 // session dismissed (the identity it wrote, or nothing), and whether the
@@ -261,6 +253,8 @@ export function updateOf(
 export interface UpdateWatchOptions {
   // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
   readonly entryUrl: string;
+  // Where this bundle's acts are recorded (src/daemon/update-act.ts).
+  readonly actsDir: string;
   // How often the source tree is re-digested.
   readonly intervalMs: number;
   // How often the registry is asked for `latest` (published installs only).
@@ -277,15 +271,18 @@ export interface UpdateWatch {
   arm(): void;
   notice(ctx: NoticeContext): DiagnosticMessage[];
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
-  // to apply or an act is already running.
+  // to apply or an act is already running on this bundle.
   act(): void;
-  // Whether an act's child is running now.
+  // Whether an act is rewriting this bundle now, whichever daemon started it.
   running(): boolean;
 }
 
 // A build or an install is a long child; ten minutes is generous for either
 // and bounds a wedged one.
 const ACT_TIMEOUT_MS = 10 * 60 * 1000;
+// How often the act's record is looked at for an end: the notice's busy label
+// and the restart after a success trail an end by at most this.
+const ACT_POLL_MS = 2_000;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -322,27 +319,9 @@ function describeRelease(c: Currency): [LogLevel, string] {
   }
 }
 
-// The last non-empty line of a stream — where a build tool puts its verdict.
-const lastLine = (text: string): string | undefined =>
-  text
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter((s) => s !== "")
-    .at(-1);
-
-// Why the act failed, for the notice's second line: the launch's own
-// classification, the exit code when there is one, and the most specific
-// text the child left behind.
-function failureReason(r: Extract<LaunchResult, { ok: false }>): string {
-  const exit = r.exitCode === null ? "" : ` (exit ${r.exitCode})`;
-  const detail =
-    lastLine(r.stderr) ?? r.error ?? lastLine(r.stdout) ?? "no output";
-  return `${r.reason}${exit}: ${detail}`;
-}
-
 // [LAW:single-enforcer] The daemon's one owner of "what is newer than me":
 // it samples the build on a clock, polls the registry on a slower one when
-// the layout is a published install, keeps the act's state, and owns the two
+// the layout is a published install, starts and watches the act, and owns the two
 // click gates — the dismiss allow-list (re-registered to the current
 // identity whenever it changes, so a stale dismissal simply stops matching)
 // and the disable allow-list (registered once; `false` is the only value a
@@ -364,6 +343,7 @@ export function reserveUpdateKeys(): () => void {
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     entryUrl,
+    actsDir,
     intervalMs,
     releaseIntervalMs,
     registryUrl,
@@ -375,7 +355,12 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // honestly unchecked — a notice asked for before arm() renders nothing.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
-  let act: ActState = IDLE;
+  const acts = makeActReader(actsDir);
+  // [LAW:one-source-of-truth] The act as last read, for the notice's render
+  // and for noticing an end; null until the first read. Every decision — a
+  // second click, a restart's hold — reads the record afresh instead, since a
+  // read a tick old can say "idle" after a build has cleared the bundle.
+  let seen: ActState | null = null;
   let gate: { readonly identity: string; readonly dispose: () => void } | null =
     null;
   const logBuild = changeLogger(log);
@@ -416,6 +401,36 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     syncGate();
   }
 
+  // Notices an act ending, whichever daemon started it: a success means the
+  // bundle on disk changed, so the build is sampled and the binary watch asked
+  // now. An overdue act is ended with a timeout verdict.
+  function watchAct(): void {
+    const facts = acts.read();
+    const next = judgeAct(facts);
+    if (
+      facts !== null &&
+      next.kind === "running" &&
+      Date.now() > facts.record.deadline &&
+      endOverdue(actsDir, facts)
+    ) {
+      log("error", `apply-update: act ${facts.act} timed out; ending it`);
+    }
+    if (seen === null && next.kind === "running") {
+      log("info", `apply-update: act ${next.act} is running; watching it`);
+    }
+    if (seen?.kind === "running" && next.kind !== "running") {
+      if (next.kind === "succeeded") {
+        log("info", `apply-update: act ${next.act} succeeded`);
+        sampleBuild();
+        onApplied();
+      }
+      if (next.kind === "failed") {
+        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
+      }
+    }
+    seen = next;
+  }
+
   return {
     arm() {
       // Daemon-lifetime registration: the disposer would only matter to a
@@ -423,6 +438,8 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       reserveUpdateKeys();
       sampleBuild();
       setInterval(sampleBuild, intervalMs).unref();
+      watchAct();
+      setInterval(watchAct, ACT_POLL_MS).unref();
       // The registry is a question only a published install asks: a checkout
       // rebuilds from the source beside it, whatever npm has.
       if (build.kind === "not-source-checkout") {
@@ -430,40 +447,36 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         setInterval(() => void pollRelease(), releaseIntervalMs).unref();
       }
     },
-    notice: (ctx) => updateNotice(current(), act, ctx),
-    running: () => act.kind === "running",
+    notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
+    running: () => judgeAct(acts.read()).kind === "running",
     act() {
       const update = current();
       if (update === null) {
         throw new BadVerbArgs("apply-update: nothing newer is known to apply");
       }
       const facts = factsOf(update);
-      if (act.kind === "running") {
+      const newest = acts.read();
+      if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
-      act = RUNNING;
-      log(
-        "info",
-        `apply-update: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
-      );
       // The child inherits the daemon's environment (PATH included): no env
       // is passed, so nothing about the command is composed from data.
-      void launch({
-        ...facts.command,
-        category: "update.apply",
-        timeoutMs: ACT_TIMEOUT_MS,
-      }).then((result) => {
-        if (result.ok) {
-          act = IDLE;
-          log("info", `apply-update: ${facts.act} succeeded`);
-          sampleBuild();
-          onApplied();
-          return;
-        }
-        const reason = failureReason(result);
-        act = { kind: "failed", identity: updateIdentity(update), reason };
-        log("error", `apply-update: ${facts.act} failed: ${reason}`);
-      });
+      const claim = claimAct(
+        actsDir,
+        newest === null ? null : newest.act,
+        updateIdentity(update),
+        { ...facts.command, category: "update.apply" },
+        ACT_TIMEOUT_MS,
+        Date.now(),
+      );
+      if (!claim.ok) {
+        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
+      }
+      log(
+        "info",
+        `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
+      );
+      seen = { kind: "running", act: claim.act };
     },
   };
 }
