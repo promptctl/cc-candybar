@@ -4,39 +4,39 @@
     {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
-      "sha": "b29670a289dbe5a2305415ce7a1ddbef96145267",
-      "timestamp": "2026-10-30T17:36:19.298Z",
+      "sha": "829558625c4940ab2721bf4e47fe786bb2e7a511",
+      "timestamp": "2026-10-30T17:38:33.969Z",
       "commits": [
         {
-          "sha": "b29670a289dbe5a2305415ce7a1ddbef96145267",
+          "sha": "829558625c4940ab2721bf4e47fe786bb2e7a511",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T17:35:08Z",
-          "message": "Merge 8e22ada0827d3cdf9da4861f5127dad8b4a78fe4 into 46745100f446a07971644e712c1ae93efc7f4a04\n"
+          "timestamp": "2026-10-30T17:35:34Z",
+          "message": "Merge 09de850a4468b76bae34c6ff9a7d06c4e74d3936 into 46745100f446a07971644e712c1ae93efc7f4a04\n"
         },
         {
-          "sha": "8e22ada0827d3cdf9da4861f5127dad8b4a78fe4",
+          "sha": "09de850a4468b76bae34c6ff9a7d06c4e74d3936",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:34:58-06:00",
           "message": "fix(test): the log line is spelled once, and a timed-out click's event waits on the click's reply budget (brandon-unfiled-3248.cuvv)\n"
         },
         {
-          "sha": "6eb1686f1dff7c93669b091bf56b6285481beb47",
+          "sha": "c2b120555de66fffc2363071da1ba3f3f56611fb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:29:11-06:00",
           "message": "fix(test): a log read judges only whole lines, the reporter pairs each failure with its own block, and the click stand-in leaves no timer behind (brandon-unfiled-3248.cuvv)\n"
         },
         {
-          "sha": "66c0269c8e92bb6e491a55968f4bef8aac3d8302",
+          "sha": "46d76d848e3ce4a969e3fd057d00ef89f3360d74",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T10:34:40-06:00",
           "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
         },
         {
-          "sha": "1668e9f23508dadff6531cdb4f78ccd5b2c9e0c1",
+          "sha": "ee463d15147ef90e47603f0937c0fc5e3af5367f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T10:22:49-06:00",
