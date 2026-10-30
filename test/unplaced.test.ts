@@ -71,6 +71,17 @@ describe("a placement of an undeclared segment", () => {
     );
   });
 
+  test("an issue found after the drops are cut still names the drop beside it", () => {
+    const source = `{
+      variables: { x: { kind: "state", key: "x", default: "" }, "x.y": { kind: "state", key: "y", default: "" } },
+      segments: { a: { template: "a" } },
+      root: { h: ["a", "ghost"] },
+    }`;
+    expect(() => validateRenderable(authored(source), "<test>")).toThrow(
+      /declared under the variable "x"[\s\S]*"ghost" does not match/,
+    );
+  });
+
   test("a config with nothing to drop is drawn as merged", () => {
     const clean = authored(
       `{ segments: { a: { template: "a" } }, root: { h: ["a"] } }`,

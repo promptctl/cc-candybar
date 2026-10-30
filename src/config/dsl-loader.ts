@@ -614,7 +614,8 @@ export interface Renderable {
  * The same validation, except that a placement of an undeclared segment drops
  * only its own cell (loader/unplaced.ts) and is returned as `dropped`, rather
  * than refusing the whole config: the bar draws everything else the author
- * placed. Any other issue still refuses it, reported together with the drops.
+ * placed. Any other issue, at any stage, still refuses it, reported together
+ * with the drops.
  * Sole producer of ValidatedConfig in the codebase — the phantom brand makes
  * "the renderer never receives an unvalidated config" a compile-time
  * invariant, not a runtime convention.
@@ -634,11 +635,16 @@ export function validateRenderable(
     groups: [],
     unplaced: [],
   };
+  // [LAW:single-enforcer] The one refusal every stage throws through, so the
+  // drops ride with whichever issue refuses the config.
+  const refuseIfIssues = (): void => {
+    if (issues.length > 0) {
+      throw new ConfigError(filePath, [...issues, ...ctx.unplaced]);
+    }
+  };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
-  if (issues.length > 0) {
-    throw new ConfigError(filePath, [...issues, ...ctx.unplaced]);
-  }
+  refuseIfIssues();
   const dropped =
     ctx.unplaced.length === 0 ? null : new ConfigError(filePath, ctx.unplaced);
   // A config with nothing to drop is the merged one itself, so its trees keep
@@ -648,9 +654,7 @@ export function validateRenderable(
   // minted over the trees that render — which exist only now, merged and
   // cross-referenced — before the settings menu and edit chrome add their own.
   const withMenus = synthesizePlacementMenus(config, issues);
-  if (issues.length > 0) {
-    throw new ConfigError(filePath, issues);
-  }
+  refuseIfIssues();
   // [LAW:one-source-of-truth] Edit-mode's CHROME half (brandon-layout-edit-
   // 2gc.3), synthesized HERE — not in parseDslConfig alongside the toggle —
   // because it needs the fully merged, preset-resolved tree cross-ref/cycles
@@ -678,9 +682,7 @@ export function validateRenderable(
     checked: () => true,
     authored: (name) => authored.has(name),
   });
-  if (issues.length > 0) {
-    throw new ConfigError(filePath, issues);
-  }
+  refuseIfIssues();
   return { config: withChrome as ValidatedConfig, dropped };
 }
 
