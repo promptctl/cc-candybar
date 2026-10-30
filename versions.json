@@ -4,46 +4,46 @@
     {
       "version": "pr-489",
       "ref": "refs/pull/489/merge",
-      "sha": "5bbc2fef870b5d43db5cfd817f6ab434078c5e75",
-      "timestamp": "2026-10-30T11:56:51.469Z",
+      "sha": "33f8b5da9929d4fb644411530c1ba713f66ebb38",
+      "timestamp": "2026-10-30T11:57:46.820Z",
       "commits": [
         {
-          "sha": "5bbc2fef870b5d43db5cfd817f6ab434078c5e75",
+          "sha": "33f8b5da9929d4fb644411530c1ba713f66ebb38",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:55:57Z",
-          "message": "Merge d82a95c60e1894d5621cd34d24238b8a1ff1fc73 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+          "timestamp": "2026-10-30T05:56:29-06:00",
+          "message": "Merge db4823e7726f20ef94a9b30b712b6c5be6646948 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
         },
         {
-          "sha": "d82a95c60e1894d5621cd34d24238b8a1ff1fc73",
+          "sha": "db4823e7726f20ef94a9b30b712b6c5be6646948",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:55:47-06:00",
           "message": "fix(plugins): self binds in an action's segment names, and the scope check reads every name an action or segment var carries, once (candybar-plugins-vf6g.3gg)\n"
         },
         {
-          "sha": "a968438748a4de746d47ccb5e8900d0f1d81dfcd",
+          "sha": "9e957aec1d32d050efa9c5be99dadd7ded0f07b3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:43:33-06:00",
           "message": "fix(config): a segment's own var named into a plugin scope is refused, so a segment named repo cannot shadow repo.<plugin> (candybar-plugins-vf6g.3gg)\n"
         },
         {
-          "sha": "c04d85a63db00851e3eaadc34fee764f79a0b6c5",
+          "sha": "85be5f59886f75a92906e36775b1a402a09822d6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:34:29-06:00",
           "message": "fix(plugins): a cache's depends_on names its plugin through self, and one predicate answers which names a namespace owns (candybar-plugins-vf6g.3gg)\n"
         },
         {
-          "sha": "9eb55eb0e2af374c807c880bf261dc606b111351",
+          "sha": "cd8477a0940c974b49f0409129ff3925f241774b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:16:56-06:00",
           "message": "fix(plugins): a plugin names itself scope-free, so one definition loads alike from a repo and an install (candybar-plugins-vf6g.3gg)\n\nA definition names itself `self` (`.self.data`, `template \"self.state\"`,\n`action \"self.go\"`, `do: [\"self.go\", …]`); the loader binds it to the\nnamespace the plugin loads under, as it binds bare session keys and\nrefreshes. A plugin spelling its own name under the other scope drops,\nnaming the `self` form. A config's plugins are the repository's when\ndiscovery found the file at the project or working directory, not by its\nname. A placement missing from one scope names the other's spelling.\nUnnamed drops answer only within their own scope. Both plugin roots are\nrefused to every config file's own declarations. Plugin identity is a\ntyped { scope, name } with one namespace function.\n\nAbsorbs candybar-plugins-vf6g.3tv.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "40228c191e06cf02de583f93a1b92e350d654a82",
+          "sha": "2a0e2f8bd23f39a3ffb5456a36cd3b2e8e379697",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:49:53-06:00",
