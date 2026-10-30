@@ -1284,7 +1284,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     void gitOf(svc, holds, "/repo", {});
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git,/repo/.git/refs/heads refused=2",
+      "git watch bound root=/repo dirs=/repo/.git,/repo/.git/refs/heads deaf=2",
       "git refresh threw (/repo): Error: logger bug",
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
@@ -1647,7 +1647,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       // platform's.
       expect(logs).toContainEqual(
         expect.stringMatching(
-          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads refused=[12]$/,
+          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads deaf=[12]$/,
         ),
       );
       expect(counters).toEqual({

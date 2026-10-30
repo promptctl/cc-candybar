@@ -2201,7 +2201,7 @@ export class RenderCache<
     // entry now hears: a change that fires nothing is read against this line.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} refused=${watch.handle.deaf.length}`,
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(

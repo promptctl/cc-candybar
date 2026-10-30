@@ -471,7 +471,7 @@ describe("RenderCache", () => {
         l.startsWith(`config watch bound projectDir=${dir} cwd=${dir} dirs=`),
       );
     const hears = (line: string, dir: string): boolean =>
-      / dirs=(.*) refused=\d+$/
+      / dirs=(.*) deaf=\d+$/
         .exec(line)![1]!
         .split(",")
         .includes(realpathSync(dir));

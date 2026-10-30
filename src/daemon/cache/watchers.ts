@@ -390,15 +390,18 @@ export class WatcherRegistry {
     return { watch, move: "rebound" };
   }
 
-  // Refresh, in place, every directory of the held watch, for every slot that
-  // shares it: one the OS is not listening to is opened again. A reopen that
-  // listens tells an `unknown` window, so a consumer calling this on a window
-  // it heard is called once more and finds nothing deaf; a retry the OS
-  // refuses tells nothing, so it cannot loop.
+  // Reopen, in place, every directory of the held watch the OS is not
+  // listening to, for every slot that shares it. A reopen that listens tells
+  // an `unknown` window, so a consumer calling this on a window it heard is
+  // called once more and finds nothing deaf; a retry the OS refuses tells
+  // nothing. It judges no folder's identity: a listening directory is left
+  // alone, so a window cannot lead back to a reopen through it, and a folder
+  // that moved is the next derive's new key.
   listening(held: HeldWatch): void {
     const slot = this.slots.get(held.key);
     if (slot === undefined) return;
-    for (const { dir } of slot.listeners) this.refreshed(dir, "retry");
+    for (const { dir } of slot.listeners)
+      if (dir.state.kind === "deaf") this.reopen(dir, "retry");
   }
 
   private opened(key: string, targets: WatchTargets): WatcherSlot {
@@ -448,8 +451,8 @@ export class WatcherRegistry {
   }
 
   // [LAW:single-enforcer] The one rule that a directory watch listens to the
-  // folder at its path, applied whenever a holder names the directory and
-  // whenever an event says the folder there moved. A deaf one is opened
+  // folder at its path, applied whenever a holder acquires the directory
+  // and whenever an event says the folder there moved. A deaf one is opened
   // again; a listening one whose path holds another folder than the one it
   // bound (removed and made again: inotify hears the old inode, and the bound
   // folder is what an event naming the directory is judged against) is

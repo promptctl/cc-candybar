@@ -559,7 +559,7 @@ export class GitDataProvider {
     if (followed.move === "rebound") {
       this.logger(
         "info",
-        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} refused=${followed.watch.handle.deaf.length}`,
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} deaf=${followed.watch.handle.deaf.length}`,
       );
     }
     return followed;
