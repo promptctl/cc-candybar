@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ac7fa0066116393d2e51df899b6ec19d31ba5071",
+      "timestamp": "2026-10-30T16:51:44.011Z",
+      "commits": [
+        {
+          "sha": "ac7fa0066116393d2e51df899b6ec19d31ba5071",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:50:45-06:00",
+          "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx) (#501)\n\n* fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n\n* test(watchers): the unreadable-folder test skips under root, which ignores directory permissions (brandon-unfiled-3248.0mvx)"
+        },
+        {
+          "sha": "47d20efc00d49b49451de6917528d43ceb12d6ff",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T16:41:43Z",
+          "message": "chore(release): set `package.json` to 1.166.2 [skip ci]\n\n## [1.166.2](https://github.com/promptctl/cc-candybar/compare/v1.166.1...v1.166.2) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) ([#494](https://github.com/promptctl/cc-candybar/issues/494)) ([db7ae9e](https://github.com/promptctl/cc-candybar/commit/db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f))\n* **test:** a test that SIGKILLs a daemon waits for its session state to be saved (brandon-unfiled-3248.vfhf) ([#500](https://github.com/promptctl/cc-candybar/issues/500)) ([79eac59](https://github.com/promptctl/cc-candybar/commit/79eac595257ef87be616ea19c3ea787386d26db6))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-499",
       "ref": "refs/pull/499/merge",
       "sha": "8ad205d9fa80ae07432cf99e53b4a0a906cc86db",
@@ -59,35 +81,6 @@
       ]
     },
     {
-      "version": "pr-501",
-      "ref": "refs/pull/501/merge",
-      "sha": "8b10f10422592a7a9bc7cf037a39684f031f5f39",
-      "timestamp": "2026-10-30T16:43:26.628Z",
-      "commits": [
-        {
-          "sha": "8b10f10422592a7a9bc7cf037a39684f031f5f39",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:42:44Z",
-          "message": "Merge a2b7b7e68f4bb6894685b0420999b8419ae59887 into 47d20efc00d49b49451de6917528d43ceb12d6ff\n"
-        },
-        {
-          "sha": "a2b7b7e68f4bb6894685b0420999b8419ae59887",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:58:54-06:00",
-          "message": "test(watchers): the unreadable-folder test skips under root, which ignores directory permissions (brandon-unfiled-3248.0mvx)\n"
-        },
-        {
-          "sha": "e8f9a70f13543092e70249657e1bfdd04d4e758e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:53:52-06:00",
-          "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
       "sha": "2aa0a47758874969a8f46a2ecad3c6b1981334b1",
@@ -113,21 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T10:22:49-06:00",
           "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f",
-      "timestamp": "2026-10-30T16:34:57.616Z",
-      "commits": [
-        {
-          "sha": "db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:34:05-06:00",
-          "message": "fix(colour): adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) (#494)\n\n* fix(colour): adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7)\n\nA three-tone window is read by halves instead of by nearest point: the\nupper half of the circle is the window's last entry (its middle rung) and\nthe lower half is split the same way between its ends. Van der Corput's\nfirst bit is the index's parity, so every odd place wears the middle rung\nand the even places alternate low and high. Of two neighbours exactly one\nis odd, so no two neighbours share a tone at any index, and every step is\none rung. Nearest point centred a tone on 0, where places 2^k - 1 and 2^k\nland either side ever closer, so 7 and 8, 15 and 16, ... shared it.\n\nThe muted position deals the role's muted form and the role itself, read\nby bin, so its neighbours alternate too.\n\nOne property test states it for every dial position over rows of 2 to 16\ncells; it replaces the adjacency checks that were spread over three tests.\nThe 🧪 toggles row's eighth item moves from the low rung to the middle one.\n\n* fix(colour): each distribution reads its placements by its own rule, so golden angle and the even spreads keep their promises (candybar-joiners-e5r4.tx7)\n\nWhether two neighbours ever select one tone is a property of the pair\n(distribution, rule), not of the window. Van der Corput keeps neighbours\napart only read by halves; golden angle only by equal bins (halves put\nplaces 8 and 9 on one tone); and the even spreads ramp evenly in order\nonly by equal bins (halves dealt a five-option monotonic menu 0, 1, 2, 2,\n2). No one rule serves both van der Corput's rung-at-a-time walk and\ngolden angle, so the rule moves from the dial's rows onto each\ndistribution, and the Shade quantize column, the QUANTIZE table and its\nname type go. A row's hue reads the same selection; under every\ndistribution it picks what it picked before.\n\nThe bundled bar authors no distribution, so no rendered byte changes.\n\nAlso: a dial position's tones are two at least by type; the walk test\ncovers every window; the adjacency test states its scope (van der Corput\nat every position, golden angle over three tones); the even spreads and\nthe activated rung are pinned; the authoring doc, design doc, memory and\naudit comment stop saying a muted row is one colour or read to the\nnearest point.\n\n* docs(colour): the memory line claims equal bins for golden angle, not that nothing else separates it (candybar-joiners-e5r4.tx7)\n\n* test(colour): the menu bytes put the toggles row's eighth item on the middle rung over grouped places (candybar-joiners-e5r4.tx7)\n\n* test(colour): no dial position is exempt from parting neighbours, now that muted deals two tones (candybar-joiners-e5r4.tx7)\n\nThe grouped-row adjacency test and the door/rate test were written while\n`muted` had one tone, so each named it as the one exemption and guarded\nthat it stayed the only one. With `muted` dealing its muted form and the\nrole itself, that state no longer exists: the guard now asserts no\nposition deals fewer than two tones, and both tests hold every position\nto parting its neighbours, so a one-tone shade cannot come back unseen.\nThe theme-identity audit needed nothing: main's divider reversal already\nremoved its muted-row clause."
         }
       ]
     }
