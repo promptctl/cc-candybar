@@ -20,7 +20,12 @@
     if (b.detail === null) return;
     let current = true;
     bundle<Partial<RawProject>>('detail', b.detail).then(
-      (g) => { if (current) detail = g[b.repo] ?? {}; },
+      (g) => {
+        if (!current) return;
+        // [LAW:no-silent-failure] a bundle without the project it was opened for is a broken export
+        if (g[b.repo] === undefined) detailError = `detail bundle ${b.detail} holds nothing for ${b.repo}`;
+        else detail = g[b.repo];
+      },
       (e: Error) => { if (current) detailError = e.message; },
     );
     return () => { current = false; };

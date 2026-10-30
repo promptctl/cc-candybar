@@ -22,8 +22,12 @@ export class Explorer {
     return this.barsOnly ? ps.filter((p) => p.live) : ps;
   }
 
+  // Every characteristic's pool, filtered once when the filter changes, not on each read: the graph,
+  // the panel and every edge pass ask for pools many times a frame.
+  private pools = $derived(new Map([...members].map(([t, ps]) => [t, this.keep(ps)])));
+
   pool(t: string): Project[] {
-    return this.keep(members.get(t)!);
+    return this.pools.get(t)!;
   }
 
   constructor() {

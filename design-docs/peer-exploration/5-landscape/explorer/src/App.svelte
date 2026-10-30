@@ -22,14 +22,16 @@
     const t = liveTraits.find((t) => `t:${t.id}`.toLowerCase() === lower);
     return t ? (`t:${t.id}` as NodeId) : null;
   };
-  const fromHash = () => {
+  const hashId = () => {
     const raw = location.hash.slice(1);
-    let id: string;
     try {
-      id = decodeURIComponent(raw);
+      return decodeURIComponent(raw);
     } catch {
-      id = raw;
+      return raw;
     }
+  };
+  const fromHash = () => {
+    const id = hashId();
     if (!id) {
       explorer.selected = null;
       return;
@@ -40,9 +42,17 @@
   };
   fromHash();
   $effect(() => {
-    const want = explorer.selected ? '#' + explorer.selected : '';
-    // Assigning the hash rather than history.pushState: Safari refuses the latter on file: URLs.
-    if (location.hash !== want) location.hash = want;
+    const selected = explorer.selected;
+    const want = selected ? '#' + selected : '';
+    if (location.hash === want) return;
+    const named = hashId() ? resolve(hashId()) : null;
+    // A link that names nothing stays in the address bar beside its notice until something is opened.
+    if (hashId() && named === null && selected === null) return;
+    // The same node spelled differently is the same history entry: its spelling is corrected in place.
+    // Otherwise opening a node is a new entry. Both go through location, not the history API: Safari
+    // refuses history.pushState on file: URLs.
+    if (named !== null && named === selected) location.replace(want);
+    else location.hash = want;
   });
   $effect(() => {
     addEventListener('hashchange', fromHash);
@@ -66,7 +76,12 @@
     barsError = null;
     let current = true;
     bundle<Bars>('bars', p.bar!).then(
-      (g) => { if (current) bars = g[p.repo] ?? null; },
+      (g) => {
+        if (!current) return;
+        // [LAW:no-silent-failure] a bundle without the project it was opened for is a broken export
+        if (g[p.repo] === undefined) barsError = `bars bundle ${p.bar} holds no bar for ${p.repo}`;
+        else bars = g[p.repo];
+      },
       (e: Error) => { if (current) barsError = e.message; },
     );
     return () => { current = false; };
