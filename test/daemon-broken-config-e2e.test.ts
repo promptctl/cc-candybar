@@ -177,7 +177,7 @@ describe("a config that cannot be drawn as written", () => {
     // and names the message the viewer showed while it was open.
     const events = await renderLines(env, sid, 2);
     expect(
-      events.some((e) => / diag=1 /.test(e) && / viewer=1\/1( |$)/.test(e)),
+      events.some((e) => / diag=1 /.test(e) && / viewer=1\/1p1( |$)/.test(e)),
     ).toBe(true);
     expect(events.at(0)).toMatch(/ viewer=-( |$)/);
   });
