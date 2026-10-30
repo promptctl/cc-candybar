@@ -12,6 +12,8 @@ export interface RawProject {
   last: string;
   lang: string;
   what: string;
+  // what the project is: the description up to its first punctuation, stored by export
+  kind: string;
   shape: string;
   motive: string;
   fams: string[];

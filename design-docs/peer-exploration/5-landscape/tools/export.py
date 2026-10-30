@@ -11,6 +11,7 @@ from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I leaves the script's own directory off the path
 import credentials
+from kind import kind_of
 
 DEST, PUBLIC = sys.argv[1], sys.argv[2]
 BARS_DIR, DETAIL_DIR = os.path.join(PUBLIC, 'bars'), os.path.join(PUBLIC, 'detail')
@@ -80,14 +81,14 @@ for run, is_top, ranked in runs:
         nov = novel.get(k, [])
         shape = (r.get('shape') or '').split()[0] if r.get('shape') else ''
         loc = m.get('sl_loc', 0)
-        kind = re.split(r'[(:;,]', r.get('what', ''))[0].strip()
+        kind = kind_of(r.get('what', ''))
         # a project that only prints Claude Code's input fields gets no drill-down; one that is not a statusline still does
         boring = not nov and kind != 'not a statusline' and (shape == 'field' or loc < 50)
         # the link is written only when it is not the repository's GitHub page; the page derives that one
         url = q['url'] if q['url'] != 'https://github.com/' + q['repo'] else None
         p = {'rank': rank, 'band': '45+' if is_top else next(b for lo, b in BANDS if q['own_commits'] >= lo),
              'repo': q['repo'], 'url': url, 'commits': q['own_commits'],
-             'last': (q.get('last') or '')[:10], 'lang': md.get('lang') or '', 'what': r.get('what', ''),
+             'last': (q.get('last') or '')[:10], 'lang': md.get('lang') or '', 'what': r.get('what', ''), 'kind': kind,
              'shape': shape, 'motive': motive.get(k, ''), 'fams': sorted(fams.get(k, [])), 'loc': loc,
              'fam': family_of.get(k), 'novel': nov, 'boring': boring,
              'copy': [[o.replace('__', '/', 1), round(100 * a)] for o, n, a, _ in m.get('shares', [])[:3]]}

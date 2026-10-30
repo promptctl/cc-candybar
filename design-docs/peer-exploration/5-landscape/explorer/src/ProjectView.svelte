@@ -32,7 +32,7 @@
   const family = $derived(p.fam === null ? null : families[p.fam]);
 </script>
 
-<div class="kind">{p.what.split(/[(:;,]/)[0]}</div>
+<div class="kind">{p.kind}</div>
 <h2>{p.repo}</h2>
 <p><a class="repo" href={p.url} target="_blank" rel="noopener">{p.url.replace('https://', '')} ↗</a></p>
 <p>{p.what}</p>
