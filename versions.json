@@ -4,15 +4,22 @@
     {
       "version": "pr-509",
       "ref": "refs/pull/509/merge",
-      "sha": "80d93d27ce187a3c09a901f2bedfd22d037855e2",
-      "timestamp": "2026-10-30T21:27:46.120Z",
+      "sha": "f9066b5549583cb1c238951bcf430024f7b0688b",
+      "timestamp": "2026-10-30T21:28:49.672Z",
       "commits": [
         {
-          "sha": "80d93d27ce187a3c09a901f2bedfd22d037855e2",
+          "sha": "f9066b5549583cb1c238951bcf430024f7b0688b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:26:54-06:00",
-          "message": "Merge c6cc10571306c8e788d5a4674f5af0312b17b524 into b51f00510c4bcca14fc9ff4177320380f9052873\n"
+          "timestamp": "2026-10-30T21:27:44Z",
+          "message": "Merge 8d46261b823c28716c62424dda6760ca863f20e9 into b51f00510c4bcca14fc9ff4177320380f9052873\n"
+        },
+        {
+          "sha": "8d46261b823c28716c62424dda6760ca863f20e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:27:33-06:00",
+          "message": "refactor(site): one reading of LANDSCAPE_DIR, shared by both builds\n"
         },
         {
           "sha": "c6cc10571306c8e788d5a4674f5af0312b17b524",
