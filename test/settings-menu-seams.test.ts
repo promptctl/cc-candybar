@@ -6,10 +6,10 @@
 // real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
 //
-// brandon-menus-sjhy.4fi: a menu's items are its hue's own shades, the ones
-// the dial's window names, so where a theme spells two neighbouring rungs
-// under a seam — textual-ansi's flat ladder, catppuccin-latte's accent at
-// `middle` — the divider is the theme's own, and the band reports it.
+// brandon-menus-sjhy.57p: no theme excuses a divider. Where a theme spells two
+// neighbouring rungs alike (textual-ansi's flat ladder, catppuccin-latte's
+// accent at `middle`), the bar still draws the two cells on grounds the joiner
+// tells apart, so any divider on any row fails.
 
 import { listThemePalettes } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
@@ -23,24 +23,17 @@ import { sessionBar } from "./helpers/session-bar";
 const TABS = ["session", "look", "layout", "config", "tools"] as const;
 const COLS = 200;
 
-// A band whose two items the theme spells under a seam: the one divider the
-// menu may draw, reported by the render as it draws it.
-const ITEM_SEAM = /an open band's item \d and item \d stand/;
-
 // The open menu's rows under every bundled theme, each tab and the theme's ⚙
-// open, at `colorCompatibility` and under the session look `look`: the rows
-// that carry the joiner's divider on a theme whose bands reported no item
-// seam, and how many filled arrows were read.
+// open, at `colorCompatibility` and under the session look `look`: every row,
+// the menu's and the bar's, that carries the joiner's divider, and how many
+// filled arrows the menu's rows hold.
 function menuSeams(
   colorCompatibility: string,
   look: Readonly<Record<string, string>>,
   tabs: readonly (typeof TABS)[number][],
 ): { divided: string[]; arrows: number } {
   const bar = sessionBar(`{ globals: { colorCompatibility: '${colorCompatibility}' } }`, COLS);
-  const render = () => {
-    const { text, warnings } = bar.render(instantOf(new Date()));
-    return { lines: text.split("\n"), warnings };
-  };
+  const render = () => ({ lines: bar.render(instantOf(new Date())).text.split("\n") });
 
   const divided: string[] = [];
   let arrows = 0;
@@ -53,22 +46,21 @@ function menuSeams(
     bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
     for (const tab of tabs) {
       bar.pick(`${SETTINGS_NS}tab`, tab);
-      const { lines, warnings } = render();
-      const themesOwn = warnings.some((w) => w.kind === "band-floor" && ITEM_SEAM.test(w.message));
+      const { lines } = render();
       // The menu opens ABOVE the bar: its rows are the ones over the bar's.
-      const menu = lines.slice(0, lines.length - barRows).map(stripAnsi);
+      const rows = lines.map(stripAnsi);
+      const menu = rows.slice(0, rows.length - barRows);
       expect(menu.length).toBeGreaterThan(2);
-      for (const row of menu) {
-        arrows += row.split(POWERLINE.glyph).length - 1;
-        if (row.includes(POWERLINE.divider) && !themesOwn) divided.push(`${theme} / ${tab}: ${row.trim()}`);
-      }
+      for (const row of menu) arrows += row.split(POWERLINE.glyph).length - 1;
+      for (const row of rows)
+        if (row.includes(POWERLINE.divider)) divided.push(`${theme} / ${tab}: ${row.trim()}`);
     }
   }
   bar.dispose();
   return { divided, arrows };
 }
 
-test("every seam in the open settings menu is a filled arrow, under every bundled theme and tab, but where the theme spells two rungs alike — which the band reports", () => {
+test("every seam in the open settings menu and the bar under it is a filled arrow, under every bundled theme and tab", () => {
   const { divided, arrows } = menuSeams("truecolor", {}, TABS);
   expect(divided).toEqual([]);
   // Non-vacuous: the menu's rows were read, seams and all.

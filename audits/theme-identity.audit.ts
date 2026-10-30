@@ -259,29 +259,19 @@ describe("no two neighbouring cells blur", () => {
     );
 
   // The joiner draws a divider where an arrow would vanish into the ground
-  // it enters: where two neighbours' backgrounds meet. Cells nested in one bar
-  // cell (context beside autocompact) wear that cell's colour
-  // byte for byte (decorEntryFor), as do the cells of a muted row, and a
-  // theme can draw two of its colours alike (textual-ansi's every shade of a
-  // role is one colour). Those are the only neighbours that share a
-  // background, so a divider between two colours is two cells the eye cannot
-  // tell apart, with the divider covering for them.
-  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider only neighbours of one colour", (_name, variant) => {
+  // it enters: where two neighbours' backgrounds meet. The bar never puts two
+  // neighbours on one ground, so every seam is an arrow between backgrounds
+  // the eye tells apart, and any divider fails.
+  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every seam is an arrow, and every arrow joins backgrounds the eye tells apart", (_name, variant) => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
+    const at = (s: (typeof seams)[number]) =>
+      `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`;
     const arrows = seams
       .filter((s) => s.glyph === ARROW && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
-      .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
+      .map(at);
     expect([...new Set(arrows)]).toEqual([]);
-    const dividers = seams
-      .filter((s) => s.glyph === DIVIDER && s.left.hex !== s.right.hex)
-      .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
+    const dividers = seams.filter((s) => s.glyph === DIVIDER).map(at);
     expect([...new Set(dividers)]).toEqual([]);
-  });
-
-  test("dividers are drawn, so the divider rule has seams to judge", () => {
-    // Non-vacuous: the rule judges every divider, and a muted row is one
-    // colour, as is every shade of a role under textual-ansi.
-    expect(VARIANTS.some((variant) => seamsUnder(variant).some((s) => s.glyph === DIVIDER))).toBe(true);
   });
 });

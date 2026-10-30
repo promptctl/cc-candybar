@@ -72,16 +72,11 @@ const ratio = (a: Rgb, b: Rgb): number => {
 };
 const deltaE = (a: Rgb, b: Rgb): number => deltaERgba(new ColorRgba(...a), new ColorRgba(...b));
 
-// The joiners' glyphs. The thin divider is not a joiner here: rich-js draws a divider in
-// the left cell's text colour on the left cell's own ground, so it IS that
-// cell's text and is measured as text. Whether a seam is an arrow or a
-// divider is decided on the drawn colours, so a seam is compared as one
-// position, whichever glyph each depth drew there.
+// The joiners' glyphs, and the thin divider rich-js draws between two cells
+// of one ground: no depth draws it, so any divider is a failure.
 const { glyph, divider, lead, tail } = POWERLINE;
 const ARROWS = new Set([glyph, lead, tail]);
 const JOINERS = new Set([...ARROWS, "\uE0B4", "\uE0B6"]);
-const DIVIDERS: Readonly<Record<string, string>> = { [divider]: glyph };
-const seamAsOne = (ch: string): string => DIVIDERS[ch] ?? ch;
 
 /**
  * Every non-space character with the fg and bg it is drawn in. Solid joiners
@@ -133,27 +128,23 @@ const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
 
 // The floors the bar's text is chosen by, highest first: body text at AA, and
 // the quiet git structure at 3:1. A character keeps the highest floor it
-// cleared in truecolor, and a divider — its cell's text — is a character like
-// any other. Where 256 draws a divider in a seam truecolor drew as an arrow,
-// there was no truecolor text there to keep a floor from, so that divider is
-// held to the lowest of them.
+// cleared in truecolor.
 const FLOORS = [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST];
-const DIVIDER_FLOOR = Math.min(...FLOORS);
 
 type Chars = ReturnType<typeof drawnChars>;
 
 /**
  * Every way `quantized` (the 256 render) fails `truecolor` (the same bar, same
  * state): an arrow no longer continuing its cell or no longer standing off
- * the cell it enters, any divider under the lowest text floor, a character
+ * the cell it enters, any divider at all, a character
  * drawn in ANSI 0–15, or a character below the highest floor it cleared in
  * truecolor. Returns how many characters were measured, so a caller can
  * refuse a vacuous pass.
  */
 function compare(label: string, truecolor: Chars, quantized: Chars, failures: string[]): number {
-  expect([label, quantized.map((c) => seamAsOne(c.ch)).join("")]).toEqual([
+  expect([label, quantized.map((c) => c.ch).join("")]).toEqual([
     label,
-    truecolor.map((c) => seamAsOne(c.ch)).join(""),
+    truecolor.map((c) => c.ch).join(""),
   ]);
   quantized.forEach(({ ch, fg, bg, joiner }, i) => {
     // An arrow continues the cell before it: wherever truecolor draws it in
@@ -165,13 +156,12 @@ function compare(label: string, truecolor: Chars, quantized: Chars, failures: st
       failures.push(`${label} ${ch}: arrow ${JSON.stringify(fg)} after a cell on ${JSON.stringify(left.bg)}`);
     // A seam glyph is measured on colours only while 256 draws them from its
     // own table: one in ANSI 0–15 is whatever the terminal's theme makes it.
-    if ((ARROWS.has(ch) || ch in DIVIDERS) && fg !== undefined && bg !== undefined && (!isRgb(fg) || !isRgb(bg)))
+    if (ch === divider) failures.push(`${label}: a divider joins two cells of one ground`);
+    if (ARROWS.has(ch) && fg !== undefined && bg !== undefined && (!isRgb(fg) || !isRgb(bg)))
       failures.push(`${label} ${ch}: seam drawn in terminal-defined ANSI colours`);
     // An arrow drawn in the colour of the cell it enters is no seam at all.
     if (ARROWS.has(ch) && isRgb(fg) && isRgb(bg) && deltaE(fg, bg) < SEAM_MIN_DELTA_E)
       failures.push(`${label} ${ch}: arrow ${JSON.stringify(fg)} vanishes into ${JSON.stringify(bg)}`);
-    if (ch in DIVIDERS && isRgb(fg) && isRgb(bg) && ratio(fg, bg) < DIVIDER_FLOOR)
-      failures.push(`${label} ${ch}: divider ${ratio(fg, bg).toFixed(2)} (floor ${DIVIDER_FLOOR})`);
   });
   let measured = 0;
   truecolor.forEach(({ ch, fg, bg, joiner }, i) => {
@@ -195,13 +185,14 @@ function compare(label: string, truecolor: Chars, quantized: Chars, failures: st
 }
 
 /**
- * Every character at ansi drawn on its own ground's index: text, divider or
- * arrow, it is the ground's colour in every terminal theme. Returns how many
- * were measured.
+ * Every character at ansi drawn on its own ground's index: text or arrow,
+ * it is the ground's colour in every terminal theme. A divider is a failure
+ * of its own. Returns how many were measured.
  */
 function sameIndex(label: string, ansi: Chars, failures: string[]): number {
   let measured = 0;
   for (const { ch, fg, bg } of ansi) {
+    if (ch === divider) failures.push(`${label}: a divider joins two cells of one ground`);
     if (fg === undefined || bg === undefined) continue;
     measured++;
     // At ansi every colour is an index; an RGB one is a writer that ignored the depth.
@@ -354,7 +345,7 @@ test("every open settings band and picker reads at 256 colours as it does in tru
   expect(failures).toEqual([]);
 });
 
-test("at ansi nothing — text, divider or arrow — is drawn on its own ground's index", async () => {
+test("at ansi no divider is drawn, and nothing — text or arrow — is drawn on its own ground's index", async () => {
   const bars = await closedBars();
   try {
     const failures: string[] = [];
