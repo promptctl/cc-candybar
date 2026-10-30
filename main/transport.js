@@ -35877,9 +35877,12 @@ var flushing = false;
 var drainedWaiters = [];
 var exiting = false;
 var exitArmed = false;
-function dlog(level, msg) {
-  const line = `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
+function logLine(level, msg) {
+  return `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
 `;
+}
+function dlog(level, msg) {
+  const line = logLine(level, msg);
   if (!exitArmed) {
     exitArmed = true;
     process_default.on("exit", () => {
@@ -35927,8 +35930,10 @@ async function flush() {
   }
 }
 function take() {
-  const lost = dropped === 0 ? "" : `${(/* @__PURE__ */ new Date()).toISOString()} [warn] log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk
-`;
+  const lost = dropped === 0 ? "" : logLine(
+    "warn",
+    `log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`
+  );
   const lines2 = lost + waiting.join("");
   waiting = [];
   waitingBytes = 0;
