@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4",
+      "timestamp": "2026-10-30T11:04:59.871Z",
+      "commits": [
+        {
+          "sha": "092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:04:04-06:00",
+          "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga) (#488)\n\n* fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n\n* fix(proc): the update act outlives the daemon, and a downed lifeline stands as a warning (brandon-unfiled-3248.86ga)\n\nHigh review of the lifeline:\n\n- The update act rewrites the bundle, so any daemon exit now killed it\n  half-written. A waited launch can say it outlives its launcher, and the\n  act does; the binary watch still holds the restart while it runs.\n- Why the lifeline is down is one state: the log says each change, and the\n  daemon shows it beside the file-events warning, so a broken lifeline\n  reaches the bar instead of only daemon.log.\n- awk is found on the launcher's PATH, as every launched program is, so a\n  machine without /usr/bin/awk (NixOS) is guarded.\n- The binary watch says its wait once, through the shared change logger.\n- The demo shim's resident programs are programs that answer RESIDENT, one\n  registry instead of two.\n\n* fix(proc): the update act dies with the daemon like every child, and a lifeline change redraws every feed (brandon-unfiled-3248.86ga)\n\nMedium review of the lifeline:\n\n- Exempting the update act from the lifeline did not let it outlive the\n  daemon: its output pipes lead to the dead daemon, so a shell in it dies of\n  SIGPIPE at its next write, and the next daemon has no record of it and\n  would start a second. The act is a launch child like any other again; the\n  binary watch still holds the restart while it runs.\n- The lifeline's seam is an observer of its fault rather than a log. The\n  daemon's observer logs each change and wakes every feed, as file events'\n  delivery does, so the warning comes and goes on pushed frames too.\n\n* fix(proc): a lifeline's start clears its fault only while it is the current one, and the warning names no daemon (brandon-unfiled-3248.86ga)\n\nSecond high review of the lifeline:\n\n- A spawn event from a lifeline already lost no longer clears the fault while\n  nothing guards.\n- The warning says \"their launcher\", since bar-pane and the CLI print it too.\n- The architecture memory says which children the lifeline holds (those not\n  blocking the daemon) and the one window it leaves: a daemon death while the\n  update writes the bundle tears it. The durable update act that closes it is\n  brandon-unfiled-3248.z676."
+        },
+        {
+          "sha": "abe2b7909fcf52f5b03f459d550ad4f260f545ac",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T10:47:14Z",
+          "message": "chore(release): set `package.json` to 1.164.0 [skip ci]\n\n## [1.164.0](https://github.com/promptctl/cc-candybar/compare/v1.163.0...v1.164.0) (2026-10-30)\n\n### Features\n\n* **config:** a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) ([#486](https://github.com/promptctl/cc-candybar/issues/486)) ([cd51ad0](https://github.com/promptctl/cc-candybar/commit/cd51ad088846247d4d8d328c870849e2b81ba424))\n\n### Bug Fixes\n\n* **ci:** the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) ([#487](https://github.com/promptctl/cc-candybar/issues/487)) ([e31c958](https://github.com/promptctl/cc-candybar/commit/e31c958417e5127d95819930643df17eb59fe2bf))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-490",
       "ref": "refs/pull/490/merge",
       "sha": "f90cc31287c6b910d25ad892ffc18bd8a881aa9a",
@@ -49,21 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:49:53-06:00",
           "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "cd51ad088846247d4d8d328c870849e2b81ba424",
-      "timestamp": "2026-10-30T10:39:17.240Z",
-      "commits": [
-        {
-          "sha": "cd51ad088846247d4d8d328c870849e2b81ba424",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:38:20-06:00",
-          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) (#486)\n\n* feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n\n* fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n\n* fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n\n* fix(config): the loader places every layer's insert cells once, and the merged config holds none (candybar-plugins-vf6g.99v)\n\nInsert cells were a second carrier of placements on the merged config,\nre-placed by every walk of a preset's tree, including over trees the load\nhad already pruned. The loader now places every layer's cells once, into the\nconfig's root and each restaging preset's tree, before cross-ref and\nsynthesis, and collects the missed-anchor notices from that same pass.\n\n- A cell naming an undeclared segment is dropped and reported at the\n  writing file's insert.<i>, from any layer, instead of crashing edit chrome.\n- An anchor on the bar's own chrome is refused at parse, like a chrome seg.\n- An inserted cell's names-view label is keyed by preset, so it no longer\n  overwrites another preset's editable label of the same id.\n- A numeric path part indexes only arrays; on an object the key scanner\n  places it as before.\n- Insert validation looks up a line only for an issue.\n- Docs: an inserted cell is an insert entry, which clicks don't rewrite,\n  in any file.\n\n* fix(config): an inserted cell hides with its anchor, only a preset a cell lands in is rewritten, and each missed entry warns once (candybar-plugins-vf6g.99v)\n\nThe unused-declaration report reads the trees with inserts placed, so a\nsegment only an insert entry places is used. A cell spliced beside an anchor\ninside a container carries the anchor's when, as a row anchor's cell is\ngated by the row. A preset no cell lands in keeps the fragment it was\nwritten as. One entry that misses several trees is one notice naming them\nall. Edit mode's label names the inserting file by its directory and name.\n\n(candybar-plugins-vf6g.99v)\n\n* fix(config): a cell-caused issue refuses only that cell, every restaging preset carries its judged tree, and an id-less cell is satisfied by any placement of its segment (candybar-plugins-vf6g.99v)"
         }
       ]
     }
