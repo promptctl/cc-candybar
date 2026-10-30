@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-504",
+      "ref": "refs/pull/504/merge",
+      "sha": "0f02db9a4f6f966ce7e23b40b2ae1e6ce9141283",
+      "timestamp": "2026-10-30T18:17:28.672Z",
+      "commits": [
+        {
+          "sha": "0f02db9a4f6f966ce7e23b40b2ae1e6ce9141283",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T18:16:40Z",
+          "message": "Merge 66a161607acc1ef1fcb87f75ccafd96a64e3a157 into f4289b24e290bb2dc07824ccd2014938750a5c6e\n"
+        },
+        {
+          "sha": "66a161607acc1ef1fcb87f75ccafd96a64e3a157",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:52:54-06:00",
+          "message": "refactor(check): an explicit target is one layer, spelled once (candybar-plugins-vf6g.chl)\n"
+        },
+        {
+          "sha": "a3727951a54e4ec0ae9a4e39b54354fc05ff00e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:48:04-06:00",
+          "message": "test(check): a cwd config in an approved repository is a repo layer (candybar-plugins-vf6g.chl)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "99218e9ee054b91401352f1767fb3c7498498db2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:47:42-06:00",
+          "message": "refactor(config): check reports scoped layers, and a load reports the chain it loaded (candybar-plugins-vf6g.chl)\n\nReview: the check outcome dropped each layer's scope, so callers rebuilt a\ndifferent chain from it; an explicit check took its layer by hand instead of\nthe resolution's; the load frame carried a second copy of the chain's paths.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "7937699092283678a762f47f58ab6796e62fabc3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:41:49-06:00",
+          "message": "refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl)\n\nEach chain layer is {path, scope}, the scope decided once where discovery\nfinds the file. repoLayers is gone from the resolution, the durable home,\nthe session, the render cache's chain and its load key, and the loader\nreads layer.scope instead of testing path membership. Hand-built chains\n(check's explicit file, demo, gallery, bench, the durable writer's home)\nstate the user's scope through one helper, homeLayer.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-506",
       "ref": "refs/pull/506/merge",
       "sha": "3404ddddd851a63270ec93f41428a2a4b2f51b5b",
@@ -56,49 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:53:27-06:00",
           "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-504",
-      "ref": "refs/pull/504/merge",
-      "sha": "5764212a1e9fe16f2d752d7473a9a7220df1f58f",
-      "timestamp": "2026-10-30T18:07:56.904Z",
-      "commits": [
-        {
-          "sha": "5764212a1e9fe16f2d752d7473a9a7220df1f58f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:07:06-06:00",
-          "message": "Merge 94c4f3da1885ee5195dda4f5b3b9f5d5bb4bf7ca into e03723ccfd5e2ed7bcd921e08ab6228dc1949671\n"
-        },
-        {
-          "sha": "94c4f3da1885ee5195dda4f5b3b9f5d5bb4bf7ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:52:54-06:00",
-          "message": "refactor(check): an explicit target is one layer, spelled once (candybar-plugins-vf6g.chl)\n"
-        },
-        {
-          "sha": "7ba4513b1f6c88047500ebfdfecbc8c96ead6b62",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:48:04-06:00",
-          "message": "test(check): a cwd config in an approved repository is a repo layer (candybar-plugins-vf6g.chl)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "6b74a3f8c107c40d570b1b581ffff71a18ee204d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:47:42-06:00",
-          "message": "refactor(config): check reports scoped layers, and a load reports the chain it loaded (candybar-plugins-vf6g.chl)\n\nReview: the check outcome dropped each layer's scope, so callers rebuilt a\ndifferent chain from it; an explicit check took its layer by hand instead of\nthe resolution's; the load frame carried a second copy of the chain's paths.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "335be22f8abfd2f27768af8db329975946e874ae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:41:49-06:00",
-          "message": "refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl)\n\nEach chain layer is {path, scope}, the scope decided once where discovery\nfinds the file. repoLayers is gone from the resolution, the durable home,\nthe session, the render cache's chain and its load key, and the loader\nreads layer.scope instead of testing path membership. Hand-built chains\n(check's explicit file, demo, gallery, bench, the durable writer's home)\nstate the user's scope through one helper, homeLayer.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
