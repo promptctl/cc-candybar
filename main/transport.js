@@ -37631,16 +37631,39 @@ var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
 function windowAt(palette, hue, shade, drawnAt) {
   return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
     const drawn = drawnIn(palette, hue, drawnAt);
+    const size = windowSize(
+      shade.tones.length,
+      new Set(LADDER.map(drawn)).size
+    );
     const [first2, ...rest2] = shade.tones;
     const kept = [first2];
     for (const tone of rest2) {
-      if (kept.every((held) => drawn(held) !== drawn(tone))) kept.push(tone);
+      if (kept.length < size && kept.every((held) => drawn(held) !== drawn(tone)))
+        kept.push(tone);
     }
-    if (kept.length > 1) return kept;
-    const wider = widen(palette, hue, shade.tones, [drawn(first2)], drawnAt);
-    return wider === void 0 ? kept : [first2, wider];
+    return inWalkOrder(
+      Array.from({ length: size - kept.length }).reduce((window2) => {
+        const wider = widen(
+          palette,
+          hue,
+          shade.tones,
+          window2.map(drawn),
+          drawnAt
+        );
+        return wider === void 0 ? window2 : [...window2, wider];
+      }, kept)
+    );
   });
 }
+var inWalkOrder = (window2) => {
+  if (window2.length < 3) return window2;
+  const ladder = LADDER;
+  const [low, ...above] = [...window2].sort(
+    (a, b) => ladder.indexOf(a) - ladder.indexOf(b)
+  );
+  return [low, above.at(-1), ...above.slice(0, -1)];
+};
+var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
 var WINDOWS = memoPerPalette();
 var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;
 function widen(palette, hue, from, taken, drawnAt) {
