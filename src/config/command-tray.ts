@@ -31,7 +31,7 @@ export function commandTray(prefix: string): {
   const clear = confirmStep(
     `${prefix}clear`,
     { arm: CLEAR, confirm: `${CLEAR} ✓ confirm` },
-    [typeClear],
+    [{ action: typeClear, when: "true" }],
   );
   return {
     template:

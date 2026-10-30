@@ -1722,6 +1722,34 @@ describe("the renderer menu", () => {
       durable.dispose();
     }
   });
+
+  // [LAW:single-enforcer] The `•` and the `⟲` count a control by one gate:
+  // where the renderer is drawn, a reset-all is offered for it and resets it.
+  test("inside tmux, a renderer alone off its default offers ⟲, and the reset-all resets it", () => {
+    const durable = durableConfig("cc-candybar-renderer-reset-in-");
+    const r = openConfig(
+      "%7",
+      `{
+  globals: { renderer: "tmux" },
+  segments: { a: { template: 'a' } },
+  root: { h: ['a'] },
+}`,
+      durable,
+    );
+    try {
+      const labelled = (text: string): string =>
+        links(r.render()).find((l) => stripAnsi(l.text) === text)!.url;
+      r.click(labelled("⟲"));
+      r.click(labelled("⟲ reset all?"));
+      const globals = durable.parsed().globals as
+        | Record<string, unknown>
+        | undefined;
+      expect(globals?.renderer).toBeUndefined();
+    } finally {
+      r.dispose();
+      durable.dispose();
+    }
+  });
 });
 
 describe("a lane toggle's readout", () => {

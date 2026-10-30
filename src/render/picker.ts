@@ -23,7 +23,7 @@
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
 // as data). The generic engine never imports this module.
 
-import { RichText, Style } from "@promptctl/rich-js";
+import { RichText, Style, type ColorRgba } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
@@ -47,7 +47,7 @@ import {
   requireActiveSegment,
   type ActiveSegmentRef,
 } from "./active-segment.js";
-import { placedBy } from "../themes/decor.js";
+import { bandFor, placedBy } from "../themes/decor.js";
 
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
@@ -600,33 +600,42 @@ export function pickerFuncs(
         // catalogue's rows past its first drop below the segment on its
         // declared drop list, the channel a `{{ menu }}` body rides — one
         // library layout, wherever it is drawn.
-        const [line, ...rows] = renderPicker(
-          applyName,
-          apply,
-          { key: page.key, stateVar: page.stateVar },
-          inBody === true
-            ? { kind: "led" }
-            : {
-                kind: "own",
-                writes: [[page.key, "-1"]],
-                onPick: closeOnPick === true,
-              },
-          paged === true,
-          runtime,
-          // A bare `{{ picker }}` authors no options dict, so it places by
-          // the default — the same resolution a `{{ menu }}` with no
-          // "distribution" option makes.
-          optionPaint(
-            active,
-            placedBy(undefined),
-            renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
-            activeSegment.drawnAt(),
-            active.bg,
-          ),
-          closeOn(active.palette, active.bg, activeSegment.drawnAt()),
-        );
-        active.drops.push(...rows);
+        const drawnAt = activeSegment.drawnAt();
+        const draw = (ground: ColorRgba): readonly RichText[] =>
+          renderPicker(
+            applyName,
+            apply,
+            { key: page.key, stateVar: page.stateVar },
+            inBody === true
+              ? { kind: "led" }
+              : {
+                  kind: "own",
+                  writes: [[page.key, "-1"]],
+                  onPick: closeOnPick === true,
+                },
+            paged === true,
+            runtime,
+            // A bare `{{ picker }}` authors no options dict, so it places by
+            // the default — the same resolution a `{{ menu }}` with no
+            // "distribution" option makes.
+            optionPaint(
+              active,
+              placedBy(undefined),
+              renderLook(runtime, "{{ picker }}"),
+              apply.paletteOf,
+              drawnAt,
+              ground,
+            ),
+            closeOn(active.palette, ground, drawnAt),
+          );
+        // [LAW:one-source-of-truth] A catalogue's drops open the segment's
+        // band, so the walk draws its first row on the band's state and the
+        // drops on its plane (node-registry's `trigger` and `band`); each is
+        // painted on the ground it is drawn on, read from the same band.
+        const band = bandFor(active.palette, active.disclosure, drawnAt);
+        const opens = apply.library !== undefined;
+        const [line, ...rows] = draw(opens ? band.state : active.bg);
+        active.drops.push(...(opens ? draw(band.plane).slice(1) : rows));
         return line!;
       },
       argTypes: ["string", "string", "bool"],

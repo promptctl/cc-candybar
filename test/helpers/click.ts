@@ -174,7 +174,8 @@ export function testVerbContext(
     // A click of a session that has rendered measures its lane switches over
     // that same config, as the daemon's does; a test that handed in none
     // switches no lane on. No lane owner runs here: a test that reads what a
-    // click set up hands in its own `clicked`.
+    // click set up hands in its own `clicked`. A session here rendered in a
+    // tmux pane, so the tmux status line is its to switch.
     lanes: {
       of: (_origin, sid) =>
         config === undefined
@@ -185,6 +186,7 @@ export function testVerbContext(
                 (key) => sessionState.get(sid, key),
                 () => false,
               ),
+              true,
             ),
       clicked: () => {},
     },

@@ -30,8 +30,7 @@ export function handedOffTo(
   following: ReadonlySet<Lane>,
 ): Lane[] {
   return LANE_NAMES.filter(
-    (lane) =>
-      lanes[lane] && LANES[lane].elsewhere !== null && following.has(lane),
+    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane),
   );
 }
 

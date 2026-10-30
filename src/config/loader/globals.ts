@@ -25,6 +25,7 @@ import {
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
 import type { ControlDomain } from "../setting-control.js";
+import { settingMenuPath } from "../menu-places.js";
 
 // [LAW:one-source-of-truth] THE globals field specs, read off the globals
 // rows (src/config/globals-fields.ts). Both the top-level `globals:` schema and
@@ -175,8 +176,8 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
     'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
   // The tmux status line became a renderer the bar fully supports, so its
   // experimental toggle is a value of the renderer setting.
-  experimentalTmuxStatus:
-    'it became the renderer setting — write renderer: "tmux" (or pick tmux in ⚙ config › renderer, from a session inside tmux)',
+  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
+  experimentalTmuxStatus: `it became the renderer setting — write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} › renderer, from a session inside tmux)`,
   // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
   // nerdFont check names the font that lacks them.
   charset:

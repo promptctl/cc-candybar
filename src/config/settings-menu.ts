@@ -352,13 +352,7 @@ const HELP_ARTIFACTS: HelpArtifacts = {
 const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
   laneSettings.map(([setting, lane]) => {
     const name = `${SETTINGS_NS}help.${setting}`;
-    const node = declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS);
-    // A `(?)` is offered where its control is.
-    HELP_ARTIFACTS.segments[name] = {
-      ...HELP_ARTIFACTS.segments[name]!,
-      when: `{{ ${SETTINGS[setting].shown} }}`,
-    };
-    return [setting, node];
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
   }),
 );
 
@@ -557,14 +551,18 @@ const markedDisplay =
     )}))`;
 // The controls in `place`, each followed by the submenus laid beside it, whose
 // bodies are laid the same way.
+// [LAW:single-enforcer] Everything laid at a control — the control, its `(?)`,
+// its submenus — is offered where the control is, by the control's one gate.
 const controlsAt = (place: Place): LayoutNode[] =>
-  controlsIn(place).flatMap((c) => [
-    controlNode(c),
-    ...c.help,
-    ...c.submenus.map((s) =>
-      disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
-    ),
-  ]);
+  controlsIn(place).flatMap((c) =>
+    [
+      controlNode(c),
+      ...c.help,
+      ...c.submenus.map((s) =>
+        disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
+      ),
+    ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` })),
+  );
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -579,15 +577,15 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
 );
 
-// [LAW:single-enforcer] `⟲` resets the controls every session is offered. A
-// control offered only to some sessions (the renderer, inside tmux) resets by
-// its own ↺, so a reset-all clicked where it is not drawn never changes a
-// setting the sessions share and that session cannot see.
-const RESET_ALL_CONTROLS = CONTROLS.filter((c) => c.shown === "true");
+// [LAW:single-enforcer] `⟲` resets the controls the session it is drawn in is
+// offered, by the same gate each control is drawn by and the `•` counts it by:
+// a control offered only to some sessions (the renderer, inside tmux) is reset
+// where it is drawn, and never by a reset-all clicked where it is not, since
+// the sessions share the setting.
 const RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "⟲", confirm: "⟲ reset all?" },
-  RESET_ALL_CONTROLS.map((c) => controlReset(c.name)),
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown })),
 );
 
 // ─── The save cell ──────────────────────────────────────────────────────────
@@ -622,7 +620,7 @@ const SAVE_PARTS: readonly SavePart[] = [
   counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
     body: RESET_ALL.template,
-    shown: `(or ${anyResettable(RESET_ALL_CONTROLS)} ${RESET_ALL.armed})`,
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`,
   },
 ];
 // The parts present, one space between each: `$sep` is empty until the first
@@ -1150,11 +1148,10 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
-    // [LAW:dataflow-not-control-flow] Every control is gated by whom it is
-    // offered to; its list hangs on it, so hiding it hides the list.
+    // Whom a control is offered to gates where it is laid (`controlsAt`); its
+    // list hangs on it, so hiding it hides the list.
     artifacts.segments[controlSeg(c.id)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
-      when: `{{ ${c.shown} }}`,
     };
     if (c.control.kind === "picker") {
       [

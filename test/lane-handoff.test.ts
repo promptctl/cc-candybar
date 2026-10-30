@@ -20,14 +20,22 @@ const effective = (
 
 describe("laneSwitches", () => {
   test("the renderer tmux switches the tmux status line on, and claude off", () => {
-    expect(laneSwitches(effective({ renderer: "tmux" })).tmuxStatus).toBe(true);
-    expect(laneSwitches(effective({ renderer: "claude" })).tmuxStatus).toBe(
-      false,
+    expect(laneSwitches(effective({ renderer: "tmux" }), true).tmuxStatus).toBe(
+      true,
     );
+    expect(
+      laneSwitches(effective({ renderer: "claude" }), true).tmuxStatus,
+    ).toBe(false);
   });
 
-  test("a 🧪 toggle switches its own lane alone", () => {
-    expect(laneSwitches(effective({ experimentalPane: true }))).toEqual({
+  test("a session outside tmux ignores the renderer tmux: its tmux status line stays off", () => {
+    expect(
+      laneSwitches(effective({ renderer: "tmux" }), false).tmuxStatus,
+    ).toBe(false);
+  });
+
+  test("a 🧪 toggle switches its own lane alone, in tmux or out", () => {
+    expect(laneSwitches(effective({ experimentalPane: true }), false)).toEqual({
       band: false,
       statusline: false,
       pane: true,

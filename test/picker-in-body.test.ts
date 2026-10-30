@@ -14,6 +14,8 @@ import { effectsOf } from "./helpers/click";
 import { links, stripAnsi } from "./helpers/ansi";
 import { cellWidth as cellLength } from "../src/render/picker";
 import { instantOf } from "../src/utils/instant";
+import { ColorRgba, contrastRatio } from "@promptctl/rich-js";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -97,6 +99,63 @@ describe("{{ carousel }} with a centre action", () => {
     const out = renderOf('{{ carousel "pick" 0 "hello" }}', "elsewhere");
     expect(stripAnsi(out)).toMatch(/◀ elsewhere ▶/);
     expect(links(out).some((l) => stripAnsi(l.text) === "elsewhere")).toBe(true);
+  });
+});
+
+// The text and background colours an SGR run sets, truecolor.
+const sgrColours = (
+  sgr: string,
+): { fg: ColorRgba | null; bg: ColorRgba | null } => {
+  const at = (code: "38" | "48"): ColorRgba | null => {
+    const m = new RegExp(`${code};2;(\\d+);(\\d+);(\\d+)`).exec(sgr);
+    return m === null ? null : new ColorRgba(+m[1]!, +m[2]!, +m[3]!);
+  };
+  return { fg: at("38"), bg: at("48") };
+};
+
+describe("{{ picker }} over a catalogue", () => {
+  // [LAW:one-source-of-truth] A catalogue's drops open the segment's band, so
+  // its first row is drawn on the band's state colour: the ✕ there is chosen
+  // for that ground, not for the segment's closed one.
+  test("its ✕ is legible on the colour its row is drawn on", () => {
+    const config = parseAndValidate(
+      "<user>",
+      `{
+        variables: { r: { kind: 'state', key: 'r', default: 'claude' } },
+        actions: {
+          pickR: { set: 'r', from: 'renderers' },
+          pageR: { set: 'r.page', int: true },
+        },
+        segments: { s: { template: '{{ picker "pickR" "pageR" false true }}' } },
+        root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
+      }`,
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", new SessionState());
+    const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp/proj",
+    });
+    const out = renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      PAYLOAD,
+      instantOf(new Date()),
+      OPTS,
+    );
+    expect(stripAnsi(out)).toContain("Claude Code's status line");
+    // The ✕'s own SGR run: the escape sequence right before the glyph.
+    const runs = [...out.matchAll(/\x1b\[([0-9;]*)m([^\x1b]*)/gu)];
+    const close = runs.find(([, , text]) => text === DISCLOSURE_GLYPH_CLOSE);
+    expect(close).toBeDefined();
+    const { fg, bg } = sgrColours(close![1]!);
+    expect(fg).not.toBeNull();
+    expect(bg).not.toBeNull();
+    expect(contrastRatio(fg!, bg!)).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 });
 

@@ -33,26 +33,68 @@ export interface ConfirmStep {
   readonly disarm: string;
 }
 
+// An action a confirm fires, while `when` (a template expression) holds where
+// the confirm is drawn — "true" for one it always fires.
+export interface ConfirmFire {
+  readonly action: string;
+  readonly when: string;
+}
+
+// [LAW:dataflow-not-control-flow] A click carries one action, and an action
+// fires unconditionally, so a fire offered only where its gate holds is
+// chosen when the confirm is drawn: one confirm action per set of gates that
+// hold, and the draw links the one whose gates hold here. A step with no gated
+// fire is the one confirm, `key`.
+function confirms(
+  key: string,
+  disarm: string,
+  fires: readonly ConfirmFire[],
+): { readonly link: string; readonly actions: Record<string, ActionDecl> } {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true",
+  );
+  const nameOf = (held: number): string =>
+    gates.length === 0 ? key : `${key}.${held}`;
+  const actions: Record<string, ActionDecl> = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf(held)] = {
+      do: [
+        disarm,
+        ...fires
+          .filter(
+            (f) => f.when === "true" || held & (1 << gates.indexOf(f.when)),
+          )
+          .map((f) => f.action),
+      ],
+    };
+  const link = (i: number, held: number): string =>
+    i === gates.length
+      ? `"${nameOf(held)}"`
+      : `(ternary ${link(i + 1, held | (1 << i))} ${link(i + 1, held)} (${gates[i]}))`;
+  return { link: link(0, 0), actions };
+}
+
 export function confirmStep(
   key: string,
   labels: { readonly arm: string; readonly confirm: string },
-  fires: readonly string[],
+  fires: readonly ConfirmFire[],
 ): ConfirmStep {
   const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
   const arm = `${key}.arm`;
   const disarm = `${key}.disarm`;
   const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
   return {
     // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
     // value, read back here.
     template:
       `{{ if ${armed} }}` +
-      `{{ action "${key}" "${labels.confirm}" }} {{ action "${disarm}" "✕" }}` +
+      `{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "✕" }}` +
       `{{ else }}{{ action "${arm}" "${labels.arm}" }}{{ end }}`,
     actions: {
       [arm]: { set: stateKey, to: ARMED },
       [disarm]: { set: stateKey, to: DISARMED },
-      [key]: { do: [disarm, ...fires] },
+      ...confirm.actions,
     },
     armed,
     variables: {

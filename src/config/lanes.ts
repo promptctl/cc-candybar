@@ -30,34 +30,41 @@ export type Renderer = (typeof RENDERERS)[number];
 // way: `when: '{{ ne .tmux.pane "" }}'`.
 export const IN_TMUX = 'ne .tmux.pane ""';
 
-// `elsewhere` is where a lane draws the bar when that is not the statusline:
-// while it is on, the statusline hands off to it (src/daemon/lane-handoff.ts).
-// Lane B draws the statusline itself, so it hands off nowhere. `rows` is the
-// most rows the lane's surface shows, or null when only the terminal bounds
-// it.
+// `handsOff` is whether a lane draws the bar somewhere other than the
+// statusline: while it is on, the statusline hands off to it
+// (src/daemon/lane-handoff.ts). Lane B draws the statusline itself, so it
+// hands off nowhere. A switch that is `inTmux` is on only for a session its
+// client reports in a tmux pane: the tmux status line belongs to that pane, so
+// a session outside tmux ignores the setting, which other sessions share, and
+// draws in Claude Code's statusline. `rows` is the most rows the lane's
+// surface shows, or null when only the terminal bounds it.
 export const LANES = {
   band: {
-    switch: { setting: "experimentalBand", on: true },
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "🧪 band (A)",
-    elsewhere: "the band above the prompt",
+    handsOff: true,
     rows: null,
   },
   statusline: {
-    switch: { setting: "experimentalStatusline", on: true },
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "🧪 statusline (B)",
-    elsewhere: null,
+    handsOff: false,
     rows: null,
   },
   pane: {
-    switch: { setting: "experimentalPane", on: true },
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "🧪 tmux pane (C)",
-    elsewhere: "a tmux pane below",
+    handsOff: true,
     rows: null,
   },
   tmuxStatus: {
-    switch: { setting: "renderer", on: "tmux" satisfies Renderer },
+    switch: {
+      setting: "renderer",
+      on: "tmux" satisfies Renderer,
+      inTmux: true,
+    },
     label: "tmux status line",
-    elsewhere: "the tmux status line",
+    handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
     rows: 5,
   },
