@@ -100,7 +100,8 @@ import {
 import { presetRoot } from "../src/config/presets";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { ReloadSignal } from "./helpers/reload-signal";
+import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
+import { viewFacts } from "./helpers/view-facts";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
@@ -1149,6 +1150,74 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
   // the file with the bytes the click left, so every application ends in the
   // same on-disk state and emits an event.
+  // [LAW:verifiable-goals] A save reloads its config explicitly, and the
+  // config's watch then hears the same write. The watch's reload resolves
+  // the bytes the save loaded and keeps the state, so each session view
+  // drawing from the entry reopens exactly once. The retries rewrite the
+  // bytes the click left, so each is a kept reload too, and the count below
+  // covers them.
+  test("a save reopens each session view drawing from its entry exactly once", async () => {
+    durable.write(userConfigBody);
+    const loads: string[] = [];
+    const lines: string[] = [];
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const sessionState = new SessionState();
+    const cache = new RenderCache(
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState,
+        watchers,
+        source: SOURCES_NOTHING,
+        declare: DECLARES_NOTHING,
+        log: (_level, line) => lines.push(line),
+      },
+      {
+        budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
+        observers: {
+          onReload: (_entry, _sessions, cause, settled) =>
+            loads.push(`${cause.kind}:${settled}`),
+        },
+      },
+    );
+    try {
+      const dir = durable.projectDir;
+      for (const sid of ["s1", "s2"])
+        cache.holdSession(dir, dir, undefined, viewFacts(dir, sid))[
+          Symbol.dispose
+        ]();
+      const ctx = originCtx(cache, sessionState);
+      let clicked = false;
+      await untilHeard(
+        () => {
+          if (clicked) {
+            writeFileSync(durable.configPath, durable.text()!);
+            return;
+          }
+          clicked = true;
+          fireVerb(
+            "apply-layout-op",
+            ctx,
+            "s1",
+            "presets.default.root",
+            REMOVE_DIRECTORY,
+          );
+        },
+        () => loads.includes("config-watch:kept"),
+        "the watch's reload of the saved bytes",
+      );
+      expect(loads.slice(0, 2)).toEqual(["open:built", "write:built"]);
+      expect(loads.slice(2).filter((l) => !l.endsWith(":kept"))).toEqual([]);
+      const reopened = lines
+        .filter((l) => / by=reload /.test(l))
+        .map((l) => /sid="(\w+)"/.exec(l)?.[1]);
+      expect(reopened.sort()).toEqual(["s1", "s2"]);
+    } finally {
+      cache.close();
+      watchers.closeAll();
+    }
+  });
+
   test("a `-` click rewrites the file's root, and the live cache reloads it through the config-file watcher", async () => {
     durable.write(userConfigBody);
     const reloads = new ReloadSignal();
