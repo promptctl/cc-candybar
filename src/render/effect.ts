@@ -27,7 +27,6 @@ import {
   type LoopName,
   type Renderable,
   type RichText,
-  type Transition,
   type TransitionName,
 } from "@promptctl/rich-js";
 
@@ -201,13 +200,13 @@ export interface EffectFrame {
 
 // A placement passing through a transition: a `fade` in as it appears, a
 // `dissolve` out as it leaves. Since the instant it began, its own t = 0, made
-// once — rich-js keeps each cell's place in it. The transition as made says
-// when it is over; what is drawn is its effect veiling toward the placement's
-// ground.
+// once. [LAW:types-are-the-program] It keeps when the transition is over and
+// the one effect to draw, veiling toward the placement's ground; the
+// transition as made veils toward the terminal's, so it is not kept.
 interface Passage {
   readonly name: TransitionName;
   readonly since: AnimationTime;
-  readonly made: Transition;
+  readonly done: (t: number) => boolean;
   readonly effect: Effect;
 }
 
@@ -494,17 +493,17 @@ export class SessionEffects<Line> {
       id: string,
       { ground }: Drawing<Line>,
     ): Passage => {
-      const made = EFFECT_CATALOGUE.transitions[transition]({
+      const begun = EFFECT_CATALOGUE.transitions[transition]({
         z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
       });
       return {
         name: transition,
         since: at,
-        made,
-        effect: fromGround(made.effect, ground),
+        done: (t) => begun.done(t),
+        effect: fromGround(begun.effect, ground),
       };
     };
-    const over = ({ since, made }: Passage): boolean => made.done(at - since);
+    const over = ({ since, done }: Passage): boolean => done(at - since);
 
     // [LAW:types-are-the-program] What a placement passes through in this
     // frame, settled once, where the walk reaches it. One drawn now fades in

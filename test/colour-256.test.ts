@@ -327,12 +327,15 @@ function sameIndex(label: string, ansi: Chars, failures: string[]): number {
   return measured;
 }
 
-// The closed bar, as `check` renders it, for a theme at a depth.
+// The closed bar, as `check` renders it, for a theme at a depth. Every render
+// is drawn at one instant, so two depths of one theme are the same bar in the
+// same state, glyph for glyph, whatever the bar draws over time.
 async function closedBars(): Promise<{
   render: (theme: string, colorCompatibility: ColorCompatibility) => Promise<Chars>;
   dispose: () => void;
 }> {
-  const prepared = await prepareConfig([], NO_REPO, process.cwd(), [], instantOf(new Date()));
+  const at = instantOf(new Date());
+  const prepared = await prepareConfig([], NO_REPO, process.cwd(), [], at);
   return {
     render: async (theme, colorCompatibility) =>
       drawnChars(
@@ -347,7 +350,7 @@ async function closedBars(): Promise<{
             colorCompatibility,
           },
           200,
-          instantOf(new Date()),
+          at,
         )).rendered,
       ),
     dispose: () => prepared.registry.dispose(),
@@ -424,8 +427,10 @@ function forEachStage(
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const ctx = testVerbContext(sessionState, undefined, config);
+    // One instant for every render, as `closedBars` draws.
+    const at = instantOf(new Date());
     const render = (colorCompatibility: ColorCompatibility) =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), { ...OPTS, colorCompatibility });
+      renderDsl(config, compiled, store, registry, PAYLOAD, at, { ...OPTS, colorCompatibility });
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
       if (url !== null) clickUrl(url, ctx);

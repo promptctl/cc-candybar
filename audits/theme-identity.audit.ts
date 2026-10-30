@@ -252,10 +252,10 @@ describe("no two neighbouring cells blur", () => {
       ),
     );
 
-  // The joiner draws a divider where an arrow would vanish into the ground
-  // it enters: where two neighbours' backgrounds meet. The bar never puts two
-  // neighbours on one ground, so every seam is an arrow between backgrounds
-  // the eye tells apart, and any divider fails.
+  // Two neighbours on one ground are joined by an arrow the joiner lifts off
+  // that ground: the seam shows, but the two cells still read as one. So every
+  // seam must be an arrow between backgrounds the eye tells apart, and any
+  // divider fails.
   test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every seam is an arrow, and every arrow joins backgrounds the eye tells apart", (_name, variant) => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);

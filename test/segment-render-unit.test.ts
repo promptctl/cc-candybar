@@ -105,10 +105,9 @@ describe("segment is the rendering unit (2de.10)", () => {
   });
 
   test("two segments authoring one bg are joined by a filled arrow, and no divider is drawn anywhere", () => {
-    // `a` and `b` author the same bg spec against the same palette: two
-    // neighbours asking for one ground. The bar never draws two neighbouring
-    // cells on one ground, so they are joined by an arrow, as are the door and
-    // the frame rate beside it.
+    // `a` and `b` author the same bg spec against the same palette, so they
+    // share one ground. A join is an arrow whatever the two grounds are: on
+    // one ground, the joiner lifts the arrow's ink off it.
     const src = `{
       globals: { palette: 'textual-dark' },
       variables: {
