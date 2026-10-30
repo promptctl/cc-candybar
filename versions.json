@@ -4,15 +4,22 @@
     {
       "version": "pr-487",
       "ref": "refs/pull/487/merge",
-      "sha": "cc498497c4e65c8dca54d6cd33e1a82625799373",
-      "timestamp": "2026-10-30T09:49:14.528Z",
+      "sha": "c899f1909def30d3c5affb54f1f52e24964246c9",
+      "timestamp": "2026-10-30T09:53:04.639Z",
       "commits": [
         {
-          "sha": "cc498497c4e65c8dca54d6cd33e1a82625799373",
+          "sha": "c899f1909def30d3c5affb54f1f52e24964246c9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:48:23-06:00",
-          "message": "Merge eba7509a79734201f7353c814098c7778fa49b95 into 5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad\n"
+          "timestamp": "2026-10-30T09:52:21Z",
+          "message": "Merge deeca69765683b1c264547e87ea7267a80e1182f into 059a45e0880e4967c0f0fee60def00a4f4153ac0\n"
+        },
+        {
+          "sha": "deeca69765683b1c264547e87ea7267a80e1182f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:52:09-06:00",
+          "message": "fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated.\n"
         },
         {
           "sha": "eba7509a79734201f7353c814098c7778fa49b95",
