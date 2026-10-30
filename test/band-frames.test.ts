@@ -29,7 +29,7 @@ describe("bandFrame", () => {
         ),
         new Segment(" ", new Style(cell)),
       ],
-      { colorSystem: ColorDepth.TRUECOLOR, hyperlinks: true },
+      { colorSystem: ColorDepth.TRUECOLOR, hyperlinks: true, reducedMotion: false },
     )}\n`;
     expect(ansi).toContain(`${ESC}]8;id=`);
     expect(bandFrame(ansi).band).toEqual([

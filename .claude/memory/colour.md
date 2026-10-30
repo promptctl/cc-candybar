@@ -32,7 +32,7 @@ Band colours are computed unrounded from one settled candidate and rounded once.
 
 ## Every floor is measured as drawn
 
-Every contrast floor is measured on the colours the terminal will actually draw at the configured depth, composited over black, never on raw RGBA. At 256 colours, text and background round independently, so a colour that loses its floor after rounding is swapped for the nearest one that clears it. At ansi depth, colours are measured as the VGA palette rich-js assumes. The SGR writer still rounds each colour itself, which keeps a powerline arrow exactly the colour of its cell. Between bands, floors are measured as ΔE in OKLab, because a contrast ratio can't separate two hues at the same lightness.
+Every contrast floor is measured on the colours the terminal will actually draw at the configured depth, composited over black, never on raw RGBA. At 256 colours, text and background round independently, so a colour that loses its floor after rounding is swapped for the nearest one that clears it. At ansi depth, colours are measured as the VGA palette rich-js assumes. The SGR writer still rounds each colour itself, so an arrow is drawn exactly in its cell's colour wherever that colour stands off the next cell's as drawn; where it doesn't, rich-js's joiner lifts the arrow's ink off the next cell's, so a join never vanishes and is never a divider. Between bands, floors are measured as ΔE in OKLab, because a contrast ratio can't separate two hues at the same lightness.
 
 ## Text
 

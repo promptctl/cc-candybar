@@ -8,9 +8,8 @@
 //   1. Every background the closed bar draws is a colour its theme names:
 //      within PALETTE_FLOOR of a colour in its palette, under every variation
 //      and every position of the shade dial, at the `none` style.
-//   2. Two neighbouring cells never blur: every arrow joins two backgrounds at
-//      least SEAM_MIN_DELTA_E apart, and where a theme's own colours put two
-//      neighbours on one background the joiner draws the divider — with the
+//   2. Two neighbouring cells never blur: every join is an arrow, and every
+//      arrow joins two backgrounds at least SEAM_MIN_DELTA_E apart — with the
 //      rate-limit windows hot and with them calm (the calm block and weekly
 //      used to share `panel`, joined by an arrow nobody could see).
 //
@@ -58,12 +57,12 @@ const DIVIDER = "\u{e0b1}";
 const TOKEN = /\x1b\[([0-9;]*)m|\x1b\]8;[^\x1b]*\x1b\\/g;
 
 
-// A seam: the backgrounds either side and the glyph between them. The arrow
-// is drawn in the left cell's background over the right cell's, so its
-// (fg, bg) pair IS the seam. The divider is drawn in the left cell's TEXT
-// colour on the right cell's background — the same style run as the left
-// cell when the two backgrounds are byte-equal — so its left side is the
-// background of the text just before it.
+// A seam: the backgrounds either side and the glyph between them — the ground
+// of the column drawn just before the glyph, and the ground the glyph is drawn
+// on. An arrow's own ink is not read as its left side: the joiner draws it in
+// the left cell's background only where that stands off the right one, and
+// lifts it off the right one where it does not, so reading the ink would see
+// two neighbours on one ground as an arrow between two.
 interface Seam {
   readonly left: ColorRgba;
   readonly right: ColorRgba;
@@ -73,19 +72,15 @@ interface Seam {
 function seams(rendered: string): Seam[] {
   const out: Seam[] = [];
   for (const line of rendered.split("\n")) {
-    let fg: ColorRgba | undefined;
     let bg: ColorRgba | undefined;
-    let cellBg: ColorRgba | undefined;
+    // The ground of the column drawn last on the line, spaces included.
+    let ground: ColorRgba | undefined;
     let pos = 0;
     const text = (t: string): void => {
-      if (t.includes(ARROW)) {
-        if (fg && bg) out.push({ left: fg, right: bg, glyph: ARROW });
-        return;
+      for (const ch of t) {
+        if ((ch === ARROW || ch === DIVIDER) && ground && bg) out.push({ left: ground, right: bg, glyph: ch });
+        ground = bg;
       }
-      t.split(DIVIDER).forEach((part, k) => {
-        if (k > 0 && cellBg && bg) out.push({ left: cellBg, right: bg, glyph: DIVIDER });
-        if (part.trim() && bg) cellBg = bg;
-      });
     };
     for (const m of line.matchAll(TOKEN)) {
       text(line.slice(pos, m.index));
@@ -93,11 +88,9 @@ function seams(rendered: string): Seam[] {
       if (m[1] === undefined) continue;
       const p = m[1].split(";").map(Number);
       for (let i = 0; i < p.length; i++) {
-        if (p[i] === 0) fg = bg = undefined;
+        if (p[i] === 0) bg = undefined;
         else if ((p[i] === 38 || p[i] === 48) && p[i + 1] === 2) {
-          const c = new ColorRgba(p[i + 2]!, p[i + 3]!, p[i + 4]!);
-          if (p[i] === 38) fg = c;
-          else bg = c;
+          if (p[i] === 48) bg = new ColorRgba(p[i + 2]!, p[i + 3]!, p[i + 4]!);
           i += 4;
         }
       }

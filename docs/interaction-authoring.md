@@ -431,9 +431,9 @@ three neighbouring shades: `"deepest"` (the role's three darkenings),
 `"deeper"`, `"middle"` (the default: one darkening, the role itself, one
 lightening), `"brighter"` and `"brightest"` (its three lightenings) — and,
 below the deepest window, `"muted"`: every cell of a row in the role's muted
-form under the role's own text colour, as Textual's labels wear them, the
-cells parted by the joiner's divider. Under a window, cells side by side step
-up and down it a shade at a time. It resolves like `variation`, and the
+form under the role's own text colour, as Textual's labels wear them. Under
+a window, cells side by side step up and down it a shade at a time. It
+resolves like `variation`, and the
 `⚙` beside the settings menu's theme picker carries a `🔆` carousel over it. `shades` is a
 registered domain and `{{ .shade.effective }}` its projection:
 
@@ -1736,7 +1736,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  polled  ✱ Opus 4.8 󰶼 
+ 🍫  polled  ✱ Opus 4.8 󰶼 
  ◀ nord ▀▀▀ ▶ 
 ```
 

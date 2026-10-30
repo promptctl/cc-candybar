@@ -1,8 +1,6 @@
 // [LAW:verifiable-goals] brandon-menus-sjhy.b9w: every pair of neighbouring
-// segments in the open settings menu is two shades joined by a filled arrow.
-// rich-js joins two cells whose drawn backgrounds stand too near to tell apart
-// with its thin divider instead, and the menu showed it between the preset
-// control and its neighbours and between the closed tabs. Driven through the
+// segments in the open settings menu is two shades joined by a filled arrow,
+// never by the thin divider U+E0B1. Driven through the
 // real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
 //
@@ -19,6 +17,9 @@ import { instantOf } from "../src/utils/instant";
 import { stripAnsi } from "./helpers/ansi";
 import { POWERLINE } from "./helpers/powerline";
 import { sessionBar } from "./helpers/session-bar";
+
+// U+E0B1, the thin divider: no join draws it, so any on a row fails.
+const DIVIDER = "\u{E0B1}";
 
 const TABS = ["session", "look", "layout", "config", "tools"] as const;
 const COLS = 200;
@@ -53,7 +54,7 @@ function menuSeams(
       expect(menu.length).toBeGreaterThan(2);
       for (const row of menu) arrows += row.split(POWERLINE.glyph).length - 1;
       for (const row of rows)
-        if (row.includes(POWERLINE.divider)) divided.push(`${theme} / ${tab}: ${row.trim()}`);
+        if (row.includes(DIVIDER)) divided.push(`${theme} / ${tab}: ${row.trim()}`);
     }
   }
   bar.dispose();

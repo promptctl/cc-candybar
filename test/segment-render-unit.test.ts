@@ -9,9 +9,8 @@
 //
 //   1. A unit with internal variation (multiple clickable regions) renders as
 //      ONE strip item — no internal chevron, every clickable region preserved.
-//   2. Two adjacent segments are never drawn on one background: whatever
-//      their grounds would be, the join between them is a filled arrow, and the
-//      divider rich-js draws between two cells of one ground never appears.
+//   2. Two adjacent segments are always joined by a filled arrow, whatever
+//      their grounds: no thin divider is drawn in its place.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -28,9 +27,9 @@ import { instantOf } from "../src/utils/instant";
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The powerline arrow, drawn at the lead, between items and at the tail, and
-// the divider rich-js draws where two items share a ground, which no bar draws.
+// U+E0B1, the thin divider, which no join draws.
 const CHEVRON = POWERLINE.glyph;
-const DIVIDER = POWERLINE.divider;
+const DIVIDER = "\u{E0B1}";
 
 // Strip (not FlexStrip): an unbounded line, so the glyph count is exactly the
 // joiner walk's output — no width-driven wrap to perturb it.
