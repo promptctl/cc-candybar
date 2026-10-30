@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-503",
+      "ref": "refs/pull/503/merge",
+      "sha": "f852b29ca8cbbfb0a940b83602897aef4f8755bb",
+      "timestamp": "2026-10-30T17:08:11.888Z",
+      "commits": [
+        {
+          "sha": "f852b29ca8cbbfb0a940b83602897aef4f8755bb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:04:12Z",
+          "message": "Merge 4361938564ec0f22ab332ef8d21820cb174d9811 into 1bef42323069803286132c18409da954fece2264\n"
+        },
+        {
+          "sha": "4361938564ec0f22ab332ef8d21820cb174d9811",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:04:01-06:00",
+          "message": "test(colour): the door's ✖ is held on every ground a variation opens it on, and the design doc states its rule (candybar-joiners-e5r4.i30)\n\nThe sweep ran the default variation only, but the door's ground is its variation's menu hue at the dial's pressed rung, so a variation with another lineage gives the ✖ another ground. It now draws every dial position under the bundled variation and every variation at each pressed rung, split by theme so each test stays inside the suite's time limit, and lists the farthest-off red by the ground's palette name. 22 of 23 themes now list a ground; only textual-ansi clears everywhere.\n"
+        },
+        {
+          "sha": "e0907723f3fb39cbf126238b951b9fad4ff86b2a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:49:49-06:00",
+          "message": "fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30)\n\nThe open door's ✖ now selects among the reds the theme names for its error\nrole instead of wearing the base red: `text-error` where it clears\nTEXT_MIN_CONTRAST on the pressed state as truecolor draws it, otherwise the\nfirst rung of the error ladder out toward the pole the ground stands farther\nfrom that clears, and where none clears, the named red standing farthest off.\nIt never slides lightness and is never a synthesised colour; `keptOn` still\nholds its contrast through rounding at 256 and ansi.\n\nA new rig test opens the door under every bundled theme and dial position at\ntruecolor, 256 and ansi and measures the ✖ as drawn; it lists the themes where\nno named red clears, with the red worn and the ratio reached. The palette\nidentity test now holds the ✖ to the theme's error reds.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-499",
       "ref": "refs/pull/499/merge",
       "sha": "33ac2de5205aa7c31f8c7567cf8d6d5dfbf10707",
@@ -55,28 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-503",
-      "ref": "refs/pull/503/merge",
-      "sha": "e3c97bf4945cf12fdc321805115e86264b6b5912",
-      "timestamp": "2026-10-30T16:53:53.442Z",
-      "commits": [
-        {
-          "sha": "e3c97bf4945cf12fdc321805115e86264b6b5912",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:52:55-06:00",
-          "message": "Merge e0907723f3fb39cbf126238b951b9fad4ff86b2a into ac7fa0066116393d2e51df899b6ec19d31ba5071\n"
-        },
-        {
-          "sha": "e0907723f3fb39cbf126238b951b9fad4ff86b2a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:49:49-06:00",
-          "message": "fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30)\n\nThe open door's ✖ now selects among the reds the theme names for its error\nrole instead of wearing the base red: `text-error` where it clears\nTEXT_MIN_CONTRAST on the pressed state as truecolor draws it, otherwise the\nfirst rung of the error ladder out toward the pole the ground stands farther\nfrom that clears, and where none clears, the named red standing farthest off.\nIt never slides lightness and is never a synthesised colour; `keptOn` still\nholds its contrast through rounding at 256 and ansi.\n\nA new rig test opens the door under every bundled theme and dial position at\ntruecolor, 256 and ansi and measures the ✖ as drawn; it lists the themes where\nno named red clears, with the red worn and the ratio reached. The palette\nidentity test now holds the ✖ to the theme's error reds.\n"
         }
       ]
     },
