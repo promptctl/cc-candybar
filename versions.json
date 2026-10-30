@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-487",
+      "ref": "refs/pull/487/merge",
+      "sha": "cc498497c4e65c8dca54d6cd33e1a82625799373",
+      "timestamp": "2026-10-30T09:49:14.528Z",
+      "commits": [
+        {
+          "sha": "cc498497c4e65c8dca54d6cd33e1a82625799373",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:48:23-06:00",
+          "message": "Merge eba7509a79734201f7353c814098c7778fa49b95 into 5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad\n"
+        },
+        {
+          "sha": "eba7509a79734201f7353c814098c7778fa49b95",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:48:13-06:00",
+          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad",
