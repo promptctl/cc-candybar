@@ -3129,11 +3129,11 @@ function __asyncGenerator(thisArg, _arguments, generator) {
     try {
       step4(g[n](v));
     } catch (e) {
-      settle2(q[0][3], e);
+      settle3(q[0][3], e);
     }
   }
   function step4(r) {
-    r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject2) : settle2(q[0][2], r);
+    r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject2) : settle3(q[0][2], r);
   }
   function fulfill(value) {
     resume("next", value);
@@ -3141,7 +3141,7 @@ function __asyncGenerator(thisArg, _arguments, generator) {
   function reject2(value) {
     resume("throw", value);
   }
-  function settle2(f, v) {
+  function settle3(f, v) {
     if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]);
   }
 }
@@ -3167,11 +3167,11 @@ function __asyncValues(o) {
   function verb(n) {
     i[n] = o[n] && function(v) {
       return new Promise(function(resolve, reject2) {
-        v = o[n](v), settle2(resolve, reject2, v.done, v.value);
+        v = o[n](v), settle3(resolve, reject2, v.done, v.value);
       });
     };
   }
-  function settle2(resolve, reject2, d, v) {
+  function settle3(resolve, reject2, d, v) {
     Promise.resolve(v).then(function(v2) {
       resolve({ value: v2, done: d });
     }, reject2);
@@ -33240,14 +33240,14 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
 }
 function onColors(loop, colors) {
   const settled3 = /* @__PURE__ */ new WeakMap();
-  const settle2 = (drawn) => {
+  const settle3 = (drawn) => {
     const lit = colors ?? drawn.colors;
     const key = [drawnKey(drawn), "|", ...lit].join(" ");
     const memo = settled3.get(drawn.theme) ?? new Memo();
     settled3.set(drawn.theme, memo);
     return memo.get(key, () => shares(drawn, lit, loop.touch));
   };
-  return stillOnSlots(atShares(loop, settle2));
+  return stillOnSlots(atShares(loop, settle3));
 }
 function drawnKey({ depth, pairs: pairs2 }) {
   return [depth, ...pairs2.map(pairKey)].join(" ");
@@ -34042,7 +34042,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.162.4";
+var PACKAGE_VERSION = "1.162.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -34321,12 +34321,12 @@ async function launch(opts) {
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
-    const settle2 = (r) => finish(() => resolve(r));
+    const settle3 = (r) => finish(() => resolve(r));
     const signal = (pid2, sig) => {
       try {
         signalGroup(pid2, sig);
       } catch (err) {
-        settle2({
+        settle3({
           ok: false,
           reason: "signal-refused",
           stdout: stdout2,
@@ -34357,7 +34357,7 @@ async function launch(opts) {
       stderr2 += chunk3.toString("utf8");
     });
     child.on("error", (err) => {
-      settle2({
+      settle3({
         ok: false,
         reason: "spawn-error",
         stdout: stdout2,
@@ -34369,7 +34369,7 @@ async function launch(opts) {
     });
     child.on("close", (code, signal2) => {
       if (terminated !== null) {
-        settle2({
+        settle3({
           ok: false,
           reason: terminated,
           stdout: stdout2,
@@ -34380,11 +34380,11 @@ async function launch(opts) {
         return;
       }
       if (code === 0) {
-        settle2({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
+        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
         return;
       }
       const reason = signal2 ? "signal" : "non-zero";
-      settle2({
+      settle3({
         ok: false,
         reason,
         stdout: stdout2,
@@ -48945,22 +48945,27 @@ var LANES = {
   band: {
     setting: "experimentalBand",
     label: "\u{1F9EA} band (A)",
-    elsewhere: "the band above the prompt"
+    elsewhere: "the band above the prompt",
+    rows: null
   },
   statusline: {
     setting: "experimentalStatusline",
     label: "\u{1F9EA} statusline (B)",
-    elsewhere: null
+    elsewhere: null,
+    rows: null
   },
   pane: {
     setting: "experimentalPane",
     label: "\u{1F9EA} tmux pane (C)",
-    elsewhere: "a tmux pane below"
+    elsewhere: "a tmux pane below",
+    rows: null
   },
   tmuxStatus: {
     setting: "experimentalTmuxStatus",
     label: "\u{1F9EA} tmux status line (C)",
-    elsewhere: "the tmux status line"
+    elsewhere: "the tmux status line",
+    // tmux draws at most five status rows (`status` takes on, off, 2…5).
+    rows: 5
   }
 };
 var LANE_NAMES = Object.keys(LANES);
@@ -56572,6 +56577,23 @@ function presetIdentCollisions(ctx, presets) {
     });
   }
 }
+function authoredPlacement(raw, name) {
+  const layouts = [
+    ["root", raw.root],
+    ...Object.entries(raw.presets ?? {}).map(
+      ([preset, p2]) => [`presets.${preset}.root`, p2.root]
+    )
+  ];
+  for (const [layoutKey, fragment] of layouts) {
+    if (fragment === void 0) continue;
+    for (const [node, path39] of fragmentNodePaths(fragment, layoutKey)) {
+      if (node.kind === "segment" && node.name === name)
+        return { layoutKey, path: path39 };
+    }
+  }
+  return void 0;
+}
+var unplacedMessage = (layoutKey, name) => `${layoutKey} entry "${name}" does not match any declared segment${renamedHint(name)}`;
 function validateCrossReferences(ctx, cfg, authored) {
   const styleFragments = [
     [["globals"], cfg.globals.style, "globals.endcaps"],
@@ -56640,7 +56662,7 @@ function validateCrossReferences(ctx, cfg, authored) {
     }
     const byId = /* @__PURE__ */ new Map();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment") continue;
+      if (node.kind !== "segment" || !declared(node.name)) continue;
       const id2 = placementId(node);
       byId.set(id2, [...byId.get(id2) ?? [], node]);
     }
@@ -56674,6 +56696,7 @@ function validateCrossReferences(ctx, cfg, authored) {
     }
   }
   const reported = /* @__PURE__ */ new Set();
+  const declared = (name) => isSettingsAnchor(name) || Object.prototype.hasOwnProperty.call(cfg.segments, name);
   const checkLayoutTree = (root, layoutKey) => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
@@ -56710,7 +56733,7 @@ function validateCrossReferences(ctx, cfg, authored) {
         reported.add(node.name);
         ctx.unplaced.push({
           path: path39,
-          message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
+          message: unplacedMessage(layoutKey, node.name),
           line
         });
       }
@@ -56737,7 +56760,8 @@ function validateCrossReferences(ctx, cfg, authored) {
         continue;
       }
       reported.add(node.name);
-      ctx.unplaced.push({
+      ctx.inherited.push({
+        name: node.name,
         path: key,
         message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
         line: findKeyLine(ctx.source, key.split("."))
@@ -57778,7 +57802,8 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
     issues,
     allowedPalettes: new Set(listResolvablePaletteNames()),
     groups: [],
-    unplaced: []
+    unplaced: [],
+    inherited: []
   };
   const data = dataPath === void 0 ? {} : validateVariables(ctx, "data", {
     [pluginDataVar(ns)]: {
@@ -58449,20 +58474,20 @@ function loadConfigSource(path39, source, dflt, ctx, allowedPalettes) {
       layer: { plugins: layer, owning: owning2 }
     };
   });
-  const { plugins, owning } = parsed2.layer;
+  const { plugins: plugins2, owning } = parsed2.layer;
   const standing = withDroppedPlacements(
-    mergeWithDefault(parsed2.raw, plugins.config),
+    mergeWithDefault(parsed2.raw, plugins2.config),
     owning
   );
   return {
     source,
     raw: parsed2.raw,
-    warnings: [...parsed2.warnings, ...plugins.dropped.map(droppedPluginNotice)],
+    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
     plugins: {
-      loaded: plugins.loaded,
-      dropped: plugins.dropped,
+      loaded: plugins2.loaded,
+      dropped: plugins2.dropped,
       reached: standing.reached,
-      rendering: plugins.rendering
+      rendering: plugins2.rendering
     },
     config: standing.config
   };
@@ -58502,7 +58527,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
   };
   const found = installedPlugins(ctx.repo);
   const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
-  const plugins = {
+  const plugins2 = {
     ...merged,
     dropped: [...merged.dropped, ...found.strays]
   };
@@ -58511,7 +58536,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       (u) => `Plugin folder could not be listed: ${u.path} \u2014 ${u.error}`
     )
   );
-  const base = plugins.config;
+  const base = plugins2.config;
   const layers = [];
   for (const path39 of paths) {
     const below = layers.at(-1)?.plugins;
@@ -58523,10 +58548,10 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
         ...ctx,
         beneath: {
           dropped: [
-            ...plugins.dropped,
+            ...plugins2.dropped,
             ...layers.flatMap((l) => l.plugins.dropped)
           ],
-          rendering: below?.rendering ?? plugins.rendering
+          rendering: below?.rendering ?? plugins2.rendering
         }
       },
       allowedPalettes
@@ -58536,17 +58561,17 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
   }
   const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
   const isReached = (d) => reached.has(d.path);
-  const surfaced = plugins.dropped.filter(isReached);
-  const unreached = plugins.dropped.filter((d) => !isReached(d));
+  const surfaced = plugins2.dropped.filter(isReached);
+  const unreached = plugins2.dropped.filter((d) => !isReached(d));
   trace.warned(surfaced.map(droppedPluginNotice));
   const installed = {
     checkout: ctx.checkout,
     roots: found.roots,
-    loaded: plugins.loaded,
+    loaded: plugins2.loaded,
     dropped: surfaced,
     unreached,
     reached,
-    rendering: layers.at(-1)?.plugins.rendering ?? plugins.rendering
+    rendering: layers.at(-1)?.plugins.rendering ?? plugins2.rendering
   };
   const top = layers.at(-1);
   if (top === void 0) {
@@ -58566,7 +58591,12 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       layers,
       base,
       installed,
-      ...validateRenderable(top, top.path, allowedPalettes)
+      ...validateRenderable(
+        top,
+        top.path,
+        allowedPalettes,
+        layers.slice(0, -1).reverse()
+      )
     };
   } catch (e) {
     for (const layer of layers.slice(0, -1))
@@ -58586,7 +58616,8 @@ function checkPlugin(config2, plugin, replaces, filePath2, allowedPalettes) {
     issues,
     allowedPalettes: /* @__PURE__ */ new Set(),
     groups: [],
-    unplaced: []
+    unplaced: [],
+    inherited: []
   };
   validateDeclarations(ctx, config2, templateScopeOf(config2), owned);
   validateNoCycles(ctx, config2, owned);
@@ -58611,25 +58642,30 @@ var NO_FILE = {
     rendering: /* @__PURE__ */ new Map()
   }
 };
-function validateRenderable({ config: merged, raw, source }, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames())) {
+function validateRenderable({ config: merged, raw, source }, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
   const issues = [];
   const ctx = {
     source,
     issues,
     allowedPalettes,
     groups: [],
-    unplaced: []
+    unplaced: [],
+    inherited: []
   };
   const refuseIfIssues = () => {
     if (issues.length > 0) {
-      throw new ConfigError(filePath2, [...issues, ...ctx.unplaced]);
+      throw new ConfigError(filePath2, [
+        ...issues,
+        ...ctx.unplaced,
+        ...ctx.inherited
+      ]);
     }
   };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped2 = ctx.unplaced.length === 0 ? null : new ConfigError(filePath2, ctx.unplaced);
-  const config2 = dropped2 === null ? merged : withoutUnplaced(merged);
+  const dropped2 = droppedByFile(filePath2, ctx, beneath);
+  const config2 = dropped2.length === 0 ? merged : withoutUnplaced(merged);
   const withMenus = synthesizePlacementMenus(config2, issues);
   refuseIfIssues();
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
@@ -58648,6 +58684,27 @@ function validateRenderable({ config: merged, raw, source }, filePath2 = "<confi
   refuseIfIssues();
   return { config: withChrome, dropped: dropped2 };
 }
+function droppedByFile(filePath2, ctx, beneath) {
+  const byFile = /* @__PURE__ */ new Map();
+  const add2 = (file, issue3) => {
+    byFile.set(file, [...byFile.get(file) ?? [], issue3]);
+  };
+  for (const issue3 of ctx.unplaced) add2(filePath2, issue3);
+  for (const { name, ...issue3 } of ctx.inherited) {
+    const author = beneath.flatMap((layer) => {
+      const at = authoredPlacement(layer.raw, name);
+      return at === void 0 ? [] : [{ layer, ...at }];
+    })[0];
+    if (author === void 0) add2(filePath2, issue3);
+    else
+      add2(author.layer.path, {
+        path: author.path,
+        message: unplacedMessage(author.layoutKey, name),
+        line: findKeyLine(author.layer.source, author.path.split("."))
+      });
+  }
+  return [...byFile].map(([file, issues]) => new ConfigError(file, issues));
+}
 function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolvablePaletteNames()), inheritedSegments = NO_INHERITED_SEGMENTS) {
   return parseDslFile(filePath2, source, allowedPalettes, () => ({
     inherited: inheritedSegments,
@@ -58664,7 +58721,8 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     issues,
     allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
-    unplaced: []
+    unplaced: [],
+    inherited: []
   };
   if (!isPlainObject3(json2)) {
     throw new ConfigError(
@@ -61290,14 +61348,15 @@ function requireValueTarget(key) {
 }
 function commit(store, home, before, after, refuse2) {
   const will = loadOrRefuse(home, after);
-  const was = loadedOrNull(home, before);
+  let held;
+  const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse2(home, was, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
 function refuseHidden(home, was, will) {
-  const hidden = hiddenBy(home, was, will);
+  const hidden = hiddenBy(home, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
       `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar \u2014 edit it there`
@@ -61370,14 +61429,21 @@ function loadOrRefuse(home, text3) {
   }
 }
 function refuseNewDrops(home, was, will) {
-  if (was === null) return;
-  const held = new Set((was.dropped?.issues ?? []).map((i) => i.message));
-  const added = (will.dropped?.issues ?? []).filter(
-    (i) => !held.has(i.message)
+  if (will.dropped.length === 0) return;
+  const prior = was();
+  if (prior === null) return;
+  const issuesOf = (chain2) => chain2.dropped.flatMap(
+    (e) => e.issues.map((issue3) => ({ file: e.file, issue: issue3 }))
+  );
+  const held = new Set(
+    issuesOf(prior).map(({ file, issue: issue3 }) => `${file}\0${issue3.message}`)
+  );
+  const added = issuesOf(will).filter(
+    ({ file, issue: issue3 }) => !held.has(`${file}\0${issue3.message}`)
   );
   if (added.length > 0) {
     throw new BadVerbArgs(
-      `refused: this click would leave a placement of a segment nothing declares \u2014 ${new ConfigError(home.path, added).message}`
+      `refused: this click would leave a placement of a segment nothing declares \u2014 ${added.map(({ file, issue: issue3 }) => new ConfigError(file, [issue3]).message).join("\n")}`
     );
   }
 }
@@ -62306,9 +62372,9 @@ function collectDiagnostics(errors2, notices, warnings) {
     ...warnings.flatMap((w) => plainMessage(w, WARNING_SEVERITY))
   ];
 }
-function plainMessage(message, severity) {
+function plainMessage({ about, text: message }, severity) {
   const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
-  return first2 === void 0 ? [] : [{ severity, message, lines: [first2, ...rest2] }];
+  return first2 === void 0 ? [] : [{ severity, about, message, lines: [first2, ...rest2] }];
 }
 function worstLevel(list2) {
   return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
@@ -62317,8 +62383,9 @@ var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
 var PAGES = 4096;
 function identityOf(message) {
-  const headline = message.message.split(/\r\n|\r|\n/, 1)[0];
-  const digest2 = createHash("sha256").update(`${message.severity.level}\0${message.severity.glyph}\0${headline}`).digest("hex");
+  const digest2 = createHash("sha256").update(
+    `${message.severity.level}\0${message.severity.glyph}\0${message.about}`
+  ).digest("hex");
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
 function stopsOf(list2) {
@@ -62356,8 +62423,8 @@ function viewedIndex(raw, list2) {
   return raw === null || at === -1 ? null : { index: at + 1, page: key % PAGES };
 }
 var MAX_VIEWER_ROWS = 20;
-function viewerRowCap(termRows) {
-  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS);
+function viewerRowCap(termRows, surfaceRows) {
+  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
 }
 function viewerRows(list2, at, sessionId2, geometry) {
   const { index } = at;
@@ -62532,7 +62599,12 @@ function repoQuestions(gate2, sessionId2, signer) {
       )
     );
     const line = [diagnosticSpan(message, null), ...answers];
-    return { severity: APPROVAL_SEVERITY, message, lines: [line] };
+    return {
+      severity: APPROVAL_SEVERITY,
+      about: `repo-question\0${dir}`,
+      message,
+      lines: [line]
+    };
   });
 }
 
@@ -64167,12 +64239,12 @@ function sourcesFactOf(sources) {
   };
 }
 function projectSources(names, read2) {
-  const plugins = {};
+  const plugins2 = {};
   for (const name of names) {
     const [, plugin, source] = name.split(".");
-    (plugins[plugin] ??= {})[source] = read2(name);
+    (plugins2[plugin] ??= {})[source] = read2(name);
   }
-  return plugins;
+  return plugins2;
 }
 function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
@@ -68109,7 +68181,14 @@ function updateNotice(update, act, ctx) {
     )
   ];
   const rest2 = failure.map((f) => [diagnosticSpan(f, null)]);
-  return [{ severity: UPDATE_SEVERITY, message, lines: [first2, ...rest2] }];
+  return [
+    {
+      severity: UPDATE_SEVERITY,
+      about: `update\0${identity3}`,
+      message,
+      lines: [first2, ...rest2]
+    }
+  ];
 }
 function updateOf(build, release3) {
   if (build.kind === "stale") {
@@ -74500,7 +74579,7 @@ var ViewParts = class {
     let node = this.slots.get(slot);
     if (node === void 0) {
       let last2;
-      const settle2 = () => {
+      const settle3 = () => {
         const selection2 = this.selections()[SELECTION_OF[slot]];
         if (selection2.kind === "decided")
           return settled2(selection2.name, null, null);
@@ -74539,7 +74618,7 @@ var ViewParts = class {
       };
       let held;
       node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next2 = settle2();
+        const next2 = settle3();
         if (held === void 0 || !sameSlot(held, next2)) held = next2;
         return held;
       });
@@ -75649,6 +75728,12 @@ function unusedDeclarations(raw, config2) {
   ];
 }
 
+// src/utils/plain.ts
+init_globals();
+function digestOf2(value) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
 // src/utils/holds.ts
 init_globals();
 var Holds = class {
@@ -75716,11 +75801,11 @@ function renderCacheBudget(memoryLimitBytes2) {
 }
 var MAX_ENTRIES3 = 256;
 function pluginLoadLine(layers, {
-  plugins,
+  plugins: plugins2,
   config: config2,
   compiled
 }, ms) {
-  const { checkout, loaded, dropped: dropped2, unreached } = plugins;
+  const { checkout, loaded, dropped: dropped2, unreached } = plugins2;
   const checkoutField = checkout === null ? "-" : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
   const dataOf = (definition) => {
     const name = pluginNameOf(definition);
@@ -75760,9 +75845,9 @@ var causeField = (cause) => {
       return `${cause.kind}:${heardField(cause.heard)}`;
   }
 };
-function configLoadedLine(entry, cause) {
+function configLoadedLine(entry, cause, settled3) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -75828,15 +75913,93 @@ function watchTargetsFor(entry) {
 function joinWarnings(parts) {
   return parts.filter(Boolean).join("\n") || null;
 }
-function buildRenderState(cwd2, chain2, warnings, deps) {
-  const { layers, config: config2, installed, dropped: dropped2 } = loadConfigChain(
-    chain2.layers,
-    DEFAULT_DSL_CONFIG,
-    { warned: (w) => warnings.push(...w) },
-    { repo: chain2.repo, cwd: cwd2 }
-  );
+var thrown = (err) => err instanceof Error ? err.message : String(err);
+function plugins(p2) {
+  return {
+    loaded: p2.loaded,
+    dropped: p2.dropped,
+    reached: [...p2.reached].sort(),
+    rendering: [...p2.rendering].sort(([a], [b]) => a.localeCompare(b))
+  };
+}
+function loadKey(inputs) {
+  const { loaded, chain: chain2 } = inputs;
+  return digestOf2({
+    cwd: inputs.cwd,
+    chain: {
+      layers: chain2.layers,
+      home: chain2.home,
+      repo: chain2.repo
+    },
+    loaded: {
+      layers: loaded.layers.map(
+        (l) => ({
+          path: l.path,
+          raw: l.raw,
+          config: l.config,
+          plugins: plugins(l.plugins),
+          // Not keyed: positions reach no state, and the resolve redraws
+          // its diagnostics on every load, so a whitespace or comment edit
+          // keeps the state.
+          source: null,
+          // Not keyed: the entry's, recomposed on every load.
+          warnings: null
+        })
+      ),
+      base: loaded.base,
+      installed: {
+        ...plugins(loaded.installed),
+        checkout: loaded.installed.checkout,
+        roots: loaded.installed.roots,
+        unreached: loaded.installed.unreached
+      },
+      config: loaded.config,
+      // [LAW:one-source-of-truth] Keyed by message: unlike a layer's own
+      // diagnostics the drops ride the state, positions and all, so a state
+      // kept across an edit that moved a drop would name the old line.
+      dropped: loaded.dropped.map((e) => e.message)
+    },
+    sources: [...inputs.sources].sort(([a], [b]) => a.localeCompare(b)).map(([name, key]) => [name, key.folder, key.generation])
+  });
+}
+function declaredSources(config2, storage) {
+  const keys2 = /* @__PURE__ */ new Map();
+  const sources = /* @__PURE__ */ new Map();
+  for (const [name, decl] of Object.entries(config2.variables)) {
+    if (decl.kind !== "source") continue;
+    const key = keys2.get(decl.storage) ?? storage.keyFor(decl.storage);
+    keys2.set(decl.storage, key);
+    sources.set(name, key);
+  }
+  return sources;
+}
+function resolveLoad(cwd2, chain2, storage) {
+  const warnings = [];
+  try {
+    const loaded = loadConfigChain(
+      chain2.layers,
+      DEFAULT_DSL_CONFIG,
+      { warned: (w) => warnings.push(...w) },
+      { repo: chain2.repo, cwd: cwd2 }
+    );
+    const inputs = {
+      cwd: cwd2,
+      chain: chain2,
+      loaded,
+      sources: declaredSources(loaded.config, storage)
+    };
+    return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
+  } catch (err) {
+    if (err instanceof ConfigError) warnings.push(...err.warnings);
+    return { kind: "failed", cause: err, warnings };
+  }
+}
+function buildRenderState(load, deps) {
+  const { cwd: cwd2, chain: chain2, loaded } = load;
+  const { layers, config: config2, installed, dropped: dropped2 } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
+  const warnings = [];
   const store = new VariableStore();
   const registry = new SourceRegistry(
     store,
@@ -75846,7 +76009,6 @@ function buildRenderState(cwd2, chain2, warnings, deps) {
     deps.ledger
   );
   let registration;
-  let sources;
   try {
     registration = registerCompiled(
       config2,
@@ -75861,62 +76023,89 @@ function buildRenderState(cwd2, chain2, warnings, deps) {
     probe2.dispose();
     stateGate(config2);
     configGate(config2);
-    sources = declaredSources(config2, deps.storage, registry);
+    for (const key of new Set(load.sources.values()))
+      registry.own(deps.storage.watch(key));
   } catch (err) {
     registry.dispose();
-    throw err;
+    if (err instanceof ConfigError) warnings.push(...err.warnings);
+    return { kind: "failed", cause: err, warnings };
   }
   return {
-    config: config2,
-    dropped: dropped2,
-    compileKey: registration.compileKey,
-    store,
-    registry,
-    compiled: registration.compiled,
-    neededInputPaths: neededPrefixesByPreset(config2),
-    // What a reset clears is the home's: resets write nowhere else.
-    authoredRoots: authoredRoots(merged, homeRaw),
-    fileHeldSettings: fileHeldSettings(homeRaw),
-    configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
-    // One entry per declaration, however many layers declare it.
-    unused: [
-      ...new Map(
-        layers.flatMap((l) => unusedDeclarations(l.raw, merged)).map((u) => [`${u.kind}:${u.name}`, u])
-      ).values()
-    ],
-    plugins: {
-      checkout: installed.checkout,
-      roots: installed.roots,
-      // What renders, as the loader decided it: a nearer layer's load or
-      // drop replaces a farther one's of the same name.
-      loaded: [...installed.rendering.values()],
-      dropped: [
-        ...installed.dropped,
-        ...layers.flatMap((l) => l.plugins.dropped)
+    kind: "built",
+    state: {
+      config: config2,
+      dropped: dropped2,
+      compileKey: registration.compileKey,
+      loadKey: load.key,
+      buildWarnings: warnings,
+      store,
+      registry,
+      compiled: registration.compiled,
+      neededInputPaths: neededPrefixesByPreset(config2),
+      // What a reset clears is the home's: resets write nowhere else.
+      authoredRoots: authoredRoots(merged, homeRaw),
+      fileHeldSettings: fileHeldSettings(homeRaw),
+      configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
+      // One entry per declaration, however many layers declare it.
+      unused: [
+        ...new Map(
+          layers.flatMap((l) => unusedDeclarations(l.raw, merged)).map((u) => [`${u.kind}:${u.name}`, u])
+        ).values()
       ],
-      unreached: installed.unreached,
-      reached: installed.reached,
-      rendering: installed.rendering
-    },
-    sources
+      plugins: {
+        checkout: installed.checkout,
+        roots: installed.roots,
+        // What renders, as the loader decided it: a nearer layer's load or
+        // drop replaces a farther one's of the same name.
+        loaded: [...installed.rendering.values()],
+        dropped: [
+          ...installed.dropped,
+          ...layers.flatMap((l) => l.plugins.dropped)
+        ],
+        unreached: installed.unreached,
+        reached: installed.reached,
+        rendering: installed.rendering
+      },
+      sources: load.sources
+    }
   };
 }
-function declaredSources(config2, storage, registry) {
-  const keys2 = /* @__PURE__ */ new Map();
-  const sources = /* @__PURE__ */ new Map();
-  for (const [name, decl] of Object.entries(config2.variables)) {
-    if (decl.kind !== "source") continue;
-    let key = keys2.get(decl.storage);
-    if (key === void 0) {
-      key = storage.keyFor(decl.storage);
-      keys2.set(decl.storage, key);
-      registry.own(storage.watch(key));
-    }
-    sources.set(name, key);
+function settle2(frame, resolveWarnings, attempt4) {
+  const common = {
+    layers: frame.layers,
+    home: frame.home,
+    repos: frame.repos,
+    ms: Math.round(performance.now() - frame.started)
+  };
+  const warning = (own2) => joinWarnings([...frame.advisories, ...resolveWarnings, ...own2]);
+  switch (attempt4.kind) {
+    case "built":
+    case "kept":
+      return {
+        ...common,
+        kind: attempt4.kind,
+        warning: warning(attempt4.state.buildWarnings),
+        state: attempt4.state,
+        error: null
+      };
+    case "failed":
+      return {
+        ...common,
+        kind: "failed",
+        warning: warning(attempt4.warnings),
+        state: null,
+        error: thrown(attempt4.cause),
+        cause: attempt4.cause
+      };
   }
-  return sources;
 }
-function loadFromDisk(projectDir, cwd2, configFile, deps) {
+function loadChain(frame, cwd2, chain2, deps, served = null) {
+  const resolved = resolveLoad(cwd2, chain2, deps.storage);
+  if (resolved.kind === "failed") return settle2(frame, [], resolved);
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle2(frame, resolved.warnings, attempt4);
+}
+function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
   const resolution = resolveDslConfig(
     repoConfigs().read(),
@@ -75935,33 +76124,26 @@ function loadFromDisk(projectDir, cwd2, configFile, deps) {
     configResolutionNotice(resolution),
     repoUnreadNotice(repos)
   ];
-  let state;
-  try {
-    state = buildRenderState(cwd2, chain2, advisories, deps);
-  } catch (err) {
-    if (err instanceof ConfigError) advisories.push(...err.warnings);
-    return {
-      layers: chain2.layers,
-      home: chain2.home,
-      ms: Math.round(performance.now() - started2),
-      repos,
-      warning: joinWarnings(advisories),
-      state: null,
-      error: err instanceof ConfigError ? err.message : err instanceof Error ? err.message : String(err)
-    };
-  }
-  return {
-    layers: chain2.layers,
-    home: chain2.home,
-    ms: Math.round(performance.now() - started2),
-    repos,
-    warning: joinWarnings(advisories),
-    state,
-    error: null
-  };
+  return loadChain(
+    { layers: chain2.layers, home: chain2.home, repos, advisories, started: started2 },
+    cwd2,
+    chain2,
+    deps,
+    served
+  );
 }
 function fallbackState(cwd2, repo2, deps) {
-  return buildRenderState(cwd2, { layers: [], home: "", repo: repo2 }, [], deps);
+  const resolved = resolveLoad(
+    cwd2,
+    { layers: [], home: "", repo: repo2 },
+    deps.storage
+  );
+  const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
+  if (built.kind === "failed")
+    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+      cause: built.cause
+    });
+  return built.state;
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
@@ -76152,7 +76334,7 @@ var RenderCache = class {
       this.entries.set(key, existing);
       return existing;
     }
-    const loaded = this.load(projectDir, cwd2, configFile);
+    const loaded = this.load(projectDir, cwd2, configFile, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     const entry = {
@@ -76175,7 +76357,7 @@ var RenderCache = class {
       `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry, [], { kind: "open" });
+    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
     return entry;
   }
   // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
@@ -76422,9 +76604,9 @@ var RenderCache = class {
   // config watch firing after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(projectDir, cwd2, configFile) {
+  load(projectDir, cwd2, configFile, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd2, configFile, this.deps);
+    return loadFromDisk(projectDir, cwd2, configFile, this.deps, served);
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
   // goes, the map stops serving it, and its state is retired.
@@ -76548,7 +76730,7 @@ var RenderCache = class {
   // Re-read an entry from disk NOW, for a caller that must not act on the old
   // config until the reload has landed (a save releasing the picks the file
   // now holds, a doctor verdict on the files as they are). The watcher still
-  // fires after a write; a second reload of unchanged bytes is idempotent.
+  // fires after a write, and its reload of the same bytes keeps the state.
   reload(projectDir, cwd2, configFile, cause) {
     this.reloadInto(this.getOrCreate(projectDir, cwd2, configFile), cause);
   }
@@ -76569,19 +76751,25 @@ var RenderCache = class {
   // arm the load took.
   reloadInto(entry, cause) {
     const sessions = this.sessionsOn(entry);
-    const loaded = this.load(entry.projectDir, entry.cwd, entry.configFile);
+    const served = entry.state;
+    const loaded = this.load(
+      entry.projectDir,
+      entry.cwd,
+      entry.configFile,
+      served
+    );
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
-    if (loaded.state !== null) {
+    if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
-      const retired = entry.state;
+    if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
-      this.retire(retired, "reload", { entry, state: loaded.state });
+      this.retire(served, "reload", { entry, state: loaded.state });
     }
     this.fit(entry);
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry, sessions, cause);
+    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
   // Every entry, under the answers now on disk: any of them may draw from a
   // repository. The live map is walked, so an entry a reload's `fit` evicts
@@ -77579,7 +77767,7 @@ function sameView(a, b) {
 
 // src/daemon/tmux-status.ts
 init_globals();
-var MAX_STATUS_ROWS = 5;
+var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
 var BINDING_OPTION = "@cc-candybar-binding-prior";
@@ -79156,6 +79344,7 @@ function laneHandoff(sessionId2, lanes) {
   ]);
   return {
     severity: HANDOFF_SEVERITY,
+    about: "lane-handoff",
     message,
     lines: [
       [
@@ -79188,11 +79377,9 @@ var RenderWarningRecords = class {
   }
   maxRecords;
   records = /* @__PURE__ */ new Map();
-  // The warnings `by` last recorded for `sessionId` in `scope`; none before
-  // its first, or once its last frame was drawn from another scope.
-  of(sessionId2, by, scope) {
-    const held = this.records.get(keyOf(sessionId2, by));
-    return held !== void 0 && held.generation === generationOf(scope.config) && held.width === scope.width ? held.warnings : [];
+  // The warnings `by` last recorded for `sessionId`; none before its first.
+  of(sessionId2, by) {
+    return this.records.get(keyOf(sessionId2, by))?.warnings ?? [];
   }
   // The session's warnings as `by` draws them in `scope`: its own record, and
   // every other renderer's drawn from the same config, each warning once
@@ -79202,7 +79389,7 @@ var RenderWarningRecords = class {
     const listed = [];
     for (const renderer of RENDERERS) {
       const held = this.records.get(keyOf(sessionId2, renderer));
-      const own2 = renderer === by ? this.of(sessionId2, by, scope) : held?.generation === generation ? held.warnings : [];
+      const own2 = renderer === by ? this.of(sessionId2, by) : held?.generation === generation ? held.warnings : [];
       const earlier = listed.map((w) => JSON.stringify(w));
       for (const w of own2) {
         const at = earlier.indexOf(JSON.stringify(w));
@@ -79213,14 +79400,13 @@ var RenderWarningRecords = class {
     return listed;
   }
   // Records what a frame warned. Says whether that changed what the
-  // renderer's next frame in `scope` shows.
+  // renderer's next frame shows.
   drawn(sessionId2, by, scope, warnings) {
-    const held = this.of(sessionId2, by, scope);
+    const held = this.of(sessionId2, by);
     const key = keyOf(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
       generation: generationOf(scope.config),
-      width: scope.width,
       warnings
     });
     for (const oldest of this.records.keys()) {
@@ -79542,8 +79728,8 @@ var renderCache = new RenderCache(
       // daemon.log with its cause — the operator's only record of why a load
       // ran, and whether a save was picked up cleanly, kept rendering
       // last-known-good behind an error, or resolved to a different file.
-      onReload: (entry, sessions, cause) => {
-        dlog("info", configLoadedLine(entry, cause));
+      onReload: (entry, sessions, cause, settled3) => {
+        dlog("info", configLoadedLine(entry, cause, settled3));
         for (const sessionId2 of sessions) frameFeeds.wake(sessionId2, "reload");
       },
       // [LAW:single-enforcer] What a session's view draws from moved: its
@@ -80318,22 +80504,26 @@ function drawRender(setup, drawing2) {
     enabled: effective.updateNotice
   });
   const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
+  const said = (text3) => ({ about: text3, text: text3 });
   const errors2 = [
-    refusedArgsError(req.refusedArgs),
-    hintsError,
-    entry.lastError,
-    state.dropped?.message ?? null,
-    clickShown?.text ?? null
-  ].filter((e) => Boolean(e));
+    said(refusedArgsError(req.refusedArgs)),
+    said(hintsError),
+    { about: "load", text: entry.lastError },
+    ...state.dropped.map((e) => ({
+      about: `dropped\0${e.file}`,
+      text: e.message
+    })),
+    said(clickShown?.text)
+  ].flatMap(({ about, text: text3 }) => about && text3 ? [{ about, text: text3 }] : []);
   const loadWarnings = entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }];
-  const scope = { config: state.config, width };
+  const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
     errors2,
     [...updates, ...questions],
     [
       ...loadWarnings,
       ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
-    ].map((w) => w.message)
+    ].map((w) => ({ about: `${w.kind}\0${w.message}`, text: w.message }))
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -80398,7 +80588,15 @@ function drawRender(setup, drawing2) {
   );
   const geometry = {
     width,
-    rows: viewerRowCap(hints.termRows),
+    // A feed's one frame is shown by every lane switched on, so it pages
+    // within the shortest of their surfaces.
+    rows: viewerRowCap(
+      hints.termRows,
+      drawing2.by === "feed" ? LANE_NAMES.flatMap((lane) => {
+        const rows = LANES[lane].rows;
+        return lanes[lane] && rows !== null ? [rows] : [];
+      }) : []
+    ),
     colorCompatibility: effective.colorCompatibility
   };
   const viewing = viewedIndex(

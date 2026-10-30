@@ -2,32 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7",
-      "timestamp": "2026-10-30T08:32:49.776Z",
-      "commits": [
-        {
-          "sha": "df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T02:32:02-06:00",
-          "message": "fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5) (#484)\n\n* fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5)\n\nA save reloads its config, and the config's watch then reloads the same\nbytes. Each reload built a new state and reopened every session view drawing\nfrom the entry, restarting its sources.\n\nA load now resolves its inputs, keys them, then builds. The render cache's\nreload keeps the served state when the key matches. The key is a digest over\na projection typed over every field of what a load reads, so a field added\nlater fails to compile until it is keyed, and no Set or Map is hashed as {}.\nOne settle composes the warning for every reader. A kept state carries the\nwarnings its build earned, and a failed build carries its own beside the\nerror. `config loaded` says state=built|kept|failed.\n\nTests that reloaded unchanged inputs to drive a build now edit the config\nfirst.\n\n* fix(daemon): a failed load keeps what was thrown, and the keep is the served state passed as data (brandon-unfiled-3248.0rr5)\n\n- A failed attempt carries its cause, not only its message: the demo rethrows\n  a defect with its stack and reports only a ConfigError, and fallbackState\n  chains the cause.\n- Past the chain, one blame rule for the resolve and the build: a key or\n  storage failure over several merged layers names no file.\n- loadChain takes the served state instead of an attempt callback; the keep\n  is a comparison of keys in the one load.\n- Plain rejects a field typed unknown or any, which would admit a Set or Map.\n- The demo reports a load's warning whole, as the strip shows it.\n\n* fix(plain): a symbol or bigint is not a digest's input, and the memory names what the key leaves to the daemon (brandon-unfiled-3248.0rr5)\n\n* test(plain): a bigint's refusal is asserted, not thrown through the test (brandon-unfiled-3248.0rr5)"
-        }
-      ]
-    },
-    {
       "version": "pr-483",
       "ref": "refs/pull/483/merge",
-      "sha": "3aa5bb0088705d79a640bb06b665be83bdcf6a01",
-      "timestamp": "2026-10-30T08:21:52.866Z",
+      "sha": "ae36e27daf2b8e05c4dfce6da122124d6a1f4bcf",
+      "timestamp": "2026-10-30T08:53:04.361Z",
       "commits": [
         {
-          "sha": "3aa5bb0088705d79a640bb06b665be83bdcf6a01",
+          "sha": "ae36e27daf2b8e05c4dfce6da122124d6a1f4bcf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:20:58Z",
-          "message": "Merge 2edd69858230fb5727ad633950098f2779a15bd2 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+          "timestamp": "2026-10-30T08:52:11Z",
+          "message": "Merge 4ea6c2f91d1bd177a6039e59308fc277b29a7d9a into 69a11c831d9f5ccef2f1064e0e51874166618e82\n"
+        },
+        {
+          "sha": "4ea6c2f91d1bd177a6039e59308fc277b29a7d9a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:52:00-06:00",
+          "message": "Merge origin/main into candybar-plugins-vf6g.84i (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "6cc3fbb4591f45c485f1d12d4ac886c76e2d2070",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:42:39-06:00",
+          "message": "fix(diagnostics): a warning still met never looks gone, a message keeps its identity as its text changes, and each drop is blamed on the file that wrote it (candybar-plugins-vf6g.84i)\n\n- A renderer's own warning record stands until its next frame replaces it,\n  so a reload or resize never closes and reopens an open viewer.\n- A message's identity is what its producer says it is about (a load's\n  config, a drop's file, a repository, an update), not its headline.\n- The viewer pages within the shortest surface showing it: a feed's frame\n  the tmux status line shows gets five rows.\n- An undeclared placement owns no id, so two of one typo are two drops.\n- A drop a lower layer wrote is reported against that file, at its line.\n- A click loads the file before it only when a refusal reads it.\n- validateConfig leaves production: check and the demo refuse drops through\n  refuseDrops, and the strict form is a test helper.\n"
         },
         {
           "sha": "2edd69858230fb5727ad633950098f2779a15bd2",
@@ -140,6 +139,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:31:26-06:00",
           "message": "feat(diagnostics): every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i)\n\nThe red and amber strip above the bar is gone. The settings door's own cell\ncarries an indicator (⚠ N, red if any error, amber otherwise, 9+ cap) that\nreads a per-draw diagnostics projection; clicking it opens a viewer that takes\nthe body's place and shows one message in full with ✕, ‹ ›, [k/N] and ⧉ copy.\nRender warnings are recorded per session and renderer, rewritten only when a\nframe is drawn from a new source. A placement of an undeclared segment drops\nonly its own cell and is reported as an error; check and the demo still refuse\nit. The handed-off statusline is the handoff line alone, so an error shows\nonce. The diagnostic dump, its file:// links and the show-config verbs are\ndeleted.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7",
+      "timestamp": "2026-10-30T08:32:49.776Z",
+      "commits": [
+        {
+          "sha": "df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:32:02-06:00",
+          "message": "fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5) (#484)\n\n* fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5)\n\nA save reloads its config, and the config's watch then reloads the same\nbytes. Each reload built a new state and reopened every session view drawing\nfrom the entry, restarting its sources.\n\nA load now resolves its inputs, keys them, then builds. The render cache's\nreload keeps the served state when the key matches. The key is a digest over\na projection typed over every field of what a load reads, so a field added\nlater fails to compile until it is keyed, and no Set or Map is hashed as {}.\nOne settle composes the warning for every reader. A kept state carries the\nwarnings its build earned, and a failed build carries its own beside the\nerror. `config loaded` says state=built|kept|failed.\n\nTests that reloaded unchanged inputs to drive a build now edit the config\nfirst.\n\n* fix(daemon): a failed load keeps what was thrown, and the keep is the served state passed as data (brandon-unfiled-3248.0rr5)\n\n- A failed attempt carries its cause, not only its message: the demo rethrows\n  a defect with its stack and reports only a ConfigError, and fallbackState\n  chains the cause.\n- Past the chain, one blame rule for the resolve and the build: a key or\n  storage failure over several merged layers names no file.\n- loadChain takes the served state instead of an attempt callback; the keep\n  is a comparison of keys in the one load.\n- Plain rejects a field typed unknown or any, which would admit a Set or Map.\n- The demo reports a load's warning whole, as the strip shows it.\n\n* fix(plain): a symbol or bigint is not a digest's input, and the memory names what the key leaves to the daemon (brandon-unfiled-3248.0rr5)\n\n* test(plain): a bigint's refusal is asserted, not thrown through the test (brandon-unfiled-3248.0rr5)"
         }
       ]
     }
