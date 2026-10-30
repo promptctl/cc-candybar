@@ -224,6 +224,65 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 1c. roleTextOn: a role's text on a ground, selected among the colours the
+//     theme names for the role
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("roleTextOn: a role's text on a ground is a colour the theme names for the role, never a synthesised one", () => {
+  // A role whose text colour and ladder are spelled by hand, so each answer
+  // below is one entry, measured on paper against the ground it is asked for.
+  const RED = new Map<string, ColorRgba>([
+    ["text-error", parseRgbHex("c86464")],
+    ["error", parseRgbHex("a03c3c")],
+    ["error-lighten-1", parseRgbHex("b45050")],
+    ["error-lighten-2", parseRgbHex("d27878")],
+    ["error-lighten-3", parseRgbHex("f0a0a0")],
+    ["error-darken-1", parseRgbHex("822828")],
+    ["error-darken-2", parseRgbHex("641414")],
+    ["error-darken-3", parseRgbHex("460000")],
+  ]);
+  const on = (ground: string, palette = new Palette("reds", true, RED)): string => {
+    const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
+    const engine = createCcCandybarEngine({ ...TEST_ENGINE, extraFuncs: segmentColorFuncs(ref) });
+    openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
+    return engine
+      .parse(`{{ roleTextOn "error" "${ground}" }}`)
+      .evaluate({})
+      .map((f) => f.plain)
+      .join("");
+  };
+
+  test("the role's text colour, where it clears the text floor, though a rung stands farther off", () => {
+    // On black: text-error 5.46:1, error-lighten-3 10.2:1.
+    expect(on("#000000")).toBe("#c86464");
+  });
+
+  test("otherwise the role itself where it clears, though a rung stands farther off", () => {
+    // On white, whose pole is black: text-error 3.84:1, error 6.55:1,
+    // darken-1 9.20:1.
+    expect(on("#ffffff")).toBe("#a03c3c");
+  });
+
+  test("otherwise the first rung out toward the pole the ground stands farther from that clears it, not the farthest", () => {
+    // On #202020, whose pole is white: text-error 4.23:1, error 2.49:1,
+    // lighten-1 3.26:1, lighten-2 5.20:1, lighten-3 7.94:1.
+    expect(on("#202020")).toBe("#d27878");
+  });
+
+  test("where none of the role's colours clears it, the one standing farthest off, on either side of the ground", () => {
+    // On #707070, whose pole is white yet whose lightenings close in on it:
+    // lighten-3 2.41:1 at best, darken-3 3.37:1, text-error 1.29:1.
+    expect(on("#707070")).toBe("#460000");
+  });
+
+  test("a role the palette names no full ladder for fails loudly, naming the missing entry, even where the text colour reads", () => {
+    const partial = new Map(RED);
+    partial.delete("error-darken-3");
+    expect(() => on("#000000", new Palette("partial", true, partial))).toThrow(/error-darken-3/);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // 2. Color references: a bare palette name and a computed hex take ONE path
 // ────────────────────────────────────────────────────────────────────────────
 

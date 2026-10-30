@@ -4,6 +4,8 @@
 // leads of its rows, the plane they sit on and their items, down to a picker
 // open inside a tab — so both sides of every seam are colours the theme names.
 // At 256 colours and ansi each is that colour rounded once, by the writer.
+// candybar-joiners-e5r4.i30: the open door's ✖, text on the segment that
+// opened the menu, is a red its palette names for its error role.
 // Driven through the real loader, `resolveEffectiveGlobals` and `renderDsl`,
 // under every bundled theme.
 
@@ -23,6 +25,7 @@ import { resolvedStyle } from "../src/render/rich-theme";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, paletteRole, shadeRole, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
+import { ERROR_REDS, doorClose } from "./helpers/door-close";
 import { POWERLINE } from "./helpers/powerline";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
 
@@ -111,6 +114,32 @@ describe("every background the bar draws is a colour its palette names", () => {
     }
     expect(wrong).toEqual([]);
     expect(measured).toBeGreaterThan(THEMES.length * VIEWS.length * 100);
+  });
+});
+
+describe("the open door's ✖ is a red its palette names for its error role", () => {
+  test("under every bundled theme and every dial position, at truecolor", () => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+    const wrong: string[] = [];
+    let measured = 0;
+    try {
+      for (const theme of THEMES) {
+        const palette = getThemePalette(theme)!;
+        const reds = new Map(ERROR_REDS.map((name) => [drawnColour(palette.get(name)!, ColorDepth.TRUECOLOR).hex, name]));
+        bar.pick("theme", theme);
+        for (const shade of SHADE_NAMES) {
+          bar.pick("shade", shade);
+          bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+          const { ink } = doorClose(bar.render(AT).text);
+          measured++;
+          if (!reds.has(ink.hex)) wrong.push(`${theme} at ${shade}: ✖ ${ink.hex}`);
+        }
+      }
+    } finally {
+      bar.dispose();
+    }
+    expect(wrong).toEqual([]);
+    expect(measured).toBe(THEMES.length * SHADE_NAMES.length);
   });
 });
 
