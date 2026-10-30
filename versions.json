@@ -4,15 +4,22 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "6fe05d133305b9ebbbc46b25a22d60b358265a09",
-      "timestamp": "2026-10-30T07:29:25.432Z",
+      "sha": "b8690c0405a81225d20a838c3651c3cc54f79d7a",
+      "timestamp": "2026-10-30T07:31:36.642Z",
       "commits": [
         {
-          "sha": "6fe05d133305b9ebbbc46b25a22d60b358265a09",
+          "sha": "b8690c0405a81225d20a838c3651c3cc54f79d7a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:28:43Z",
-          "message": "Merge 7c496f6069ad08b38d834fe6859aee9537ef13ce into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+          "timestamp": "2026-10-30T07:30:42Z",
+          "message": "Merge f7eb949885bc14ecbb916c23a6c25255ad4d9376 into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+        },
+        {
+          "sha": "f7eb949885bc14ecbb916c23a6c25255ad4d9376",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:30:30-06:00",
+          "message": "fix(landscape): a project without a bundle has no key for it, and the credential check names a file that is not a bundle\n"
         },
         {
           "sha": "7c496f6069ad08b38d834fe6859aee9537ef13ce",
