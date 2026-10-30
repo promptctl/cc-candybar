@@ -12707,7 +12707,7 @@ var require_pipeline = __commonJS({
     var PassThrough;
     var Readable;
     var addAbortListener;
-    function destroyer(stream, reading, writing2) {
+    function destroyer(stream, reading, writing) {
       let finished = false;
       stream.on("close", () => {
         finished = true;
@@ -12716,7 +12716,7 @@ var require_pipeline = __commonJS({
         stream,
         {
           readable: reading,
-          writable: writing2
+          writable: writing
         },
         (err) => {
           finished = !err;
@@ -12884,7 +12884,7 @@ var require_pipeline = __commonJS({
       for (let i = 0; i < streams.length; i++) {
         const stream = streams[i];
         const reading = i < streams.length - 1;
-        const writing2 = i > 0;
+        const writing = i > 0;
         const end = reading || (opts === null || opts === void 0 ? void 0 : opts.end) !== false;
         const isLastStream = i === streams.length - 1;
         if (isNodeStream(stream)) {
@@ -12895,7 +12895,7 @@ var require_pipeline = __commonJS({
           };
           var onError = onError2;
           if (end) {
-            const { destroy, cleanup } = destroyer(stream, reading, writing2);
+            const { destroy, cleanup } = destroyer(stream, reading, writing);
             destroys.push(destroy);
             if (isReadable(stream) && isLastStream) {
               lastStreamCleanup.push(cleanup);
@@ -69014,8 +69014,9 @@ var IDLE = { kind: "idle" };
 function judgeAct(facts) {
   if (facts === null) return IDLE;
   const { act, record: record2, alive, end, lastLine } = facts;
+  if (alive) return { kind: "running", act };
   if (end === null) {
-    return alive ? { kind: "running", act } : {
+    return {
       kind: "failed",
       act,
       identity: record2.identity,
@@ -69044,27 +69045,31 @@ function actNumbers(dir) {
 }
 var TAIL_BYTES = 4096;
 function lastLineOf(file) {
-  let fd;
+  const tail = readTailSync(file, TAIL_BYTES);
+  switch (tail.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`${file}: ${tail.reason}`);
+    case "ok":
+      return tail.value.buf.toString("utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1) ?? null;
+  }
+}
+function removeAct(dir, act) {
+  const leaving = import_node_path33.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fd = fs_default.openSync(file, "r");
+    fs_default.renameSync(import_node_path33.default.join(dir, String(act)), leaving);
   } catch (err) {
-    if (err.code === "ENOENT") return null;
+    if (err.code === "ENOENT") return;
     throw err;
   }
-  try {
-    const size = fs_default.fstatSync(fd).size;
-    const buf = import_buffer.Buffer.alloc(Math.min(size, TAIL_BYTES));
-    fs_default.readSync(fd, buf, 0, buf.length, size - buf.length);
-    return buf.toString("utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1) ?? null;
-  } finally {
-    fs_default.closeSync(fd);
-  }
+  fs_default.rmSync(leaving, { recursive: true, force: true });
 }
 var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
 function isRecordedJob(record2, read2 = readStartTime, boot = bootedAt()) {
   if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
   const leader = read2(record2.pid);
-  return leader.kind === "unavailable" || leader.token === record2.startTime;
+  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
 function readRecord(actDir) {
   try {
@@ -69074,7 +69079,6 @@ function readRecord(actDir) {
     throw err;
   }
 }
-var writing = (facts) => facts !== null && facts.alive;
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2 = readStartTime) {
   let known = null;
@@ -69090,7 +69094,7 @@ function makeActReader(dir, read2 = readStartTime) {
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
-    if (!fs_default.existsSync(recordOf2(actDir))) return null;
+    if (!fs_default.existsSync(actDir)) return null;
     const facts = { act, record: record2, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
@@ -69126,15 +69130,10 @@ function claimAct(dir, after, identity3, command, timeoutMs, now2, read2 = readS
   let stood = false;
   try {
     const start = read2(job.pid);
-    if (start.kind !== "start") {
-      throw new Error(
-        `apply-update: the act's job has no fingerprint: ${start.detail}`
-      );
-    }
     const record2 = {
       identity: identity3,
       pid: job.pid,
-      startTime: start.token,
+      startTime: start.kind === "start" ? start.token : null,
       started: now2,
       deadline: now2 + timeoutMs
     };
@@ -69147,7 +69146,7 @@ function claimAct(dir, after, identity3, command, timeoutMs, now2, read2 = readS
       throw err;
     }
     if (actNumbers(dir).some((n) => n > act)) {
-      fs_default.rmSync(actDir, { recursive: true, force: true });
+      removeAct(dir, act);
       return CLAIMED_FIRST;
     }
     stood = true;
@@ -69157,7 +69156,7 @@ function claimAct(dir, after, identity3, command, timeoutMs, now2, read2 = readS
     fs_default.rmSync(staging, { recursive: true, force: true });
   }
   for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
-    fs_default.rmSync(import_node_path33.default.join(dir, String(n)), { recursive: true, force: true });
+    removeAct(dir, n);
   }
   return { ok: true, act };
 }
@@ -69363,26 +69362,30 @@ function makeUpdateWatch(opts) {
   }
   let unreadable = null;
   const logUnreadable = changeLogger(log);
-  function readActs() {
+  function touchActs(touch) {
     try {
-      const facts = acts.read();
+      const value = touch();
       unreadable = null;
-      return { ok: true, facts };
+      return { ok: true, value };
     } catch (err) {
       unreadable = `update act files (${actsDir2}): ${err.message}`;
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
     }
   }
+  function endIfOverdue(facts) {
+    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
+    const why2 = endOverdue(actsDir2, facts) ? "timed out" : "outlived its verdict";
+    log("error", `apply-update: act ${facts.act} ${why2}; ending it`);
+  }
   function watchAct() {
-    const read2 = readActs();
+    const read2 = touchActs(() => {
+      const facts = acts.read();
+      endIfOverdue(facts);
+      return facts;
+    });
     if (!read2.ok) return;
-    const { facts } = read2;
-    const next2 = judgeAct(facts);
-    if (facts?.alive && Date.now() > facts.record.deadline) {
-      const why2 = endOverdue(actsDir2, facts) ? "timed out" : "outlived its verdict";
-      log("error", `apply-update: act ${facts.act} ${why2}; ending it`);
-    }
+    const next2 = judgeAct(read2.value);
     if (seen === null && next2.kind === "running") {
       log("info", `apply-update: act ${next2.act} is running; watching it`);
     }
@@ -69412,8 +69415,8 @@ function makeUpdateWatch(opts) {
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
     running() {
-      const read2 = readActs();
-      return !read2.ok || writing(read2.facts);
+      const read2 = touchActs(() => acts.read());
+      return read2.ok && judgeAct(read2.value).kind === "running";
     },
     error: () => unreadable,
     act() {
@@ -69422,10 +69425,10 @@ function makeUpdateWatch(opts) {
         throw new BadVerbArgs("apply-update: nothing newer is known to apply");
       }
       const facts = factsOf(update);
-      const read2 = readActs();
+      const read2 = touchActs(() => acts.read());
       if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
-      const newest = read2.facts;
-      if (writing(newest)) {
+      const newest = read2.value;
+      if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
       const claim = claimAct(
@@ -80833,7 +80836,7 @@ var updateWatch = makeUpdateWatch({
   entryUrl: "file:///app/dist/index.mjs",
   // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
   // this daemon runs from.
-  actsDir: actsDir(stateDir(), fileURLToPath("file:///app/dist/index.mjs")),
+  actsDir: actsDir(stateDir(), DAEMON_BUNDLE),
   intervalMs: BIN_CHECK_INTERVAL_MS,
   releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
   registryUrl: process_default.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
@@ -82280,13 +82283,13 @@ async function render2(size) {
   return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text3) {
-  let writing2;
+  let writing;
   try {
-    writing2 = navigator.clipboard.writeText(text3);
+    writing = navigator.clipboard.writeText(text3);
   } catch (e) {
-    writing2 = Promise.reject(e);
+    writing = Promise.reject(e);
   }
-  return writing2.then(
+  return writing.then(
     () => null,
     (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text3}`
   );
