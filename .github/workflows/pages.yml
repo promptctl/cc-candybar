@@ -20,6 +20,11 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 
+# [LAW:one-source-of-truth] where the explorer sits beside the live bar: the assemble step publishes
+# it here, and both builds derive their links to each other from it.
+env:
+  LANDSCAPE_DIR: landscape
+
 jobs:
   build:
     name: Build
@@ -60,8 +65,8 @@ jobs:
         run: |
           rm -rf published
           cp -R site/dist published
-          mkdir -p published/landscape
-          cp -R design-docs/peer-exploration/5-landscape/site/. published/landscape/
+          mkdir -p "published/$LANDSCAPE_DIR"
+          cp -R design-docs/peer-exploration/5-landscape/site/. "published/$LANDSCAPE_DIR/"
 
       - name: Hand the version to the deploy
         uses: actions/upload-artifact@v4

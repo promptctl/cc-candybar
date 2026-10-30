@@ -46,6 +46,8 @@ const result = await build({
   alias,
   inject: [shim("globals.ts")],
   define: { global: "globalThis", "import.meta.url": JSON.stringify("file:///app/dist/index.mjs"), __SOURCE_DIGEST__: "undefined",
+    // Where the deploy publishes the landscape explorer below this page; unset, the page links to none.
+    __LANDSCAPE__: JSON.stringify(process.env.LANDSCAPE_DIR ? process.env.LANDSCAPE_DIR.replace(/\/*$/, "/") : null),
     __PACKAGE_VERSION__: JSON.stringify(JSON.parse(readFileSync(path.join(here, "..", "package.json"), "utf8")).version) },
   logLevel: "warning",
   metafile: true,
