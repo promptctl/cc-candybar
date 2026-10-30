@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5577ddd8731d529e5500113fe2febc34aff9f5b2",
-      "timestamp": "2026-10-30T14:27:45.298Z",
-      "commits": [
-        {
-          "sha": "5577ddd8731d529e5500113fe2febc34aff9f5b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:26:42-06:00",
-          "message": "feat(plugins): a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) (#497)\n\n* feat(plugins): a missing segment is an error only when its plugin is present, and its error copies a fix prompt (candybar-plugins-vf6g.odm)\n\n* fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n\n* fix(plugins): a copy click finds its message in whichever renderer delivered it, and an id anchor on an absent placement is absent with it (candybar-plugins-vf6g.odm)\n\nA request and a feed frame list different diagnostics, so each renderer's\ncopies are kept apart and recorded only once its frame exists. An insert\ncell's anchor is a placement id, so the segments placed under it are what\nits absence is judged by.\n\n* fix(plugins): an insert cell is absent through any chain of absent anchors, its own typo is reported whatever it stands on, and a closed feed's copies retire with it (candybar-plugins-vf6g.odm)\n\n* fix(plugins): a copy click names the renderer whose frame it reads, held across a view's successor and recorded once delivered; an insert entry places its segment for the unused check; absent placements are a linear fixpoint (candybar-plugins-vf6g.odm)\n\n* docs(click): the copy-diagnostic verb's args name the renderer that drew the link (candybar-plugins-vf6g.odm)"
-        },
-        {
-          "sha": "12958c7fab6a69a0aecab8498b33d6418a34f8b5",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T13:45:18Z",
-          "message": "chore(release): set `package.json` to 1.165.1 [skip ci]\n\n## [1.165.1](https://github.com/promptctl/cc-candybar/compare/v1.165.0...v1.165.1) (2026-10-30)\n\n### Bug Fixes\n\n* **var-system:** a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24) ([#495](https://github.com/promptctl/cc-candybar/issues/495)) ([5920905](https://github.com/promptctl/cc-candybar/commit/592090572d8ec1c672f7c5994824e93e218f8291))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-496",
       "ref": "refs/pull/496/merge",
-      "sha": "c1c71944dec043af7495df42008936a8e5f9abbb",
-      "timestamp": "2026-10-30T13:40:12.687Z",
+      "sha": "fb96a4fae64e0bd334b5dc1167950ad52e5dd8eb",
+      "timestamp": "2026-10-30T14:31:12.067Z",
       "commits": [
         {
-          "sha": "c1c71944dec043af7495df42008936a8e5f9abbb",
+          "sha": "fb96a4fae64e0bd334b5dc1167950ad52e5dd8eb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:39:18Z",
-          "message": "Merge 9ef66fec4afb7b6cc282940668514836bec9de85 into 592090572d8ec1c672f7c5994824e93e218f8291\n"
+          "timestamp": "2026-10-30T14:30:10Z",
+          "message": "Merge b7a010ab993eb0551675d50f27274906c05698dc into 5577ddd8731d529e5500113fe2febc34aff9f5b2\n"
+        },
+        {
+          "sha": "b7a010ab993eb0551675d50f27274906c05698dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:30:04-06:00",
+          "message": "fix(deps): require rich-js ^0.25.1, since 0.25.0's color module reads `pattern` before its import and no suite loads under ts-jest (candybar-joiners-e5r4.0hr)\n"
         },
         {
           "sha": "9ef66fec4afb7b6cc282940668514836bec9de85",
@@ -56,6 +41,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:17:10-06:00",
           "message": "test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5577ddd8731d529e5500113fe2febc34aff9f5b2",
+      "timestamp": "2026-10-30T14:27:45.298Z",
+      "commits": [
+        {
+          "sha": "5577ddd8731d529e5500113fe2febc34aff9f5b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:26:42-06:00",
+          "message": "feat(plugins): a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) (#497)\n\n* feat(plugins): a missing segment is an error only when its plugin is present, and its error copies a fix prompt (candybar-plugins-vf6g.odm)\n\n* fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n\n* fix(plugins): a copy click finds its message in whichever renderer delivered it, and an id anchor on an absent placement is absent with it (candybar-plugins-vf6g.odm)\n\nA request and a feed frame list different diagnostics, so each renderer's\ncopies are kept apart and recorded only once its frame exists. An insert\ncell's anchor is a placement id, so the segments placed under it are what\nits absence is judged by.\n\n* fix(plugins): an insert cell is absent through any chain of absent anchors, its own typo is reported whatever it stands on, and a closed feed's copies retire with it (candybar-plugins-vf6g.odm)\n\n* fix(plugins): a copy click names the renderer whose frame it reads, held across a view's successor and recorded once delivered; an insert entry places its segment for the unused check; absent placements are a linear fixpoint (candybar-plugins-vf6g.odm)\n\n* docs(click): the copy-diagnostic verb's args name the renderer that drew the link (candybar-plugins-vf6g.odm)"
+        },
+        {
+          "sha": "12958c7fab6a69a0aecab8498b33d6418a34f8b5",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T13:45:18Z",
+          "message": "chore(release): set `package.json` to 1.165.1 [skip ci]\n\n## [1.165.1](https://github.com/promptctl/cc-candybar/compare/v1.165.0...v1.165.1) (2026-10-30)\n\n### Bug Fixes\n\n* **var-system:** a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24) ([#495](https://github.com/promptctl/cc-candybar/issues/495)) ([5920905](https://github.com/promptctl/cc-candybar/commit/592090572d8ec1c672f7c5994824e93e218f8291))\n"
         }
       ]
     },

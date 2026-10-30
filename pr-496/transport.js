@@ -22573,6 +22573,7 @@ var VERB_DOCTOR_PROBE = "doctor-probe";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
+var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_TMUX_STATUS_CLICK = "tmux-status-click";
 function encodeSegments(parts) {
   return parts.map(encodeURIComponent).join("/");
@@ -22616,13 +22617,13 @@ function splitVerb(s) {
 // src/click/read.ts
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cell-widths.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cell-widths.js
 init_globals();
 var RANGES = [
   [0, 0, 0],
@@ -23326,7 +23327,7 @@ function widensToEmoji(codePoint) {
   return NARROW_TO_WIDE.has(codePoint);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/memo.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/memo.js
 init_globals();
 var MEMO_MAX = 4096;
 var Memo = class {
@@ -23357,7 +23358,7 @@ var WeakMemo = class {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/pattern.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/pattern.js
 init_globals();
 function pattern(re) {
   if (re.global || re.sticky) {
@@ -23366,7 +23367,7 @@ function pattern(re) {
   return re;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
 var cellLenMemo = new Memo();
 var ZWJ = 8205;
 var VS16 = 65039;
@@ -23561,10 +23562,10 @@ function expandTabs(text4, tabSize) {
   return { text: expanded, offsetOf };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/palette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/palette.js
 init_globals();
 var Palette = class {
   name;
@@ -23596,7 +23597,7 @@ function opaqueOnly(name) {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
 function hex2(byte) {
   return byte.toString(16).padStart(2, "0");
 }
@@ -24651,7 +24652,7 @@ var ANSI_COLOR_NAMES = withGrayAliases({
 });
 var COLOR_NAMES = ["default", ...Object.keys(ANSI_COLOR_NAMES)];
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/oklch.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/oklch.js
 init_globals();
 var _a;
 var OKLCH_AXES = ["l", "c", "h", "alpha"];
@@ -24892,7 +24893,7 @@ var Oklch = class {
 };
 _a = Oklch;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorRef.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorRef.js
 init_globals();
 var ColorRefError = class extends Error {
   ref;
@@ -24927,10 +24928,10 @@ function suggest(palette, miss) {
   return near.length === 0 ? "" : `; did you mean: ${near.join(", ")}`;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorMath.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorMath.js
 init_globals();
 var LEVEL_STEP = 0.1;
 function rgbToHsl(c) {
@@ -25066,7 +25067,7 @@ function ensureContrastToward(fg, bg, minRatio, toward) {
   return new Oklch(pass, lab.c, lab.h, lab.alpha).toRgba();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
 var MUTED_BLEND = 0.7;
 var TEXT_ALPHA = 0.66;
 var SURFACE_LIFT = 0.05;
@@ -25114,16 +25115,16 @@ function accentText(tint, muted, background) {
   return ensureContrastToward(tint, muted, TEXT_ON_MUTED, contrastFor(background));
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-dark.js
 init_globals();
 var theme = {
   name: "atom-one-dark",
@@ -25303,7 +25304,7 @@ var theme = {
 };
 var atom_one_dark_default = theme;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-light.js
 init_globals();
 var theme2 = {
   name: "atom-one-light",
@@ -25483,7 +25484,7 @@ var theme2 = {
 };
 var atom_one_light_default = theme2;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-frappe.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-frappe.js
 init_globals();
 var theme3 = {
   name: "catppuccin-frappe",
@@ -25663,7 +25664,7 @@ var theme3 = {
 };
 var catppuccin_frappe_default = theme3;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-latte.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-latte.js
 init_globals();
 var theme4 = {
   name: "catppuccin-latte",
@@ -25843,7 +25844,7 @@ var theme4 = {
 };
 var catppuccin_latte_default = theme4;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-macchiato.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-macchiato.js
 init_globals();
 var theme5 = {
   name: "catppuccin-macchiato",
@@ -26023,7 +26024,7 @@ var theme5 = {
 };
 var catppuccin_macchiato_default = theme5;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-mocha.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-mocha.js
 init_globals();
 var theme6 = {
   name: "catppuccin-mocha",
@@ -26203,13 +26204,13 @@ var theme6 = {
 };
 var catppuccin_mocha_default = theme6;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/types.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/types.js
 init_globals();
 var ANSI_SLOTS = [
   "black",
@@ -26230,7 +26231,7 @@ var ANSI_SLOTS = [
   "brightWhite"
 ];
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
 var VGA_ANSI = Object.fromEntries(ANSI_SLOTS.map((slot, n) => [slot, STANDARD_TABLE.get(n).hex]));
 var TEXTUAL_DARK_ANSI = {
   black: "#1A1A1A",
@@ -26269,7 +26270,7 @@ var TEXTUAL_LIGHT_ANSI = {
   brightWhite: "#F7F7F7"
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
 var theme7 = {
   name: "cyberpunk",
   dark: true,
@@ -26449,7 +26450,7 @@ var theme7 = {
 };
 var cyberpunk_default = theme7;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/default.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/default.js
 init_globals();
 var theme8 = {
   name: "default",
@@ -26611,7 +26612,7 @@ var theme8 = {
 };
 var default_default = theme8;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/dracula.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/dracula.js
 init_globals();
 var theme9 = {
   name: "dracula",
@@ -26791,7 +26792,7 @@ var theme9 = {
 };
 var dracula_default = theme9;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/flexoki.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/flexoki.js
 init_globals();
 var theme10 = {
   name: "flexoki",
@@ -26971,7 +26972,7 @@ var theme10 = {
 };
 var flexoki_default = theme10;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/gruvbox.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/gruvbox.js
 init_globals();
 var theme11 = {
   name: "gruvbox",
@@ -27151,7 +27152,7 @@ var theme11 = {
 };
 var gruvbox_default = theme11;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/monokai.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/monokai.js
 init_globals();
 var theme12 = {
   name: "monokai",
@@ -27331,7 +27332,7 @@ var theme12 = {
 };
 var monokai_default = theme12;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/nord.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/nord.js
 init_globals();
 var theme13 = {
   name: "nord",
@@ -27511,7 +27512,7 @@ var theme13 = {
 };
 var nord_default = theme13;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine.js
 init_globals();
 var theme14 = {
   name: "rose-pine",
@@ -27691,7 +27692,7 @@ var theme14 = {
 };
 var rose_pine_default = theme14;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-dawn.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-dawn.js
 init_globals();
 var theme15 = {
   name: "rose-pine-dawn",
@@ -27871,7 +27872,7 @@ var theme15 = {
 };
 var rose_pine_dawn_default = theme15;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-moon.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-moon.js
 init_globals();
 var theme16 = {
   name: "rose-pine-moon",
@@ -28051,7 +28052,7 @@ var theme16 = {
 };
 var rose_pine_moon_default = theme16;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-dark.js
 init_globals();
 var theme17 = {
   name: "solarized-dark",
@@ -28231,7 +28232,7 @@ var theme17 = {
 };
 var solarized_dark_default = theme17;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-light.js
 init_globals();
 var theme18 = {
   name: "solarized-light",
@@ -28411,7 +28412,7 @@ var theme18 = {
 };
 var solarized_light_default = theme18;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/svg-export.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/svg-export.js
 init_globals();
 var theme19 = {
   name: "svg-export",
@@ -28591,7 +28592,7 @@ var theme19 = {
 };
 var svg_export_default = theme19;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-ansi.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-ansi.js
 init_globals();
 var theme20 = {
   name: "textual-ansi",
@@ -28753,7 +28754,7 @@ var theme20 = {
 };
 var textual_ansi_default = theme20;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-dark.js
 init_globals();
 var theme21 = {
   name: "textual-dark",
@@ -28915,7 +28916,7 @@ var theme21 = {
 };
 var textual_dark_default = theme21;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-light.js
 init_globals();
 var theme22 = {
   name: "textual-light",
@@ -29077,7 +29078,7 @@ var theme22 = {
 };
 var textual_light_default = theme22;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/tokyo-night.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/tokyo-night.js
 init_globals();
 var theme23 = {
   name: "tokyo-night",
@@ -29257,7 +29258,7 @@ var theme23 = {
 };
 var tokyo_night_default = theme23;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
 var THEMES = {
   "atom-one-dark": atom_one_dark_default,
   "atom-one-light": atom_one_light_default,
@@ -29284,7 +29285,7 @@ var THEMES = {
   "tokyo-night": tokyo_night_default
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
 var THEME_NAMES = Object.freeze(Object.keys(THEMES).sort());
 var cache = new Memo();
 function listThemePalettes() {
@@ -29352,7 +29353,7 @@ function parseOpaqueHex(value, theme24, key) {
   return color;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
 function defineTheme(d) {
   return new TerminalTheme(d.bg, d.fg, d.ansi, buildPalette(d.name, d.dark, {
     primary: d.primary,
@@ -29389,7 +29390,7 @@ var TEXTUAL_DARK = defineTheme(getThemeBaseColors("textual-dark"));
 var TEXTUAL_LIGHT = defineTheme(getThemeBaseColors("textual-light"));
 var TEXTUAL_ANSI = defineTheme(getThemeBaseColors("textual-ansi"));
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/transpose.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/transpose.js
 init_globals();
 var ANCHORED_ROOTS = /* @__PURE__ */ new Set([
   "error",
@@ -29421,13 +29422,13 @@ function transposePalette(palette, key, name) {
   return new Palette(name ?? palette.name, newDark, next2);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/easing.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/easing.js
 init_globals();
 function cubicBezier(x1, y1, x2, y2) {
   for (const [name, v] of [["x1", x1], ["y1", y1], ["x2", x2], ["y2", y2]]) {
@@ -29731,16 +29732,16 @@ var Phase = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/anchor.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/anchor.js
 init_globals();
 function shiftAnchor(anchor, cells) {
   return {
@@ -29760,7 +29761,7 @@ function levelOf(anchor, owner) {
   return level;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
 var ATTRIBUTE_NAMES = [
   "bold",
   "dim",
@@ -30423,7 +30424,7 @@ function anchorsEqual(a, b) {
   return a.owner === b.owner && a.row === b.row && a.col === b.col && anchorsEqual(a.inner, b.inner);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
 var isAscii = (text4) => /^[\x00-\x7F]*$/.test(text4);
 function drawable(options, chosen, ascii, glyphs = String) {
   return options.asciiOnly === true && !isAscii(glyphs(chosen)) ? ascii : chosen;
@@ -30534,7 +30535,7 @@ function isMeasurable(obj) {
   return typeof obj === "object" && obj !== null && "measure" in obj && typeof obj.measure === "function";
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
 var Measurement = class _Measurement {
   minimum;
   maximum;
@@ -30587,7 +30588,7 @@ var Measurement = class _Measurement {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/segment.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/segment.js
 init_globals();
 var ControlType;
 (function(ControlType2) {
@@ -31086,7 +31087,7 @@ function stylesEqual(a, b) {
   return a.equals(b);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
 function shownAt(animation, t2, motion) {
   const reduced = motion.reducedMotion === true;
   const drawn = reduced ? animation.reduced() : animation;
@@ -31319,7 +31320,7 @@ var Animation = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/tween.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/tween.js
 init_globals();
 function tween(from, to, timing) {
   for (const [name, v] of [["from", from], ["to", to]]) {
@@ -31345,7 +31346,7 @@ function tween(from, to, timing) {
   });
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
 var ColorRamp = class _ColorRamp {
   ease;
   stops;
@@ -31464,7 +31465,7 @@ function turnOf(what, v) {
   return into < 1 ? into : 0;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/timeline.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/timeline.js
 init_globals();
 function finiteSeconds(what, seconds) {
   if (!Number.isFinite(seconds))
@@ -31573,10 +31574,10 @@ var Timeline = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
 init_globals();
 function* words(text4) {
   const re = /\s*\S+\s*/y;
@@ -31628,10 +31629,10 @@ function divideLine(text4, width, options) {
   return cuts;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
 init_globals();
 var utf8 = new TextEncoder();
 function fnv1a(text4) {
@@ -31642,7 +31643,7 @@ function fnv1a(text4) {
   return (hash2 >>> 0).toString(16).padStart(8, "0");
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
 var TERMINATORS = "\\x1b\\x07\\x9c";
 function stripOscTerminators(url) {
   return url.replace(new RegExp(`[${TERMINATORS}]`, "g"), "");
@@ -31662,7 +31663,7 @@ function osc8Sequences(text4) {
   }));
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/state.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/state.js
 init_globals();
 var RenderWriteError = class extends Error {
   constructor() {
@@ -31709,7 +31710,7 @@ function refuseRenderWrite(owner) {
     throw new RenderWriteError();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
 function stripControlChars(text4) {
   return text4.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g, "");
 }
@@ -32583,28 +32584,9 @@ function* padded(drawn, free, left, right, style) {
     yield new Segment((tail ? line[last2].text : "") + pad(right), style);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
 init_globals();
 var JOIN = Object.freeze({ name: "join" });
-var ColorOwners = class {
-  fg;
-  bg;
-  constructor(fg, bg) {
-    this.fg = fg;
-    this.bg = bg;
-  }
-};
-function colorsOwnedBy(anchor, owners) {
-  for (let level = anchor; level; level = level.inner) {
-    if (owners.has(level.owner))
-      return { fg: true, bg: true };
-    if (level.owner instanceof ColorOwners) {
-      const { fg, bg } = level.owner;
-      return { fg: fg !== null && owners.has(fg), bg: bg !== null && owners.has(bg) };
-    }
-  }
-  return { fg: false, bg: false };
-}
 function drawJoin(joiner, left, right, context) {
   const join4 = joiner.join(left, right, context);
   return { render: (options) => Segment.anchorLines([[...render(join4, options)]], JOIN)[0] };
@@ -32740,15 +32722,18 @@ function parseCaps(raw) {
 function joinForms(seam, caps) {
   return { seam: seam.seam.flatMap((cell3) => "cap" in cell3 ? caps[cell3.cap] : [cell3]), lead: caps.lead, tail: caps.tail };
 }
+var partsRead = (cell3, side) => new Set([cell3.fg, cell3.bg].flatMap((color) => color === "ground" ? [] : [...paintsIn(color)].flatMap((p2) => "edge" in p2 && p2.edge === side ? [p2.part] : [])));
 var readsGround = (cells, side) => cells.some((cell3) => [cell3.fg, cell3.bg].some((color) => color !== "ground" && [...paintsIn(color)].some((p2) => "edge" in p2 && p2.edge === side && p2.part === "bg")));
 function formOf(shape) {
+  const cells = (part) => shape[part].map((cell3) => ({ cell: cell3, parts: { left: partsRead(cell3, "left"), right: partsRead(cell3, "right") } }));
   return {
     shape,
     reads: {
       seam: { left: readsGround(shape.seam, "left"), right: readsGround(shape.seam, "right") },
       lead: readsGround(shape.lead, "right"),
       tail: readsGround(shape.tail, "left")
-    }
+    },
+    cells: { seam: cells("seam"), lead: cells("lead"), tail: cells("tail") }
   };
 }
 function paintableBg(bg) {
@@ -32809,6 +32794,63 @@ function cellStyle(cell3, edges, options) {
   const bgcolor = cell3.bg === "ground" ? void 0 : resolvePaint(cell3.bg, edges, options);
   return new Style({ color: standOff(resolvePaint(cell3.fg, edges, options), bgcolor, options.colorSystem ?? ColorDepth.TRUECOLOR), bgcolor });
 }
+var JoinedCell = class _JoinedCell {
+  cell;
+  parts;
+  neighbours;
+  edges;
+  options;
+  /** What the cell's paints read on each side: that neighbour and its edge as the cell was resolved from it, or `null` for a side they read nothing of. */
+  reads;
+  /** Whether the cell's paints read either neighbour, so it follows them under an effect. */
+  follows;
+  /** The cell as drawn from its edges: the one resolution, at join time and after an effect alike. */
+  style;
+  constructor(cell3, parts, neighbours, edges, options) {
+    this.cell = cell3;
+    this.parts = parts;
+    this.neighbours = neighbours;
+    this.edges = edges;
+    this.options = options;
+    const read2 = (side) => {
+      if (parts[side].size === 0)
+        return null;
+      const [owner, edge] = [neighbours[side], edges[side]];
+      if (owner === null || edge === void 0)
+        throw new Error(`a join cell paints with its ${side} neighbour's edge, and the join has no ${side} neighbour`);
+      return { owner, edge };
+    };
+    this.reads = { left: read2("left"), right: read2("right") };
+    this.follows = this.reads.left !== null || this.reads.right !== null;
+    this.style = cellStyle(cell3, edges, options);
+  }
+  /**
+   * The cell resolved again once each side's edge has moved as `moves` says:
+   * its `colors`, as `cellStyle` draws them, and `style`, the cell's own, with
+   * the record of that stamped where this one was, so an effect drawn over
+   * this one moves on from these edges. Resolved, lift included, at `depth`,
+   * the depth the effect writes the frame at. None when nothing moved of what
+   * the cell paints with: a seam of arrows in two grounds is as it was drawn
+   * while an effect moves only the lettering beside it, and its lift is not
+   * walked again for a frame that cannot change it.
+   */
+  rederived(moves, style, depth) {
+    const reaches = (side) => moves[side]?.color !== void 0 && this.parts[side].has("fg") || moves[side]?.bgcolor !== void 0 && this.parts[side].has("bg");
+    if (!reaches("left") && !reaches("right"))
+      return void 0;
+    const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
+    const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
+    const next2 = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
+    const restamp = (level) => ({ ...level, owner: level.owner === this ? next2 : level.owner, inner: level.inner && restamp(level.inner) });
+    return { colors: next2.style, style: style.withAnchor(style.anchor && restamp(style.anchor)) };
+  }
+};
+function joinedCell(anchor) {
+  for (let level = anchor; level; level = level.inner)
+    if (level.owner instanceof JoinedCell)
+      return level.owner;
+  return void 0;
+}
 var shapeGlyphs = (shape) => PARTS.flatMap((part) => shape[part].flatMap(glyphsOf)).join("");
 var CellJoiner = class {
   seam;
@@ -32823,7 +32865,7 @@ var CellJoiner = class {
     const forms = this._forms;
     return {
       *render(options) {
-        const { shape: drawn, reads } = drawable(options, forms.glyph, forms.ascii, (form) => shapeGlyphs(form.shape));
+        const { cells, reads } = drawable(options, forms.glyph, forms.ascii, (form) => shapeGlyphs(form.shape));
         const edges = { left: left?.edgeStyle("right", options), right: right?.edgeStyle("left", options) };
         const leftBg = paintableBg(edges.left?.bgcolor);
         const rightBg = paintableBg(edges.right?.bgcolor);
@@ -32832,10 +32874,9 @@ var CellJoiner = class {
         const leads = hasRight && (!reads.lead || rightBg !== void 0);
         const tails = hasLeft && (!reads.tail || leftBg !== void 0);
         const neighbours = { left, right };
-        const ownerOf = (color) => color !== "ground" && "edge" in color ? neighbours[color.edge] : null;
-        const styled = (part) => drawn[part].map((cell3, at) => {
-          const owners = new ColorOwners(ownerOf(cell3.fg), ownerOf(cell3.bg));
-          return new Segment(pickGlyph(cell3, part, index, at), cellStyle(cell3, edges, options).withAnchor({ owner: owners, row: 0, col: 0, inner: void 0 }));
+        const styled = (part) => cells[part].map(({ cell: cell3, parts }, at) => {
+          const joined = new JoinedCell(cell3, parts, neighbours, edges, options);
+          return new Segment(pickGlyph(cell3, part, index, at), joined.style.withAnchor({ owner: joined, row: 0, col: 0, inner: void 0 }));
         });
         if (!hasLeft || !hasRight) {
           if (leads || tails)
@@ -32931,7 +32972,7 @@ var JOINERS2 = Object.freeze({
   plain: new CellJoiner(SEAMS.plain, CAPS.flat)
 });
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/render.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/render.js
 init_globals();
 function shownOn(segment, destination) {
   const style = destination.reducedMotion ? segment.style?.reduced() : segment.style;
@@ -32955,7 +32996,7 @@ function segmentsToString(segments, destination) {
   return parts.join("");
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
 init_globals();
 var escapes = () => /\r|\x1b\[([0-9;:]*)m|\x1b\[([012]?)K|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|\x9c|$)|\x1b[ -/]*[0-~]/g;
 function* escapeTokens(bytes) {
@@ -33096,7 +33137,7 @@ var AnsiDecoder = class {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
 init_globals();
 function setIntoLine(text4) {
   text4.end = "";
@@ -33104,7 +33145,7 @@ function setIntoLine(text4) {
   return text4.expandTabs();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
 init_globals();
 var UNMOVED = { lastChange: Number.NEGATIVE_INFINITY, nextChange: Number.POSITIVE_INFINITY };
 var Recolored = class {
@@ -33136,41 +33177,115 @@ var Recolored = class {
     return { segments: this._recolored(walked, shown.value, depth), hold: holdOf(shown, this.t) };
   }
   *_recolored(walked, frame, depth) {
-    for (const { segment, look, glyphs } of walked) {
-      if (look === void 0) {
+    const drawings = walked.map(({ look, glyphs }) => {
+      if (look === void 0)
+        return void 0;
+      const joined = joinedCell(look.style.anchor);
+      if (joined?.follows === true)
+        return { joined };
+      const from = { fg: look.pair.fg, bg: look.pair.bg, attributes: look.attributes };
+      const { terminal, reverse: reverse2 } = look.pair;
+      return { painted: glyphs.map(({ cell: cell3 }) => cell3 === void 0 ? from : returned(frame(from, { ...cell3, seed: cellSeed(this.key, cell3.row, cell3.col), terminal, reverse: reverse2 }))) };
+    });
+    const beside2 = edgesBeside(walked, drawings);
+    for (const [i, { segment, look, glyphs }] of walked.entries()) {
+      const drawing2 = drawings[i];
+      if (look === void 0 || drawing2 === void 0)
         yield segment;
-        continue;
-      }
-      const { style: base, wire, slots, pair, attributes } = look;
-      const { terminal } = pair;
-      const from = { fg: pair.fg, bg: pair.bg, attributes };
-      const runs2 = [];
-      for (const { glyph, cell: cell3 } of glyphs) {
-        const moved = cell3 === void 0 ? from : returned(frame(from, { ...cell3, seed: cellSeed(this.key, cell3.row, cell3.col), terminal, reverse: pair.reverse }));
-        const colors = onScreen(moved, pair.reverse);
-        const last2 = runs2[runs2.length - 1];
-        const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
-        if (last2 !== void 0 && writesAlike(last2.drawn, writes) && sameAttributes(last2.attributes, moved.attributes)) {
-          last2.text += glyph;
-          last2.cells += cellLen(glyph);
-          last2.colors = colors;
-        } else {
-          runs2.push({ text: glyph, cells: cellLen(glyph), colors, attributes: moved.attributes, drawn: writes });
-        }
-      }
-      if (runs2.every((run3) => writesAlike(run3.drawn, wire) && sameAttributes(run3.attributes, attributes))) {
-        yield segment;
-        continue;
-      }
-      let offset = 0;
-      for (const run3 of runs2) {
-        const placed = base.shiftedBy(offset);
-        const shifted = sameAttributes(run3.attributes, attributes) ? placed : placed.withAttributes(cellAttributes(run3.attributes));
-        const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
-        yield new Segment(run3.text, style);
-        offset += run3.cells;
+      else if ("joined" in drawing2)
+        yield this._rejoined(segment, look, drawing2.joined, glyphs, beside2, frame, depth);
+      else
+        yield* this._repainted(segment, look, glyphs, drawing2.painted, depth);
+    }
+  }
+  /** `segment`'s cells drawn in the looks the effect painted them. */
+  *_repainted(segment, look, glyphs, moved, depth) {
+    const { style: base, wire, slots, pair, attributes } = look;
+    const runs2 = [];
+    for (const [k, { glyph }] of glyphs.entries()) {
+      const now2 = moved[k];
+      const colors = onScreen(now2, pair.reverse);
+      const last2 = runs2[runs2.length - 1];
+      const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
+      if (last2 !== void 0 && writesAlike(last2.drawn, writes) && sameAttributes(last2.attributes, now2.attributes)) {
+        last2.text += glyph;
+        last2.cells += cellLen(glyph);
+        last2.colors = colors;
+      } else {
+        runs2.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes });
       }
     }
+    if (runs2.every((run3) => writesAlike(run3.drawn, wire) && sameAttributes(run3.attributes, attributes))) {
+      yield segment;
+      return;
+    }
+    let offset = 0;
+    for (const run3 of runs2) {
+      const placed = base.shiftedBy(offset);
+      const shifted = sameAttributes(run3.attributes, attributes) ? placed : placed.withAttributes(cellAttributes(run3.attributes));
+      const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
+      yield new Segment(run3.text, style);
+      offset += run3.cells;
+    }
+  }
+  /**
+   * A join cell's `segment` resolved again from the edges beside it, as the
+   * effect left them: each neighbour's nearest cell to the join on its row,
+   * its slots as the depth writes them. A side whose neighbour the effect moved
+   * nothing of keeps the edge the cell was drawn from, so with neither moved
+   * the cell is as it was drawn.
+   */
+  _rejoined(segment, look, joined, glyphs, beside2, frame, depth) {
+    const cells = glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3]);
+    const [at] = cells;
+    if (at === void 0)
+      return segment;
+    const { theme: theme24 } = this;
+    const terminals = /* @__PURE__ */ new Set();
+    const edgeOf = (spec, foreground) => {
+      if (!spec?.isDefault)
+        return spec;
+      const own2 = ColorSpec.fromRgba(spec.getTruecolor(theme24, foreground));
+      terminals.add(own2);
+      return own2;
+    };
+    const moved = (from, to) => {
+      const specs = movedSpecs(from, to, depth, theme24);
+      return specs.fg === void 0 && specs.bg === void 0 ? void 0 : { color: edgeOf(specs.fg, true), bgcolor: edgeOf(specs.bg, false) };
+    };
+    const unseen = (edge) => {
+      const wire2 = edge.drawnColors(depth);
+      const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
+      const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
+      return moved(slots2, returned(frame({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+    };
+    const moveOf = (side) => {
+      const read2 = joined.reads[side];
+      if (read2 === null)
+        return void 0;
+      const cell3 = beside2(cells, side, read2.owner);
+      return cell3 === void 0 ? unseen(read2.edge) : moved(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
+    };
+    const rederived = joined.rederived({ left: moveOf("left"), right: moveOf("right") }, look.style, depth);
+    if (rederived === void 0)
+      return segment;
+    const { colors, style } = rederived;
+    const was = joined.style;
+    const drawn = colors.drawnColors(depth);
+    const { wire, slots } = look;
+    const rounded = this.respec(wire, slots, { fg: colors.color?.getTruecolor(theme24, true) ?? slots.fg, bg: colors.bgcolor?.getTruecolor(theme24, false) ?? slots.bg }, depth);
+    const written2 = (now2, before, wrote, drew, round2) => {
+      if (sameSpec(now2, before))
+        return wrote;
+      if (now2 === void 0)
+        throw new Error(`a seam cell resolved to ${before?.name ?? "nothing"} when drawn and to nothing after an effect moved its neighbours`);
+      return terminals.has(now2) ? round2 : drew;
+    };
+    const writes = {
+      color: written2(colors.color, was.color, wire.color, drawn.color, rounded.color),
+      bgcolor: written2(colors.bgcolor, was.bgcolor, wire.bgcolor, drawn.bgcolor, rounded.bgcolor)
+    };
+    return new Segment(segment.text, writesAlike(writes, wire) ? style : style.add(Style.fromColor(writes.color, writes.bgcolor)));
   }
   measure(options) {
     return Measurement.get(options, this.renderable);
@@ -33271,6 +33386,39 @@ function walk(looked) {
   const placed = walkGlyphs(looked.map(({ segment }) => segment));
   return looked.map((item, i) => ({ ...item, glyphs: placed[i] }));
 }
+function edgesBeside(walked, drawings) {
+  let rows;
+  const index = () => {
+    const byRow = /* @__PURE__ */ new Map();
+    walked.forEach(({ look, glyphs }, i) => {
+      const drawing2 = drawings[i];
+      if (look === void 0 || drawing2 === void 0 || !("painted" in drawing2))
+        return;
+      const moved = drawing2.painted;
+      glyphs.forEach(({ cell: cell3 }, k) => {
+        if (cell3 === void 0)
+          return;
+        const row2 = byRow.get(cell3.row) ?? [];
+        row2.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved[k] });
+        byRow.set(cell3.row, row2);
+      });
+    });
+    return byRow;
+  };
+  return (cells, side, owner) => {
+    const row2 = (rows ??= index()).get(cells[0].row) ?? [];
+    const first2 = cells[0].col;
+    const last2 = cells[cells.length - 1].col;
+    if (side === "right")
+      return row2.find((cell3) => cell3.col > last2 && drawnBy(cell3.anchor, owner));
+    for (let k = row2.length - 1; k >= 0; k--) {
+      const cell3 = row2[k];
+      if (cell3.col < first2 && drawnBy(cell3.anchor, owner))
+        return cell3;
+    }
+    return void 0;
+  };
+}
 function drawsLines(style) {
   return [style.underline, style.underline2, style.strike, style.overline, style.frame, style.encircle].some((on2) => on2 === true);
 }
@@ -33297,16 +33445,14 @@ function measured(looked, walked, depth, theme24) {
 }
 function confined(effect, ...owners) {
   const confinedTo = new Set(owners);
-  const ownedOf = (cell3) => colorsOwnedBy(cell3.anchor, confinedTo);
-  const any2 = ({ fg, bg }) => fg || bg;
-  const owned = (drawn) => ({ ...drawn, cells: () => drawn.cells().filter((cell3) => any2(ownedOf(cell3))) });
-  return (drawn) => Animation.map(effect(owned(drawn)), (frame) => (look, cell3) => {
-    const owns = ownedOf(cell3);
-    if (!any2(owns))
-      return look;
-    const moved = frame(look, cell3);
-    return { fg: owns.fg ? moved.fg : look.fg, bg: owns.bg ? moved.bg : look.bg, attributes: owns.fg ? moved.attributes : look.attributes };
-  });
+  const owned = (cell3) => {
+    for (let level = cell3.anchor; level; level = level.inner)
+      if (confinedTo.has(level.owner))
+        return true;
+    return false;
+  };
+  const narrowed = (drawn) => ({ ...drawn, cells: () => drawn.cells().filter(owned) });
+  return (drawn) => Animation.map(effect(narrowed(drawn)), (frame) => (look, cell3) => owned(cell3) ? frame(look, cell3) : look);
 }
 function onScreen(slots, reverse2) {
   return reverse2 ? { fg: slots.bg, bg: slots.fg } : slots;
@@ -33338,6 +33484,9 @@ function cellAttributes(of) {
 function sameAttributes(a, b) {
   return a === b || MOVED.every((name) => a[name] === b[name]);
 }
+function sameSpec(a, b) {
+  return a === b || a !== void 0 && b !== void 0 && a.type === b.type && a.name === b.name;
+}
 function sameColors(a, b) {
   return sameColor(a.fg, b.fg) && sameColor(a.bg, b.bg);
 }
@@ -33345,10 +33494,10 @@ function sameColor(a, b) {
   return a.red === b.red && a.green === b.green && a.blue === b.blue && a.alpha === b.alpha;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/noise.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/noise.js
 init_globals();
 var P = (() => {
   const base = [
@@ -33661,7 +33810,7 @@ function smoothstep(a, b, x) {
   return t2 * t2 * (3 - 2 * t2);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
 var LEGIBLE = 4.5;
 var LEVELS = 48;
 var STRENGTHS = Array.from({ length: LEVELS }, (_, i) => (i + 1) / LEVELS);
@@ -34129,7 +34278,7 @@ var EFFECT_CATALOGUE = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effect.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effect.js
 init_globals();
 function placeGlyphs(segments, key) {
   let index = 0;
@@ -34188,7 +34337,7 @@ function standsApart(placed, shown) {
   });
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effects.js
 init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
@@ -34359,7 +34508,7 @@ var GLYPH_EFFECT_CATALOGUE = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/frames.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/frames.js
 init_globals();
 var FrameSequence = class {
   /** Which frame is in progress when: the holds are the frames' seconds, in order. */
@@ -34419,7 +34568,7 @@ function textFrameAt(animation, t2, motion) {
   return stamped;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
 init_globals();
 function renderToBlock(r, options) {
   const segments = [...render(r, options)];
@@ -34766,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.165.0";
+var PACKAGE_VERSION = "1.165.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -48357,13 +48506,13 @@ function sprigStrings() {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
 init_globals();
 function applyStyleToFragment(child, style) {
   const fragment = asFragment(child);
@@ -48378,7 +48527,7 @@ function asFragment(child) {
   return child;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
 function attrFunc(style) {
   return {
     fn: ((child) => applyStyleToFragment(child, style)),
@@ -48435,7 +48584,7 @@ function richTextStyleFuncs() {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
 init_globals();
 function asColor(value, func) {
   let colour;
@@ -48512,7 +48661,7 @@ function colorFuncs(drawnAt = () => TRUECOLOR) {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
 init_globals();
 function colorStops(tail, palette) {
   if (tail.length % 2 !== 0) {
@@ -48543,7 +48692,7 @@ function paletteFuncs(getPalette) {
   return { color: colorFunc2, ramp: rampFunc };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
 init_globals();
 var HOST_CLOCK = Timeline.play(0);
 function pairs(what, tail, value) {
@@ -48631,7 +48780,7 @@ function animationFuncs(frame, options = {}) {
   return { frames: framesFunc, stepped: steppedFunc, tween: tweenFunc, loop: loopFunc, glyphs: glyphsFunc };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 function richTextFuncs(drawnAt) {
   return { ...richTextStyleFuncs(), ...colorFuncs(drawnAt) };
 }
@@ -50379,6 +50528,19 @@ var ConfigError = class extends Error {
     this.file = file;
     this.issues = issues;
     this.warnings = warnings;
+  }
+};
+var DroppedFileError = class extends ConfigError {
+  prompt;
+  constructor(file, issues) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
+    ].join("\n\n");
   }
 };
 function findKeyLine(source, pathParts) {
@@ -58058,6 +58220,90 @@ function validateHelpers(ctx, raw) {
 // src/config/loader/cross-ref.ts
 init_globals();
 
+// src/config/loader/unplaced.ts
+init_globals();
+function presenceOf(segments, rendering) {
+  const owners = [...rendering].map(
+    ([ns, definition]) => [ownedBy(ns), definition]
+  );
+  return (name) => {
+    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
+      return { kind: "declared" };
+    const owner = owners.find(([owns]) => owns(name));
+    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
+    const scope = scopeOf(name);
+    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
+  };
+}
+function reportable(presence2) {
+  return presence2.kind === "plugin" || presence2.kind === "missing";
+}
+function absentPlacement(config2, cells, presence2) {
+  const placed = /* @__PURE__ */ new Map();
+  const add2 = (id2, at) => {
+    placed.set(id2, [...placed.get(id2) ?? [], at]);
+  };
+  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
+  const fragments = [
+    config2.root,
+    ...Object.values(config2.presets).flatMap(
+      (p2) => p2.root === void 0 ? [] : [p2.root]
+    )
+  ];
+  for (const tree of fragments.flatMap(trees))
+    for (const node of walkNodes(tree))
+      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
+  for (const cell3 of cells)
+    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
+  const absent = /* @__PURE__ */ new Set();
+  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id2, at] of placed)
+      if (!absent.has(id2) && at.every(standsOnAbsent)) {
+        absent.add(id2);
+        grew = true;
+      }
+  }
+  return (id2) => absent.has(id2);
+}
+function withoutUnplaced(config2) {
+  let removed = 0;
+  const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
+  const placed = (name) => {
+    const keep2 = declared(name).kind === "declared";
+    if (!keep2) removed += 1;
+    return keep2;
+  };
+  const container = (node) => ({
+    ...node,
+    children: node.children.flatMap((child) => nodes(child))
+  });
+  const nodes = (node) => node.kind === "container" ? [container(node)] : placed(node.name) ? [mapOpens(node, container)] : [];
+  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
+  const root = (r) => ({
+    ...r,
+    rows: Object.fromEntries(
+      Object.entries(r.rows).map(([name, row2]) => [name, tree(row2)])
+    )
+  });
+  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
+  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
+  const result = {
+    ...config2,
+    root: root(config2.root),
+    presets: Object.fromEntries(
+      Object.entries(config2.presets).map(([name, p2]) => [name, preset(p2)])
+    )
+  };
+  return removed === 0 ? config2 : result;
+}
+var EMPTY_ROW = {
+  kind: "container",
+  direction: "horizontal",
+  children: []
+};
+
 // src/config/loader/projections.ts
 init_globals();
 
@@ -58275,11 +58521,19 @@ function authoredPlacement(raw, name) {
   }
   return void 0;
 }
-var unplacedMessage = (layoutKey, name, segments) => `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+var unplacedMessage = (layoutKey, name, segments, presence2) => presence2.kind === "plugin" ? `${layoutKey} entry "${name}" does not match any segment plugin "${pluginNs(presence2.definition)}" declares \u2014 the plugin loaded from ${presence2.definition.path} declares: ${pluginDeclares(pluginNs(presence2.definition), segments)}${missingSegmentHint(name, segments)}` : `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+function pluginDeclares(ns, segments) {
+  const owned = Object.keys(segments).filter(ownedBy(ns)).sort();
+  if (owned.length === 0) return "no segments";
+  return owned.map((seg2) => {
+    const settings = Object.keys(segments[seg2].settings ?? {});
+    return `${seg2} (${settings.length === 0 ? "no settings" : `settings: ${settings.join(", ")}`})`;
+  }).join(", ");
+}
 function missingSegmentHint(name, segments) {
   return renamedHint(name) + otherScopeHint(name, (other) => Object.hasOwn(segments, other));
 }
-function validateCrossReferences(ctx, cfg, authored) {
+function validateCrossReferences(ctx, cfg, authored, presence2) {
   const styleFragments = [
     [["globals"], cfg.globals.style, "globals.endcaps"],
     [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
@@ -58347,7 +58601,8 @@ function validateCrossReferences(ctx, cfg, authored) {
     }
     const byId = /* @__PURE__ */ new Map();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment" || !declared(node.name)) continue;
+      if (node.kind !== "segment" || presence2(node.name).kind !== "declared")
+        continue;
       const id2 = placementId(node);
       byId.set(id2, [...byId.get(id2) ?? [], node]);
     }
@@ -58381,7 +58636,6 @@ function validateCrossReferences(ctx, cfg, authored) {
     }
   }
   const reported = /* @__PURE__ */ new Set();
-  const declared = (name) => isSettingsAnchor(name) || Object.prototype.hasOwnProperty.call(cfg.segments, name);
   const checkLayoutTree = (root, layoutKey) => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
@@ -58414,11 +58668,12 @@ function validateCrossReferences(ctx, cfg, authored) {
         }
         continue;
       }
-      if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+      const placed = presence2(node.name);
+      if (reportable(placed)) {
         reported.add(node.name);
         ctx.unplaced.push({
           path: path42,
-          message: unplacedMessage(layoutKey, node.name, cfg.segments),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed),
           line
         });
       }
@@ -58441,14 +58696,19 @@ function validateCrossReferences(ctx, cfg, authored) {
   }
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
-      if (node.kind !== "segment" || isSettingsAnchor(node.name) || Object.prototype.hasOwnProperty.call(cfg.segments, node.name) || reported.has(node.name)) {
-        continue;
-      }
+      if (node.kind !== "segment" || reported.has(node.name)) continue;
+      const placed = presence2(node.name);
+      if (!reportable(placed)) continue;
       reported.add(node.name);
       ctx.inherited.push({
         name: node.name,
         path: key,
-        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${missingSegmentHint(node.name, cfg.segments)}`,
+        message: unplacedMessage(
+          `${key} inherits from a config layer below whose`,
+          node.name,
+          cfg.segments,
+          placed
+        ),
         line: findKeyLine(ctx.source, key.split("."))
       });
     }
@@ -59316,10 +59576,11 @@ function dropsOwning(layer, beneath) {
     return unnamed.filter((d) => d.scope === scope).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   };
 }
-function withDroppedPlacements(config2, owning) {
+function withDroppedPlacements(config2, owning, inserted) {
   const placements = presetNames(config2.presets).flatMap((preset) => [...walkNodes(presetRoot(config2, preset).node)]).flatMap((node) => node.kind === "segment" ? [node] : []);
   const names = /* @__PURE__ */ new Set([
     ...placements.map((n) => n.name),
+    ...inserted,
     ...Object.keys(config2.segments)
   ]);
   const caused = [...names].map((name) => ({ name, cause: owning(name) })).filter(({ cause }) => cause.length > 0);
@@ -59910,38 +60171,6 @@ function isDirectoryLink(root, e) {
   }
 }
 
-// src/config/loader/unplaced.ts
-init_globals();
-function withoutUnplaced(config2) {
-  const placed = (name) => isSettingsAnchor(name) || Object.prototype.hasOwnProperty.call(config2.segments, name);
-  const container = (node) => ({
-    ...node,
-    children: node.children.flatMap((child) => nodes(child))
-  });
-  const nodes = (node) => node.kind === "container" ? [container(node)] : placed(node.name) ? [mapOpens(node, container)] : [];
-  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
-  const root = (r) => ({
-    ...r,
-    rows: Object.fromEntries(
-      Object.entries(r.rows).map(([name, row2]) => [name, tree(row2)])
-    )
-  });
-  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
-  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
-  return {
-    ...config2,
-    root: root(config2.root),
-    presets: Object.fromEntries(
-      Object.entries(config2.presets).map(([name, p2]) => [name, preset(p2)])
-    )
-  };
-}
-var EMPTY_ROW = {
-  kind: "container",
-  direction: "horizontal",
-  children: []
-};
-
 // src/utils/git-root.ts
 init_globals();
 var import_node_path20 = __toESM(require_path_browserify(), 1);
@@ -60286,7 +60515,8 @@ function loadConfigSource(path42, source, dflt, ctx, allowedPalettes) {
   const { plugins: plugins2, owning } = parsed2.layer;
   const standing = withDroppedPlacements(
     mergeWithDefault(parsed2.raw, plugins2.config),
-    owning
+    owning,
+    (parsed2.raw.insert ?? []).map((cell3) => cell3.seg)
   );
   return {
     source,
@@ -60376,6 +60606,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
   const surfaced = plugins2.dropped.filter(isReached);
   const unreached = plugins2.dropped.filter((d) => !isReached(d));
   trace.warned(surfaced.map(droppedPluginNotice));
+  const rendering = layers.at(-1)?.plugins.rendering ?? plugins2.rendering;
   const installed = {
     checkout: ctx.checkout,
     roots: found.roots,
@@ -60383,7 +60614,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
     dropped: surfaced,
     unreached,
     reached,
-    rendering: layers.at(-1)?.plugins.rendering ?? plugins2.rendering
+    rendering
   };
   const top = layers.at(-1);
   const renderable = ({
@@ -60401,6 +60632,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       ...renderable(
         validateRenderable(
           loadConfig(null, base, NO_PROJECT),
+          rendering,
           "<default>",
           allowedPalettes
         )
@@ -60415,6 +60647,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       ...renderable(
         validateRenderable(
           top,
+          rendering,
           top.path,
           allowedPalettes,
           layers.slice(0, -1).reverse()
@@ -60425,6 +60658,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
     for (const [i, layer] of layers.slice(0, -1).entries())
       validateRenderable(
         layer,
+        layer.plugins.rendering,
         layer.path,
         allowedPalettes,
         layers.slice(0, i).reverse()
@@ -60434,7 +60668,12 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
 }
 function checkPlugin(config2, ns, replaces, filePath2, allowedPalettes) {
   if (replaces) {
-    validateRenderable(unauthored(config2), filePath2, allowedPalettes);
+    validateRenderable(
+      unauthored(config2),
+      /* @__PURE__ */ new Map(),
+      filePath2,
+      allowedPalettes
+    );
     return;
   }
   const owned = ownedBy(ns);
@@ -60470,8 +60709,13 @@ var NO_FILE = {
     rendering: /* @__PURE__ */ new Map()
   }
 };
-function validateRenderable(authoredConfig, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
-  const written2 = layerInserts({ ...authoredConfig, path: filePath2 }, beneath);
+function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
+  const presence2 = presenceOf(authoredConfig.config.segments, rendering);
+  const written2 = layerInserts(
+    { ...authoredConfig, path: filePath2 },
+    beneath,
+    presence2
+  );
   const judge = (cells, refused) => {
     const inserted = placeInserts(
       authoredConfig.config,
@@ -60484,6 +60728,7 @@ function validateRenderable(authoredConfig, filePath2 = "<config>", allowedPalet
       allowedPalettes,
       beneath,
       inserted.config,
+      presence2,
       written2.dropped,
       [...inserted.notices, ...refused]
     );
@@ -60521,7 +60766,7 @@ function validateRenderable(authoredConfig, filePath2 = "<config>", allowedPalet
     return judge(taken, refused);
   }
 }
-function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, filed, notices) {
+function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
   const issues = [];
   const ctx = {
     source,
@@ -60540,11 +60785,18 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
       );
     }
   };
-  validateCrossReferences(ctx, merged, raw);
+  validateCrossReferences(ctx, merged, raw, presence2);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped2 = droppedByFile(filePath2, merged.segments, ctx, beneath, filed);
-  const config2 = dropped2.length === 0 ? merged : withoutUnplaced(merged);
+  const dropped2 = droppedByFile(
+    filePath2,
+    merged.segments,
+    ctx,
+    presence2,
+    beneath,
+    filed
+  );
+  const config2 = withoutUnplaced(merged);
   const withMenus = synthesizePlacementMenus(config2, issues);
   refuseIfIssues();
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
@@ -60568,11 +60820,19 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
     warnings: notices
   };
 }
-function layerInserts(top, beneath) {
+function layerInserts(top, beneath, presence2) {
   const layers = [...beneath].reverse().concat(top);
-  const declared = (cell3) => Object.prototype.hasOwnProperty.call(top.config.segments, cell3.seg);
+  const standsOnAbsent = absentPlacement(
+    top.config,
+    layers.flatMap((layer) => layer.raw.insert ?? []),
+    presence2
+  );
+  const anchored2 = (cell3) => !standsOnAbsent(cell3.anchor);
+  const declared = (cell3) => presence2(cell3.seg).kind === "declared";
+  const broken = (cell3) => reportable(presence2(cell3.seg));
+  const own2 = (layer) => (layer.raw.insert ?? []).filter(anchored2);
   return {
-    cells: layers.flatMap((layer) => (layer.raw.insert ?? []).filter(declared)),
+    cells: layers.flatMap((layer) => own2(layer).filter(declared)),
     authored: {
       root: layers.some((layer) => layer.raw.root !== void 0),
       presets: new Set(
@@ -60582,14 +60842,15 @@ function layerInserts(top, beneath) {
     // One locator per layer, so its source is parsed at most once.
     dropped: layers.flatMap((layer) => {
       const lineOf = keyLocator(layer.source);
-      return (layer.raw.insert ?? []).filter((cell3) => !declared(cell3)).map((cell3) => ({
+      return (layer.raw.insert ?? []).filter(broken).map((cell3) => ({
         file: layer.path,
         issue: {
           path: cell3.by.entry,
           message: unplacedMessage(
             cell3.by.entry,
             cell3.seg,
-            top.config.segments
+            top.config.segments,
+            presence2(cell3.seg)
           ),
           line: lineOf(cell3.by.entry.split("."))
         }
@@ -60597,7 +60858,7 @@ function layerInserts(top, beneath) {
     })
   };
 }
-function droppedByFile(filePath2, segments, ctx, beneath, filed) {
+function droppedByFile(filePath2, segments, ctx, presence2, beneath, filed) {
   const byFile = /* @__PURE__ */ new Map();
   const add2 = (file, issue3) => {
     byFile.set(file, [...byFile.get(file) ?? [], issue3]);
@@ -60613,11 +60874,18 @@ function droppedByFile(filePath2, segments, ctx, beneath, filed) {
     else
       add2(author.layer.path, {
         path: author.path,
-        message: unplacedMessage(author.layoutKey, name, segments),
+        message: unplacedMessage(
+          author.layoutKey,
+          name,
+          segments,
+          presence2(name)
+        ),
         line: findKeyLine(author.layer.source, author.path.split("."))
       });
   }
-  return [...byFile].map(([file, issues]) => new ConfigError(file, issues));
+  return [...byFile].map(
+    ([file, issues]) => new DroppedFileError(file, issues)
+  );
 }
 function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolvablePaletteNames()), inheritedSegments = NO_INHERITED_SEGMENTS) {
   return parseDslFile(filePath2, source, allowedPalettes, () => ({
@@ -64289,16 +64557,45 @@ var HANDOFF_SEVERITY = {
 function diagnosticSpan(text4, link) {
   return { text: sanitizeText(text4), link };
 }
-function collectDiagnostics(errors2, notices, warnings) {
-  return [
-    ...errors2.flatMap((e) => plainMessage(e, ERROR_SEVERITY)),
+function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
+  const plain = /* @__PURE__ */ new Set();
+  const plainOf2 = (text4, severity) => {
+    const made = plainMessage(text4, severity);
+    for (const m of made) plain.add(m);
+    return made;
+  };
+  const list2 = [
+    ...errors2.flatMap((e) => plainOf2(e, ERROR_SEVERITY)),
     ...notices,
-    ...warnings.flatMap((w) => plainMessage(w, WARNING_SEVERITY))
+    ...warnings.flatMap((w) => plainOf2(w, WARNING_SEVERITY))
   ];
+  const keys2 = copyKeys(list2);
+  return list2.map(
+    (m, i) => plain.has(m) ? {
+      ...m,
+      lines: [
+        [
+          diagnosticSpan(
+            m.lines[0][0].text,
+            copyLink(sessionId2, by, keys2[i])
+          )
+        ],
+        ...m.lines.slice(1)
+      ]
+    } : m
+  );
 }
-function plainMessage({ about, text: message }, severity) {
+function plainMessage({ about, text: message, copy: copy3 }, severity) {
   const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
-  return first2 === void 0 ? [] : [{ severity, about, message, lines: [first2, ...rest2] }];
+  return first2 === void 0 ? [] : [{ severity, about, message, copy: copy3, lines: [first2, ...rest2] }];
+}
+function copyKeys(list2) {
+  return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
+}
+function copyLink(sessionId2, by, key) {
+  return effectsUrl([
+    { verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }
+  ]);
 }
 function worstLevel(list2) {
   return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
@@ -64350,7 +64647,7 @@ var MAX_VIEWER_ROWS = 20;
 function viewerRowCap(termRows, surfaceRows) {
   return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
 }
-function viewerRows(list2, at, sessionId2, geometry) {
+function viewerRows(list2, at, sessionId2, by, geometry) {
   const { index } = at;
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
@@ -64375,7 +64672,7 @@ function viewerRows(list2, at, sessionId2, geometry) {
         ...steps2 ? [step4("\u203A", on2)] : [],
         button(
           "\u29C9 copy",
-          effectsUrl([{ verb: VERB_COPY, args: [shown.message] }])
+          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0))
         )
       ],
       opts
@@ -64527,6 +64824,7 @@ function repoQuestions(gate2, sessionId2, signer) {
       severity: APPROVAL_SEVERITY,
       about: `repo-question\0${dir}`,
       message,
+      copy: message,
       lines: [line]
     };
   });
@@ -68910,6 +69208,27 @@ function pbcopy(text4, ctx) {
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
+var DRAWERS = /* @__PURE__ */ new Set([
+  "request",
+  "feed"
+]);
+function requireDrawer(by) {
+  if (!DRAWERS.has(by))
+    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
+  return by;
+}
+var copyDiagnostic = (value, ctx) => {
+  const [sessionId2 = "", by = "", key = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  if (text4 === void 0)
+    throw new BadVerbArgs(
+      `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
+    );
+  pbcopy(text4, ctx);
+};
 var openVscode = (value, ctx) => clickLaunch(
   {
     bin: "/usr/bin/open",
@@ -69763,7 +70082,8 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_SLASH, slash],
   [VERB_RUN, run2],
-  [VERB_REPO_CONFIG, repoConfig]
+  [VERB_REPO_CONFIG, repoConfig],
+  [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
 ]);
 var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_SET_STATE,
@@ -69782,7 +70102,8 @@ var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
-  VERB_REPO_CONFIG
+  VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC
 ]);
 var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
   VERB_SET_STATE,
@@ -69807,7 +70128,8 @@ var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_LOAD_CONFIG
+  VERB_LOAD_CONFIG,
+  VERB_COPY_DIAGNOSTIC
 ]);
 function clickSessionOf(verb, value) {
   return sessionOfEffects(
@@ -70010,6 +70332,7 @@ function describeLink(link, sessionId2) {
 }
 var HOST_VERBS = /* @__PURE__ */ new Map([
   [VERB_COPY, "copies to the clipboard"],
+  [VERB_COPY_DIAGNOSTIC, "copies a diagnostic to the clipboard"],
   [VERB_OPEN_VSCODE, "opens a file in VS Code"],
   [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
   [VERB_RUN, "runs a program the config declares"]
@@ -70578,6 +70901,7 @@ function updateNotice(update, act, ctx) {
       severity: UPDATE_SEVERITY,
       about: `update\0${identity3}`,
       message,
+      copy: message,
       lines: [first2, ...rest2]
     }
   ];
@@ -77837,7 +78161,7 @@ function* templatesOf(config2) {
     for (const [, source] of actionTemplates(a)) yield source;
   }
 }
-function unusedDeclarations(raw, config2) {
+function unusedDeclarations(raw, config2, inserted) {
   const fold = valueReadsOf(config2);
   const read2 = /* @__PURE__ */ new Set();
   const bound = /* @__PURE__ */ new Set();
@@ -77862,7 +78186,7 @@ function unusedDeclarations(raw, config2) {
     }
   }
   const writtenKeys = /* @__PURE__ */ new Set();
-  const placed = /* @__PURE__ */ new Set();
+  const placed = new Set(inserted);
   for (const name of clicked) {
     const action2 = config2.actions[name];
     if (action2 === void 0) continue;
@@ -78155,6 +78479,9 @@ function buildRenderState(load, deps) {
   const { layers, config: config2, installed, dropped: dropped2 } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
+  const inserted = layers.flatMap(
+    (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
+  );
   const warnings = [];
   const store = new VariableStore();
   const registry = new SourceRegistry(
@@ -78204,11 +78531,11 @@ function buildRenderState(load, deps) {
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
       // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed, so a segment only an insert entry places
-      // is used.
+      // over the trees as placed and every layer's insert entries, so a
+      // segment only an insert entry places is used, here or not.
       unused: [
         ...new Map(
-          layers.flatMap((l) => unusedDeclarations(l.raw, loaded.placed)).map((u) => [`${u.kind}:${u.name}`, u])
+          layers.flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted)).map((u) => [`${u.kind}:${u.name}`, u])
         ).values()
       ],
       plugins: {
@@ -78429,6 +78756,14 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
+  // delivered copies, by the key its copy click names (src/render/
+  // diagnostics.ts), one map per renderer, since a request and a feed frame
+  // list different messages and a click names the surface it came from. Held
+  // by session, not by view, because a frame on screen outlives the view it
+  // was drawn from (a reload's successor); dropped when the session has no
+  // view. No link carries the text it copies.
+  copies = /* @__PURE__ */ new Map();
   // Every view the cache serves or served, until reclaimed.
   viewHolds = /* @__PURE__ */ new Map();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -78709,6 +79044,7 @@ var RenderCache = class {
   retireView(view, reason) {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
+    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -78984,6 +79320,25 @@ var RenderCache = class {
   // case by construction.
   latestView() {
     return [...this.views.values()].at(-1) ?? null;
+  }
+  // The renderer `by` delivered a frame of the session's bar listing
+  // `copies`. A session with no view is closed: nothing it delivers is kept.
+  delivered(sessionId2, by, copies) {
+    if (!this.views.has(sessionId2)) return;
+    const drawn = this.copies.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    this.copies.set(sessionId2, drawn.set(by, copies));
+  }
+  // What the diagnostic under `key` copies in the frame renderer `by` last
+  // delivered for the session; undefined while that renderer's last frame
+  // did not list it. Reads, never opens, like latestView.
+  drawnCopy(sessionId2, by, key) {
+    return this.copies.get(sessionId2)?.get(by)?.get(key);
+  }
+  // The renderer no longer draws the session's bar (its feed closed): what
+  // its last frame listed is on no surface now, so a click naming it is
+  // refused rather than copying a list gone stale.
+  stopDrawing(sessionId2, by) {
+    this.copies.get(sessionId2)?.delete(by);
   }
 };
 
@@ -79714,6 +80069,7 @@ var FrameFeeds = class {
       }
     }
     if (feed.followers.size === 0) return;
+    frame.delivered();
     const answers = {
       bar: sentOf(frame.resp),
       statusline: sentOf(frame.statusline)
@@ -81505,8 +81861,6 @@ function laneHandoff(sessionId2, lanes) {
   ]);
   return {
     severity: HANDOFF_SEVERITY,
-    about: "lane-handoff",
-    message,
     lines: [
       [
         diagnosticSpan(
@@ -81823,7 +82177,15 @@ var frameFeeds = new FrameFeeds({
   // journal commit land before a frame of it is drawn.
   watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
   lanes: (sessionId2) => viewLanes(sessionId2),
-  pin: (sessionId2) => renderCache.pin(sessionId2),
+  // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+  // moment the feed stops drawing, so its drawn copies retire with it.
+  pin: (sessionId2) => {
+    const unpin = renderCache.pin(sessionId2);
+    return () => {
+      renderCache.stopDrawing(sessionId2, "feed");
+      unpin();
+    };
+  },
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
   refreshes: () => refreshLedger.totals(),
@@ -82148,7 +82510,7 @@ async function replyTo(req, timedOut, accepted) {
       return { stated: req2.deadline.kind, ms, endsAt: t0 + ms };
     };
     const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(checked.req, at, waitFor(checked.req), facts).then(
-      ({ answer: answer2, motion, clickShown }) => {
+      ({ answer: answer2, motion, clickShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -82156,11 +82518,15 @@ async function replyTo(req, timedOut, accepted) {
           // [LAW:single-enforcer] An answer carrying the click error that
           // reaches its client is the one that delivered it
           // (src/daemon/click-error.ts).
-          delivered: clickShown === null ? NOTHING_DELIVERED : () => answeredClickError(
-            sessionState,
-            checked.req.sessionId,
-            clickShown
-          )
+          delivered: () => {
+            delivered();
+            if (clickShown !== null)
+              answeredClickError(
+                sessionState,
+                checked.req.sessionId,
+                clickShown
+              );
+          }
         };
       },
       (error) => {
@@ -82326,7 +82692,8 @@ var verbCtx = {
       origin.cwd,
       origin.configFile ?? void 0
     )
-  }
+  },
+  diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
 };
 var reloadConfig = verbCtx.reloadConfig;
 var RENDER_OPTS_BASE = {
@@ -82451,7 +82818,7 @@ function renderFrame(sessionId2, fps) {
     try {
       const setup = __using(_stack, setUpFrame(sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, motion, evaluated: evaluated2, lanes } = drawRender(setup, {
+      const { drawn, motion, evaluated: evaluated2, delivered, lanes } = drawRender(setup, {
         by: "feed",
         fps
       });
@@ -82470,6 +82837,7 @@ function renderFrame(sessionId2, fps) {
         },
         moves: motion === "moves",
         evaluated: evaluated2,
+        delivered,
         failure: null
       };
     } catch (_) {
@@ -82492,6 +82860,7 @@ function renderFrame(sessionId2, fps) {
       statusline: failed2,
       moves: false,
       evaluated: 0,
+      delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` }
     };
   }
@@ -82700,18 +83069,26 @@ function drawRender(setup, drawing2) {
     enabled: effective.updateNotice
   });
   const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
-  const said = (text4) => ({ about: text4, text: text4 });
+  const sourced = (about, text4) => ({
+    about,
+    text: text4,
+    copy: text4
+  });
+  const said = (text4) => sourced(text4 ?? "", text4);
   const errors2 = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
-    { about: "load", text: entry.lastError },
-    { about: "update-act", text: updateWatch.error() },
+    sourced("load", entry.lastError),
+    sourced("update-act", updateWatch.error()),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
-      text: e.message
+      text: e.message,
+      copy: e.prompt
     })),
     said(clickShown?.text)
-  ].flatMap(({ about, text: text4 }) => about && text4 ? [{ about, text: text4 }] : []);
+  ].flatMap(
+    ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
+  );
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...lifelineWarnings(),
@@ -82719,12 +83096,18 @@ function drawRender(setup, drawing2) {
   ];
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
+    sessionId2,
+    drawing2.by,
     errors2,
     [...updates, ...questions],
     [
       ...standing,
       ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
-    ].map((w) => ({ about: `${w.kind}\0${w.message}`, text: w.message }))
+    ].map((w) => ({
+      about: `${w.kind}\0${w.message}`,
+      text: w.message,
+      copy: w.message
+    }))
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -82776,6 +83159,9 @@ function drawRender(setup, drawing2) {
     // payload's `.effective` fields read.
     { ...effective, effects, idleSince }
   );
+  const keys2 = copyKeys(diagnostics);
+  const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
+  const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
   menuIdle.observe(sessionId2, at, frame.menuRows > 0, effective.menuTimeout);
   const menusSince = menuIdle.since(sessionId2, at);
   noteFacts(facts, {
@@ -82863,7 +83249,7 @@ function drawRender(setup, drawing2) {
   });
   return {
     drawn: {
-      body: viewing === null ? frame.text : viewerRows(diagnostics, viewing, sessionId2, geometry),
+      body: viewing === null ? frame.text : viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry),
       viewerOpen: viewing !== null,
       diagnostics,
       geometry
@@ -82871,6 +83257,7 @@ function drawRender(setup, drawing2) {
     motion: frame.motion,
     evaluated: frame.evaluated,
     clickShown,
+    delivered,
     lanes
   };
 }
@@ -82949,7 +83336,10 @@ async function drawAnswer(req, at, wait, facts) {
       ended,
       refreshed: refreshedFact(refreshed)
     });
-    const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
+    const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+      setup,
+      ANSWERING
+    );
     const output = composeBar(drawn);
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
@@ -82962,7 +83352,8 @@ async function drawAnswer(req, at, wait, facts) {
     return {
       answer: toStatusline ? statusline : output,
       motion,
-      clickShown
+      clickShown,
+      delivered
     };
   } catch (_) {
     var _error = _, _hasError = true;
