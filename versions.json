@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-510",
+      "ref": "refs/pull/510/merge",
+      "sha": "08e67c5e727c6c85e253afbd78bd311e78997aa2",
+      "timestamp": "2026-10-30T21:37:26.541Z",
+      "commits": [
+        {
+          "sha": "08e67c5e727c6c85e253afbd78bd311e78997aa2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:36:37-06:00",
+          "message": "Merge adb77e06d7b92db28d7f78c67aefd577d41dedb0 into 19183e1e39371f3a80b53ee9182655ebec2787f9\n"
+        },
+        {
+          "sha": "adb77e06d7b92db28d7f78c67aefd577d41dedb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:34:15-06:00",
+          "message": "fix(colour): a dial window widens to its position's count of tones, so every distribution keeps neighbours apart at every depth (candybar-joiners-e5r4.cfm)\n\nA window at a depth widened only until it held two tones. Golden angle\nkeeps neighbours apart only over three, so a three-tone position whose\ndepth rounds two tones alike left a golden-angle container with pairs\ndrawn as one colour at 256 and ansi. The window now widens, through the\none `widen`, rung by rung until it holds as many tones as its position\nnames, and holds fewer only where the role's ladder has no more drawn\napart. Truecolor windows are unchanged.\n\nThe adjacency test holds van der Corput over every window of a position\nnaming two or more and golden angle over every window of a position\nnaming three, at every depth, and states the edge: a window short of its\ncount holds exactly what the role draws. The preview test covers dracula\nat 256, whose accent window widens back to three.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "19183e1e39371f3a80b53ee9182655ebec2787f9",
