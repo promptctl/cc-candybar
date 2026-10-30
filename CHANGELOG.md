@@ -1,3 +1,9 @@
+## [1.166.3](https://github.com/promptctl/cc-candybar/compare/v1.166.2...v1.166.3) (2026-10-30)
+
+### Bug Fixes
+
+* **watchers:** the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx) ([#501](https://github.com/promptctl/cc-candybar/issues/501)) ([ac7fa00](https://github.com/promptctl/cc-candybar/commit/ac7fa0066116393d2e51df899b6ec19d31ba5071))
+
 ## [1.166.2](https://github.com/promptctl/cc-candybar/compare/v1.166.1...v1.166.2) (2026-10-30)
 
 ### Bug Fixes
