@@ -10,9 +10,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The build runs every package's install scripts, so it holds a read-only token and keeps no
+# credentials in the checkout; only the deploy job, which runs no package code, can write.
 permissions:
-  contents: write        # the multiplexer pushes gh-pages
-  pull-requests: write   # the sticky preview comment
+  contents: read
 
 # A deploy from one ref must not cancel another's; the multiplexer retries lost pushes itself.
 concurrency:
@@ -20,14 +21,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Build and deploy
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # the multiplexer reads git history for each version's manifest
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -62,10 +63,36 @@ jobs:
           mkdir -p published/landscape
           cp -R design-docs/peer-exploration/5-landscape/site/. published/landscape/
 
-      # A fork's pull request gets a read-only token whatever `permissions:` says, so it can neither
-      # push gh-pages nor comment: it builds, which is the check, and publishes nothing.
+      - name: Hand the version to the deploy
+        uses: actions/upload-artifact@v4
+        with:
+          name: published
+          path: published
+          retention-days: 1
+
+  deploy:
+    name: Deploy
+    needs: build
+    # A fork's pull request gets a read-only token whatever `permissions:` says, so it can neither
+    # push gh-pages nor comment: it builds, which is the check, and publishes nothing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # the multiplexer pushes gh-pages
+      pull-requests: write   # the sticky preview comment
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the multiplexer reads git history for each version's manifest
+
+      - name: Take the built version
+        uses: actions/download-artifact@v4
+        with:
+          name: published
+          path: published
+
       - name: Deploy with gh-pages-multiplexer
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: brandon-fryslie/gh-pages-multiplexer@v1
         with:
           source-dir: published
