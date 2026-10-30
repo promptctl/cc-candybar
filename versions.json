@@ -4,15 +4,22 @@
     {
       "version": "pr-497",
       "ref": "refs/pull/497/merge",
-      "sha": "162462ca4f0eadce738bc86467cfa4ff519a0df8",
-      "timestamp": "2026-10-30T13:49:16.929Z",
+      "sha": "a3299fa5d53a7afa5067bb2a26ebe18e422fdf15",
+      "timestamp": "2026-10-30T13:57:10.746Z",
       "commits": [
         {
-          "sha": "162462ca4f0eadce738bc86467cfa4ff519a0df8",
+          "sha": "a3299fa5d53a7afa5067bb2a26ebe18e422fdf15",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:48:21Z",
-          "message": "Merge aead04de4f3662abe06783149093ab3fe4b171c1 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+          "timestamp": "2026-10-30T13:56:20Z",
+          "message": "Merge e795be7abb37765bb358bf799c9d8ddf855d05c8 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+        },
+        {
+          "sha": "e795be7abb37765bb358bf799c9d8ddf855d05c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:56:10-06:00",
+          "message": "fix(plugins): an insert cell is absent through any chain of absent anchors, its own typo is reported whatever it stands on, and a closed feed's copies retire with it (candybar-plugins-vf6g.odm)\n"
         },
         {
           "sha": "aead04de4f3662abe06783149093ab3fe4b171c1",

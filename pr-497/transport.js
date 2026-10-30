@@ -57306,10 +57306,10 @@ function presenceOf(segments, rendering) {
 function reportable(presence2) {
   return presence2.kind === "plugin" || presence2.kind === "missing";
 }
-function segmentsPlacedAs(config2, cells) {
+function absentPlacement(config2, cells, presence2) {
   const placed = /* @__PURE__ */ new Map();
-  const add2 = (id2, segment) => {
-    placed.set(id2, (placed.get(id2) ?? /* @__PURE__ */ new Set()).add(segment));
+  const add2 = (id2, at) => {
+    placed.set(id2, [...placed.get(id2) ?? [], at]);
   };
   const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
   const fragments = [
@@ -57320,9 +57320,17 @@ function segmentsPlacedAs(config2, cells) {
   ];
   for (const tree of fragments.flatMap(trees))
     for (const node of walkNodes(tree))
-      if (node.kind === "segment") add2(placementId(node), node.name);
-  for (const cell3 of cells) add2(cell3.id ?? cell3.seg, cell3.seg);
-  return (id2) => [...placed.get(id2) ?? []];
+      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
+  for (const cell3 of cells)
+    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
+  const absent = (id2, seen) => {
+    const at = placed.get(id2) ?? [];
+    const on2 = new Set(seen).add(id2);
+    return at.length > 0 && at.every(
+      (p2) => presence2(p2.seg).kind === "absent" || p2.anchor !== void 0 && !on2.has(p2.anchor) && absent(p2.anchor, on2)
+    );
+  };
+  return (id2) => absent(id2, /* @__PURE__ */ new Set());
 }
 function withoutUnplaced(config2) {
   let removed = 0;
@@ -59879,14 +59887,12 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
 }
 function layerInserts(top, beneath, presence2) {
   const layers = [...beneath].reverse().concat(top);
-  const placedAs = segmentsPlacedAs(
+  const standsOnAbsent = absentPlacement(
     top.config,
-    layers.flatMap((layer) => layer.raw.insert ?? [])
+    layers.flatMap((layer) => layer.raw.insert ?? []),
+    presence2
   );
-  const anchored2 = (cell3) => {
-    const on2 = placedAs(cell3.anchor);
-    return on2.length === 0 || on2.some((seg2) => presence2(seg2).kind !== "absent");
-  };
+  const anchored2 = (cell3) => !standsOnAbsent(cell3.anchor);
   const declared = (cell3) => presence2(cell3.seg).kind === "declared";
   const broken = (cell3) => reportable(presence2(cell3.seg));
   const own2 = (layer) => (layer.raw.insert ?? []).filter(anchored2);
@@ -59901,7 +59907,7 @@ function layerInserts(top, beneath, presence2) {
     // One locator per layer, so its source is parsed at most once.
     dropped: layers.flatMap((layer) => {
       const lineOf = keyLocator(layer.source);
-      return own2(layer).filter(broken).map((cell3) => ({
+      return (layer.raw.insert ?? []).filter(broken).map((cell3) => ({
         file: layer.path,
         issue: {
           path: cell3.by.entry,
@@ -78360,6 +78366,12 @@ var RenderCache = class {
     }
     return void 0;
   }
+  // The renderer no longer draws the session's bar (its feed closed): what
+  // its last frame listed is on no surface now, so a click naming only it is
+  // refused rather than copying a list gone stale.
+  stopDrawing(sessionId2, by) {
+    this.views.get(sessionId2)?.drawnCopies.delete(by);
+  }
 };
 
 // src/daemon/session-state-file.ts
@@ -81199,7 +81211,15 @@ var frameFeeds = new FrameFeeds({
   // journal commit land before a frame of it is drawn.
   watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
   lanes: (sessionId2) => viewLanes(sessionId2),
-  pin: (sessionId2) => renderCache.pin(sessionId2),
+  // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+  // moment the feed stops drawing, so its drawn copies retire with it.
+  pin: (sessionId2) => {
+    const unpin = renderCache.pin(sessionId2);
+    return () => {
+      renderCache.stopDrawing(sessionId2, "feed");
+      unpin();
+    };
+  },
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
   refreshes: () => refreshLedger.totals(),
