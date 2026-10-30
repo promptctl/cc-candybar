@@ -16,9 +16,9 @@ import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
 import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
 
-// The page's clipboard (this file is checked against Node's types, which have no `navigator`).
 // Where the deploy publishes the landscape explorer, relative to this page; null outside the deploy.
 declare const __LANDSCAPE__: string | null;
+// The page's clipboard (this file is checked against Node's types, which have no `navigator`).
 declare const navigator: { readonly clipboard: { writeText(text: string): Promise<void> } };
 
 interface Size {
@@ -249,7 +249,7 @@ export const transport = {
   about:
     'This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>\'s own daemon, compiled for the browser and running in this page against a simulated machine. ' +
     "The bar replays a few turns of a Claude Code session. Every click is real: open the 🍫 menu, switch themes, arrange segments.",
-  nav: __LANDSCAPE__ === null ? undefined : `<a href="${__LANDSCAPE__}">Statusline landscape →</a>`,
+  landscape: __LANDSCAPE__,
   render,
   click,
   // A new session over the bundled config: what the visitor's clicks wrote is

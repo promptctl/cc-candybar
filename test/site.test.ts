@@ -19,12 +19,33 @@ jest.setTimeout(60_000);
 
 const ROOT = process.cwd();
 
+// The deploy alone says where the explorer sits; a build without it has no explorer to link to.
+function withoutLandscape(): NodeJS.ProcessEnv {
+  const { LANDSCAPE_DIR: _, ...env } = process.env;
+  return env;
+}
+
+test("the deploy's LANDSCAPE_DIR is the live bar's link to the explorer, and a path outside the page is refused", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
+  execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe", env: { ...withoutLandscape(), LANDSCAPE_DIR: "landscape" } });
+  const printed = execFileSync("node", ["--input-type=module", "-e", `
+    const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
+    console.log(JSON.stringify(transport.landscape));
+    process.exit(0);
+  `], { encoding: "utf8", timeout: 30_000 });
+  expect(JSON.parse(printed.trim().split("\n").pop()!)).toBe("landscape/");
+  for (const bad of ["/landscape", "./landscape", "../landscape", 'x" onclick="y'])
+    expect(() => execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe", env: { ...withoutLandscape(), LANDSCAPE_DIR: bad } })).toThrow(/LANDSCAPE_DIR must be folders/);
+  fs.rmSync(out, { recursive: true, force: true });
+});
+
 test("the built site renders, clicks, and plays its scenario with no server", () => {
   // Built into a directory of its own, so a test run never replaces the developer's site/dist.
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
-  execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe" });
+  execFileSync("node", [path.join(ROOT, "site/build.mjs"), out], { stdio: "pipe", env: withoutLandscape() });
   const probe = `
     const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
+    if (transport.landscape !== null) throw new Error("a build outside the deploy links to an explorer: " + transport.landscape);
     const size = { width: 120, rows: 40 };
     // The page's first render compiles the config in its arrival turn, which
     // can spend its whole deadline, so what has not answered draws pending;
