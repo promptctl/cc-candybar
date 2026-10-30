@@ -53,6 +53,7 @@ describe("the bar's loop runs at the session's animation speed", () => {
   test.each([
     ["1x", 10],
     ["5x", 50],
+    ["10x", 100],
     ["20x", 200],
   ] as const)("ten seconds at %s are %d seconds of the loop", (speed, t) => {
     const fx = new SessionEffects<string>("s");
@@ -115,7 +116,13 @@ describe("a fade runs at the session's animation speed", () => {
     speed: AnimationSpeedName,
     shown: boolean,
   ): ReadonlyArray<{ placement: string; t: number }> => {
-    const motion = framed(fx, memory, "none", fx.clockAt(when, ANIMATION_SPEEDS[speed]), fades);
+    const motion = framed(
+      fx,
+      memory,
+      "none",
+      fx.clockAt(when, ANIMATION_SPEEDS[speed]),
+      fades,
+    );
     motion.placed("left", shown ? ["left"] : []);
     motion.row("r", "bar", shown ? [item("left")] : []);
     motion.drawn();
@@ -136,10 +143,9 @@ describe("a fade runs at the session's animation speed", () => {
       expect(frame(fx, memory, at(1), speed, true)).toEqual([
         { placement: "left", t: 0 },
       ]);
-      expect(frame(fx, memory, at(1 + later / 2), speed, true)[0]!.t).toBeCloseTo(
-        (later / 2) * ANIMATION_SPEEDS[speed],
-        9,
-      );
+      expect(
+        frame(fx, memory, at(1 + later / 2), speed, true)[0]!.t,
+      ).toBeCloseTo((later / 2) * ANIMATION_SPEEDS[speed], 9);
       expect(frame(fx, memory, at(1 + later), speed, true)).toEqual(fading);
     },
   );
@@ -168,12 +174,11 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     seconds: readonly number[],
   ): string => {
     const store = new VariableStore();
-    const registry = new SourceRegistry(
-      store,
-      "",
-      new SessionState(),
-    );
-    const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const registry = new SourceRegistry(store, "", new SessionState());
+    const compiled = registerDslConfig(CONFIG, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp",
+    });
     const effects = new SessionEffects<RenderedLine>("s");
     try {
       return seconds

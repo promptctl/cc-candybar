@@ -10,7 +10,10 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { drawPayload, registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
+import {
+  ANIMATION_SPEED_NAMES,
+  listResolvablePaletteNames,
+} from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
@@ -409,7 +412,7 @@ describe("the flash on the bar", () => {
   // The flash counts down to the moment the daemon's timer closes the menus,
   // so its holds are on the host clock however fast the session animates.
   test("the flash begins and turns at the same host instant at every animation speed", () => {
-    for (const speed of ["1x", "5x", "20x"]) {
+    for (const speed of ANIMATION_SPEED_NAMES) {
       const rt = buildRuntime(
         `{ globals: { animationSpeed: "${speed}" }, root: { h: ['directory', 'model'] } }`,
       );
