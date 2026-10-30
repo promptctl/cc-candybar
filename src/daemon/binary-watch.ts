@@ -39,6 +39,8 @@ export interface BinaryWatchOptions {
   readonly targets: readonly string[];
   readonly intervalMs: number;
   readonly stat: BundleStat;
+  /** True while something the restart would kill is rewriting the bundle. */
+  readonly held: () => boolean;
   /** The daemon's one exit funnel, which owns running only once. */
   readonly exit: () => void;
   readonly log: DaemonLogger;
@@ -50,7 +52,7 @@ export interface BinaryWatch {
 }
 
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
-  const { targets, intervalMs, stat, exit, log } = opts;
+  const { targets, intervalMs, stat, held, exit, log } = opts;
   // The stamps the daemon booted with, taken the same way every sample is.
   const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
   // [LAW:types-are-the-program] A stat that failed at boot leaves nothing to
@@ -67,10 +69,12 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
         continue;
       }
       if (!sameStamp(stamp, now)) {
-        log(
-          "info",
-          `binary ${now.kind === "absent" ? "gone" : "changed"} (${path}); shutting down`,
-        );
+        const what = `binary ${now.kind === "absent" ? "gone" : "changed"} (${path})`;
+        if (held()) {
+          log("info", `${what}; the restart waits for the running update`);
+          return;
+        }
+        log("info", `${what}; shutting down`);
         if (timer) clearInterval(timer);
         exit();
         return;

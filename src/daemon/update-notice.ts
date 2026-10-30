@@ -279,6 +279,8 @@ export interface UpdateWatch {
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
   // to apply or an act is already running.
   act(): void;
+  // Whether an act's child is running now.
+  running(): boolean;
 }
 
 // A build or an install is a long child; ten minutes is generous for either
@@ -442,6 +444,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       }
     },
     notice: (ctx) => updateNotice(current(), act, ctx),
+    running: () => act.kind === "running",
     act() {
       const update = current();
       if (update === null) {

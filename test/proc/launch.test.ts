@@ -7,7 +7,9 @@ import {
   launch,
   launchDetachedSync,
   launchSync,
+  setLaunchLog,
   setLaunchStats,
+  __lifelineForTest,
   __resetRateLimitsForTest,
 } from "../../src/proc/launch";
 import type { LaunchCategory } from "../../src/proc/launch";
@@ -285,6 +287,8 @@ describe("launch (async)", () => {
   });
 
   it("calls onStart/onEnd exactly once per launch with the category tag", async () => {
+    // The process's first launch also starts its lifeline, a spawn of its own.
+    await launch({ bin: "/bin/echo", args: ["up"], category: "git" });
     const { handle, starts, ends } = makeSpyHandle();
     setLaunchStats(handle);
     await launch({ bin: "/bin/echo", args: ["x"], category: "git" });
@@ -462,5 +466,59 @@ describe("launch — per-category rate-limit", () => {
     });
     expect(second.ok).toBe(false);
     if (!second.ok) expect(second.reason).toBe("rate-limited");
+  });
+});
+
+// [LAW:types-are-the-program] A waited child cannot outlive the process that
+// launched it. Cutting the lifeline's pipe is the EOF that process's death
+// gives it, however the process died; the daemon e2e kills a real launcher.
+describe("the lifeline", () => {
+  // A `sleep` under `sh`, so the group holds a grandchild a signal to `sh`
+  // alone would orphan, with a duration no other process on the host has.
+  const grandchild = (seconds: string) => ({
+    bin: "/bin/sh",
+    args: ["-c", `sleep ${seconds}; echo late`],
+    category: "user-shell" as const,
+  });
+  const running = (seconds: string) =>
+    spawnSync("pgrep", ["-f", `^sleep ${seconds}$`]).status === 0;
+
+  let lost: string[];
+  beforeEach(() => {
+    lost = [];
+    setLaunchLog((_level, msg) => lost.push(msg));
+  });
+
+  it("ends every group in flight when the launcher's pipe closes", async () => {
+    const pending = launch(grandchild("30.861"));
+    await until(() => running("30.861"), "the launched sleep");
+    __lifelineForTest().cut();
+    const r = await pending;
+    expect(r).toMatchObject({ ok: false, reason: "signal", stdout: "" });
+    await until(() => !running("30.861"), "the grandchild sleep ending");
+  });
+
+  it("a lost lifeline is said, and the next launch replaces it holding every group in flight", async () => {
+    const first = launch(grandchild("30.862"));
+    const { pid: lostPid } = __lifelineForTest();
+    process.kill(lostPid!, "SIGKILL");
+    await until(() => lost.length > 0, "the lost lifeline's warning");
+    expect(lost).toEqual([
+      "launch lifeline lost (exited SIGKILL); the next launch starts another",
+    ]);
+    const second = launch(grandchild("30.863"));
+    const replacement = __lifelineForTest();
+    expect(replacement.pid).not.toBe(lostPid);
+    await until(
+      () => running("30.862") && running("30.863"),
+      "both launched sleeps",
+    );
+    replacement.cut();
+    expect(await first).toMatchObject({ ok: false, reason: "signal" });
+    expect(await second).toMatchObject({ ok: false, reason: "signal" });
+    await until(
+      () => !running("30.862") && !running("30.863"),
+      "both grandchild sleeps ending",
+    );
   });
 });

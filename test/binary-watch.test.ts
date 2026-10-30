@@ -13,6 +13,8 @@ let dir: string;
 let bundle: string;
 let exits: number;
 let lines: Array<[LogLevel, string]>;
+// Whether an update's act is rewriting the bundle.
+let updating: boolean;
 
 const watch = (
   targets = [bundle],
@@ -22,6 +24,7 @@ const watch = (
     targets,
     intervalMs: 60_000,
     stat,
+    held: () => updating,
     exit: () => exits++,
     log: (level, msg) => lines.push([level, msg]),
   });
@@ -33,6 +36,7 @@ beforeEach(() => {
   fs.writeFileSync(bundle, "// bundle");
   exits = 0;
   lines = [];
+  updating = false;
 });
 
 afterEach(() => {
@@ -127,4 +131,25 @@ test("one moved target among several ends the daemon once", () => {
   fs.rmSync(bundle);
   w.checkNow();
   expect(exits).toBe(1);
+});
+
+// The update's act is a launch child that dies with the daemon, so a restart
+// mid-act would leave the bundle half-written.
+test("a bundle rebuilt while an update runs restarts the daemon once the update ends", () => {
+  const w = watch();
+  updating = true;
+  const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
+  fs.utimesSync(bundle, later, later);
+  w.checkNow();
+  expect(exits).toBe(0);
+  updating = false;
+  w.checkNow();
+  expect(exits).toBe(1);
+  expect(lines).toEqual([
+    [
+      "info",
+      `binary changed (${bundle}); the restart waits for the running update`,
+    ],
+    ["info", `binary changed (${bundle}); shutting down`],
+  ]);
 });

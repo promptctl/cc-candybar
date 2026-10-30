@@ -128,7 +128,7 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { launch, setLaunchStats } from "../proc/launch";
+import { launch, setLaunchLog, setLaunchStats } from "../proc/launch";
 import { decodeWire } from "./verb-error";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -245,6 +245,8 @@ const DOCTOR_STORES = fileStores(stateDir());
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
 setLaunchStats(stats.launchStats);
+// A launch child's lifeline, lost and replaced, is said in daemon.log.
+setLaunchLog(dlog);
 // [LAW:single-enforcer] The daemon injects `dlog` into both registries so
 // cache + watcher lifecycle events land in daemon.log at the right level.
 // Non-daemon consumers (var-system tests, future library use) take the
@@ -515,6 +517,9 @@ const binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs.statSync,
+  // The update notice's act rewrites the bundle from a launch child, which
+  // dies with the daemon: a restart waits for it, and its end samples again.
+  held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog,
 });
