@@ -4,15 +4,22 @@
     {
       "version": "pr-512",
       "ref": "refs/pull/512/merge",
-      "sha": "2d899a5795737a851430d6ec8feb4974d7cfc85a",
-      "timestamp": "2026-10-30T23:18:12.494Z",
+      "sha": "717ea407f02f11356ad3a53791d388a41b994024",
+      "timestamp": "2026-10-30T23:53:27.586Z",
       "commits": [
         {
-          "sha": "2d899a5795737a851430d6ec8feb4974d7cfc85a",
+          "sha": "717ea407f02f11356ad3a53791d388a41b994024",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T17:17:13-06:00",
-          "message": "Merge e2f67df1435ec8911d3ced1341e8f9aad9977205 into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+          "timestamp": "2026-10-30T23:52:45Z",
+          "message": "Merge ebba12810ec98b5eb79234b4173edca35b350dfe into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+        },
+        {
+          "sha": "ebba12810ec98b5eb79234b4173edca35b350dfe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:52:36-06:00",
+          "message": "test(colour): the trigger frame exempts only a depth-0 press with none to give, and the turn property states the search order (candybar-joiners-e5r4.34r)\n\nHigh review of #512. The frame test read the sweep's press exemption pooled over depths 0-3 by colour, so a bar trigger's press that had a rung to give was exempt wherever a deeper band's no-rung press shared its colour. It now reads the per-depth rule at depth 0, which the sweep's pool is built from.\n\nThe turn property judged a moved cell against its neighbours as they finally stand, while the rule reads each as it stood when the turn was read; it now judges against both, as dealt and as they stand. It also asserts the search order: a moved cell falls back onto the press only where the cell across the turn had no rung apart from its neighbours and the press either. Under the literal order (each cell's neighbours-only fallback before the other cell is tried) this assertion fails in 2,510 lines.\n\nPolicy 4 states the order's consequence for a line-start keystone.\n"
         },
         {
           "sha": "e2f67df1435ec8911d3ced1341e8f9aad9977205",
