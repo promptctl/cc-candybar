@@ -233,10 +233,10 @@ const RUNGS = Object.values(RUNGS_OUT).flat();
  * (`text-<role>`, held by the palette to WCAG AA on `<role>-muted`) where it
  * clears TEXT_MIN_CONTRAST on `ground`; otherwise, walking the role's ladder
  * out from the role itself toward the pole `ground` stands farther from, the
- * first that clears it, the role first; and where none of the role's colours
- * clears it, whichever of them stands farthest off `ground`, its text colour
- * and the role itself included. Each pair is measured as truecolor draws it,
- * over black; the depth's rounding is `keptOn`'s.
+ * first that clears it, the role first; and otherwise whichever of the role's
+ * colours stands farthest off `ground`, its text colour and the role itself
+ * included, which clears it wherever any of them does. Each pair is measured
+ * as truecolor draws it, over black; the depth's rounding is `keptOn`'s.
  *
  * [LAW:single-enforcer] The one place this choice is made.
  * [LAW:dataflow-not-control-flow] A fixed list of named entries, each

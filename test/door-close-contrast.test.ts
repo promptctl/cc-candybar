@@ -210,15 +210,19 @@ describe.each(THEMES)("under %s", (theme) => {
     truecolor = doorsUnder(rigs.truecolor, theme);
   });
 
-  test("at truecolor, under every dial position and variation, the ✖ clears the text floor on its ground, or no red its theme names can and it wears the one standing farthest off", () => {
+  test("at truecolor, under every dial position and variation, the ✖ is a red its theme names, and clears the text floor on its ground, or no red its theme names can and it wears the one standing farthest off", () => {
     const palette = getThemePalette(theme)!;
     const shown = (name: string) => drawnColour(palette.get(name)!, ColorDepth.TRUECOLOR);
+    const reds = new Set(ERROR_REDS.map((name) => shown(name).hex));
     const wrong: string[] = [];
     const listed = new Set<string>();
     for (const { variation, shade, ink, ground } of truecolor) {
       const named = groundOf(variation, shade);
       const ratio = contrastRatio(ink, ground);
       const where = `under ${variation} at ${shade} (on ${named}): ✖ ${ink.hex} on ${ground.hex} at ${ratio.toFixed(2)}:1`;
+      // Never synthesised, on every ground: the palette-identity sweep draws
+      // the bundled variation only.
+      if (!reds.has(ink.hex)) wrong.push(`${where}, not a red its theme names`);
       // The listing is keyed by the ground's name, so the ground is held to it.
       if (ground.hex !== shown(named).hex) {
         wrong.push(`${where}, on a ground that is not ${named} (${shown(named).hex})`);
