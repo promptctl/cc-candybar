@@ -1,13 +1,13 @@
 // [LAW:verifiable-goals] brandon-menus-sjhy.b9w: every pair of neighbouring
-// segments in the open settings menu is two shades joined by a filled arrow,
-// never by the thin divider U+E0B1. Driven through the
+// segments in the open settings menu is joined by a filled arrow, never by the
+// thin divider U+E0B1. Driven through the
 // real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
 //
 // brandon-menus-sjhy.57p: no theme excuses a divider. Where a theme spells two
 // neighbouring rungs alike (textual-ansi's flat ladder, catppuccin-latte's
-// accent at `middle`), the bar still draws the two cells on grounds the joiner
-// tells apart, so any divider on any row fails.
+// accent at `middle`), the two cells share a ground and the joiner lifts the
+// arrow's ink off it, so any divider on any row fails.
 
 import { listThemePalettes } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../src/config/menu-keys";

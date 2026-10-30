@@ -122,15 +122,15 @@ const CLOCK: Clock = {
   animatedAt: () => drawInProgress("animatedAt").anim,
 };
 
-// rich-js's `frames` and `stepped`, drawn for the time `time` reads. Its
-// `tween`, `loop` and `glyphs` are not registered, so a template naming one is
-// refused as an unknown function. A frame's motion is read off the cells it
-// draws (`Segment.nextChange`): `glyphs` stamps its cells as `frames` does,
-// but `tween` and `loop` tell their motion only to a frame that hears holds
-// (`TemplateFrame.onHold`), which no draw here passes, so registered as they
-// are, a bar drawing one would move at the still rate. `stepped` tells its
-// motion that way too; the bundled bar draws it beside `frames`, whose cells
-// carry the beat.
+// rich-js's `frames` and `stepped`, the animation functions the bar's
+// templates draw with, drawn for the time `time` reads. `tween`, `loop` and
+// `glyphs` are not registered, so a template naming one is refused as an
+// unknown function. Whoever registers them: `glyphs` stamps its cells as
+// `frames` does, so its motion is read off them (`Segment.nextChange`), but
+// `tween` and `loop` tell theirs only to a frame that hears holds
+// (`TemplateFrame.onHold`), which no draw here passes, so a bar drawing one
+// would move at the still rate. `stepped` tells its motion that way too; the
+// bundled bar draws it beside `frames`, whose cells carry the beat.
 function animationPair(time: () => number): FuncMap {
   const { frames, stepped } = animationFuncs(() => ({ time: time() }));
   // [LAW:no-silent-failure] A rich-js that drops either is a vocabulary the
