@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "35846ae8042324805c53b14c0c5fc02d669edcd3",
+      "timestamp": "2026-10-30T19:42:43.521Z",
+      "commits": [
+        {
+          "sha": "35846ae8042324805c53b14c0c5fc02d669edcd3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T13:41:50-06:00",
+          "message": "fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686) (#506)\n\n* fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686)\n\nA cell's shade is selected from its hue's window at the depth drawn: the\ndial position's tones the depth draws as distinct colours, by identity\nafter rounding (rich-js drawnColour), widened along the ladder to the\nnearest rung drawn apart where the depth draws them all as one. A pressed\nshade (the activated trigger, its band's leads and ✕) is the dial's\nactivated rung widened by the same function until it draws apart from its\nband's items, its trigger's neighbours and the press a depth up. Both are\nmemoised per palette and read by entryOf as before.\n\nThe closing sweep renders every bundled theme at truecolor, 256 and ansi,\nclosed and on each settings tab, through the session rig, and holds every\nseam to two grounds drawn as two colours. One seam reader in test/helpers\nserves the sweep, colour-256 and the theme-identity audit.\n\n* test(colour): the door's ✖ at a lower depth is held on the rung the depth presses it into (candybar-joiners-e5r4.686)\n\nAt 256 colours and ansi the door's ground is the pressed shade at that\ndepth, which moves along the ladder where the depth draws the dial's rung\nlike what stands beside the door. Where the ground is the truecolor one\nrounded, rounding never costs the ✖ the contrast it has at truecolor, as\nbefore. On another rung the ✖ stands as far off as the door's rule puts a\nred there at truecolor: the text floor where a named red clears it, else\nthe farthest of them. The looks at a lower depth are the first to reach\neach ground the depth gives the door, and each ground is held to its name.\n\nThe listing of grounds no named red clears, regenerated from the rendered\nbar at truecolor, is unchanged: no truecolor ground moves.\n\n* fix(colour): a theme's preview samples each hue's window at the depth drawn, so it shows what the bar deals there (candybar-joiners-e5r4.686)\n\nThe preview's bar row sampled the dial's named tones at every depth, while a\nclosed cell now wears its hue's window at the depth. At ansi a widened window\nholds a rung the dial does not name, so the preview showed one colour where the\nbar alternates two (catppuccin-mocha and default at ansi). The preview now deals\nevery tone of each hue's window across as many swatches as the dial names\ntones, so its shape is the same at every depth and its colours are the depth's.\nAt truecolor every window outside textual-ansi is the dial's own, so no\ntruecolor byte moves.\n\nWhat the design stands beside a pressed shade is stated once in the tests'\nwords (besidePress), which the pressed-shade test reads and the closing sweep\nwill. The one-hue lineage test states its premise, one hue at every depth, in\nplace of an assertion that compared a value with itself. The ladder's tie-break\ncomment now says which side the muted form sits on.\n\n* test(colour): the closing sweep exempts a seam by the cells it joins, never by the colour they share (candybar-joiners-e5r4.686)\n\nThe flat-ladder and no-rung-left exemptions matched a seam's colour, so at ansi\ntwo other cells meeting on that slot would have passed unheld. Each is now read\noff the seam's two cells, by the shade the render dealt each before rounding:\na flat seam joins two cells of a flat role, a press seam touches a cell in a\npressed shade with nothing left to give. The press rule reads its adjacencies\nfrom the tests' one statement of them. Each listed authored cell must wear an\nalert in every frame, so a cell wearing its tint is never exempt. The counts\nare unchanged: 9,660 seams, 2,484 beside an authored cell, 198 flat, 130 press.\n\ncolour-256 says why a lower-depth lift is held as drawn: an exact oracle needs\nthe shade the depth dealt, which the bytes do not show and the policy cannot\nbe asked for without being its own oracle.\n\n* test(colour): the sweep knows a cell by its text and the colour it is drawn in, and exempts a seam only where every such cell wears an exempt shade (candybar-joiners-e5r4.686)\n\nEvery ✕ and every blank lead shares one visible text, so keyed by text alone a\npress at one depth with nothing to give lent its exemption to a ✕ or lead at\nanother. A seam is now exempt only where every cell of that text drawn in that\ncolour wears a flat role's shade, or a pressed shade with nothing left to give.\nThe counts are unchanged: 2,484 authored, 198 flat, 130 press.\n\n* docs(colour): a flat role's window says why it never widens into the muted form (candybar-joiners-e5r4.686)\n\ntextual-ansi's muted form draws apart from its one-colour ladder, so a flat\nrole has a second colour; the window keeps off it because on the ladder's\npositions it is the pressed button's shade. The window's type, the sweep's flat\nrule and the adjacency test now say \"no second rung\" rather than \"no second\ncolour\"."
+        }
+      ]
+    },
+    {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
       "sha": "e675b83b3fab30edc3c6e925bd01ca87d7d4d8b2",
@@ -41,78 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T10:22:49-06:00",
           "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-506",
-      "ref": "refs/pull/506/merge",
-      "sha": "57e2f9e1be65e7b9d9b67c23d807145bfe6f717a",
-      "timestamp": "2026-10-30T19:21:05.055Z",
-      "commits": [
-        {
-          "sha": "57e2f9e1be65e7b9d9b67c23d807145bfe6f717a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T19:20:14Z",
-          "message": "Merge e9f955265abf5592f09ee231b05b7c8eea56fcb5 into 38412c68e7a12dce2557dc35449033e18226bae2\n"
-        },
-        {
-          "sha": "e9f955265abf5592f09ee231b05b7c8eea56fcb5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:52:23-06:00",
-          "message": "docs(colour): a flat role's window says why it never widens into the muted form (candybar-joiners-e5r4.686)\n\ntextual-ansi's muted form draws apart from its one-colour ladder, so a flat\nrole has a second colour; the window keeps off it because on the ladder's\npositions it is the pressed button's shade. The window's type, the sweep's flat\nrule and the adjacency test now say \"no second rung\" rather than \"no second\ncolour\".\n"
-        },
-        {
-          "sha": "3cded2d3edc46637e5d0777899414e99375a8740",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:44:38-06:00",
-          "message": "test(colour): the sweep knows a cell by its text and the colour it is drawn in, and exempts a seam only where every such cell wears an exempt shade (candybar-joiners-e5r4.686)\n\nEvery ✕ and every blank lead shares one visible text, so keyed by text alone a\npress at one depth with nothing to give lent its exemption to a ✕ or lead at\nanother. A seam is now exempt only where every cell of that text drawn in that\ncolour wears a flat role's shade, or a pressed shade with nothing left to give.\nThe counts are unchanged: 2,484 authored, 198 flat, 130 press.\n"
-        },
-        {
-          "sha": "5034d0753329b66f89e68376935645832ae6beca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:39:01-06:00",
-          "message": "test(colour): the closing sweep exempts a seam by the cells it joins, never by the colour they share (candybar-joiners-e5r4.686)\n\nThe flat-ladder and no-rung-left exemptions matched a seam's colour, so at ansi\ntwo other cells meeting on that slot would have passed unheld. Each is now read\noff the seam's two cells, by the shade the render dealt each before rounding:\na flat seam joins two cells of a flat role, a press seam touches a cell in a\npressed shade with nothing left to give. The press rule reads its adjacencies\nfrom the tests' one statement of them. Each listed authored cell must wear an\nalert in every frame, so a cell wearing its tint is never exempt. The counts\nare unchanged: 9,660 seams, 2,484 beside an authored cell, 198 flat, 130 press.\n\ncolour-256 says why a lower-depth lift is held as drawn: an exact oracle needs\nthe shade the depth dealt, which the bytes do not show and the policy cannot\nbe asked for without being its own oracle.\n"
-        },
-        {
-          "sha": "ad78793b0d84376748c160777ceca6982de12c2d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:38:48-06:00",
-          "message": "fix(colour): a theme's preview samples each hue's window at the depth drawn, so it shows what the bar deals there (candybar-joiners-e5r4.686)\n\nThe preview's bar row sampled the dial's named tones at every depth, while a\nclosed cell now wears its hue's window at the depth. At ansi a widened window\nholds a rung the dial does not name, so the preview showed one colour where the\nbar alternates two (catppuccin-mocha and default at ansi). The preview now deals\nevery tone of each hue's window across as many swatches as the dial names\ntones, so its shape is the same at every depth and its colours are the depth's.\nAt truecolor every window outside textual-ansi is the dial's own, so no\ntruecolor byte moves.\n\nWhat the design stands beside a pressed shade is stated once in the tests'\nwords (besidePress), which the pressed-shade test reads and the closing sweep\nwill. The one-hue lineage test states its premise, one hue at every depth, in\nplace of an assertion that compared a value with itself. The ladder's tie-break\ncomment now says which side the muted form sits on.\n"
-        },
-        {
-          "sha": "bc4414dbfeaab366e4deb9467c7fef8fb0905420",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:13:05-06:00",
-          "message": "test(colour): the door's ✖ at a lower depth is held on the rung the depth presses it into (candybar-joiners-e5r4.686)\n\nAt 256 colours and ansi the door's ground is the pressed shade at that\ndepth, which moves along the ladder where the depth draws the dial's rung\nlike what stands beside the door. Where the ground is the truecolor one\nrounded, rounding never costs the ✖ the contrast it has at truecolor, as\nbefore. On another rung the ✖ stands as far off as the door's rule puts a\nred there at truecolor: the text floor where a named red clears it, else\nthe farthest of them. The looks at a lower depth are the first to reach\neach ground the depth gives the door, and each ground is held to its name.\n\nThe listing of grounds no named red clears, regenerated from the rendered\nbar at truecolor, is unchanged: no truecolor ground moves.\n"
-        },
-        {
-          "sha": "2fe5af744cf67b56ed833569b16d940727e9a853",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:21:13-06:00",
-          "message": "fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686)\n\nA cell's shade is selected from its hue's window at the depth drawn: the\ndial position's tones the depth draws as distinct colours, by identity\nafter rounding (rich-js drawnColour), widened along the ladder to the\nnearest rung drawn apart where the depth draws them all as one. A pressed\nshade (the activated trigger, its band's leads and ✕) is the dial's\nactivated rung widened by the same function until it draws apart from its\nband's items, its trigger's neighbours and the press a depth up. Both are\nmemoised per palette and read by entryOf as before.\n\nThe closing sweep renders every bundled theme at truecolor, 256 and ansi,\nclosed and on each settings tab, through the session rig, and holds every\nseam to two grounds drawn as two colours. One seam reader in test/helpers\nserves the sweep, colour-256 and the theme-identity audit.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "38412c68e7a12dce2557dc35449033e18226bae2",
-      "timestamp": "2026-10-30T19:04:51.811Z",
-      "commits": [
-        {
-          "sha": "38412c68e7a12dce2557dc35449033e18226bae2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:03:55-06:00",
-          "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk) (#507)\n\n* fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n\n* fix(diagnostics): the config watch retries a refused directory, and its warning is its own (candybar-plugins-vf6g.8uk)\n\nA kept config watch now retries its deaf directories on every load but a\nfailed window, as a watch_file path does, so the warning clears once the OS\nwill watch the directory again instead of standing until a restart. The\nwatch_file entry holds the derived and held watch as one value, the same pair\nthe cache entry holds; the watch's warning has its own type and reads as the\nconfig watch's, since its targets include plugin folders.\n\n* fix(watchers): follow retries a kept watch's deaf directories by one rule, for every consumer (candybar-plugins-vf6g.8uk)\n\nThe registry's follow takes what the watch heard and reopens deaf\ndirectories unless it answers a failed window, so config, plugin sources\nand git share the rule, and an answers-watch failure no longer retries.\nA repeated identical refusal logs once. The link-chain fault no longer\nprints its path twice. The e2e heal re-applies its write until heard.\n\n* fix(watchers): git and config follow only their own watch's failed window (candybar-plugins-vf6g.8uk)\n\nA git pass follows its watch with the failed window it heard since the\nlast pass, so a recurring handle error no longer loops reopen and pass.\nA config entry ignores the answers watch's failure, which says nothing\nabout its own directories."
         }
       ]
     }

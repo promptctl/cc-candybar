@@ -37611,9 +37611,44 @@ var VARIATIONS = {
 var TRIAL_VARIATION_NAMES = Object.keys(
   TUNINGS
 );
-var vocabularyOf = (decor) => decor.variation.hues.flatMap(
-  (hue) => decor.shade.tones.map((shade) => ({ hue, shade }))
-);
+var vocabularyOf = (palette, decor, drawnAt) => decor.variation.hues.flatMap((hue) => {
+  const window2 = windowAt(palette, hue, decor.shade, drawnAt);
+  return decor.shade.tones.map((_, at) => ({
+    hue,
+    shade: window2[at % window2.length]
+  }));
+});
+function windowAt(palette, hue, shade, drawnAt) {
+  return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
+    const drawn = drawnIn(palette, hue, drawnAt);
+    const [first2, ...rest2] = shade.tones;
+    const kept = [first2];
+    for (const tone of rest2) {
+      if (kept.every((held) => drawn(held) !== drawn(tone))) kept.push(tone);
+    }
+    if (kept.length > 1) return kept;
+    const wider = widen(palette, hue, shade.tones, [drawn(first2)], drawnAt);
+    return wider === void 0 ? kept : [first2, wider];
+  });
+}
+var WINDOWS = memoPerPalette();
+var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;
+function widen(palette, hue, from, taken, drawnAt) {
+  const drawn = drawnIn(palette, hue, drawnAt);
+  return ladderFrom(from, palette.dark).find(
+    (rung) => !taken.includes(drawn(rung))
+  );
+}
+function ladderFrom(from, dark) {
+  const ladder = LADDER;
+  const place = (shade) => shade === "muted" ? dark ? -1 : ladder.length : ladder.indexOf(shade);
+  const away = dark ? 1 : -1;
+  return LADDER.map((rung, at) => ({
+    rung,
+    at,
+    distance: Math.min(...from.map((shade) => Math.abs(at - place(shade))))
+  })).filter(({ distance }) => distance > 0).sort((a, b) => a.distance - b.distance || (b.at - a.at) * away).map(({ rung }) => rung);
+}
 var inBin = (placement, size) => Math.floor(placement * size);
 var inHalves = (placement, size) => {
   let entry = size - 1;
@@ -37671,15 +37706,16 @@ function rowAndCell(address) {
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
 var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
-function decorEntryFor(decor, address) {
+function decorEntryFor(palette, decor, address, drawnAt) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
   const { hues, run: run3, keystones } = decor.variation;
   const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
   const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
   if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
+  const hue = keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2;
   return {
-    hue: keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2,
-    shade: vocabularySelect(decor.shade.tones, cell3)
+    hue,
+    shade: vocabularySelect(windowAt(palette, hue, decor.shade, drawnAt), cell3)
   };
 }
 var KEYSTONE_AT = {
@@ -37718,31 +37754,58 @@ function legibleOn(palette, text4, background, drawnAt) {
 }
 var LEGIBLE2 = memoPerPalette();
 var hueOf2 = ({ decor, depth }) => lineageHue(decor.variation.open, depth);
-var bandEntries = (disclosure) => disclosure.decor.shade.tones.map((shade) => ({
-  hue: hueOf2(disclosure),
-  shade
-}));
+var bandEntries = (palette, disclosure, drawnAt) => windowAt(palette, hueOf2(disclosure), disclosure.decor.shade, drawnAt).map(
+  (shade) => ({ hue: hueOf2(disclosure), shade })
+);
+function pressedAt(palette, disclosure, drawnAt) {
+  const { decor, depth } = disclosure;
+  const { variation, shade } = decor;
+  const key = [
+    depth,
+    variation.open.join(","),
+    variation.hues.join(","),
+    variation.keystones.length,
+    shade.tones.join(","),
+    shade.activated,
+    drawnAt
+  ].join("|");
+  return PRESSED(palette, key, () => {
+    const hue = hueOf2(disclosure);
+    const dealt = (at) => windowAt(palette, at, shade, drawnAt).map(drawnIn(palette, at, drawnAt));
+    const keystone = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
+    const besideBand = (up) => [
+      ...dealt(hueOf2(up)),
+      drawnIn(palette, hueOf2(up), drawnAt)(pressedAt(palette, up, drawnAt))
+    ];
+    const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
+    const taken = [...dealt(hue), ...besideTrigger];
+    if (!taken.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
+      return shade.activated;
+    return widen(palette, hue, [shade.activated], taken, drawnAt) ?? shade.activated;
+  });
+}
+var PRESSED = memoPerPalette();
 var nestedIn = (disclosure) => ({
   ...disclosure,
   depth: disclosure.depth + 1
 });
-function bandFor(palette, disclosure) {
+function bandFor(palette, disclosure, drawnAt) {
   return {
     state: paletteRole(
       palette,
-      shadeRole(hueOf2(disclosure), disclosure.decor.shade.activated)
+      shadeRole(hueOf2(disclosure), pressedAt(palette, disclosure, drawnAt))
     ),
     plane: paletteRole(palette, PLANE_ROLE),
-    items: bandEntries(disclosure).map(
+    items: bandEntries(palette, disclosure, drawnAt).map(
       (entry) => decorEntryColour(palette, entry)
     )
   };
 }
-function bandItemFor(palette, disclosure, place) {
-  return vocabularySelect(bandFor(palette, disclosure).items, place);
+function bandItemFor(palette, disclosure, place, drawnAt) {
+  return vocabularySelect(bandFor(palette, disclosure, drawnAt).items, place);
 }
 function bandItem(palette, disclosure, place, drawnAt) {
-  const tint = bandItemFor(palette, disclosure, place);
+  const tint = bandItemFor(palette, disclosure, place, drawnAt);
   return {
     tint,
     text: disclosure.decor.shade.text(
@@ -37804,7 +37867,7 @@ function decorationFor(palette, region, drawnAt) {
   switch (region.kind) {
     case "bar": {
       const { decor, address } = region;
-      const entry = decorEntryFor(decor, address);
+      const entry = decorEntryFor(palette, decor, address, drawnAt);
       const tint = decorEntryColour(palette, entry);
       return {
         tint,
@@ -75659,7 +75722,7 @@ function pickerFuncs(runtime, activeSegment) {
           ),
           closeOn(active2.palette, ground, drawnAt)
         );
-        const band = bandFor(active2.palette, active2.disclosure);
+        const band = bandFor(active2.palette, active2.disclosure, drawnAt);
         const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
         if (rows.length === 0) return draw2(active2.bg)[0];
         active2.drops.push(...rows);
@@ -75973,7 +76036,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
 // src/render/theme-preview.ts
 var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
 function previewRows(palette, decor, opens, drawnAt) {
-  const band = bandFor(palette, opens);
+  const band = bandFor(palette, opens, drawnAt);
   const chosen = (text4, colour) => ({
     text: text4,
     colour,
@@ -75981,7 +76044,7 @@ function previewRows(palette, decor, opens, drawnAt) {
   });
   return [
     [
-      vocabularyOf(decor).map((entry, i) => {
+      vocabularyOf(palette, decor, drawnAt).map((entry, i) => {
         const colour = decorEntryColour(palette, entry);
         return {
           text: BAR_WORDS[i % BAR_WORDS.length],
@@ -76151,7 +76214,11 @@ function renderMenu(applyName, displays, options, runtime) {
   );
   const body = () => {
     const drawnAt = runtime.activeSegment.drawnAt();
-    const plane = bandFor(placement.palette, placement.disclosure).plane;
+    const plane = bandFor(
+      placement.palette,
+      placement.disclosure,
+      drawnAt
+    ).plane;
     const apply = requireOptionKind(action2, applyName, "menu");
     return renderPicker(
       applyName,
@@ -77416,7 +77483,7 @@ function placeOf(node, colours) {
     text: colours.text
   };
 }
-var bandOf = (colours) => bandFor(colours.palette, colours.disclosure);
+var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
 function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
   const dealt = {
     palette,
