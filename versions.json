@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-496",
+      "ref": "refs/pull/496/merge",
+      "sha": "c9212a54b1d2677a73c41eedf0b3ca4ca3696c38",
+      "timestamp": "2026-10-30T13:17:16.209Z",
+      "commits": [
+        {
+          "sha": "c9212a54b1d2677a73c41eedf0b3ca4ca3696c38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:16:33-06:00",
+          "message": "Merge 0859b3ec9ab39b3c07a7552865eac0fd6564808d into de52a356dd72f020a4f914a98688bac6a27ebd13\n"
+        },
+        {
+          "sha": "0859b3ec9ab39b3c07a7552865eac0fd6564808d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:12:41-06:00",
+          "message": "fix(render): bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr)\n\nrich-js 0.25's joiner has no divider: it always draws its seam and lifts\nan arrow's ink off a ground it would vanish into. The seam adapters\nfollow the new SeamForm (plainWith has no divider; the glyph probe draws\ntwo cells), the glyph lists and doctor fixtures lose U+E0B1, and the\ndocs' render fences and the two byte snapshots show U+E0B0 where U+E0B1\nwas, each a lifted arrow between the door and its rate cell.\n\nThe reversed tests' arrow checks read the lift: in colour-256 an arrow's\nink is its cell's ground wherever that stands off the next ground as\ndrawn, and otherwise the colour rich-js's own joiner draws for the two\ntruecolor grounds, at truecolor, 256 and ansi. The theme-identity audit\nreads an arrow's left side from the column before it, since the ink no\nlonger says it.\n\nThe 33 other rich-js commits in 0.25.0 change four APIs the render\nuses: Effected takes its time from RenderOptions.frame, an effect frame\ncarries CellLook attributes, Transition is a class with a schedule, and\nanimationFuncs takes a TemplateFrame (only frames and stepped are\nregistered, as before).\n"
+        },
+        {
+          "sha": "80a1e55480af7d54a457cc64b83300411171fd83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:17:10-06:00",
+          "message": "test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c7c3ecda46896168f06ef5bc176b5bb541bd0a28",
