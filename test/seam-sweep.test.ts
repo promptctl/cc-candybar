@@ -18,8 +18,9 @@
 //   authors each, and each must wear an alert in every frame: one wearing its
 //   tint is the policy's own cell.
 // - A seam between two cells of a role whose whole ladder the depth draws as
-//   one colour. That role has no second colour to give, so its cells meet on
-//   one (textual-ansi names every rung of every role alike).
+//   one colour. That role has no second rung to give (its muted form is the
+//   pressed button's), so its cells meet on one (textual-ansi names every rung
+//   of every role alike).
 // - A seam beside a cell in a pressed shade whose role's ladder the depth
 //   draws only in colours that stand beside the press. The same rule read for
 //   the pressed state: at sixteen colours a ladder of three slots, two of them

@@ -394,7 +394,7 @@ describe("the colour is its role at a shade, as the palette names it", () => {
             const decor: Decor = { variation, shade: SHADES[shade] };
             const size = windowAt(palette, hue, SHADES[shade], drawnAt).length;
             // A window of one tone is a role whose whole ladder draws as one
-            // colour (held by the window's own test): no second colour to deal.
+            // colour (held by the window's own test): no second rung to deal.
             if (size === 1) continue;
             for (const [name, over] of KEEP_NEIGHBOURS_APART.filter(([, over]) => over(size))) {
               const colour = (index: number, count: number): string => {

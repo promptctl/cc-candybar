@@ -437,9 +437,12 @@ export const vocabularyOf = (
  * The tones a row of one hue deals at one depth, in the order a cell's place
  * selects them, no two of them drawn as one colour there.
  * [LAW:types-are-the-program] Never empty, and one tone only where the role's
- * whole ladder draws as one colour at the depth: there is no second colour to
+ * whole ladder draws as one colour at the depth: there is no second rung to
  * deal, so the row wears that one and the joiner shows each seam, which is
- * the theme's look at that depth.
+ * the theme's look at that depth. A window never widens into the muted form,
+ * even where it draws apart (textual-ansi's does): on the ladder's positions
+ * it is the shade a pressed button wears, and a closed row in it would read
+ * as pressed.
  */
 export type Tones = readonly [RoleShade, ...RoleShade[]];
 
