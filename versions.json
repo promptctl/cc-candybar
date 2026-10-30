@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-489",
-      "ref": "refs/pull/489/merge",
-      "sha": "80ab2cbae420b1dd36996f1b3cfd3d550f107653",
-      "timestamp": "2026-10-30T10:51:59.041Z",
-      "commits": [
-        {
-          "sha": "80ab2cbae420b1dd36996f1b3cfd3d550f107653",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:51:06-06:00",
-          "message": "Merge 40228c191e06cf02de583f93a1b92e350d654a82 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
-        },
-        {
-          "sha": "40228c191e06cf02de583f93a1b92e350d654a82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:49:53-06:00",
-          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-488",
       "ref": "refs/pull/488/merge",
-      "sha": "fb224891913c5ec7d0616afa2844db749e1c358e",
-      "timestamp": "2026-10-30T10:43:27.949Z",
+      "sha": "0c7c034ba24c07ca5a01d5d7fceb2d41e45b2cf5",
+      "timestamp": "2026-10-30T10:56:50.555Z",
       "commits": [
         {
-          "sha": "fb224891913c5ec7d0616afa2844db749e1c358e",
+          "sha": "0c7c034ba24c07ca5a01d5d7fceb2d41e45b2cf5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:42:36Z",
-          "message": "Merge d85122577da2a3514d93fb2289e1e39068ab189d into cd51ad088846247d4d8d328c870849e2b81ba424\n"
+          "timestamp": "2026-10-30T10:56:07Z",
+          "message": "Merge dadc8bfa6afe64f4c76f30237acfe0ef61ad71b2 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
+        },
+        {
+          "sha": "dadc8bfa6afe64f4c76f30237acfe0ef61ad71b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:55:56-06:00",
+          "message": "fix(proc): a lifeline's start clears its fault only while it is the current one, and the warning names no daemon (brandon-unfiled-3248.86ga)\n\nSecond high review of the lifeline:\n\n- A spawn event from a lifeline already lost no longer clears the fault while\n  nothing guards.\n- The warning says \"their launcher\", since bar-pane and the CLI print it too.\n- The architecture memory says which children the lifeline holds (those not\n  blocking the daemon) and the one window it leaves: a daemon death while the\n  update writes the bundle tears it. The durable update act that closes it is\n  brandon-unfiled-3248.z676.\n"
         },
         {
           "sha": "d85122577da2a3514d93fb2289e1e39068ab189d",
@@ -56,6 +41,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:20:37-06:00",
           "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-489",
+      "ref": "refs/pull/489/merge",
+      "sha": "80ab2cbae420b1dd36996f1b3cfd3d550f107653",
+      "timestamp": "2026-10-30T10:51:59.041Z",
+      "commits": [
+        {
+          "sha": "80ab2cbae420b1dd36996f1b3cfd3d550f107653",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:51:06-06:00",
+          "message": "Merge 40228c191e06cf02de583f93a1b92e350d654a82 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
+        },
+        {
+          "sha": "40228c191e06cf02de583f93a1b92e350d654a82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:49:53-06:00",
+          "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
         }
       ]
     },

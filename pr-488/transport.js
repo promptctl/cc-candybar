@@ -34042,7 +34042,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.163.0";
+var PACKAGE_VERSION = "1.164.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -34282,7 +34282,7 @@ function lifelineWarnings() {
   return fault === null ? [] : [
     {
       kind: "lifeline",
-      message: `programs the daemon runs would outlive it if it died: its launch lifeline ${fault}, and the next launch starts another`
+      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`
     }
   ];
 }
@@ -34302,7 +34302,9 @@ function spawnLifeline() {
   }
   statsHandle?.onEnd("lifeline", Date.now() - t0);
   const pipe = line.stdin;
-  line.once("spawn", () => setFault(null));
+  line.once("spawn", () => {
+    if (lifeline?.process === line) setFault(null);
+  });
   line.once("error", (err) => lose(line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
