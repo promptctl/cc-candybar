@@ -38,15 +38,19 @@ export interface DrawnRow {
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
 // through before the render — so the two agree by construction rather than by
 // each call site remembering the option. The segments are drawn once and read
-// twice: encoded as bytes, and asked when they next change.
+// twice: encoded as bytes, and asked when they next change. A row drawn under
+// motion is drawn for its frame's `time`, the one moment rich-js hands every
+// animation placed in it; a still row is drawn for none.
 function draw(
   renderable: Renderable,
   options: {
     readonly colorSystem: ColorSystemName | null;
     readonly width?: number;
+    readonly time?: number;
   },
 ): DrawnRow {
   const destination = resolveDestination(options.colorSystem);
+  const { time } = options;
   const segments = [
     ...render(renderable, {
       maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
@@ -54,6 +58,9 @@ function draw(
       asciiOnly: false,
       theme: RENDER_THEME,
       colorSystem: destination.colorSystem,
+      ...(time === undefined
+        ? {}
+        : { frame: { time, host: { frameTime: time } } }),
       // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
       // as no style at all; a name the theme lacks is a broken config, so it
       // throws here exactly as the cell splitter throws on it.
@@ -132,7 +139,7 @@ function plainWith(separator: string): CellJoiner {
     const seam = form.seam.map((cell) =>
       "cap" in cell ? cell : { ...cell, glyph: separator },
     );
-    return { seam, divider: seam };
+    return { seam };
   };
   const { seam, caps } = JOINERS.plain;
   const joiner = new CellJoiner(
@@ -218,16 +225,17 @@ export function privateGlyphsIn(text: string): string {
   return [...new Set(text.match(PRIVATE_USE) ?? [])].join("");
 }
 
-// The private-use glyphs a row draws — its caps, the seam between two cells,
-// and the divider between two on one ground, each once, in the order drawn:
-// what a terminal needs a Nerd Font (or its own built-in glyphs) to show.
-// MEASURED through the joiner that draws the row, as its geometry is, so a
-// joiner rich-js adds needs no entry here.
+// The private-use glyphs a row draws — its caps and the seam between two
+// cells, each once, in the order drawn: what a terminal needs a Nerd Font (or
+// its own built-in glyphs) to show. MEASURED through the joiner that draws the
+// row, as its geometry is, so a joiner rich-js adds needs no entry here. Two
+// cells reach every part a join draws, because a seam is one form whatever
+// the two grounds are.
 export function stripPrivateGlyphs(options: StripShape): string {
   const joiner = pickJoiner(options.endcaps, options.separator);
   const cell = (bgcolor: string): RichText =>
     new RichText("x", { end: "", style: new Style({ bgcolor }) });
-  const cells = [cell("#101010"), cell("#202020"), cell("#202020")];
+  const cells = [cell("#101010"), cell("#202020")];
   const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
   return privateGlyphsIn(drawn.text);
 }
@@ -276,7 +284,10 @@ export function drawStripCells(
   // [LAW:single-enforcer] An effect wraps the whole composed strip, here, so a
   // powerline seam's ink — its left cell's fill — moves with that cell. The
   // effect reads the row's width off the frame it draws.
-  const out = draw(motion.kind === "still" ? strip : motion.wrap(strip), drawn);
+  const out =
+    motion.kind === "still"
+      ? draw(strip, drawn)
+      : draw(motion.wrap(strip), { ...drawn, time: motion.time });
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.

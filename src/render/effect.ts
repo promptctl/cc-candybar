@@ -27,7 +27,6 @@ import {
   type LoopName,
   type Renderable,
   type RichText,
-  type Transition,
   type TransitionName,
 } from "@promptctl/rich-js";
 
@@ -103,12 +102,15 @@ export interface FrameMotion<Line> {
 }
 
 // [LAW:types-are-the-program] What one row is drawn under: nothing, or an
-// effect made for the row. A still row has no
-// `Effected` around it at all, so `none` draws exactly the bytes it always drew.
+// effect made for the row and the time the frame is drawn at, which rich-js
+// hands a placed `Effected` through the frame it is drawn in. A still row has
+// no `Effected` around it at all, so `none` draws exactly the bytes it always
+// drew.
 export type RowMotion =
   | { readonly kind: "still" }
   | {
       readonly kind: "moving";
+      readonly time: number;
       readonly wrap: (strip: Renderable) => Renderable;
     };
 
@@ -198,11 +200,14 @@ export interface EffectFrame {
 
 // A placement passing through a transition: a `fade` in as it appears, a
 // `dissolve` out as it leaves. Since the instant it began, its own t = 0, made
-// once from the placement's ground — rich-js keeps each cell's place in it.
+// once. [LAW:types-are-the-program] It keeps when the transition is over and
+// the one effect to draw, veiling toward the placement's ground; the
+// transition as made veils toward the terminal's, so it is not kept.
 interface Passage {
   readonly name: TransitionName;
   readonly since: AnimationTime;
-  readonly transition: Transition;
+  readonly done: (t: number) => boolean;
+  readonly effect: Effect;
 }
 
 // A placement the frame drew — for one leaving, what it held of its last
@@ -318,9 +323,10 @@ const NOISE_DEPTH = 4096;
 // as it wore the cell it caps — and dark, as drawn. Held between holds, so a
 // host draws a new frame only when one turns, and never after the last.
 function closingFlash(fill: ColorRgba, text: ColorRgba): Effect {
-  const lit: CellFrame = (colors, { terminal }) => ({
-    bg: terminal.bg ? colors.bg : fill,
-    fg: terminal.fg ? colors.fg : terminal.bg ? fill : text,
+  const lit: CellFrame = (look, { terminal }) => ({
+    ...look,
+    bg: terminal.bg ? look.bg : fill,
+    fg: terminal.fg ? look.fg : terminal.bg ? fill : text,
   });
   const dark: CellFrame = (colors) => colors;
   const holds = CLOSING_FLASH.reduceRight<Animation<CellFrame>>(
@@ -487,20 +493,17 @@ export class SessionEffects<Line> {
       id: string,
       { ground }: Drawing<Line>,
     ): Passage => {
-      const made = EFFECT_CATALOGUE.transitions[transition]({
+      const begun = EFFECT_CATALOGUE.transitions[transition]({
         z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
       });
       return {
         name: transition,
         since: at,
-        transition: {
-          effect: fromGround(made.effect, ground),
-          done: (t) => made.done(t),
-        },
+        done: (t) => begun.done(t),
+        effect: fromGround(begun.effect, ground),
       };
     };
-    const over = ({ since, transition }: Passage): boolean =>
-      transition.done(at - since);
+    const over = ({ since, done }: Passage): boolean => done(at - since);
 
     // [LAW:types-are-the-program] What a placement passes through in this
     // frame, settled once, where the walk reaches it. One drawn now fades in
@@ -634,7 +637,7 @@ export class SessionEffects<Line> {
           : [
               {
                 t: at - passage.since,
-                effect: confined(passage.transition.effect, ...owners),
+                effect: confined(passage.effect, ...owners),
               },
             ];
       });
@@ -678,6 +681,7 @@ export class SessionEffects<Line> {
       const rowKey = `${this.key}#${rowName}`;
       return {
         kind: "moving",
+        time: bar.t,
         wrap: (strip) =>
           new Effected(
             strip,
@@ -697,7 +701,7 @@ export class SessionEffects<Line> {
               // veils: the menu is about to close.
               ...flashed,
             ]),
-            { t: bar.t, key: rowKey, theme: ASSUMED_TERMINAL },
+            { key: rowKey, theme: ASSUMED_TERMINAL },
           ),
       };
     };

@@ -122,6 +122,27 @@ const CLOCK: Clock = {
   animatedAt: () => drawInProgress("animatedAt").anim,
 };
 
+// rich-js's `frames` and `stepped`, the animation functions the bar's
+// templates draw with, drawn for the time `time` reads. `tween`, `loop` and
+// `glyphs` are not registered, so a template naming one is refused as an
+// unknown function. Whoever registers them: `glyphs` stamps its cells as
+// `frames` does, so its motion is read off them (`Segment.nextChange`), but
+// `tween` and `loop` tell theirs only to a frame that hears holds
+// (`TemplateFrame.onHold`), which no draw here passes, so a bar drawing one
+// would move at the still rate. `stepped` tells its motion that way too; the
+// bundled bar draws it beside `frames`, whose cells carry the beat.
+function animationPair(time: () => number): FuncMap {
+  const { frames, stepped } = animationFuncs(() => ({ time: time() }));
+  // [LAW:no-silent-failure] A rich-js that drops either is a vocabulary the
+  // bundled bar's templates no longer load against.
+  if (frames === undefined || stepped === undefined) {
+    throw new Error(
+      "rich-js's animationFuncs no longer registers frames and stepped",
+    );
+  }
+  return { frames, stepped };
+}
+
 // The engine's own clock factories. `frames`/`stepped` are decoration, so they
 // draw at the session's animation clock and run at its speed;
 // `realtimeFrames`/`realtimeStepped` are the same pair at the instant, for a
@@ -151,10 +172,10 @@ const SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
 
 const CLOCK_FACTORIES: readonly ClockFactory[] = [
   (clock) => sprigDatetimeWhere(clock.now, true),
-  (clock) => animationFuncs(clock.animatedAt),
+  (clock) => animationPair(clock.animatedAt),
   (clock) =>
     Object.fromEntries(
-      Object.entries(animationFuncs(() => clock.now().getTime() / 1000)).map(
+      Object.entries(animationPair(() => clock.now().getTime() / 1000)).map(
         ([name, func]) => [
           `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
           func,
