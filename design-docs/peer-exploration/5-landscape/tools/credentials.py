@@ -30,9 +30,15 @@ def entropy(s):
     return -sum(c / n * math.log2(c / n) for c in Counter(s).values())
 
 
-def find(text):
-    """Every credential-shaped string in text, as (kind, match)."""
-    text = ANSI.sub('', text)
+def find(frame):
+    """Every credential-shaped string in a frame, as (kind, match). The frame is read twice: as raw
+    bytes, where an escape's payload (an OSC 8 link's URL, an OSC 0/2 window title) is plain text
+    between control characters, and with escapes removed, where a token split by colour codes is
+    whole again."""
+    return {h for text in (frame, ANSI.sub('', frame)) for h in shapes(text)}
+
+
+def shapes(text):
     hits = [(kind, m.group()) for kind, rx in SHAPES for m in rx.finditer(text)]
     for m in LONG.finditer(text):
         s = m.group()
