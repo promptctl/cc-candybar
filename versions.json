@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-484",
+      "ref": "refs/pull/484/merge",
+      "sha": "5def3433d0902e05e5cbfb9c0ae1ebf3118039e1",
+      "timestamp": "2026-10-30T08:23:37.340Z",
+      "commits": [
+        {
+          "sha": "5def3433d0902e05e5cbfb9c0ae1ebf3118039e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:22:53Z",
+          "message": "Merge 2459e136e679c978bd52ad0ffbea0c465ae0f98f into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+        },
+        {
+          "sha": "2459e136e679c978bd52ad0ffbea0c465ae0f98f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:22:41-06:00",
+          "message": "fix(plain): a symbol or bigint is not a digest's input, and the memory names what the key leaves to the daemon (brandon-unfiled-3248.0rr5)\n"
+        },
+        {
+          "sha": "8f0d040979e7fc73bb39a716cea7489707cbada0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:18:26-06:00",
+          "message": "fix(daemon): a failed load keeps what was thrown, and the keep is the served state passed as data (brandon-unfiled-3248.0rr5)\n\n- A failed attempt carries its cause, not only its message: the demo rethrows\n  a defect with its stack and reports only a ConfigError, and fallbackState\n  chains the cause.\n- Past the chain, one blame rule for the resolve and the build: a key or\n  storage failure over several merged layers names no file.\n- loadChain takes the served state instead of an attempt callback; the keep\n  is a comparison of keys in the one load.\n- Plain rejects a field typed unknown or any, which would admit a Set or Map.\n- The demo reports a load's warning whole, as the strip shows it.\n"
+        },
+        {
+          "sha": "30ae0cc47739c988ad94253e9dc5265bd822a810",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:07:28-06:00",
+          "message": "fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5)\n\nA save reloads its config, and the config's watch then reloads the same\nbytes. Each reload built a new state and reopened every session view drawing\nfrom the entry, restarting its sources.\n\nA load now resolves its inputs, keys them, then builds. The render cache's\nreload keeps the served state when the key matches. The key is a digest over\na projection typed over every field of what a load reads, so a field added\nlater fails to compile until it is keyed, and no Set or Map is hashed as {}.\nOne settle composes the warning for every reader. A kept state carries the\nwarnings its build earned, and a failed build carries its own beside the\nerror. `config loaded` says state=built|kept|failed.\n\nTests that reloaded unchanged inputs to drive a build now edit the config\nfirst.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-483",
       "ref": "refs/pull/483/merge",
       "sha": "3aa5bb0088705d79a640bb06b665be83bdcf6a01",
@@ -125,35 +161,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:31:26-06:00",
           "message": "feat(diagnostics): every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i)\n\nThe red and amber strip above the bar is gone. The settings door's own cell\ncarries an indicator (⚠ N, red if any error, amber otherwise, 9+ cap) that\nreads a per-draw diagnostics projection; clicking it opens a viewer that takes\nthe body's place and shows one message in full with ✕, ‹ ›, [k/N] and ⧉ copy.\nRender warnings are recorded per session and renderer, rewritten only when a\nframe is drawn from a new source. A placement of an undeclared segment drops\nonly its own cell and is reported as an error; check and the demo still refuse\nit. The handed-off statusline is the handoff line alone, so an error shows\nonce. The diagnostic dump, its file:// links and the show-config verbs are\ndeleted.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-484",
-      "ref": "refs/pull/484/merge",
-      "sha": "fea85c2da6db30c20586dcd52124aab883d30c1f",
-      "timestamp": "2026-10-30T08:19:25.805Z",
-      "commits": [
-        {
-          "sha": "fea85c2da6db30c20586dcd52124aab883d30c1f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:18:38Z",
-          "message": "Merge 8f0d040979e7fc73bb39a716cea7489707cbada0 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
-        },
-        {
-          "sha": "8f0d040979e7fc73bb39a716cea7489707cbada0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T02:18:26-06:00",
-          "message": "fix(daemon): a failed load keeps what was thrown, and the keep is the served state passed as data (brandon-unfiled-3248.0rr5)\n\n- A failed attempt carries its cause, not only its message: the demo rethrows\n  a defect with its stack and reports only a ConfigError, and fallbackState\n  chains the cause.\n- Past the chain, one blame rule for the resolve and the build: a key or\n  storage failure over several merged layers names no file.\n- loadChain takes the served state instead of an attempt callback; the keep\n  is a comparison of keys in the one load.\n- Plain rejects a field typed unknown or any, which would admit a Set or Map.\n- The demo reports a load's warning whole, as the strip shows it.\n"
-        },
-        {
-          "sha": "30ae0cc47739c988ad94253e9dc5265bd822a810",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T02:07:28-06:00",
-          "message": "fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5)\n\nA save reloads its config, and the config's watch then reloads the same\nbytes. Each reload built a new state and reopened every session view drawing\nfrom the entry, restarting its sources.\n\nA load now resolves its inputs, keys them, then builds. The render cache's\nreload keeps the served state when the key matches. The key is a digest over\na projection typed over every field of what a load reads, so a field added\nlater fails to compile until it is keyed, and no Set or Map is hashed as {}.\nOne settle composes the warning for every reader. A kept state carries the\nwarnings its build earned, and a failed build carries its own beside the\nerror. `config loaded` says state=built|kept|failed.\n\nTests that reloaded unchanged inputs to drive a build now edit the config\nfirst.\n"
         }
       ]
     },
