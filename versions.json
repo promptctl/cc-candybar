@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7fa9b112cc7061c7e0e1a63a7955c56987054064",
+      "timestamp": "2026-10-30T22:24:27.813Z",
+      "commits": [
+        {
+          "sha": "7fa9b112cc7061c7e0e1a63a7955c56987054064",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:23:39-06:00",
+          "message": "feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) (#511)\n\n* feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why)\n\n* fix(menus): the schema, the speed tests and the menu map carry 10x (brandon-menus-sjhy.why)\n\nThe committed config schema offered only 1x/5x/20x, so check:schema failed\nand an editor flagged animationSpeed: \"10x\" the loader accepts. The fade and\nframes tables gain literal 10x rows so the rate is asserted, not derived from\nthe table under test.\n\n* test(menus): every speed table is keyed by the speed domain (brandon-menus-sjhy.why)\n\nA speed added to the domain no longer slips past the loop, fade and frames\ntables: each is a Record over every speed, so the omission fails to compile,\nwhile the expected values stay literal. The fade table gains its 5x row. The\nmenu map stops listing speed values it would have to track by hand."
+        },
+        {
+          "sha": "8c3367611eff3468d4e6dcbbdb2130db7083f5df",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T21:43:53Z",
+          "message": "chore(release): set `package.json` to 1.168.1 [skip ci]\n\n## [1.168.1](https://github.com/promptctl/cc-candybar/compare/v1.168.0...v1.168.1) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1) ([#508](https://github.com/promptctl/cc-candybar/issues/508)) ([b51f005](https://github.com/promptctl/cc-candybar/commit/b51f00510c4bcca14fc9ff4177320380f9052873))\n* **site:** the live bar and the landscape explorer link to each other ([#509](https://github.com/promptctl/cc-candybar/issues/509)) ([19183e1](https://github.com/promptctl/cc-candybar/commit/19183e1e39371f3a80b53ee9182655ebec2787f9))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-510",
       "ref": "refs/pull/510/merge",
       "sha": "e3de505e3c45881ceb24aa2a8e7889847cd49aaa",
@@ -41,57 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T15:34:15-06:00",
           "message": "fix(colour): a dial window widens to its position's count of tones, so every distribution keeps neighbours apart at every depth (candybar-joiners-e5r4.cfm)\n\nA window at a depth widened only until it held two tones. Golden angle\nkeeps neighbours apart only over three, so a three-tone position whose\ndepth rounds two tones alike left a golden-angle container with pairs\ndrawn as one colour at 256 and ansi. The window now widens, through the\none `widen`, rung by rung until it holds as many tones as its position\nnames, and holds fewer only where the role's ladder has no more drawn\napart. Truecolor windows are unchanged.\n\nThe adjacency test holds van der Corput over every window of a position\nnaming two or more and golden angle over every window of a position\nnaming three, at every depth, and states the edge: a window short of its\ncount holds exactly what the role draws. The preview test covers dracula\nat 256, whose accent window widens back to three.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-511",
-      "ref": "refs/pull/511/merge",
-      "sha": "6bbcb04835492640d2ffbfe737bcdabb82d56e9d",
-      "timestamp": "2026-10-30T22:16:03.344Z",
-      "commits": [
-        {
-          "sha": "6bbcb04835492640d2ffbfe737bcdabb82d56e9d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T22:15:10Z",
-          "message": "Merge 28ea307548ff84608b7a36308eb989fe3fefd784 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
-        },
-        {
-          "sha": "28ea307548ff84608b7a36308eb989fe3fefd784",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:15:00-06:00",
-          "message": "test(menus): every speed table is keyed by the speed domain (brandon-menus-sjhy.why)\n\nA speed added to the domain no longer slips past the loop, fade and frames\ntables: each is a Record over every speed, so the omission fails to compile,\nwhile the expected values stay literal. The fade table gains its 5x row. The\nmenu map stops listing speed values it would have to track by hand.\n"
-        },
-        {
-          "sha": "5e5c47649a05f714b2f6f931055a74818817ab04",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:12:50-06:00",
-          "message": "fix(menus): the schema, the speed tests and the menu map carry 10x (brandon-menus-sjhy.why)\n\nThe committed config schema offered only 1x/5x/20x, so check:schema failed\nand an editor flagged animationSpeed: \"10x\" the loader accepts. The fade and\nframes tables gain literal 10x rows so the rate is asserted, not derived from\nthe table under test.\n"
-        },
-        {
-          "sha": "97e75f55a59c75a1feb1a21322cd958f2124e705",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:09:30-06:00",
-          "message": "feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "19183e1e39371f3a80b53ee9182655ebec2787f9",
-      "timestamp": "2026-10-30T21:33:48.711Z",
-      "commits": [
-        {
-          "sha": "19183e1e39371f3a80b53ee9182655ebec2787f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:33:00-06:00",
-          "message": "fix(site): the live bar and the landscape explorer link to each other (#509)\n\n* fix(site): the live bar and the landscape explorer link to each other\n\n* fix(site): the deploy says where the explorer sits and both pages derive their links from it; the toolbar stays one row\n\n* fix(site): the explorer path is checked and built as an element, the toolbar passes the graph its pointer, and a test holds the link\n\n* refactor(site): one reading of LANDSCAPE_DIR, shared by both builds"
         }
       ]
     }

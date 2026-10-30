@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.168.0";
+var PACKAGE_VERSION = "1.168.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -38067,7 +38067,12 @@ var EFFECT_NAMES = Object.freeze([
   EFFECT_FLOOR,
   ...Object.keys(EFFECT_CATALOGUE.loops)
 ]);
-var ANIMATION_SPEEDS = Object.freeze({ "1x": 1, "5x": 5, "20x": 20 });
+var ANIMATION_SPEEDS = Object.freeze({
+  "1x": 1,
+  "5x": 5,
+  "10x": 10,
+  "20x": 20
+});
 var ANIMATION_SPEED_NAMES = Object.keys(
   ANIMATION_SPEEDS
 );
