@@ -634,8 +634,8 @@ export function pickerFuncs(
         // painted on the ground it is drawn on, read from the same band.
         const band = bandFor(active.palette, active.disclosure, drawnAt);
         const opens = apply.library !== undefined;
-        const [line, ...rows] = draw(opens ? band.state : active.bg);
-        active.drops.push(...(opens ? draw(band.plane).slice(1) : rows));
+        const [line] = draw(opens ? band.state : active.bg);
+        if (opens) active.drops.push(...draw(band.plane).slice(1));
         return line!;
       },
       argTypes: ["string", "string", "bool"],

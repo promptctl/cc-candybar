@@ -2055,6 +2055,10 @@ function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
     origin.configFile ?? undefined,
   );
   const latest = frameFeeds.latest(sessionId);
+  // [LAW:dataflow-not-control-flow] exception: a click before the session's
+  // first request since a restart has no hint yet, and is measured as if in
+  // tmux so a tmux session's click owes its setup; the owed setup is settled
+  // against the session's own hint when its next event arrives.
   return laneSwitches(
     sessionGlobals(sessionId, hold.state),
     latest === null || inTmux(latest.hints.tmux),
