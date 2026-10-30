@@ -1892,7 +1892,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   try {
     using setup = setUpFrame(sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, motion, evaluated, lanes, recorded } = drawRender(setup, {
+    const { drawn, motion, evaluated, lanes } = drawRender(setup, {
       by: "feed",
       fps,
     });
@@ -1911,7 +1911,6 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       },
       moves: motion === "moves",
       evaluated,
-      wakes: recorded,
       failure: null,
     };
   } catch (error) {
@@ -1929,7 +1928,6 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       statusline: failed,
       moves: false,
       evaluated: 0,
-      wakes: false,
       failure: { level, line: `frame ${line}` },
     };
   }
@@ -2275,8 +2273,6 @@ function drawRender(
   clickShown: ClickErrorRecord | null;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
-  // Whether this frame's warnings moved its renderer's record.
-  recorded: boolean;
 } {
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -2341,11 +2337,13 @@ function drawRender(
   // indicator reads it as the `diagnostics` projection and the viewer pages
   // the same object, so the two cannot disagree within a frame. The render
   // warnings are this renderer's recorded ones — known only after a walk, so
-  // the frame before this one's (src/daemon/render-warnings.ts).
+  // the frame before this one's, drawn from this config at this width
+  // (src/daemon/render-warnings.ts).
+  const scope = { config: state.config, width };
   const diagnostics = collectDiagnostics(
     errors,
     [...updates, ...questions],
-    [...loadWarnings, ...renderWarnings.of(sessionId, drawing.by)].map(
+    [...loadWarnings, ...renderWarnings.of(sessionId, drawing.by, scope)].map(
       (w) => w.message,
     ),
   );
@@ -2419,10 +2417,15 @@ function drawRender(
         : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`,
   });
   // [LAW:no-silent-failure] Every frame records what it warned; a record that
-  // moved is shown by the renderer's next frame. A feed wakes for it after
-  // this frame (FeedFrame.wakes); a request's next frame is Claude Code's next
-  // poll.
-  const recorded = renderWarnings.drawn(sessionId, drawing.by, drawnWarnings);
+  // moved is shown by the renderer's next frame: a feed's next spaced frame,
+  // a request's next poll. Nothing wakes for it, since a frame whose own
+  // indicator moves what it warns would wake itself forever.
+  const recorded = renderWarnings.drawn(
+    sessionId,
+    drawing.by,
+    scope,
+    drawnWarnings,
+  );
   const geometry: DiagnosticGeometry = {
     width,
     colorCompatibility: effective.colorCompatibility,
@@ -2516,7 +2519,6 @@ function drawRender(
     evaluated: frame.evaluated,
     clickShown,
     lanes,
-    recorded,
   };
 }
 

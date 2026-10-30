@@ -113,7 +113,6 @@ import {
   type ViewParts,
 } from "./parts.js";
 import { fixedSource, type Selections } from "./view-source.js";
-import type { FrameSource } from "../render/frame-memory.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   authoredRules,
@@ -1164,9 +1163,6 @@ export interface DrawnFrame {
   // turn what it reads moved (outside any draw), or `per-draw`, a rule that
   // reads the instant, evaluated by this frame. A decided slot is absent.
   readonly rules: ReadonlyMap<ExpressionSlot, "kept" | "per-draw">;
-  // What the frame was drawn from: the identity transitions compare frames by
-  // (src/render/frame-memory.ts), and a renderer's warning record follows.
-  readonly source: FrameSource;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1670,6 +1666,5 @@ export function drawDsl(
     evaluated: parts.evaluated - evaluatedBefore,
     pending: [...waited].sort(),
     rules,
-    source,
   };
 }

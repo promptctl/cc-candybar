@@ -49,10 +49,6 @@ export interface FeedFrame {
   readonly moves: boolean;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
-  // Drawing it moved what the session's next frame shows (its renderer's
-  // warning record, src/daemon/render-warnings.ts): the feed wakes for it
-  // once this frame is pushed, so an idle bar does not keep a stale count.
-  readonly wakes: boolean;
   readonly failure: LogLine | null;
 }
 
@@ -142,9 +138,8 @@ export interface FeedDeps<Req> {
 
 // Why a feed's next frame was brought forward: a value its bar reads changed
 // (`data`), its session's own state moved (`state`), its config reloaded
-// (`reload`), which panes are on a screen changed (`visibility`), or a frame's
-// own draw moved what the next one shows (`frame`).
-const WAKE_CAUSES = ["data", "state", "reload", "visibility", "frame"] as const;
+// (`reload`), or which panes are on a screen changed (`visibility`).
+const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
 export type WakeCause = (typeof WAKE_CAUSES)[number];
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
@@ -470,7 +465,7 @@ export class FrameFeeds<Req> {
       pace: paceOf(this.deps.periods.still),
       drawMs: 0,
       evaluated: 0,
-      woke: { data: 0, state: 0, reload: 0, visibility: 0, frame: 0 },
+      woke: { data: 0, state: 0, reload: 0, visibility: 0 },
       coalesced: 0,
       summarizedAt: now,
       refreshesAtOpen: this.deps.refreshes(),
@@ -551,9 +546,6 @@ export class FrameFeeds<Req> {
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     this.schedule(feed, frame, started);
-    // [LAW:no-ambient-temporal-coupling] Woken after the frame is set, never
-    // folded into the draw that moved it: the next frame reads the move.
-    if (frame.wakes) this.wake(feed.sessionId, "frame");
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
