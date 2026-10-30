@@ -4,15 +4,22 @@
     {
       "version": "pr-500",
       "ref": "refs/pull/500/merge",
-      "sha": "c83999d80217d5848a316f67519a6939ef137624",
-      "timestamp": "2026-10-30T16:15:59.442Z",
+      "sha": "aa712462a9256f0e448eee2ecb38dad96224bee3",
+      "timestamp": "2026-10-30T16:18:13.381Z",
       "commits": [
         {
-          "sha": "c83999d80217d5848a316f67519a6939ef137624",
+          "sha": "aa712462a9256f0e448eee2ecb38dad96224bee3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:15:02-06:00",
-          "message": "Merge 925c432c5470ece599e1ccb72db9e47912d1a05f into 73801c6e3b63cf23ed6af12476e50b45a0c45333\n"
+          "timestamp": "2026-10-30T16:17:21Z",
+          "message": "Merge cf3cc85f18a21c632d51ebc35c9f6da82fff46d9 into 73801c6e3b63cf23ed6af12476e50b45a0c45333\n"
+        },
+        {
+          "sha": "cf3cc85f18a21c632d51ebc35c9f6da82fff46d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:17:10-06:00",
+          "message": "fix(test): the viewer read refuses a bar already showing the viewer, and the killed-daemon wait reads the daemon's own env and snapshot type (brandon-unfiled-3248.vfhf)\n"
         },
         {
           "sha": "925c432c5470ece599e1ccb72db9e47912d1a05f",
