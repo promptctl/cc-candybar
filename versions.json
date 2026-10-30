@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-492",
+      "ref": "refs/pull/492/merge",
+      "sha": "05e40aeb6dd4616a2179881fd84c4f9b628d4e67",
+      "timestamp": "2026-10-30T11:47:46.489Z",
+      "commits": [
+        {
+          "sha": "05e40aeb6dd4616a2179881fd84c4f9b628d4e67",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:46:58Z",
+          "message": "Merge 30cc5846a0210a55fec753e56dd4272fb95a4bd9 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+        },
+        {
+          "sha": "30cc5846a0210a55fec753e56dd4272fb95a4bd9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:46:46-06:00",
+          "message": "test(colour): the palette-identity walk names its one exemption, and why authored backgrounds need none (candybar-joiners-e5r4.dg6)\n"
+        },
+        {
+          "sha": "f2e5c39eaa0e189d66bf48f0f0021080d76f5c20",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:38:08-06:00",
+          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-489",
       "ref": "refs/pull/489/merge",
       "sha": "c1ff5a64ff9f7f4cb80efa155de52b83d21e5943",
@@ -127,28 +156,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:03:05-06:00",
           "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-492",
-      "ref": "refs/pull/492/merge",
-      "sha": "089dcd7c7d2f27c33fb06507aae915b1b347ae7b",
-      "timestamp": "2026-10-30T11:39:55.968Z",
-      "commits": [
-        {
-          "sha": "089dcd7c7d2f27c33fb06507aae915b1b347ae7b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:39:04-06:00",
-          "message": "Merge f2e5c39eaa0e189d66bf48f0f0021080d76f5c20 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
-        },
-        {
-          "sha": "f2e5c39eaa0e189d66bf48f0f0021080d76f5c20",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:38:08-06:00",
-          "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
         }
       ]
     },
