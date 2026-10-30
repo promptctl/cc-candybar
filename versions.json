@@ -4,25 +4,25 @@
     {
       "version": "pr-497",
       "ref": "refs/pull/497/merge",
-      "sha": "f6bc6af3e3210d3ebd25c90c8776fb44067e70c0",
-      "timestamp": "2026-10-30T13:35:53.016Z",
+      "sha": "d4242f57536e8886c6e576b19331954e059751fa",
+      "timestamp": "2026-10-30T13:36:51.077Z",
       "commits": [
         {
-          "sha": "f6bc6af3e3210d3ebd25c90c8776fb44067e70c0",
+          "sha": "d4242f57536e8886c6e576b19331954e059751fa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:34:58Z",
-          "message": "Merge e41f85f601d342cf3fbda3de78c493ad8e94637d into 592090572d8ec1c672f7c5994824e93e218f8291\n"
+          "timestamp": "2026-10-30T13:35:52Z",
+          "message": "Merge 42d4ff839b25f5220607b0c1011c752e8fa97e08 into 592090572d8ec1c672f7c5994824e93e218f8291\n"
         },
         {
-          "sha": "e41f85f601d342cf3fbda3de78c493ad8e94637d",
+          "sha": "42d4ff839b25f5220607b0c1011c752e8fa97e08",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T07:34:46-06:00",
           "message": "fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n"
         },
         {
-          "sha": "040cbcb389ab73e52840ec82b85f9417231c323e",
+          "sha": "c1b636055f63ec1c3ce69e13996bfddc719dde33",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T07:17:46-06:00",
