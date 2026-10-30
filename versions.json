@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-502",
+      "ref": "refs/pull/502/merge",
+      "sha": "88a81b8273801a7be4180e936f149d449652d111",
+      "timestamp": "2026-10-30T16:36:46.410Z",
+      "commits": [
+        {
+          "sha": "88a81b8273801a7be4180e936f149d449652d111",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:35:45Z",
+          "message": "Merge 88c9c9a5843bc6afceff78a97e8b14cfb4ca7591 into db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f\n"
+        },
+        {
+          "sha": "88c9c9a5843bc6afceff78a97e8b14cfb4ca7591",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:34:40-06:00",
+          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "16665f584aaaf3747d9f10d3c2ee6eada86f69e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:22:49-06:00",
+          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f",
@@ -63,49 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-502",
-      "ref": "refs/pull/502/merge",
-      "sha": "d1b8a5845e954195999a08db29cd9f14469ab06e",
-      "timestamp": "2026-10-30T16:23:47.089Z",
-      "commits": [
-        {
-          "sha": "d1b8a5845e954195999a08db29cd9f14469ab06e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:22:59Z",
-          "message": "Merge 054ca3e4940c81b6915b988fe67567f71a48aa71 into 4f90c928ea159b91f00da76cd04a08140a27cb0e\n"
-        },
-        {
-          "sha": "054ca3e4940c81b6915b988fe67567f71a48aa71",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:22:49-06:00",
-          "message": "test(lab): run daemon-log then a waiting file in one process, six times, and name what lands (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "2161ae44e9de51caa5b8bd70fbb7d9d41970e39a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:22:49-06:00",
-          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "bca35c5fac93243f7c3b731010f1e353f8a2b37c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:13:24-06:00",
-          "message": "test(lab): dump every failure in the build-currency e2e with the daemon's log, run four copies (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "fa988e1371ea3bdf93e225c2ac09cc6f9cff0f15",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:55:19-06:00",
-          "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
         }
       ]
     },
