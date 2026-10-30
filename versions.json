@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-509",
+      "ref": "refs/pull/509/merge",
+      "sha": "d8654a2442501a688a245bff122362f05471d953",
+      "timestamp": "2026-10-30T21:20:50.385Z",
+      "commits": [
+        {
+          "sha": "d8654a2442501a688a245bff122362f05471d953",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:19:59-06:00",
+          "message": "Merge 291927a94edf2b7d1040dccd75d76539f52312ac into b51f00510c4bcca14fc9ff4177320380f9052873\n"
+        },
+        {
+          "sha": "291927a94edf2b7d1040dccd75d76539f52312ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:19:48-06:00",
+          "message": "fix(site): the live bar and the landscape explorer link to each other\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b51f00510c4bcca14fc9ff4177320380f9052873",
