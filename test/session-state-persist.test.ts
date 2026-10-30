@@ -81,27 +81,6 @@ describe("SessionState disk persistence", () => {
     expect(existsSync(`${file}.writing`)).toBe(false);
   });
 
-  // [LAW:no-ambient-temporal-coupling] Shutdown's synchronous flush writes the
-  // newest state; a debounced write already on its way is older, and must not
-  // land over it.
-  it("a synchronous flush during a debounced write keeps the newer state", async () => {
-    const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
-    );
-    ss.set("s1", "theme", "old");
-    // The debounce fires, and its write is under way.
-    await new Promise((resolve) => setTimeout(resolve, 1));
-    ss.set("s1", "theme", "new");
-    ss.flush();
-    // Whatever the debounced write does next, it lands before this settles.
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
-    expect(existsSync(`${file}.writing`)).toBe(false);
-  });
-
   // The rename that publishes a debounced write runs on the thread pool, so a
   // flush can land while it is on its way. The newer state still wins, the
   // older write's temp file is gone, and nothing calls the superseded rename
