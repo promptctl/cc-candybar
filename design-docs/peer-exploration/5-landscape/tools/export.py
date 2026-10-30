@@ -9,6 +9,9 @@ literal so an item lands in the same group the README counts.
 import ast, base64, gzip, json, glob, os, re, sys
 from collections import defaultdict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I leaves the script's own directory off the path
+import credentials
+
 DEST, PUBLIC = sys.argv[1], sys.argv[2]
 BARS_DIR, DETAIL_DIR = os.path.join(PUBLIC, 'bars'), os.path.join(PUBLIC, 'detail')
 meas = json.load(open('/tmp/ccland/t2/measure.json'))
@@ -123,6 +126,8 @@ def bundle(kind, folder, by_repo, per):
     return where
 
 
+# [LAW:no-silent-failure] a credential-shaped frame stops the export before anything is written.
+credentials.check(bars)
 bar_at = bundle('bars', BARS_DIR, bars, 10)
 detail_at = bundle('detail', DETAIL_DIR, details, 50)
 for p in projects:

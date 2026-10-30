@@ -21,7 +21,7 @@ export interface RawProject {
   boring: boolean;
   copy: [repo: string, percent: number][];
   // The risk tier the capture triage stamped (tools/capture/triage.py), and whether its bar was
-  // captured: ran in the sandbox and printed something. The frames themselves live in bars.ts.
+  // captured: ran in the sandbox and printed something. The frames themselves arrive in a bars bundle.
   tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
   live: boolean;
   // The bundles holding this project's frames and its long text, or null when it has neither.

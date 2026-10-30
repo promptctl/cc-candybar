@@ -39,6 +39,10 @@ WORKERS = 8
 TICKS = sorted(os.listdir(os.path.join(FIXTURE, 'tick')))
 # this user's temp directory, by its real path, for the sandbox to deny
 UTMP = os.path.realpath(subprocess.check_output(['getconf', 'DARWIN_USER_TEMP_DIR'], text=True).strip())
+# the paths the profile allows back, by their real paths, so it names no machine's home or survey directory
+BUN, BUN_CACHE = os.path.realpath(os.path.expanduser('~/.bun')), os.path.realpath(os.path.expanduser('~/.cache/bun'))
+SANDBOX = ['-D', 'UTMP=' + UTMP, '-D', 'BUN=' + BUN, '-D', 'BUN_CACHE=' + BUN_CACHE,
+           '-D', 'RUNS=' + os.path.realpath(RUNS), '-D', 'RUNS_PARENT=' + os.path.dirname(os.path.realpath(RUNS))]
 TRANSCRIPT_DIR = 'home/.claude/projects'
 
 
@@ -86,11 +90,11 @@ def run_timeline(slug, entry, src, width):
     cwd = os.path.join(run, 'work', 'candybar-demo')
     cmd = entry['cmd'].replace('__PROJ__', proj)
     env = {'HOME': home, 'USER': 'dev', 'LOGNAME': 'dev', 'SHELL': '/bin/bash', 'TMPDIR': os.path.join(run, 'tmp'),
-           'PATH': os.path.join(run, 'bin') + ':' + os.path.join(proj, 'node_modules/.bin') + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:' + os.path.expanduser('~/.bun/bin'),
+           'PATH': os.path.join(run, 'bin') + ':' + os.path.join(proj, 'node_modules/.bin') + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:' + os.path.join(BUN, 'bin'),
            'LANG': 'en_US.UTF-8', 'LC_ALL': 'en_US.UTF-8', 'TERM': 'xterm-256color', 'COLORTERM': 'truecolor',
            'COLUMNS': str(width), 'LINES': str(ROWS), 'CLAUDE_PLUGIN_ROOT': proj, 'CLAUDE_CONFIG_DIR': os.path.join(home, '.claude'),
            'CLAUDE_CODE_ENTRYPOINT': 'cli', 'CLAUDECODE': '1', 'NO_COLOR': '', 'FORCE_COLOR': '1', 'PWD': cwd}
-    argv = ['sandbox-exec', '-f', PROFILE, '-D', 'RUN=' + run, '-D', 'SRC=' + real(src), '-D', 'UTMP=' + UTMP, 'bash', '-c', cmd]
+    argv = ['sandbox-exec', '-f', PROFILE, '-D', 'RUN=' + run, '-D', 'SRC=' + real(src), *SANDBOX, 'bash', '-c', cmd]
     frames, last, first, ms = [], None, None, 0
     for k, tick in enumerate(TICKS):
         td = os.path.join(FIXTURE, 'tick', tick)
