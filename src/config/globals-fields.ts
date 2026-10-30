@@ -34,6 +34,8 @@ import {
   ENDCAPS_SHAPES,
   PADDING_RANGE,
   SHADE_NAMES,
+  TRIAL_SHADE_NAMES,
+  TRIAL_VARIATION_NAMES,
   VARIATION_NAMES,
   isExpression,
   parseSessionBoolean,
@@ -68,6 +70,10 @@ export interface Control {
   readonly label: string;
   readonly place: Place;
   readonly previews: readonly PreviewName[];
+  // Members of the setting's domain offered by the settings menu's 🧪 trials
+  // submenu instead of by this control: values a user may choose, kept off
+  // the control everyone turns.
+  readonly trials: readonly string[];
 }
 
 // The values a session-resolved field ranges, one arm per primitive: a flag, a
@@ -144,7 +150,8 @@ const control = (
   label: string,
   place: Place,
   previews: readonly PreviewName[] = [],
-): Control => ({ label, place, previews });
+  trials: readonly string[] = [],
+): Control => ({ label, place, previews, trials });
 
 const enumValues = <T extends string>(
   members: readonly T[],
@@ -398,7 +405,7 @@ export const GLOBAL_FIELDS = {
   variation: enumSetting(
     VARIATION_NAMES,
     "accent",
-    control("🎼", "gear", ["layout"]),
+    control("🎼", "gear", ["layout"], TRIAL_VARIATION_NAMES),
     { optionDomain: "variations", themeDefault: true },
   ),
   // Which of its role's shades each CELL of the closed bar wears — a named
@@ -406,10 +413,15 @@ export const GLOBAL_FIELDS = {
   // role's darkenings and lightenings, or its muted form. The default is the
   // window centred on each role's own colour — "the default will be 'middle'
   // (standard role)" (candybar-theme-colours-6fq5.e5n).
-  shade: enumSetting(SHADE_NAMES, "middle", control("🔆", "gear", ["layout"]), {
-    optionDomain: "shades",
-    themeDefault: true,
-  }),
+  shade: enumSetting(
+    SHADE_NAMES,
+    "middle",
+    control("🔆", "gear", ["layout"], TRIAL_SHADE_NAMES),
+    {
+      optionDomain: "shades",
+      themeDefault: true,
+    },
+  ),
   // Whether a placement that appears mid-session fades in over 20 s
   // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
   // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.

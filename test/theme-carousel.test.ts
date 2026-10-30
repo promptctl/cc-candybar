@@ -221,6 +221,32 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
+  test("a centre that writes nothing names a value its ring lacks, which sits just before the first option", () => {
+    const rt = rig(`{
+      variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
+      actions: { choose: { set: 'pick', from: ['a', 'b', 'c', 'd', 'e'] }, list: { copy: 'list' } },
+      segments: { ring: { template: '{{ carousel "choose" 0 "list" }}' } },
+      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
+    }`);
+    rt.sessionState.set(SID, "pick", "x");
+    const rendered = rt.render();
+    expect(stripAnsi(rendered)).toContain(`${CAROUSEL_PREV} x ${CAROUSEL_NEXT}`);
+    expect(arrows(rendered)).toEqual({ prev: [["pick", "e"]], next: [["pick", "a"]] });
+    rt.dispose();
+  });
+
+  test("a colour-valued carousel holding a name its domain lacks draws the name alone, never asking a palette for it", () => {
+    const rt = rig(`{
+      variables: { st: { kind: 'state', key: 'st' } },
+      actions: { choose: { set: 'st', from: 'styles' }, list: { copy: 'list' } },
+      segments: { ring: { template: '{{ carousel "choose" 0 "list" }}' } },
+      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
+    }`);
+    rt.sessionState.set(SID, "st", "gone");
+    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} gone ${CAROUSEL_NEXT}`);
+    rt.dispose();
+  });
+
   test("a rotation lands the ring on the option it wrote, both ways round", () => {
     const rt = rig(CAROUSEL_ONLY);
     rt.render();

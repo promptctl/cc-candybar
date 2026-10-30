@@ -17,6 +17,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
+import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
 
 const sleep = (ms: number): Promise<void> =>
@@ -90,7 +91,8 @@ function setUp() {
   cleanups.push(() => cache.close());
   const open = (sid: string) =>
     cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
-  const reload = (): void => cache.reload(dir, dir, configFile);
+  const reload = (): void =>
+    cache.reload(dir, dir, configFile, { kind: "write" });
   return { status, changed, reloads, writeConfig, reload, open };
 }
 
@@ -116,7 +118,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   // Twenty periods of re-reads of the same text.
   await sleep(1000);
   expect(changed).toHaveLength(settled);
-  fs.writeFileSync(status, "red");
+  writeAtomic(status, "red");
   await until(() => held.view.store.read("status") === "red", "the new value");
   expect(changed).toHaveLength(settled + 1);
   await sleep(300);
@@ -140,17 +142,25 @@ test("a reload names the sessions that drew from its entry, whether or not it lo
 // A view a reload replaced is no session's bar, though the render that holds
 // it still draws from it: what its retired sources publish wakes no feed.
 test("a view a reload retired says nothing more while a render still holds it", async () => {
-  const { status, changed, writeConfig, reload, open } = setUp();
+  const { status, changed, reload, open } = setUp();
   using old = open("s");
-  await until(() => old.view.store.read("status") === "green", "the first read");
-  writeConfig("{{ .status }}!");
+  await until(
+    () => old.view.store.read("status") === "green",
+    "the first read",
+  );
+  // [LAW:no-ambient-temporal-coupling] A reload of the file as it stands: a
+  // write would also wake the config's watch, whose reload of its own can
+  // land inside the window counted below and open the session's view again.
   reload();
   using now = open("s");
   expect(now.view).not.toBe(old.view);
-  await until(() => now.view.store.read("status") === "green", "the successor's first read");
+  await until(
+    () => now.view.store.read("status") === "green",
+    "the successor's first read",
+  );
   await sleep(200);
   const settled = changed.length;
-  fs.writeFileSync(status, "red");
+  writeAtomic(status, "red");
   await until(
     () =>
       old.view.store.read("status") === "red" &&

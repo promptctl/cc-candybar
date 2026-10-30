@@ -216,7 +216,7 @@ test("a reload opens each of the entry's views anew on the new state, and retire
   configure(dir);
   const { cache, lines } = makeCache();
   const before = await render(cache, "s-a");
-  cache.reload(dir, dir, undefined);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   // The successor is open — declared, so the next frame draws a view that
   // holds what it reads — before any render (brandon-unfiled-3248.8ro6, 4a).
   expect(cache.stats.views).toBe(1);
@@ -255,7 +255,7 @@ test("a reload keeps whether the session's view was read: a view idle before it 
   // A sweep with no render since: the view is unread, and kept once more.
   cache.releaseIdle();
   expect(cache.stats.views).toBe(1);
-  cache.reload(dir, dir, undefined);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   cache.releaseIdle();
   expect(cache.stats.views).toBe(0);
   expect(lines).toContainEqual(
@@ -321,7 +321,7 @@ test("a view held by a render in flight is disposed only when the render returns
   configure(dir);
   const { cache, lines } = makeCache();
   const held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
-  cache.reload(dir, dir, undefined);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
@@ -430,7 +430,7 @@ test("a view that fails to open releases the state hold it was opened under", ()
     "log boom",
   );
   // Retired by the reload and held by nothing, the state is reclaimed now.
-  cache.reload(dir, dir, undefined);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.stats.retired).toBe(0);
 });
 

@@ -113,7 +113,7 @@ describe("checkConfig — explicit target", () => {
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow`,
+      `source still running after ${SHORT_SETTLE_MS} ms, drawn as pending: slow`,
     );
     expect(checkPlan(outcome).code).toBe(0);
   });
@@ -139,6 +139,40 @@ describe("checkConfig — explicit target", () => {
     expect(stripAnsi(outcome.rendered)).toContain("yielded");
     expect(stripAnsi(outcome.rendered)).not.toContain("fallback");
     expect(outcome.warnings).toEqual([]);
+  });
+
+  // brandon-unfiled-3248.qniv: each preset's pass pushes its own payload, and
+  // a source keyed on an input the preset moves re-reads on that push — so the
+  // pass waits for that read and renders what it yielded, never the previous
+  // preset's value or its fallback. The source counts its own runs and the
+  // probe segment fails on purpose with what it drew, so the verdict lists one
+  // (preset, run) per pass: every preset drew a run of its own.
+  it("a source keyed on the preset renders, under each preset, what it yielded for that preset", async () => {
+    const counter = path.join(dir, "preset-runs");
+    const command = `f='${counter}'; [ -f "$f" ] || printf 0 > "$f"; n=$(($(cat "$f")+1)); printf %s "$n" > "$f"; printf %s "$n"`;
+    const p = write(
+      "preset-keyed.json5",
+      `{
+        variables: {
+          runs: { kind: "shell", command: ${JSON.stringify(command)}, parse: { text: true }, cache: { key: "{{ .preset.effective }}" }, default: "none" },
+        },
+        segments: { probe: { template: '{{ fail (printf "%s drew %s" .preset.effective .runs) }}' } },
+        globals: { preset: "a" },
+        presets: { a: {}, b: { root: { h: ["probe"] } } },
+        root: { h: ["probe"] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    const drew = new Map(
+      [...message.matchAll(/segment "probe": (\S+) drew (\S+)/g)].map((m) => [m[1]!, m[2]!]),
+    );
+    const total = Number(fs.readFileSync(counter, "utf8"));
+    // One run per preset the key moved to, each pass drawing its own.
+    expect([...drew.keys()]).toEqual(expect.arrayContaining(["a", "b"]));
+    expect(drew.get("a")).toBe("1");
+    expect(new Set(drew.values()).size).toBe(drew.size);
+    for (const run of drew.values()) expect(Number(run)).toBeLessThanOrEqual(total);
+    expect(message).not.toContain("drew none");
   });
 
   // brandon-config-16g: the same advisory the daemon puts on the strip, so an
@@ -222,7 +256,7 @@ describe("checkConfig — explicit target", () => {
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow2`,
+      `source still running after ${SHORT_SETTLE_MS} ms, drawn as pending: slow2`,
     );
     expect(checkPlan(outcome).code).toBe(0);
   });

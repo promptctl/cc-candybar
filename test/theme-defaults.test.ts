@@ -69,12 +69,12 @@ describe("themeDefaults at load", () => {
     [
       "a shade outside the dial",
       `{ themeDefaults: { nord: { shade: 'darkest' } } }`,
-      "themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got \"darkest\"",
+      "themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest, wide, widest, pair, pair-wide; got \"darkest\"",
     ],
     [
       "a variation outside the table",
       `{ themeDefaults: { nord: { variation: 'rainbow' } } }`,
-      'themeDefaults.nord.variation must be one of: accent, duo, mono, alt; got "rainbow"',
+      'themeDefaults.nord.variation must be one of: accent, duo, mono, alt, door-primary, door-secondary, door-alternate, start-primary, start-secondary, start-alternate, end-primary, end-secondary, end-alternate, ends-primary, ends-secondary, ends-alternate; got "rainbow"',
     ],
     [
       "a style the merged styles block does not declare",

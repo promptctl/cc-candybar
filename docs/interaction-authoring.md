@@ -408,7 +408,9 @@ same two lines as any other picker:
 }
 ```
 
-A name outside the table is a load error that lists the ones there are:
+A name outside the table is a load error that lists the ones there are,
+the trial tunings of the accent variation among them, which the settings menu
+offers under the gear's `🧪 trials` rather than on the `🎼` carousel:
 
 ```json5 check:fail
 {
@@ -417,7 +419,7 @@ A name outside the table is a load error that lists the ones there are:
 ```
 
 ```error
-globals.variation must be one of: accent, duo, mono, alt; got "accent-primary"
+globals.variation must be one of: accent, duo, mono, alt, door-primary, door-secondary, door-alternate, start-primary, start-secondary, start-alternate, end-primary, end-secondary, end-alternate, ends-primary, ends-secondary, ends-alternate; got "accent-primary"
 ```
 
 ### The bar's shade
@@ -453,8 +455,10 @@ registered domain and `{{ .shade.effective }}` its projection:
 }
 ```
 
-A name outside the dial is a load error that lists its positions, lowest
-first:
+A name outside the dial is a load error that lists its positions: the
+windows lowest first, then the trial jumps (`wide`, `widest`, `pair`,
+`pair-wide`), which the settings menu offers under the gear's `🧪 trials`
+rather than on the `🔆` carousel:
 
 ```json5 check:fail
 {
@@ -463,7 +467,7 @@ first:
 ```
 
 ```error
-globals.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got "darkest"
+globals.shade must be one of: muted, deepest, deeper, middle, brighter, brightest, wide, widest, pair, pair-wide; got "darkest"
 ```
 
 ### A theme's own default look: `themeDefaults`
@@ -511,7 +515,7 @@ domain, and a style a name your `styles` declare:
 ```
 
 ```error
-themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got "darkest"
+themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest, wide, widest, pair, pair-wide; got "darkest"
 ```
 
 ### The display globals: colorCompatibility, autoWrap, padding
@@ -2138,7 +2142,7 @@ that row chooses the shade. A container nested inside a cell does not re-place
 the bar — everything in it wears that cell's hue and shade, so a `distribution`
 there is a load error (`sets "distribution" on a container inside a cell`).
 A disclosure body is read the same way: its items are placed along their
-rows, each cell wearing one of the band's two item colours and everything
+rows, each cell wearing one of the band's item colours and everything
 nested in a cell wearing that cell's, so a `distribution` inside a body's cell
 is the same load error. A body's rows pick nothing, so one on a vertical
 container in a body is refused too (`sets "distribution" on a vertical

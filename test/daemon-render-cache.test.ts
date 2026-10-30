@@ -15,7 +15,6 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,6 +23,7 @@ import { join } from "node:path";
 import {
   RenderCache,
   type CacheEntry,
+  type LoadCause,
   type Hold,
   type RenderCacheObservers,
   type SessionView,
@@ -720,13 +720,10 @@ describe("RenderCache", () => {
       expect(entry.lastWarning).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
-      // watcher fires on file deletion in the same dir. Rewrite-then-unlink
-      // so every application of the mutation emits an event (a bare unlink
-      // of an already-absent file emits none) and ends with the file absent.
-      await reloads.after(entry, () => {
-        writeFileSync(cfgJson, validCfg);
-        unlinkSync(cfgJson);
-      });
+      // watcher fires on file deletion in the same dir.
+      await reloads.afterRemoving(entry, cfgJson, () =>
+        writeFileSync(cfgJson, validCfg),
+      );
       expect(entry.lastWarning).toBeNull();
       // The .json5 is still the resolved file; render state intact.
       expect(entry.configLayers).toEqual([cfgJson5]);
@@ -950,11 +947,13 @@ describe("RenderCache", () => {
   // per entry, and a change to them reloads the entries under the new answer.
   test("an entry follows the answers through the cache's one watch", async () => {
     const { dir, cleanup } = mkConfigDir();
-    const lines: string[] = [];
-    const { cache, cleanups, reloads, watchers } = makeCache(
-      undefined,
-      (_level, msg) => lines.push(msg),
-    );
+    const causes: LoadCause["kind"][] = [];
+    const { cache, cleanups, reloads, watchers } = makeCache({
+      onReload: (entry, sessions, cause) => {
+        causes.push(cause.kind);
+        reloads.observers.onReload!(entry, sessions, cause);
+      },
+    });
     try {
       const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
@@ -971,9 +970,7 @@ describe("RenderCache", () => {
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
-      expect(lines).toContain(
-        "repo-config answers changed, reloading entries=1",
-      );
+      expect(causes).toContain("answers-watch");
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1032,7 +1029,7 @@ describe("RenderCache", () => {
         ],
       );
 
-      cache.reload("/p4", "/p4", undefined);
+      cache.reload("/p4", "/p4", undefined, { kind: "write" });
       const reload = lines.filter((l) =>
         l.startsWith("config disposed reason=reload"),
       );
@@ -1121,7 +1118,7 @@ describe("RenderCache", () => {
       lines.filter((l) => l.startsWith("config disposed reason=reload"));
     try {
       const hold = cache.hold("/p0", "/p0", undefined);
-      cache.reload("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined, { kind: "write" });
       // The entry serves the fresh state; the render keeps the one it
       // started on, undisposed, until it returns.
       expect(hold.entry.state).not.toBe(hold.state);
@@ -1136,7 +1133,7 @@ describe("RenderCache", () => {
       ]);
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
-      cache.reload("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined, { kind: "write" });
       expect(disposals()).toHaveLength(2);
       expect(disposals()[1]).toMatch(/ held=0$/);
     } finally {
@@ -1156,7 +1153,7 @@ describe("RenderCache", () => {
       ];
       expect(holds[1]!.state).toBe(holds[0]!.state);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
-      cache.reload("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined, { kind: "write" });
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
@@ -1298,9 +1295,9 @@ describe("RenderCache idle sweep", () => {
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "render cache used after close",
       );
-      expect(() => cache.reload(dir, dir, undefined)).toThrow(
-        "render cache used after close",
-      );
+      expect(() =>
+        cache.reload(dir, dir, undefined, { kind: "write" }),
+      ).toThrow("render cache used after close");
     } finally {
       cache.close();
       jest.useRealTimers();
@@ -1642,7 +1639,7 @@ describe("RenderCache frames and pins", () => {
         );
       }
       const unpin = cache.pin("s1");
-      cache.reload(dir, dir, undefined);
+      cache.reload(dir, dir, undefined, { kind: "write" });
       expect(logs).toContainEqual(
         expect.stringMatching(
           /^session view reopen failed sid="s1": Error: the successor broke/,
@@ -1758,7 +1755,7 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request, opened } = pinCache();
     try {
       request("s1", dirs[0]!);
-      cache.reload(dirs[0]!, dirs[0]!, undefined);
+      cache.reload(dirs[0]!, dirs[0]!, undefined, { kind: "write" });
       expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
         "request",
         "reload",

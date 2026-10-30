@@ -83,12 +83,20 @@ describe("{{ carousel }} with a centre action", () => {
     }
   });
 
-  test("an unknown current value centres on the first option, still clickable", () => {
-    // The value an empty or stale key holds is no option: the centre shows
-    // the first, the one ▶ steps from, and its click still fires.
+  test("an unset key centres on the first option, still clickable", () => {
+    // An empty key holds the first member, the one ▶ steps from.
     const out = renderOf('{{ carousel "pick" 0 "hello" }}', "");
     expect(stripAnsi(out)).toMatch(/◀ low ▶/);
     expect(links(out).some((l) => stripAnsi(l.text) === "low")).toBe(true);
+  });
+
+  test("a value the ring lacks is named at the centre, never another option", () => {
+    // The centre opens the list and writes nothing, so it says what the key
+    // holds: a settings control whose ring is part of its setting's domain
+    // still names a value in force from the rest.
+    const out = renderOf('{{ carousel "pick" 0 "hello" }}', "elsewhere");
+    expect(stripAnsi(out)).toMatch(/◀ elsewhere ▶/);
+    expect(links(out).some((l) => stripAnsi(l.text) === "elsewhere")).toBe(true);
   });
 });
 

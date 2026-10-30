@@ -732,19 +732,7 @@ describe("a storage folder's watch", () => {
     const entry = r.cache.getOrCreate(dir, dir, file);
     const storage = storageOf();
     const before = entry.state.sources.get(STATUS)!;
-    await until(
-      () => {
-        if (
-          fs.existsSync(storage) &&
-          entry.state.sources.get(STATUS) !== before
-        )
-          return true;
-        fs.rmSync(storage, { recursive: true, force: true });
-        return false;
-      },
-      "a reload that recreated the removed folder",
-      10_000,
-    );
+    await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
     expect(fs.statSync(storage).isDirectory()).toBe(true);
     expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
       before.generation,
@@ -835,16 +823,12 @@ describe("an installed plugin's storage", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
     const entry = r.cache.getOrCreate(dir, dir, file);
     const folder = path.join(root(), "p");
-    await until(
-      () => {
-        fs.rmSync(folder, { recursive: true, force: true });
-        return Object.keys(entry.state.config.variables).every(
-          (n) => !n.startsWith("plugins.p."),
-        );
-      },
-      "the reload that drops the uninstalled plugin",
-      10_000,
-    );
+    await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
+    expect(
+      Object.keys(entry.state.config.variables).filter((n) =>
+        n.startsWith("plugins.p."),
+      ),
+    ).toEqual([]);
     expect(r.providers.managedStorage.stats().folders).toBe(0);
     expect(fs.existsSync(folder)).toBe(false);
   });

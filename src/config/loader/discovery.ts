@@ -8,11 +8,12 @@ import os from "node:os";
 import path from "node:path";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
+import { worktreeLink } from "../../utils/git-root.js";
 import {
   gateRepos,
-  standing,
   type ApprovedRepo,
   type RepoAnswers,
+  type RepoDir,
   type RepoGate,
   type RepoProject,
 } from "./repo-gate.js";
@@ -154,8 +155,9 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
  *
  * [LAW:single-enforcer] Built on top of `dslConfigCandidatePaths` — the
  * precedence list lives in one place. And the one place a repository's
- * answer decides whether its files load (`gateRepos`): the render, `check`
- * and the durable writer all resolve here.
+ * answer decides whether its files load (`gateRepos`, whose `approved` the
+ * layers are filtered by): the render, `check` and the durable writer all
+ * resolve here.
  */
 export function resolveDslConfig(
   answers: RepoAnswers,
@@ -164,11 +166,11 @@ export function resolveDslConfig(
   configFile?: string,
 ): ConfigResolution {
   const unchecked: Unchecked[] = [];
-  // Each location's file, and the real directory of the repository that
-  // supplies it — null for the user's own file or the explicit one.
+  // Each location's file, and the repository directory that supplies it —
+  // null for the user's own file or the explicit one.
   const atLocation = new Map<
     string,
-    { readonly file: string; readonly repo: string | null }
+    { readonly file: string; readonly repo: RepoDir | null }
   >();
   for (const candidate of dslConfigCandidatePaths(
     projectDir,
@@ -191,9 +193,14 @@ export function resolveDslConfig(
       dir,
       path.basename(candidate).replace(/\.(json5|json)$/, ""),
     );
-    const repo = configFile !== undefined || isUserFile(candidate) ? null : dir;
     if (!atLocation.has(location)) {
-      atLocation.set(location, { file: candidate, repo });
+      atLocation.set(location, {
+        file: candidate,
+        repo:
+          configFile !== undefined || isUserFile(candidate)
+            ? null
+            : { dir, link: worktreeLink(dir) },
+      });
     }
   }
   const found = [...atLocation.values()];
@@ -203,7 +210,7 @@ export function resolveDslConfig(
     repoProject(projectDir),
   );
   const layers = found
-    .filter((f) => f.repo === null || standing(answers, f.repo) === "approved")
+    .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
     .map((f) => f.file)
     .reverse();
   if (configFile === undefined) {
@@ -234,8 +241,10 @@ export function repoProject(
     return null;
   }
   const listed = listFolders(path.join(projectDir, REPO_PLUGIN_DIR));
+  const dir = fs.realpathSync.native(projectDir);
   return {
-    dir: fs.realpathSync.native(projectDir),
+    dir,
+    link: worktreeLink(dir),
     path: projectDir,
     ships: !("error" in listed) && listed.folders.length > 0,
   };

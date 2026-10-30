@@ -1,3 +1,63 @@
+## [1.162.4](https://github.com/promptctl/cc-candybar/compare/v1.162.3...v1.162.4) (2026-10-29)
+
+### Bug Fixes
+
+* **daemon:** every config load says why it ran, and a click reloads no entry (brandon-unfiled-3248.7nq0) ([#481](https://github.com/promptctl/cc-candybar/issues/481)) ([34f2f8f](https://github.com/promptctl/cc-candybar/commit/34f2f8f995929cdfb25ae15d119ac336290790d4))
+
+## [1.162.3](https://github.com/promptctl/cc-candybar/compare/v1.162.2...v1.162.3) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** the tmux stub waits on a gate the test holds (brandon-unfiled-3248.009i) ([#480](https://github.com/promptctl/cc-candybar/issues/480)) ([fd6ec8d](https://github.com/promptctl/cc-candybar/commit/fd6ec8d4733e93e217d07463582ca5edf2c228bb))
+
+## [1.162.2](https://github.com/promptctl/cc-candybar/compare/v1.162.1...v1.162.2) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** a removed folder's wait lays the folder down again each round, until the watch hears it (brandon-unfiled-3248.rfpg) ([#479](https://github.com/promptctl/cc-candybar/issues/479)) ([571b5c5](https://github.com/promptctl/cc-candybar/commit/571b5c50dc27af202258dd28207a56c2deaa5169))
+
+## [1.162.1](https://github.com/promptctl/cc-candybar/compare/v1.162.0...v1.162.1) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** a watched-file rewrite is a rename over the file, re-applied until the feed hears it (brandon-unfiled-3248.v9ix) ([#478](https://github.com/promptctl/cc-candybar/issues/478)) ([2377fc2](https://github.com/promptctl/cc-candybar/commit/2377fc2986a52b1c81e1717e5c90e7b17373a205))
+
+## [1.162.0](https://github.com/promptctl/cc-candybar/compare/v1.161.4...v1.162.0) (2026-10-29)
+
+### Features
+
+* **approval:** approving a repository covers all of its worktrees (candybar-plugins-vf6g.svv) ([#477](https://github.com/promptctl/cc-candybar/issues/477)) ([c0cbfc6](https://github.com/promptctl/cc-candybar/commit/c0cbfc62bf5d8cc64dcaf60c67df971379b28fcc))
+
+## [1.161.4](https://github.com/promptctl/cc-candybar/compare/v1.161.3...v1.161.4) (2026-10-28)
+
+### Bug Fixes
+
+* **load-gate:** the budget judges the charge once V8 has collected (brandon-frame-feed-znsy.zpm) ([#475](https://github.com/promptctl/cc-candybar/issues/475)) ([fd4f89e](https://github.com/promptctl/cc-candybar/commit/fd4f89eba779df530659e2fd7e1506eac358f8d1))
+
+## [1.161.3](https://github.com/promptctl/cc-candybar/compare/v1.161.2...v1.161.3) (2026-10-28)
+
+### Bug Fixes
+
+* **menu:** a menu's items are the theme's shades of its header's colour; the trial looks sit in 🧪 trials (brandon-menus-sjhy.6xa) ([#451](https://github.com/promptctl/cc-candybar/issues/451)) ([f2eecdf](https://github.com/promptctl/cc-candybar/commit/f2eecdf3cb2dbd4e1b9ff2837047e9aeadae7d7f))
+
+## [1.161.2](https://github.com/promptctl/cc-candybar/compare/v1.161.1...v1.161.2) (2026-10-28)
+
+### Bug Fixes
+
+* **test:** the real-client e2e runs the client again on a blank answer, as the next tick would (brandon-unfiled-3248.s1je) ([#474](https://github.com/promptctl/cc-candybar/issues/474)) ([c425751](https://github.com/promptctl/cc-candybar/commit/c425751301e47461eaace7e400402d0882682ee6))
+
+## [1.161.1](https://github.com/promptctl/cc-candybar/compare/v1.161.0...v1.161.1) (2026-10-28)
+
+### Bug Fixes
+
+* **check:** each preset's pass awaits the runs its payload started (brandon-unfiled-3248.qniv) ([#470](https://github.com/promptctl/cc-candybar/issues/470)) ([1a69a2d](https://github.com/promptctl/cc-candybar/commit/1a69a2d3008355bf63db5bb29fd536ea9d1eab7c))
+
+## [1.161.0](https://github.com/promptctl/cc-candybar/compare/v1.160.11...v1.161.0) (2026-10-28)
+
+### Features
+
+* **bench:** a benchmark of what a statusline tick costs (brandon-unfiled-3248.1vnf) ([#473](https://github.com/promptctl/cc-candybar/issues/473)) ([10aa78b](https://github.com/promptctl/cc-candybar/commit/10aa78b576fe62e635399b0300e17c1ef0b1e65a))
+
 ## [1.160.11](https://github.com/promptctl/cc-candybar/compare/v1.160.10...v1.160.11) (2026-10-28)
 
 ### Bug Fixes

@@ -1241,12 +1241,34 @@ export type DrawSelection = Pick<
 // draw reads, and the selections its view's slots settle.
 export type RenderSelection = DrawSelection & Selections;
 
-// One frame of a fixed payload: the view drawing from `store` is bound to
-// `payload` and `selection` — at the width it is drawn at, `term.cols`, and the
-// depth `opts` names, so the writer and every contrast floor read one depth —
-// and drawn. What `cc-candybar check`, the demo and a test draw by: the seam a
-// session's view reads, given a constant. The payload is also the draw's
-// projections (DRAW_PROJECTIONS read their paths in it).
+// The view drawing from `store` bound to a fixed `payload` and `selection` —
+// at the width it is drawn at, `term.cols`, and the depth `opts` names, so the
+// writer and every contrast floor read one depth. Returns the payload as
+// bound, which is also the draw's projections (DRAW_PROJECTIONS read their
+// paths in it). [LAW:one-source-of-truth] The one composition of what a fixed
+// view reads: a source keyed on an input starts its run inside this bind, and
+// a caller that waits for that run before it draws (`cc-candybar check`)
+// draws the very object the key read.
+export function bindPayload(
+  compiled: CompiledConfig,
+  store: VariableStore,
+  registry: SourceRegistry,
+  payload: unknown,
+  opts: BuildLineOptions,
+  selection: RenderSelection,
+): unknown {
+  const drawn = {
+    ...(payload as object),
+    term: { cols: opts.width },
+    colorCompatibility: { effective: opts.colorCompatibility },
+  };
+  bindView(compiled, store, registry, fixedSource(drawn, selection));
+  return drawn;
+}
+
+// One frame of a fixed payload: bound (`bindPayload`) and drawn in one call.
+// What the demo and a test draw by: the seam a session's view reads, given a
+// constant.
 export function drawPayload(
   config: ValidatedConfig,
   compiled: CompiledConfig,
@@ -1266,12 +1288,14 @@ export function drawPayload(
     () => false,
   ),
 ): DrawnFrame {
-  const drawn = {
-    ...(payload as object),
-    term: { cols: opts.width },
-    colorCompatibility: { effective: opts.colorCompatibility },
-  };
-  bindView(compiled, store, registry, fixedSource(drawn, selection));
+  const drawn = bindPayload(
+    compiled,
+    store,
+    registry,
+    payload,
+    opts,
+    selection,
+  );
   return drawDsl(
     config,
     compiled,

@@ -15,7 +15,7 @@
 //     one transposed palette every unpinned segment colours from.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { ColorRgba, getThemePalette, Palette, transposePalette } from "@promptctl/rich-js";
+import { ColorDepth, ColorRgba, getThemePalette, Palette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -32,6 +32,8 @@ import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   decorFor,
   DISTRIBUTIONS,
+  bandFor,
+  rowGround,
   SHADES,
   VARIATIONS,
   type Address,
@@ -225,8 +227,14 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       }
       seen.add(names.map((n) => rt.bgOf(n)).join());
     }
-    // Every shipped variation paints this two-row bar differently.
-    expect(seen.size).toBe(Object.keys(VARIATIONS).length);
+    // The variations paint these cells in as many distinct ways as the model
+    // says they do — the lineage a variation's menus open in paints no closed
+    // cell, and a keystone on the door or on `meaning` is off these cells.
+    const forms = new Set(
+      (Object.keys(VARIATIONS) as VariationName[]).map((variation) => names.map((n) => rt.expectedTint(n, variation)).join()),
+    );
+    expect(seen.size).toBe(forms.size);
+    expect(forms.size).toBeGreaterThanOrEqual(6);
     // An omitting caller renders the default: secondary on row 1, accent on row 2.
     rt.render();
     for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "accent"));
@@ -652,8 +660,9 @@ describe("an open trigger on a row no colour stands off", () => {
 describe("an open band whose plane stands on its trigger", () => {
   // nord washed out the way a style can wash a palette: the accent, the
   // background and the foreground all but meet, over a first row dark enough
-  // that the accent stands off it as it is — so the open state is the accent,
-  // and no plane recedes from it.
+  // that the accent stands off it as it is — so the open state is near that
+  // white, and no plane recedes from it into a background that is the same
+  // white.
   const washed = new Palette(
     "washed",
     true,
@@ -668,7 +677,7 @@ describe("an open band whose plane stands on its trigger", () => {
     ]),
   );
 
-  test("still renders its body, and reports the plane and each seam it leaves short, once", () => {
+  test("still renders its body, and reports each floor it stands short of, once", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -699,26 +708,22 @@ describe("an open band whose plane stands on its trigger", () => {
     );
     expect(errors).toEqual([]);
     expect(out).toContain("INNER-BODY");
-    expect(warnings).toEqual([
+    // The band the toggle opens: the bar's default decor at depth 0, over the
+    // ground of the row the toggle is alone on.
+    const opened = bandFor(
+      washed,
       {
-        kind: "band-floor",
-        message: expect.stringMatching(/^theme "washed": an open band's plane stands ΔE 0\.\d{3} off the trigger that opened it as drawn at depth TRUECOLOR, under the 0\.1 that tells them apart; another style clears it$/),
+        decor: DEFAULT_DECOR,
+        depth: 0,
+        ground: rowGround(DEFAULT_DECOR, [{ index: 0, count: 1, distribution: DISTRIBUTIONS["van-der-corput"], axis: "row" }]),
       },
-      // Washed's accent and background are one white, so the band's trigger
-      // and both its items are that white too: every seam among them is short.
-      {
-        kind: "band-floor",
-        message: `theme "washed": an open band's trigger and low item stand ΔE 0.000 apart as drawn at depth TRUECOLOR, under the 0.04 below which two cells in those colours are joined by a divider and read as one`,
-      },
-      {
-        kind: "band-floor",
-        message: `theme "washed": an open band's trigger and high item stand ΔE 0.000 apart as drawn at depth TRUECOLOR, under the 0.04 below which two cells in those colours are joined by a divider and read as one`,
-      },
-      {
-        kind: "band-floor",
-        message: `theme "washed": an open band's low item and high item stand ΔE 0.000 apart as drawn at depth TRUECOLOR, under the 0.04 below which two cells in those colours are joined by a divider and read as one`,
-      },
-    ]);
+      ColorDepth.TRUECOLOR,
+    );
+    expect(opened.shortfalls[0]).toMatch(
+      /^theme "washed": an open band's plane stands ΔE 0\.\d{3} off the trigger that opened it as drawn at depth TRUECOLOR, under the 0\.1 that tells them apart; another style clears it$/,
+    );
+    // Each floor the band stands short of, as the band names it, once.
+    expect(warnings).toEqual(opened.shortfalls.map((message) => ({ kind: "band-floor", message })));
     registry.dispose();
   });
 });

@@ -216,14 +216,14 @@ function sameIndex(label: string, ansi: Chars, failures: string[]): number {
 
 // The closed bar, as `check` renders it, for a theme at a depth.
 async function closedBars(): Promise<{
-  render: (theme: string, colorCompatibility: ColorCompatibility) => Chars;
+  render: (theme: string, colorCompatibility: ColorCompatibility) => Promise<Chars>;
   dispose: () => void;
 }> {
   const prepared = await prepareConfig([], null, process.cwd(), [], instantOf(new Date()));
   return {
-    render: (theme, colorCompatibility) =>
+    render: async (theme, colorCompatibility) =>
       drawnChars(
-        renderEffective(
+        (await renderEffective(
           prepared,
           {
             ...resolveEffectiveGlobals(
@@ -235,7 +235,7 @@ async function closedBars(): Promise<{
           },
           200,
           instantOf(new Date()),
-        ).rendered,
+        )).rendered,
       ),
     dispose: () => prepared.registry.dispose(),
   };
@@ -329,7 +329,7 @@ test("every bundled theme's text reads at 256 colours as it does in truecolor", 
     const failures: string[] = [];
     let measured = 0;
     for (const theme of listThemePalettes()) {
-      measured += compare(theme, bars.render(theme, "truecolor"), bars.render(theme, "256"), failures);
+      measured += compare(theme, await bars.render(theme, "truecolor"), await bars.render(theme, "256"), failures);
     }
     // Non-vacuous: the whole bar, every theme.
     expect(measured).toBeGreaterThan(listThemePalettes().length * 50);
@@ -360,7 +360,7 @@ test("at ansi nothing — text, divider or arrow — is drawn on its own ground'
     const failures: string[] = [];
     let measured = 0;
     for (const theme of listThemePalettes()) {
-      measured += sameIndex(theme, bars.render(theme, "ansi"), failures);
+      measured += sameIndex(theme, await bars.render(theme, "ansi"), failures);
       forEachStage(theme, (stage, render) => {
         measured += sameIndex(`${theme} [${stage}]`, render("ansi"), failures);
       });

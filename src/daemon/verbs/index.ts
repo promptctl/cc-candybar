@@ -122,8 +122,8 @@ import {
   type EvaluatedRun,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
-import { repoAnswerFields, repoConfigs } from "../repo-configs";
-import { withAnswer, type RepoAnswer } from "../../config/loader/repo-gate";
+import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
+import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
@@ -1591,11 +1591,15 @@ const repoConfig: VerbHandler = (value, ctx) => {
       "the answer's signature does not match what it carries: it was not drawn by this daemon",
     );
   }
-  const filed = repoConfigs().update((book) => withAnswer(book, dir, answered));
+  const filed = recordAnswer(repoConfigs(), dir, answered);
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
-  ctx.dlog("info", `repo-config: ${dir} ${answered} (session=${sid})`);
+  const { superseded, absent, unchecked } = filed.value;
+  ctx.dlog(
+    "info",
+    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`,
+  );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
 

@@ -17,10 +17,10 @@
 //
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
-// throughout with no post-mortem; its charge stays within a budget for these
-// sessions and does not climb; the cache's held counts stay flat; every click
-// on one session's settings menu, once a second, answers ok within the click's
-// budget.
+// throughout with no post-mortem; its charge once V8 has collected stays
+// within a budget for these sessions, and under load does not climb; the
+// cache's held counts stay flat; every click on one session's settings menu,
+// once a second, answers ok within the click's budget.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 //
@@ -59,6 +59,9 @@ import type { StatsSnapshot } from "../src/daemon/stats.js";
 import { parseHandlerUrl } from "../src/install/index.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
+import { percentile } from "./lib/percentile.js";
+import { sessionEnv } from "./lib/session-env.js";
+import { transcriptPath, transcriptTurn } from "./lib/transcript.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const BUNDLE = path.join(REPO, "dist", "index.mjs");
@@ -139,6 +142,9 @@ const STAGE_EVERY = 8;
 const BRANCH_EVERY = 64;
 // A long session's transcript: ~5000 lines.
 const TRANSCRIPT_TURNS = 1700;
+// When turn `t` happened: the seeded history runs back from now, 20 s a turn.
+const turnTime = (t: number): Date =>
+  new Date(Date.now() - Math.max(0, TRANSCRIPT_TURNS - t) * 20_000);
 // A cold daemon builds every session's state at once; each session must have
 // answered once by then.
 const WARM_DEADLINE_MS = 30_000;
@@ -151,13 +157,17 @@ const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
-// What these sessions may be charged: a fifth over the daemon's base and each
-// session's part, as measured at their peaks (~180 MB at 20 sessions, ~275 MB
-// at 50 and ~430 MB at 100) — ~516 MB at 100. The shipped limit is sized for
-// the backstop, and judging by it would pass a daemon nearly twice as heavy.
+// What these sessions may be charged once V8 has collected: a fifth over the
+// daemon's base and each session's part, as measured at their peaks on CI
+// (~174 MB at 20 sessions, ~420 MB at 100) — ~506 MB at 100. Under load the
+// charge adds the garbage V8 lets the old generation hold before collecting,
+// which it sizes from measured GC and mutator speed: one build's peak lands in
+// either of two modes ~15 MB apart by the runner's timing, so a budget on it
+// judges the runner. The shipped limit is sized for the backstop, and judging
+// by it would pass a daemon nearly twice as heavy.
 // [LAW:one-source-of-truth] Derived from the sessions run, so the budget is
 // always these sessions'.
-const BUDGET_BYTES = 1.2 * (120 + 3.1 * SESSIONS) * 1024 * 1024;
+const BUDGET_BYTES = 1.2 * (112 + 3.1 * SESSIONS) * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
@@ -267,17 +277,12 @@ const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
     litStatusline(index),
   );
   // Where Claude Code keeps a session's transcript: under its project's slug.
-  const project = path.join(
-    dirs.claude,
-    "projects",
-    checkout.replace(/[^A-Za-z0-9]/g, "-"),
-  );
-  fs.mkdirSync(project, { recursive: true });
-  const transcript = path.join(project, `${id}.jsonl`);
+  const transcript = transcriptPath(dirs.claude, checkout, id);
+  fs.mkdirSync(path.dirname(transcript), { recursive: true });
   fs.writeFileSync(
     transcript,
     Array.from({ length: TRANSCRIPT_TURNS }, (_, t) =>
-      turn(id, checkout, t),
+      transcriptTurn(id, checkout, t, turnTime(t)),
     ).join(""),
   );
   return { index, id, checkout, transcript, ticks: 0, answers: 0 };
@@ -302,84 +307,6 @@ function litStatusline(index: number): string {
     },
     next: { ticket: ticket(index + 1), recorded_at: "2026-10-25T20:00:00Z" },
   });
-}
-
-// One turn as Claude Code writes it: the prompt, the assistant's tool call
-// with its usage, and the tool's result.
-function turn(sessionId: string, cwd: string, t: number): string {
-  const at = new Date(
-    Date.now() - Math.max(0, TRANSCRIPT_TURNS - t) * 20_000,
-  ).toISOString();
-  const common = {
-    sessionId,
-    cwd,
-    version: "2.1.299",
-    gitBranch: "main",
-    userType: "external",
-  };
-  const lines = [
-    {
-      ...common,
-      type: "user",
-      uuid: `u-${t}`,
-      timestamp: at,
-      message: {
-        role: "user",
-        content: `Step ${t}: run the tests and fix what fails. `.repeat(8),
-      },
-    },
-    {
-      ...common,
-      type: "assistant",
-      uuid: `a-${t}`,
-      timestamp: at,
-      requestId: `req_${t}`,
-      message: {
-        model: "claude-opus-5-5",
-        id: `msg_${t}`,
-        type: "message",
-        role: "assistant",
-        content: [
-          { type: "thinking", thinking: "", signature: "C".repeat(900) },
-          {
-            type: "tool_use",
-            id: `toolu_${t}`,
-            name: "Bash",
-            input: { command: "pnpm test" },
-          },
-        ],
-        stop_reason: "tool_use",
-        usage: {
-          input_tokens: 2,
-          cache_creation_input_tokens: 1200 + t,
-          cache_read_input_tokens: 40_000 + 900 * t,
-          output_tokens: 300 + t,
-          service_tier: "standard",
-          cache_creation: {
-            ephemeral_1h_input_tokens: 1200 + t,
-            ephemeral_5m_input_tokens: 0,
-          },
-        },
-      },
-    },
-    {
-      ...common,
-      type: "user",
-      uuid: `r-${t}`,
-      timestamp: at,
-      message: {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: `toolu_${t}`,
-            content: "ok ".repeat(200),
-          },
-        ],
-      },
-    },
-  ];
-  return lines.map((l) => JSON.stringify(l) + "\n").join("");
 }
 
 // What Claude Code sends on a statusline refresh, as it moves through a session.
@@ -487,12 +414,7 @@ daemon.on("exit", (code, signal) => {
 });
 
 // The hints a client running in this session's terminal reports.
-const sessionEnv = {
-  CLAUDE_CONFIG_DIR: dirs.claude,
-  TERM: "xterm-ghostty",
-  TERM_PROGRAM: "ghostty",
-  COLORTERM: "truecolor",
-};
+const terminalEnv = sessionEnv(dirs.claude);
 const client = nodeClientHint("node", BUNDLE);
 
 interface Render {
@@ -539,7 +461,12 @@ function tick(s: Session): void {
       "transcript turn",
       fs.promises.appendFile(
         s.transcript,
-        turn(s.id, s.checkout, TRANSCRIPT_TURNS + s.ticks),
+        transcriptTurn(
+          s.id,
+          s.checkout,
+          TRANSCRIPT_TURNS + s.ticks,
+          turnTime(TRANSCRIPT_TURNS + s.ticks),
+        ),
       ),
     );
   }
@@ -577,7 +504,7 @@ function tick(s: Session): void {
         [BUNDLE],
         s.checkout,
         {
-          ...detectClientHints(sessionEnv, s.checkout, {
+          ...detectClientHints(terminalEnv, s.checkout, {
             columns: 160,
             rows: 48,
           }),
@@ -696,14 +623,22 @@ const unanswered: string[] = [];
 const charge = (pid: number) => chargeProbe(process.platform, pid);
 
 async function sample(started: number): Promise<void> {
+  // [LAW:no-ambient-temporal-coupling] The phase and offset of the instant the
+  // sample was asked for, not of whatever phase holds once it is answered.
   const at = Date.now() - started;
+  const asked = phase;
   const outcome = await fetchStats();
   if (outcome.kind !== "ok") {
     unanswered.push(`${at} ms: ${outcome.kind}/${outcome.cause}`);
     return;
   }
   const reading = await charge(outcome.value.pid)(outcome.value.rssBytes);
-  samples.push({ phase, at, stats: outcome.value, charge: reading.bytes });
+  samples.push({
+    phase: asked,
+    at,
+    stats: outcome.value,
+    charge: reading.bytes,
+  });
 }
 
 // The daemon's heap once everything unreachable is collected, through its
@@ -903,6 +838,13 @@ async function run(): Promise<{
   const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
+  // The charge read after the final collection and the drain of the sessions'
+  // last renders, with every session's state still held: what these sessions
+  // cost, without the garbage V8 lets the old generation hold under load. The
+  // drain's own garbage is small beside that headroom. A run whose reading
+  // went unanswered has none, and fails here as well as on its own check.
+  const chargeAfterCollection =
+    samples.find((s) => s.phase === "after")?.charge ?? null;
   const climb = heapAfter - heapBefore;
   const first0 = samples[0]!.stats;
   // The charge under load, over the steady phase's second half: in the first
@@ -991,9 +933,10 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
-      name: "charge within the budget",
-      pass: charges.every((c) => c <= BUDGET_BYTES),
-      detail: `max ${mb(Math.max(...charges))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
+      name: "charge once collected within the budget",
+      pass:
+        chargeAfterCollection !== null && chargeAfterCollection <= BUDGET_BYTES,
+      detail: `${chargeAfterCollection === null ? "no reading after the collection" : `${mb(chargeAfterCollection)} MB`} of ${mb(BUDGET_BYTES)} MB, ${underLoad.length === 0 ? "no reading under load" : `${mb(Math.max(...underLoad))} MB at most under load`} (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
@@ -1082,6 +1025,9 @@ async function run(): Promise<{
       max: ms.at(-1) ?? 0,
     },
     chargeMb: charges.map(mb),
+    // The charge the budget judges, by name.
+    chargeAfterCollectionMb:
+      chargeAfterCollection === null ? null : mb(chargeAfterCollection),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
@@ -1205,9 +1151,7 @@ function tally(xs: readonly string[]): Record<string, number> {
   return out;
 }
 function pct(sorted: readonly number[], p: number): number {
-  return Math.round(
-    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0,
-  );
+  return sorted.length === 0 ? 0 : Math.round(percentile(sorted, p));
 }
 
 // [LAW:no-silent-failure] Every way out is a verdict: a crash fails, and a

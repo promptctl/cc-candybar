@@ -357,6 +357,9 @@ export class ManagedStorage {
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; an unnamed event re-reads every held file in
   // the folder; the folder's own name or an error is judged against the disk.
+  // The OS reports a change to the watched folder itself under the folder's
+  // own name, as though it were a child, so that path is the folder joined
+  // with its own name.
   private invalidated(watched: Watched, invalidation: Invalidation): void {
     const { key } = watched;
     const inFolder = (f: SessionFile) => sameKey(f.storage, key);
@@ -366,13 +369,11 @@ export class ManagedStorage {
         this.sessions.changed(inFolder);
         return;
       case "changed": {
-        const { names } = invalidation;
-        if (names.has(path.basename(key.folder))) {
+        const { paths } = invalidation;
+        if (paths.has(path.join(key.folder, path.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {
-          this.sessions.changed(
-            (f) => inFolder(f) && names.has(fileName(f.sessionId)),
-          );
+          this.sessions.changed((f) => inFolder(f) && paths.has(fileOf(f)));
         }
         return;
       }
