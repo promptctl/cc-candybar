@@ -117,20 +117,17 @@ const roleText: DecorText = (palette, hue, background, drawnAt) =>
 /**
  * One position of the shade dial: the shades a row's cells wear, in the order
  * a cell's place in its row selects them (`vocabularySelect` over this list,
- * read with the position's own `quantize` rule), and how text is chosen on
- * them. A position of one shade is a uniform row. A band's items wear the
- * same position of the dial, in the band's hue (`bandFor`).
+ * read by the rule of the distribution that placed the cell), and how text is
+ * chosen on them. A band's items wear the same position of the dial, in the
+ * band's hue (`bandFor`).
  */
 export interface Shade {
-  readonly tones: readonly [RoleShade, ...RoleShade[]];
-  readonly text: DecorText;
   /**
-   * How a cell's placement picks among `tones`: the rule under which van der
-   * Corput's neighbours never land on one tone — `halves` over three tones,
-   * `bin` over two (`inHalves`, `inBin`). [LAW:dataflow-not-control-flow]
-   * A value in the row, not a branch on the tone count.
+   * [LAW:types-are-the-program] Two tones at least: a position of one puts
+   * every pair of neighbours on one shade, under any distribution.
    */
-  readonly quantize: QuantizeName;
+  readonly tones: readonly [RoleShade, RoleShade, ...RoleShade[]];
+  readonly text: DecorText;
   /**
    * The shade a pressed button wears at this position: the segment whose menu
    * is open, and the ✕ and blank leads of that menu's rows, in the menu's hue
@@ -146,9 +143,10 @@ export interface Shade {
 /**
  * Three neighbouring rungs of the ladder from `from`: one position of the dial.
  * Listed low, high, middle because a row's cells take entries 0, 2, 1, 2 of
- * three, over and over (van der Corput, read by `inHalves`): the row walks up
- * and down its window a rung at a time — low, middle, high, middle, low — and
- * turning the dial one position moves every cell exactly one rung.
+ * three, over and over (van der Corput, read by its own rule, `DISTRIBUTIONS`):
+ * the row walks up and down its window a rung at a time — low, middle, high,
+ * middle, low — and turning the dial one position moves every cell exactly
+ * one rung.
  * The order is the one Brandon compared the positions in
  * (candybar-theme-colours-6fq5.e5n).
  */
@@ -157,7 +155,6 @@ const ladderWindow = (from: number): Shade => ({
   // rungs up a ladder of seven; the `!`s state that, they do not guard it.
   tones: [LADDER[from]!, LADDER[from + 2]!, LADDER[from + 1]!],
   text: poleText,
-  quantize: "halves",
   activated: "muted",
 });
 
@@ -171,19 +168,17 @@ const centredWindow = (apart: number): Shade => ({
   // three rungs each side stays on the ladder.
   tones: [LADDER[3 - apart]!, LADDER[3 + apart]!, LADDER[3]!],
   text: poleText,
-  quantize: "halves",
   activated: "muted",
 });
 
 /**
  * Two rungs `apart` rungs each side of the role, and never the role itself:
- * every neighbouring pair of cells jumps the whole width (`inBin` alternates
- * two tones strictly, whatever the row's length).
+ * every neighbouring pair of cells jumps the whole width (van der Corput
+ * alternates two tones strictly, whatever the row's length).
  */
 const pairWindow = (apart: number): Shade => ({
   tones: [LADDER[3 - apart]!, LADDER[3 + apart]!],
   text: poleText,
-  quantize: "bin",
   activated: "muted",
 });
 
@@ -207,8 +202,8 @@ export const TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES) as ReadonlyArray<
  * it to, lowest first (candybar-theme-colours-6fq5.e5n). The window of three
  * rungs slides up the ladder from the role's deepest shades to its brightest,
  * and `middle` — centred on the role itself — is where it rests. Below the
- * deepest window the dial reaches `muted`: a row's cells alternate the role's
- * muted form and the role itself, under the role's own text. A new position is
+ * deepest window the dial reaches `muted`: a row's cells deal the role's muted
+ * form and the role itself, under the role's own text. A new position is
  * one row here: the option domain, the loader's enum and the settings control
  * derive from this table, and the row names what a pressed button wears there.
  */
@@ -216,7 +211,6 @@ export const SHADES = {
   muted: {
     tones: ["muted", "base"],
     text: roleText,
-    quantize: "bin",
     activated: "lighten-2",
   },
   deepest: ladderWindow(0),
@@ -269,10 +263,10 @@ export const KEYSTONE_HUE = "accent" satisfies DecorHue;
  * degrees, and it is a VALUE the render carries, so every one ships through
  * the same selection.
  * [LAW:types-are-the-program] One or two hues, no more: a row's starting step
- * is read with `inBin` off its van der Corput placement (0, ½, ¼, ¾, …), which
- * steps in order through one or two bins and not through three (rows 0–3 of a
- * three-step variation would land on steps 0, 1, 0, 2). A longer one needs
- * a different selection, so the type does not admit it.
+ * is read off its placement as a cell's shade is, which under van der Corput
+ * (0, ½, ¼, ¾, …) steps in order through one or two hues and not through
+ * three (rows 0–3 of a three-step variation would land on steps 0, 2, 1, 2).
+ * A longer one needs a different selection, so the type does not admit it.
  */
 export interface Variation {
   readonly hues: readonly [DecorHue] | readonly [DecorHue, DecorHue];
@@ -415,20 +409,61 @@ export const vocabularyOf = (decor: Decor): readonly DecorEntry[] =>
 
 // --- Distributions ------------------------------------------------------------
 
+/** How a placement in [0, 1) picks one of `size` entries. */
+export type Quantize = (placement: number, size: number) => number;
+
 /**
- * Where sibling `index` of `count` lands in [0, 1). One field, read at every
- * level of the tree.
+ * The equal bin the placement falls in: each entry an equal share of the
+ * circle, in order. Over two entries a van der Corput placement's first bit
+ * IS its bin, so any number of rows alternates. The nearest-point rule ties
+ * there: ¼ and ¾ sit midway between the two points, both round to the
+ * second, and rows 1 and 2 of a three-row bar shared a hue.
+ */
+export const inBin: Quantize = (placement, size) =>
+  Math.floor(placement * size);
+
+/**
+ * The upper half of the circle is the last entry, and the lower half is shared
+ * among the rest the same way: over three entries, [0, ¼) is the first, [¼, ½)
+ * the second and [½, 1) the third; over two it is the bin. A van der Corput
+ * placement's first bit is its index's lowest bit and its second bit the next
+ * one up, so every odd place takes the last entry and the even places
+ * alternate the other two. Of two neighbouring places exactly one is odd, so
+ * they never share an entry, at any index. A rule that centres an entry on 0,
+ * as the nearest point does, fails: places 2ᵏ − 1 and 2ᵏ land either side of
+ * 0, ever closer (7 and 8 at ⅞ and ¹⁄₁₆), and both round to it. Equal bins put
+ * cells 5 and 6 on one entry.
+ */
+export const inHalves: Quantize = (placement, size) => {
+  let entry = size - 1;
+  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
+  return entry;
+};
+
+/**
+ * How a placer spreads its children over a vocabulary: where sibling `index`
+ * of `count` lands on the circle [0, 1), and the rule a landing is read by.
+ * One value, read at every level of the tree.
  *
+ * [LAW:locality-or-seam] The rule travels with the placement because whether
+ * two neighbours ever select one entry is a property of the pair, not of
+ * either half: `DISTRIBUTIONS` says which pairs keep them apart, and why no
+ * one rule serves every placement.
  * [LAW:dataflow-not-control-flow] The distribution is a VALUE an instance
  * carries, not a branch: `decorFor` calls whatever it is handed and the five
  * shipped ones are five entries in one table.
  */
-export type Distribution = (index: number, count: number) => number;
+export interface Distribution {
+  /** Where sibling `index` of `count` lands in [0, 1). */
+  readonly place: (index: number, count: number) => number;
+  /** Which of `size` entries a landing selects. */
+  readonly quantize: Quantize;
+}
 
 const PHI = 0.6180339887498949;
 
 /** Bit reversal of `index` as a binary fraction: 0, ½, ¼, ¾, ⅛, … Never reads the count. */
-const vanDerCorput: Distribution = (index) => {
+const vanDerCorput: Distribution["place"] = (index) => {
   let value = 0;
   let place = 0.5;
   for (let i = index; i > 0; i >>= 1, place /= 2) value += place * (i & 1);
@@ -463,23 +498,45 @@ export const isDistributionName = (value: unknown): value is DistributionName =>
  * hiding a sibling moves nobody. `monotonic` and `ends-interleaved` read it —
  * legitimate for a CLOSED set (a menu's option domain, where the count is the
  * set) and a trade the author spends knowingly.
+ *
+ * So is keeping neighbours apart, and each distribution's rule is the one
+ * that does it where any can. Van der Corput read by halves never gives two
+ * neighbours one entry, over two entries or more, at any index (`inHalves`).
+ * Golden angle read by equal bins never does over three: a step of φ moves a
+ * landing more than a third of the circle and less than two thirds, so it
+ * always changes bin. Over two no rule can, because no two-colouring of the
+ * circle separates every pair a rotation by an irrational apart. No one rule
+ * serves both: a window walked a rung at a time needs one half of the circle
+ * on one entry (van der Corput's odd places are its upper half, its even
+ * places its lower), and golden angle puts neighbours inside each half
+ * (places 4 and 5, 8 and 9). The even spreads read by equal bins, so a closed
+ * set gives every entry an equal run, in order; read by halves, five options
+ * would wear the last entry three times. They keep no neighbours apart, nor
+ * does `uniform`, which reads by halves so that its one entry is the one van
+ * der Corput's odd places wear: a window's middle rung.
  */
 export const DISTRIBUTIONS = {
-  "van-der-corput": vanDerCorput,
-  "golden-angle": (index) => (index * PHI) % 1,
-  "ends-interleaved": (index, count) => {
-    const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
-    return (slot + 0.5) / count;
+  "van-der-corput": { place: vanDerCorput, quantize: inHalves },
+  "golden-angle": { place: (index) => (index * PHI) % 1, quantize: inBin },
+  "ends-interleaved": {
+    place: (index, count) => {
+      const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
+      return (slot + 0.5) / count;
+    },
+    quantize: inBin,
   },
-  monotonic: (index, count) => (index + 0.5) / count,
-  uniform: () => 0.5,
+  monotonic: {
+    place: (index, count) => (index + 0.5) / count,
+    quantize: inBin,
+  },
+  uniform: { place: () => 0.5, quantize: inHalves },
 } as const satisfies Record<DistributionName, Distribution>;
 
 export const DEFAULT_DISTRIBUTION: DistributionName = "van-der-corput";
 
 /**
  * [LAW:single-enforcer] THE resolution of an authored distribution NAME to the
- * function an instance places by — an absent name is the default. Every placer
+ * distribution an instance places by — an absent name is the default. Every placer
  * (a compiled container, a `{{ menu }}`'s options, a bare `{{ picker }}`) reads
  * "omitted yields van der Corput" through this one call, so no two of them can
  * default differently.
@@ -498,9 +555,10 @@ export interface Position {
 /**
  * A position placed by its parent's distribution — the one field every placer
  * carries, read here at every level of the tree. A band's items are addressed
- * by these alone. [LAW:dataflow-not-control-flow] A step carries the function
- * it is placed by, so a fold calls whatever each level was handed; a tree
- * mixing five distributions is five values, not five code paths.
+ * by these alone. [LAW:dataflow-not-control-flow] A step carries the
+ * distribution it is placed by, so a fold calls whatever each level was
+ * handed; a tree mixing five distributions is five values, not five code
+ * paths.
  */
 export interface PlacedStep extends Position {
   readonly distribution: Distribution;
@@ -530,71 +588,32 @@ export interface AddressStep extends PlacedStep {
 export type Address = readonly AddressStep[];
 
 /**
- * How a placement in [0, 1) picks one of `size` entries. Each bar vocabulary
- * is read with a rule under which van der Corput's neighbours never land on
- * the same entry, and its row names which, so the rule is a value the
- * vocabulary is read with, not a branch on its size.
+ * [LAW:one-source-of-truth] Which of `size` entries `step` selects: where its
+ * distribution lands it, read by that distribution's own rule — the one
+ * selection a row's hue, a cell's shade and a band's item all make. An absent
+ * step is a node alone on that axis — a bar with no vertical container, a
+ * one-cell row — and is placed where a first child is, at 0: the first entry.
  */
-export type Quantize = (placement: number, size: number) => number;
-
-/**
- * The equal bin the placement falls in. Over two entries a van der Corput
- * placement's first bit IS its bin, so any number of rows alternates. The
- * nearest-point rule ties there: ¼ and ¾ sit midway between the two points,
- * both round to the second, and rows 1 and 2 of a three-row bar shared a hue.
- */
-export const inBin: Quantize = (placement, size) =>
-  Math.floor(placement * size);
-
-/**
- * The upper half of the circle is the last entry, and the lower half is shared
- * among the rest the same way: over three entries, [0, ¼) is the first, [¼, ½)
- * the second and [½, 1) the third. A van der Corput placement's first bit is
- * its index's lowest bit and its second bit the next one up, so every odd
- * place takes the last entry and the even places alternate the other two. Of
- * two neighbouring places exactly one is odd, so they never share an entry, at
- * any index. A rule that centres an entry on 0, as the nearest point does,
- * fails: places 2ᵏ − 1 and 2ᵏ land either side of 0, ever closer (7 and 8 at ⅞
- * and ¹⁄₁₆), and both round to it. Equal bins put cells 5 and 6 on one entry.
- */
-export const inHalves: Quantize = (placement, size) => {
-  let entry = size - 1;
-  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
-  return entry;
-};
-
-/**
- * [LAW:one-source-of-truth] The two rules by name — the spelling a `Shade`
- * row carries, and a memo key can hold, where a function cannot.
- */
-export const QUANTIZE = {
-  bin: inBin,
-  halves: inHalves,
-} as const satisfies Record<string, Quantize>;
-export type QuantizeName = keyof typeof QUANTIZE;
-
-/** Where a step falls on the circle; an absent step (the root) at 0. */
-function placementOf(step: PlacedStep | undefined): number {
-  return step === undefined ? 0 : step.distribution(step.index, step.count);
+function entryOf(step: PlacedStep | undefined, size: number): number {
+  if (step === undefined) return 0;
+  const { place, quantize } = step.distribution;
+  return quantize(place(step.index, step.count), size);
 }
 
 /**
- * The entry of `vocabulary` that `step` selects under `quantize`. An absent
- * step is a node alone on that axis — a bar with no vertical container, a
- * one-cell row — and is placed where a first child is, at 0. Generic over the
+ * The entry of `vocabulary` that `step` selects (`entryOf`). Generic over the
  * entry type so the selection is testable over any vocabulary — a one-entry
  * one must yield that entry everywhere.
  *
- * [LAW:no-silent-failure] Both quantizers land in `[0, size)` for a placement
- * in `[0, 1)` and `T` is non-nullable, so an undefined read here is exactly an
+ * [LAW:no-silent-failure] Both rules land in `[0, size)` for a placement in
+ * `[0, 1)` and `T` is non-nullable, so an undefined read here is exactly an
  * empty vocabulary — nothing to select — and throws rather than returning it.
  */
 export function vocabularySelect<T extends {}>(
   vocabulary: readonly T[],
   step: PlacedStep | undefined,
-  quantize: Quantize,
 ): T {
-  const entry = vocabulary[quantize(placementOf(step), vocabulary.length)];
+  const entry = vocabulary[entryOf(step, vocabulary.length)];
   if (entry === undefined)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -619,9 +638,9 @@ function rowAndCell(address: Address): {
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
 
-/** The step of the variation a row starts on: the bin its placement falls in. */
+/** The step of the variation a row starts on: the hue its placement selects. */
 const rowStart = (variation: Variation, row: AddressStep | undefined): number =>
-  inBin(placementOf(row), variation.hues.length);
+  entryOf(row, variation.hues.length);
 
 /**
  * The decorative entry a bar node's address selects under `decor`: the last
@@ -661,11 +680,7 @@ export function decorEntryFor(decor: Decor, address: Address): DecorEntry {
     hue: keystones.some((at) => KEYSTONE_AT[at](row, cell))
       ? KEYSTONE_HUE
       : stepped,
-    shade: vocabularySelect(
-      decor.shade.tones,
-      cell,
-      QUANTIZE[decor.shade.quantize],
-    ),
+    shade: vocabularySelect(decor.shade.tones, cell),
   };
 }
 
@@ -859,8 +874,8 @@ const nestedIn = (disclosure: Disclosure): Disclosure => ({
  * drawn from what it OPENS, not from where it sits, and what the ✕ and the
  * blank leads of its rows wear; `plane` is the ground its rows sit on; `items`
  * are what the cells on that plane wear, one per tone of the dial's window
- * (`bandEntries`), which `bandItemFor` deals along a row by the window's own
- * rule, so neighbours differ by shade as the bar's do.
+ * (`bandEntries`), which `bandItemFor` deals along a row as the bar deals its
+ * shades, so neighbours differ by shade as the bar's do.
  */
 export interface Band {
   readonly state: ColorRgba;
@@ -896,26 +911,22 @@ export function bandFor(palette: Palette, disclosure: Disclosure): Band {
 /**
  * The colour of the item `place` places in the band `disclosure` opens: one of
  * the band's `items`, picked by that step as the bar's cell picks its shade
- * (`decorEntryFor`), under the dial position's own rule — one placement
+ * (`decorEntryFor`), under its distribution's own rule — one placement
  * mechanism at every level, so a menu row walks its hue's window as a bar row
  * does. A picker's option is one step, its index over the WHOLE option
  * domain, so paging never recolours it; an absent step (a body that is one
  * segment) is placed where a first child is. Like a bar cell's, an item's
  * colour is a function of its place: a sibling hiding recolours nobody, so
  * the two cells either side of a hidden one, or neighbours an authored
- * distribution places on one tone, wear one item and are joined by the
- * joiner's divider.
+ * distribution places on one tone, wear one item, and the joiner owns the
+ * seam between them.
  */
 export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
   place: PlacedStep | undefined,
 ): ColorRgba {
-  return vocabularySelect(
-    bandFor(palette, disclosure).items,
-    place,
-    QUANTIZE[disclosure.decor.shade.quantize],
-  );
+  return vocabularySelect(bandFor(palette, disclosure).items, place);
 }
 
 /**

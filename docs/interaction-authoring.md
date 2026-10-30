@@ -430,10 +430,10 @@ the closed bar draws is one the theme names. It is a dial over a window of
 three neighbouring shades: `"deepest"` (the role's three darkenings),
 `"deeper"`, `"middle"` (the default: one darkening, the role itself, one
 lightening), `"brighter"` and `"brightest"` (its three lightenings) — and,
-below the deepest window, `"muted"`: every cell of a row in the role's muted
-form under the role's own text colour, as Textual's labels wear them. Under
-a window, cells side by side step up and down it a shade at a time. It
-resolves like `variation`, and the
+below the deepest window, `"muted"`: a row's cells alternate the role's muted
+form and the role itself, under the role's own text colour, as Textual's
+labels wear it. Under a window, cells side by side step up and down it a
+shade at a time. It resolves like `variation`, and the
 `⚙` beside the settings menu's theme picker carries a `🔆` carousel over it. `shades` is a
 registered domain and `{{ .shade.effective }}` its projection:
 
@@ -2174,7 +2174,7 @@ its own placement.
 | `van-der-corput` (default) | no | bit-reversal sequence 0, ½, ¼, ¾, ⅛, … — neighbours land far apart |
 | `golden-angle` | no | index × φ mod 1 — the same isolation, a different spread |
 | `uniform` | no | every child at ½ — one tint for the whole row |
-| `monotonic` | yes | evenly spaced positions in declaration order — a row steps through its window's three shades in the order the window lists them and wraps (four cells: entries 0, 1, 2, 0), so past three cells some neighbours share a shade |
+| `monotonic` | yes | evenly spaced positions in declaration order — a row steps through its window's shades in the order the window lists them, an equal run on each (six cells over three shades: entries 0, 0, 1, 1, 2, 2), so past three cells some neighbours share a shade |
 | `ends-interleaved` | yes | evenly spaced, alternating from both ends inward |
 
 Isolation is a property of the distribution you chose, not of the system.
@@ -2186,6 +2186,14 @@ closed, and a menu's option domain is exactly that: the count *is* the set,
 nothing is ever added behind its back. A `when`-hidden child still counts under
 every distribution (every child is walked), so a predicate flipping re-spaces
 nothing.
+
+Keeping neighbours apart is a property of the distribution too. Under
+`van-der-corput` no two cells side by side wear one shade, at every position of
+the shade dial and however long the row runs. `golden-angle` keeps them apart
+over a window of three shades, but not over the two-shade positions (`muted`,
+`pair` and `pair-wide`), where some neighbours share one. `monotonic`,
+`ends-interleaved` and `uniform` make no such promise: the first two spread the
+window evenly, and `uniform` wears one shade.
 
 The field on both placers — a row keeping isolation under a different spread,
 a menu ramping its closed domain:

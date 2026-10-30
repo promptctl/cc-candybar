@@ -24,7 +24,6 @@ import {
   SHADES,
   DECOR_HUES,
   KEYSTONE_HUE,
-  QUANTIZE,
   DISTRIBUTIONS,
   PLANE_ROLE,
   TEXT_MIN_CONTRAST,
@@ -258,14 +257,15 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   });
 
   test("the shade step is placed by its OWN distribution", () => {
-    // Cell 1 of 4: vdc 0.5, in [½, 1) -> entry 2; monotonic 0.375, in [¼, ½) -> entry 1.
+    // Cell 1 of 4: vdc 0.5, read by halves, in [½, 1) -> entry 2; monotonic
+    // 0.375, read by equal bins, in [⅓, ⅔) -> entry 1.
     expect(decorEntryFor(TWO_STEP, [cell(1, 4)]).shade).toBe(SHADES.middle.tones[2]);
     expect(
       decorEntryFor(TWO_STEP, [{ ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic }]).shade,
     ).toBe(SHADES.middle.tones[1]);
   });
 
-  test("a row walks up and down its window a rung at a time", () => {
+  test("a row walks up and down its window a rung at a time, every window in its own steps", () => {
     // Van der Corput read by halves lands a row's cells on entries 0, 2, 1, 2
     // of three, over and over; the window is listed low, high, middle, so the
     // row reads low, middle, high, middle, low, … however long it runs.
@@ -281,23 +281,69 @@ describe("the colour is its role at a shade, as the palette names it", () => {
         Array.from({ length: 16 }, (_, i) => [0, 1, 2, 1][i % 4]),
       ]);
     }
+    // A widened window walks the same way by its wider steps, and a position
+    // of two tones alternates them.
+    for (const shade of SHADE_NAMES) {
+      const { tones } = SHADES[shade];
+      const [low, middle, high] = [...tones].sort((a, b) => rung(a) - rung(b));
+      const steps = tones.length === 3 ? [low, middle, high, middle] : tones;
+      expect([shade, walk(shade)]).toEqual([shade, Array.from({ length: 16 }, (_, i) => steps[i % steps.length])]);
+    }
   });
 
   // [LAW:verifiable-goals] candybar-joiners-e5r4.tx7: the property, stated
-  // once. The mechanism reads the position alone, so a row's length is only
-  // how far the property is checked, never an input to the tone.
-  test("under every dial position, no two cells side by side select one tone, in any row up to sixteen long", () => {
-    const tone = (shade: ShadeName, index: number, count: number): RoleShade =>
-      decorEntryFor({ ...TWO_STEP, shade: SHADES[shade] }, [row(0, 2), cell(index, count)]).shade;
+  // once, for the distributions that carry it and the windows they carry it
+  // over (`DISTRIBUTIONS` says why these): van der Corput, the default, over
+  // every position, and golden angle over three tones. The mechanism reads the
+  // position alone, so a row's length is only how far the property is
+  // checked, never an input to the tone.
+  const KEEP_NEIGHBOURS_APART: ReadonlyArray<readonly [DistributionName, (shade: ShadeName) => boolean]> = [
+    ["van-der-corput", () => true],
+    ["golden-angle", (shade) => SHADES[shade].tones.length === 3],
+  ];
+
+  test("no two cells side by side select one tone, in any row up to sixteen long: under every dial position by van der Corput, and over every three-tone window by golden angle", () => {
     const alike: string[] = [];
-    for (const shade of SHADE_NAMES) {
-      for (let count = 2; count <= 16; count++) {
-        for (let i = 0; i + 1 < count; i++) {
-          if (tone(shade, i, count) === tone(shade, i + 1, count)) alike.push(`${shade}, ${count} cells: ${i} and ${i + 1}`);
+    for (const [name, over] of KEEP_NEIGHBOURS_APART) {
+      for (const shade of SHADE_NAMES.filter(over)) {
+        const tone = (index: number, count: number): RoleShade =>
+          decorEntryFor({ ...TWO_STEP, shade: SHADES[shade] }, [
+            row(0, 2),
+            { ...cell(index, count), distribution: DISTRIBUTIONS[name] },
+          ]).shade;
+        for (let count = 2; count <= 16; count++) {
+          for (let i = 0; i + 1 < count; i++) {
+            if (tone(i, count) === tone(i + 1, count)) alike.push(`${name}, ${shade}, ${count} cells: ${i} and ${i + 1}`);
+          }
         }
       }
     }
     expect(alike).toEqual([]);
+  });
+
+  test("the even spreads deal every tone of a window an equal run, monotonic in the order the window lists them", () => {
+    for (const shade of SHADE_NAMES) {
+      const { tones } = SHADES[shade];
+      for (const runs of [1, 2, 3, 4]) {
+        const count = tones.length * runs;
+        const dealt = (name: DistributionName): RoleShade[] =>
+          Array.from(
+            { length: count },
+            (_, i) =>
+              decorEntryFor({ ...TWO_STEP, shade: SHADES[shade] }, [
+                row(0, 2),
+                { ...cell(i, count), distribution: DISTRIBUTIONS[name] },
+              ]).shade,
+          );
+        expect([shade, count, dealt("monotonic")]).toEqual([shade, count, tones.flatMap((tone) => Array<RoleShade>(runs).fill(tone))]);
+        const interleaved = dealt("ends-interleaved");
+        expect([shade, count, tones.map((tone) => interleaved.filter((t) => t === tone).length)]).toEqual([
+          shade,
+          count,
+          tones.map(() => runs),
+        ]);
+      }
+    }
   });
 
   test("a muted row alternates its role's muted form with the role itself, in one hue", () => {
@@ -396,7 +442,7 @@ describe("the colour is its role at a shade, as the palette names it", () => {
 describe("distributions", () => {
   test("van der Corput is bit reversal and reads no count", () => {
     const vdc = DISTRIBUTIONS["van-der-corput"];
-    expect([0, 1, 2, 3, 4, 5, 6, 7].map((i) => vdc(i, 8))).toEqual([
+    expect([0, 1, 2, 3, 4, 5, 6, 7].map((i) => vdc.place(i, 8))).toEqual([
       0, 0.5, 0.25, 0.75, 0.125, 0.625, 0.375, 0.875,
     ]);
   });
@@ -404,11 +450,11 @@ describe("distributions", () => {
   test("n-free distributions ignore the count; n-reading ones use it", () => {
     for (let index = 0; index < 8; index++) {
       for (const name of N_FREE) {
-        expect(DISTRIBUTIONS[name](index, 8)).toBe(DISTRIBUTIONS[name](index, 20));
+        expect(DISTRIBUTIONS[name].place(index, 8)).toBe(DISTRIBUTIONS[name].place(index, 20));
       }
     }
     for (const name of N_READING) {
-      expect(DISTRIBUTIONS[name](1, 8)).not.toBe(DISTRIBUTIONS[name](1, 20));
+      expect(DISTRIBUTIONS[name].place(1, 8)).not.toBe(DISTRIBUTIONS[name].place(1, 20));
     }
   });
 
@@ -416,7 +462,7 @@ describe("distributions", () => {
     for (const name of ALL_NAMES) {
       for (let count = 1; count <= 12; count++) {
         for (let index = 0; index < count; index++) {
-          const v = DISTRIBUTIONS[name](index, count);
+          const v = DISTRIBUTIONS[name].place(index, count);
           expect(v).toBeGreaterThanOrEqual(0);
           expect(v).toBeLessThan(1);
         }
@@ -467,19 +513,22 @@ describe("done-when: adding a sibling", () => {
   });
 
   test("re-spaces existing siblings under the n-reading distributions (the trade is real)", () => {
+    // Read by equal bins, an even spread keeps its ends where they were, so a
+    // re-spacing need not reach a colour at every parent: each shape's parents
+    // are tried in tree order until one does.
     for (const name of N_READING) {
       const distribution = DISTRIBUTIONS[name];
       let moved = 0;
-      for (const { seed, shape } of SHAPES) {
-        const rng = seededRng(seed);
+      for (const { shape } of SHAPES) {
         const parents = allNodes(shape, distribution).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
-        if (parents.length === 0) continue;
-        const target = drawFrom(rng, parents).path;
         const before = colourMap(shape, distribution);
-        const after = colourMap(withSiblingAdded(shape, target), distribution);
-        for (const [key, hex] of before) if (after.get(key) !== hex) moved++;
+        for (const { path } of parents) {
+          const after = colourMap(withSiblingAdded(shape, path), distribution);
+          for (const [key, hex] of before) if (after.get(key) !== hex) moved++;
+          if (moved > 0) break;
+        }
       }
-      expect(moved).toBeGreaterThan(0);
+      expect([name, moved > 0]).toEqual([name, true]);
     }
   });
 });
@@ -527,15 +576,14 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     }
     expect(steps.size).toBeGreaterThan(ALL_NAMES.length);
     for (const step of steps.values()) {
-      for (const quantize of Object.values(QUANTIZE)) {
-        expect(vocabularySelect([only], step, quantize)).toBe(only);
-      }
+      expect(vocabularySelect([only], step)).toBe(only);
     }
   });
 
-  test("an empty vocabulary has nothing to select and says so", () => {
-    for (const quantize of Object.values(QUANTIZE)) {
-      expect(() => vocabularySelect([], undefined, quantize)).toThrow(/empty vocabulary/);
+  test("an empty vocabulary has nothing to select and says so, under every distribution", () => {
+    expect(() => vocabularySelect([], undefined)).toThrow(/empty vocabulary/);
+    for (const name of ALL_NAMES) {
+      expect(() => vocabularySelect([], { index: 1, count: 2, distribution: DISTRIBUTIONS[name] })).toThrow(/empty vocabulary/);
     }
   });
 });
@@ -555,12 +603,12 @@ describe("depth steps along the lineage", () => {
 });
 
 describe("a band item is placed by its step", () => {
-  test("an item wears one of its band's items — the band's hue at a tone of the dial's window — picked by the step that places it along its row under the window's own rule", () => {
+  test("an item wears one of its band's items — the band's hue at a tone of the dial's window — picked by the step that places it along its row, as a bar cell picks its shade", () => {
     const at = (index: number, count: number): PlacedStep => ({ index, count, distribution: VDC });
     for (const shade of SHADE_NAMES) {
       const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
       const disclosure: Disclosure = { decor, depth: 0 };
-      const { tones, quantize } = SHADES[shade];
+      const tones: readonly RoleShade[] = SHADES[shade].tones;
       for (const palette of REGISTRY) {
         const { items } = bandFor(palette, disclosure);
         // The items are the lineage's hue at each tone, as the palette names it.
@@ -569,9 +617,9 @@ describe("a band item is placed by its step", () => {
           bandItemFor(palette, disclosure, place).hex;
         const inBand = (address: Address) =>
           decorationFor(palette, { kind: "band", band: disclosure, address }, ColorDepth.TRUECOLOR).tint.hex;
-        // A cell picks its item as a bar cell picks its shade: the window's
-        // own rule over its placement, so neighbours never share one.
-        const expected = (index: number): string => items[QUANTIZE[quantize](VDC(index, 1), tones.length)]!.hex;
+        // A cell picks its item as a bar cell at that place picks its shade.
+        const expected = (index: number): string =>
+          items[tones.indexOf(decorEntryFor(decor, [cell(index, index + 1)]).shade)]!.hex;
         for (const count of [2, 5, 12]) {
           const cells = Array.from({ length: count }, (_, index) => item(at(index, count)));
           expect(cells).toEqual(cells.map((_, index) => expected(index)));
@@ -646,6 +694,12 @@ describe("an open menu wears shades its theme names, selected and never searched
     expect(SHADES.muted.activated).toBe("lighten-2");
     for (const name of SHADE_NAMES.filter((shade) => shade !== "muted")) {
       expect([name, SHADES[name].activated]).toEqual([name, "muted"]);
+    }
+    // A pressed button wears a shade its position never deals, so it stands
+    // out of the row it is pressed in.
+    for (const name of SHADE_NAMES) {
+      const tones: readonly RoleShade[] = SHADES[name].tones;
+      expect([name, tones.includes(SHADES[name].activated)]).toEqual([name, false]);
     }
   });
 
