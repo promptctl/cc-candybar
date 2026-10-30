@@ -61,6 +61,9 @@
   // The bar drawn along the bottom is the selected project's, when it has one captured; otherwise the
   // top-ranked project with a captured bar, so a visitor sees a bar playing on load. Only that bar's
   // bundle is fetched.
+  // The site publishes this page beside the live bar, one folder down. Resolved against the page,
+  // not the base tag the deploy injects, as the bundles are.
+  const liveBar = new URL('../', location.href).href;
   const featured = projects.find((p) => p.live && p.bar != null)!;
   const shown = $derived.by(() => {
     const s = explorer.selected === null ? undefined : projectById.get(explorer.selected);
@@ -109,7 +112,8 @@
 <main>
   <Graph {explorer} right={panelOpen ? PANEL : 0} {textScale} />
   <button class="toggle" style:right="{panelOpen ? PANEL : 0}px" title={panelOpen ? 'hide the panel' : 'show the panel'} onclick={() => (panelOpen = !panelOpen)}>{panelOpen ? '›' : '‹'}</button>
-  <div class="bar">
+  <div class="bar" style:right="{(panelOpen ? PANEL : 0) + 40}px">
+    <a class="home" href={liveBar}>← cc-candybar live bar</a>
     <input placeholder="find a project or characteristic…" bind:value={query} />
     <button onclick={() => explorer.reset()}>reset graph</button>
     <label class="scale" title="list only projects whose bar was captured">
@@ -140,7 +144,8 @@
   .scale input[type='checkbox'] { width: auto; }
   .speed button { background: none; border: 0; color: var(--dim); font: inherit; padding: 0 4px; cursor: pointer; }
   .speed button.on { color: var(--live); }
-  .bar { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; z-index: 2; }
+  .bar { position: absolute; left: 14px; top: 12px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; z-index: 2; pointer-events: none; }
+  .bar > * { pointer-events: auto; }
   .strip { position: absolute; left: 0; bottom: 0; z-index: 3; padding: 0 14px 12px; pointer-events: none; }
   .strip.error { color: #e06c6c; font-size: 12px; }
   .retry { display: inline; text-decoration: underline; }
@@ -149,6 +154,8 @@
   .caption { display: block; margin-top: 4px; background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; pointer-events: auto; }
   .caption:hover { color: var(--fg); }
   input { width: 320px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: inherit; }
+  .home { align-self: center; color: var(--dim); text-decoration: none; white-space: nowrap; }
+  .home:hover { color: var(--fg); }
   .bar > button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
   .hits { position: absolute; top: 38px; left: 0; width: 460px; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
   .hits button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--fg); font: inherit; padding: 6px 10px; cursor: pointer; }
