@@ -131,8 +131,8 @@ import { claudeConfigDir } from "../claude-settings";
 import {
   launch,
   lifelineWarnings,
-  setLaunchLog,
   setLaunchStats,
+  setLifelineObserver,
   type LifelineWarning,
 } from "../proc/launch";
 import { decodeWire } from "./verb-error";
@@ -251,8 +251,6 @@ const DOCTOR_STORES = fileStores(stateDir());
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
 setLaunchStats(stats.launchStats);
-// A launch child's lifeline, down and running again, is said in daemon.log.
-setLaunchLog(dlog);
 // [LAW:single-enforcer] The daemon injects `dlog` into both registries so
 // cache + watcher lifecycle events land in daemon.log at the right level.
 // Non-daemon consumers (var-system tests, future library use) take the
@@ -500,6 +498,18 @@ fileEvents.subscribe((notice) => {
       return;
   }
 });
+// [LAW:no-silent-failure] Each change in whether what the daemon launches
+// dies with it is said in daemon.log, and every feed redraws, so its warning
+// comes and goes on frames too.
+setLifelineObserver((fault) => {
+  dlog(
+    fault === null ? "info" : "warn",
+    fault === null
+      ? "launch lifeline running again"
+      : `launch lifeline ${fault}; the next launch starts another`,
+  );
+  frameFeeds.wakeWhere("data", () => true);
+});
 
 // One cadence for "how often does the daemon look at its build on disk" —
 // the binary watch (exit on a changed bundle) and the update watch (does the
@@ -523,9 +533,9 @@ const binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs.statSync,
-  // The update notice's act rewrites the bundle: a restart while it runs
-  // would boot a half-written bundle and drop the act's verdict, so it waits.
-  // A success samples again at once; after a failure the next tick does.
+  // The update notice's act rewrites the bundle from a launch child, which
+  // dies with the daemon: a restart waits for it. A success samples again at
+  // once; after a failure the next tick does.
   held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog,

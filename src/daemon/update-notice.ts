@@ -447,14 +447,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         `apply-update: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
       );
       // The child inherits the daemon's environment (PATH included): no env
-      // is passed, so nothing about the command is composed from data. It
-      // rewrites the bundle the daemon runs from, so the daemon's death leaves
-      // it to finish rather than tearing the bundle half-written.
+      // is passed, so nothing about the command is composed from data.
       void launch({
         ...facts.command,
         category: "update.apply",
         timeoutMs: ACT_TIMEOUT_MS,
-        outlivesLauncher: true,
       }).then((result) => {
         if (result.ok) {
           act = IDLE;
