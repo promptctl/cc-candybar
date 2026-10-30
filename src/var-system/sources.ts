@@ -18,7 +18,6 @@ import {
   type HeldWatch,
   type Invalidation,
   type PathsWatch,
-  type WatchMove,
 } from "../daemon/cache/watchers.js";
 import { setInterval, clearInterval } from "timers";
 import {
@@ -354,9 +353,16 @@ class PathWatches {
     return entry;
   }
 
-  // Derive where the path can change and follow it: a new key acquires its
-  // watch, keeping every directory both keys name.
-  private followed(filePath: string, entry: WatchEntry): WatchMove {
+  // Derive where the path can change, follow it, and say the watch's fault.
+  // A new key acquires its watch, keeping every directory both keys name and
+  // retrying any the OS is not listening to. A kept watch's deaf directories
+  // are retried on any cause but a `failed` window: the OS refuses an
+  // immediate retry the way it refused the first.
+  private rederive(
+    filePath: string,
+    entry: WatchEntry,
+    cause: Invalidation,
+  ): void {
     entry.watch = derived(filePath);
     const { watch, move } = this.watchers.follow(
       entry.held,
@@ -364,23 +370,19 @@ class PathWatches {
       (heard) => this.heard(filePath, entry, heard),
     );
     entry.held = watch;
-    return move;
+    if (cause.kind !== "failed" && move === "kept")
+      this.watchers.listening(entry.held);
+    this.report(filePath, entry);
   }
 
-  // A window re-derives and re-reads. A kept watch's deaf directories are
-  // opened again here, at an event the OS reported, never at the `failed`
-  // window that made them deaf: the OS refuses an immediate retry the way it
-  // refused the first, and a rebound watch was just opened.
+  // A window re-derives and re-reads.
   private heard(
     filePath: string,
     entry: WatchEntry,
     heard: Invalidation,
   ): void {
     const wasLeaf = entry.watch.reached;
-    const move = this.followed(filePath, entry);
-    if (heard.kind !== "failed" && move === "kept")
-      this.watchers.listening(entry.held);
-    this.report(filePath, entry);
+    this.rederive(filePath, entry, heard);
     // Ancestor churn on the way DOWN is not a change to the path; a move
     // up from the leaf is its removal, which the subscribers must read. A
     // failed directory may have missed a change, so its window always reads.
@@ -399,9 +401,7 @@ class PathWatches {
   // reported.
   caughtUp(): void {
     for (const [filePath, entry] of this.entries) {
-      if (this.followed(filePath, entry) === "kept")
-        this.watchers.listening(entry.held);
-      this.report(filePath, entry);
+      this.rederive(filePath, entry, { kind: "unknown" });
       for (const cb of entry.subscribers.keys()) cb();
     }
   }

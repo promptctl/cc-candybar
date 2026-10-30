@@ -314,17 +314,19 @@ export class ManagedStorage {
   }
 
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
-  // held files it names re-read; an unnamed event re-reads every held file in
-  // the folder; the folder's own name or an error is judged against the disk.
-  // The OS reports a change to the watched folder itself under the folder's
-  // own name, as though it were a child, so that path is the folder joined
-  // with its own name.
+  // held files it names re-read; the folder's own name or an error is judged
+  // against the disk. An `unknown` window may hold the folder's own event (an
+  // unnamed one, or a named one the window folded), so it is judged as the
+  // folder's own name is, re-reading every held file in the folder still
+  // there. The OS reports a change to the watched folder itself under the
+  // folder's own name, as though it were a child, so that path is the folder
+  // joined with its own name.
   private invalidated(watched: Watched, invalidation: Invalidation): void {
     const { key } = watched;
     const inFolder = (f: SessionFile) => sameKey(f.storage, key);
     switch (invalidation.kind) {
       case "unknown":
-        this.sessions.changed(inFolder);
+        this.judged(watched, () => this.sessions.changed(inFolder));
         return;
       case "changed": {
         const { paths } = invalidation;

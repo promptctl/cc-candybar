@@ -358,7 +358,10 @@ describe("WatcherRegistry", () => {
     }
   });
 
-  test("a name-filtered directory hears its own name when the folder at its path is replaced, and not after a chmod", async () => {
+  // The handle moves onto the folder made again, so a later event naming the
+  // directory (macOS: a child came or went) is judged against that folder and
+  // passes no filter; every slot on it re-reads what went unheard.
+  test("a name-filtered directory hears its own name when the folder at its path is replaced, moves onto the new folder, and not after a chmod", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-self-"));
     const conf = path.join(root, "conf");
     fs.mkdirSync(conf);
@@ -374,9 +377,16 @@ describe("WatcherRegistry", () => {
       fs.mkdirSync(conf);
       listener("rename", "conf");
       await until(() => seen.length === 1, "the replacement's invalidation");
-      expect(seen).toEqual([
-        { kind: "changed", paths: new Set([path.join(conf, "conf")]) },
-      ]);
+      expect(seen).toEqual([{ kind: "unknown" }]);
+      expect(fake.opensOf(conf)).toHaveLength(2);
+      expect(fake.opensOf(conf)[0]!.closed).toBe(true);
+      fake.opensOf(conf)[1]!.listener("change", "conf");
+      fake.opensOf(conf)[1]!.listener("rename", "config.json5");
+      await until(() => seen.length === 2, "the watched name's invalidation");
+      expect(seen[1]).toEqual({
+        kind: "changed",
+        paths: new Set([path.join(conf, "config.json5")]),
+      });
       reg.closeAll();
     } finally {
       fake.restore();
@@ -532,6 +542,9 @@ describe("WatcherRegistry", () => {
       expect(fake.opensOf("/v")).toHaveLength(1);
       expect(fake.opensOf("/v")[0]!.closed).toBe(false);
       expect(watch.handle.deaf).toEqual([]);
+      // The other slot hears the recovery, so the fault it reported clears.
+      await until(() => other.length === 2, "the other slot's recovery window");
+      expect(other[1]).toEqual({ kind: "unknown" });
       expect(counters).toEqual({
         ...zeroCounters(),
         watchersOpened: 2,
@@ -539,6 +552,25 @@ describe("WatcherRegistry", () => {
         dirWatchesOpened: 3,
         dirWatchesClosed: 1,
       });
+      reg.closeAll();
+    } finally {
+      fake.restore();
+    }
+  });
+
+  // Every acquire names its directories as they are now: a holder joining a
+  // slot retries its deaf directory as one opening a slot does.
+  test("acquiring a slot another holder holds reopens its deaf directory", () => {
+    const fake = standIn();
+    try {
+      const reg = new WatcherRegistry({ logger: () => {} });
+      const first = reg.acquire("k", { dirs: [{ path: "/w" }] }, () => {});
+      fake.opensOf("/w")[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
+      expect(first.deaf).toHaveLength(1);
+      const second = reg.acquire("k", { dirs: [{ path: "/w" }] }, () => {});
+      expect(fake.opensOf("/w")).toHaveLength(2);
+      expect(second.deaf).toEqual([]);
+      expect(first.deaf).toEqual([]);
       reg.closeAll();
     } finally {
       fake.restore();
