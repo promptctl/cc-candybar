@@ -17,10 +17,12 @@
 // exception is a group the launcher was refused to signal: `signal-refused`).
 // `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
 // outliving its caller — the daemon-handoff escape hatch, used only by the
-// daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
-// ([LAW:no-mode-explosion]); the two lifetimes are two functions with two
-// return contracts, so an unwaited helper that survives a render frame is
-// unrepresentable here rather than forbidden by convention.
+// daemon-acquisition path. `launchJobSync` is the *job*: it outlives its
+// launcher too, but its output and its verdict are files it owns, so any
+// process can read how it ended. There is no `detached: boolean` flag on
+// `LaunchOpts` ([LAW:no-mode-explosion]); the three lifetimes are three
+// functions with three return contracts, so an unwaited helper that survives a
+// render frame is unrepresentable here rather than forbidden by convention.
 //
 // A `launch` child leads its own process group, so terminating it (the timeout,
 // or the caller's `signal`) reaches everything it spawned: `sh -c "sleep 5;
@@ -32,7 +34,13 @@
 // the process that launched it ends.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import type { Socket } from "node:net";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
@@ -108,8 +116,9 @@ export const LAUNCH_CATEGORIES = [
   "install.open",
   "daemon-spawn",
   // Process start-time fingerprint (`ps -o lstart=`) for socket-lease liveness
-  // (process-fingerprint.ts). Spawned only at daemon start + EADDRINUSE
-  // arbitration — never per render — so it needs no rate limit.
+  // (process-fingerprint.ts). Spawned only at daemon start, EADDRINUSE
+  // arbitration, and once per update act a daemon reads (src/daemon/update-act.ts)
+  // — never per render — so it needs no rate limit.
   "process-fingerprint",
   // The memory backstop's post-mortem memory attribution (memory-report.ts):
   // `footprint`/`vmmap` on the death path, once per breach, never per render.
@@ -119,8 +128,8 @@ export const LAUNCH_CATEGORIES = [
   // each scheduled only once the last has answered, so no rate limit.
   "limits.charge",
   // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
-  // over a published install). One click, one long-running child; the
-  // notice's own running/failed state serialises clicks, so no rate limit.
+  // over a published install), launched as a job. One click, one long-running
+  // child; the act's record admits one at a time, so no rate limit.
   "update.apply",
   // `cc-candybar plugin install`'s clone of a plugin's repo
   // (src/plugin-install.ts): three git calls per install, in the CLI's own
@@ -799,4 +808,180 @@ function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
   }
   child.unref();
   return { ok: true, stdout: "", stderr: "", exitCode: null };
+}
+
+// --- the job ---
+//
+// [LAW:types-are-the-program] A job outlives the process that launched it and
+// still has an answer to "how did it end": its stdout, its stderr and its
+// verdict are files, so a launcher that dies costs it nothing (no pipe leads
+// back to the launcher for a write to fail on with SIGPIPE), and whoever reads
+// the files afterwards learns the end. A `/bin/sh` wraps the program to write
+// the verdict, because the program's parent is the one process that hears its
+// exit, and that parent must outlive the launcher.
+//
+// The sh waits on a start gate: a line on stdin, from a pipe only the
+// launcher holds. The launcher records the job first and then opens the gate,
+// so a launcher that dies before recording it gives the sh EOF instead of a
+// line, and the program never runs. Whatever a record says about a job, the
+// program ran only if that record existed first.
+//
+// The verdict is claimed, never overwritten: each writer stages its own file
+// and links it to the status path, and the link fails if the path exists. The
+// first verdict wins, so a deadline that ends the job cannot overwrite an exit
+// that landed first, nor an exit a deadline that landed first.
+
+// [LAW:one-source-of-truth] How a job ended, and the one spelling of it on
+// disk: the sh writes `exit <code>`, and an end the launcher imposes writes
+// `timeout`.
+export type JobEnd =
+  | { readonly kind: "exit"; readonly code: number }
+  | { readonly kind: "timeout" };
+
+const formatJobEnd = (end: JobEnd): string =>
+  end.kind === "exit" ? `exit ${end.code}` : "timeout";
+
+// The positional args are `<stdout> <stderr> <status> <program> <args…>`, so
+// nothing about the program is composed into the script.
+const JOB_SCRIPT =
+  `out=$1 err=$2 status=$3; shift 3; ` +
+  `read go || exit 0; ` +
+  `"$@" >"$out" 2>"$err" </dev/null; ` +
+  `echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; ` +
+  `rm -f "$status.$$"`;
+
+export interface JobFiles {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly status: string;
+}
+
+export type JobLaunch =
+  | {
+      readonly ok: true;
+      // Leads the job's process group, as every launched child does.
+      readonly pid: number;
+      // Opens the start gate: the program runs.
+      release(): void;
+      // Closes the gate unopened: the sh exits, and the program never runs.
+      withdraw(): void;
+    }
+  | { readonly ok: false; readonly error: string };
+
+// [LAW:single-enforcer] The one launch with the job's lifetime. Detached, so
+// it leads its own group, which nothing aimed at the launcher reaches; never
+// guarded by the lifeline; unref'd, so it never holds the launcher open.
+export function launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch {
+  recordStart(opts.category);
+  const t0 = Date.now();
+  statsHandle?.onStart(opts.category);
+  let child: ChildProcess;
+  try {
+    child = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        JOB_SCRIPT,
+        "sh",
+        files.stdout,
+        files.stderr,
+        files.status,
+        opts.bin,
+        ...(opts.args ?? []),
+      ],
+      {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"],
+      },
+    );
+  } catch (err) {
+    statsHandle?.onEnd(opts.category, Date.now() - t0);
+    return { ok: false, error: spawnErrorText(err, opts.cwd) };
+  }
+  statsHandle?.onEnd(opts.category, Date.now() - t0);
+  // An async spawn failure has no pid; its `error` needs a listener or Node
+  // crashes the launcher, and the missing pid already says it failed.
+  child.once("error", () => {});
+  const pid = child.pid;
+  const gate = child.stdin as Socket;
+  // [LAW:no-silent-failure] exception: a write to a sh that already died
+  // fails EPIPE, and that death is said where every reader looks, in the job's
+  // missing verdict, which reads as lost.
+  gate.on("error", () => {});
+  if (pid === undefined) {
+    gate.destroy();
+    return {
+      ok: false,
+      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`,
+    };
+  }
+  child.unref();
+  gate.unref();
+  return {
+    ok: true,
+    pid,
+    release: () => gate.end("go\n"),
+    withdraw: () => gate.end(),
+  };
+}
+
+// The job's verdict, or null while it has none. [LAW:no-silent-failure] A
+// status this module did not write is an error, never an end.
+export function readJobEnd(status: string): JobEnd | null {
+  let text: string;
+  try {
+    text = readFileSync(status, "utf8").trim();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+  const exit = /^exit (\d+)$/.exec(text);
+  if (exit) return { kind: "exit", code: Number(exit[1]) };
+  if (text === "timeout") return { kind: "timeout" };
+  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text)}`);
+}
+
+// Whether anything of the job's process group is still running. The group
+// outlives its leader while the program runs, so a sh killed on its own does
+// not read as an ended job. A job runs as its launcher's user, so a group the
+// launcher may not signal (EPERM) is someone else's under a recycled id.
+export function jobGroupAlive(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ESRCH" || code === "EPERM") return false;
+    throw err;
+  }
+}
+
+// Ends a job's group with the timeout's own escalation, and gives it a verdict
+// of the launcher's unless its own landed first: the first verdict stands, and
+// a group that outlives its verdict (a child the program left) is ended all the
+// same. True when the launcher's verdict is the one that stands. A status
+// whose directory is gone belongs to a job whose files were removed once it
+// had ended, so there is nothing left to end.
+export function endJob(pid: number, status: string, end: JobEnd): boolean {
+  const staged = `${status}.${process.pid}`;
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}\n`);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+  let stands = true;
+  try {
+    linkSync(staged, status);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    stands = false;
+  } finally {
+    rmSync(staged, { force: true });
+  }
+  signalGroup(pid, "SIGTERM");
+  setTimeout(() => signalGroup(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  return stands;
 }

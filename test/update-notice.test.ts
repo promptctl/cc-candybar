@@ -14,9 +14,9 @@ import {
   UPDATE_DISMISSED_KEY,
   UPDATE_NOTICE_FIELD,
   UPDATE_NOTICE_SESSION_KEY,
-  type ActState,
   type Update,
 } from "../src/daemon/update-notice";
+import type { ActState } from "../src/daemon/update-act";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
 import type { Currency } from "../src/install/currency";
 import { effectsOf as decode } from "./helpers/click";
@@ -169,7 +169,7 @@ describe("updateNotice", () => {
   });
 
   test("while the act runs its affordance is a busy label with no apply click", () => {
-    const [ch] = updateNotice(SOURCE, { kind: "running" }, ctx());
+    const [ch] = updateNotice(SOURCE, { kind: "running", act: 1 }, ctx());
     expect(ch!.lines[0][1]!.text).toBe("[rebuilding…]");
     const verbs = ch!.lines
       .flat()
@@ -179,6 +179,7 @@ describe("updateNotice", () => {
 
   const FAILED: ActState = {
     kind: "failed",
+    act: 1,
     identity: updateIdentity(SOURCE),
     reason: "non-zero (exit 1): boom",
   };

@@ -40,6 +40,7 @@ import {
   readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { dlog } from "./log";
+import { actsDir } from "./update-act";
 import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
 import { makeBinaryWatch } from "./binary-watch";
 import { LANE_FRAMES } from "./lane-frames";
@@ -533,9 +534,9 @@ const binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs.statSync,
-  // The update notice's act rewrites the bundle from a launch child, which
-  // dies with the daemon: a restart waits for it. A success samples again at
-  // once; after a failure the next tick does.
+  // The update notice's act rewrites the bundle, and a restart in the middle
+  // would start the next daemon from a half-written one: a restart waits for
+  // it. A success samples again at once; after a failure the next tick does.
   held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog,
@@ -549,6 +550,9 @@ const binaryWatch = makeBinaryWatch({
 // its own, folded between the error and warning channels.
 const updateWatch = makeUpdateWatch({
   entryUrl: import.meta.url,
+  // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
+  // this daemon runs from.
+  actsDir: actsDir(stateDir(), DAEMON_BUNDLE),
   intervalMs: BIN_CHECK_INTERVAL_MS,
   releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
   registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
@@ -2389,6 +2393,7 @@ function drawRender(
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
     { about: "load", text: entry.lastError },
+    { about: "update-act", text: updateWatch.error() },
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
