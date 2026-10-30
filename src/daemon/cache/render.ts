@@ -256,7 +256,6 @@ export type ReloadedEntry = Readonly<
     | "configFile"
     | "configLayers"
     | "repos"
-    | "failedFile"
     | "lastError"
     | "lastWarning"
   >
@@ -280,6 +279,9 @@ export type ReloadedEntry = Readonly<
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
+  // [LAW:no-silent-failure] The placements of undeclared segments the load
+  // dropped to draw the rest of the bar, one error per file that wrote one.
+  readonly dropped: readonly ConfigError[];
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
   // it was compiled from): states carrying one key carry one compile.
   readonly compileKey: string;
@@ -339,7 +341,7 @@ export interface ConfigChain {
 // they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
 // session — which it dropped, and how long the load took: a drop is also on
-// the strip, but the rest is said nowhere else. The daemon's own sink —
+// the bar's message, but the rest is said nowhere else. The daemon's own sink —
 // buildRenderState is shared with the demo.
 export function pluginLoadLine(
   layers: readonly string[],
@@ -488,9 +490,8 @@ export interface CacheEntry {
   // The file durable clicks write (resolveDslConfig's home).
   configHome: string;
   // What the session's repositories contribute, as the last load's answers
-  // decided it: the strip asks for each one awaiting.
+  // decided it: the bar asks for each one awaiting.
   repos: RepoGate;
-  failedFile: string | null;
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
@@ -591,7 +592,7 @@ function cacheKey(
 // does this preset's layout live" (src/config/presets.ts), projected onto
 // the raw shape rather than re-derived here.
 // [LAW:one-source-of-truth] `config` must be the MERGED tree, before
-// validateConfig: edit chrome materializes an explicit `presets.<n>.root`
+// validateRenderable: edit chrome materializes an explicit `presets.<n>.root`
 // for every preset, so asked of the validated tree presetRoot() never
 // reports `root` and a file customizing a root-staging preset reads as
 // pristine.
@@ -685,8 +686,8 @@ function watchTargetsFor(entry: CacheEntry): {
   };
 }
 
-// The warning channel is ONE string (composeWithDiagnostics splits it into
-// rows); absent advisories are nulls in the list, an empty list is null.
+// The load's warning is ONE message (the bar's diagnostics show it whole);
+// absent advisories are nulls in the list, an empty list is null.
 function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
   return parts.filter(Boolean).join("\n") || null;
 }
@@ -719,10 +720,6 @@ export type LoadOutcome = {
       // told apart from a config the load refused by this, never by its
       // message.
       readonly cause: unknown;
-      // The layer whose load threw — the file the strip links to. Null when
-      // the throw was not a file's (the bundled default by program
-      // invariant never is).
-      readonly failedFile: string | null;
     }
 );
 
@@ -734,7 +731,6 @@ export type Settled = LoadOutcome["kind"];
 interface Failed {
   readonly kind: "failed";
   readonly cause: unknown;
-  readonly failedFile: string | null;
   readonly warnings: readonly string[];
 }
 
@@ -770,11 +766,6 @@ export type Attempt =
 
 const thrown = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
-
-// Past the chain, a failure is the one file's when there is one, and no
-// file's when several merged into what failed.
-const blamed = (layers: LoadedChain["layers"]): string | null =>
-  layers.length === 1 ? layers[0]!.path : null;
 
 // [LAW:types-are-the-program] The key covers the whole of a load's inputs:
 // each projection names every field of what it projects (`Projection`), and
@@ -822,6 +813,10 @@ function loadKey(inputs: LoadInputs): string {
         unreached: loaded.installed.unreached,
       } satisfies Projection<LoadedChain["installed"]>,
       config: loaded.config,
+      // [LAW:one-source-of-truth] Keyed by message: unlike a layer's own
+      // diagnostics the drops ride the state, positions and all, so a state
+      // kept across an edit that moved a drop would name the old line.
+      dropped: loaded.dropped.map((e) => e.message),
     } satisfies Projection<LoadedChain>,
     sources: [...inputs.sources]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -859,20 +854,13 @@ export function resolveLoad(
   storage: PluginStorage,
 ): ResolvedLoad | Failed {
   const warnings: string[] = [];
-  let failing: string | null = null;
   try {
     const loaded = loadConfigChain(
       chain.layers,
       DEFAULT_DSL_CONFIG,
-      {
-        entered: (path) => {
-          failing = path;
-        },
-        warned: (w) => warnings.push(...w),
-      },
+      { warned: (w) => warnings.push(...w) },
       { repo: chain.repo, cwd },
     );
-    failing = blamed(loaded.layers);
     const inputs = {
       cwd,
       chain,
@@ -882,7 +870,7 @@ export function resolveLoad(
     return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
   } catch (err) {
     if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return { kind: "failed", cause: err, failedFile: failing, warnings };
+    return { kind: "failed", cause: err, warnings };
   }
 }
 
@@ -894,11 +882,11 @@ export function resolveLoad(
 // caller keeps its prior state and shows both.
 export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { cwd, chain, loaded } = load;
-  // [LAW:dataflow-not-control-flow][LAW:single-enforcer] `validateConfig`
+  // [LAW:dataflow-not-control-flow][LAW:single-enforcer] `validateRenderable`
   // (inside the resolve) is the sole producer of `ValidatedConfig`, and the
   // renderer accepts only `ValidatedConfig`, so the compiler enforces the
   // chain — there is no "skip validate" path that typechecks downstream.
-  const { layers, config, installed } = loaded;
+  const { layers, config, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
@@ -963,12 +951,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return {
-      kind: "failed",
-      cause: err,
-      failedFile: blamed(layers),
-      warnings,
-    };
+    return { kind: "failed", cause: err, warnings };
   }
 
   // [LAW:one-source-of-truth] basePalette is NOT frozen here. One cache entry
@@ -980,6 +963,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     kind: "built",
     state: {
       config,
+      dropped,
       compileKey: registration.compileKey,
       loadKey: load.key,
       buildWarnings: warnings,
@@ -1032,7 +1016,7 @@ export interface LoadFrame {
 // reader (the render cache, the doctor, the demo). The warning is the
 // resolution's advisories, the resolve's, then the attempt's: a built or kept
 // state's own build warnings, or what a failed attempt earned before it threw,
-// so warnings earned before a failure reach the strip beside the error, and a
+// so warnings earned before a failure reach the bar beside the error, and a
 // kept state never drops a line its build earned.
 export function settle(
   frame: LoadFrame,
@@ -1065,7 +1049,6 @@ export function settle(
         state: null,
         error: thrown(attempt.cause),
         cause: attempt.cause,
-        failedFile: attempt.failedFile,
       };
   }
 }
@@ -1139,8 +1122,7 @@ export function loadFromDisk(
   // registration, palette resolution — is the `failed` arm; the caller's
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
-  // plus the error strip (composeWithDiagnostics reads `lastError` and
-  // `lastWarning`).
+  // and its diagnostics count `lastError` and `lastWarning`.
   return loadChain(
     { layers: chain.layers, home: chain.home, repos, advisories, started },
     cwd,
@@ -1153,7 +1135,7 @@ export function loadFromDisk(
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
 // bundled default. The render cache seeds an entry with it, and
 // `cc-candybar doctor`, which has no cache, reads the same bar from it. The
-// seed's own advisories go nowhere: the strip already carries the failed
+// seed's own advisories go nowhere: the bar already carries the failed
 // load's, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
@@ -1586,8 +1568,8 @@ export class RenderCache<
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
-    // rides the diagnostic strip above it, loud, and the settings menu is the
-    // door back to the file. The default validates by program invariant
+    // is counted by the indicator beside its settings door, loud, and the
+    // settings menu is the door back to the file. The default validates by program invariant
     // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
@@ -1597,7 +1579,6 @@ export class RenderCache<
       configLayers: [],
       configHome: "",
       repos: loaded.repos,
-      failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
       state:
@@ -2187,7 +2168,6 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    entry.failedFile = loaded.error === null ? null : loaded.failedFile;
     const { targets, unresolved } = watchTargetsFor(entry);
     // [LAW:one-source-of-truth] The key names the target set, so the
     // registry's `follow` rebinds exactly when the set changed.

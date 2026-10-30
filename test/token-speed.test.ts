@@ -28,10 +28,10 @@ import type { ClientHints } from "../src/daemon/protocol";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { ABSENT, ok } from "../src/utils/outcome";
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   mergeWithDefault,
   parseDslConfig,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";

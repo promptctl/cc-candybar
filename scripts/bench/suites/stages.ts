@@ -151,7 +151,7 @@ export const STAGES: readonly Benchmark[] = [
           loadConfigChain(
             [],
             DEFAULT_DSL_CONFIG,
-            { entered: () => {}, warned: () => {} },
+            { warned: () => {} },
             { repo: null, cwd },
           );
         });

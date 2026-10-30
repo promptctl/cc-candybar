@@ -53,7 +53,7 @@ describe("drive-bar", () => {
     expect(fs.readFileSync(original, "utf8")).toBe(before);
   });
 
-  test("a click the daemon refuses comes back with the strip that shows it", async () => {
+  test("a click the daemon refuses comes back with the indicator that counts it", async () => {
     bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
     await bar.render();
     await bar.click(DOOR_GLYPH);

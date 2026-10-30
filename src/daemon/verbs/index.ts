@@ -108,8 +108,6 @@ import {
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
   VERB_UNDO,
   VERB_DOCTOR_RUN,
@@ -351,17 +349,6 @@ const openVscode: VerbHandler = (value, ctx) =>
     'open -a "Visual Studio Code"',
     ctx.dlog,
   );
-
-// Click on the ⚠ in the bar copies the parse error to clipboard.
-const showConfigError: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
-
-// [LAW:one-type-per-behavior] Warnings (advisory diagnostics — e.g. config
-// extension collision) and errors (load-fatal) are surfaced as distinct
-// icons in the bar so the operator can tell them apart at a glance. The
-// click behavior is the same — copy the message — but the diagnostic
-// categories are kept in separate channels through the render pipeline.
-const showConfigWarning: VerbHandler = (value, ctx) =>
-  pbcopy(oneArg(value), ctx);
 
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
@@ -879,7 +866,7 @@ const save: VerbHandler = (value, ctx) => {
   const placements = placementDrafts(config, pick);
   // Nothing unsaved is the save's own postcondition already holding — a second
   // click on a bar drawn before the first save released its picks — so it is
-  // a recorded no-op, never a failure on the diagnostic strip.
+  // a recorded no-op, never a failure the bar reports.
   if (drafts.length + placements.length === 0) {
     ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
     return;
@@ -1673,8 +1660,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_REDO, redo],
   [VERB_BACK, back],
   [VERB_REWIND, rewind],
-  [VERB_SHOW_CONFIG_ERROR, showConfigError],
-  [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
   [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],

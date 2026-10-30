@@ -19,7 +19,7 @@
 // three call, so a synthesized global menu and a hand-authored group are
 // indistinguishable to the render walk.
 //
-// WHY THIS RUNS FROM validateConfig, BEFORE synthesizeEditChrome — the two
+// WHY THIS RUNS FROM validateRenderable, BEFORE synthesizeEditChrome — the two
 // passes both rewrite every preset root, so their order is a real decision:
 //   • It cannot run at parse time (loader/*.ts) like group/menu synthesis,
 //     because the tree it must splice into only exists after merge: a file's
@@ -76,7 +76,12 @@ import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
-import { SETTINGS_ANCHOR, SETTINGS_OPEN, SETTINGS_REF } from "./door.js";
+import {
+  DIAGNOSTICS_VIEWING,
+  SETTINGS_ANCHOR,
+  SETTINGS_OPEN,
+  SETTINGS_REF,
+} from "./door.js";
 import {
   SETTINGS,
   type SettingName,
@@ -405,6 +410,17 @@ const laneReadout = (lane: Lane): string => {
 // discriminator. Both forms are padded to the wider of `polled` and the
 // fastest pace, MOVING_FPS, so a bar starting, stopping or losing its lane
 // moves no cell after it.
+// [LAW:single-enforcer] Every error and warning a draw owes its reader is one
+// indicator, a second click region in the door's own cell, so it sits beside
+// the door wherever an author put it and no layout can leave it out. It reads
+// the draw's `diagnostics` projection, the same list the viewer pages
+// (src/render/diagnostics.ts); its click opens the viewer on the first
+// message, by that message's key. Nothing to show is an empty label, which draws nothing.
+const DIAGNOSTICS_INDICATOR =
+  `{{ if .diagnostics.label }} ` +
+  `{{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}` +
+  `{{ end }}`;
+
 const FPS_SEG = `${SETTINGS_NS}fps`;
 export const POLLED = "polled";
 const FPS_UNIT = " fps";
@@ -895,9 +911,15 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   const artifacts: MenuArtifacts = {
     variables: {
       [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+      [DIAGNOSTICS_VIEWING]: {
+        kind: "state",
+        key: DIAGNOSTICS_VIEWING,
+        default: "0",
+      },
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
       [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       ...TOOLBAR.actions,
@@ -938,7 +960,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
           `{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}` +
-          `{{ else }}{{ $door }}{{ end }}`,
+          `{{ else }}{{ $door }}{{ end }}` +
+          DIAGNOSTICS_INDICATOR,
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -1141,7 +1164,7 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
-// validateConfig after cross-ref/cycle checks pass and before edit chrome.
+// validateRenderable after cross-ref/cycle checks pass and before edit chrome.
 // Every declared preset — the floor `default` included — gets an explicit
 // `presets[name].root` carrying its anchored, expanded tree; `config.root`
 // itself is left untouched, exactly as synthesizeEditChrome leaves it, because

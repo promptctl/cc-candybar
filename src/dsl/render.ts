@@ -1130,8 +1130,8 @@ export interface RenderObservers {
   //
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
-  // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a globals rule, a gate or a
+  // callers listen — the daemon records each for the bar's diagnostics
+  // (src/daemon/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
   // variable that cannot refresh, so each is visible whether or not anyone is
   // looking at a bar. Check lists
   // a band-floor shortfall only where its own renders open a trigger — one open

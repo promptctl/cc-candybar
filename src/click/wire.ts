@@ -43,8 +43,6 @@ export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-export const VERB_SHOW_CONFIG_ERROR = "show-config-error";
-export const VERB_SHOW_CONFIG_WARNING = "show-config-warning";
 // [LAW:effects-at-boundaries] A daemon-global config override: the verb writes
 // the override path (or clears it with an empty value); the render pipeline
 // reads it at the cache-lookup boundary. Clicking a different config is a

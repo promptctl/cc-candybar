@@ -1,10 +1,10 @@
 import { TEST_SIGNER } from "./helpers/link-signer";
 import v8 from "node:v8";
 import vm from "node:vm";
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   loadConfig,
   NO_PROJECT,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";

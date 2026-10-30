@@ -107,7 +107,7 @@ describe("termWidth probe", () => {
       probe({ ...HEALTHY_FACTS, width: inSession(null) }),
     ).toEqual({
       ok: false,
-      reason: `session s1's statusline client measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+      reason: `session s1's statusline client measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
     });
   });
 

@@ -25,6 +25,14 @@ export interface ValidateCtx {
   // walk synthesis: the walk owns positions, the synthesis owns cross-section
   // emission.
   readonly groups: GroupSugarDecl[];
+  // Placements of a segment nothing declares: each is an error, but one the
+  // loader can draw past by dropping that cell (loader/unplaced.ts), so it is
+  // kept apart from the issues that refuse the config.
+  readonly unplaced: ConfigIssue[];
+  // Those of them the tree that renders inherits from a layer below, by name,
+  // each with its issue under that tree: the loader reports each against the
+  // file that wrote it.
+  readonly inherited: Array<ConfigIssue & { readonly name: string }>;
 }
 
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };

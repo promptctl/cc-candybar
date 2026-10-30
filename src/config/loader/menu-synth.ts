@@ -12,7 +12,7 @@
 //
 // Two halves, run where each one's facts exist. `checkMenuDecls` runs in
 // `parseDslConfig` over what one file wrote: the reservation and every call's
-// shape. `synthesizePlacementMenus` runs in `validateConfig` over the trees
+// shape. `synthesizePlacementMenus` runs in `validateRenderable` over the trees
 // that render, because a menu's key is its PLACEMENT's
 // (brandon-segment-settings-i4n).
 //
@@ -190,7 +190,7 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
   // key the settings menu's picker accordion mints, and a shared key joining an
   // accordion is the mechanism BY DESIGN, so the join was silent (brandon-menus-du8).
   // Gated here, at load, because this pass sees exactly the AUTHORED menus: the
-  // settings menu synthesizes its own artifacts in `validateConfig`, after this
+  // settings menu synthesizes its own artifacts in `validateRenderable`, after this
   // pass has run, so its own reserved key is never asked to pass its own gate.
   // The render side re-reads these options but re-checks nothing — a config that
   // loaded holds no reserved key [LAW:parse-dont-validate].
@@ -385,7 +385,7 @@ function identityIssue(apply: string): string | undefined {
 // `deriveActionValidators(config.actions)` derives the click gates through
 // the ONE existing path [LAW:single-enforcer].
 //
-// Runs from validateConfig once cross-ref has proved every placement names a
+// Runs from validateRenderable once cross-ref has proved every placement names a
 // declared segment and every id is unique in its tree; the issues it finds
 // are key collisions only a merged, placed config can have.
 export function synthesizePlacementMenus(

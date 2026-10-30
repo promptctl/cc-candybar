@@ -138,7 +138,7 @@ The complete shape of a `shell` variable:
 | `kind` | `"shell"` |
 | `command` | the command line, run by `/bin/sh -c` |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
-| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes; a watch the OS refuses is reported like a key that throws, below), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's warning strip says it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
+| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes; a watch the OS refuses is reported like a key that throws, below), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A source that reads no session's value runs once for its directory, shared by
@@ -981,11 +981,12 @@ declares — drops **that plugin only**: the rest of your config renders, a
 template reading its data, a source or a variable, calling its helper or
 binding its action shows `⚠` naming the drop — a segment of it you placed or
 retuned stands in as that cell — a `run` of yours that refreshes one of its
-sources still runs, with nothing of it to refresh, the bar's diagnostic strip
-names the definition and the reason, and `check` fails. An INSTALLED plugin
+sources still runs, with nothing of it to refresh, the bar's diagnostics
+indicator offers a message naming the definition and the reason, and `check`
+fails. An INSTALLED plugin
 that does not load is your config's problem only where it reaches it (a
 placement, a retune, a helper call, an action binding or a `refreshes`): one
-nothing reaches is neither on the strip nor in `check`. A
+nothing reaches is neither among the bar's messages nor in `check`. A
 listed definition is a folder's `plugin.json5`, the folder naming the plugin.
 A definition is watched like your config file, so fixing or installing it
 reloads the bar:

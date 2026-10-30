@@ -27,6 +27,8 @@ import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 
+import { viewerLink } from "./helpers/diagnostics-viewer";
+
 jest.setTimeout(30_000);
 
 const SESSION = "sources-e2e-0001";
@@ -212,7 +214,15 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const refused = await sendClick(sockPath, forged);
     expect(refused).toMatchObject({ ok: false });
     expect((await stats()).runs).toMatchObject({ started: before.runs.started, refused: before.runs.refused + 1 });
-    await renderUntil((b) => b.includes("signature does not match"), "the forged link's refusal");
+    // The refusal is the bar's one message: the indicator counts it, and the
+    // viewer it opens shows it.
+    const bar = await renderUntil((b) => b.includes("⚠ 1"), "the forged link's refusal");
+    const open = viewerLink(bar, "open")!;
+    expect((await sendClick(sockPath, open.url)).ok).toBe(true);
+    const shown = stripAnsi(await renderRaw());
+    expect(shown).toContain("signature does not match");
+    expect(shown).not.toContain("/h/forged");
+    expect((await sendClick(sockPath, viewerLink(await renderRaw(), "✕")!.url)).ok).toBe(true);
     expect(await render()).not.toContain("/h/forged");
   });
 });

@@ -19,7 +19,7 @@
 // [LAW:no-silent-failure] A click on text the bar did not draw stops the run,
 // naming what it did draw. A click the daemon refuses is a fact about the bar,
 // not a failure of the harness: the refusal is returned beside the next render,
-// which shows it in the red strip exactly as a user would see it. A slash
+// which counts it with the indicator beside the door, as a user would see it. A slash
 // command is refused by the daemon itself: the session reports a tmux pane (so
 // the bar draws its slash controls, as it does for a session inside tmux) on a
 // socket in the harness's scratch dir, where no tmux server listens. A click
@@ -51,7 +51,7 @@ import {
 
 const SESSION_ID = BAR_SESSION_ID;
 const REPLY_BUDGET_MS = 10_000;
-/** The terminal the client reports: columns, and rows (which cap the diagnostic strip). */
+/** The terminal the client reports: columns, and rows. */
 export interface TerminalSize {
   readonly width: number;
   readonly rows: number;

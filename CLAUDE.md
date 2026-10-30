@@ -35,7 +35,7 @@ How they show up here:
 - **One render path.** The daemon, the check command, the demo and the tests all draw through the same functions. There is no parallel renderer and no fallback computation.
 - **One store.** The variable store (MobX) is the single source of truth for derived values. Don't add a cache beside it.
 - **Variability lives in data.** The payload carries every value a template reads. Segments show and hide by `when` over values, not by branches in code.
-- **Errors are loud.** A bad config draws a red or amber strip above the bar, and nothing a config authors can make a render throw. Don't add a silent default that hides a broken state.
+- **Errors are loud.** Every error and warning shows as a `⚠ N` indicator beside the settings door, red or amber, whose click opens a viewer with the message in full. Nothing a config authors can make a render throw. Don't add a silent default that hides a broken state.
 
 ## Memory
 

@@ -33,7 +33,8 @@ import {
 
 import { CHECK_TODAY, checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { unauthored, validateConfig } from "../src/config/dsl-loader";
+import { validateConfig } from "../test/helpers/parse-and-validate";
+import { unauthored } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";

@@ -11,12 +11,12 @@
 //     declaration under a bundled name is a delta), by-name merge of root's
 //     rows (a whole tree replaces). Pure function.
 //
-//   validateConfig (DslConfig → ValidatedConfig)
+//   validateRenderable (DslConfig → ValidatedConfig)
 //     Cross-references + cycle detection on the merged shape. Sole producer
 //     of ValidatedConfig. Throws ConfigError on cross-ref / cycle problems.
 //
 // loadConfig (path|null → DslConfig) wires parse+merge for the daemon's
-// production path. validateConfig finishes the chain.
+// production path. validateRenderable finishes the chain.
 //
 // [LAW:dataflow-not-control-flow] Validation passes accumulate issues into
 // a list; consumers see every problem at once (compiler-style).
@@ -37,6 +37,7 @@ import {
   ConfigError,
   editabilityNotice,
   findKeyLine,
+  DroppedPlacements,
   type ConfigIssue,
 } from "./loader/diagnostics.js";
 import {
@@ -77,6 +78,8 @@ import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
+  authoredPlacement,
+  unplacedMessage,
   validateCrossReferences,
   validateDeclarations,
 } from "./loader/cross-ref.js";
@@ -95,6 +98,7 @@ import {
   type PluginLayer,
 } from "./loader/plugins.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
+import { withoutUnplaced } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
@@ -145,7 +149,7 @@ export type { DroppedPlugin } from "./loader/plugins.js";
  * resolves explicitly by importing DEFAULT_DSL_CONFIG themselves.
  *
  * [LAW:one-source-of-truth] The source and the parsed raw shape are returned
- * alongside the config, so the whole result is validateConfig's input —
+ * alongside the config, so the whole result is validateRenderable's input —
  * cross-ref diagnostics walk the fragments the file wrote and quote its lines
  * — and the caller can ask the raw shape what the file itself AUTHORS (which
  * preset roots it declares; candybar-config-dqe's `preset.customized`), all
@@ -158,7 +162,7 @@ export type { DroppedPlugin } from "./loader/plugins.js";
  * fails instead, the thrown ConfigError carries them.
  *
  * Throws ConfigError on JSON5 syntax / structural / per-record validation
- * failures. Cross-references and cycles are validateConfig()'s job.
+ * failures. Cross-references and cycles are validateRenderable()'s job.
  *
  * [LAW:dataflow-not-control-flow] One function, one branch, same operations
  * each call.
@@ -339,8 +343,8 @@ function statKey(file: string): string {
  *
  * `read` is the one content read of each file — a writer proving the text it
  * is about to write passes that text for its own layer. `trace` hears each
- * path as its load starts and each layer's advisories before its validation
- * runs, so a caller still holds both when a layer throws.
+ * layer's advisories before its validation runs, so a caller still holds them
+ * when a layer throws; the throw itself names the file it is blamed on.
  *
  * [LAW:dataflow-not-control-flow] One fold; an empty chain validates the
  * bundled default through the same `loadConfig(null)` every no-file load
@@ -378,7 +382,6 @@ export function loadConfigChain(
   const base = plugins.config;
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
   for (const path of paths) {
-    trace.entered(path);
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
@@ -423,7 +426,7 @@ export function loadConfigChain(
       layers,
       base,
       installed,
-      config: validateConfig(
+      ...validateRenderable(
         loadConfig(null, base, NO_PROJECT),
         "<default>",
         allowedPalettes,
@@ -435,14 +438,21 @@ export function loadConfigChain(
       layers,
       base,
       installed,
-      config: validateConfig(top, top.path, allowedPalettes),
+      ...validateRenderable(
+        top,
+        top.path,
+        allowedPalettes,
+        layers.slice(0, -1).reverse(),
+      ),
     };
   } catch (e) {
-    for (const layer of layers.slice(0, -1)) {
-      trace.entered(layer.path);
-      validateConfig(layer, layer.path, allowedPalettes);
-    }
-    trace.entered(top.path);
+    // [LAW:single-enforcer] Blame goes to the lowest layer that fails on its
+    // own, judged by the same tolerant validation the merged chain failed
+    // under: a placement a lower layer leaves undeclared only drops its cell
+    // there too, so it cannot stand in for the error that actually refused
+    // the chain.
+    for (const layer of layers.slice(0, -1))
+      validateRenderable(layer, layer.path, allowedPalettes);
     throw e;
   }
 }
@@ -455,8 +465,6 @@ export interface SessionDirs {
 }
 
 export interface ChainTrace {
-  // The file a throw is to be blamed on, as the chain learns it.
-  readonly entered: (path: string) => void;
   readonly warned: (warnings: readonly string[]) => void;
 }
 
@@ -478,7 +486,10 @@ export interface LoadedChain {
     // Installed drops no layer reaches: logged, never a warning.
     readonly unreached: readonly DroppedPlugin[];
   };
+  // The merged config the bar draws, and the placements it dropped
+  // (validateRenderable).
   readonly config: ValidatedConfig;
+  readonly dropped: readonly ConfigError[];
 }
 
 export interface LoadedFile {
@@ -486,7 +497,7 @@ export interface LoadedFile {
   readonly source: string;
   readonly warnings: readonly string[];
   // The plugin definitions the file listed: those merged, and those dropped
-  // with why. A drop is also a `warnings` line (the strip shows it); `check`
+  // with why. A drop is also a `warnings` line (the bar shows it); `check`
   // reads this to fail its verdict.
   readonly plugins: {
     readonly loaded: readonly string[];
@@ -517,7 +528,10 @@ export interface AuthoredConfig {
  * held is checked whole — the layer's own references and placements into that
  * namespace were checked against the plugin it replaces, and only a full check
  * sees them break, so the replacement drops alone rather than failing the file.
- * The full validateConfig of the file listing it still runs over the result.
+ * The file listing it is validated over the result, so the check is the same
+ * tolerant one the bar loads by: a placement of a segment nothing declares
+ * drops its cell and is reported by the file's own validation, never blamed
+ * on the plugin.
  */
 function checkPlugin(
   config: DslConfig,
@@ -527,7 +541,8 @@ function checkPlugin(
   allowedPalettes: ReadonlySet<string> | undefined,
 ): void {
   if (replaces) {
-    validateConfig(unauthored(config), filePath, allowedPalettes);
+    // [LAW:single-enforcer] The bar's own judgment of what fails a config.
+    validateRenderable(unauthored(config), filePath, allowedPalettes);
     return;
   }
   const owned = ownedBy(plugin);
@@ -538,6 +553,8 @@ function checkPlugin(
     issues,
     allowedPalettes: new Set(),
     groups: [],
+    unplaced: [],
+    inherited: [],
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
@@ -570,35 +587,68 @@ const NO_FILE: LoadedFile = {
   },
 };
 
+// A config the bar can draw, and the placements it dropped to draw it.
+export interface Renderable {
+  readonly config: ValidatedConfig;
+  // [LAW:no-silent-failure] Each placement of an undeclared segment, as one
+  // error per file that wrote one; empty for none. `check` refuses them.
+  readonly dropped: readonly ConfigError[];
+}
+
+// A file beneath the one validated, by its path.
+export type AuthoredLayer = AuthoredConfig & { readonly path: string };
+
 /**
- * Promote a merged DslConfig to a ValidatedConfig by running cross-references
- * and cycle detection. Sole producer of ValidatedConfig in the codebase — the
- * phantom brand makes "the renderer never receives an unvalidated config" a
- * compile-time invariant, not a runtime convention.
- *
- * Throws ConfigError aggregating every issue.
+ * The same validation, except that a placement of an undeclared segment drops
+ * only its own cell (loader/unplaced.ts) and is returned as `dropped`, rather
+ * than refusing the whole config: the bar draws everything else the author
+ * placed. Any other issue, at any stage, still refuses it, reported together
+ * with the drops.
+ * Sole producer of ValidatedConfig in the codebase — the phantom brand makes
+ * "the renderer never receives an unvalidated config" a compile-time
+ * invariant, not a runtime convention.
  *
  * [LAW:single-enforcer] One cast site, here, exclusive.
  */
-export function validateConfig(
-  { config, raw, source }: AuthoredConfig,
+export function validateRenderable(
+  { config: merged, raw, source }: AuthoredConfig,
   filePath = "<config>",
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
-): ValidatedConfig {
+  // The files it merges over, nearest first.
+  beneath: readonly AuthoredLayer[] = [],
+): Renderable {
   const issues: ConfigIssue[] = [];
-  const ctx: ValidateCtx = { source, issues, allowedPalettes, groups: [] };
-  validateCrossReferences(ctx, config, raw);
-  validateNoCycles(ctx, config);
-  if (issues.length > 0) {
-    throw new ConfigError(filePath, issues);
-  }
+  const ctx: ValidateCtx = {
+    source,
+    issues,
+    allowedPalettes,
+    groups: [],
+    unplaced: [],
+    inherited: [],
+  };
+  // [LAW:single-enforcer] The one refusal every stage throws through, so the
+  // drops ride with whichever issue refuses the config.
+  const refuseIfIssues = (): void => {
+    if (issues.length > 0) {
+      throw new ConfigError(filePath, [
+        ...issues,
+        ...ctx.unplaced,
+        ...ctx.inherited,
+      ]);
+    }
+  };
+  validateCrossReferences(ctx, merged, raw);
+  validateNoCycles(ctx, merged);
+  refuseIfIssues();
+  const dropped = droppedByFile(filePath, ctx, beneath);
+  // A config with nothing to drop is the merged one itself, so its trees keep
+  // their identity.
+  const config = dropped.length === 0 ? merged : withoutUnplaced(merged);
   // [LAW:one-source-of-truth] A menu's keys are its PLACEMENT's, so they are
   // minted over the trees that render — which exist only now, merged and
   // cross-referenced — before the settings menu and edit chrome add their own.
   const withMenus = synthesizePlacementMenus(config, issues);
-  if (issues.length > 0) {
-    throw new ConfigError(filePath, issues);
-  }
+  refuseIfIssues();
   // [LAW:one-source-of-truth] Edit-mode's CHROME half (brandon-layout-edit-
   // 2gc.3), synthesized HERE — not in parseDslConfig alongside the toggle —
   // because it needs the fully merged, preset-resolved tree cross-ref/cycles
@@ -626,16 +676,51 @@ export function validateConfig(
     checked: () => true,
     authored: (name) => authored.has(name),
   });
-  if (issues.length > 0) {
-    throw new ConfigError(filePath, issues);
+  refuseIfIssues();
+  return { config: withChrome as ValidatedConfig, dropped };
+}
+
+// [LAW:single-enforcer] What `check` and the demo refuse that the bar draws
+// past: every dropped placement, each file's error in turn.
+export function refuseDrops(dropped: readonly ConfigError[]): void {
+  if (dropped.length > 0) throw new DroppedPlacements(dropped);
+}
+
+// [LAW:no-silent-failure] Each dropped placement reported against the file
+// that wrote it: this file's own, and each one inherited against the nearest
+// file beneath whose own layout places it, at its path and line there. One no
+// file wrote (an installed plugin's layout) stays under the tree that renders
+// it.
+function droppedByFile(
+  filePath: string,
+  ctx: ValidateCtx,
+  beneath: readonly AuthoredLayer[],
+): ConfigError[] {
+  const byFile = new Map<string, ConfigIssue[]>();
+  const add = (file: string, issue: ConfigIssue): void => {
+    byFile.set(file, [...(byFile.get(file) ?? []), issue]);
+  };
+  for (const issue of ctx.unplaced) add(filePath, issue);
+  for (const { name, ...issue } of ctx.inherited) {
+    const author = beneath.flatMap((layer) => {
+      const at = authoredPlacement(layer.raw, name);
+      return at === undefined ? [] : [{ layer, ...at }];
+    })[0];
+    if (author === undefined) add(filePath, issue);
+    else
+      add(author.layer.path, {
+        path: author.path,
+        message: unplacedMessage(author.layoutKey, name),
+        line: findKeyLine(author.layer.source, author.path.split(".")),
+      });
   }
-  return withChrome as ValidatedConfig;
+  return [...byFile].map(([file, issues]) => new ConfigError(file, issues));
 }
 
 /**
  * Parse a JSON5 DSL config source into a RawDslConfig. JSON5 syntax + per-
  * record structural validation. Cross-references and cycles are NOT checked
- * here — they belong to validateConfig, which runs on the merged shape.
+ * here — they belong to validateRenderable, which runs on the merged shape.
  *
  * Returned shape preserves absence: top-level keys are optional in RawDslConfig.
  *
@@ -665,8 +750,8 @@ export function parseDslConfig(
 // stages: the editability notice is computed once the text is JSON5 (so a
 // syntax error is reported once, by stage 1, never again by the scanner on
 // the same defect) and BEFORE structural validation, whose ConfigError
-// carries it — a duplicate key beside an unknown top-level key is named on
-// the strip beside that error, not after it is fixed.
+// carries it — a duplicate key beside an unknown top-level key is named
+// beside that error, not after it is fixed.
 function parseDslFile<L>(
   filePath: string,
   source: string,
@@ -694,6 +779,8 @@ function parseDslFile<L>(
     issues,
     allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
+    unplaced: [],
+    inherited: [],
   };
 
   // ── Stage 2: top-level shape + per-record shape. Absence survives as
@@ -837,19 +924,19 @@ function validateTopLevel(
   synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] The `menus.` reservation and every `{{ menu }}`
   // call's shape, checked where the author wrote them; the keys each placement
-  // derives are minted after merge (validateConfig).
+  // derives are minted after merge (validateRenderable).
   checkMenuDecls(ctx, out);
   // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-
   // 2gc.3) — unconditional, like the reservation above, so `edit.mode`/
   // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger
   // segment cross-ref-checks normally. The CHROME half (the per-position +/-
-  // affordances) runs later, in validateConfig, once the merged/preset-
+  // affordances) runs later, in validateRenderable, once the merged/preset-
   // resolved tree exists to derive it from.
   synthesizeEditModeToggle(ctx, out);
   // [LAW:one-source-of-truth] The global settings menu reserves its namespace
   // here and synthesizes NOTHING here: the tree it must be present in only
   // exists after merge (a user `root` replaces the default's), so the artifacts
-  // are minted in validateConfig. The reservation is unconditional all the same,
+  // are minted in validateRenderable. The reservation is unconditional all the same,
   // mirroring every other namespace above — "you never author candybar.*" is a
   // stable contract, not a rule that switches on when the pass happens to fire.
   reservedNamespaceCollisions(

@@ -747,6 +747,19 @@ describe("an installed plugin", () => {
     }
   });
 
+  test("a lower layer's undeclared placement is not blamed on a replacement joining it", async () => {
+    install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
+    const user = write("user.json5", `{ root: { h: ["gti"] } }`);
+    write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
+    const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"] }`);
+    const warnings: string[] = [];
+    // `check` refuses the drop, naming the placement — never the plugin.
+    await expect(prepareConfig([user, project], null, dir, warnings, instantOf(new Date()))).rejects.toThrow(
+      /user\.json5[\s\S]*"gti" does not match any declared segment/,
+    );
+    expect(warnings.join("\n")).not.toContain("was not loaded");
+  });
+
   test("a cycle the layer already held is not blamed on a plugin joining it", async () => {
     const user = write(
       "user.json5",
@@ -877,7 +890,10 @@ describe("an installed plugin", () => {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
       answerRepo(repo);
-      const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
+      const p = write(
+        "config.json5",
+        `{ segments: { s: { template: "{{ .plugins.lit.nope }}" } }, root: { h: ["s"] } }`,
+      );
       const entry = cache.getOrCreate(repo, repo, p);
       expect(entry.lastError).not.toBeNull();
       expect(entry.state.plugins.roots).toContain(path.join(repo, ".cc-candybar", "plugins"));

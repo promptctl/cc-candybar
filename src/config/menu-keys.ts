@@ -137,7 +137,7 @@ export const MENU_OPTIONS_VOCABULARY =
 // vocabulary, value types, and defaults live exactly once. An unknown name or a
 // mistyped value throws with text naming the legal shape — the blind authoring
 // agent's teaching channel [LAW:no-silent-failure]; the loader attaches segment
-// context, the renderer surfaces it via composeWithDiagnostics.
+// context, the renderer surfaces it as the bar's error.
 export function parseMenuOptions(
   entries: Readonly<Record<string, unknown>>,
 ): MenuOptions {

@@ -32,7 +32,7 @@ Disposing a store has to release its computeds' subscriptions. A keepAlive compu
 
 ## There is always a bar
 
-Each cache entry starts with the bundled default's state. A config that fails its very first load still renders a bar, settings menu included, under the error strip.
+Each cache entry starts with the bundled default's state. A config that fails its very first load still renders a bar, settings menu included, with its error behind the indicator beside the door.
 
 ## Tests
 

@@ -210,7 +210,7 @@ export interface PickerStep {
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
 // to declared actions; this asserts the KIND each must be (apply ⇒ set-option,
 // page ⇒ set-int) — a wrong kind is an author error surfaced loudly at render
-// (composeWithDiagnostics shows it), not a silent empty picker.
+// (the bar's diagnostics show it), not a silent empty picker.
 export function requireKind<K extends CompiledActionDecl["kind"]>(
   runtime: ActionRuntime,
   name: string,

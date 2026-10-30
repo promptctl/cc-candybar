@@ -51,6 +51,8 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 
 const TEST_TIMEOUT_MS = 30_000;
+import { DOOR_GLYPH } from "../src/config/disclosure";
+
 jest.setTimeout(TEST_TIMEOUT_MS);
 
 // `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
@@ -249,7 +251,8 @@ describe("every render request writes one render event, whatever its outcome", (
     const hints = { termCols: 120, termRows: 40 };
     await render(sockPath, FORGING_SID, projectDir, hints, configFlag("drawn"));
     // A gate that fails costs what it gates, not the bar
-    // (brandon-unfiled-3248.ryf): the reply is a bar, its strip saying why.
+    // (brandon-unfiled-3248.ryf): the reply is a bar, and its event says why
+    // (the indicator offers it from the next frame: daemon-render-warnings).
     const gated = stripAnsi(
       await render(
         sockPath,
@@ -259,9 +262,7 @@ describe("every render request writes one render event, whatever its outcome", (
         configFlag("broken"),
       ),
     );
-    expect(gated).toContain(
-      "when over mark: the gate broke — what it gates is hidden",
-    );
+    expect(gated).toContain(DOOR_GLYPH);
     await expect(
       renderRequest(sockPath, {
         hookData: hookData("ev-refused", projectDir),
@@ -427,8 +428,6 @@ describe("every render request writes one render event, whatever its outcome", (
     // its fields are the drawn bar's, in the same order.
     const gate = await attempts("ev-gate", "ok", "info");
     expect(field(gate, "warn")).toBe("when");
-    // Its strip's full text was written beside it.
-    expect(field(gate, "dumpFailed")).toBe("-");
     const keys = (event: Event) => event.fields.map(([k]) => k);
     expect(keys(gate)).toEqual(keys(drawn));
 
@@ -676,30 +675,6 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(
       logLines(env).filter((l) => l.includes("refused_field_9b04")),
     ).toEqual([]);
-  });
-
-  // A dump write the filesystem refuses costs the render nothing: the bar is
-  // drawn, and its event names the refusal.
-  test("a refused dump write is the render event's dumpFailed", async () => {
-    const dir = path.join(stateDir(env), "diagnostics");
-    rmSync(dir, { recursive: true, force: true });
-    writeFileSync(dir, ""); // a file where the directory should be
-    try {
-      await render(
-        sockPath,
-        "ev-dump-refused",
-        projectDir,
-        {},
-        configFlag("broken"),
-      );
-    } finally {
-      rmSync(dir, { force: true });
-    }
-    const event = only(await eventsOf("ev-dump-refused"));
-    expect(field(event, "outcome")).toBe("ok");
-    expect(JSON.parse(field(event, "dumpFailed") ?? "null")).toMatch(
-      /ev-dump-refused\.txt: /,
-    );
   });
 
   // The kind is untrusted JSON: one no request carries — a name, or a value a

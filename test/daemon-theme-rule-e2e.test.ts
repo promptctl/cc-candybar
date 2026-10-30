@@ -7,7 +7,7 @@
 // reading `.theme.effective` agrees with it — one producer, so a label cannot
 // name a theme the bar is not wearing. And when the rule names a theme nothing
 // installs, the bar STILL RENDERS (in the floor theme) with the reason on the
-// diagnostic strip above it: the daemon's own warning channel, which is the half
+// bar's diagnostics: the daemon's own warning channel, which is the half
 // `onRenderWarning` exists for and which no unit test of renderDsl can observe.
 //
 // The value is data-driven, so a throw would take the statusline away the moment
@@ -24,6 +24,8 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+
+import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
 
 jest.setTimeout(30_000);
 
@@ -85,7 +87,7 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the real daemon
       expect(goodText).toContain("T=dracula");
       // dracula's `surface` — the bar is wearing the theme the label names.
       expect(good).toContain("48;2;43;46;59");
-      // Nothing to warn about, so no strip at all.
+      // Nothing to warn about, so no indicator at all.
       expect(goodText).not.toContain("⚠");
 
       // ── the branch whose result names nothing installed ────────────────────
@@ -96,11 +98,15 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the real daemon
       // In the floor theme (textual-dark's `surface`), and labelled as such.
       expect(badText).toContain("T=textual-dark");
       expect(bad).toContain("48;2;30;30;30");
-      // And the reason is on the strip above it, naming the slot, the value the
-      // rule produced, and what was rendered instead.
-      expect(badText).toContain("globals.palette");
-      expect(badText).toContain("no-such-theme");
-      expect(badText).toContain("textual-dark");
+      // And the reason is the bar's message, from the frame after the one that
+      // met it, naming the slot, the value the rule produced, and what was
+      // rendered instead.
+      const again = await render(sockPath, BAD_SESSION, projectDir);
+      expect(indicatorOf(again)).toBe("⚠ 1");
+      const [page] = await readDiagnostics(sockPath, BAD_SESSION, projectDir, again);
+      expect(page!.text).toContain("globals.palette");
+      expect(page!.text).toContain("no-such-theme");
+      expect(page!.text).toContain("textual-dark");
     } finally {
       if (daemon !== undefined) await killAndWait(daemon);
       rmSync(projectDir, { recursive: true, force: true });

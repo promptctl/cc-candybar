@@ -15,27 +15,34 @@
 
 // `elsewhere` is where a lane draws the bar when that is not the statusline:
 // while it is on, the statusline hands off to it (src/daemon/lane-handoff.ts).
-// Lane B draws the statusline itself, so it hands off nowhere.
+// Lane B draws the statusline itself, so it hands off nowhere. `rows` is the
+// most rows the lane's surface shows, or null when only the terminal bounds
+// it.
 export const LANES = {
   band: {
     setting: "experimentalBand",
     label: "🧪 band (A)",
     elsewhere: "the band above the prompt",
+    rows: null,
   },
   statusline: {
     setting: "experimentalStatusline",
     label: "🧪 statusline (B)",
     elsewhere: null,
+    rows: null,
   },
   pane: {
     setting: "experimentalPane",
     label: "🧪 tmux pane (C)",
     elsewhere: "a tmux pane below",
+    rows: null,
   },
   tmuxStatus: {
     setting: "experimentalTmuxStatus",
     label: "🧪 tmux status line (C)",
     elsewhere: "the tmux status line",
+    // tmux draws at most five status rows (`status` takes on, off, 2…5).
+    rows: 5,
   },
 } as const;
 

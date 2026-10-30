@@ -14,7 +14,7 @@
 // There is no demo-only payload: a field the daemon's payload gains is in the
 // demo's.
 // The config is the one file named here, loaded or refused; the daemon's
-// search for a config and its diagnostic strip are not part of the demo.
+// search for a config and its diagnostics viewer are not part of the demo.
 //
 // [LAW:dataflow-not-control-flow] The body is straight-line: load → frames →
 // dispose. The config file and the hook event are data; swapping either
@@ -33,7 +33,11 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
-import { ConfigError } from "../config/loader/diagnostics.js";
+import {
+  ConfigError,
+  DroppedPlacements,
+} from "../config/loader/diagnostics.js";
+import { refuseDrops } from "../config/dsl-loader.js";
 import {
   loadChain,
   openView,
@@ -139,6 +143,14 @@ function loadState(): DslRenderState {
 
 async function renderFrames(): Promise<void> {
   const state = loadState();
+  // [LAW:no-silent-failure] The daemon draws past a placement of an undeclared
+  // segment; the demo, like `check`, refuses it with the loader's message.
+  try {
+    refuseDrops(state.dropped);
+  } catch (e) {
+    state.registry.dispose();
+    throw e;
+  }
   // The session's view of the state, as the daemon opens one per session,
   // declared with the one request the demo's frames draw by.
   const view = openView(
@@ -223,7 +235,8 @@ try {
 } catch (err) {
   // A refused config is the demo's one expected failure: the loader's message
   // is the whole report. Anything else is a defect and keeps its stack.
-  if (!(err instanceof ConfigError)) throw err;
+  if (!(err instanceof ConfigError || err instanceof DroppedPlacements))
+    throw err;
   process.stderr.write(`error: ${err.message}\n`);
   process.exitCode = 1;
 } finally {

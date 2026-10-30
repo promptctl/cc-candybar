@@ -86,9 +86,10 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const first = view.draw({ x: "1" }, A);
     const second = view.draw({ x: "1" }, B);
     expect(first.evaluated).toBeGreaterThan(second.evaluated);
-    // `stamp`'s body, and the settings door's, which reads who the frame is
-    // drawn for (`drawing.fps`, a draw projection); nothing else.
-    expect(second.evaluated).toBe(2);
+    // `stamp`'s body, the rate beside the settings door, which reads who the
+    // frame is drawn for (`drawing.fps`, a draw projection), and the door's
+    // own cell, whose indicator reads the draw's diagnostics; nothing else.
+    expect(second.evaluated).toBe(3);
     expect(stripAnsi(second.text)).toContain(String(Math.floor(B)));
     expect(view.errors).toEqual([]);
   });
@@ -97,9 +98,9 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const view = viewOf(CONFIG);
     view.draw({ x: "1" }, A);
     const changed = view.draw({ x: "2" }, A);
-    // `stamp`'s body, the door's, and `shown`'s body: `shown`'s colours read
-    // no `x`.
-    expect(changed.evaluated).toBe(3);
+    // `stamp`'s body, the door's two cells, and `shown`'s body: `shown`'s
+    // colours read no `x`.
+    expect(changed.evaluated).toBe(4);
     expect(stripAnsi(changed.text)).toContain("x=2");
   });
 
@@ -261,8 +262,9 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       ),
     );
     view.draw({}, A);
-    // The settings door's body alone, which reads who the frame is drawn for.
-    expect(view.draw({}, B).evaluated).toBe(1);
+    // The settings door's two cells alone, which read who the frame is drawn
+    // for and the draw's diagnostics.
+    expect(view.draw({}, B).evaluated).toBe(2);
     expect(view.errors).toEqual([]);
   });
 

@@ -38,6 +38,16 @@ export class ConfigError extends Error {
   }
 }
 
+// [LAW:types-are-the-program] What `check` and the demo refuse that the bar
+// draws past: every placement it dropped, as each writing file's own error.
+// An author's refusal like ConfigError, but over several files.
+export class DroppedPlacements extends Error {
+  constructor(readonly errors: readonly ConfigError[]) {
+    super(errors.map((e) => e.message).join("\n"));
+    this.name = "DroppedPlacements";
+  }
+}
+
 // ─── Best-effort source-line lookup ──────────────────────────────────────────
 
 // Walk source forward, finding each path component as a JSON5 key in turn.

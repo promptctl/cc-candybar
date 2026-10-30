@@ -24,6 +24,7 @@ import {
   AXIS_OF,
   bodyPath,
   childPath,
+  walkNodePaths,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
@@ -161,6 +162,33 @@ function presetIdentCollisions(
     });
   }
 }
+
+// Where a file's own layout places `name`: the layout key (`root`, or a
+// preset's) and the node's path under it; none when it places no such entry.
+export function authoredPlacement(
+  raw: RawDslConfig,
+  name: string,
+): { readonly layoutKey: string; readonly path: string } | undefined {
+  const layouts: Array<readonly [string, RootFragment | undefined]> = [
+    ["root", raw.root],
+    ...Object.entries(raw.presets ?? {}).map(
+      ([preset, p]) => [`presets.${preset}.root`, p.root] as const,
+    ),
+  ];
+  for (const [layoutKey, fragment] of layouts) {
+    if (fragment === undefined) continue;
+    for (const [node, path] of fragmentNodePaths(fragment, layoutKey)) {
+      if (node.kind === "segment" && node.name === name)
+        return { layoutKey, path };
+    }
+  }
+  return undefined;
+}
+
+// The message a placement of an undeclared segment is reported with, at the
+// layout key that places it.
+export const unplacedMessage = (layoutKey: string, name: string): string =>
+  `${layoutKey} entry "${name}" does not match any declared segment${renamedHint(name)}`;
 
 export function validateCrossReferences(
   ctx: ValidateCtx,
@@ -328,9 +356,11 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
+    // A placement of an undeclared segment is dropped, not drawn, so it owns
+    // no id: one bad name costs its own cell and is reported as a drop.
     const byId = new Map<string, SegmentNode[]>();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment") continue;
+      if (node.kind !== "segment" || !declared(node.name)) continue;
       const id = placementId(node);
       byId.set(id, [...(byId.get(id) ?? []), node]);
     }
@@ -400,10 +430,14 @@ export function validateCrossReferences(
   }
   // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
   // fragment at this key, never the merged root — so a node is reported at
-  // the path, and on the line, the author would look for it, and a row they
-  // inherited is not theirs to be told about. The tree that renders is checked
-  // below (placement counts); an inherited row names only bundled segments,
-  // which no file can remove.
+  // the path, and on the line, the author would look for it. The tree that
+  // renders is checked below: placement counts, and a placement a lower layer
+  // wrote that names no declared segment. The undeclared names reported, so
+  // each is told once.
+  const reported = new Set<string>();
+  const declared = (name: string): boolean =>
+    isSettingsAnchor(name) ||
+    Object.prototype.hasOwnProperty.call(cfg.segments, name);
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root)
@@ -447,9 +481,10 @@ export function validateCrossReferences(
         continue;
       }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
-        ctx.issues.push({
+        reported.add(node.name);
+        ctx.unplaced.push({
           path,
-          message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
+          message: unplacedMessage(layoutKey, node.name),
           line,
         });
       }
@@ -473,6 +508,31 @@ export function validateCrossReferences(
   }
   for (const [key, tree] of rendered) {
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
+  }
+  // [LAW:no-silent-failure] Every placement the bar drops (loader/unplaced.ts)
+  // is reported: one this file wrote above, at its own line; one a layer below
+  // wrote, here, for the loader to report against the file that wrote it
+  // (validateRenderable) — a home config's typo is still the user's to fix
+  // when a repo config sits above it. Its issue under the tree that renders it
+  // stands when no file wrote it.
+  for (const [key, tree] of rendered) {
+    for (const [node] of walkNodePaths(tree, key)) {
+      if (
+        node.kind !== "segment" ||
+        isSettingsAnchor(node.name) ||
+        Object.prototype.hasOwnProperty.call(cfg.segments, node.name) ||
+        reported.has(node.name)
+      ) {
+        continue;
+      }
+      reported.add(node.name);
+      ctx.inherited.push({
+        name: node.name,
+        path: key,
+        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
+        line: findKeyLine(ctx.source, key.split(".")),
+      });
+    }
   }
 
   validateDeclarations(ctx, cfg, templateScope, () => true);

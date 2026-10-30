@@ -10,10 +10,10 @@
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   loadConfig,
   NO_PROJECT,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";

@@ -8,7 +8,7 @@
 // sugar is WHEN this can run: a group is authored data, lowered per file
 // before merge; edit chrome is DERIVED from which segments are actually in
 // the tree, which is only known after merge and preset-root resolution. So
-// this runs from validateConfig, on the fully resolved
+// this runs from validateRenderable, on the fully resolved
 // config each declared preset stages — see synthesizeEditChrome below.
 //
 // [LAW:single-enforcer] The +/- affordances reuse EXISTING primitives
@@ -835,7 +835,7 @@ function spliceEditChromeForPreset(
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
-// validateConfig after cross-ref/cycle checks pass. Every declared preset
+// validateRenderable after cross-ref/cycle checks pass. Every declared preset
 // (the floor "default" included — presetNames/presetByName/presetRoot
 // already treat it uniformly) gets an explicit `presets[name].root` carrying
 // its spliced tree; `config.root` itself is left untouched (presetRoot falls

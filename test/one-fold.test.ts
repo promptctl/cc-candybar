@@ -9,7 +9,6 @@ import {
   mergeWithDefault,
   parseDslConfig,
   unauthored,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { declaredVariables } from "../src/config/loader/refs";
 import { ConfigError } from "../src/config/loader/diagnostics";
@@ -17,7 +16,7 @@ import type { DslConfig } from "../src/config/dsl-types";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { buildNeededPrefixes } from "../src/daemon/render-payload";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

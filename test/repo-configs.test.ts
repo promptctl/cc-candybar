@@ -234,7 +234,6 @@ const loadedEntry: ReloadedEntry = {
     unproven: [],
     unread: null,
   },
-  failedFile: null,
   lastError: null,
   lastWarning: null,
   state: undefined as never,
@@ -282,8 +281,7 @@ test("the config loaded event names the repositories left waiting and declined, 
       unproven: [{ dir: "/c", reason: "/x is not there" }],
       unread: null,
     },
-    failedFile: null,
-    lastError: null,
+      lastError: null,
     lastWarning: null,
     state: undefined as never,
   };
@@ -312,7 +310,7 @@ test("the question offers each answer as a link signed for its session, director
     `a cc-candybar config for ${project} — run it?`,
   );
   const answers = channel!.lines[0]
-    .flatMap((span) => effectsOf(span.link))
+    .flatMap((span) => (span.link === null ? [] : effectsOf(span.link)))
     .filter((e) => e.verb === VERB_REPO_CONFIG);
   expect(answers.map((e) => e.args.slice(0, 3))).toEqual([
     ["sid-1", project, "approved"],

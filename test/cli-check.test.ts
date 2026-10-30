@@ -175,7 +175,7 @@ describe("checkConfig — explicit target", () => {
     expect(message).not.toContain("drew none");
   });
 
-  // brandon-config-16g: the same advisory the daemon puts on the strip, so an
+  // brandon-config-16g: the same advisory the daemon puts on the bar, so an
   // authoring agent sees the duplicate before a durable click refuses it.
   it("a duplicate object key is a clean verdict with a warning naming the key and its line", async () => {
     const p = write(

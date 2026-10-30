@@ -12,7 +12,7 @@
 //
 // [LAW:one-source-of-truth] Both shared primitives live in leaf modules under
 // ./: the style constants in ./diagnostic-style (shared with the daemon's
-// composeWithDiagnostics so the diagnostic visual language cannot drift) and
+// diagnostics viewer so the diagnostic visual language cannot drift) and
 // the sanitize-and-truncate primitive in ./diagnostic-text (shared with
 // src/daemon/server.ts so the security-critical control-char neutralization
 // (C0 + DEL + C1/8-bit-CSI) cannot drift between the two callers).

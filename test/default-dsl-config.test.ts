@@ -27,9 +27,8 @@ import {
   parseDslConfig,
   mergeWithDefault,
   unauthored,
-  validateConfig,
 } from "../src/config/dsl-loader";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";

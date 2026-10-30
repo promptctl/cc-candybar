@@ -113,7 +113,7 @@ export function controlDomainAdmits(
 
 // A domain longer than this reads in a message as its name, its size and a
 // few of its members: an error naming every installed theme is a wall of text
-// that pushes the rest of the diagnostic strip off the screen.
+// that buries the rest of the message in the diagnostics viewer.
 const LISTED_MEMBERS = 8;
 const SAMPLED_MEMBERS = 3;
 

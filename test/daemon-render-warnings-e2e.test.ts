@@ -1,16 +1,19 @@
 // [LAW:nothing-unseen] candybar-theme-colours-6fq5.ge6, measured on a REAL
 // daemon: a render's event — its `render sid=…` log line — names every warning
-// the strip above that render's bar carried, by kind and in the strip's order:
-// the config load's own (`load`) and each one the render itself reported
-// (`RenderWarning`), `-` for none. The cases enumerate both sources whole — a
-// load warning or not, a render warning or not — and read each render's strip
-// beside its event, so the two cannot disagree unseen.
+// that render met, by kind and in order: the config load's own (`load`) and
+// each one the render itself reported (`RenderWarning`), `-` for none. The
+// cases enumerate both sources whole — a load warning or not, a render warning
+// or not — and read the messages the bar's indicator offers beside the event,
+// so the two cannot disagree unseen. A render warning is known only after the
+// walk, so the bar counts it from the frame after the one that met it, and a
+// renderer records every frame's warnings by value.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
+import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -34,10 +37,16 @@ const GLOBALS = `globals: { palette: '${RULE}', style: '${STYLE_RULE}' }`;
 const CONFIGS = {
   clean: `{ ${GLOBALS}, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   dup: `{ ${GLOBALS}, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
+  clock: `{ globals: { palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   stuck: `{ ${GLOBALS}, variables: { stamp: { kind: "shell", command: "echo hi", cache: { key: '{{ fail "no key" }}' } } }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
-describe("a daemon render's event names every warning its strip carried", () => {
+const fieldOf =
+  (name: string) =>
+  (line: string): string | undefined =>
+    new RegExp(` ${name}=(\\S+)`).exec(line)?.[1];
+
+describe("a daemon render's event names every warning, and the indicator offers each", () => {
   let sockPath: string;
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
@@ -60,6 +69,12 @@ describe("a daemon render's event names every warning its strip carried", () => 
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
+
+  const argsOf = (config: keyof typeof CONFIGS): string[] => [
+    "cc-candybar",
+    "--config",
+    path.join(projectDir, `${config}.json5`),
+  ];
 
   test.each([
     { config: "clean", sessionId: "clean-good", warn: "-", shown: [] },
@@ -94,31 +109,91 @@ describe("a daemon render's event names every warning its strip carried", () => 
       shown: ["no-such-theme", "refresh"],
     },
   ] as const)(
-    "$config config, session $sessionId: the strip shows $shown and the event says warn=$warn",
+    "$config config, session $sessionId: the viewer shows $shown and the event says warn=$warn",
     async ({ config, sessionId, warn, shown }) => {
-      const output = stripAnsi(
-        await render(sockPath, sessionId, projectDir, {}, [
-          "cc-candybar",
-          "--config",
-          path.join(projectDir, `${config}.json5`),
-        ]),
-      );
+      const args = argsOf(config);
+      const draw = () => render(sockPath, sessionId, projectDir, {}, args);
+      // The first frame records what its walk met; the next one counts it.
+      await draw();
+      const bar = await draw();
       // The bar renders under every case: a warning never takes it away.
-      expect(output).toContain("mark");
-      // A strip exactly when there is a warning, showing each in its order.
-      // Each is found by one word, since the strip wraps a line between words.
-      expect(output.includes("⚠")).toBe(shown.length > 0);
-      for (const word of shown) expect(output).toContain(word);
-      const at = shown.map((word) => output.indexOf(word));
-      expect(at).toEqual([...at].sort((a, b) => a - b));
+      expect(stripAnsi(bar)).toContain("mark");
+      expect(indicatorOf(bar)).toBe(
+        shown.length === 0 ? null : `⚠ ${shown.length}`,
+      );
+      // Each warning is its own message, in the event's order.
+      const pages = await readDiagnostics(
+        sockPath,
+        sessionId,
+        projectDir,
+        bar,
+        {},
+        args,
+      );
+      expect(pages).toHaveLength(shown.length);
+      shown.forEach((word, i) => expect(pages[i]!.text).toContain(word));
 
       // A request the helper retried after a reply timeout is logged once per
-      // attempt, and every attempt drew the same warnings.
-      const events = (await renderLines(env, sessionId)).map(
-        (l) => l.match(/ warn=(\S+)/)?.[1],
+      // attempt, and every attempt met the same warnings.
+      const events = (await renderLines(env, sessionId, 2)).map(
+        fieldOf("warn"),
       );
-      expect(events.length).toBeGreaterThanOrEqual(1);
       for (const event of events) expect(event).toBe(warn);
     },
   );
+
+  test("the record follows every frame: the count holds across frames, and opening the viewer moves nothing", async () => {
+    // `-bad` makes the palette rule name no theme.
+    const sid = "record-once-bad";
+    const args = argsOf("clean");
+    const draw = () => render(sockPath, sid, projectDir, {}, args);
+    // The first frame met the warning but drew before it was recorded.
+    expect(indicatorOf(await draw())).toBeNull();
+    const bars = [await draw(), await draw(), await draw()];
+    for (const bar of bars) expect(indicatorOf(bar)).toBe("⚠ 1");
+    const records = (await renderLines(env, sid, 4)).map(fieldOf("warnRecord"));
+    expect(records).toEqual(["new", "kept", "kept", "kept"]);
+    // Opening the viewer writes the session's state and draws the viewer in
+    // the body's place, then the bar again with its indicator: none of those
+    // frames moves the record, so the count cannot flip between them.
+    const pages = await readDiagnostics(
+      sockPath,
+      sid,
+      projectDir,
+      bars[0]!,
+      {},
+      args,
+    );
+    expect(pages.map((p) => p.position)).toEqual(["1/1"]);
+    expect(indicatorOf(await draw())).toBe("⚠ 1");
+    const all = await renderLines(env, sid, 6);
+    expect(all.slice(4).map(fieldOf("warnRecord"))).toEqual(["kept", "kept"]);
+    expect(all.map(fieldOf("diag"))).toEqual(["0", "1", "1", "1", "1", "1"]);
+  });
+
+  test("a warning that starts while nothing about the frame moves is counted by the next frame, and cleared once it stops", async () => {
+    // The palette rule names no theme for two seconds of every four: the
+    // config, the session's state and the width stay the same throughout.
+    const sid = "record-clock";
+    const args = argsOf("clock");
+    const draw = () => render(sockPath, sid, projectDir, {}, args);
+    const phase = (): number => (Date.now() / 1000) % 4;
+    const enter = async (from: number): Promise<void> => {
+      const wait = (from - phase() + 4) % 4;
+      await new Promise((resolve) => setTimeout(resolve, wait * 1000 + 150));
+    };
+    // The first draw compiles the config, which can outlast a window.
+    await draw();
+    await enter(2);
+    await draw();
+    await enter(0);
+    await draw();
+    expect(indicatorOf(await draw())).toBe("⚠ 1");
+    await enter(2);
+    await draw();
+    expect(indicatorOf(await draw())).toBeNull();
+    const records = (await renderLines(env, sid, 5)).map(fieldOf("warnRecord"));
+    // The last four: met, counted, stopped, cleared.
+    expect(records.slice(-4)).toEqual(["new", "kept", "new", "kept"]);
+  });
 });

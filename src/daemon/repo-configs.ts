@@ -6,11 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { LinkSigner, SignedFields } from "../click/link-signer.js";
-import {
-  effectsUrl,
-  VERB_REPO_CONFIG,
-  VERB_SHOW_CONFIG_WARNING,
-} from "../click/wire.js";
+import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
 import { repoProject } from "../config/loader/discovery.js";
 import {
   answerDir,
@@ -30,9 +26,9 @@ import { stateFile, type StateFile } from "../doctor/state-file.js";
 import {
   APPROVAL_SEVERITY,
   diagnosticSpan,
-  type DiagnosticChannel,
+  type DiagnosticMessage,
   type DiagnosticLine,
-} from "../render/diagnostic-strip.js";
+} from "../render/diagnostics.js";
 import { stateDir } from "./paths.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
@@ -151,14 +147,14 @@ export function repoAnswerFields(
 }
 
 // [LAW:dataflow-not-control-flow] One channel per directory awaiting an
-// answer — the list is the answer, so the strip folds it beside the update
-// notice with no "is there a question" branch. The sentence copies itself, as
-// every diagnostic row does; each answer is its own signed click.
+// answer — the list is the answer, so the diagnostics fold it beside the
+// update notice with no "is there a question" branch. The sentence is plain
+// text (the viewer's ⧉ copies it); each answer is its own signed click.
 export function repoQuestions(
   gate: RepoGate,
   sessionId: string,
   signer: LinkSigner,
-): DiagnosticChannel[] {
+): DiagnosticMessage[] {
   return gate.awaiting.map((dir) => {
     const message = `a cc-candybar config for ${dir} — run it?`;
     const answers = REPO_ANSWERS.map((answer) =>
@@ -177,13 +173,12 @@ export function repoQuestions(
         ]),
       ),
     );
-    const line: DiagnosticLine = [
-      diagnosticSpan(
-        message,
-        effectsUrl([{ verb: VERB_SHOW_CONFIG_WARNING, args: [message] }]),
-      ),
-      ...answers,
-    ];
-    return { severity: APPROVAL_SEVERITY, message, lines: [line] };
+    const line: DiagnosticLine = [diagnosticSpan(message, null), ...answers];
+    return {
+      severity: APPROVAL_SEVERITY,
+      about: `repo-question\0${dir}`,
+      message,
+      lines: [line],
+    };
   });
 }

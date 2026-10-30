@@ -778,20 +778,37 @@ describe("RenderCache", () => {
     }
   });
 
+  test("a placement of an undeclared segment drops only its cell: the config loads, and the drop is its error", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      writeFileSync(
+        cfg,
+        `{ segments: { s: { template: "mine" } }, root: { h: ["s", "nope"] } }`,
+      );
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.dropped[0]?.message).toMatch(
+        /root entry "nope" does not match any declared segment/,
+      );
+      const placed = JSON.stringify(entry.state.config.root);
+      expect(placed).toContain('"s"');
+      expect(placed).not.toContain('"nope"');
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
   test("a duplicate key's advisory survives beside a fatal validation error", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups } = makeCache();
     try {
       const cfg = join(dir, ".cc-candybar.json5");
-      // The duplicate plus a dangling segment reference: the reference is
-      // fatal; the advisory still reaches the strip beside it.
-      writeFileSync(
-        cfg,
-        DUPLICATE_KEY_CONFIG.replace(
-          `root: { h: ["s"] }`,
-          `root: { h: ["nope"] }`,
-        ),
-      );
+      // The duplicate plus a dangling variable reference: the reference is
+      // fatal; the advisory still reaches the bar beside it.
+      writeFileSync(cfg, DUPLICATE_KEY_CONFIG.replace("{{ .x }}", "{{ .nope }}"));
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toContain("nope");
       expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);

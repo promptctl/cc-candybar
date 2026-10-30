@@ -5,7 +5,7 @@
 // is one name a read can land on, so every resolver agrees (`variableRead`).
 //
 // [LAW:single-enforcer] Checked once, over the names the store is declared
-// from: those of the config validateConfig returns, after every synthesis pass,
+// from: those of the config validateRenderable returns, after every synthesis pass,
 // since a synthesized name is built from authored ones and two of them can
 // nest. A plugin's own names are checked as it joins its layer, so its nesting
 // drops that plugin alone.
