@@ -89,6 +89,7 @@ describe("WatcherRegistry", () => {
       null,
       { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
+      null,
     );
     expect(first.move).toBe("rebound");
     expect(first.watch.key).toBe("a");
@@ -97,6 +98,7 @@ describe("WatcherRegistry", () => {
       first.watch,
       { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
+      null,
     );
     expect(kept.move).toBe("kept");
     expect(kept.watch).toBe(first.watch);
@@ -106,6 +108,7 @@ describe("WatcherRegistry", () => {
       kept.watch,
       { key: "b", targets: { dirs: [] }, unbound: false },
       () => {},
+      null,
     );
     expect(rebound.move).toBe("rebound");
     expect(rebound.watch.key).toBe("b");
@@ -116,6 +119,7 @@ describe("WatcherRegistry", () => {
       rebound.watch,
       { key: "c", targets: { dirs: [] }, unbound: true },
       () => {},
+      null,
     );
     expect(unbound.move).toBe("kept");
     expect(unbound.watch).toBe(rebound.watch);
@@ -506,8 +510,8 @@ describe("WatcherRegistry", () => {
         targets: { dirs: [{ path: "/w", filenames: [name] }] },
         unbound: false,
       });
-      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv));
-      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv));
+      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv), null);
+      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv), null);
       expect(moved.move).toBe("rebound");
       expect(fake.opened).toHaveLength(1);
       expect(fake.opened[0]!.closed).toBe(false);
@@ -563,7 +567,7 @@ describe("WatcherRegistry", () => {
       };
       const seen: Invalidation[] = [];
       const other: Invalidation[] = [];
-      const { watch } = reg.follow(null, spec, (inv) => seen.push(inv));
+      const { watch } = reg.follow(null, spec, (inv) => seen.push(inv), null);
       reg.acquire("other", { dirs: [{ path: "/w" }] }, (inv) => other.push(inv));
       fake.opensOf("/w")[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length === 1 && other.length === 1, "both slots' failed windows");
@@ -572,10 +576,13 @@ describe("WatcherRegistry", () => {
         { kind: "failed", path: "/w", reason: "EMFILE: too many open files" },
       ]);
 
-      expect(reg.follow(watch, spec, () => {}).move).toBe("kept");
+      // A follow answering the failed window keeps the watch deaf: the OS
+      // refuses an immediate retry the way it refused the first.
+      const failed = seen[0]!;
+      expect(reg.follow(watch, spec, () => {}, failed).move).toBe("kept");
       expect(fake.opensOf("/w")).toHaveLength(1);
 
-      reg.listening(watch);
+      expect(reg.follow(watch, spec, () => {}, null).move).toBe("kept");
       expect(fake.opensOf("/w")).toHaveLength(2);
       expect(fake.opensOf("/v")).toHaveLength(1);
       expect(fake.opensOf("/v")[0]!.closed).toBe(false);
@@ -840,7 +847,7 @@ describe("watchFault", () => {
         { kind: "failed", path: "/f", reason: "gone" },
       ]),
     });
-    expect(fault).toMatch(new RegExp(`^config: cannot follow the links of ${x} — .*symbolic links`));
+    expect(fault).toContain(`config: cannot follow a link chain — ${x}: more than 40 symbolic links`);
     expect(fault).toContain("; cannot watch /r — EMFILE; watching /f failed — gone");
   });
 });

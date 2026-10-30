@@ -442,6 +442,13 @@ const heardField = (heard: Invalidation): string => {
   }
 };
 
+// What a watch heard to cause the load, whichever watch it was; `null` for a
+// load no watch caused.
+const heardOf = (cause: LoadCause): Invalidation | null =>
+  cause.kind === "config-watch" || cause.kind === "answers-watch"
+    ? cause.heard
+    : null;
+
 const causeField = (cause: LoadCause): string => {
   switch (cause.kind) {
     case "open":
@@ -2198,13 +2205,11 @@ export class RenderCache<
       entry.watch?.held ?? null,
       { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
+      heardOf(cause),
     );
     // Re-derived on every load, kept or rebound, so what the bar says the
     // watch cannot hear is what the disk says now.
-    entry.watch = { derived: paths, held: watch };
-    const failed =
-      cause.kind === "config-watch" && cause.heard.kind === "failed";
-    if (move === "kept" && !failed) this.deps.watchers.listening(watch);
+    entry.watch = { derived: { ...paths, key }, held: watch };
     if (move === "kept") return;
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the

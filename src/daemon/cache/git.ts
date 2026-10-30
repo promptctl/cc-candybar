@@ -552,7 +552,12 @@ export class GitDataProvider {
     // holds (`follow`), and the period rebinds once the path names a
     // directory again. The build holds nothing, and takes the refused slot
     // the period refreshes.
-    const followed = this.watchers.follow(held, spec, () => this.changed(root));
+    const followed = this.watchers.follow(
+      held,
+      spec,
+      () => this.changed(root),
+      null,
+    );
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
     // against this line, as the config cache's bind line.

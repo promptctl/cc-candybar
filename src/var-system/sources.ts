@@ -345,8 +345,11 @@ class PathWatches {
     const entry: WatchEntry = {
       bound: {
         derived: watch,
-        held: this.watchers.follow(null, watch, (heard) =>
-          this.heard(filePath, entry, heard),
+        held: this.watchers.follow(
+          null,
+          watch,
+          (heard) => this.heard(filePath, entry, heard),
+          null,
         ).watch,
       },
       subscribers: new Map(),
@@ -357,23 +360,20 @@ class PathWatches {
 
   // Derive where the path can change, follow it, and say the watch's fault.
   // A new key acquires its watch, keeping every directory both keys name and
-  // retrying any the OS is not listening to. A kept watch's deaf directories
-  // are retried on any cause but a `failed` window: the OS refuses an
-  // immediate retry the way it refused the first.
+  // retrying any the OS is not listening to.
   private rederive(
     filePath: string,
     entry: WatchEntry,
     cause: Invalidation,
   ): void {
     const paths = derived(filePath);
-    const { watch, move } = this.watchers.follow(
+    const { watch } = this.watchers.follow(
       entry.bound.held,
       paths,
       (heard) => this.heard(filePath, entry, heard),
+      cause,
     );
     entry.bound = { derived: paths, held: watch };
-    if (cause.kind !== "failed" && move === "kept")
-      this.watchers.listening(watch);
     this.report(filePath, entry);
   }
 

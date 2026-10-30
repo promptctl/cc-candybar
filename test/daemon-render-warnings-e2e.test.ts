@@ -21,7 +21,6 @@ import path from "node:path";
 import {
   killAndWait,
   render,
-  renderUntil,
   stripAnsi,
 } from "./helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
@@ -31,6 +30,7 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
+import { untilHeard } from "./helpers/reload-signal";
 
 jest.setTimeout(30_000);
 
@@ -225,7 +225,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       expect(indicatorOf(bar)).toBe("⚠ 2");
       const pages = await readDiagnostics(sockPath, sid, dir, bar, {}, []);
       expect(pages.map((p) => p.text)).toEqual([
-        expect.stringContaining(`config watch: cannot follow the links of ${link}`),
+        expect.stringContaining(`config watch: cannot follow a link chain — ${link}`),
         expect.stringContaining(`could not be checked: ${link}`),
       ]);
       const events = (await renderLines(env, sid, 1)).map(fieldOf("warn"));
@@ -233,14 +233,16 @@ describe("a daemon render's event names every warning, and the indicator offers 
 
       // A real file where the loop was: the watch hears it and reloads, and
       // the bar is left asking only whether to run the repository's config.
-      rmSync(link);
-      rmSync(`${link}.other`);
-      writeFileSync(link, `{ segments: {} }`);
-      const healed = await renderUntil(
-        sockPath,
-        sid,
-        dir,
-        (b) => indicatorOf(b) === "⚠ 1",
+      // [LAW:no-ambient-temporal-coupling] The write is re-applied until the
+      // watch has heard it.
+      rmSync(`${link}.other`, { force: true });
+      let healed = "";
+      await untilHeard(
+        () => {
+          rmSync(link, { force: true });
+          writeFileSync(link, `{ segments: {} }`);
+        },
+        async () => indicatorOf((healed = await render(sockPath, sid, dir))) === "⚠ 1",
         "the bar once the loop is broken",
       );
       const left = await readDiagnostics(sockPath, sid, dir, healed, {}, []);

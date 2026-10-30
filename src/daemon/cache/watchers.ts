@@ -176,7 +176,8 @@ export interface BoundWatch {
 export function watchFault(label: string, watch: BoundWatch): string | null {
   const reasons = [
     ...watch.derived.unresolved.map(
-      (u) => `cannot follow the links of ${u.path} — ${u.reason}`,
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain — ${u.reason}`,
     ),
     ...watch.held.handle.deaf.map((d) =>
       d.kind === "refused"
@@ -395,17 +396,19 @@ export class WatcherRegistry {
   // FSEvents keeps on its path for a slot the OS refuses. The next derive
   // that finds the directory there rebinds, since its key differs.
   //
-  // A deaf watch under an unchanged key is kept deaf: config and git follow
-  // on a `failed` window, and a follow that retried would retry an error that
-  // recurs on every reopen within one debounce window. A deaf directory is
-  // retried when a holder names it instead: an acquire that joins it, or a
-  // consumer's `listening`.
+  // A kept watch reopens, in place, every directory the OS is not listening
+  // to, unless the follow answers a `failed` window (`after`): the OS
+  // refuses an immediate retry the way it refused the first, and a retry
+  // that fails again would tell another failed window. So every consumer
+  // that follows a moving spec retries its deaf directories by the same rule.
   follow(
     held: HeldWatch | null,
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
+    after: Invalidation | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     if (held !== null && (held.key === spec.key || spec.unbound)) {
+      if (after?.kind !== "failed") this.listening(held);
       return { watch: held, move: "kept" };
     }
     const watch = {
@@ -423,7 +426,7 @@ export class WatcherRegistry {
   // nothing. It judges no folder's identity: a listening directory is left
   // alone, so a window cannot lead back to a reopen through it, and a folder
   // that moved is the next derive's new key.
-  listening(held: HeldWatch): void {
+  private listening(held: HeldWatch): void {
     const slot = this.slots.get(held.key);
     if (slot === undefined) return;
     for (const { dir } of slot.listeners)
@@ -470,7 +473,7 @@ export class WatcherRegistry {
       id,
       ...where,
       listeners: new Set(),
-      state: this.open(where, () => dir, "acquire"),
+      state: this.open(where, () => dir, "acquire", null),
     };
     this.dirs.set(id, dir);
     return dir;
@@ -503,7 +506,7 @@ export class WatcherRegistry {
   private reopen(dir: DirWatch, cause: string): void {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause);
+    dir.state = this.open(dir, () => dir, cause, was);
     if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
     else if (was.kind === "listening")
       this.tell(dir, failedOf(dir.state.deafness));
@@ -515,6 +518,7 @@ export class WatcherRegistry {
     where: { readonly path: string; readonly recursive: boolean },
     dirOf: () => DirWatch,
     cause: string,
+    was: DirState | null,
   ): DirState {
     const at = where.path;
     const bound = boundKey(boundOf(at));
@@ -556,7 +560,14 @@ export class WatcherRegistry {
       return { kind: "listening", handle, bound };
     } catch (e) {
       const reason = (e as Error).message;
-      this.logger("warn", `watch failed ${at}: ${reason}`);
+      // [LAW:nothing-unseen] A refusal is logged when it starts or its reason
+      // changes; every reload retries a deaf directory, and the same refusal
+      // repeated would bury the events around it.
+      const same =
+        was?.kind === "deaf" &&
+        was.deafness.kind === "refused" &&
+        was.deafness.reason === reason;
+      if (!same) this.logger("warn", `watch failed ${at}: ${reason}`);
       return {
         kind: "deaf",
         deafness: { kind: "refused", path: at, reason },
