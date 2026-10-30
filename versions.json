@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-486",
+      "ref": "refs/pull/486/merge",
+      "sha": "2e774a95a3d66a799a6376a936cc5ccd96583fe8",
+      "timestamp": "2026-10-30T09:31:06.415Z",
+      "commits": [
+        {
+          "sha": "2e774a95a3d66a799a6376a936cc5ccd96583fe8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:30:16Z",
+          "message": "Merge 349c86dd39ad8093c6ddacd3d149c3af2e2a76bc into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+        },
+        {
+          "sha": "349c86dd39ad8093c6ddacd3d149c3af2e2a76bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:30:03-06:00",
+          "message": "fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n"
+        },
+        {
+          "sha": "3de9afea2984fe93871460f954c6860ea18a376c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:11:46-06:00",
+          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-485",
       "ref": "refs/pull/485/merge",
       "sha": "8c93d1dafe953410a772c89b3bb4c6eb5f7deff9",
@@ -27,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:08:34-06:00",
           "message": "fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h)\n\nThe daemon writes a probe into a folder of its own each period and judges\ndelivery for every watch it holds: delivering, stalled, or unmeasured with a\nreason. A stall or an unmeasured span draws an amber row naming the span's\nstart, daemon-stats prints a fileEvents line, and the span's close reloads\nevery config entry under events-resumed and re-reads every held plugin file.\nPlugin storage reads that one owner in place of a probe per folder, and keeps\njudging each folder's identity on the owner's period.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-486",
-      "ref": "refs/pull/486/merge",
-      "sha": "a33db125a7d41c169010a4401b6fcb377e30115d",
-      "timestamp": "2026-10-30T09:13:10.021Z",
-      "commits": [
-        {
-          "sha": "a33db125a7d41c169010a4401b6fcb377e30115d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:12:17-06:00",
-          "message": "Merge 3de9afea2984fe93871460f954c6860ea18a376c into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
-        },
-        {
-          "sha": "3de9afea2984fe93871460f954c6860ea18a376c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:11:46-06:00",
-          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
         }
       ]
     },

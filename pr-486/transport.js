@@ -49008,6 +49008,8 @@ var ConfigError = class extends Error {
   }
 };
 function findKeyLine(source, pathParts) {
+  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, pathParts) : void 0;
+  if (indexed !== void 0) return indexed;
   let cursor = 0;
   let foundCursor;
   for (const part of pathParts) {
@@ -49020,6 +49022,23 @@ function findKeyLine(source, pathParts) {
     foundCursor = found;
   }
   return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+}
+function elementPathLine(source, pathParts) {
+  let node;
+  try {
+    node = parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return void 0;
+    throw e;
+  }
+  let reached;
+  for (const part of pathParts) {
+    const next2 = /^\d+$/.test(part) ? node.kind === "array" ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    if (next2 === void 0) break;
+    node = next2;
+    reached = next2;
+  }
+  return reached === void 0 ? void 0 : lineFromOffset(source, reached.span.start);
 }
 function findKeyOccurrence(source, from, key) {
   const escaped2 = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
@@ -50089,16 +50108,14 @@ function* fragmentNodePaths(fragment, key) {
 function mergeRoot(fragment, base) {
   return isRowsFragment(fragment) ? { ...base, ...fragment, rows: { ...base.rows, ...fragment.rows } } : rootOf2(fragment);
 }
-function insertCells(root, cells, file) {
+function insertCells(root, cells) {
   return cells.reduce(
-    (acc, cell3, i) => {
-      const entry = `insert[${i}]`;
+    (acc, cell3) => {
       const id2 = cell3.id ?? cell3.seg;
       const held = segmentWithId(rootNode(acc.root), id2);
       if (held !== void 0) {
         return held.name === cell3.seg ? acc : refuse2(
           acc,
-          entry,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
         );
@@ -50107,23 +50124,25 @@ function insertCells(root, cells, file) {
         kind: "segment",
         name: cell3.seg,
         ...cell3.id !== void 0 && { id: cell3.id },
-        insertedBy: { file, entry }
+        insertedBy: cell3.by
       };
-      const rows = Object.entries(acc.root.rows);
-      const placed = rows.map(
-        ([name, row2]) => [name, besideRow(row2, cell3.anchor, node, cell3.relation)]
+      const rows = Object.entries(acc.root.rows).map(
+        ([name, row2]) => [
+          name,
+          row2,
+          besideRow(row2, cell3.anchor, node, cell3.relation)
+        ]
       );
-      return placed.some(([, row2]) => row2 !== null) ? {
+      return rows.some(([, , placed]) => placed !== null) ? {
         ...acc,
         root: {
           ...acc.root,
           rows: Object.fromEntries(
-            placed.map(([name, row2], r) => [name, row2 ?? rows[r][1]])
+            rows.map(([name, row2, placed]) => [name, placed ?? row2])
           )
         }
       } : refuse2(
         acc,
-        entry,
         cell3,
         `${cell3.relation} "${cell3.anchor}", but the bar has no placement "${cell3.anchor}"`
       );
@@ -50131,11 +50150,8 @@ function insertCells(root, cells, file) {
     { root, unplaced: [] }
   );
 }
-function refuse2(acc, entry, cell3, reason) {
-  return {
-    ...acc,
-    unplaced: [...acc.unplaced, { entry, seg: cell3.seg, reason }]
-  };
+function refuse2(acc, cell3, reason) {
+  return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
 }
 function segmentWithId(tree, id2) {
   for (const node of walkNodes(tree)) {
@@ -50153,14 +50169,9 @@ function besideRow(row2, anchor, cell3, relation) {
       ...when2 !== void 0 && { when: when2 }
     };
   }
-  return beside(row2, anchor, cell3, relation);
+  return row2.kind === "container" ? beside(row2, anchor, cell3, relation) : besideInBody(row2, anchor, cell3, relation);
 }
 function beside(node, anchor, cell3, relation) {
-  if (node.kind === "segment") {
-    if (node.opens === void 0) return null;
-    const body = beside(node.opens.body, anchor, cell3, relation);
-    return body === null ? null : { ...node, opens: { ...node.opens, body } };
-  }
   const at = node.children.findIndex(
     (child) => child.kind === "segment" && placementId(child) === anchor
   );
@@ -50176,7 +50187,7 @@ function beside(node, anchor, cell3, relation) {
     };
   }
   for (const [i, child] of node.children.entries()) {
-    const next2 = beside(child, anchor, cell3, relation);
+    const next2 = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
     if (next2 !== null) {
       return {
         ...node,
@@ -50185,6 +50196,15 @@ function beside(node, anchor, cell3, relation) {
     }
   }
   return null;
+}
+function besideInBody(node, anchor, cell3, relation) {
+  let found = false;
+  const next2 = mapOpens(node, (body) => {
+    const placed = beside(body, anchor, cell3, relation);
+    found = placed !== null;
+    return placed ?? body;
+  });
+  return found ? next2 : null;
 }
 function restages(fragment) {
   if (!isRowsFragment(fragment)) return true;
@@ -50218,10 +50238,33 @@ function presetByName(presets, name) {
 }
 function presetRoot(config2, name) {
   const fragment = presetByName(config2.presets, name).root ?? EMPTY_ROWS;
+  const { node, unplaced } = renderedRoot(config2, fragment);
   return {
-    node: rootNode(mergeRoot(fragment, config2.root)),
-    path: restages(fragment) ? `presets.${name}.root` : "root"
+    node,
+    path: restages(fragment) ? `presets.${name}.root` : "root",
+    unplaced
   };
+}
+function unplacedNotices(config2) {
+  const trees = [
+    { path: "root", where: "", ...renderedRoot(config2, EMPTY_ROWS) },
+    ...presetNames(config2.presets).map((name) => ({
+      ...presetRoot(config2, name),
+      where: ` in preset "${name}"`
+    }))
+  ];
+  return trees.filter((tree, i) => trees.findIndex((t2) => t2.path === tree.path) === i).flatMap(
+    ({ where, unplaced }) => unplaced.map(
+      ({ cell: cell3, reason }) => `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${reason}${where}`
+    )
+  );
+}
+function renderedRoot(config2, fragment) {
+  const { root, unplaced } = insertCells(
+    mergeRoot(fragment, config2.root),
+    config2.insert
+  );
+  return { node: rootNode(root), unplaced };
 }
 function presetGlobals(config2, name) {
   return { ...config2.globals, ...presetByName(config2.presets, name).globals };
@@ -54050,15 +54093,7 @@ var import_json53 = __toESM(require_dist(), 1);
 
 // src/config/loader/merge.ts
 init_globals();
-function mergeWithDefault(raw, dflt, file) {
-  const { root, unplaced } = insertCells(
-    mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
-    raw.insert ?? [],
-    file
-  );
-  return { config: mergeSections(raw, dflt, root), unplaced };
-}
-function mergeSections(raw, dflt, root) {
+function mergeWithDefault(raw, dflt) {
   return {
     globals: { ...dflt.globals, ...raw.globals ?? {} },
     variables: { ...dflt.variables, ...raw.variables ?? {} },
@@ -54066,7 +54101,12 @@ function mergeSections(raw, dflt, root) {
       dflt.segments,
       segmentDeltas(dflt.segments, raw.segments ?? {})
     ),
-    root,
+    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
+    // [LAW:one-source-of-truth] insert cells accumulate in chain order, each
+    // already stamped with the file and entry that wrote it. They stay data:
+    // every rendered tree places them itself (presets.ts's presetRoot), so a
+    // preset's own tree gets its own anchor and clash decisions.
+    insert: [...dflt.insert, ...raw.insert ?? []],
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
     // ships none).
@@ -55276,7 +55316,7 @@ var INSERT_SCHEMA = {
     after: optionalStringSpec()
   }
 };
-function validateInsert(ctx, raw) {
+function validateInsert(ctx, raw, file) {
   if (!Array.isArray(raw)) {
     ctx.issues.push({
       path: "insert",
@@ -55292,11 +55332,20 @@ function validateInsert(ctx, raw) {
     const sides = ["before", "after"].filter(
       (side) => arm2[side] !== void 0
     );
+    const line = findKeyLine(ctx.source, path39.split("."));
     if (sides.length !== 1) {
       ctx.issues.push({
         path: path39,
         message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, ["insert"])
+        line
+      });
+      return [];
+    }
+    if (isReservedName(arm2.seg)) {
+      ctx.issues.push({
+        path: `${path39}.seg`,
+        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
+        line: findKeyLine(ctx.source, [...path39.split("."), "seg"])
       });
       return [];
     }
@@ -55306,7 +55355,8 @@ function validateInsert(ctx, raw) {
         seg: arm2.seg,
         ...arm2.id !== void 0 && { id: arm2.id },
         anchor: arm2[relation],
-        relation
+        relation,
+        by: { file, entry: path39 }
       }
     ];
   });
@@ -56930,7 +56980,9 @@ function validateCrossReferences(ctx, cfg, authored) {
       `insert.${i}`
     );
   }
-  const rendered = /* @__PURE__ */ new Map([["root", rootNode(cfg.root)]]);
+  const rendered = /* @__PURE__ */ new Map([
+    ["root", renderedRoot(cfg, EMPTY_ROWS).node]
+  ]);
   for (const name of presetNames(cfg.presets)) {
     const { node, path: path39 } = presetRoot(cfg, name);
     rendered.set(path39, node);
@@ -57742,11 +57794,8 @@ function applyPlugins(definitions, ctx, base, validate) {
             { source, json: import_json52.default.parse(source) },
             ctx
           ),
-          under2,
-          // A definition may not declare `insert` (DEFINITION_KEYS), so
-          // nothing is ever unplaced.
-          file
-        ).config;
+          under2
+        );
         requireOneSourcePerFile(file, plugin, config2);
         validate(config2, plugin, under2 !== layer.config);
         return config2;
@@ -58631,13 +58680,7 @@ function detectConfigCollisions(projectDir, cwd2) {
 
 // src/config/dsl-loader.ts
 function loadConfig(path39, dflt, ctx, allowedPalettes) {
-  return path39 === null ? (
-    // No file authors no `insert`, so nothing is ever unplaced.
-    {
-      ...NO_FILE,
-      config: mergeWithDefault(NO_FILE.raw, dflt, "<default>").config
-    }
-  ) : loadConfigSource(
+  return path39 === null ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) } : loadConfigSource(
     path39,
     fs_default.readFileSync(path39, "utf-8"),
     dflt,
@@ -58668,20 +58711,14 @@ function loadConfigSource(path39, source, dflt, ctx, allowedPalettes) {
     };
   });
   const { plugins: plugins2, owning } = parsed2.layer;
-  const merged = mergeWithDefault(parsed2.raw, plugins2.config, path39);
-  const standing = withDroppedPlacements(merged.config, owning);
+  const standing = withDroppedPlacements(
+    mergeWithDefault(parsed2.raw, plugins2.config),
+    owning
+  );
   return {
     source,
     raw: parsed2.raw,
-    // [LAW:no-silent-failure] A cell this file's `insert` could not place is
-    // a warning on this file: the bar still draws, and says what it left out.
-    warnings: [
-      ...parsed2.warnings,
-      ...plugins2.dropped.map(droppedPluginNotice),
-      ...merged.unplaced.map(
-        (u) => `${path39}: ${u.entry} places "${u.seg}" ${u.reason}`
-      )
-    ],
+    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
     plugins: {
       loaded: plugins2.loaded,
       dropped: plugins2.dropped,
@@ -58773,6 +58810,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
     rendering: layers.at(-1)?.plugins.rendering ?? plugins2.rendering
   };
   const top = layers.at(-1);
+  trace.warned(unplacedNotices(top?.config ?? base));
   if (top === void 0) {
     return {
       layers,
@@ -58939,7 +58977,13 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
     isPlainObject3(json2.segments) ? Object.keys(json2.segments) : []
   );
-  const raw = validateTopLevel(ctx, json2, inherited, actionHomeOf(filePath2));
+  const raw = validateTopLevel(
+    ctx,
+    json2,
+    inherited,
+    actionHomeOf(filePath2),
+    filePath2
+  );
   if (issues.length > 0) {
     throw new ConfigError(filePath2, issues, warnings);
   }
@@ -58961,7 +59005,7 @@ function parseJson5OrThrow(filePath2, source) {
     ]);
   }
 }
-function validateTopLevel(ctx, raw, inheritedSegments, home) {
+function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
   for (const key of Object.keys(raw)) {
     if (!TOP_LEVEL_KEYS.has(key)) {
       ctx.issues.push({
@@ -58990,7 +59034,8 @@ function validateTopLevel(ctx, raw, inheritedSegments, home) {
   }
   if (raw.root !== void 0)
     out.root = validateRootFragment(ctx, "root", raw.root);
-  if (raw.insert !== void 0) out.insert = validateInsert(ctx, raw.insert);
+  if (raw.insert !== void 0)
+    out.insert = validateInsert(ctx, raw.insert, file);
   if (raw.actions !== void 0)
     out.actions = validateActions(ctx, raw.actions, home);
   if (raw.looks !== void 0) {
@@ -60027,6 +60072,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
   // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
   // in the bar rather than authored with the rest of this literal.
   themeDefaults: BUNDLED_THEME_DEFAULTS,
+  insert: [],
   presets: {
     // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
     // — the resolution floor as a value, not a special case. An empty fragment
@@ -60421,10 +60467,8 @@ var DEFAULT_DSL_CONFIG = mergeWithDefault(
     JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
     AUTHORED_PALETTE_NAMES
   ),
-  RAW_DEFAULT_DSL_CONFIG,
-  // The bundled default authors no `insert`, so nothing is ever unplaced.
-  "<default>"
-).config;
+  RAW_DEFAULT_DSL_CONFIG
+);
 
 // src/daemon/bundled-presets.ts
 var BUNDLED_PRESETS = presetNames(
@@ -77354,7 +77398,7 @@ function placementsBySegment(config2) {
 function orderedSegmentNames(config2) {
   const out = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const node of walkNodes(rootNode(config2.root))) {
+  for (const node of walkNodes(renderedRoot(config2, EMPTY_ROWS).node)) {
     if (node.kind !== "segment") continue;
     if (config2.segments[node.name] && !seen.has(node.name)) {
       out.push(node.name);
