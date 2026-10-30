@@ -769,6 +769,26 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     rt.dispose();
   });
 
+  test("an empty container draws no line, so a { v } whose first child is empty draws its next child on the row's line, at a place of its own", () => {
+    const rt = build(groupedRow("[ 'a', { v: [ { h: [] }, 'b' ] }, 'c' ]"));
+    const lines = stripAnsi(rt.render())
+      .split("\n")
+      .map((line) => [...line.matchAll(/«(\w)»/g)].map(([, name]) => name))
+      .filter((names) => names.length > 0);
+    expect(lines).toEqual([["a", "b", "c"]]);
+    const THREE = FIVE.slice(0, 3);
+    const places = THREE.map((n) => {
+      const { index, count, lineStart, lineEnd } = addressOf(rt.root, n).at(-1)!;
+      return [n, index, count, lineStart, lineEnd];
+    });
+    expect(places).toEqual([
+      ["a", 0, 3, 0, 2],
+      ["b", 1, 3, 0, 2],
+      ["c", 2, 3, 0, 2],
+    ]);
+    rt.dispose();
+  });
+
   test("edit chrome keeps one place per content cell, so a grouped row wears in edit mode what it wears outside it", () => {
     const rt = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] }, 'e' ]"));
     rt.render();

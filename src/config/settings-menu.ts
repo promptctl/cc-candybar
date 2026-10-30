@@ -716,21 +716,27 @@ function prependAnchor(node: LayoutNode): LayoutNode {
           children: [anchorRef, node],
         };
   }
-  return node.kind === "container" && node.when === undefined
-    ? { ...node, children: [anchorRef, ...node.children] }
-    : {
-        kind: "container",
-        direction: "horizontal",
-        // [LAW:no-silent-failure] The gated row's cells are laid on this
-        // line, and a row nested in a row places nothing, so its authored
-        // distribution places them from here, as an ungated row's places the
-        // door beside its cells.
-        ...(node.kind === "container" &&
-          node.distribution !== undefined && {
-            distribution: node.distribution,
-          }),
-        children: [anchorRef, node],
-      };
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node],
+    };
+  }
+  if (node.when === undefined) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  // [LAW:one-source-of-truth] A gated row is led from outside its gate on a
+  // row of its own making, and a row nested in a row places nothing: its
+  // distribution moves to the row its cells are now laid on, as an ungated
+  // row's places the door beside its cells.
+  const { distribution, ...gated } = node;
+  return {
+    kind: "container",
+    direction: "horizontal",
+    ...(distribution !== undefined && { distribution }),
+    children: [anchorRef, gated],
+  };
 }
 
 // [LAW:parse-dont-validate] The checkpoint: in, a tree that may or may not name

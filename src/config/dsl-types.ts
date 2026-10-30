@@ -259,8 +259,11 @@ export interface ContainerNode {
   // of the five shipped distributions. Absent ≡ `van-der-corput`, resolved once
   // at compile (`placedBy`). Per instance, not global: a `{{ menu }}`'s band is
   // the other kind of placer and carries the SAME field in its options dict.
-  // Choosing `monotonic` / `ends-interleaved` reads the sibling count, so adding
-  // a child re-spaces its siblings — a trade the author spends knowingly.
+  // Read on a row, which places every leaf it nests, and on a stack of rows;
+  // refused anywhere inside a row. Choosing `monotonic` / `ends-interleaved`
+  // reads the row's count, the farthest place any of its lines reaches, so
+  // adding a cell anywhere in the row re-spaces all of it — a trade the author
+  // spends knowingly.
   readonly distribution?: DistributionName;
   // A horizontal container whose children share ONE place on the row: edit
   // mode's chrome around the content cell it edits. Every other container

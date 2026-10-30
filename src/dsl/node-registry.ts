@@ -540,18 +540,19 @@ export function childStep(
 // the places it spans over every line it draws, so every leaf it holds is
 // placed within its row's count. A segment takes one place, and so does a
 // unit, whose children share it. A horizontal container lays its children
-// side by side. A vertical one draws its first child on the line it sits on
-// and each other child on a line of its own below, starting where it sits:
-// a row zips its children's first lines and stacks every further line under
-// them (`composeFlow`).
+// side by side. A vertical one draws its first child that draws a line on the
+// line it sits on, and each child after it on a line of its own below,
+// starting where it sits: a row zips its children's first lines and stacks
+// every further line under them, and an empty container draws no line at
+// all (`composeFlow`).
 interface Span {
   readonly width: number;
   readonly reach: number;
 }
 
 // A child's span, the place it starts at, counted from its container's, and
-// whether it is drawn on a line of its own: every child of a vertical
-// container but its first.
+// whether it is drawn on a line of its own: a child of a vertical container
+// once an earlier child has drawn a line.
 interface Laid {
   readonly start: number;
   readonly span: Span;
@@ -564,11 +565,12 @@ function spanOf(node: LayoutNode): Span {
   }
   const laid = laidOut(node);
   return {
-    // An empty container draws no line, so it takes no place.
-    width:
-      node.direction === "vertical"
-        ? (laid[0]?.span.width ?? 0)
-        : laid.reduce((sum, { span }) => sum + span.width, 0),
+    // The places of the children drawn on its first line: none, for a
+    // container that draws no line.
+    width: laid.reduce(
+      (sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width),
+      0,
+    ),
     reach: reachOf(laid),
   };
 }
@@ -580,7 +582,8 @@ function spanOf(node: LayoutNode): Span {
 function laidOut(node: ContainerNode): Laid[] {
   const spans = node.children.map(spanOf);
   const ownLine = (index: number): boolean =>
-    node.direction === "vertical" && index > 0;
+    node.direction === "vertical" &&
+    spans.slice(0, index).some(({ width }) => width > 0);
   if (node.direction === "vertical" || node.unit === true) {
     return spans.map((span, i) => ({ start: 0, span, ownLine: ownLine(i) }));
   }
@@ -610,7 +613,7 @@ const reachOf = (laid: readonly Laid[]): number =>
 // the keystones find the first and last leaf of every drawn line. A unit —
 // edit chrome around one content cell — is the one container that keeps its
 // children on one place, so entering edit mode recolours nothing.
-export function placeChildren(
+function placeChildren(
   node: ContainerNode,
   at: AddressStep | undefined,
 ): AddressStep[] {
