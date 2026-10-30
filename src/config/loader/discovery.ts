@@ -17,6 +17,7 @@ import {
   type RepoGate,
   type RepoProject,
 } from "./repo-gate.js";
+import type { PluginScope } from "./plugin-scope.js";
 
 // [LAW:one-source-of-truth] The set of accepted extensions lives here once.
 // Both .json5 and .json are accepted: JSON ⊂ JSON5, so the same parser
@@ -121,15 +122,31 @@ function xdgConfigBase(): string {
  * The path rides on `missing` so the message and the durable-write target
  * both name it without re-deriving it from the inputs.
  */
+/**
+ * One chain layer: its file, and whose plugins the file lists — a
+ * repository's (`repo`) or the user's installed ones (`plugins`).
+ *
+ * [LAW:one-source-of-truth] The scope is decided where the search finds the
+ * file, from which location supplied it, and rides with the path. A second
+ * list of repository paths beside the layers drifts the moment a caller
+ * builds or filters one list and not the other, and a repository's plugin
+ * then replaces the installed one of the same name.
+ */
+export interface ConfigLayer {
+  readonly path: string;
+  readonly scope: PluginScope;
+}
+
+// The user's own file or an explicit one: never a repository's, whatever its
+// name. The one way to state a layer outside the search.
+export function homeLayer(path: string): ConfigLayer {
+  return { path, scope: "plugins" };
+}
+
 export type ConfigResolution = { readonly repos: RepoGate } & (
   | {
       readonly kind: "chain";
-      readonly layers: readonly string[];
-      // [LAW:one-source-of-truth] The layers a repository supplies — found at
-      // a project or working directory, the ones the gate answers for — so
-      // the plugins each lists are `repo` plugins. The user's file and an
-      // explicit one, whatever their name, are never among them.
-      readonly repoLayers: readonly string[];
+      readonly layers: readonly ConfigLayer[];
       readonly home: string;
       readonly unchecked: readonly Unchecked[];
     }
@@ -221,13 +238,16 @@ export function resolveDslConfig(
   const kept = found
     .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
     .reverse();
-  const layers = kept.map((f) => f.file);
-  const repoLayers = kept.flatMap((f) => (f.repo === null ? [] : [f.file]));
+  const layers = kept.map(
+    (f): ConfigLayer => ({
+      path: f.file,
+      scope: f.repo === null ? "plugins" : "repo",
+    }),
+  );
   if (configFile === undefined) {
     return {
       kind: "chain",
       layers,
-      repoLayers,
       home: userHome(layers),
       unchecked,
       repos,
@@ -237,7 +257,7 @@ export function resolveDslConfig(
   const [own] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, repoLayers, home, unchecked, repos };
+    return { kind: "chain", layers, home, unchecked, repos };
   }
   return own === undefined
     ? { kind: "missing", path: configFile, home, repos }
@@ -270,9 +290,10 @@ export function repoProject(
 // The user's file: the XDG layer when the chain holds one, else the file a
 // first-ever write creates there — CONFIG_EXTENSIONS' head, the documented
 // format, the one that wins a same-location tie.
-function userHome(layers: readonly string[]): string {
+function userHome(layers: readonly ConfigLayer[]): string {
   return (
-    layers.find(isUserFile) ?? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
+    layers.find((l) => isUserFile(l.path))?.path ??
+    `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
   );
 }
 
@@ -295,9 +316,7 @@ export interface ConfigHome {
   readonly path: string;
   // The chain's layers over `path`, lowest first. The home is the chain's
   // bottom, so a layer is either the home or above it.
-  readonly above: readonly string[];
-  // The chain's layers a repository supplies (`ConfigResolution`).
-  readonly repoLayers: readonly string[];
+  readonly above: readonly ConfigLayer[];
   // The approved project whose plugins the chain loads, and the working
   // directory their checkout data paths resolve against.
   readonly repo: ApprovedRepo | null;
@@ -314,8 +333,7 @@ export function durableConfig(
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
-    above: layers.filter((l) => l !== resolved.home),
-    repoLayers: resolved.kind === "chain" ? resolved.repoLayers : [],
+    above: layers.filter((l) => l.path !== resolved.home),
     repo: resolved.repos.plugins,
     cwd: cwd ?? null,
   };

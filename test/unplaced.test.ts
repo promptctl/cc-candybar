@@ -6,6 +6,7 @@
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   inheritableSegmentNames,
+  homeLayer,
   loadConfigChain,
   mergeWithDefault,
   parseDslConfig,
@@ -153,10 +154,10 @@ describe("a chain whose merge fails", () => {
   test("is blamed on the error that refused it, not on a lower file's undeclared placement", () => {
     const load = () =>
       loadConfigChain(
-        ["/lower.json5", "/upper.json5"],
+        ["/lower.json5", "/upper.json5"].map(homeLayer),
         DEFAULT_DSL_CONFIG,
         { warned: () => {} },
-        { repo: null, cwd: null, repoLayers: [] },
+        { repo: null, cwd: null },
         (p) => FILES[p]!,
       );
     expect(load).toThrow(ConfigError);
@@ -168,10 +169,10 @@ describe("a chain whose merge fails", () => {
 describe("a lower layer's undeclared placement", () => {
   const chain = (files: Record<string, string>) =>
     loadConfigChain(
-      Object.keys(files),
+      Object.keys(files).map(homeLayer),
       DEFAULT_DSL_CONFIG,
       { warned: () => {} },
-      { repo: null, cwd: null, repoLayers: [] },
+      { repo: null, cwd: null },
       (p) => files[p]!,
     );
   const LOWER = `{ segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`;

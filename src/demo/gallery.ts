@@ -22,6 +22,7 @@ import process from "node:process";
 import { resolveUserPath } from "../utils/user-path.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { prepareConfig, renderEffective } from "../check.js";
+import { homeLayer } from "../config/dsl-loader.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -43,9 +44,9 @@ const named =
 const repos = repoGateAt(process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
-  named === undefined ? [] : [named],
   // The file named is explicit: no repository supplies it.
-  { repo: repos.plugins, repoLayers: [] },
+  named === undefined ? [] : [homeLayer(named)],
+  { repo: repos.plugins },
   process.cwd(),
   warnings,
   at,

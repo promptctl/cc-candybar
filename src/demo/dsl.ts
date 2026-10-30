@@ -37,7 +37,7 @@ import {
   ConfigError,
   DroppedPlacements,
 } from "../config/loader/diagnostics.js";
-import { refuseDrops } from "../config/dsl-loader.js";
+import { homeLayer, refuseDrops } from "../config/dsl-loader.js";
 import {
   loadChain,
   openView,
@@ -122,8 +122,7 @@ function loadState(): DslRenderState {
   const repos = repoGateAt(cwd);
   // The file it was given is named explicitly: no repository supplies it.
   const chain = {
-    layers: [configPath],
-    repoLayers: [],
+    layers: [homeLayer(configPath)],
     home: configPath,
     repo: repos.plugins,
   };
@@ -131,7 +130,7 @@ function loadState(): DslRenderState {
   // come out of the one place every load composes them.
   const loaded = loadChain(
     {
-      layers: chain.layers,
+      layers: [configPath],
       home: chain.home,
       repos,
       advisories: repoGateLines(repos),

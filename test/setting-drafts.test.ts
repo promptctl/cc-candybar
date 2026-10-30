@@ -166,7 +166,7 @@ describe("a save under a preset that pins the field lands where it renders", () 
     const before = drafts(source, p);
     writeValues(
       { record: () => {}, logger: () => {} },
-      { path: file, above: [], repoLayers: [], repo: null, cwd: null },
+      { path: file, above: [], repo: null, cwd: null },
       before.map(({ target, value }) => [target, value] as const),
     );
     const after = readFileSync(file, "utf8");

@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
+import { homeLayer } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
@@ -108,7 +109,7 @@ describe("a listed plugin", () => {
 
   test("its segments join the add-segment library", async () => {
     const warnings: string[] = [];
-    const prepared = await prepareConfig([config()], NO_REPO, dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(config())], NO_REPO, dir, warnings, instantOf(new Date()));
     try {
       const members = [...addableSegmentDomains(prepared.config).values()][0]!.members;
       expect(members).toContain("plugins.deploy.status");
@@ -120,7 +121,7 @@ describe("a listed plugin", () => {
   test("a data rewrite changes what the bar reads, without a reload", async () => {
     const p = config();
     const data = write("deploy/state.json", `{ "env": "prod", "state": "rolling" }`);
-    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
     try {
       const read = () => prepared.store.readDocument("plugins.deploy.data");
       expect(read()).toEqual({ kind: "ok", value: { env: "prod", state: "rolling" } });
@@ -228,7 +229,7 @@ test("the user's config still renders beside a dropped plugin", async () => {
     `{ plugins: ["./x/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] } }`,
   );
   const warnings: string[] = [];
-  const prepared = await prepareConfig([p], NO_REPO, dir, warnings, instantOf(new Date()));
+  const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, warnings, instantOf(new Date()));
   try {
     expect(prepared.config.segments.mine).toBeDefined();
     expect(prepared.droppedPlugins).toHaveLength(1);
@@ -252,7 +253,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
       `{ plugins: ["./deploy/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine", "plugins.deploy.status"] } }`,
     );
     const warnings: string[] = [];
-    const prepared = await prepareConfig([p], NO_REPO, dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, warnings, instantOf(new Date()));
     try {
       expect(prepared.droppedPlugins).toHaveLength(1);
       return prepared.config.segments["plugins.deploy.status"]!.template!;
@@ -288,7 +289,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
          segments: { "plugins.deploy.status": { palette: "nord" } },
          root: { h: [{ seg: "plugins.deploy.status", settings: { compact: true } }, { seg: "plugins.deploy.status", id: "two", settings: { compact: false } }] } }`,
     );
-    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["plugins.deploy.status"]!.template).toContain("was not loaded");
     } finally {
@@ -303,7 +304,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
          segments: { "my.clock": { template: "tick" } },
          root: { h: [{ kind: "group", name: "extra", label: "x", children: ["my.clock"] }] } }`,
     );
-    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["my.clock"]!.template).toBe("tick");
       expect(prepared.config.segments["groups.extra"]!.template).not.toContain("plugin not loaded");
@@ -328,7 +329,7 @@ test("the user's file retunes a plugin segment by field", async () => {
     "config.json5",
     `{ plugins: ["./deploy/plugin.json5"], segments: { "plugins.deploy.status": { bg: "error" } }, root: { h: ["plugins.deploy.status"] } }`,
   );
-  const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
   try {
     expect(prepared.config.segments["plugins.deploy.status"]).toMatchObject({ bg: "error" });
     expect(prepared.config.segments["plugins.deploy.status"]!.template).toContain("⇪");
@@ -339,7 +340,7 @@ test("the user's file retunes a plugin segment by field", async () => {
 
 test("a data file written after load, and replaced by rename, is read", async () => {
   const p = config();
-  const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
   try {
     const read = () => (prepared.store.readDocument("plugins.deploy.data") as { value?: { state?: string } }).value?.state;
     // fs.watch attaches asynchronously with no ready signal: repeat the
@@ -366,7 +367,7 @@ test("a plugin whose names another layer already declares is dropped; the first 
   const p = config();
   write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
   fs.writeFileSync(p, `{ plugins: ["./deploy/plugin.json5", "./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-  const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
   try {
     expect(prepared.droppedPlugins.map((d) => d.reason).join()).toContain(
       `plugin "deploy" is already listed`,
@@ -549,7 +550,7 @@ describe("an installed plugin", () => {
   async function segmentsIn(projectDir: string): Promise<string[]> {
     const prepared = await prepareConfig(
       [],
-      { repo: repoGateAt(projectDir).plugins, repoLayers: [] },
+      { repo: repoGateAt(projectDir).plugins },
       projectDir,
       [],
       instantOf(new Date()),
@@ -812,7 +813,7 @@ describe("an installed plugin", () => {
     write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["mine", "plugins.deploy.status"] } }`);
     const warnings: string[] = [];
-    const prepared = await prepareConfig([user, project], NO_REPO, dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([user, project].map(homeLayer), NO_REPO, dir, warnings, instantOf(new Date()));
     try {
       expect(warnings.join("\n")).toContain(`references unknown action "plugins.deploy.go"`);
     } finally {
@@ -827,7 +828,7 @@ describe("an installed plugin", () => {
     const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"] }`);
     const warnings: string[] = [];
     // `check` refuses the drop, naming the placement — never the plugin.
-    await expect(prepareConfig([user, project], NO_REPO, dir, warnings, instantOf(new Date()))).rejects.toThrow(
+    await expect(prepareConfig([user, project].map(homeLayer), NO_REPO, dir, warnings, instantOf(new Date()))).rejects.toThrow(
       /user\.json5[\s\S]*"gti" does not match any declared segment/,
     );
     expect(warnings.join("\n")).not.toContain("was not loaded");
@@ -841,7 +842,7 @@ describe("an installed plugin", () => {
     write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"] }`);
     const warnings: string[] = [];
-    await expect(prepareConfig([user, project], NO_REPO, dir, warnings, instantOf(new Date()))).rejects.toThrow("Dependency cycle");
+    await expect(prepareConfig([user, project].map(homeLayer), NO_REPO, dir, warnings, instantOf(new Date()))).rejects.toThrow("Dependency cycle");
     expect(warnings.join("\n")).not.toContain("was not loaded");
   });
 
@@ -867,7 +868,7 @@ describe("an installed plugin", () => {
     for (const line of message.split("\n").filter((l) => /segment "(reads|binds)"/.test(l))) {
       expect(line).toContain(notice);
     }
-    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["plugins.lit.ticket"]!.template).toContain(notice);
     } finally {
@@ -893,7 +894,7 @@ describe("an installed plugin", () => {
     const message = fatal(await checkConfig(p, dir));
     expect(message).toContain("1 plugin did not load");
     expect(message).toContain(notice);
-    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(prepared.droppedPlugins).toHaveLength(1);
       expect(prepared.config.segments["plugins.lit.ticket"]!.template).toContain(notice);
@@ -1054,7 +1055,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ actions: { mark: { set: "m", to: "1" }, both: { do: ["mark", "plugins.lit.open"] } }, variables: { m: { kind: "state", key: "m", default: "0" } }, segments: { b: { template: '{{ action "both" "go" }}' } }, root: { h: ["b"] } }`,
     );
-    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.actions["plugins.lit.open"]).toBeDefined();
       expect(prepared.droppedPlugins.map((d) => [d.scope, d.name])).toEqual([["plugins", "lit"]]);
@@ -1067,7 +1068,7 @@ describe("an installed plugin", () => {
     install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const user = write("user.json5", `{ root: { h: [{ seg: "plugins.lit.s", settings: { a: true } }] } }`);
     const project = write("project.json5", `{ root: { h: [{ seg: "plugins.lit.s", settings: { b: 3 } }] } }`);
-    const prepared = await prepareConfig([user, project], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([user, project].map(homeLayer), NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(Object.keys(prepared.config.segments["plugins.lit.s"]!.settings ?? {})).toContain("b");
     } finally {
@@ -1091,7 +1092,7 @@ describe("an installed plugin", () => {
     write("a.b/plugin.json5", `{ data: "./d.json", segments: {} }`);
     const user = write("user.json5", `{ plugins: ["./a.b/plugin.json5"] }`);
     const project = write("project.json5", `{ root: { h: ["plugins.zzz.s"] } }`);
-    const prepared = await prepareConfig([user, project], NO_REPO, dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([user, project].map(homeLayer), NO_REPO, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["plugins.zzz.s"]!.template).toContain(`its folder \\"a.b\\" is not a plugin name`);
     } finally {
@@ -1186,7 +1187,7 @@ test("a placement under a refused loose definition's folder stands in naming the
   );
   const message = fatal(await checkConfig(p, dir));
   expect(message).not.toContain("unknown segment");
-  const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([homeLayer(p)], NO_REPO, dir, [], instantOf(new Date()));
   try {
     expect(prepared.config.segments["plugins.deploy.s"]!.template).toContain("move this file to");
   } finally {
