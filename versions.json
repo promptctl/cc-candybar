@@ -4,15 +4,29 @@
     {
       "version": "pr-504",
       "ref": "refs/pull/504/merge",
-      "sha": "28cb104f8c5a3d1c49b2b68b03997125c311bacb",
-      "timestamp": "2026-10-30T17:53:45.851Z",
+      "sha": "74f87925162bafa16851607059eb4199b7450e12",
+      "timestamp": "2026-10-30T17:56:40.722Z",
       "commits": [
         {
-          "sha": "28cb104f8c5a3d1c49b2b68b03997125c311bacb",
+          "sha": "74f87925162bafa16851607059eb4199b7450e12",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T17:47:51Z",
-          "message": "Merge 0599747b3b0141010919d7c30c2f5935e8537bd9 into 60d9da3ab14bbf0a4f835357c392667f7dc1a884\n"
+          "timestamp": "2026-10-30T17:53:05Z",
+          "message": "Merge 21b9b48b9111c66181b972b403904aeafdc683c0 into 60d9da3ab14bbf0a4f835357c392667f7dc1a884\n"
+        },
+        {
+          "sha": "21b9b48b9111c66181b972b403904aeafdc683c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:52:54-06:00",
+          "message": "refactor(check): an explicit target is one layer, spelled once (candybar-plugins-vf6g.chl)\n"
+        },
+        {
+          "sha": "33be93f24ec025ca666671fe86e8fe46b9eacacd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:48:04-06:00",
+          "message": "test(check): a cwd config in an approved repository is a repo layer (candybar-plugins-vf6g.chl)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "0599747b3b0141010919d7c30c2f5935e8537bd9",
