@@ -35877,9 +35877,12 @@ var flushing = false;
 var drainedWaiters = [];
 var exiting = false;
 var exitArmed = false;
-function dlog(level, msg) {
-  const line = `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
+function logLine(level, msg) {
+  return `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
 `;
+}
+function dlog(level, msg) {
+  const line = logLine(level, msg);
   if (!exitArmed) {
     exitArmed = true;
     process_default.on("exit", () => {
@@ -35927,8 +35930,10 @@ async function flush() {
   }
 }
 function take() {
-  const lost = dropped === 0 ? "" : `${(/* @__PURE__ */ new Date()).toISOString()} [warn] log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk
-`;
+  const lost = dropped === 0 ? "" : logLine(
+    "warn",
+    `log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`
+  );
   const lines2 = lost + waiting.join("");
   waiting = [];
   waitingBytes = 0;
@@ -50227,34 +50232,43 @@ var SourceRegistry = class _SourceRegistry {
 
 // src/config/lanes.ts
 init_globals();
+var RENDERERS = ["claude", "tmux"];
+var IN_TMUX = 'ne .tmux.pane ""';
 var LANES = {
   band: {
-    setting: "experimentalBand",
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "\u{1F9EA} band (A)",
-    elsewhere: "the band above the prompt",
+    handsOff: true,
     rows: null
   },
   statusline: {
-    setting: "experimentalStatusline",
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "\u{1F9EA} statusline (B)",
-    elsewhere: null,
+    handsOff: false,
     rows: null
   },
   pane: {
-    setting: "experimentalPane",
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "\u{1F9EA} tmux pane (C)",
-    elsewhere: "a tmux pane below",
+    handsOff: true,
     rows: null
   },
   tmuxStatus: {
-    setting: "experimentalTmuxStatus",
-    label: "\u{1F9EA} tmux status line (C)",
-    elsewhere: "the tmux status line",
+    switch: {
+      setting: "renderer",
+      on: "tmux",
+      inTmux: true
+    },
+    label: "tmux status line",
+    handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
     rows: 5
   }
 };
 var LANE_NAMES = Object.keys(LANES);
+var TOGGLED_LANES = LANE_NAMES.filter(
+  (lane) => LANES[lane].switch.on === true
+);
 var MOVING_FPS = 30;
 var ANSWERING = { by: "request" };
 var DRAWING_VAR = "drawing";
@@ -50816,13 +50830,21 @@ function flashAt(since, timeoutS, at) {
 }
 
 // src/config/globals-fields.ts
-var control = (label2, place, previews = [], trials = []) => ({ label: label2, place, previews, trials });
-var enumValues = (members, optionDomain) => ({
+var control = (label2, place, {
+  previews = [],
+  trials = [],
+  shown = "true"
+} = {}) => ({ label: label2, place, previews, trials, shown });
+var enumValues = (members, optionDomain, library) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members },
   parse: (raw) => members.includes(raw) ? raw : null,
   ...optionDomain !== void 0 && {
-    optionDomain: { name: optionDomain, members }
+    optionDomain: {
+      name: optionDomain,
+      members,
+      ...library !== void 0 && { library }
+    }
   }
 });
 var boolValues = {
@@ -50838,7 +50860,7 @@ var intValues = (range) => ({
 function enumSetting(members, floor2, shown, extra = {}) {
   return {
     kind: "session",
-    ...enumValues(members, extra.optionDomain),
+    ...enumValues(members, extra.optionDomain, extra.library),
     floor: floor2,
     control: shown,
     themeDefault: extra.themeDefault ?? false
@@ -50936,11 +50958,22 @@ var menuGlyphSpec = {
   }
 };
 var LANE_ROWS = Object.fromEntries(
-  LANE_NAMES.map((lane) => [
-    LANES[lane].setting,
+  TOGGLED_LANES.map((lane) => [
+    LANES[lane].switch.setting,
     boolSetting(false, control(LANES[lane].label, "toggles"))
   ])
 );
+var RENDERER_DESCRIPTIONS = {
+  claude: "Claude Code's status line",
+  tmux: "the tmux status line, while this pane is shown"
+};
+var RENDERER_LIBRARY = {
+  groups: [{ id: "renderer", label: "draw the bar in" }],
+  entry: (option) => ({
+    group: "renderer",
+    description: RENDERER_DESCRIPTIONS[option]
+  })
+};
 var GLOBAL_FIELDS = {
   // The config default for the base theme: a theme NAME, or a rule choosing
   // one per render (brandon-themes-dzl). A placement's `theme` setting other
@@ -50962,7 +50995,7 @@ var GLOBAL_FIELDS = {
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("\u25A6", "door", ["layout", "presetDelete"])
+    control("\u25A6", "door", { previews: ["layout", "presetDelete"] })
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -50971,7 +51004,7 @@ var GLOBAL_FIELDS = {
     "style",
     optionalStringSpec(),
     { from: "styles" },
-    control("\u25D0", "gear", ["palette"]),
+    control("\u25D0", "gear", { previews: ["palette"] }),
     { themeDefault: true }
   ),
   // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
@@ -50992,7 +51025,10 @@ var GLOBAL_FIELDS = {
   variation: enumSetting(
     VARIATION_NAMES,
     "accent",
-    control("\u{1F3BC}", "gear", ["layout"], TRIAL_VARIATION_NAMES),
+    control("\u{1F3BC}", "gear", {
+      previews: ["layout"],
+      trials: TRIAL_VARIATION_NAMES
+    }),
     { optionDomain: "variations", themeDefault: true }
   ),
   // Which of its role's shades each CELL of the closed bar wears — a named
@@ -51003,7 +51039,7 @@ var GLOBAL_FIELDS = {
   shade: enumSetting(
     SHADE_NAMES,
     "middle",
-    control("\u{1F506}", "gear", ["layout"], TRIAL_SHADE_NAMES),
+    control("\u{1F506}", "gear", { previews: ["layout"], trials: TRIAL_SHADE_NAMES }),
     {
       optionDomain: "shades",
       themeDefault: true
@@ -51048,6 +51084,16 @@ var GLOBAL_FIELDS = {
     MENU_TIMEOUT_RANGE,
     MENU_TIMEOUT_DEFAULT,
     control("menu timeout", "config")
+  ),
+  // Where the bar is drawn (RENDERERS, src/config/lanes.ts). Offered only to a
+  // session inside tmux: outside it, `claude` is the one renderer there is,
+  // and a session there draws in Claude Code's status line whatever this
+  // says, leaving the setting the sessions share as it is.
+  renderer: enumSetting(
+    RENDERERS,
+    "claude",
+    control("renderer", "config", { shown: IN_TMUX }),
+    { optionDomain: "renderers", library: RENDERER_LIBRARY }
   ),
   ...LANE_ROWS,
   // The color depth rich-js downsamples output to (the legacy
@@ -51314,7 +51360,6 @@ var SLOT_PATHS = Object.fromEntries(
 function slotAt(path41) {
   return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path41);
 }
-var IN_TMUX = 'ne .tmux.pane ""';
 
 // src/config/synthesis-inputs.ts
 function synthesisReads(artifacts, trees, helpers) {
@@ -51676,22 +51721,18 @@ function themeFloor() {
 
 // src/config/option-domain.ts
 var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve, paletteOf) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, paletteOf });
+function registerBuiltinDomain(name, resolve, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
 }
-registerBuiltinDomain(
-  "themes",
-  () => listResolvablePaletteNames(),
-  (option) => paletteForThemeName(option)
-);
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
 var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(
-  PLACEMENT_THEMES,
-  placementThemeNames,
-  (option, render3) => placementPalette(option, render3.palette)
-);
-for (const { name, members } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members);
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library });
 }
 function perConfigDomainsFor(config2) {
   return /* @__PURE__ */ new Map([
@@ -51725,7 +51766,13 @@ function resolveOptionDomain(from, perConfigDomains) {
   const local = perConfigDomains.get(from);
   if (local) return local;
   const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) return { members: entry.resolve(), paletteOf: entry.paletteOf };
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library
+    };
+  }
   throw new Error(unknownOptionDomain(from, perConfigDomains));
 }
 var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
@@ -51991,11 +52038,57 @@ init_globals();
 
 // src/config/loader/globals.ts
 init_globals();
+
+// src/config/menu-places.ts
+init_globals();
+var TABS = [
+  { member: "session", label: "\u26A1 session" },
+  { member: "look", label: "\u{1F3A8} look" },
+  // `📐`, because `▦` is the preset control's glyph.
+  { member: "layout", label: "\u{1F4D0} layout" },
+  { member: "config", label: "\u2699 config" },
+  { member: "tools", label: "\u{1F9F0} tools" }
+];
+var TAB_LABEL = Object.fromEntries(
+  TABS.map((t2) => [t2.member, t2.label])
+);
+var SUBMENUS = {
+  gear: { beside: "theme", trigger: "\u2699" },
+  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" },
+  // The looks still on trial (Brandon: "put them in a separate menu"): the
+  // members of a setting's domain its row names as `trials`, each setting's
+  // in a picker of its own, off the control everyone turns.
+  trials: { beside: "shade", trigger: "\u{1F9EA} trials" }
+};
+var SUBMENU_NAMES = Object.keys(SUBMENUS);
+var PLACE = perSetting(
+  (name) => SETTINGS[name].place
+);
+var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
+var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var settingMenuPath = (name) => placePath(PLACE[name]);
+var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+  top,
+  ...SUBMENU_NAMES.filter((s) => within(s, top))
+]).map((place) => ({
+  path: placePath(place),
+  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+})).filter(({ names }) => names.length > 0);
+var laneOffReason = (lane) => {
+  const { setting, on: on2, inTmux: inTmux2 } = LANES[lane].switch;
+  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}${inTmux2 ? "; it runs only for a session inside a tmux pane" : ""}`;
+};
+
+// src/config/loader/globals.ts
 var GLOBALS_FIELDS = Object.fromEntries(
   Object.entries(GLOBAL_FIELDS).map(([field, row2]) => [field, row2.spec])
 );
 function settingControlDomain(field) {
-  return GLOBAL_FIELDS[field].domain;
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row2) {
+  return "optionDomain" in row2 && row2.optionDomain?.library !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
 }
 function fragmentRejection(description, message) {
   return {
@@ -52054,6 +52147,10 @@ var REMOVED_GLOBALS = {
   // value in it is refused by value (cross-ref.ts).
   look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
   progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  // The tmux status line became a renderer the bar fully supports, so its
+  // experimental toggle is a value of the renderer setting.
+  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
+  experimentalTmuxStatus: `it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} \u203A renderer, from a session inside tmux)`,
   // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
   // nerdFont check names the font that lacks them.
   charset: "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing."
@@ -52441,47 +52538,11 @@ var NODE_FLAGS = {
   version: ["-V", "--version"]
 };
 
-// src/config/menu-places.ts
-init_globals();
-var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" },
-  { member: "tools", label: "\u{1F9F0} tools" }
-];
-var TAB_LABEL = Object.fromEntries(
-  TABS.map((t2) => [t2.member, t2.label])
-);
-var SUBMENUS = {
-  gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" },
-  // The looks still on trial (Brandon: "put them in a separate menu"): the
-  // members of a setting's domain its row names as `trials`, each setting's
-  // in a picker of its own, off the control everyone turns.
-  trials: { beside: "shade", trigger: "\u{1F9EA} trials" }
-};
-var SUBMENU_NAMES = Object.keys(SUBMENUS);
-var PLACE = perSetting(
-  (name) => SETTINGS[name].place
-);
-var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
-var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
-var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
-  top,
-  ...SUBMENU_NAMES.filter((s) => within(s, top))
-]).map((place) => ({
-  path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
-})).filter(({ names }) => names.length > 0);
-var laneOffReason = (lane) => `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(LANES[lane].setting)}, or set globals.${LANES[lane].setting}: true`;
-
 // src/help-text.ts
 var LANE_PLACES = [
-  ...new Set(Object.values(LANES).map((l) => settingMenuPath(l.setting)))
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
+  )
 ].join(" or ");
 var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
 var EDIT_MODE_HELP = [
@@ -52505,8 +52566,8 @@ var LANE_HELP = {
     "on: opens that pane \xB7 off: closes it"
   ],
   tmuxStatus: [
-    "animates the bar in the tmux status line, while this session's pane is the one it shows",
-    "on: the daemon draws it there \xB7 off: puts the status line back as it was"
+    "draws the bar in the tmux status line, while this session's pane is the one it shows",
+    "tmux: the daemon draws it there \xB7 claude: puts the status line back as it was"
   ]
 };
 var HELP_TEXT = `
@@ -52550,7 +52611,7 @@ ${settingsByPlace().flatMap(({ path: path41, names }) => [
   Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
   in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
 
-Animation lanes (experimental; toggles in the settings menu's ${LANE_PLACES}):
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
 ${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
 ${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
@@ -52591,7 +52652,7 @@ Subcommands:
                            drawn at PANE's width, so split PANE with -v for a
                            pane under it that fits. Experimental:
                            runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.setting)}.
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
 
 Config tooling:
   doctor [file]            Check your setup the way the bar's \u{1FA7A} doctor does \u2014
@@ -52643,6 +52704,7 @@ var TMUX_ENV = {
   // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
   truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
+var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
 // src/render/strip.ts
 init_globals();
@@ -54278,19 +54340,38 @@ var ARMED = "armed";
 var DISARMED = "disarmed";
 var CONFIRM_KEY_SUFFIX = ".armed";
 var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i, held) => i === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i + 1, held | 1 << i)} ${link(i + 1, held)} (${gates[i]}))`;
+  return { link: link(0, 0), actions };
+}
 function confirmStep(key, labels, fires) {
   const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
   const arm2 = `${key}.arm`;
   const disarm = `${key}.disarm`;
   const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
   return {
     // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
     // value, read back here.
-    template: `{{ if ${armed} }}{{ action "${key}" "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
     actions: {
       [arm2]: { set: stateKey, to: ARMED },
       [disarm]: { set: stateKey, to: DISARMED },
-      [key]: { do: [disarm, ...fires] }
+      ...confirm.actions
     },
     armed,
     variables: {
@@ -54325,7 +54406,7 @@ function commandTray(prefix) {
   const clear = confirmStep(
     `${prefix}clear`,
     { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
-    [typeClear]
+    [{ action: typeClear, when: "true" }]
   );
   return {
     template: COMMANDS.map(
@@ -54489,9 +54570,9 @@ var PREVIEWS = {
 var controlRow = (name, row2) => `${SETTINGS_NS}list.${name}.${row2}`;
 var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
 var DRIFT_MARK = " \u2022";
-var anyResettable = (names) => names.length === 0 ? "false" : `(or ${names.map((n) => `.${controlResettable(n)}`).join(" ")})`;
+var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
 var laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].setting, lane]
+  (lane) => [LANES[lane].switch.setting, lane]
 );
 var HELP_ARTIFACTS = {
   variables: {},
@@ -54499,15 +54580,10 @@ var HELP_ARTIFACTS = {
   segments: {}
 };
 var HELP = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [
-    setting,
-    declareHelp(
-      `${SETTINGS_NS}help.${setting}`,
-      LANE_HELP[lane],
-      [],
-      HELP_ARTIFACTS
-    )
-  ])
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
+  })
 );
 var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 var laneReadout = (lane) => {
@@ -54515,7 +54591,12 @@ var laneReadout = (lane) => {
   const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
     " "
   );
-  return `{{ if .${SETTINGS[LANES[lane].setting].effectiveVar} }} {{ if ${feed("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed("fps")} }} fps{{ if not ${feed("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`;
+  return (
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed("fps")} }} fps{{ if not ${feed("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
+  );
 };
 var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
 var FPS_SEG = `${SETTINGS_NS}fps`;
@@ -54588,22 +54669,24 @@ var MENU_CONTROLS = [...CONTROLS, ...TRIAL_CONTROLS];
 var controlsIn = (place) => MENU_CONTROLS.filter((c) => c.place === place);
 var controlsUnder = (place) => MENU_CONTROLS.filter((c) => within(c.place, place));
 var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-  controlsUnder(place).map((c) => c.name)
+  controlsUnder(place)
 )}))`;
-var controlsAt = (place) => controlsIn(place).flatMap((c) => [
-  controlNode(c),
-  ...c.help,
-  ...c.submenus.map(
-    (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
-  )
-]);
+var controlsAt = (place) => controlsIn(place).flatMap(
+  (c) => [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map(
+      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
+    )
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
+);
 var SETTINGS_WRITTEN_KEYS = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
 );
 var RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "\u27F2", confirm: "\u27F2 reset all?" },
-  CONTROLS.map((c) => controlReset(c.name))
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
 );
 var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
 var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
@@ -54621,7 +54704,7 @@ var SAVE_PARTS = [
   counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
   {
     body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS.map((c) => c.name))} ${RESET_ALL.armed})`
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
   }
 ];
 var SAVE_CELL = {
@@ -62220,7 +62303,10 @@ function underThemeDefault(globals, fragment) {
 }
 
 // src/config/effective-globals.ts
-var laneSwitches = (effective) => perLane((lane) => effective[LANES[lane].setting]);
+var laneSwitches = (effective, inTmux2) => perLane((lane) => {
+  const { setting, on: on2, inTmux: needsTmux } = LANES[lane].switch;
+  return effective[setting] === on2 && (inTmux2 || !needsTmux);
+});
 function resolveValued(field, staged, sessionPick, globals) {
   const row2 = valuedRow(field);
   return effectiveGlobal(
@@ -75490,18 +75576,14 @@ function pickerFuncs(runtime, activeSegment) {
           );
         }
         const apply = requireOptionKind(runtime, applyName, "picker");
-        if (apply.library !== void 0) {
-          throw new Error(
-            `{{ picker "${applyName}" \u2026 }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`
-          );
-        }
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
             `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
           );
         }
-        const [line] = renderPicker(
+        const drawnAt = activeSegment.drawnAt();
+        const draw2 = (ground) => renderPicker(
           applyName,
           apply,
           { key: page2.key, stateVar: page2.stateVar },
@@ -75520,12 +75602,16 @@ function pickerFuncs(runtime, activeSegment) {
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
             apply.paletteOf,
-            activeSegment.drawnAt(),
-            active2.bg
+            drawnAt,
+            ground
           ),
-          closeOn(active2.palette, active2.bg, activeSegment.drawnAt())
+          closeOn(active2.palette, ground, drawnAt)
         );
-        return line;
+        const band = bandFor(active2.palette, active2.disclosure);
+        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        if (rows.length === 0) return draw2(active2.bg)[0];
+        active2.drops.push(...rows);
+        return draw2(band.state)[0];
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },
@@ -79578,7 +79664,7 @@ var sentOf = (resp) => ({
   resp,
   bytes: JSON.stringify(resp)
 });
-var answerOf3 = (answers, lane) => LANES[lane].elsewhere === null ? answers.statusline : answers.bar;
+var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.bar : answers.statusline;
 var paceOf = (period) => Math.round(1e3 / period);
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
@@ -81656,37 +81742,27 @@ function productionLaneEdge(following) {
 init_globals();
 function handedOffTo(lanes, following) {
   return LANE_NAMES.filter(
-    (lane) => lanes[lane] && LANES[lane].elsewhere !== null && following.has(lane)
+    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane)
   );
 }
-var HANDOFF_BUTTON = "[\u27F2 draw it here]";
+var HANDOFF_BUTTON = "[\u27F2 claude]";
 function laneHandoff(sessionId2, lanes) {
-  const where = lanes.map((lane) => LANES[lane].elsewhere).join(" and ");
-  const message = `the bar is drawn in ${where}`;
   const reset = effectsUrl([
     {
       verb: VERB_RESET_CONFIG,
-      args: [sessionId2, ...lanes.map((lane) => LANES[lane].setting)]
+      args: [sessionId2, ...lanes.map((lane) => LANES[lane].switch.setting)]
     }
   ]);
   return {
     severity: HANDOFF_SEVERITY,
-    lines: [
-      [
-        diagnosticSpan(
-          message,
-          effectsUrl([{ verb: VERB_COPY, args: [message] }])
-        ),
-        diagnosticSpan(HANDOFF_BUTTON, reset)
-      ]
-    ]
+    lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]]
   };
 }
 
 // src/daemon/render-warnings.ts
 init_globals();
 var MAX_RECORDS = 512;
-var RENDERERS = ["request", "feed"];
+var RENDERERS2 = ["request", "feed"];
 var generations = /* @__PURE__ */ new WeakMap();
 var nextGeneration = 0;
 var generationOf = (config2) => {
@@ -81712,7 +81788,7 @@ var RenderWarningRecords = class {
   ofSession(sessionId2, by, scope) {
     const generation = generationOf(scope.config);
     const listed = [];
-    for (const renderer of RENDERERS) {
+    for (const renderer of RENDERERS2) {
       const held = this.records.get(keyOf(sessionId2, renderer));
       const own2 = renderer === by ? this.of(sessionId2, by) : held?.generation === generation ? held.warnings : [];
       const earlier = listed.map((w) => JSON.stringify(w));
@@ -82687,7 +82763,10 @@ function viewLanes(sessionId2) {
   var _stack = [];
   try {
     const hold = __using(_stack, renderCache.holdView(sessionId2));
-    return hold === null ? null : laneSwitches(hold.view.source.effective());
+    return hold === null ? null : laneSwitches(
+      hold.view.source.effective(),
+      inTmux(hold.view.facts().hints.tmux)
+    );
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -82702,7 +82781,11 @@ function lanesAt(origin, sessionId2) {
       origin.cwd,
       origin.configFile ?? void 0
     ));
-    return laneSwitches(sessionGlobals2(sessionId2, hold.state));
+    const latest = frameFeeds.latest(sessionId2);
+    return laneSwitches(
+      sessionGlobals2(sessionId2, hold.state),
+      latest === null || inTmux(latest.hints.tmux)
+    );
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -82864,7 +82947,7 @@ function setUpDraw(hold, req, hintsError, at, facts) {
 function drawRender(setup, drawing2) {
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const effective = view.source.effective();
-  const lanes = laneSwitches(effective);
+  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
   });
@@ -83123,7 +83206,10 @@ async function drawAnswer(req, at, wait, facts) {
   var _stack = [];
   try {
     const setup = __using(_stack, setUpRender(req, at, facts));
-    arrived2(req, laneSwitches(setup.view.source.effective()));
+    arrived2(
+      req,
+      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
+    );
     noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
     const waitFrom = performance.now();
     const refreshed = /* @__PURE__ */ new Map();
