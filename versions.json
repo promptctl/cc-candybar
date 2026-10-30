@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "cd51ad088846247d4d8d328c870849e2b81ba424",
+      "timestamp": "2026-10-30T10:39:17.240Z",
+      "commits": [
+        {
+          "sha": "cd51ad088846247d4d8d328c870849e2b81ba424",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:38:20-06:00",
+          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) (#486)\n\n* feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n\n* fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n\n* fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n\n* fix(config): the loader places every layer's insert cells once, and the merged config holds none (candybar-plugins-vf6g.99v)\n\nInsert cells were a second carrier of placements on the merged config,\nre-placed by every walk of a preset's tree, including over trees the load\nhad already pruned. The loader now places every layer's cells once, into the\nconfig's root and each restaging preset's tree, before cross-ref and\nsynthesis, and collects the missed-anchor notices from that same pass.\n\n- A cell naming an undeclared segment is dropped and reported at the\n  writing file's insert.<i>, from any layer, instead of crashing edit chrome.\n- An anchor on the bar's own chrome is refused at parse, like a chrome seg.\n- An inserted cell's names-view label is keyed by preset, so it no longer\n  overwrites another preset's editable label of the same id.\n- A numeric path part indexes only arrays; on an object the key scanner\n  places it as before.\n- Insert validation looks up a line only for an issue.\n- Docs: an inserted cell is an insert entry, which clicks don't rewrite,\n  in any file.\n\n* fix(config): an inserted cell hides with its anchor, only a preset a cell lands in is rewritten, and each missed entry warns once (candybar-plugins-vf6g.99v)\n\nThe unused-declaration report reads the trees with inserts placed, so a\nsegment only an insert entry places is used. A cell spliced beside an anchor\ninside a container carries the anchor's when, as a row anchor's cell is\ngated by the row. A preset no cell lands in keeps the fragment it was\nwritten as. One entry that misses several trees is one notice naming them\nall. Edit mode's label names the inserting file by its directory and name.\n\n(candybar-plugins-vf6g.99v)\n\n* fix(config): a cell-caused issue refuses only that cell, every restaging preset carries its judged tree, and an id-less cell is satisfied by any placement of its segment (candybar-plugins-vf6g.99v)"
+        }
+      ]
+    },
+    {
       "version": "pr-488",
       "ref": "refs/pull/488/merge",
       "sha": "f2ca086508182a7f30b9912cf06400e55a3074af",
@@ -27,85 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:20:37-06:00",
           "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-486",
-      "ref": "refs/pull/486/merge",
-      "sha": "3ccf3f4524ce8a867e320d5a8b74715ea2d8de69",
-      "timestamp": "2026-10-30T10:32:30.044Z",
-      "commits": [
-        {
-          "sha": "3ccf3f4524ce8a867e320d5a8b74715ea2d8de69",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:31:44Z",
-          "message": "Merge 0487a902cd2db630b22a7a2c85d382de36b23cd9 into e31c958417e5127d95819930643df17eb59fe2bf\n"
-        },
-        {
-          "sha": "0487a902cd2db630b22a7a2c85d382de36b23cd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:24:39-06:00",
-          "message": "fix(config): a cell-caused issue refuses only that cell, every restaging preset carries its judged tree, and an id-less cell is satisfied by any placement of its segment (candybar-plugins-vf6g.99v)\n"
-        },
-        {
-          "sha": "41e4ebd5cb314eb3ede98f4e78ed6d5ae573eb83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:05:52-06:00",
-          "message": "fix(config): an inserted cell hides with its anchor, only a preset a cell lands in is rewritten, and each missed entry warns once (candybar-plugins-vf6g.99v)\n\nThe unused-declaration report reads the trees with inserts placed, so a\nsegment only an insert entry places is used. A cell spliced beside an anchor\ninside a container carries the anchor's when, as a row anchor's cell is\ngated by the row. A preset no cell lands in keeps the fragment it was\nwritten as. One entry that misses several trees is one notice naming them\nall. Edit mode's label names the inserting file by its directory and name.\n\n(candybar-plugins-vf6g.99v)\n"
-        },
-        {
-          "sha": "24101b133d0364bcfa142578b7da320af3ab14b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:52:06-06:00",
-          "message": "fix(config): the loader places every layer's insert cells once, and the merged config holds none (candybar-plugins-vf6g.99v)\n\nInsert cells were a second carrier of placements on the merged config,\nre-placed by every walk of a preset's tree, including over trees the load\nhad already pruned. The loader now places every layer's cells once, into the\nconfig's root and each restaging preset's tree, before cross-ref and\nsynthesis, and collects the missed-anchor notices from that same pass.\n\n- A cell naming an undeclared segment is dropped and reported at the\n  writing file's insert.<i>, from any layer, instead of crashing edit chrome.\n- An anchor on the bar's own chrome is refused at parse, like a chrome seg.\n- An inserted cell's names-view label is keyed by preset, so it no longer\n  overwrites another preset's editable label of the same id.\n- A numeric path part indexes only arrays; on an object the key scanner\n  places it as before.\n- Insert validation looks up a line only for an issue.\n- Docs: an inserted cell is an insert entry, which clicks don't rewrite,\n  in any file.\n"
-        },
-        {
-          "sha": "1eb5ae4cdacaf547d59b5c8cdbbf1b65a322c696",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:31:32-06:00",
-          "message": "fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n"
-        },
-        {
-          "sha": "5ece5144d8d7c50894a2f3d801d3aafcb9694620",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:30:03-06:00",
-          "message": "fix(config): every rendered tree places a layer's insert cells, so presets decide their own anchors and clashes (candybar-plugins-vf6g.99v)\n"
-        },
-        {
-          "sha": "b08dae164a62996f201afa43411a67c2cf3262f4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:11:46-06:00",
-          "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
-      "timestamp": "2026-10-30T10:02:09.763Z",
-      "commits": [
-        {
-          "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:01:16-06:00",
-          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) (#487)\n\n* fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n\n* fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated."
-        },
-        {
-          "sha": "059a45e0880e4967c0f0fee60def00a4f4153ac0",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T09:48:48Z",
-          "message": "chore(release): set `package.json` to 1.163.0 [skip ci]\n\n## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)\n\n### Features\n\n* **diagnostics:** every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) ([#483](https://github.com/promptctl/cc-candybar/issues/483)) ([4363d2a](https://github.com/promptctl/cc-candybar/commit/4363d2a7982c76c6f6ada1028f154dd9a498309c))\n\n### Bug Fixes\n\n* **daemon:** one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) ([#485](https://github.com/promptctl/cc-candybar/issues/485)) ([5a804ba](https://github.com/promptctl/cc-candybar/commit/5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad))\n"
         }
       ]
     }
