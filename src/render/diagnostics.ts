@@ -12,6 +12,8 @@
 //
 // [LAW:effects-at-boundaries] Pure: (messages, geometry, viewing) → strings.
 
+import { createHash } from "node:crypto";
+
 import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
 import { effectsUrl, VERB_COPY, VERB_SET_STATE } from "../click/wire.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
@@ -145,15 +147,33 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
       : "warning";
 }
 
+// [LAW:one-source-of-truth] Which message the viewer shows is stored as the
+// message itself — its severity and verbatim text, digested — never as a
+// position: a list that shifts under an open viewer would otherwise show
+// another message under the same position, and one that shrank and grew
+// again would reopen it. A positive integer, so the viewer's key keeps the
+// integer gate every click to it crosses.
+export function diagnosticKey(message: DiagnosticMessage): string {
+  const digest = createHash("sha256")
+    .update(
+      `${message.severity.level}\0${message.severity.glyph}\0${message.message}`,
+    )
+    .digest("hex");
+  // 48 bits: a safe integer, and no collision inside any one list.
+  return String(Number.parseInt(digest.slice(0, 12), 16) + 1);
+}
+
 // [LAW:one-source-of-truth] What the door's indicator reads (the `diagnostics`
-// draw projection): its label, empty when there is nothing to show, and the
-// colours of the list's worst level. The count is capped so the indicator
-// never grows past four cells.
+// draw projection): its label, empty when there is nothing to show, the
+// colours of the list's worst level, and the key of the message its click
+// opens — the first. The count is capped so the indicator never grows past
+// four cells.
 export const INDICATOR_CAP = 9;
 export interface DiagnosticsProjection {
   readonly label: string;
   readonly fg: string;
   readonly bg: string;
+  readonly open: string;
 }
 const LEVEL_COLORS: Readonly<Record<DiagnosticLevel, DiagnosticColors>> = {
   error: DIAGNOSTIC_ERROR_COLORS,
@@ -170,18 +190,23 @@ export function diagnosticsProjection(
       level === null ? "" : `⚠ ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
+    open: list[0] === undefined ? VIEWER_CLOSED : diagnosticKey(list[0]),
   };
 }
 
-// What the viewer's ✕ writes: any index below 1 is closed.
-const VIEWER_CLOSED = 0;
+// What the viewer's ✕ writes: no message has it as its key.
+const VIEWER_CLOSED = "0";
 
-// The message the viewer shows for the stored `raw` over a list of `n`: none
-// while closed or with nothing to show, else the stored index clamped into
-// range, so a list that shrank shows its last message rather than nothing.
-export function viewedIndex(raw: string | null, n: number): number | null {
-  const stored = raw === null ? NaN : Number.parseInt(raw, 10);
-  return !(stored >= 1) || n === 0 ? null : Math.min(stored, n);
+// [LAW:dataflow-not-control-flow] The position (1-based) of the message the
+// stored key `raw` names in this draw's list; none while closed, and none once
+// that message is no longer in the list — the viewer closes rather than show
+// another message in its place.
+export function viewedIndex(
+  raw: string | null,
+  list: DiagnosticList,
+): number | null {
+  const at = list.findIndex((m) => diagnosticKey(m) === raw);
+  return at === -1 ? null : at + 1;
 }
 
 export interface DiagnosticGeometry {
@@ -206,19 +231,23 @@ export function viewerRows(
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg,
   });
-  const go = (to: number): string =>
+  const go = (key: string): string =>
     effectsUrl([
       {
         verb: VERB_SET_STATE,
-        args: [sessionId, DIAGNOSTICS_VIEWING, String(to)],
+        args: [sessionId, DIAGNOSTICS_VIEWING, key],
       },
     ]);
   const button = (text: string, link: string | null): RichText =>
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
   // the arrow's width, so the header never shifts as the reader pages.
-  const step = (glyph: string, to: number): RichText =>
-    to >= 1 && to <= list.length ? button(glyph, go(to)) : button(" ", null);
+  const step = (glyph: string, to: number): RichText => {
+    const neighbour = list[to - 1];
+    return neighbour === undefined
+      ? button(" ", null)
+      : button(glyph, go(diagnosticKey(neighbour)));
+  };
   const header = [
     button("✕", go(VIEWER_CLOSED)),
     ...(list.length > 1 ? [step("‹", index - 1)] : []),

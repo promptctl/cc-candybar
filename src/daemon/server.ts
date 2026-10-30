@@ -2427,10 +2427,10 @@ function drawRender(
     colorCompatibility: effective.colorCompatibility,
   };
   // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
-  // place: the message it shows, clamped into the list as it stands now.
+  // place: open only while the message it was opened on is in this list.
   const viewing = viewedIndex(
     sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
-    diagnostics.length,
+    diagnostics,
   );
   const g = gitService.getStats();
   const u = usageStore.getStats();

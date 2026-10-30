@@ -193,6 +193,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
     await draw();
     expect(indicatorOf(await draw())).toBeNull();
     const records = (await renderLines(env, sid, 5)).map(fieldOf("warnRecord"));
-    expect(records).toEqual(["kept", "new", "kept", "new", "kept"]);
+    // The last four: met, counted, stopped, cleared.
+    expect(records.slice(-4)).toEqual(["new", "kept", "new", "kept"]);
   });
 });

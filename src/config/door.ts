@@ -31,7 +31,7 @@ export const SETTINGS_REF: DisclosureRef = {
 
 // [LAW:one-source-of-truth] The session key the diagnostics viewer is open
 // under, written by the indicator the door carries (its `set`-int action, so
-// every config's gate holds it) and by the viewer's own ‹ › ✕: the 1-based
-// index of the message it shows, or closed at anything below 1, the key absent
-// included (src/render/diagnostics.ts).
+// every config's gate holds it) and by the viewer's own ‹ › ✕: the key of the
+// message it shows (diagnosticKey), closed at any value no message in the
+// draw's list has — ✕'s, or the key absent (src/render/diagnostics.ts).
 export const DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;

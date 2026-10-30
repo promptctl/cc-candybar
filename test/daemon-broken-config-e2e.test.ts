@@ -90,6 +90,39 @@ describe("a config that cannot be drawn as written", () => {
     );
   });
 
+  // The viewer holds the message it was opened on, not a position: a message
+  // arriving ahead of it leaves it in view, and once it is gone the viewer
+  // closes, and stays closed when other messages appear later.
+  test("the viewer follows its message as the list moves, and closes once it is gone", async () => {
+    const sid = "broken-identity";
+    const a = args(
+      "identity",
+      `{ globals: { padding: 1, padding: 1 }, segments: { mine: { template: "MINE" } }, root: { h: ["mine"] } }`,
+    );
+    // An unknown flag is this request's own error, ahead of the file's warning.
+    const flagged = [...a, "--no-such-flag"];
+    const draw = (argv: string[]) =>
+      render(sockPath, sid, projectDir, {}, argv);
+    const bar = await draw(a);
+    expect(indicatorOf(bar)).toBe("⚠ 1");
+    await click(sockPath, viewerLink(bar, "open")!.url);
+    let shown = await draw(flagged);
+    // The error arrived ahead of it: still the warning, now second.
+    expect(pageOf(shown).position).toBe("2/2");
+    expect(pageOf(shown).text).toContain('duplicate key "padding"');
+    // Paged to the flag's error, which then goes: closed, never the warning.
+    await click(sockPath, viewerLink(shown, "‹")!.url);
+    shown = await draw(flagged);
+    expect(pageOf(shown).text).toContain("--no-such-flag");
+    shown = await draw(a);
+    expect(stripAnsi(shown)).toContain("MINE");
+    expect(indicatorOf(shown)).toBe("⚠ 1");
+    // Another error arriving later does not open the viewer on it.
+    shown = await draw([...a, "--another-flag"]);
+    expect(stripAnsi(shown)).toContain("MINE");
+    expect(indicatorOf(shown)).toBe("⚠ 2");
+  });
+
   test("a config failing validation keeps a working bar: the default's settings menu opens under its error", async () => {
     const sid = "broken-validate";
     const a = args(
@@ -178,12 +211,12 @@ describe("a config that cannot be drawn as written", () => {
         expect(new RichText(row).cellLength).toBeLessThanOrEqual(40);
 
     // ‹ steps back from the second message to the first.
-    await click(sockPath, viewerLink(bar, "1")!.url);
+    await click(sockPath, viewerLink(bar, "open")!.url);
     let shown = await render(sockPath, sid, projectDir, hints, a);
-    await click(sockPath, viewerLink(shown, "2")!.url);
+    await click(sockPath, viewerLink(shown, "›")!.url);
     shown = await render(sockPath, sid, projectDir, hints, a);
     expect(pageOf(shown).position).toBe("2/2");
-    await click(sockPath, viewerLink(shown, "1")!.url);
+    await click(sockPath, viewerLink(shown, "‹")!.url);
     shown = await render(sockPath, sid, projectDir, hints, a);
     expect(pageOf(shown).position).toBe("1/2");
     const copies = linkUrls(shown)
@@ -194,6 +227,6 @@ describe("a config that cannot be drawn as written", () => {
       /^Invalid config in .*many\.json5[\s\S]*first-missing-segment[\s\S]*second-missing/,
     );
     expect(copies[0]!.args[0]).not.toContain("duplicate key");
-    await click(sockPath, viewerLink(shown, "0")!.url);
+    await click(sockPath, viewerLink(shown, "✕")!.url);
   });
 });

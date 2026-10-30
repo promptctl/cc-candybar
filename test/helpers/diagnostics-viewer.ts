@@ -11,23 +11,29 @@ import { click, render } from "./daemon-e2e";
 
 // The indicator's text in a rendered bar (`⚠ N`), or null when it shows none.
 export function indicatorOf(rendered: string): string | null {
-  const link = viewerLink(rendered, "1");
+  const link = viewerLink(rendered, "open");
   return link === undefined ? null : stripAnsi(link.text).trim();
 }
 
-// The rendered link that writes `value` to the viewer's key.
+// What a click on the viewer's key does: the indicator opens it, ‹ › page it,
+// ✕ closes it.
+export type ViewerControl = "open" | "‹" | "›" | "✕";
+
+// The rendered link that writes the viewer's key as `control`: told apart by
+// the text it wears, since each writes a message's key, not a position.
 export function viewerLink(
   rendered: string,
-  value: string,
+  control: ViewerControl,
 ): { url: string; text: string } | undefined {
-  return links(rendered).find((l) =>
-    effectsOf(l.url).some(
-      (e) =>
-        e.verb === "set-state" &&
-        e.args[1] === DIAGNOSTICS_VIEWING &&
-        e.args[2] === value,
-    ),
-  );
+  return links(rendered).find((l) => {
+    const text = stripAnsi(l.text).trim();
+    return (
+      (control === "open" ? text.startsWith("⚠") : text === control) &&
+      effectsOf(l.url).some(
+        (e) => e.verb === "set-state" && e.args[1] === DIAGNOSTICS_VIEWING,
+      )
+    );
+  });
 }
 
 // One page of the viewer: its position and the message's text, its words
@@ -60,7 +66,7 @@ export async function readDiagnostics(
   hints: ClientHints = {},
   args: string[] = [],
 ): Promise<ViewerPage[]> {
-  const open = viewerLink(bar, "1");
+  const open = viewerLink(bar, "open");
   if (open === undefined) return [];
   const draw = (): Promise<string> =>
     render(sockPath, sessionId, cwd, hints, args);
@@ -72,9 +78,9 @@ export async function readDiagnostics(
     pages.push(page);
     const [at, of] = page.position.split("/").map(Number);
     if (at! >= of!) break;
-    await click(sockPath, viewerLink(shown, String(at! + 1))!.url);
+    await click(sockPath, viewerLink(shown, "›")!.url);
     shown = await draw();
   }
-  await click(sockPath, viewerLink(shown, "0")!.url);
+  await click(sockPath, viewerLink(shown, "✕")!.url);
   return pages;
 }

@@ -144,11 +144,12 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     default: 0,
   },
   // The settings door's indicator (src/render/diagnostics.ts,
-  // DiagnosticsProjection): its label, "" while there is nothing to show, and
-  // the colours of the worst level the draw's diagnostics hold.
+  // DiagnosticsProjection): its label, "" while there is nothing to show, the
+  // colours of the worst level the draw's diagnostics hold, and the key of
+  // the message its click opens.
   ...Object.fromEntries(
     (
-      ["label", "fg", "bg"] as const satisfies ReadonlyArray<
+      ["label", "fg", "bg", "open"] as const satisfies ReadonlyArray<
         keyof DiagnosticsProjection
       >
     ).map((field) => [

@@ -217,12 +217,12 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     // The refusal is the bar's one message: the indicator counts it, and the
     // viewer it opens shows it.
     const bar = await renderUntil((b) => b.includes("⚠ 1"), "the forged link's refusal");
-    const open = viewerLink(bar, "1")!;
+    const open = viewerLink(bar, "open")!;
     expect((await sendClick(sockPath, open.url)).ok).toBe(true);
     const shown = stripAnsi(await renderRaw());
     expect(shown).toContain("signature does not match");
     expect(shown).not.toContain("/h/forged");
-    expect((await sendClick(sockPath, viewerLink(await renderRaw(), "0")!.url)).ok).toBe(true);
+    expect((await sendClick(sockPath, viewerLink(await renderRaw(), "✕")!.url)).ok).toBe(true);
     expect(await render()).not.toContain("/h/forged");
   });
 });

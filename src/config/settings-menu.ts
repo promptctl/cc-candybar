@@ -414,11 +414,11 @@ const laneReadout = (lane: Lane): string => {
 // indicator, a second click region in the door's own cell, so it sits beside
 // the door wherever an author put it and no layout can leave it out. It reads
 // the draw's `diagnostics` projection, the same list the viewer pages
-// (src/render/diagnostics.ts); its click opens the viewer at the first
-// message. Nothing to show is an empty label, which draws nothing.
+// (src/render/diagnostics.ts); its click opens the viewer on the first
+// message, by that message's key. Nothing to show is an empty label, which draws nothing.
 const DIAGNOSTICS_INDICATOR =
   `{{ if .diagnostics.label }} ` +
-  `{{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label "1")) }}` +
+  `{{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}` +
   `{{ end }}`;
 
 const FPS_SEG = `${SETTINGS_NS}fps`;

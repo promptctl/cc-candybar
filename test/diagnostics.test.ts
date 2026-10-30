@@ -14,6 +14,7 @@ import {
   diagnosticsProjection,
   ERROR_SEVERITY,
   UPDATE_SEVERITY,
+  diagnosticKey,
   viewedIndex,
   viewerRows,
   WARNING_SEVERITY,
@@ -100,22 +101,23 @@ describe("the indicator the door reads", () => {
   });
 
   test("red with the count when any member is an error", () => {
-    const p = diagnosticsProjection(collectDiagnostics(["e"], [], ["w"]));
-    expect(p).toEqual({
+    const list = collectDiagnostics(["e"], [], ["w"]);
+    expect(diagnosticsProjection(list)).toEqual({
       label: "⚠ 2",
       fg: DIAGNOSTIC_ERROR_COLORS.fg,
       bg: DIAGNOSTIC_ERROR_COLORS.bg,
+      // Its click opens the first message, by its key.
+      open: diagnosticKey(list[0]!),
     });
   });
 
   test("amber when every member is a warning or a notice", () => {
-    const p = diagnosticsProjection(
-      collectDiagnostics([], [notice("n")], ["w"]),
-    );
-    expect(p).toEqual({
+    const list = collectDiagnostics([], [notice("n")], ["w"]);
+    expect(diagnosticsProjection(list)).toEqual({
       label: "⚠ 2",
       fg: DIAGNOSTIC_WARNING_COLORS.fg,
       bg: DIAGNOSTIC_WARNING_COLORS.bg,
+      open: diagnosticKey(list[0]!),
     });
   });
 
@@ -131,13 +133,28 @@ describe("the indicator the door reads", () => {
 });
 
 describe("the viewer", () => {
-  test("which message it shows: closed below 1, clamped into a list that shrank", () => {
-    expect(viewedIndex(null, 3)).toBeNull();
-    expect(viewedIndex("0", 3)).toBeNull();
-    expect(viewedIndex("-2", 3)).toBeNull();
-    expect(viewedIndex("1", 0)).toBeNull();
-    expect(viewedIndex("2", 3)).toBe(2);
-    expect(viewedIndex("5", 3)).toBe(3);
+  test("which message it shows: the one its key names, wherever the list moved it; closed once it is gone", () => {
+    const list = collectDiagnostics(["a", "b"], [], ["c"]);
+    const [a, b, c] = list.map(diagnosticKey);
+    expect(viewedIndex(null, list)).toBeNull();
+    expect(viewedIndex("0", list)).toBeNull();
+    expect(viewedIndex(b!, list)).toBe(2);
+    expect(viewedIndex(c!, list)).toBe(3);
+    // A new message ahead of it moves it, and the viewer follows it.
+    const grown = collectDiagnostics(["new", "a", "b"], [], ["c"]);
+    expect(viewedIndex(b!, grown)).toBe(3);
+    // Gone: closed, never another message in its place.
+    expect(viewedIndex(a!, collectDiagnostics(["b"], [], ["c"]))).toBeNull();
+    expect(viewedIndex(a!, [])).toBeNull();
+  });
+
+  test("a message's key is its severity and text: the same message keeps it, a warning and an error of one text differ", () => {
+    const [error] = collectDiagnostics(["same"], [], []);
+    const [again] = collectDiagnostics(["same"], [], []);
+    const [warning] = collectDiagnostics([], [], ["same"]);
+    expect(diagnosticKey(error!)).toBe(diagnosticKey(again!));
+    expect(diagnosticKey(error!)).not.toBe(diagnosticKey(warning!));
+    expect(diagnosticKey(error!)).toMatch(/^[1-9]\d*$/u);
   });
 
   test("one message: ✕, its position and ⧉, then the message", () => {
@@ -155,10 +172,11 @@ describe("the viewer", () => {
     const writes = links(viewerRows(list, 2, SID, geometry(80)))
       .filter((l) => stripAnsi(l.text) !== "⧉ copy ")
       .map((l) => [stripAnsi(l.text).trim(), effectsOf(l.url)]);
+    const [a, , c] = list.map(diagnosticKey);
     expect(writes).toEqual([
       ["✕", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, "0"] }]],
-      ["‹", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, "1"] }]],
-      ["›", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, "3"] }]],
+      ["‹", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, a] }]],
+      ["›", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, c] }]],
     ]);
   });
 
