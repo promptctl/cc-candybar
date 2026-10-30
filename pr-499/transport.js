@@ -38796,6 +38796,7 @@ var WatcherRegistry = class {
     const at = where.path;
     const bound = boundKey(boundOf(at));
     try {
+      fs_default.opendirSync(at).closeSync();
       const handle = fs_default.watch(
         at,
         { persistent: false, recursive: where.recursive },

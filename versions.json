@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-499",
+      "ref": "refs/pull/499/merge",
+      "sha": "33ac2de5205aa7c31f8c7567cf8d6d5dfbf10707",
+      "timestamp": "2026-10-30T16:54:49.812Z",
+      "commits": [
+        {
+          "sha": "33ac2de5205aa7c31f8c7567cf8d6d5dfbf10707",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:53:54Z",
+          "message": "Merge 6152eeb9396e3b3113daf02f006e42fdb0963175 into ac7fa0066116393d2e51df899b6ec19d31ba5071\n"
+        },
+        {
+          "sha": "6152eeb9396e3b3113daf02f006e42fdb0963175",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:48:22-06:00",
+          "message": "test(tmux): the default menu's toggles bytes drop the retired tmux toggle, over main's menu (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "1de6baae1ce1a00a5370ef02f779641f3f253ca5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:35:51-06:00",
+          "message": "fix(tmux): rebase onto main — the picker reads the band by its palette and disclosure, and the default menu's toggles bytes drop the retired tmux toggle (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "01971067e39a9fa5d1ee62f73b53ddb47a6e97e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:15:12-06:00",
+          "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "95f07d16194ef54cce369929f804e756f111ad3a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:10:48-06:00",
+          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "96a6cd210e105e1ad33b0e53d7ffbec2b889d620",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:02:51-06:00",
+          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
+        },
+        {
+          "sha": "e3c56e2c5de9ed6d3245dada7a8029e7a7991aab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:43:47-06:00",
+          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-503",
       "ref": "refs/pull/503/merge",
       "sha": "e3c97bf4945cf12fdc321805115e86264b6b5912",
@@ -42,63 +99,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-10-30T16:41:43Z",
           "message": "chore(release): set `package.json` to 1.166.2 [skip ci]\n\n## [1.166.2](https://github.com/promptctl/cc-candybar/compare/v1.166.1...v1.166.2) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) ([#494](https://github.com/promptctl/cc-candybar/issues/494)) ([db7ae9e](https://github.com/promptctl/cc-candybar/commit/db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f))\n* **test:** a test that SIGKILLs a daemon waits for its session state to be saved (brandon-unfiled-3248.vfhf) ([#500](https://github.com/promptctl/cc-candybar/issues/500)) ([79eac59](https://github.com/promptctl/cc-candybar/commit/79eac595257ef87be616ea19c3ea787386d26db6))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-499",
-      "ref": "refs/pull/499/merge",
-      "sha": "8ad205d9fa80ae07432cf99e53b4a0a906cc86db",
-      "timestamp": "2026-10-30T16:49:24.074Z",
-      "commits": [
-        {
-          "sha": "8ad205d9fa80ae07432cf99e53b4a0a906cc86db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:48:31-06:00",
-          "message": "Merge 2395aaf92566a36c81c31b8059fa6042e52bc8b7 into 47d20efc00d49b49451de6917528d43ceb12d6ff\n"
-        },
-        {
-          "sha": "2395aaf92566a36c81c31b8059fa6042e52bc8b7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:48:22-06:00",
-          "message": "test(tmux): the default menu's toggles bytes drop the retired tmux toggle, over main's menu (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "1e63d46354034da5d513ab1e65c6ff660dec1bef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:35:51-06:00",
-          "message": "fix(tmux): rebase onto main — the picker reads the band by its palette and disclosure, and the default menu's toggles bytes drop the retired tmux toggle (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "a8e9b5feb088453925fefca0cf2376764bbe6b01",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:15:12-06:00",
-          "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "c08ab3bf7c16e642a7a15e10a9d5a031678106f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:10:48-06:00",
-          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "391ac67d3eec955b9c820fb7fe67ac0d368fa1aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:02:51-06:00",
-          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "15cab4fdcccabb2a4b46dfa50f1859eee2e55ca6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:43:47-06:00",
-          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
         }
       ]
     },
