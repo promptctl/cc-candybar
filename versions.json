@@ -4,39 +4,39 @@
     {
       "version": "pr-507",
       "ref": "refs/pull/507/merge",
-      "sha": "80c5942c7c74fe19268e78bf6cb786ac43bb24ab",
-      "timestamp": "2026-10-30T18:54:02.071Z",
+      "sha": "122a2655dffa88b9a23c6e2ad24c3645b2ed1087",
+      "timestamp": "2026-10-30T18:54:49.913Z",
       "commits": [
         {
-          "sha": "80c5942c7c74fe19268e78bf6cb786ac43bb24ab",
+          "sha": "122a2655dffa88b9a23c6e2ad24c3645b2ed1087",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:52:45Z",
-          "message": "Merge b8905f683aed12f94b20f44216e975f86a79918a into 5b44ba9e047f7fd59d83562b39c5d23776c81d14\n"
+          "timestamp": "2026-10-30T12:53:25-06:00",
+          "message": "Merge b53c280a910823771b15f9446fc23abf95e03307 into 5b44ba9e047f7fd59d83562b39c5d23776c81d14\n"
         },
         {
-          "sha": "b8905f683aed12f94b20f44216e975f86a79918a",
+          "sha": "b53c280a910823771b15f9446fc23abf95e03307",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T12:52:35-06:00",
           "message": "fix(watchers): git and config follow only their own watch's failed window (candybar-plugins-vf6g.8uk)\n\nA git pass follows its watch with the failed window it heard since the\nlast pass, so a recurring handle error no longer loops reopen and pass.\nA config entry ignores the answers watch's failure, which says nothing\nabout its own directories.\n"
         },
         {
-          "sha": "bf189a39c08c592cab930b063e2a158cc564e21d",
+          "sha": "442dd8c8a988d4ef82d7f89ab3a262cf03824bb1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T12:47:14-06:00",
           "message": "fix(watchers): follow retries a kept watch's deaf directories by one rule, for every consumer (candybar-plugins-vf6g.8uk)\n\nThe registry's follow takes what the watch heard and reopens deaf\ndirectories unless it answers a failed window, so config, plugin sources\nand git share the rule, and an answers-watch failure no longer retries.\nA repeated identical refusal logs once. The link-chain fault no longer\nprints its path twice. The e2e heal re-applies its write until heard.\n"
         },
         {
-          "sha": "14320c05c38ca02de9516ecdfe2a29b10d9b904f",
+          "sha": "d3522fb54fc3b89b9f16a40d4931f24f8b34295b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T12:37:16-06:00",
           "message": "fix(diagnostics): the config watch retries a refused directory, and its warning is its own (candybar-plugins-vf6g.8uk)\n\nA kept config watch now retries its deaf directories on every load but a\nfailed window, as a watch_file path does, so the warning clears once the OS\nwill watch the directory again instead of standing until a restart. The\nwatch_file entry holds the derived and held watch as one value, the same pair\nthe cache entry holds; the watch's warning has its own type and reads as the\nconfig watch's, since its targets include plugin folders.\n"
         },
         {
-          "sha": "a3e26357cc22cc5ea47f53631f026368a80d6762",
+          "sha": "3951cdd0db1d4c6f49752b8abad7d632ec7ef68c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T12:31:45-06:00",
