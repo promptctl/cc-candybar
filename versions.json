@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-500",
+      "ref": "refs/pull/500/merge",
+      "sha": "b7dcb1f9905b51aaa79cca99bc708a020febccee",
+      "timestamp": "2026-10-30T15:56:17.071Z",
+      "commits": [
+        {
+          "sha": "b7dcb1f9905b51aaa79cca99bc708a020febccee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:55:28-06:00",
+          "message": "Merge 90c6752277c0301d560582296c1c237b1038f100 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
+        },
+        {
+          "sha": "90c6752277c0301d560582296c1c237b1038f100",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:55:19-06:00",
+          "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
+        },
+        {
+          "sha": "c9290fab3ed8400f0db1ff6813068d3344ef0a17",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:52:10-06:00",
+          "message": "WIP: temporary CI diagnostics for vfhf (to be removed)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-501",
       "ref": "refs/pull/501/merge",
       "sha": "52c9ba30020e0e769cbc13ad7e472948c254e688",
@@ -77,28 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T06:19:40-06:00",
           "message": "fix(colour): grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7)\n\nA container inside a row was one address, so every cell in it wore one\nshade: a grouped { h } drew in one colour, and so did the settings door\nand its frame-rate cell. The compile now places every leaf of a row at\nits own place on the row's line, through any nested { h }, and stores\neach child's step on its container; a cell is read as its innermost cell\nstep. A { v } in a row draws its first child on the row's line and each\nother on a line of its own below, each placed from where it sits.\n\nEdit chrome's unit around a content cell is marked `unit` (synthesis-\nonly) and shares the cell's one place, so edit mode recolours nothing.\nThe loader refuses a distribution anywhere inside a row with one\nmessage. Snapshots and doc render fences regenerate: the door's divider\nbecomes an arrow and the cells after it move one place.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-500",
-      "ref": "refs/pull/500/merge",
-      "sha": "53a4fe05881382f00f06f285bd979400cf78f9aa",
-      "timestamp": "2026-10-30T15:53:07.869Z",
-      "commits": [
-        {
-          "sha": "53a4fe05881382f00f06f285bd979400cf78f9aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:52:20-06:00",
-          "message": "Merge c9290fab3ed8400f0db1ff6813068d3344ef0a17 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
-        },
-        {
-          "sha": "c9290fab3ed8400f0db1ff6813068d3344ef0a17",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:52:10-06:00",
-          "message": "WIP: temporary CI diagnostics for vfhf (to be removed)\n"
         }
       ]
     },
