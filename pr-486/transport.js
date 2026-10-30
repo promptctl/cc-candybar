@@ -49024,7 +49024,26 @@ var ConfigError = class extends Error {
   }
 };
 function findKeyLine(source, pathParts) {
-  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, pathParts) : void 0;
+  return keyLocator(source)(pathParts);
+}
+function keyLocator(source) {
+  let parsed2;
+  const document = () => {
+    parsed2 ??= { node: parseOrUndefined(source) };
+    return parsed2.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+function parseOrUndefined(source) {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return void 0;
+    throw e;
+  }
+}
+function keyLine(source, document, pathParts) {
+  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
   if (indexed !== void 0) return indexed;
   let cursor = 0;
   let foundCursor;
@@ -49039,14 +49058,9 @@ function findKeyLine(source, pathParts) {
   }
   return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
 }
-function elementPathLine(source, pathParts) {
-  let node;
-  try {
-    node = parseDocument(source);
-  } catch (e) {
-    if (e instanceof Json5EditError) return void 0;
-    throw e;
-  }
+function elementPathLine(source, document, pathParts) {
+  if (document === void 0) return void 0;
+  let node = document;
   let reached;
   let indexed = false;
   for (const part of pathParts) {
@@ -50131,14 +50145,20 @@ function insertCells(root, cells) {
   return cells.reduce(
     (acc, cell3) => {
       const id2 = cell3.id ?? cell3.seg;
-      const held = segmentWithId(rootNode(acc.root), id2);
-      if (held !== void 0) {
-        return held.name === cell3.seg ? acc : refuse2(
+      const placed = [...walkNodes(rootNode(acc.root))].flatMap(
+        (node2) => node2.kind === "segment" ? [node2] : []
+      );
+      if (placed.some(
+        (node2) => node2.name === cell3.seg && (cell3.id === void 0 || placementId(node2) === cell3.id)
+      ))
+        return acc;
+      const held = placed.find((node2) => placementId(node2) === id2);
+      if (held !== void 0)
+        return refuse2(
           acc,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
         );
-      }
       const node = {
         kind: "segment",
         name: cell3.seg,
@@ -50152,12 +50172,12 @@ function insertCells(root, cells) {
           besideRow(row2, cell3.anchor, node, cell3.relation)
         ]
       );
-      return rows.some(([, , placed]) => placed !== null) ? {
+      return rows.some(([, , placed2]) => placed2 !== null) ? {
         ...acc,
         root: {
           ...acc.root,
           rows: Object.fromEntries(
-            rows.map(([name, row2, placed]) => [name, placed ?? row2])
+            rows.map(([name, row2, placed2]) => [name, placed2 ?? row2])
           )
         }
       } : refuse2(
@@ -50171,12 +50191,6 @@ function insertCells(root, cells) {
 }
 function refuse2(acc, cell3, reason) {
   return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
-}
-function segmentWithId(tree, id2) {
-  for (const node of walkNodes(tree)) {
-    if (node.kind === "segment" && placementId(node) === id2) return node;
-  }
-  return void 0;
 }
 function besideRow(row2, anchor, cell3, relation) {
   if (row2.kind === "segment" && placementId(row2) === anchor) {
@@ -50264,21 +50278,22 @@ function presetRoot(config2, name) {
   };
 }
 function placeInserts(config2, cells, authored) {
+  if (cells.length === 0) return { config: config2, notices: [] };
   const own2 = insertCells(config2.root, cells);
-  const restaged = Object.entries(config2.presets).filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS)).map(([name, preset]) => {
-    const renders = mergeRoot(preset.root ?? EMPTY_ROWS, config2.root);
-    const placed = insertCells(renders, cells);
-    return { name, preset, ...placed, landed: placed.root !== renders };
-  });
+  const restaged = Object.entries(config2.presets).filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS)).map(([name, preset]) => ({
+    name,
+    preset,
+    ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config2.root), cells)
+  }));
   const missed = /* @__PURE__ */ new Map();
   const miss = (tree) => ({ cell: cell3, reason }) => {
     const reasons = missed.get(cell3) ?? /* @__PURE__ */ new Map();
     reasons.set(reason, [...reasons.get(reason) ?? [], tree]);
     missed.set(cell3, reasons);
   };
-  own2.unplaced.forEach(miss("the root"));
+  (authored.root ? own2.unplaced : []).forEach(miss("the root"));
   for (const { name, unplaced } of restaged.filter(
-    ({ name: name2 }) => authored.has(name2)
+    ({ name: name2 }) => authored.presets.has(name2)
   ))
     unplaced.forEach(miss(`preset "${name}"`));
   return {
@@ -50288,7 +50303,7 @@ function placeInserts(config2, cells, authored) {
       presets: {
         ...config2.presets,
         ...Object.fromEntries(
-          restaged.filter(({ landed }) => landed).map(({ name, preset, root }) => [
+          restaged.map(({ name, preset, root }) => [
             name,
             { ...preset, root: rootNode(root) }
           ])
@@ -50297,10 +50312,13 @@ function placeInserts(config2, cells, authored) {
     },
     notices: [...missed].flatMap(
       ([cell3, reasons]) => [...reasons].map(
-        ([reason, trees]) => `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${reason} (in ${trees.join(", ")})`
+        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
       )
     )
   };
+}
+function insertNotice(cell3, what) {
+  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
 }
 function presetGlobals(config2, name) {
   return { ...config2.globals, ...presetByName(config2.presets, name).globals };
@@ -55163,7 +55181,7 @@ function segArmSpec() {
       ctx.issues.push({
         path: `${path41}.${field}`,
         message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, ["root"])
+        line: findKeyLine(ctx.source, [...path41.split("."), field])
       });
       return "";
     }
@@ -58931,12 +58949,57 @@ var NO_FILE = {
   }
 };
 function validateRenderable(authoredConfig, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
-  const { raw, source } = authoredConfig;
-  const inserted = placeLayerInserts(
-    { ...authoredConfig, path: filePath2 },
-    beneath
-  );
-  const merged = inserted.config;
+  const written2 = layerInserts({ ...authoredConfig, path: filePath2 }, beneath);
+  const judge = (cells, refused) => {
+    const inserted = placeInserts(
+      authoredConfig.config,
+      cells,
+      written2.authored
+    );
+    return judgeRenderable(
+      authoredConfig,
+      filePath2,
+      allowedPalettes,
+      beneath,
+      inserted.config,
+      written2.dropped,
+      [...inserted.notices, ...refused]
+    );
+  };
+  try {
+    return judge(written2.cells, []);
+  } catch (e) {
+    if (!(e instanceof ConfigError) || written2.cells.length === 0) throw e;
+    const bare = judge([], []);
+    const own2 = new Set(
+      bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
+    );
+    const { taken, refused } = written2.cells.reduce(
+      (acc, cell3) => {
+        try {
+          judge([...acc.taken, cell3], []);
+          return { ...acc, taken: [...acc.taken, cell3] };
+        } catch (err) {
+          if (!(err instanceof ConfigError)) throw err;
+          const why2 = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
+          return {
+            ...acc,
+            refused: [
+              ...acc.refused,
+              insertNotice(
+                cell3,
+                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why2}`
+              )
+            ]
+          };
+        }
+      },
+      { taken: [], refused: [] }
+    );
+    return judge(taken, refused);
+  }
+}
+function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, filed, notices) {
   const issues = [];
   const ctx = {
     source,
@@ -58951,14 +59014,14 @@ function validateRenderable(authoredConfig, filePath2 = "<config>", allowedPalet
       throw new ConfigError(
         filePath2,
         [...issues, ...ctx.unplaced, ...ctx.inherited],
-        inserted.notices
+        notices
       );
     }
   };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped2 = droppedByFile(filePath2, ctx, beneath, inserted.dropped);
+  const dropped2 = droppedByFile(filePath2, ctx, beneath, filed);
   const config2 = dropped2.length === 0 ? merged : withoutUnplaced(merged);
   const withMenus = synthesizePlacementMenus(config2, issues);
   refuseIfIssues();
@@ -58980,30 +59043,32 @@ function validateRenderable(authoredConfig, filePath2 = "<config>", allowedPalet
     config: withChrome,
     dropped: dropped2,
     placed: merged,
-    warnings: inserted.notices
+    warnings: notices
   };
 }
-function placeLayerInserts(top, beneath) {
+function layerInserts(top, beneath) {
   const layers = [...beneath].reverse().concat(top);
-  const written2 = layers.flatMap(
-    (layer) => (layer.raw.insert ?? []).map((cell3) => ({ cell: cell3, layer }))
-  );
-  const declared = ({ cell: cell3 }) => Object.prototype.hasOwnProperty.call(top.config.segments, cell3.seg);
-  const placed = placeInserts(
-    top.config,
-    written2.filter(declared).map(({ cell: cell3 }) => cell3),
-    new Set(layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {})))
-  );
+  const declared = (cell3) => Object.prototype.hasOwnProperty.call(top.config.segments, cell3.seg);
   return {
-    ...placed,
-    dropped: written2.filter((w) => !declared(w)).map(({ cell: cell3, layer }) => ({
-      file: layer.path,
-      issue: {
-        path: cell3.by.entry,
-        message: unplacedMessage(cell3.by.entry, cell3.seg),
-        line: findKeyLine(layer.source, cell3.by.entry.split("."))
-      }
-    }))
+    cells: layers.flatMap((layer) => (layer.raw.insert ?? []).filter(declared)),
+    authored: {
+      root: layers.some((layer) => layer.raw.root !== void 0),
+      presets: new Set(
+        layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {}))
+      )
+    },
+    // One locator per layer, so its source is parsed at most once.
+    dropped: layers.flatMap((layer) => {
+      const lineOf = keyLocator(layer.source);
+      return (layer.raw.insert ?? []).filter((cell3) => !declared(cell3)).map((cell3) => ({
+        file: layer.path,
+        issue: {
+          path: cell3.by.entry,
+          message: unplacedMessage(cell3.by.entry, cell3.seg),
+          line: lineOf(cell3.by.entry.split("."))
+        }
+      }));
+    })
   };
 }
 function droppedByFile(filePath2, ctx, beneath, filed) {
