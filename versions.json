@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f",
+      "timestamp": "2026-10-30T16:34:57.616Z",
+      "commits": [
+        {
+          "sha": "db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:34:05-06:00",
+          "message": "fix(colour): adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) (#494)\n\n* fix(colour): adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7)\n\nA three-tone window is read by halves instead of by nearest point: the\nupper half of the circle is the window's last entry (its middle rung) and\nthe lower half is split the same way between its ends. Van der Corput's\nfirst bit is the index's parity, so every odd place wears the middle rung\nand the even places alternate low and high. Of two neighbours exactly one\nis odd, so no two neighbours share a tone at any index, and every step is\none rung. Nearest point centred a tone on 0, where places 2^k - 1 and 2^k\nland either side ever closer, so 7 and 8, 15 and 16, ... shared it.\n\nThe muted position deals the role's muted form and the role itself, read\nby bin, so its neighbours alternate too.\n\nOne property test states it for every dial position over rows of 2 to 16\ncells; it replaces the adjacency checks that were spread over three tests.\nThe 🧪 toggles row's eighth item moves from the low rung to the middle one.\n\n* fix(colour): each distribution reads its placements by its own rule, so golden angle and the even spreads keep their promises (candybar-joiners-e5r4.tx7)\n\nWhether two neighbours ever select one tone is a property of the pair\n(distribution, rule), not of the window. Van der Corput keeps neighbours\napart only read by halves; golden angle only by equal bins (halves put\nplaces 8 and 9 on one tone); and the even spreads ramp evenly in order\nonly by equal bins (halves dealt a five-option monotonic menu 0, 1, 2, 2,\n2). No one rule serves both van der Corput's rung-at-a-time walk and\ngolden angle, so the rule moves from the dial's rows onto each\ndistribution, and the Shade quantize column, the QUANTIZE table and its\nname type go. A row's hue reads the same selection; under every\ndistribution it picks what it picked before.\n\nThe bundled bar authors no distribution, so no rendered byte changes.\n\nAlso: a dial position's tones are two at least by type; the walk test\ncovers every window; the adjacency test states its scope (van der Corput\nat every position, golden angle over three tones); the even spreads and\nthe activated rung are pinned; the authoring doc, design doc, memory and\naudit comment stop saying a muted row is one colour or read to the\nnearest point.\n\n* docs(colour): the memory line claims equal bins for golden angle, not that nothing else separates it (candybar-joiners-e5r4.tx7)\n\n* test(colour): the menu bytes put the toggles row's eighth item on the middle rung over grouped places (candybar-joiners-e5r4.tx7)\n\n* test(colour): no dial position is exempt from parting neighbours, now that muted deals two tones (candybar-joiners-e5r4.tx7)\n\nThe grouped-row adjacency test and the door/rate test were written while\n`muted` had one tone, so each named it as the one exemption and guarded\nthat it stayed the only one. With `muted` dealing its muted form and the\nrole itself, that state no longer exists: the guard now asserts no\nposition deals fewer than two tones, and both tests hold every position\nto parting its neighbours, so a one-tone shade cannot come back unseen.\nThe theme-identity audit needed nothing: main's divider reversal already\nremoved its muted-row clause."
+        }
+      ]
+    },
+    {
       "version": "pr-499",
       "ref": "refs/pull/499/merge",
       "sha": "2a62401c6410718b21f218dddcb807005e14bf5c",
@@ -48,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "79eac595257ef87be616ea19c3ea787386d26db6",
-      "timestamp": "2026-10-30T16:33:27.966Z",
-      "commits": [
-        {
-          "sha": "79eac595257ef87be616ea19c3ea787386d26db6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:32:28-06:00",
-          "message": "fix(test): a test that SIGKILLs a daemon waits for its session state to be saved (brandon-unfiled-3248.vfhf) (#500)\n\n* fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n\n* fix(test): a test that SIGKILLs a daemon waits for the viewer's close to be saved, and the shared viewer read stays strict (brandon-unfiled-3248.vfhf)\n\n* fix(test): the viewer read refuses a bar already showing the viewer, and the killed-daemon wait reads the daemon's own env and snapshot type (brandon-unfiled-3248.vfhf)"
-        },
-        {
-          "sha": "4f90c928ea159b91f00da76cd04a08140a27cb0e",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T16:19:30Z",
-          "message": "chore(release): set `package.json` to 1.166.1 [skip ci]\n\n## [1.166.1](https://github.com/promptctl/cc-candybar/compare/v1.166.0...v1.166.1) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7) ([#493](https://github.com/promptctl/cc-candybar/issues/493)) ([73801c6](https://github.com/promptctl/cc-candybar/commit/73801c6e3b63cf23ed6af12476e50b45a0c45333))\n* **colour:** the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6) ([#492](https://github.com/promptctl/cc-candybar/issues/492)) ([fe783f4](https://github.com/promptctl/cc-candybar/commit/fe783f48728a83116d74cf3674e4695aff77fd76))\n* **render:** bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr) ([#496](https://github.com/promptctl/cc-candybar/issues/496)) ([16ba284](https://github.com/promptctl/cc-candybar/commit/16ba284b459a5bc135c21f529414a4020a2b2b46))\n"
         }
       ]
     },
