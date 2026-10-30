@@ -1645,17 +1645,22 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       // is refused on macOS; Linux's recursive watcher (Node's own walk)
       // swallows the loop and watches nothing, so its count is the
       // platform's.
-      expect(logs).toContainEqual(
-        expect.stringMatching(
-          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads deaf=[12]$/,
-        ),
-      );
+      const bound = logs
+        .map((l) =>
+          l.match(
+            /^git watch bound root=.* dirs=.*\.git,.*refs\/heads deaf=([12])$/,
+          ),
+        )
+        .find((m) => m !== null);
+      expect(bound).toBeDefined();
+      // Each of the two directories either listens or is deaf.
+      const deaf = Number(bound![1]);
       expect(counters).toEqual({
         watchersOpened: 0,
         watchersClosed: 0,
         watchRefusals: 1,
         watchErrors: 0,
-        dirWatchesOpened: 0,
+        dirWatchesOpened: 2 - deaf,
         dirWatchesClosed: 0,
       });
     } finally {
