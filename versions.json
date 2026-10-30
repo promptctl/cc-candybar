@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-490",
+      "ref": "refs/pull/490/merge",
+      "sha": "0a22deb194a2198b2a42bff3f01a2caa6fe29536",
+      "timestamp": "2026-10-30T11:20:47.211Z",
+      "commits": [
+        {
+          "sha": "0a22deb194a2198b2a42bff3f01a2caa6fe29536",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:20:07Z",
+          "message": "Merge ce1ad8fb2220cbcee891ac574d84fda3cc6731d1 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+        },
+        {
+          "sha": "ce1ad8fb2220cbcee891ac574d84fda3cc6731d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:20:03-06:00",
+          "message": "docs(joiners): the problem statement beside the plan"
+        },
+        {
+          "sha": "d7ba3fd451616b4238fa5d7be1469639a9aa52da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:20:02-06:00",
+          "message": "docs(joiners): fold the design review in — lift direction and ansi rule, byte-identity scope, imports text keeps, quantize per window size"
+        },
+        {
+          "sha": "7f39650bf5c406f389b84654f2f0610a76033923",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:00:36-06:00",
+          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n"
+        },
+        {
+          "sha": "70758536031569d8f24edcae8983e15cb75881ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:03:05-06:00",
+          "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
+        }
+      ]
+    },
+    {
       "version": "pr-489",
       "ref": "refs/pull/489/merge",
       "sha": "228833fe8d74d2f5898346a992754d172c1b63fb",
@@ -49,35 +92,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-10-30T10:47:14Z",
           "message": "chore(release): set `package.json` to 1.164.0 [skip ci]\n\n## [1.164.0](https://github.com/promptctl/cc-candybar/compare/v1.163.0...v1.164.0) (2026-10-30)\n\n### Features\n\n* **config:** a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) ([#486](https://github.com/promptctl/cc-candybar/issues/486)) ([cd51ad0](https://github.com/promptctl/cc-candybar/commit/cd51ad088846247d4d8d328c870849e2b81ba424))\n\n### Bug Fixes\n\n* **ci:** the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) ([#487](https://github.com/promptctl/cc-candybar/issues/487)) ([e31c958](https://github.com/promptctl/cc-candybar/commit/e31c958417e5127d95819930643df17eb59fe2bf))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-490",
-      "ref": "refs/pull/490/merge",
-      "sha": "f90cc31287c6b910d25ad892ffc18bd8a881aa9a",
-      "timestamp": "2026-10-30T11:04:32.590Z",
-      "commits": [
-        {
-          "sha": "f90cc31287c6b910d25ad892ffc18bd8a881aa9a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:03:40-06:00",
-          "message": "Merge 7f39650bf5c406f389b84654f2f0610a76033923 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
-        },
-        {
-          "sha": "7f39650bf5c406f389b84654f2f0610a76033923",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:00:36-06:00",
-          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n"
-        },
-        {
-          "sha": "70758536031569d8f24edcae8983e15cb75881ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:03:05-06:00",
-          "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
         }
       ]
     }
