@@ -384,6 +384,22 @@ describe("watchTargetsOf", () => {
     expect(unresolved).toEqual([{ path: x, reason: expect.stringMatching(/symbolic links/) }]);
   });
 
+  // A held watch binds the inode it opened on (Linux's inotify), so the same
+  // directories by the same names are a different watch once one is made
+  // again at its path: a consumer following the key rebinds onto it.
+  test("a directory removed and made again at its path is a different watch", () => {
+    const d = path.join(dir, "d");
+    fs.mkdirSync(d);
+    const f = path.join(d, "f");
+    const before = watchTargetsOf({ named: [f], whole: [] });
+    expect(watchTargetsOf({ named: [f], whole: [] }).key).toBe(before.key);
+    rmrf(d);
+    fs.mkdirSync(d);
+    const after = watchTargetsOf({ named: [f], whole: [] });
+    expect(after.targets).toEqual(before.targets);
+    expect(after.key).not.toBe(before.key);
+  });
+
   test("a directory watched whole hears every child, whatever names are watched in it", () => {
     const d = path.join(dir, "d");
     fs.mkdirSync(d);

@@ -15,7 +15,6 @@ import { readFile as fsReadFile } from "fs/promises";
 import fs, { type FSWatcher } from "fs";
 import path from "path";
 import { watchTargetsOf, type PathsWatch } from "../daemon/cache/watchers.js";
-import { boundKey, boundOf } from "../utils/folder-identity.js";
 import { setInterval, clearInterval } from "timers";
 import {
   computed,
@@ -347,7 +346,13 @@ class WatchManager {
 
   private arm(filePath: string): WatchEntry {
     const entry: WatchEntry = {
-      watch: { targets: { dirs: [] }, reached: false, unresolved: [] },
+      watch: {
+        targets: { dirs: [] },
+        bound: new Map(),
+        key: "",
+        reached: false,
+        unresolved: [],
+      },
       dirs: new Map(),
       subscribers: new Map(),
     };
@@ -357,27 +362,22 @@ class WatchManager {
   }
 
   // Derive where the path can change from disk ONCE, and bring the
-  // directories to it: one in the set and not listening to the directory at
-  // its path now (new, failed, or bound to one since removed) is opened; one
-  // no longer in the set is closed; one listening to it keeps its handle,
-  // since opening and closing a directory watch is not free on macOS (see the
-  // watcher registry). New handles open before old ones close, so a refusal
-  // leaves the rest listening, and a failed directory is tried again only
-  // here — at an event on another of the entry's directories, or the
-  // daemon's catch-up — never in a loop.
+  // directories to it: one in the set and not listening to the folder at its
+  // path now (new, failed, or bound to one since removed and made again) is
+  // opened; one no longer in the set is closed; one listening to it keeps its
+  // handle, since opening and closing a directory watch is not free on macOS
+  // (see the watcher registry). A refusal is the watch's standing fault, and
+  // a failed directory is tried again only here — at an event on another of
+  // the entry's directories, or the daemon's catch-up — never in a loop: the
+  // OS refuses an immediate retry the same way.
   private rederive(filePath: string, entry: WatchEntry): void {
     entry.watch = watchTargetsOf({ named: [filePath], whole: [filePath] });
-    const wanted = new Set(entry.watch.targets.dirs.map((d) => d.path));
-    for (const dir of wanted) {
-      // [LAW:one-source-of-truth] Whether a handle still hears its path is
-      // the identity every watch owner judges by (`boundOf`): Linux's inotify
-      // follows the inode, so a directory recreated at the path is deaf to
-      // the handle opened on the one before, with no event to say so.
+    const wanted = entry.watch.bound;
+    for (const [dir, bound] of wanted) {
       const held = entry.dirs.get(dir);
-      if (held?.kind === "open" && held.bound === boundKey(boundOf(dir)))
-        continue;
+      if (held?.kind === "open" && held.bound === bound) continue;
       if (held?.kind === "open") held.handle.close();
-      entry.dirs.set(dir, this.open(filePath, entry, dir));
+      entry.dirs.set(dir, this.open(filePath, entry, dir, bound));
     }
     for (const [dir, state] of entry.dirs) {
       if (wanted.has(dir)) continue;
@@ -387,11 +387,15 @@ class WatchManager {
     this.report(filePath, entry);
   }
 
-  private open(filePath: string, entry: WatchEntry, dir: string): DirState {
+  // `bound` was read before the open, so a folder replaced while it opens
+  // reads as moved at the next re-derive, never as the one the handle bound.
+  private open(
+    filePath: string,
+    entry: WatchEntry,
+    dir: string,
+    bound: string,
+  ): DirState {
     const self = path.basename(dir);
-    // Read before the open, so a directory replaced while it opens reads as
-    // moved at the next re-derive, never as the one the handle bound.
-    const bound = boundKey(boundOf(dir));
     try {
       const handle = fs.watch(dir, (_event, changed) => {
         // A platform that reports no name could be reporting anything here.

@@ -3,6 +3,7 @@ import path from "node:path";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { walkLinks } from "../../utils/atomic-write";
+import { boundKey, boundOf } from "../../utils/folder-identity";
 import {
   canonicalDirectory,
   nearestWatchTarget,
@@ -89,12 +90,18 @@ export interface Refusal {
   readonly reason: string;
 }
 
-// What watching a set of paths takes: the directories to watch, whether every
-// hop reached its own directory (`reached`: none waits on a missing directory
-// to appear, so an event can be about the path itself), and the paths whose
-// link chain the kernel stopped walking, with why.
+// What watching a set of paths takes: the directories to watch, the folder
+// each binds now (`bound`, by path), whether every hop reached its own
+// directory (`reached`: none waits on a missing directory to appear, so an
+// event can be about the path itself), and the paths whose link chain the
+// kernel stopped walking, with why. `key` spells the targets and what they
+// bind: equal keys are one watch, so a held watch whose key moved is bound to
+// directories the paths no longer reach (Linux's inotify follows the inode,
+// so a directory made again at its path is a new one to the watch).
 export interface PathsWatch {
   readonly targets: WatchTargets;
+  readonly bound: ReadonlyMap<string, string>;
+  readonly key: string;
   readonly reached: boolean;
   readonly unresolved: readonly Refusal[];
 }
@@ -131,16 +138,24 @@ export function watchTargetsOf(paths: {
   }
   for (const dir of paths.whole.map(canonicalDirectory))
     if (dir !== null) byDir.set(dir, null);
+  const targets: WatchTargets = {
+    dirs: [...byDir.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dirPath, names]) =>
+        names === null
+          ? { path: dirPath }
+          : { path: dirPath, filenames: [...names].sort() },
+      ),
+  };
+  // [LAW:one-source-of-truth] The folder identity every watch owner judges
+  // by, read once here for every consumer of the rule.
+  const bound = new Map(
+    targets.dirs.map((d) => [d.path, boundKey(boundOf(d.path))] as const),
+  );
   return {
-    targets: {
-      dirs: [...byDir.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dirPath, names]) =>
-          names === null
-            ? { path: dirPath }
-            : { path: dirPath, filenames: [...names].sort() },
-        ),
-    },
+    targets,
+    bound,
+    key: JSON.stringify([targets, [...bound]]),
     reached,
     unresolved,
   };

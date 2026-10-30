@@ -2154,10 +2154,10 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const { targets, unresolved } = watchTargetsFor(entry);
-    // [LAW:one-source-of-truth] The key names the target set, so the
-    // registry's `follow` rebinds exactly when the set changed.
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
+    const { targets, unresolved, key: bound } = watchTargetsFor(entry);
+    // [LAW:one-source-of-truth] The key names the target set and the folders
+    // it binds, so the registry's `follow` rebinds exactly when either moved.
+    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${bound}`;
     // [LAW:single-enforcer] One reload dispatcher per cache entry: any
     // change the entry's watch hears re-resolves its whole chain (so a
     // higher-precedence file appearing supersedes a lower one) and reloads.
