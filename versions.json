@@ -4,15 +4,22 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "e20464019fc21a6a627c1c58bd72b59e9cab452c",
-      "timestamp": "2026-10-30T07:32:42.776Z",
+      "sha": "849c8d89047ee230e6c7f4a7393023b7e74c6eab",
+      "timestamp": "2026-10-30T07:34:12.257Z",
       "commits": [
         {
-          "sha": "e20464019fc21a6a627c1c58bd72b59e9cab452c",
+          "sha": "849c8d89047ee230e6c7f4a7393023b7e74c6eab",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:31:53Z",
-          "message": "Merge cee0fbaf4083234bcfaf9d574f1d2a44a4edec20 into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+          "timestamp": "2026-10-30T07:33:20Z",
+          "message": "Merge 8e5bc1b69d4a72766909d7f660594cb56add89c9 into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+        },
+        {
+          "sha": "8e5bc1b69d4a72766909d7f660594cb56add89c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:32:51-06:00",
+          "message": "fix(capture): the hook's transcript path names the folder the transcript is copied into\n"
         },
         {
           "sha": "cee0fbaf4083234bcfaf9d574f1d2a44a4edec20",
