@@ -466,7 +466,7 @@ export type Tones = readonly [RoleShade, ...RoleShade[]];
  * position's tones the depth draws apart, in the position's order, up to that
  * size; then, for each tone short of it, the nearest rung of the ladder drawn
  * as none of the tones the window holds (`widen`); listed, where it holds
- * three, as the dial lists a position (`inWalkOrder`). At 256 colours
+ * three or more, as the dial lists a position (`inWalkOrder`). At 256 colours
  * neighbouring rungs round onto one table entry, at ansi onto one of the
  * hue's slots, and a theme can name two rungs alike at any depth, so a window
  * that kept them would deal two neighbours one colour where the role had
@@ -522,11 +522,11 @@ export function windowAt(
 }
 
 /**
- * A window of three listed the way the dial lists every position of three
- * (`ladderWindow`): its lowest rung, its highest, then the one between. The
- * default distribution deals the third entry at every other cell, so in that
- * order a row walks up and down the window a rung at a time as the depth
- * draws it. Appended instead, a widened rung would take the third entry
+ * A window of three or more listed the way the dial lists every position of
+ * three (`ladderWindow`): its lowest rung, its highest, then those between,
+ * lowest first. The default distribution deals the third entry of three at
+ * every other cell, so in that order a row walks up and down the window a
+ * rung at a time as the depth draws it. Appended instead, a widened rung would take the third entry
  * wherever it stands on the ladder, and a row would wear a rung past the
  * position's own tones on half its cells. A window the depth left whole is in
  * that order already, so it does not move. Over two tones the order decides
@@ -534,14 +534,15 @@ export function windowAt(
  */
 const inWalkOrder = (window: Tones): Tones => {
   if (window.length < 3) return window;
-  // [LAW:no-defensive-null-guards] A window of three holds rungs of the
-  // ladder only: the muted form is a tone of the muted position alone, which
-  // names two, and a window never widens into it.
+  // [LAW:no-defensive-null-guards] A window of three or more holds rungs of
+  // the ladder only: the muted form is a tone of the muted position alone,
+  // which names two, and a window never widens into it. The `!`s state that
+  // the window holds at least three, as the guard above leaves it.
   const ladder: readonly RoleShade[] = LADDER;
-  const [low, between, high] = [...window].sort(
+  const [low, ...above] = [...window].sort(
     (a, b) => ladder.indexOf(a) - ladder.indexOf(b),
   );
-  return [low!, high!, between!];
+  return [low!, above.at(-1)!, ...above.slice(0, -1)];
 };
 
 /**

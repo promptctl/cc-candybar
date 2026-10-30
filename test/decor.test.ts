@@ -109,14 +109,14 @@ const rung = (shade: RoleShade): number => LADDER.indexOf(shade);
 // two.
 const windowSizeOf = (count: number, ladderColours: number): number => Math.max(2, Math.min(count, ladderColours - 1));
 
-// A window of three as the dial lists every position of three, in the test's
-// own words: its lowest rung, its highest, then the one between, so van der
-// Corput, which deals the third entry at every other cell, walks it a rung at
-// a time. A window of two is as built.
+// A window of three or more as the dial lists every position of three, in
+// the test's own words: its lowest rung, its highest, then those between,
+// lowest first, so van der Corput, which deals the third entry of three at
+// every other cell, walks it a rung at a time. A window of two is as built.
 const walked = (window: readonly RoleShade[]): readonly RoleShade[] => {
   if (window.length < 3) return window;
-  const [low, between, high] = [...window].sort((a, b) => rung(a) - rung(b));
-  return [low!, high!, between!];
+  const byRung = [...window].sort((a, b) => rung(a) - rung(b));
+  return [byRung[0]!, byRung.at(-1)!, ...byRung.slice(1, -1)];
 };
 
 // The rungs of the ladder nearest `from` first, in the test's own words: every
