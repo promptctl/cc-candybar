@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-500",
+      "ref": "refs/pull/500/merge",
+      "sha": "53a4fe05881382f00f06f285bd979400cf78f9aa",
+      "timestamp": "2026-10-30T15:53:07.869Z",
+      "commits": [
+        {
+          "sha": "53a4fe05881382f00f06f285bd979400cf78f9aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:52:20-06:00",
+          "message": "Merge c9290fab3ed8400f0db1ff6813068d3344ef0a17 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
+        },
+        {
+          "sha": "c9290fab3ed8400f0db1ff6813068d3344ef0a17",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:52:10-06:00",
+          "message": "WIP: temporary CI diagnostics for vfhf (to be removed)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "fe783f48728a83116d74cf3674e4695aff77fd76",
