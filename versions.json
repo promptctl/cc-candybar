@@ -4,15 +4,22 @@
     {
       "version": "pr-490",
       "ref": "refs/pull/490/merge",
-      "sha": "0a22deb194a2198b2a42bff3f01a2caa6fe29536",
-      "timestamp": "2026-10-30T11:20:47.211Z",
+      "sha": "c48b9dc9f669d0e4c1fc78d619d74aab5091cfca",
+      "timestamp": "2026-10-30T11:30:09.743Z",
       "commits": [
         {
-          "sha": "0a22deb194a2198b2a42bff3f01a2caa6fe29536",
+          "sha": "c48b9dc9f669d0e4c1fc78d619d74aab5091cfca",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:20:07Z",
-          "message": "Merge ce1ad8fb2220cbcee891ac574d84fda3cc6731d1 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+          "timestamp": "2026-10-30T11:29:22Z",
+          "message": "Merge ca37ca3160ba86a565d33805ae975ba84b5c7f8e into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+        },
+        {
+          "sha": "ca37ca3160ba86a565d33805ae975ba84b5c7f8e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:29:18-06:00",
+          "message": "docs(joiners): fold the second review in — merge order, the muted dial's activated rung, byte identity without effects, 8k−1/8k, windows widen before they shrink, ansi caveat"
         },
         {
           "sha": "ce1ad8fb2220cbcee891ac574d84fda3cc6731d1",
