@@ -410,10 +410,10 @@ export interface DecorEntry {
 }
 
 /**
- * The decorations a closed cell can wear under `decor` in `palette` at
- * `drawnAt` — what a theme's preview samples: each of its roles at the tones
- * of that role's window there (`windowAt`), in the window's order, dealt
- * across as many places as the dial position names tones. The count is the
+ * The decorations a theme's preview samples of a closed cell under `decor`
+ * in `palette` at `drawnAt`: each of its roles at the tones of that role's
+ * window there (`windowAt`), in the window's order, dealt across as many
+ * places as the dial position names tones. The count is the
  * dial's at every depth, so a frame keeps its shape at every depth, while
  * the colours are the ones the depth deals; and a window of two or more
  * tones never puts one colour on two places side by side. The roles sit side

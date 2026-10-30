@@ -293,7 +293,11 @@ describe("a dial window at a depth", () => {
               if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}, place ${i} not in ${dealt[i]!.hue}`);
               if (entry.shade === dealt[i]!.shade) return;
               seen.moved++;
-              if (i !== turn - 1 && i !== turn) wrong.push(`${where}, place ${i} moved beside no turn`);
+              // A place moves only at the meeting, and only where the place
+              // across it was drawn like it, as dealt or as it stands.
+              const across = i === turn ? turn - 1 : i === turn - 1 ? turn : undefined;
+              if (across === undefined || ![drawn(dealt[across]!), drawn(sampled[across]!)].includes(drawn(dealt[i]!)))
+                wrong.push(`${where}, place ${i} moved, though no place across a meeting was drawn like it`);
             });
             const beside = (i: number): string[] => [sampled[i - 1], sampled[i + 1]].flatMap((e) => (e === undefined ? [] : [drawn(e)]));
             const hasRungToGive = (i: number): boolean => LADDER.some((rung) => !beside(i).includes(drawn({ hue: sampled[i]!.hue, shade: rung })));
@@ -580,7 +584,7 @@ describe("where a row turns hue", () => {
   const ROWS = Array.from({ length: 15 }, (_, i) => i + 2);
 
   test.each(VARIATION_NAMES)(
-    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only beside a turn, and leaves its window only where no tone of it stands apart from both neighbours",
+    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn was drawn like it, and leaves its window only where no tone of it stands apart from both neighbours",
     (name) => {
       const variation = VARIATIONS[name];
       const wrong: string[] = [];
@@ -616,10 +620,14 @@ describe("where a row turns hue", () => {
                 const hasRungToGive = (i: number): boolean => ladder(line[i]!.hue).some((c) => !besideOf(i).includes(c));
                 line.forEach((entry, i) => {
                   if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}: ${i} wears ${entry.hue}, dealt ${dealt[i]!.hue}`);
-                  const atTurn = [dealt[i - 1], dealt[i + 1]].some((beside) => beside !== undefined && beside.hue !== entry.hue);
                   if (entry.shade === dealt[i]!.shade) return;
                   seen.moved++;
-                  if (!atTurn) wrong.push(`${where}: ${i} left its tone, beside no turn`);
+                  // A cell moves only where a cell across a turn beside it was
+                  // drawn like what it was dealt, as dealt or as it stands.
+                  const metAcross = [i - 1, i + 1].some(
+                    (j) => dealt[j] !== undefined && dealt[j]!.hue !== entry.hue && [drawn(dealt[j]!), drawn(line[j]!)].includes(drawn(dealt[i]!)),
+                  );
+                  if (!metAcross) wrong.push(`${where}: ${i} left its tone, though no cell across a turn was drawn like it`);
                   if (windowOf(entry.hue).includes(entry.shade)) return;
                   seen.widened++;
                   const apart = windowOf(entry.hue).filter((tone) => !besideOf(i).includes(drawn({ hue: entry.hue, shade: tone })));

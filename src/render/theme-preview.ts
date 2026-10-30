@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] `{{ themePreview }}` — a small sample of the theme
 // the bar is wearing, drawn from the colours the bar itself is drawn from
-// (brandon-theme-picker-bgw.ef6): every decoration a closed cell can wear under
-// the render's decor at the depth drawn (each of its variation's roles at the
+// (brandon-theme-picker-bgw.ef6): the decorations a closed cell wears under the
+// render's decor at the depth drawn (each of its variation's roles at the
 // tones of that role's window there, the roles side by side), the state/plane
 // pair of the band the preview's own lineage opens from the bar — inside the
 // settings menu, the door's, so "▾ open" is the colour the open door wears —
