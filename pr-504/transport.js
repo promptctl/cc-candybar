@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.166.3";
+var PACKAGE_VERSION = "1.167.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -78451,10 +78451,11 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(frame, resolveWarnings, attempt4) {
+function settle2(frame, chain2, resolveWarnings, attempt4) {
   const common = {
-    layers: frame.layers,
-    home: frame.home,
+    // [LAW:one-source-of-truth] The files reported are the chain loaded.
+    layers: chain2.layers.map((l) => l.path),
+    home: chain2.home,
     repos: frame.repos,
     ms: Math.round(performance.now() - frame.started)
   };
@@ -78482,9 +78483,9 @@ function settle2(frame, resolveWarnings, attempt4) {
 }
 function loadChain(frame, cwd2, chain2, deps, served = null) {
   const resolved = resolveLoad(cwd2, chain2, deps.storage);
-  if (resolved.kind === "failed") return settle2(frame, [], resolved);
+  if (resolved.kind === "failed") return settle2(frame, chain2, [], resolved);
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(frame, resolved.warnings, attempt4);
+  return settle2(frame, chain2, resolved.warnings, attempt4);
 }
 function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
@@ -78505,19 +78506,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
     configResolutionNotice(resolution),
     repoUnreadNotice(repos)
   ];
-  return loadChain(
-    {
-      layers: chain2.layers.map((l) => l.path),
-      home: chain2.home,
-      repos,
-      advisories,
-      started: started2
-    },
-    cwd2,
-    chain2,
-    deps,
-    served
-  );
+  return loadChain({ repos, advisories, started: started2 }, cwd2, chain2, deps, served);
 }
 function fallbackState(cwd2, repo2, deps) {
   const resolved = resolveLoad(
