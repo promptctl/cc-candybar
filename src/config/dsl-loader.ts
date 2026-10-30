@@ -515,6 +515,9 @@ export interface LoadedChain {
   // (validateRenderable).
   readonly config: ValidatedConfig;
   readonly dropped: readonly ConfigError[];
+  // The merged config with every layer's insert cells placed
+  // (validateRenderable's `placed`).
+  readonly placed: DslConfig;
 }
 
 export interface LoadedFile {
@@ -618,6 +621,11 @@ export interface Renderable {
   // [LAW:no-silent-failure] Each placement of an undeclared segment, as one
   // error per file that wrote one; empty for none. `check` refuses them.
   readonly dropped: readonly ConfigError[];
+  // [LAW:one-source-of-truth] The merged config with every layer's insert
+  // cells placed, before the load drops or synthesizes anything: the trees
+  // the files authored as they render, for a reader that asks what the
+  // authors placed (an insert entry places its segment as surely as a row).
+  readonly placed: DslConfig;
   // The advisories the chain earns as a whole: each insert cell a tree that
   // renders could not place.
   readonly warnings: readonly string[];
@@ -717,6 +725,7 @@ export function validateRenderable(
   return {
     config: withChrome as ValidatedConfig,
     dropped,
+    placed: merged,
     warnings: inserted.notices,
   };
 }

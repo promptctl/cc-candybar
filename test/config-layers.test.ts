@@ -21,6 +21,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { applyLayoutOp } from "../src/daemon/config-file-store";
 import { walkNodes } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
+import { loadConfigOnce } from "../src/doctor/cli";
 
 let dir: string;
 let project: string;
@@ -195,11 +196,15 @@ describe("a project layer inserting into the user's row", () => {
     );
   const order = (rendered: string, ...marks: string[]) =>
     marks.map((m) => rendered.indexOf(m));
-  // The warnings about the config's own root, apart from any naming a preset.
+  // The trees one insert notice names as missed: its closing `(in …)`.
+  const missedTrees = (w: string) => /\(in (.*)\)$/.exec(w)?.[1] ?? "";
+  // The warnings about the config's own root.
   const warnedFor = (warnings: readonly string[], entry: string) =>
-    warnings.filter((w) => w.includes(entry) && !w.includes(" in preset "));
+    warnings.filter(
+      (w) => w.includes(entry) && missedTrees(w).includes("the root"),
+    );
   const presetWarnings = (warnings: readonly string[], preset: string) =>
-    warnings.filter((w) => w.endsWith(` in preset "${preset}"`));
+    warnings.filter((w) => missedTrees(w).includes(`preset "${preset}"`));
   const presetTree = async (preset: string) => {
     const outcome = clean(await checkConfig(undefined, project));
     const prepared = await prepareConfig(
@@ -254,7 +259,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const bundled = clean(await checkConfig(undefined, project)).warnings;
-    expect(bundled.filter((w) => w.includes(" in preset "))).toEqual([]);
+    expect(bundled.filter((w) => missedTrees(w).includes("preset "))).toEqual([]);
     expect(warnedFor(bundled, "insert.0")).toEqual([]);
     userRow(
       `{ rows: { status: { h: ["mine", "other"] } } }`,
@@ -391,7 +396,7 @@ describe("a project layer inserting into the user's row", () => {
       )!;
       expect(label.opens).toBeUndefined();
       expect(config.segments[label.name]!.template).toBe(
-        `{{ "theirs · ${outcome.layers[1]} insert.0" }}`,
+        `{{ "theirs · ${path.basename(project)}/.cc-candybar.json5 insert.0" }}`,
       );
       // A layout op aimed at the inserted id writes nothing.
       const before = fs.readFileSync(userFile, "utf8");
@@ -476,7 +481,43 @@ describe("a project layer inserting into the user's row", () => {
           ? [config.segments[n.name]!.template]
           : [],
       );
-    expect(labels("default")).toEqual([`{{ "theirs · ${projectFile} insert.0" }}`]);
+    expect(labels("default")).toEqual([`{{ "theirs · ${path.basename(project)}/.cc-candybar.json5 insert.0" }}`]);
     expect(labels("mine2")).toEqual([`{{ "theirs" }}`]);
+    // The label names the file by its directory and name, never the whole
+    // path, which would outrun the bar.
+    expect(labels("default")[0]).not.toContain(dir);
+  });
+
+  test("a segment only an insert entry places, and the variable it reads, are not reported unused", () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    fs.writeFileSync(
+      projectFile,
+      `{
+        variables: { tv: { kind: "literal", value: "x" } },
+        segments: { theirs: { template: "{{ .tv }}" }, spare: { template: "S" } },
+        insert: [{ seg: "theirs", after: "mine" }],
+      }`,
+    );
+    const { unused } = loadConfigOnce({
+      projectDir: project,
+      cwd: project,
+      configFile: null,
+    });
+    expect(unused.map((u) => `${u.kind} ${u.name}`)).toEqual(["segment spare"]);
+  });
+
+  test("an entry whose anchor no tree holds is one warning naming every tree it missed", async () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", "other"] } } }`,
+      ` }, presets: { compact: { root: { h: ["other"] } }, wide: { root: { h: ["mine"] } }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "nope" }]`);
+    const warned = clean(await checkConfig(undefined, project)).warnings.filter(
+      (w) => w.includes("insert.0"),
+    );
+    expect(warned).toHaveLength(1);
+    expect(missedTrees(warned[0]!)).toBe(
+      'the root, preset "compact", preset "wide"',
+    );
   });
 });

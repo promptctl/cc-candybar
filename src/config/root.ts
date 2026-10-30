@@ -143,6 +143,8 @@ export interface Unplaced {
 // under another segment it would make the id ambiguous, so it is refused like
 // a missing anchor — never placed, so the tree's ids stay unique.
 // [LAW:no-silent-failure] Every cell that does not land comes back unplaced.
+// A tree no cell lands in comes back as the same object it was given, which
+// is how a caller tells a tree that changed from one that did not.
 export function insertCells(
   root: Root,
   cells: readonly InsertCell[],
@@ -187,7 +189,7 @@ export function insertCells(
         : refuse(
             acc,
             cell,
-            `${cell.relation} "${cell.anchor}", but the bar has no placement "${cell.anchor}"`,
+            `${cell.relation} "${cell.anchor}", but there is no placement "${cell.anchor}"`,
           );
     },
     { root, unplaced: [] },
@@ -245,11 +247,17 @@ function beside(
   );
   if (at >= 0) {
     const cut = relation === "before" ? at : at + 1;
+    // [LAW:one-source-of-truth] The cell is gated by its anchor's own `when`,
+    // as a row anchor's cell is by the row it lifts that `when` to: beside a
+    // placement means shown where that placement is. A node's `when` reads
+    // the shared scope, never its placement's settings, so it means the same
+    // on the cell.
+    const { when } = node.children[at]!;
     return {
       ...node,
       children: [
         ...node.children.slice(0, cut),
-        cell,
+        { ...cell, ...(when !== undefined && { when }) },
         ...node.children.slice(cut),
       ],
     };

@@ -184,10 +184,12 @@ export function presetRoot(
 // renders — so a preset's whole tree decides its own anchors and clashes,
 // and a preset that restages nothing renders the config's root, cells and
 // all. The result holds no cells to place, so no later pass can place one
-// again. A preset that restages carries its placed tree as a whole tree.
-// [LAW:no-silent-failure] Each cell a tree could not place comes back as the
-// warning the bar shows: the file and entry that wrote it, why, and the
-// preset whose tree it missed.
+// again. Only a preset whose tree a cell landed in carries that tree, as a
+// whole tree; every other keeps the fragment it was written as, row names
+// and all.
+// [LAW:no-silent-failure] Each cell the trees could not place comes back as
+// one warning the bar shows: the file and entry that wrote it, why, and
+// every tree it missed.
 // [LAW:no-silent-failure] exception: a preset no config file declares is not
 // warned for. Its tree is ours, not the user's, so a cell whose anchor it
 // lacks has no "beside" there — like a `when` that is false, not a broken
@@ -199,22 +201,28 @@ export function placeInserts(
   authored: ReadonlySet<string>,
 ): { readonly config: DslConfig; readonly notices: readonly string[] } {
   const own = insertCells(config.root, cells);
-  const restaged = Object.entries(config.presets).flatMap(([name, preset]) => {
-    const fragment = preset.root ?? EMPTY_ROWS;
-    return restages(fragment)
-      ? [
-          {
-            name,
-            preset,
-            ...insertCells(mergeRoot(fragment, config.root), cells),
-          },
-        ]
-      : [];
-  });
-  const notice =
-    (where: string) =>
-    ({ cell, reason }: Unplaced): string =>
-      `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${reason}${where}`;
+  const restaged = Object.entries(config.presets)
+    .filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS))
+    .map(([name, preset]) => {
+      const renders = mergeRoot(preset.root ?? EMPTY_ROWS, config.root);
+      const placed = insertCells(renders, cells);
+      // insertCells hands back the tree it was given when no cell lands.
+      return { name, preset, ...placed, landed: placed.root !== renders };
+    });
+  // Every tree each cell missed, by why, in the order the trees were placed.
+  const missed = new Map<InsertCell, Map<string, string[]>>();
+  const miss =
+    (tree: string) =>
+    ({ cell, reason }: Unplaced): void => {
+      const reasons = missed.get(cell) ?? new Map<string, string[]>();
+      reasons.set(reason, [...(reasons.get(reason) ?? []), tree]);
+      missed.set(cell, reasons);
+    };
+  own.unplaced.forEach(miss("the root"));
+  for (const { name, unplaced } of restaged.filter(({ name }) =>
+    authored.has(name),
+  ))
+    unplaced.forEach(miss(`preset "${name}"`));
   return {
     config: {
       ...config,
@@ -222,21 +230,21 @@ export function placeInserts(
       presets: {
         ...config.presets,
         ...Object.fromEntries(
-          restaged.map(({ name, preset, root }) => [
-            name,
-            { ...preset, root: rootNode(root) },
-          ]),
+          restaged
+            .filter(({ landed }) => landed)
+            .map(({ name, preset, root }) => [
+              name,
+              { ...preset, root: rootNode(root) },
+            ]),
         ),
       },
     },
-    notices: [
-      ...own.unplaced.map(notice("")),
-      ...restaged
-        .filter(({ name }) => authored.has(name))
-        .flatMap(({ name, unplaced }) =>
-          unplaced.map(notice(` in preset "${name}"`)),
-        ),
-    ],
+    notices: [...missed].flatMap(([cell, reasons]) =>
+      [...reasons].map(
+        ([reason, trees]) =>
+          `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${reason} (in ${trees.join(", ")})`,
+      ),
+    ),
   };
 }
 

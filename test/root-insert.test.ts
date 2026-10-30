@@ -1,13 +1,17 @@
 // `insert` cells over one rendered tree: where each lands, and which come
 // back unplaced.
 
-import { insertCells } from "../src/config/root";
-import type {
-  ContainerNode,
-  InsertCell,
-  LayoutNode,
-  Root,
-  SegmentNode,
+import { fragmentNode, insertCells } from "../src/config/root";
+import { placeInserts } from "../src/config/presets";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import {
+  walkNodes,
+  type ContainerNode,
+  type DslConfig,
+  type InsertCell,
+  type LayoutNode,
+  type Root,
+  type SegmentNode,
 } from "../src/config/dsl-types";
 
 const seg = (name: string, id?: string): SegmentNode => ({
@@ -78,4 +82,64 @@ test("an absent anchor and an id another segment holds both come back unplaced",
     "insert.1",
   ]);
   expect(unplaced[1]!.reason).toContain('already segment "b"');
+});
+
+test("a cell beside an anchor inside a row hides whenever its anchor's `when` hides it", () => {
+  const gated: SegmentNode = { ...seg("a"), when: "{{ .show }}" };
+  const root: Root = { rows: { status: h(gated, seg("b")) } };
+  const { root: out } = insertCells(
+    root,
+    cells({ seg: "x", anchor: "a", relation: "after" }),
+  );
+  expect((out.rows.status as ContainerNode).children).toEqual([
+    gated,
+    { ...seg("x"), insertedBy: by(0), when: "{{ .show }}" },
+    seg("b"),
+  ]);
+});
+
+test("a tree no cell lands in comes back as the tree it was given", () => {
+  const root: Root = { rows: { status: h(seg("a")) } };
+  expect(insertCells(root, []).root).toBe(root);
+  expect(
+    insertCells(root, cells({ seg: "x", anchor: "nope", relation: "after" }))
+      .root,
+  ).toBe(root);
+});
+
+describe("placeInserts", () => {
+  // A preset written as a rows map, one as a whole tree, and the config's
+  // own root holding the anchor "a".
+  const config: DslConfig = {
+    ...DEFAULT_DSL_CONFIG,
+    root: { rows: { status: h(seg("a")) } },
+    presets: {
+      rowsPreset: { root: { rows: { extra: h(seg("b")) } } },
+      treePreset: { root: h(seg("b")) },
+    },
+  };
+
+  test("with no cells, every preset keeps the fragment it was written as", () => {
+    const { config: out, notices } = placeInserts(config, [], new Set());
+    expect(out.root).toBe(config.root);
+    for (const name of Object.keys(config.presets))
+      expect(out.presets[name]).toBe(config.presets[name]);
+    expect(notices).toEqual([]);
+  });
+
+  test("only a preset whose tree received a cell carries the placed tree", () => {
+    const { config: out } = placeInserts(
+      config,
+      cells({ seg: "x", anchor: "a", relation: "after" }),
+      new Set(),
+    );
+    // The rows map renders the root's row, anchor and all, so the cell lands.
+    expect(
+      [...walkNodes(fragmentNode(out.presets.rowsPreset!.root!))].some(
+        (n) => n.kind === "segment" && n.name === "x",
+      ),
+    ).toBe(true);
+    // The whole tree holds no "a": it stays as written.
+    expect(out.presets.treePreset).toBe(config.presets.treePreset);
+  });
 });

@@ -20,6 +20,7 @@
 // (menu-keys.ts/disclosure.ts) so a synthesized menu and a hand-authored one
 // are indistinguishable at render. Nothing here is a new render concept.
 
+import path from "node:path";
 import { synthesisInputs } from "./synthesis-inputs.js";
 import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
@@ -556,6 +557,14 @@ function editableUnit(
   ];
 }
 
+// A config file as a label on the bar: its directory's name and its own.
+// Every file a chain layers is named `.cc-candybar.*` or `config.*`, so the
+// name alone can't tell a project's from a subdirectory's, and the directory
+// beside it can; the full path would outrun the bar.
+function fileLabel(file: string): string {
+  return path.join(path.basename(path.dirname(file)), path.basename(file));
+}
+
 // The unit an inserted cell gets: the cell, and in the names view a label
 // naming the file and entry that placed it. No `+`, `✖` or configure: the
 // cell is an insert entry, which no click rewrites.
@@ -578,7 +587,7 @@ function insertedUnit(
       `${id}/${ctx.presetIdent}`,
       child,
       decl,
-      `${id} · ${insertedBy.file} ${insertedBy.entry}`,
+      `${id} · ${fileLabel(insertedBy.file)} ${insertedBy.entry}`,
     ),
     when: `{{ ${namesView(ctx.presetIdent)} }}`,
   };
