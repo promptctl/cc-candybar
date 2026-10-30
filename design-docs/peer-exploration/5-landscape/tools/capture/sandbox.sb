@@ -6,10 +6,22 @@
 ;; comes in as the UTMP parameter (its real path, under /private) because a regex rule over
 ;; /var/folders costs a second per process launch while a subpath rule costs nothing. Ancestors of
 ;; the run copy allow metadata reads only, so a realpath walk succeeds without exposing their
-;; contents. Writes are denied everywhere but the run copy and the null device.
+;; contents. Writes are denied everywhere but the run copy and the null device: the runner reads
+;; the bar from pipes, so no terminal device is writable, and a write to another pty cannot reach
+;; the developer's open terminals.
+;;
+;; LaunchServices opens are denied, so a script cannot start an app.
+;;
+;; This profile does not contain inter-process requests. A process under it still asks the
+;; user's GUI session to act for it: osascript drives Finder or Terminal here even under a
+;; deny-default profile with every mach lookup refused, and whatever that session runs, runs
+;; unsandboxed with the user's network and files. A rule that seems to close this does not, so
+;; none is written here. Containing the runs means taking the session away from them: a separate
+;; user with no GUI login, or a VM.
 (version 1)
 (allow default)
 (deny network*)
+(deny lsopen)
 (deny file-read* (subpath "/Users"))
 (deny file-read* (subpath "/Volumes"))
 (deny file-read* (subpath "/private/tmp"))
@@ -18,7 +30,7 @@
 (allow file-read-metadata (literal "/private/tmp") (literal "/tmp") (literal "/private/tmp/ccland") (literal "/private/tmp/ccland/runs"))
 (deny file-write*)
 (allow file-write* (subpath (param "RUN")))
-(allow file-write* (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/ttys"))
+(allow file-write* (literal "/dev/null"))
 (allow file-read* (subpath (param "RUN")))
 (allow file-read* (subpath (param "SRC")))
 (allow file-read* (subpath "/Users/bmf/.bun/bin"))
