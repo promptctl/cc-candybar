@@ -3129,11 +3129,11 @@ function __asyncGenerator(thisArg, _arguments, generator) {
     try {
       step4(g[n](v));
     } catch (e) {
-      settle2(q[0][3], e);
+      settle3(q[0][3], e);
     }
   }
   function step4(r) {
-    r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject2) : settle2(q[0][2], r);
+    r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject2) : settle3(q[0][2], r);
   }
   function fulfill(value) {
     resume("next", value);
@@ -3141,7 +3141,7 @@ function __asyncGenerator(thisArg, _arguments, generator) {
   function reject2(value) {
     resume("throw", value);
   }
-  function settle2(f, v) {
+  function settle3(f, v) {
     if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]);
   }
 }
@@ -3167,11 +3167,11 @@ function __asyncValues(o) {
   function verb(n) {
     i[n] = o[n] && function(v) {
       return new Promise(function(resolve, reject2) {
-        v = o[n](v), settle2(resolve, reject2, v.done, v.value);
+        v = o[n](v), settle3(resolve, reject2, v.done, v.value);
       });
     };
   }
-  function settle2(resolve, reject2, d, v) {
+  function settle3(resolve, reject2, d, v) {
     Promise.resolve(v).then(function(v2) {
       resolve({ value: v2, done: d });
     }, reject2);
@@ -33242,14 +33242,14 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
 }
 function onColors(loop, colors) {
   const settled3 = /* @__PURE__ */ new WeakMap();
-  const settle2 = (drawn) => {
+  const settle3 = (drawn) => {
     const lit = colors ?? drawn.colors;
     const key = [drawnKey(drawn), "|", ...lit].join(" ");
     const memo = settled3.get(drawn.theme) ?? new Memo();
     settled3.set(drawn.theme, memo);
     return memo.get(key, () => shares(drawn, lit, loop.touch));
   };
-  return stillOnSlots(atShares(loop, settle2));
+  return stillOnSlots(atShares(loop, settle3));
 }
 function drawnKey({ depth, pairs: pairs2 }) {
   return [depth, ...pairs2.map(pairKey)].join(" ");
@@ -34323,12 +34323,12 @@ async function launch(opts) {
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
-    const settle2 = (r) => finish(() => resolve(r));
+    const settle3 = (r) => finish(() => resolve(r));
     const signal = (pid2, sig) => {
       try {
         signalGroup(pid2, sig);
       } catch (err) {
-        settle2({
+        settle3({
           ok: false,
           reason: "signal-refused",
           stdout: stdout2,
@@ -34359,7 +34359,7 @@ async function launch(opts) {
       stderr2 += chunk3.toString("utf8");
     });
     child.on("error", (err) => {
-      settle2({
+      settle3({
         ok: false,
         reason: "spawn-error",
         stdout: stdout2,
@@ -34371,7 +34371,7 @@ async function launch(opts) {
     });
     child.on("close", (code, signal2) => {
       if (terminated !== null) {
-        settle2({
+        settle3({
           ok: false,
           reason: terminated,
           stdout: stdout2,
@@ -34382,11 +34382,11 @@ async function launch(opts) {
         return;
       }
       if (code === 0) {
-        settle2({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
+        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
         return;
       }
       const reason = signal2 ? "signal" : "non-zero";
-      settle2({
+      settle3({
         ok: false,
         reason,
         stdout: stdout2,
@@ -58387,20 +58387,20 @@ function loadConfigSource(path40, source, dflt, ctx, allowedPalettes) {
       layer: { plugins: layer, owning: owning2 }
     };
   });
-  const { plugins, owning } = parsed2.layer;
+  const { plugins: plugins2, owning } = parsed2.layer;
   const standing = withDroppedPlacements(
-    mergeWithDefault(parsed2.raw, plugins.config),
+    mergeWithDefault(parsed2.raw, plugins2.config),
     owning
   );
   return {
     source,
     raw: parsed2.raw,
-    warnings: [...parsed2.warnings, ...plugins.dropped.map(droppedPluginNotice)],
+    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
     plugins: {
-      loaded: plugins.loaded,
-      dropped: plugins.dropped,
+      loaded: plugins2.loaded,
+      dropped: plugins2.dropped,
       reached: standing.reached,
-      rendering: plugins.rendering
+      rendering: plugins2.rendering
     },
     config: standing.config
   };
@@ -58440,7 +58440,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
   };
   const found = installedPlugins(ctx.repo);
   const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
-  const plugins = {
+  const plugins2 = {
     ...merged,
     dropped: [...merged.dropped, ...found.strays]
   };
@@ -58449,7 +58449,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       (u) => `Plugin folder could not be listed: ${u.path} \u2014 ${u.error}`
     )
   );
-  const base = plugins.config;
+  const base = plugins2.config;
   const layers = [];
   for (const path40 of paths) {
     trace.entered(path40);
@@ -58462,10 +58462,10 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
         ...ctx,
         beneath: {
           dropped: [
-            ...plugins.dropped,
+            ...plugins2.dropped,
             ...layers.flatMap((l) => l.plugins.dropped)
           ],
-          rendering: below?.rendering ?? plugins.rendering
+          rendering: below?.rendering ?? plugins2.rendering
         }
       },
       allowedPalettes
@@ -58475,17 +58475,17 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
   }
   const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
   const isReached = (d) => reached.has(d.path);
-  const surfaced = plugins.dropped.filter(isReached);
-  const unreached = plugins.dropped.filter((d) => !isReached(d));
+  const surfaced = plugins2.dropped.filter(isReached);
+  const unreached = plugins2.dropped.filter((d) => !isReached(d));
   trace.warned(surfaced.map(droppedPluginNotice));
   const installed = {
     checkout: ctx.checkout,
     roots: found.roots,
-    loaded: plugins.loaded,
+    loaded: plugins2.loaded,
     dropped: surfaced,
     unreached,
     reached,
-    rendering: layers.at(-1)?.plugins.rendering ?? plugins.rendering
+    rendering: layers.at(-1)?.plugins.rendering ?? plugins2.rendering
   };
   const top = layers.at(-1);
   if (top === void 0) {
@@ -64035,12 +64035,12 @@ function sourcesFactOf(sources) {
   };
 }
 function projectSources(names, read2) {
-  const plugins = {};
+  const plugins2 = {};
   for (const name of names) {
     const [, plugin, source] = name.split(".");
-    (plugins[plugin] ??= {})[source] = read2(name);
+    (plugins2[plugin] ??= {})[source] = read2(name);
   }
-  return plugins;
+  return plugins2;
 }
 function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
@@ -74377,7 +74377,7 @@ var ViewParts = class {
     let node = this.slots.get(slot);
     if (node === void 0) {
       let last2;
-      const settle2 = () => {
+      const settle3 = () => {
         const selection2 = this.selections()[SELECTION_OF[slot]];
         if (selection2.kind === "decided")
           return settled2(selection2.name, null, null);
@@ -74416,7 +74416,7 @@ var ViewParts = class {
       };
       let held;
       node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next2 = settle2();
+        const next2 = settle3();
         if (held === void 0 || !sameSlot(held, next2)) held = next2;
         return held;
       });
@@ -75526,6 +75526,12 @@ function unusedDeclarations(raw, config2) {
   ];
 }
 
+// src/utils/plain.ts
+init_globals();
+function digestOf2(value) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
 // src/utils/holds.ts
 init_globals();
 var Holds = class {
@@ -75593,11 +75599,11 @@ function renderCacheBudget(memoryLimitBytes2) {
 }
 var MAX_ENTRIES3 = 256;
 function pluginLoadLine(layers, {
-  plugins,
+  plugins: plugins2,
   config: config2,
   compiled
 }, ms) {
-  const { checkout, loaded, dropped: dropped2, unreached } = plugins;
+  const { checkout, loaded, dropped: dropped2, unreached } = plugins2;
   const checkoutField = checkout === null ? "-" : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
   const dataOf = (definition) => {
     const name = pluginNameOf(definition);
@@ -75637,9 +75643,9 @@ var causeField = (cause) => {
       return `${cause.kind}:${heardField(cause.heard)}`;
   }
 };
-function configLoadedLine(entry, cause) {
+function configLoadedLine(entry, cause, settled3) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -75705,17 +75711,97 @@ function watchTargetsFor(entry) {
 function joinWarnings(parts) {
   return parts.filter(Boolean).join("\n") || null;
 }
-function buildRenderState(cwd2, chain2, warnings, deps, entered = () => {
-}) {
-  const { layers, config: config2, installed } = loadConfigChain(
-    chain2.layers,
-    DEFAULT_DSL_CONFIG,
-    { entered, warned: (w) => warnings.push(...w) },
-    { repo: chain2.repo, cwd: cwd2 }
-  );
-  entered(layers.length === 1 ? layers[0].path : null);
+var thrown = (err) => err instanceof Error ? err.message : String(err);
+var blamed = (layers) => layers.length === 1 ? layers[0].path : null;
+function plugins(p2) {
+  return {
+    loaded: p2.loaded,
+    dropped: p2.dropped,
+    reached: [...p2.reached].sort(),
+    rendering: [...p2.rendering].sort(([a], [b]) => a.localeCompare(b))
+  };
+}
+function loadKey(inputs) {
+  const { loaded, chain: chain2 } = inputs;
+  return digestOf2({
+    cwd: inputs.cwd,
+    chain: {
+      layers: chain2.layers,
+      home: chain2.home,
+      repo: chain2.repo
+    },
+    loaded: {
+      layers: loaded.layers.map(
+        (l) => ({
+          path: l.path,
+          raw: l.raw,
+          config: l.config,
+          plugins: plugins(l.plugins),
+          // Not keyed: positions reach no state, and the resolve redraws
+          // its diagnostics on every load, so a whitespace or comment edit
+          // keeps the state.
+          source: null,
+          // Not keyed: the entry's, recomposed on every load.
+          warnings: null
+        })
+      ),
+      base: loaded.base,
+      installed: {
+        ...plugins(loaded.installed),
+        checkout: loaded.installed.checkout,
+        roots: loaded.installed.roots,
+        unreached: loaded.installed.unreached
+      },
+      config: loaded.config
+    },
+    sources: [...inputs.sources].sort(([a], [b]) => a.localeCompare(b)).map(([name, key]) => [name, key.folder, key.generation])
+  });
+}
+function declaredSources(config2, storage) {
+  const keys2 = /* @__PURE__ */ new Map();
+  const sources = /* @__PURE__ */ new Map();
+  for (const [name, decl] of Object.entries(config2.variables)) {
+    if (decl.kind !== "source") continue;
+    const key = keys2.get(decl.storage) ?? storage.keyFor(decl.storage);
+    keys2.set(decl.storage, key);
+    sources.set(name, key);
+  }
+  return sources;
+}
+function resolveLoad(cwd2, chain2, storage) {
+  const warnings = [];
+  let failing = null;
+  try {
+    const loaded = loadConfigChain(
+      chain2.layers,
+      DEFAULT_DSL_CONFIG,
+      {
+        entered: (path40) => {
+          failing = path40;
+        },
+        warned: (w) => warnings.push(...w)
+      },
+      { repo: chain2.repo, cwd: cwd2 }
+    );
+    failing = blamed(loaded.layers);
+    const inputs = {
+      cwd: cwd2,
+      chain: chain2,
+      loaded,
+      sources: declaredSources(loaded.config, storage)
+    };
+    return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
+  } catch (err) {
+    if (err instanceof ConfigError) warnings.push(...err.warnings);
+    return { kind: "failed", cause: err, failedFile: failing, warnings };
+  }
+}
+function buildRenderState(load, deps) {
+  const { cwd: cwd2, chain: chain2, loaded } = load;
+  const { layers, config: config2, installed } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
+  const warnings = [];
   const store = new VariableStore();
   const registry = new SourceRegistry(
     store,
@@ -75725,7 +75811,6 @@ function buildRenderState(cwd2, chain2, warnings, deps, entered = () => {
     deps.ledger
   );
   let registration;
-  let sources;
   try {
     registration = registerCompiled(
       config2,
@@ -75740,61 +75825,94 @@ function buildRenderState(cwd2, chain2, warnings, deps, entered = () => {
     probe2.dispose();
     stateGate(config2);
     configGate(config2);
-    sources = declaredSources(config2, deps.storage, registry);
+    for (const key of new Set(load.sources.values()))
+      registry.own(deps.storage.watch(key));
   } catch (err) {
     registry.dispose();
-    throw err;
+    if (err instanceof ConfigError) warnings.push(...err.warnings);
+    return {
+      kind: "failed",
+      cause: err,
+      failedFile: blamed(layers),
+      warnings
+    };
   }
   return {
-    config: config2,
-    compileKey: registration.compileKey,
-    store,
-    registry,
-    compiled: registration.compiled,
-    neededInputPaths: neededPrefixesByPreset(config2),
-    // What a reset clears is the home's: resets write nowhere else.
-    authoredRoots: authoredRoots(merged, homeRaw),
-    fileHeldSettings: fileHeldSettings(homeRaw),
-    configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
-    // One entry per declaration, however many layers declare it.
-    unused: [
-      ...new Map(
-        layers.flatMap((l) => unusedDeclarations(l.raw, merged)).map((u) => [`${u.kind}:${u.name}`, u])
-      ).values()
-    ],
-    plugins: {
-      checkout: installed.checkout,
-      roots: installed.roots,
-      // What renders, as the loader decided it: a nearer layer's load or
-      // drop replaces a farther one's of the same name.
-      loaded: [...installed.rendering.values()],
-      dropped: [
-        ...installed.dropped,
-        ...layers.flatMap((l) => l.plugins.dropped)
+    kind: "built",
+    state: {
+      config: config2,
+      compileKey: registration.compileKey,
+      loadKey: load.key,
+      buildWarnings: warnings,
+      store,
+      registry,
+      compiled: registration.compiled,
+      neededInputPaths: neededPrefixesByPreset(config2),
+      // What a reset clears is the home's: resets write nowhere else.
+      authoredRoots: authoredRoots(merged, homeRaw),
+      fileHeldSettings: fileHeldSettings(homeRaw),
+      configPath: chain2.layers.includes(chain2.home) ? chain2.home : null,
+      // One entry per declaration, however many layers declare it.
+      unused: [
+        ...new Map(
+          layers.flatMap((l) => unusedDeclarations(l.raw, merged)).map((u) => [`${u.kind}:${u.name}`, u])
+        ).values()
       ],
-      unreached: installed.unreached,
-      reached: installed.reached,
-      rendering: installed.rendering
-    },
-    sources
+      plugins: {
+        checkout: installed.checkout,
+        roots: installed.roots,
+        // What renders, as the loader decided it: a nearer layer's load or
+        // drop replaces a farther one's of the same name.
+        loaded: [...installed.rendering.values()],
+        dropped: [
+          ...installed.dropped,
+          ...layers.flatMap((l) => l.plugins.dropped)
+        ],
+        unreached: installed.unreached,
+        reached: installed.reached,
+        rendering: installed.rendering
+      },
+      sources: load.sources
+    }
   };
 }
-function declaredSources(config2, storage, registry) {
-  const keys2 = /* @__PURE__ */ new Map();
-  const sources = /* @__PURE__ */ new Map();
-  for (const [name, decl] of Object.entries(config2.variables)) {
-    if (decl.kind !== "source") continue;
-    let key = keys2.get(decl.storage);
-    if (key === void 0) {
-      key = storage.keyFor(decl.storage);
-      keys2.set(decl.storage, key);
-      registry.own(storage.watch(key));
-    }
-    sources.set(name, key);
+function settle2(frame, resolveWarnings, attempt4) {
+  const common = {
+    layers: frame.layers,
+    home: frame.home,
+    repos: frame.repos,
+    ms: Math.round(performance.now() - frame.started)
+  };
+  const warning = (own2) => joinWarnings([...frame.advisories, ...resolveWarnings, ...own2]);
+  switch (attempt4.kind) {
+    case "built":
+    case "kept":
+      return {
+        ...common,
+        kind: attempt4.kind,
+        warning: warning(attempt4.state.buildWarnings),
+        state: attempt4.state,
+        error: null
+      };
+    case "failed":
+      return {
+        ...common,
+        kind: "failed",
+        warning: warning(attempt4.warnings),
+        state: null,
+        error: thrown(attempt4.cause),
+        cause: attempt4.cause,
+        failedFile: attempt4.failedFile
+      };
   }
-  return sources;
 }
-function loadFromDisk(projectDir, cwd2, configFile, deps) {
+function loadChain(frame, cwd2, chain2, deps, served = null) {
+  const resolved = resolveLoad(cwd2, chain2, deps.storage);
+  if (resolved.kind === "failed") return settle2(frame, [], resolved);
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle2(frame, resolved.warnings, attempt4);
+}
+function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
   const resolution = resolveDslConfig(
     repoConfigs().read(),
@@ -75813,37 +75931,26 @@ function loadFromDisk(projectDir, cwd2, configFile, deps) {
     configResolutionNotice(resolution),
     repoUnreadNotice(repos)
   ];
-  let state;
-  let failing = null;
-  try {
-    state = buildRenderState(cwd2, chain2, advisories, deps, (path40) => {
-      failing = path40;
-    });
-  } catch (err) {
-    if (err instanceof ConfigError) advisories.push(...err.warnings);
-    return {
-      layers: chain2.layers,
-      home: chain2.home,
-      ms: Math.round(performance.now() - started2),
-      repos,
-      failedFile: failing,
-      warning: joinWarnings(advisories),
-      state: null,
-      error: err instanceof ConfigError ? err.message : err instanceof Error ? err.message : String(err)
-    };
-  }
-  return {
-    layers: chain2.layers,
-    home: chain2.home,
-    ms: Math.round(performance.now() - started2),
-    repos,
-    warning: joinWarnings(advisories),
-    state,
-    error: null
-  };
+  return loadChain(
+    { layers: chain2.layers, home: chain2.home, repos, advisories, started: started2 },
+    cwd2,
+    chain2,
+    deps,
+    served
+  );
 }
 function fallbackState(cwd2, repo2, deps) {
-  return buildRenderState(cwd2, { layers: [], home: "", repo: repo2 }, [], deps);
+  const resolved = resolveLoad(
+    cwd2,
+    { layers: [], home: "", repo: repo2 },
+    deps.storage
+  );
+  const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
+  if (built.kind === "failed")
+    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+      cause: built.cause
+    });
+  return built.state;
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
@@ -76034,7 +76141,7 @@ var RenderCache = class {
       this.entries.set(key, existing);
       return existing;
     }
-    const loaded = this.load(projectDir, cwd2, configFile);
+    const loaded = this.load(projectDir, cwd2, configFile, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     const entry = {
@@ -76058,7 +76165,7 @@ var RenderCache = class {
       `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry, [], { kind: "open" });
+    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
     return entry;
   }
   // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
@@ -76305,9 +76412,9 @@ var RenderCache = class {
   // config watch firing after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(projectDir, cwd2, configFile) {
+  load(projectDir, cwd2, configFile, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd2, configFile, this.deps);
+    return loadFromDisk(projectDir, cwd2, configFile, this.deps, served);
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
   // goes, the map stops serving it, and its state is retired.
@@ -76431,7 +76538,7 @@ var RenderCache = class {
   // Re-read an entry from disk NOW, for a caller that must not act on the old
   // config until the reload has landed (a save releasing the picks the file
   // now holds, a doctor verdict on the files as they are). The watcher still
-  // fires after a write; a second reload of unchanged bytes is idempotent.
+  // fires after a write, and its reload of the same bytes keeps the state.
   reload(projectDir, cwd2, configFile, cause) {
     this.reloadInto(this.getOrCreate(projectDir, cwd2, configFile), cause);
   }
@@ -76452,19 +76559,25 @@ var RenderCache = class {
   // arm the load took.
   reloadInto(entry, cause) {
     const sessions = this.sessionsOn(entry);
-    const loaded = this.load(entry.projectDir, entry.cwd, entry.configFile);
+    const served = entry.state;
+    const loaded = this.load(
+      entry.projectDir,
+      entry.cwd,
+      entry.configFile,
+      served
+    );
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
-    if (loaded.state !== null) {
+    if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
-      const retired = entry.state;
+    if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
-      this.retire(retired, "reload", { entry, state: loaded.state });
+      this.retire(served, "reload", { entry, state: loaded.state });
     }
     this.fit(entry);
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry, sessions, cause);
+    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
   // Every entry, under the answers now on disk: any of them may draw from a
   // repository. The live map is walked, so an entry a reload's `fit` evicts
@@ -79461,8 +79574,8 @@ var renderCache = new RenderCache(
       // daemon.log with its cause — the operator's only record of why a load
       // ran, and whether a save was picked up cleanly, kept rendering
       // last-known-good behind an error, or resolved to a different file.
-      onReload: (entry, sessions, cause) => {
-        dlog("info", configLoadedLine(entry, cause));
+      onReload: (entry, sessions, cause, settled3) => {
+        dlog("info", configLoadedLine(entry, cause, settled3));
         for (const sessionId2 of sessions) frameFeeds.wake(sessionId2, "reload");
       },
       // [LAW:single-enforcer] What a session's view draws from moved: its
