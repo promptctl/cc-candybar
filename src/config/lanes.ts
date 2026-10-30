@@ -3,53 +3,86 @@
 // the daemon's pushed frames (src/daemon/frame-feed.ts) — A in the band above
 // the prompt (a Claude Code mod), B in a patched Claude Code's own statusline,
 // C outside Claude Code, in tmux: a pane beside the session, and the tmux
-// status line. All are experimental, and each sits behind its own toggle so it
-// can be switched off, or removed, alone.
+// status line. Each is switched by a setting of its own, so it can be switched
+// off, or removed, alone.
 //
 // [LAW:one-type-per-behavior] One behavior, three instances: a lane is a
-// subscriber, and what differs between them is a name and a setting.
+// subscriber, and what differs between them is a name and its switch — the
+// setting that turns it on and the value that does. The experimental lanes are
+// each a 🧪 toggle; the tmux status line is on while the bar's renderer is
+// tmux.
 // [LAW:one-source-of-truth] THE table. The globals fields, the menu's
 // controls (SETTINGS), the payload's read-back and the daemon's gate all
 // derive from these rows or are keyed by them, so deleting a lane's row makes
 // the compiler name everything left behind.
 
-// `elsewhere` is where a lane draws the bar when that is not the statusline:
-// while it is on, the statusline hands off to it (src/daemon/lane-handoff.ts).
-// Lane B draws the statusline itself, so it hands off nowhere. `rows` is the
-// most rows the lane's surface shows, or null when only the terminal bounds
-// it.
+// Where the bar is drawn: Claude Code's own status line, or the tmux status
+// line of the pane the session runs in. A session outside tmux has no tmux
+// status line, so it draws in Claude Code's whatever the setting says.
+export const RENDERERS = ["claude", "tmux"] as const;
+export type Renderer = (typeof RENDERERS)[number];
+
+// [LAW:one-source-of-truth] The one spelling of "this session runs in a tmux
+// pane", as a template expression over the client's tmux hint: a slash click
+// has a pane to type into (every bundled slash control gates on it, so none
+// shows a button whose every click the verb would refuse), and the session
+// has a tmux status line to draw in. A user's own slash button gates the same
+// way: `when: '{{ ne .tmux.pane "" }}'`.
+export const IN_TMUX = 'ne .tmux.pane ""';
+
+// `handsOff` is whether a lane draws the bar somewhere other than the
+// statusline: while it is on, the statusline hands off to it
+// (src/daemon/lane-handoff.ts). Lane B draws the statusline itself, so it
+// hands off nowhere. A switch that is `inTmux` is on only for a session its
+// client reports in a tmux pane: the tmux status line belongs to that pane, so
+// a session outside tmux ignores the setting, which other sessions share, and
+// draws in Claude Code's statusline. `rows` is the most rows the lane's
+// surface shows, or null when only the terminal bounds it.
 export const LANES = {
   band: {
-    setting: "experimentalBand",
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "🧪 band (A)",
-    elsewhere: "the band above the prompt",
+    handsOff: true,
     rows: null,
   },
   statusline: {
-    setting: "experimentalStatusline",
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "🧪 statusline (B)",
-    elsewhere: null,
+    handsOff: false,
     rows: null,
   },
   pane: {
-    setting: "experimentalPane",
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "🧪 tmux pane (C)",
-    elsewhere: "a tmux pane below",
+    handsOff: true,
     rows: null,
   },
   tmuxStatus: {
-    setting: "experimentalTmuxStatus",
-    label: "🧪 tmux status line (C)",
-    elsewhere: "the tmux status line",
+    switch: {
+      setting: "renderer",
+      on: "tmux" satisfies Renderer,
+      inTmux: true,
+    },
+    label: "tmux status line",
+    handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
     rows: 5,
   },
 } as const;
 
 export type Lane = keyof typeof LANES;
-export type LaneSetting = (typeof LANES)[Lane]["setting"];
+export type LaneSwitch = (typeof LANES)[Lane]["switch"];
+// The settings that are a lane's own 🧪 toggle: a flag, on at `true`.
+export type LaneSetting = Extract<LaneSwitch, { readonly on: true }>["setting"];
+// The lanes a toggle of their own switches.
+export type ToggledLane = {
+  [L in Lane]: (typeof LANES)[L]["switch"]["on"] extends true ? L : never;
+}[Lane];
 
 export const LANE_NAMES = Object.keys(LANES) as readonly Lane[];
+export const TOGGLED_LANES = LANE_NAMES.filter(
+  (lane): lane is ToggledLane => LANES[lane].switch.on === true,
+);
 
 // Which lanes a session's settings switch on.
 export type LaneSwitches = Readonly<Record<Lane, boolean>>;

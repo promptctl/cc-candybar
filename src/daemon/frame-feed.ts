@@ -240,7 +240,7 @@ const sentOf = (resp: Response): Sent => ({
 // [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
 // the one drawing it in the statusline draws what the statusline shows.
 const answerOf = (answers: Answers, lane: Lane): Sent =>
-  LANES[lane].elsewhere === null ? answers.statusline : answers.bar;
+  LANES[lane].handsOff ? answers.bar : answers.statusline;
 
 // [LAW:one-source-of-truth] The frames a second a feed draws at: the period it
 // set, never a time it measured. The pace is drawn into the frame, so a

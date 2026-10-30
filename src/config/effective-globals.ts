@@ -83,9 +83,20 @@ export type EffectiveGlobals = ValuedGlobals & {
 };
 
 // Which lanes a session's settings switch on — each lane's toggle as the
-// resolution resolved it.
-export const laneSwitches = (effective: EffectiveGlobals): LaneSwitches =>
-  perLane((lane) => effective[LANES[lane].setting]);
+// resolution resolved it, on while its switch's setting holds the value that
+// turns it on, and, for a switch that is `inTmux`, while the session's client
+// reports it in a tmux pane.
+// [LAW:single-enforcer] The one place "outside tmux ignores the renderer"
+// is decided: the draw, the feed and a click's before/after all read lanes
+// here, so no setup ever runs for a lane a session cannot have.
+export const laneSwitches = (
+  effective: EffectiveGlobals,
+  inTmux: boolean,
+): LaneSwitches =>
+  perLane((lane) => {
+    const { setting, on, inTmux: needsTmux } = LANES[lane].switch;
+    return effective[setting] === on && (inTmux || !needsTmux);
+  });
 
 // [LAW:one-type-per-behavior] THE fold for one valued field: the staged
 // fragment over the session's pick over the config default over the row's

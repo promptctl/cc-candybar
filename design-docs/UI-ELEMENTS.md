@@ -245,7 +245,7 @@ At 200 columns the descriptions are cut later:
 | `✕` | closes |
 
 - **Where used:** edit mode's `✚` only. Its domain is the declared segments, grouped by each segment's own `group:` (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for a segment that declares none).
-- **Authored as:** a domain that declares a library (`DomainLibrary` in `src/config/option-domain.ts`); laid out by `src/render/library.ts` (`libraryLayout`, at most 8 rows per page). A bare `{{ picker }}` refuses a catalogue domain; only a menu body lays one out.
+- **Authored as:** a domain that declares a library (`DomainLibrary` in `src/config/option-domain.ts`); laid out by `src/render/library.ts` (`libraryLayout`, at most 8 rows per page). A `{{ picker }}` over one draws the first row in its cell and drops the rest below, the way a menu body does.
 
 ### Carousel
 

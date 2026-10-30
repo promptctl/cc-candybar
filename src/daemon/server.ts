@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { linkSignerFromKeyFile } from "./link-key.js";
 import { Runs } from "./runs.js";
+import { inTmux } from "../tmux-hint.js";
 import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
@@ -2032,18 +2033,36 @@ function sessionGlobals(
 // opens nothing (`holdView`).
 function viewLanes(sessionId: string): LaneSwitches | null {
   using hold = renderCache.holdView(sessionId);
-  return hold === null ? null : laneSwitches(hold.view.source.effective());
+  return hold === null
+    ? null
+    : laneSwitches(
+        hold.view.source.effective(),
+        inTmux(hold.view.facts().hints.tmux),
+      );
 }
 
 // The lanes `sessionId`'s settings switch on over the config `origin`
-// resolves to, as the render cache holds it.
+// resolves to, as the render cache holds it, in the pane its latest request
+// reported — the same request a click's setups and status line follow
+// (laneClicked). A session this daemon has no request from has no pane fact
+// yet, so its switches are its settings alone: what the click moves is owed
+// to its first request, which settles it against the pane that request
+// reports (`arrived`), so a session outside tmux is owed nothing it can run.
 function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
   );
-  return laneSwitches(sessionGlobals(sessionId, hold.state));
+  const latest = frameFeeds.latest(sessionId);
+  // [LAW:dataflow-not-control-flow] exception: a click with no request on
+  // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
+  // tmux so a tmux session's click owes its setup; the owed setup is settled
+  // against the session's own hint when its next event arrives.
+  return laneSwitches(
+    sessionGlobals(sessionId, hold.state),
+    latest === null || inTmux(latest.hints.tmux),
+  );
 }
 
 // A render request that crossed the checkpoint: its hookData carries every
@@ -2366,7 +2385,7 @@ function drawRender(
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
   const effective = view.source.effective();
   // Which animation lanes this session's settings switch on, as drawn.
-  const lanes = laneSwitches(effective);
+  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
   });
@@ -2804,7 +2823,10 @@ async function drawAnswer(
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
-  arrived(req, laneSwitches(setup.view.source.effective()));
+  arrived(
+    req,
+    laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
+  );
   noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of

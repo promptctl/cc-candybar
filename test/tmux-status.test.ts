@@ -217,6 +217,16 @@ describe("TmuxStatusLines", () => {
     expect(h.tmux.binding).toContain("switch-client -t =");
   });
 
+  // candybar-plugins-vf6g.qzx: a session outside tmux whose renderer is tmux
+  // has no status line to draw in, so it keeps drawing in Claude Code's.
+  test("a session switched on with no tmux pane holds no status line", async () => {
+    const h = harness();
+    h.owner.observe("s1", null, true);
+    await h.answer({}, {});
+    expect(h.subs.has("s1")).toBe(false);
+    expect([...session(h)]).toEqual([]);
+  });
+
   test("a held pane its status line does not show draws nothing, and the status line drops back to its own height", async () => {
     const h = harness();
     h.hold("s1", "%1");

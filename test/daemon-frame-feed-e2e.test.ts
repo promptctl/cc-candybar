@@ -613,7 +613,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
   // the mod or the tmux pane, we should NOT show the original bar except a
   // single line that contains a button to reset those settings".
-  test("while the band draws the bar, Claude Code's statusline is one line whose button brings the bar back", async () => {
+  test("while the band draws the bar, Claude Code's statusline is one small row whose button brings the bar back", async () => {
     const sid = "feed-handoff";
     // [LAW:nothing-unseen] Each render's event says whether the statusline
     // handed off, and to which lanes.
@@ -641,7 +641,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       args("handoff"),
     );
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
-      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
+      `🧪 ${HANDOFF_BUTTON}`,
     ]);
     // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
     // as one more event than a count read before the render: a retry of the
@@ -735,7 +735,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       args("warned"),
     );
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
-      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON} ⚠ 1`,
+      `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
     ]);
     expect(stripAnsi(handedOff)).not.toContain('duplicate key "effect"');
     const last = String(barText(band.live().at(-1)!));
@@ -752,7 +752,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await click(sockPath, viewerLink(viewer.rendered, "✕")!.url);
     expect(
       stripAnsi(await render(sockPath, sid, projectDir, {}, args("warned"))),
-    ).toContain("the bar is drawn in the band above the prompt");
+    ).toContain(HANDOFF_BUTTON);
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to

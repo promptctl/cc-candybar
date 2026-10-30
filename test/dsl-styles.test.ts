@@ -163,6 +163,31 @@ describe("the renamed keys refuse their old spellings", () => {
     );
   });
 
+  // candybar-plugins-vf6g.qzx: the tmux status line's toggle became a value
+  // of the renderer setting.
+  test.each([
+    ["globals", `{ globals: { experimentalTmuxStatus: true } }`],
+    [
+      "presets.p.globals",
+      `{ presets: { p: { globals: { experimentalTmuxStatus: true } } } }`,
+    ],
+    ["editGlobals", `{ editGlobals: { experimentalTmuxStatus: true } }`],
+  ])("%s.experimentalTmuxStatus names renderer: \"tmux\"", (at, src) => {
+    expect(issues(src)).toContain(
+      `${at}.experimentalTmuxStatus was removed: it became the renderer setting — write renderer: "tmux"`,
+    );
+  });
+
+  test("an action persisting experimentalTmuxStatus names renderer: \"tmux\"", () => {
+    expect(
+      issues(
+        `{ actions: { t: { persist: "experimentalTmuxStatus", to: "true" } }, segments: { a: { template: '{{ action "t" "x" }}' } }, root: { h: ['a'] } }`,
+      ),
+    ).toContain(
+      'actions.t: the globals field "experimentalTmuxStatus" was removed: it became the renderer setting — write renderer: "tmux"',
+    );
+  });
+
   test.each(["powerline", "capsule", "plain"])(
     "a style may not be named %s, an endcaps shape",
     (shape) => {

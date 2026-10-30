@@ -36,10 +36,15 @@ export interface TmuxHint {
   readonly truecolor: string | null;
 }
 
+// [LAW:one-source-of-truth] Whether a request's client reported its session in
+// a tmux pane: a client too old to answer (absent) is read as not in tmux.
+export const inTmux = (tmux: TmuxHint | null | undefined): boolean =>
+  tmux !== null && tmux !== undefined;
+
 // [LAW:dataflow-not-control-flow] TOTAL over the client's environment, like
 // detectSsh: "not in tmux" is the affirmative answer `null`, never a failure to
-// determine, so the client always reports and the daemon reads an ABSENT
-// `tmux` hint as "client too old to answer" rather than as "not in tmux".
+// determine, so the client always reports; an ABSENT `tmux` hint means a
+// client too old to answer, which `inTmux` draws as outside tmux.
 // In tmux iff both TMUX and TMUX_PANE are non-empty — TMUX alone leaks into
 // shells that were merely started from a tmux pane and have since detached.
 export function detectTmuxHint(

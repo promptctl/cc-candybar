@@ -54,7 +54,16 @@ import {
 } from "./loader/validate-core.js";
 import { findKeyLine } from "./loader/diagnostics.js";
 import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "./disclosure.js";
-import { LANES, LANE_NAMES, type Lane, type LaneSetting } from "./lanes.js";
+import {
+  IN_TMUX,
+  LANES,
+  RENDERERS,
+  TOGGLED_LANES,
+  type LaneSetting,
+  type Renderer,
+  type ToggledLane,
+} from "./lanes.js";
+import type { DomainLibrary } from "./option-domain.js";
 import type { ControlDomain } from "./setting-control.js";
 import type { SettingRange } from "./dsl-types.js";
 import { MENU_TIMEOUT_DEFAULT, MENU_TIMEOUT_RANGE } from "./menu-timeout.js";
@@ -74,6 +83,12 @@ export interface Control {
   // submenu instead of by this control: values a user may choose, kept off
   // the control everyone turns.
   readonly trials: readonly string[];
+  // A template expression, true in the sessions the control is offered to:
+  // `true` for one every session may turn, or a session fact such as being
+  // inside tmux for a setting only such a session can act on.
+  // [LAW:dataflow-not-control-flow] Every control carries one, so the menu
+  // gates each the same way and none is a special case.
+  readonly shown: string;
 }
 
 // The values a session-resolved field ranges, one arm per primitive: a flag, a
@@ -88,6 +103,9 @@ type ValueDomain<T> = [T] extends [boolean]
 export interface NamedDomain {
   readonly name: string;
   readonly members: readonly string[];
+  // A catalogue's groups and a line per member, when its picker lays it out
+  // as one described row per option (option-domain.ts).
+  readonly library?: DomainLibrary;
 }
 
 interface Valued<T> {
@@ -149,20 +167,28 @@ export type FieldRow =
 const control = (
   label: string,
   place: Place,
-  previews: readonly PreviewName[] = [],
-  trials: readonly string[] = [],
-): Control => ({ label, place, previews, trials });
+  {
+    previews = [],
+    trials = [],
+    shown = "true",
+  }: Partial<Pick<Control, "previews" | "trials" | "shown">> = {},
+): Control => ({ label, place, previews, trials, shown });
 
 const enumValues = <T extends string>(
   members: readonly T[],
   optionDomain?: string,
+  library?: DomainLibrary,
 ) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members } as ValueDomain<T>,
   parse: (raw: string): T | null =>
     (members as readonly string[]).includes(raw) ? (raw as T) : null,
   ...(optionDomain !== undefined && {
-    optionDomain: { name: optionDomain, members },
+    optionDomain: {
+      name: optionDomain,
+      members,
+      ...(library !== undefined && { library }),
+    },
   }),
 });
 
@@ -182,11 +208,15 @@ function enumSetting<T extends string, const D extends boolean = false>(
   members: readonly T[],
   floor: NoInfer<T>,
   shown: Control,
-  extra: { readonly optionDomain?: string; readonly themeDefault?: D } = {},
+  extra: {
+    readonly optionDomain?: string;
+    readonly library?: DomainLibrary;
+    readonly themeDefault?: D;
+  } = {},
 ): SessionRow<T, D> {
   return {
     kind: "session",
-    ...enumValues(members, extra.optionDomain),
+    ...enumValues(members, extra.optionDomain, extra.library),
     floor,
     control: shown,
     themeDefault: (extra.themeDefault ?? false) as D,
@@ -342,15 +372,29 @@ const menuGlyphSpec: FieldSpec<string> = {
 
 // ─── The rows ────────────────────────────────────────────────────────────────
 
-// The animation lanes' toggles (LANES, src/config/lanes.ts): each lane's
-// setting is a flag, off until a config or a session turns it on, behind the
-// `🧪 toggles` submenu.
+// The experimental lanes' toggles (LANES, src/config/lanes.ts): each such
+// lane's setting is a flag, off until a config or a session turns it on,
+// behind the `🧪 toggles` submenu.
 const LANE_ROWS = Object.fromEntries(
-  LANE_NAMES.map((lane: Lane) => [
-    LANES[lane].setting,
+  TOGGLED_LANES.map((lane: ToggledLane) => [
+    LANES[lane].switch.setting,
     boolSetting(false, control(LANES[lane].label, "toggles")),
   ]),
 ) as { readonly [K in LaneSetting]: SessionRow<boolean, false> };
+
+// What each renderer's row says in the open renderer menu, laid out as the
+// add-segment menu lays its library: one aligned row per option.
+const RENDERER_DESCRIPTIONS: Readonly<Record<Renderer, string>> = {
+  claude: "Claude Code's status line",
+  tmux: "the tmux status line, while this pane is shown",
+};
+const RENDERER_LIBRARY: DomainLibrary = {
+  groups: [{ id: "renderer", label: "draw the bar in" }],
+  entry: (option) => ({
+    group: "renderer",
+    description: RENDERER_DESCRIPTIONS[option as Renderer],
+  }),
+};
 
 // Row order is the order the settings carry everywhere they are listed — the
 // menu's controls within a place, the drafts a save writes, the schema's keys.
@@ -375,7 +419,7 @@ export const GLOBAL_FIELDS = {
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("▦", "door", ["layout", "presetDelete"]),
+    control("▦", "door", { previews: ["layout", "presetDelete"] }),
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -384,7 +428,7 @@ export const GLOBAL_FIELDS = {
     "style",
     optionalStringSpec(),
     { from: "styles" },
-    control("◐", "gear", ["palette"]),
+    control("◐", "gear", { previews: ["palette"] }),
     { themeDefault: true },
   ),
   // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
@@ -405,7 +449,10 @@ export const GLOBAL_FIELDS = {
   variation: enumSetting(
     VARIATION_NAMES,
     "accent",
-    control("🎼", "gear", ["layout"], TRIAL_VARIATION_NAMES),
+    control("🎼", "gear", {
+      previews: ["layout"],
+      trials: TRIAL_VARIATION_NAMES,
+    }),
     { optionDomain: "variations", themeDefault: true },
   ),
   // Which of its role's shades each CELL of the closed bar wears — a named
@@ -416,7 +463,7 @@ export const GLOBAL_FIELDS = {
   shade: enumSetting(
     SHADE_NAMES,
     "middle",
-    control("🔆", "gear", ["layout"], TRIAL_SHADE_NAMES),
+    control("🔆", "gear", { previews: ["layout"], trials: TRIAL_SHADE_NAMES }),
     {
       optionDomain: "shades",
       themeDefault: true,
@@ -461,6 +508,16 @@ export const GLOBAL_FIELDS = {
     MENU_TIMEOUT_RANGE,
     MENU_TIMEOUT_DEFAULT,
     control("menu timeout", "config"),
+  ),
+  // Where the bar is drawn (RENDERERS, src/config/lanes.ts). Offered only to a
+  // session inside tmux: outside it, `claude` is the one renderer there is,
+  // and a session there draws in Claude Code's status line whatever this
+  // says, leaving the setting the sessions share as it is.
+  renderer: enumSetting(
+    RENDERERS,
+    "claude",
+    control("renderer", "config", { shown: IN_TMUX }),
+    { optionDomain: "renderers", library: RENDERER_LIBRARY },
   ),
   ...LANE_ROWS,
   // The color depth rich-js downsamples output to (the legacy

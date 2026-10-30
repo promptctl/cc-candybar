@@ -30,7 +30,9 @@ A lane is set up or torn down only by the session's own click that moved its swi
 
 The tmux status line is held at a request's arrival and a click's commit, never at a draw. Between requests nothing re-takes a status line that was released, because a re-take from a remembered switch would re-take one another session's save turned off.
 
-While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one handoff line instead of a second bar. Turning the switch on alone draws nothing.
+While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one small row instead of a second bar: a button that draws it back there, and the error indicator, so an error is seen even where the lane's bar isn't. Turning the switch on alone draws nothing.
+
+The tmux status line is switched by the renderer, a setting every session the config renders shares. A session outside tmux has no status line to take, so it draws in Claude Code's while the setting still says tmux, and nothing writes the setting for it. Its control is offered only inside tmux, and reset-all resets it only where it is drawn: a reset clicked outside tmux would turn tmux off for every tmux session.
 
 ## Relaunching Claude Code under the attach launcher
 

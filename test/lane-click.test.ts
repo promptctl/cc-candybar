@@ -45,7 +45,7 @@ function rig() {
       effectsUrl(
         lanes.map((lane) => ({
           verb: VERB_SET_STATE,
-          args: [sid, LANES[lane].setting, "true"],
+          args: [sid, LANES[lane].switch.setting, String(LANES[lane].switch.on)],
         })),
       ),
       ctx,
