@@ -1,3 +1,9 @@
+## [1.167.1](https://github.com/promptctl/cc-candybar/compare/v1.167.0...v1.167.1) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30) ([#503](https://github.com/promptctl/cc-candybar/issues/503)) ([e03723c](https://github.com/promptctl/cc-candybar/commit/e03723ccfd5e2ed7bcd921e08ab6228dc1949671))
+
 ## [1.167.0](https://github.com/promptctl/cc-candybar/compare/v1.166.3...v1.167.0) (2026-10-30)
 
 ### Features
