@@ -4,15 +4,22 @@
     {
       "version": "pr-484",
       "ref": "refs/pull/484/merge",
-      "sha": "5def3433d0902e05e5cbfb9c0ae1ebf3118039e1",
-      "timestamp": "2026-10-30T08:23:37.340Z",
+      "sha": "2c5c1054e1896ae6dc63b85aab7930aa86c42972",
+      "timestamp": "2026-10-30T08:26:13.402Z",
       "commits": [
         {
-          "sha": "5def3433d0902e05e5cbfb9c0ae1ebf3118039e1",
+          "sha": "2c5c1054e1896ae6dc63b85aab7930aa86c42972",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:22:53Z",
-          "message": "Merge 2459e136e679c978bd52ad0ffbea0c465ae0f98f into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+          "timestamp": "2026-10-30T08:25:23Z",
+          "message": "Merge 50d4893481b38b4522d8d49a186f5112d2d4d891 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+        },
+        {
+          "sha": "50d4893481b38b4522d8d49a186f5112d2d4d891",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:25:11-06:00",
+          "message": "test(plain): a bigint's refusal is asserted, not thrown through the test (brandon-unfiled-3248.0rr5)\n"
         },
         {
           "sha": "2459e136e679c978bd52ad0ffbea0c465ae0f98f",
