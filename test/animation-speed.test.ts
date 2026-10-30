@@ -1,5 +1,5 @@
 // [LAW:behavior-not-structure] The animation speed (brandon-menus-sjhy.nt2):
-// at 5x or 20x every decorative animation — the bar's loop, a fade, a
+// at any speed above 1x every decorative animation — the bar's loop, a fade, a
 // template's `frames` — runs that many times faster than at 1x, a change of
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
@@ -133,6 +133,7 @@ describe("a fade runs at the session's animation speed", () => {
   // in flight (its revision moves), so a fade runs at one speed throughout.
   test.each([
     ["1x", 1.5, [{ placement: "left", t: 1.5 }]],
+    ["10x", 3, []],
     ["20x", 1.5, []],
   ] as const)(
     "at %s, a twenty-second fade %s s in is %j",
@@ -214,6 +215,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
   test.each([
     ["1x", 1, "anim=b", "real=b"],
     ["5x", 1, "anim=f", "real=b"],
+    ["10x", 0.5, "anim=f", "real=a"],
     ["20x", 0.4, "anim=i", "real=a"],
   ] as const)(
     "at %s, %d s later draws %s and %s",
