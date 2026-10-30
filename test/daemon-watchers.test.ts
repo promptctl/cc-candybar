@@ -5,7 +5,9 @@ import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   WatcherRegistry,
+  watchFault,
   watchTargetsOf,
+  type Deafness,
   type Invalidation,
 } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -87,6 +89,7 @@ describe("WatcherRegistry", () => {
       null,
       { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
+      null,
     );
     expect(first.move).toBe("rebound");
     expect(first.watch.key).toBe("a");
@@ -95,6 +98,7 @@ describe("WatcherRegistry", () => {
       first.watch,
       { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
+      null,
     );
     expect(kept.move).toBe("kept");
     expect(kept.watch).toBe(first.watch);
@@ -104,6 +108,7 @@ describe("WatcherRegistry", () => {
       kept.watch,
       { key: "b", targets: { dirs: [] }, unbound: false },
       () => {},
+      null,
     );
     expect(rebound.move).toBe("rebound");
     expect(rebound.watch.key).toBe("b");
@@ -114,6 +119,7 @@ describe("WatcherRegistry", () => {
       rebound.watch,
       { key: "c", targets: { dirs: [] }, unbound: true },
       () => {},
+      null,
     );
     expect(unbound.move).toBe("kept");
     expect(unbound.watch).toBe(rebound.watch);
@@ -504,8 +510,8 @@ describe("WatcherRegistry", () => {
         targets: { dirs: [{ path: "/w", filenames: [name] }] },
         unbound: false,
       });
-      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv));
-      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv));
+      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv), null);
+      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv), null);
       expect(moved.move).toBe("rebound");
       expect(fake.opened).toHaveLength(1);
       expect(fake.opened[0]!.closed).toBe(false);
@@ -561,7 +567,7 @@ describe("WatcherRegistry", () => {
       };
       const seen: Invalidation[] = [];
       const other: Invalidation[] = [];
-      const { watch } = reg.follow(null, spec, (inv) => seen.push(inv));
+      const { watch } = reg.follow(null, spec, (inv) => seen.push(inv), null);
       reg.acquire("other", { dirs: [{ path: "/w" }] }, (inv) => other.push(inv));
       fake.opensOf("/w")[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length === 1 && other.length === 1, "both slots' failed windows");
@@ -570,10 +576,13 @@ describe("WatcherRegistry", () => {
         { kind: "failed", path: "/w", reason: "EMFILE: too many open files" },
       ]);
 
-      expect(reg.follow(watch, spec, () => {}).move).toBe("kept");
+      // A follow answering the failed window keeps the watch deaf: the OS
+      // refuses an immediate retry the way it refused the first.
+      const failed = seen[0]!;
+      expect(reg.follow(watch, spec, () => {}, failed).move).toBe("kept");
       expect(fake.opensOf("/w")).toHaveLength(1);
 
-      reg.listening(watch);
+      expect(reg.follow(watch, spec, () => {}, null).move).toBe("kept");
       expect(fake.opensOf("/w")).toHaveLength(2);
       expect(fake.opensOf("/v")).toHaveLength(1);
       expect(fake.opensOf("/v")[0]!.closed).toBe(false);
@@ -804,6 +813,42 @@ describe("watchTargetsOf", () => {
     const { targets, reached } = watchTargetsOf({ named: [path.join(dir, "later", "f")], whole: [] });
     expect(targets.dirs).toEqual([{ path: dir, filenames: ["later"] }]);
     expect(reached).toBe(false);
+  });
+});
+
+// What a watch says it cannot hear, from the watch alone: the bar shows this
+// for a config and for a `watch_file` path alike.
+describe("watchFault", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-fault-")));
+  });
+  afterEach(() => rmrf(dir));
+
+  const held = (deaf: readonly Deafness[]) => ({
+    key: "k",
+    handle: { release: () => {}, deaf },
+  });
+
+  test("a watch that hears every place its paths can change has no fault", () => {
+    const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
+    expect(watchFault("config", { derived, held: held([]) })).toBeNull();
+  });
+
+  test("names each path whose links it cannot follow, and each directory the OS is not listening to", () => {
+    const x = path.join(dir, "x");
+    fs.symlinkSync(`${x}.other`, x);
+    fs.symlinkSync(x, `${x}.other`);
+    const derived = watchTargetsOf({ named: [x, path.join(dir, "f")], whole: [] });
+    const fault = watchFault("config", {
+      derived,
+      held: held([
+        { kind: "refused", path: "/r", reason: "EMFILE" },
+        { kind: "failed", path: "/f", reason: "gone" },
+      ]),
+    });
+    expect(fault).toContain(`config: cannot follow a link chain — ${x}: more than 40 symbolic links`);
+    expect(fault).toContain("; cannot watch /r — EMFILE; watching /f failed — gone");
   });
 });
 

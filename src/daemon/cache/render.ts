@@ -77,7 +77,7 @@ import {
   watchTargetsOf,
   type WatcherRegistry,
   type WatcherHandle,
-  type HeldWatch,
+  type BoundWatch,
   type Invalidation,
   type PathsWatch,
 } from "./watchers.js";
@@ -442,6 +442,12 @@ const heardField = (heard: Invalidation): string => {
   }
 };
 
+// What the entry's own config watch heard to cause the load; `null` for a
+// load it did not cause, since another watch's failure says nothing about
+// the config directories.
+const heardOf = (cause: LoadCause): Invalidation | null =>
+  cause.kind === "config-watch" ? cause.heard : null;
+
 const causeField = (cause: LoadCause): string => {
   switch (cause.kind) {
     case "open":
@@ -513,9 +519,13 @@ export interface CacheEntry {
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
-  // The watch the registry holds for the entry, under the key naming its
-  // target set; null until the first bind.
-  watch: HeldWatch | null;
+  // [LAW:one-source-of-truth] The entry's watch: where its config can change,
+  // as the last load derived it, and the watch the registry holds for it, set
+  // as one on every load. While a directory the derive names is briefly gone
+  // the held watch is the one bound before, and both still state what is so:
+  // the disk's chains, and the directories actually heard. Null until the
+  // first bind.
+  watch: BoundWatch | null;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -1599,7 +1609,7 @@ export class RenderCache<
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, { kind: "open" });
     // An entry just created was drawn by no session.
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
 
@@ -1933,7 +1943,7 @@ export class RenderCache<
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    entry.watch?.handle.release();
+    entry.watch?.held.handle.release();
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
   }
@@ -2146,7 +2156,7 @@ export class RenderCache<
     this.fit(entry);
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, cause);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
 
@@ -2167,7 +2177,15 @@ export class RenderCache<
   // (including null↔non-null) is one way the set changes; a candidate's
   // parent directory appearing is another — the same rule covers both, so
   // there is no separate "did the path change" test to drift from it.
-  private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
+  //
+  // A kept watch's deaf directories are retried on any cause but a `failed`
+  // window, which the OS refuses again at once: a directory refused once is
+  // otherwise deaf until the target set moves, and the bar says so for good.
+  private refreshWatcher(
+    entry: CacheEntry,
+    loaded: LoadOutcome,
+    cause: LoadCause,
+  ): void {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
@@ -2183,11 +2201,14 @@ export class RenderCache<
     // cwd) tuple already scopes the entry's watch set; what was heard rides
     // on the reload's cause.
     const { watch, move } = this.deps.watchers.follow(
-      entry.watch,
+      entry.watch?.held ?? null,
       { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
+      heardOf(cause),
     );
-    entry.watch = watch;
+    // Re-derived on every load, kept or rebound, so what the bar says the
+    // watch cannot hear is what the disk says now.
+    entry.watch = { derived: { ...paths, key }, held: watch };
     if (move === "kept") return;
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the

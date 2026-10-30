@@ -14,8 +14,9 @@ import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import {
   WatcherRegistry,
+  watchFault,
   watchTargetsOf,
-  type HeldWatch,
+  type BoundWatch,
   type Invalidation,
   type PathsWatch,
 } from "../daemon/cache/watchers.js";
@@ -302,10 +303,9 @@ function firstThenChange(
 type WatchFault = (fault: string | null) => void;
 
 interface WatchEntry {
-  // Where the path can change, as last derived from disk.
-  watch: PathsWatch;
-  // The watcher registry's watch on it.
-  held: HeldWatch;
+  // Where the path can change, as last derived from disk, and the watcher
+  // registry's watch on it.
+  bound: BoundWatch;
   // Each subscriber's update, and where it hears the watch's fault.
   readonly subscribers: Map<() => void, WatchFault>;
 }
@@ -343,11 +343,16 @@ class PathWatches {
   private arm(filePath: string): WatchEntry {
     const watch = derived(filePath);
     const entry: WatchEntry = {
-      watch,
+      bound: {
+        derived: watch,
+        held: this.watchers.follow(
+          null,
+          watch,
+          (heard) => this.heard(filePath, entry, heard),
+          null,
+        ).watch,
+      },
       subscribers: new Map(),
-      held: this.watchers.follow(null, watch, (heard) =>
-        this.heard(filePath, entry, heard),
-      ).watch,
     };
     this.entries.set(filePath, entry);
     return entry;
@@ -355,23 +360,20 @@ class PathWatches {
 
   // Derive where the path can change, follow it, and say the watch's fault.
   // A new key acquires its watch, keeping every directory both keys name and
-  // retrying any the OS is not listening to. A kept watch's deaf directories
-  // are retried on any cause but a `failed` window: the OS refuses an
-  // immediate retry the way it refused the first.
+  // retrying any the OS is not listening to.
   private rederive(
     filePath: string,
     entry: WatchEntry,
     cause: Invalidation,
   ): void {
-    entry.watch = derived(filePath);
-    const { watch, move } = this.watchers.follow(
-      entry.held,
-      entry.watch,
+    const paths = derived(filePath);
+    const { watch } = this.watchers.follow(
+      entry.bound.held,
+      paths,
       (heard) => this.heard(filePath, entry, heard),
+      cause,
     );
-    entry.held = watch;
-    if (cause.kind !== "failed" && move === "kept")
-      this.watchers.listening(entry.held);
+    entry.bound = { derived: paths, held: watch };
     this.report(filePath, entry);
   }
 
@@ -381,12 +383,13 @@ class PathWatches {
     entry: WatchEntry,
     heard: Invalidation,
   ): void {
-    const wasLeaf = entry.watch.reached;
+    const wasLeaf = entry.bound.derived.reached;
     this.rederive(filePath, entry, heard);
     // Ancestor churn on the way DOWN is not a change to the path; a move
     // up from the leaf is its removal, which the subscribers must read. A
     // failed directory may have missed a change, so its window always reads.
-    if (heard.kind !== "failed" && !wasLeaf && !entry.watch.reached) return;
+    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
+      return;
     for (const cb of entry.subscribers.keys()) cb();
   }
 
@@ -411,13 +414,14 @@ class PathWatches {
     if (!entry) return;
     entry.subscribers.delete(callback);
     if (entry.subscribers.size === 0) {
-      entry.held.handle.release();
+      entry.bound.held.handle.release();
       this.entries.delete(filePath);
     }
   }
 
   dispose(): void {
-    for (const entry of this.entries.values()) entry.held.handle.release();
+    for (const entry of this.entries.values())
+      entry.bound.held.handle.release();
     this.entries.clear();
   }
 
@@ -431,23 +435,9 @@ class PathWatches {
 const derived = (filePath: string): PathsWatch =>
   watchTargetsOf({ named: [filePath], whole: [filePath] });
 
-// The watch's fault, derived from what it holds now: the link chain it could
-// not walk, and every directory the OS is not listening to.
-function faultOf(filePath: string, entry: WatchEntry): string | null {
-  const reasons = [
-    ...entry.watch.unresolved.map(
-      (u) => `cannot follow its links — ${u.reason}`,
-    ),
-    ...entry.held.handle.deaf.map((d) =>
-      d.kind === "refused"
-        ? `cannot watch ${d.path} — ${d.reason}`
-        : `watching ${d.path} failed — ${d.reason}`,
-    ),
-  ];
-  return reasons.length === 0
-    ? null
-    : `watch_file ${filePath}: ${reasons.join("; ")}`;
-}
+// The watch's fault, derived from what it holds now.
+const faultOf = (filePath: string, entry: WatchEntry): string | null =>
+  watchFault(`watch_file ${filePath}`, entry.bound);
 
 // ─── TtlBucketManager ────────────────────────────────────────────────────────
 

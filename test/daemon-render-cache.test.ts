@@ -17,6 +17,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -620,6 +621,33 @@ describe("RenderCache", () => {
         cleanup();
       }
     });
+  });
+
+  // A config folder the OS refused is retried on the entry's next load, so
+  // the fault the bar shows clears once the OS will watch it again.
+  test("a refused config directory is heard again after the next load", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const at = realpathSync(dir);
+    const watch = fs.watch.bind(fs);
+    let refuse = true;
+    const spy = jest.spyOn(fs, "watch").mockImplementation(((
+      ...args: Parameters<typeof fs.watch>
+    ) => {
+      if (refuse && args[0] === at) throw new Error("EMFILE: too many open files");
+      return watch(...args);
+    }) as typeof fs.watch);
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      refuse = false;
+      cache.reload(dir, dir, undefined, { kind: "doctor" });
+      expect(entry.watch!.held.handle.deaf).toEqual([]);
+    } finally {
+      for (const fn of cleanups) fn();
+      spy.mockRestore();
+      cleanup();
+    }
   });
 
   test("a `{ rows }` fragment merges over the bundled rows and authors the floor preset's root", async () => {
