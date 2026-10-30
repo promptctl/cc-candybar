@@ -260,7 +260,7 @@ function segArmSpec(): FieldSpec<string> {
       ctx.issues.push({
         path: `${path}.${field}`,
         message: `a "seg" node must have a non-empty segment name, got ${describeValue(v)}`,
-        line: findKeyLine(ctx.source, ["root"]),
+        line: findKeyLine(ctx.source, [...path.split("."), field]),
       });
       return "";
     },
@@ -605,13 +605,17 @@ export function validateInsert(
 export function insertJson(): JsonNode {
   return {
     type: "array",
-    items: recordJson(INSERT_SCHEMA),
+    // [LAW:single-enforcer] The loader's exactly-one-side rule, mirrored.
+    items: {
+      ...recordJson(INSERT_SCHEMA),
+      oneOf: [{ required: ["before"] }, { required: ["after"] }],
+    },
     description:
       "Cells this file adds beside placements the bar it merges over already has: each { seg, id?, before | after: <placement id> }",
   };
 }
 
-// ─── Group sugar (`kind: "group"`)───────────────────────────────────────────
+// ─── Group sugar (`kind: "group"`) ───────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The closed sentinel and ▸/▾ glyphs are the shared
 // disclosure primitive (src/config/disclosure.ts) — a group is one of its two

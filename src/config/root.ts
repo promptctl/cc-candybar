@@ -138,13 +138,13 @@ export interface Unplaced {
 // [LAW:one-source-of-truth] THE placement of `insert` cells in one tree that
 // renders, in chain order (a later cell may anchor on an earlier one). A cell
 // lands beside the placement its anchor names, wherever in the tree that is,
-// so a whole-tree root and a rows map are addressed alike. A cell whose id
-// the tree already holds under the same segment is satisfied as it stands;
-// under another segment it would make the id ambiguous, so it is refused like
-// a missing anchor — never placed, so the tree's ids stay unique.
+// so a whole-tree root and a rows map are addressed alike. A cell the tree
+// already places is satisfied as it stands: one without an id by any
+// placement of its segment, under any id and at any depth; one with an id by
+// that id alone. An id the tree holds under another segment would make the
+// id ambiguous, so that cell is refused like a missing anchor — never placed,
+// so the tree's ids stay unique.
 // [LAW:no-silent-failure] Every cell that does not land comes back unplaced.
-// A tree no cell lands in comes back as the same object it was given, which
-// is how a caller tells a tree that changed from one that did not.
 export function insertCells(
   root: Root,
   cells: readonly InsertCell[],
@@ -152,16 +152,24 @@ export function insertCells(
   return cells.reduce<{ root: Root; unplaced: readonly Unplaced[] }>(
     (acc, cell) => {
       const id = cell.id ?? cell.seg;
-      const held = segmentWithId(rootNode(acc.root), id);
-      if (held !== undefined) {
-        return held.name === cell.seg
-          ? acc
-          : refuse(
-              acc,
-              cell,
-              `as "${id}", but placement "${id}" is already segment "${held.name}" — give the cell its own id`,
-            );
-      }
+      const placed = [...walkNodes(rootNode(acc.root))].flatMap((node) =>
+        node.kind === "segment" ? [node] : [],
+      );
+      if (
+        placed.some(
+          (node) =>
+            node.name === cell.seg &&
+            (cell.id === undefined || placementId(node) === cell.id),
+        )
+      )
+        return acc;
+      const held = placed.find((node) => placementId(node) === id);
+      if (held !== undefined)
+        return refuse(
+          acc,
+          cell,
+          `as "${id}", but placement "${id}" is already segment "${held.name}" — give the cell its own id`,
+        );
       const node: SegmentNode = {
         kind: "segment",
         name: cell.seg,
@@ -202,13 +210,6 @@ function refuse(
   reason: string,
 ): { root: Root; unplaced: readonly Unplaced[] } {
   return { ...acc, unplaced: [...acc.unplaced, { cell, reason }] };
-}
-
-function segmentWithId(tree: LayoutNode, id: string): SegmentNode | undefined {
-  for (const node of walkNodes(tree)) {
-    if (node.kind === "segment" && placementId(node) === id) return node;
-  }
-  return undefined;
 }
 
 // A row that IS the anchor becomes a horizontal row of the two cells; any

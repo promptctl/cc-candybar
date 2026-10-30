@@ -184,31 +184,34 @@ export function presetRoot(
 // renders — so a preset's whole tree decides its own anchors and clashes,
 // and a preset that restages nothing renders the config's root, cells and
 // all. The result holds no cells to place, so no later pass can place one
-// again. Only a preset whose tree a cell landed in carries that tree, as a
-// whole tree; every other keeps the fragment it was written as, row names
-// and all.
+// again.
+// [LAW:one-source-of-truth] With any cell to place, every preset that
+// restages carries the tree it was judged as, whole: a rows map left as
+// written would merge again over the root that now holds the cells, and
+// render a tree nobody judged. With none, the config is returned as it came.
 // [LAW:no-silent-failure] Each cell the trees could not place comes back as
 // one warning the bar shows: the file and entry that wrote it, why, and
 // every tree it missed.
-// [LAW:no-silent-failure] exception: a preset no config file declares is not
-// warned for. Its tree is ours, not the user's, so a cell whose anchor it
-// lacks has no "beside" there — like a `when` that is false, not a broken
-// state — and warning would put a standing ⚠ on every bar a repo adds to.
+// [LAW:no-silent-failure] exception: a tree no config file writes — the
+// bundled root, a preset only the bundled default declares — is not warned
+// for. Its tree is ours, not the user's, so a cell whose anchor it lacks has
+// no "beside" there — like a `when` that is false, not a broken state — and
+// warning would put a standing ⚠ on every bar a repo adds to.
 export function placeInserts(
   config: DslConfig,
   cells: readonly InsertCell[],
-  // The presets some config file declares.
-  authored: ReadonlySet<string>,
+  // The trees some config file writes.
+  authored: AuthoredTrees,
 ): { readonly config: DslConfig; readonly notices: readonly string[] } {
+  if (cells.length === 0) return { config, notices: [] };
   const own = insertCells(config.root, cells);
   const restaged = Object.entries(config.presets)
     .filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS))
-    .map(([name, preset]) => {
-      const renders = mergeRoot(preset.root ?? EMPTY_ROWS, config.root);
-      const placed = insertCells(renders, cells);
-      // insertCells hands back the tree it was given when no cell lands.
-      return { name, preset, ...placed, landed: placed.root !== renders };
-    });
+    .map(([name, preset]) => ({
+      name,
+      preset,
+      ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config.root), cells),
+    }));
   // Every tree each cell missed, by why, in the order the trees were placed.
   const missed = new Map<InsertCell, Map<string, string[]>>();
   const miss =
@@ -218,9 +221,9 @@ export function placeInserts(
       reasons.set(reason, [...(reasons.get(reason) ?? []), tree]);
       missed.set(cell, reasons);
     };
-  own.unplaced.forEach(miss("the root"));
+  (authored.root ? own.unplaced : []).forEach(miss("the root"));
   for (const { name, unplaced } of restaged.filter(({ name }) =>
-    authored.has(name),
+    authored.presets.has(name),
   ))
     unplaced.forEach(miss(`preset "${name}"`));
   return {
@@ -230,22 +233,31 @@ export function placeInserts(
       presets: {
         ...config.presets,
         ...Object.fromEntries(
-          restaged
-            .filter(({ landed }) => landed)
-            .map(({ name, preset, root }) => [
-              name,
-              { ...preset, root: rootNode(root) },
-            ]),
+          restaged.map(({ name, preset, root }) => [
+            name,
+            { ...preset, root: rootNode(root) },
+          ]),
         ),
       },
     },
     notices: [...missed].flatMap(([cell, reasons]) =>
-      [...reasons].map(
-        ([reason, trees]) =>
-          `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${reason} (in ${trees.join(", ")})`,
+      [...reasons].map(([reason, trees]) =>
+        insertNotice(cell, `${reason} (in ${trees.join(", ")})`),
       ),
     ),
   };
+}
+
+// Which trees a config file writes: its root, and the presets it declares.
+export interface AuthoredTrees {
+  readonly root: boolean;
+  readonly presets: ReadonlySet<string>;
+}
+
+// [LAW:one-source-of-truth] THE spelling of an advisory about one insert
+// cell: the file and entry that wrote it, the segment, and what befell it.
+export function insertNotice(cell: InsertCell, what: string): string {
+  return `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${what}`;
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

@@ -675,7 +675,19 @@
         "required": [
           "seg"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "before"
+            ]
+          },
+          {
+            "required": [
+              "after"
+            ]
+          }
+        ]
       },
       "description": "Cells this file adds beside placements the bar it merges over already has: each { seg, id?, before | after: <placement id> }"
     },

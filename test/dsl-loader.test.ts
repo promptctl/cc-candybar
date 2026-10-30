@@ -2629,6 +2629,17 @@ describe("loadDslConfig — insert", () => {
     });
   });
 
+  test("an empty segment name is reported on its own entry's line, in a file with no root", () => {
+    const rootless = expectError(`{ insert: [{ seg: "", after: "model" }] }`);
+    const issue = rootless.issues.find((i) => i.path === "insert.0.seg")!;
+    expect(issue.message).toContain("non-empty segment name");
+    expect(issue.line).toBe(1);
+    const err = expectError(
+      `{\n  root: { h: ["model"] },\n  insert: [\n    { seg: "", after: "model" },\n  ],\n}`,
+    );
+    expect(err.issues.find((i) => i.path === "insert.0.seg")!.line).toBe(4);
+  });
+
   test("insert must be a list", () => {
     expectIssue(`{ insert: { seg: "model", after: "a" } }`, {
       path: "insert",

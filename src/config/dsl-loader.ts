@@ -38,6 +38,7 @@ import {
   ConfigError,
   editabilityNotice,
   findKeyLine,
+  keyLocator,
   DroppedPlacements,
   type ConfigIssue,
 } from "./loader/diagnostics.js";
@@ -81,7 +82,7 @@ import {
 } from "./loader/actions.js";
 import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
-import { placeInserts } from "./presets.js";
+import { insertNotice, placeInserts, type AuthoredTrees } from "./presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
   authoredPlacement,
@@ -653,15 +654,87 @@ export function validateRenderable(
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[] = [],
 ): Renderable {
-  const { raw, source } = authoredConfig;
+  const written = layerInserts({ ...authoredConfig, path: filePath }, beneath);
   // [LAW:single-enforcer] Every layer's `insert` cells are placed here, once,
   // before any check or synthesis walks a tree — so each walk sees the trees
   // that render and none places a cell again.
-  const inserted = placeLayerInserts(
-    { ...authoredConfig, path: filePath },
-    beneath,
-  );
-  const merged = inserted.config;
+  const judge = (
+    cells: readonly InsertCell[],
+    refused: readonly string[],
+  ): Renderable => {
+    const inserted = placeInserts(
+      authoredConfig.config,
+      cells,
+      written.authored,
+    );
+    return judgeRenderable(
+      authoredConfig,
+      filePath,
+      allowedPalettes,
+      beneath,
+      inserted.config,
+      written.dropped,
+      [...inserted.notices, ...refused],
+    );
+  };
+  try {
+    return judge(written.cells, []);
+  } catch (e) {
+    if (!(e instanceof ConfigError) || written.cells.length === 0) throw e;
+    // [LAW:no-silent-failure] A layer's guess about the bar beneath it never
+    // refuses that bar. The chain is judged again without any cell, so an
+    // error that stands there is the files' own and refuses them as written;
+    // otherwise the cells are taken in chain order, each judged over those
+    // already taken, and a cell that brings an issue is left out and reported
+    // against the entry that wrote it, whatever key the issue names.
+    const bare = judge([], []);
+    const own = new Set(
+      bare.dropped.flatMap((d) => d.issues.map((i) => i.message)),
+    );
+    const { taken, refused } = written.cells.reduce<{
+      taken: readonly InsertCell[];
+      refused: readonly string[];
+    }>(
+      (acc, cell) => {
+        try {
+          judge([...acc.taken, cell], []);
+          return { ...acc, taken: [...acc.taken, cell] };
+        } catch (err) {
+          if (!(err instanceof ConfigError)) throw err;
+          const why = err.issues
+            .filter((issue) => !own.has(issue.message))
+            .map((issue) => issue.message)
+            .join("; ");
+          return {
+            ...acc,
+            refused: [
+              ...acc.refused,
+              insertNotice(
+                cell,
+                `${cell.relation} "${cell.anchor}", but the bar refuses it there: ${why}`,
+              ),
+            ],
+          };
+        }
+      },
+      { taken: [], refused: [] },
+    );
+    return judge(taken, refused);
+  }
+}
+
+// validateRenderable over one placement of the insert cells: `merged` is the
+// config with them placed, `filed` the cells already dropped, and `notices`
+// the advisories the placement earned.
+function judgeRenderable(
+  { raw, source }: AuthoredConfig,
+  filePath: string,
+  allowedPalettes: ReadonlySet<string>,
+  beneath: readonly AuthoredLayer[],
+  merged: DslConfig,
+  filed: readonly FiledIssue[],
+  notices: readonly string[],
+): Renderable {
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = {
     source,
@@ -678,14 +751,14 @@ export function validateRenderable(
       throw new ConfigError(
         filePath,
         [...issues, ...ctx.unplaced, ...ctx.inherited],
-        inserted.notices,
+        notices,
       );
     }
   };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped = droppedByFile(filePath, ctx, beneath, inserted.dropped);
+  const dropped = droppedByFile(filePath, ctx, beneath, filed);
   // A config with nothing to drop is the merged one itself, so its trees keep
   // their identity.
   const config = dropped.length === 0 ? merged : withoutUnplaced(merged);
@@ -726,7 +799,7 @@ export function validateRenderable(
     config: withChrome as ValidatedConfig,
     dropped,
     placed: merged,
-    warnings: inserted.notices,
+    warnings: notices,
   };
 }
 
@@ -736,43 +809,44 @@ interface FiledIssue {
   readonly issue: ConfigIssue;
 }
 
-// The top layer's config with every layer's `insert` cells placed
-// (placeInserts), lowest layer first so a later cell may anchor on an earlier
-// one. A cell naming no declared segment draws nothing, like any placement
-// of one: it is left out and reported against the file and entry that wrote
-// it, whichever layer that is.
-function placeLayerInserts(
+// Every layer's `insert` cells, lowest layer first so a later cell may anchor
+// on an earlier one, and the trees the files write. A cell naming no declared
+// segment draws nothing, like any placement of one: it is left out and
+// reported against the file and entry that wrote it, whichever layer that is.
+function layerInserts(
   top: AuthoredLayer,
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[],
 ): {
-  readonly config: DslConfig;
-  readonly notices: readonly string[];
+  readonly cells: readonly InsertCell[];
+  readonly authored: AuthoredTrees;
   readonly dropped: readonly FiledIssue[];
 } {
   const layers = [...beneath].reverse().concat(top);
-  const written = layers.flatMap((layer) =>
-    (layer.raw.insert ?? []).map((cell) => ({ cell, layer })),
-  );
-  const declared = ({ cell }: { cell: InsertCell }): boolean =>
+  const declared = (cell: InsertCell): boolean =>
     Object.prototype.hasOwnProperty.call(top.config.segments, cell.seg);
-  const placed = placeInserts(
-    top.config,
-    written.filter(declared).map(({ cell }) => cell),
-    new Set(layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {}))),
-  );
   return {
-    ...placed,
-    dropped: written
-      .filter((w) => !declared(w))
-      .map(({ cell, layer }) => ({
-        file: layer.path,
-        issue: {
-          path: cell.by.entry,
-          message: unplacedMessage(cell.by.entry, cell.seg),
-          line: findKeyLine(layer.source, cell.by.entry.split(".")),
-        },
-      })),
+    cells: layers.flatMap((layer) => (layer.raw.insert ?? []).filter(declared)),
+    authored: {
+      root: layers.some((layer) => layer.raw.root !== undefined),
+      presets: new Set(
+        layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {})),
+      ),
+    },
+    // One locator per layer, so its source is parsed at most once.
+    dropped: layers.flatMap((layer) => {
+      const lineOf = keyLocator(layer.source);
+      return (layer.raw.insert ?? [])
+        .filter((cell) => !declared(cell))
+        .map((cell) => ({
+          file: layer.path,
+          issue: {
+            path: cell.by.entry,
+            message: unplacedMessage(cell.by.entry, cell.seg),
+            line: lineOf(cell.by.entry.split(".")),
+          },
+        }));
+    }),
   };
 }
 

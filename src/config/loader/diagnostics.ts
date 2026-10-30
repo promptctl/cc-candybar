@@ -66,11 +66,41 @@ export function findKeyLine(
   source: string,
   pathParts: readonly string[],
 ): number | undefined {
+  return keyLocator(source)(pathParts);
+}
+
+// findKeyLine over one source, for a caller that looks up several paths in
+// it: the document is parsed at most once, and only if a path needs it.
+export function keyLocator(
+  source: string,
+): (pathParts: readonly string[]) => number | undefined {
+  let parsed: { readonly node: Node | undefined } | undefined;
+  const document = (): Node | undefined => {
+    parsed ??= { node: parseOrUndefined(source) };
+    return parsed.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+
+function parseOrUndefined(source: string): Node | undefined {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return undefined;
+    throw e;
+  }
+}
+
+function keyLine(
+  source: string,
+  document: () => Node | undefined,
+  pathParts: readonly string[],
+): number | undefined {
   // [LAW:single-enforcer] A path through an array (`insert.1.seg`) is placed
   // by the config editor's own document model, which knows where element 1
   // starts; the key scanner below cannot count elements.
   const indexed = pathParts.some((p) => /^\d+$/.test(p))
-    ? elementPathLine(source, pathParts)
+    ? elementPathLine(source, document(), pathParts)
     : undefined;
   if (indexed !== undefined) return indexed;
   let cursor = 0;
@@ -98,15 +128,11 @@ export function findKeyLine(
 // object it is a key like any other (`themeDefaults: { "16": … }`).
 function elementPathLine(
   source: string,
+  document: Node | undefined,
   pathParts: readonly string[],
 ): number | undefined {
-  let node: Node;
-  try {
-    node = parseDocument(source);
-  } catch (e) {
-    if (e instanceof Json5EditError) return undefined;
-    throw e;
-  }
+  if (document === undefined) return undefined;
+  let node = document;
   let reached: Node | undefined;
   let indexed = false;
   for (const part of pathParts) {

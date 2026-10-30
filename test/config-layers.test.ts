@@ -520,4 +520,78 @@ describe("a project layer inserting into the user's row", () => {
       'the root, preset "compact", preset "wide"',
     );
   });
+
+  test("a rows-map preset that already places the cell loads, and every tree draws it once", () => {
+    userRow(
+      `{ rows: { status: { h: ["mine"] } } }`,
+      `, theirs: { template: "THEIRSEG" } }, presets: { P: { root: { rows: { extra: { h: ["theirs"] } } } }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const { drawn, warnings } = barLoad();
+    expect(drawn("P").filter((n) => n === "theirs")).toHaveLength(1);
+    expect(drawn("default").filter((n) => n === "theirs")).toHaveLength(1);
+    expect(warnings.filter((w) => w.includes("insert.0"))).toEqual([]);
+  });
+
+  test("a cell without an id is satisfied by the user's placement of its segment under another id", async () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", { seg: "theirs", id: "t2" }] } } }`,
+      `, theirs: { template: "THEIRSEG" }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(outcome.rendered.split("THEIRSEG")).toHaveLength(2);
+    expect(outcome.warnings.filter((w) => w.includes("insert.0"))).toEqual([]);
+  });
+
+  test("a cell with its own id is drawn beside a placement of its segment under another id", async () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", "theirs"] } } }`,
+      `, theirs: { template: "THEIRSEG" }`,
+    );
+    writeProject(`[{ seg: "theirs", id: "t2", after: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(outcome.rendered.split("THEIRSEG")).toHaveLength(3);
+  });
+
+  test("a missed anchor warns for the root only when a config file writes it", async () => {
+    fs.writeFileSync(
+      userFile,
+      `{ segments: { mine: { template: "USERSEG" } } }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "nope" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
+    expect(outcome.rendered).not.toContain("THEIRSEG");
+  });
+
+  test("a clash only the cell brings refuses the cell, at its entry, and the user's bar draws", () => {
+    // `p-q` and `p_q` are distinct ids whose menus collapse to one state
+    // key: the clash exists only once the repo's cell is placed.
+    fs.writeFileSync(
+      userFile,
+      `{
+        actions: { act: { set: "theme", from: "themes" } },
+        segments: {
+          mine: { template: "USERSEG" },
+          m: { template: 'M {{ menu "act" "▸" "▾" }}' },
+        },
+        root: { rows: { status: { h: ["mine", { seg: "m", id: "p-q" }] } } },
+      }`,
+    );
+    writeProject(`[{ seg: "m", id: "p_q", after: "mine" }]`, `x: { template: "X" }`);
+    const { drawn, warnings } = barLoad();
+    expect(drawn("default").filter((n) => n === "m")).toHaveLength(1);
+    expect(drawn("default")).toContain("mine");
+    const refused = warnings.filter((w) => w.includes("insert.0"));
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toContain(projectFile);
+    expect(refused[0]).toContain("normalize to the same state key");
+  });
+
+  test("an error the user's own bar has still refuses it, with or without the repo's cells", () => {
+    userRow(`{ rows: { status: { h: ["mine", "other", { seg: "other" }] } } }`);
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    expect(() => barLoad()).toThrow(/2 placements with the id "other"/);
+  });
 });

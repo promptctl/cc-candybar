@@ -1063,11 +1063,16 @@ cell takes exactly one of `before` or `after`, and an optional `id`. The
 anchor must be a placement: the bar's own chrome, such as the settings
 door, is refused. Every
 arrangement places the cell in its own tree, presets included, and one
-whose tree lacks the anchor doesn't draw it. When that is the user's own
-root, or a preset some config file writes, the bar warns once per cell,
-naming your file, the cell, the anchor and every tree that lacks it. A preset only cc-candybar ships has
-no such placement to sit beside, so it simply draws without the cell. A cell the user already places is not
-drawn twice. The cell shows only where its anchor does: a `when` that
+whose tree lacks the anchor doesn't draw it. When that tree is a root or a
+preset some config file writes, the bar warns once per cell, naming your
+file, the cell, the anchor and every tree that lacks it. A root or preset only
+cc-candybar ships has no such placement to sit beside, so it simply draws
+without the cell. A cell a tree already places is not drawn twice: a cell
+without an `id` is already placed by any placement of its segment, whatever
+its id and however deep; a cell with an `id` only by a placement with that
+id. A cell whose id the tree holds under another segment, or that would
+clash with the bar once placed, is not drawn, and the bar warns naming your
+file and the entry. The cell shows only where its anchor does: a `when` that
 hides the anchor hides the cell too. Like the rest of the file, `insert` takes effect only once the
 user has approved the repository. In edit mode the cell shows which file
 placed it, and offers no remove or move: it is an `insert` entry, and edit

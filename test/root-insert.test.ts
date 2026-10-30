@@ -98,6 +98,41 @@ test("a cell beside an anchor inside a row hides whenever its anchor's `when` hi
   ]);
 });
 
+test("a cell without an id is satisfied by any placement of its segment, under any id and at any depth", () => {
+  const trigger: SegmentNode = {
+    ...seg("toggle"),
+    opens: {
+      ref: { variable: "v", key: "k", member: "open" },
+      body: h(seg("x", "deep")),
+      placement: "drop",
+    },
+  };
+  const root: Root = { rows: { status: h(seg("a"), trigger) } };
+  const { root: out, unplaced } = insertCells(
+    root,
+    cells({ seg: "x", anchor: "a", relation: "after" }),
+  );
+  expect(unplaced).toEqual([]);
+  expect(out).toBe(root);
+});
+
+test("a cell with an id is satisfied by that id alone", () => {
+  const root: Root = { rows: { status: h(seg("a"), seg("x", "one")) } };
+  const { root: out, unplaced } = insertCells(
+    root,
+    cells(
+      { seg: "x", id: "one", anchor: "a", relation: "after" },
+      { seg: "x", id: "two", anchor: "a", relation: "after" },
+    ),
+  );
+  expect(unplaced).toEqual([]);
+  expect((out.rows.status as ContainerNode).children).toEqual([
+    seg("a"),
+    { ...seg("x", "two"), insertedBy: by(1) },
+    seg("x", "one"),
+  ]);
+});
+
 test("a tree no cell lands in comes back as the tree it was given", () => {
   const root: Root = { rows: { status: h(seg("a")) } };
   expect(insertCells(root, []).root).toBe(root);
@@ -119,27 +154,38 @@ describe("placeInserts", () => {
     },
   };
 
+  const none = { root: false, presets: new Set<string>() };
+
   test("with no cells, every preset keeps the fragment it was written as", () => {
-    const { config: out, notices } = placeInserts(config, [], new Set());
-    expect(out.root).toBe(config.root);
-    for (const name of Object.keys(config.presets))
-      expect(out.presets[name]).toBe(config.presets[name]);
+    const { config: out, notices } = placeInserts(config, [], none);
+    expect(out).toBe(config);
     expect(notices).toEqual([]);
   });
 
-  test("only a preset whose tree received a cell carries the placed tree", () => {
+  test("with a cell, every preset that restages carries the tree it was judged as, whole", () => {
     const { config: out } = placeInserts(
       config,
       cells({ seg: "x", anchor: "a", relation: "after" }),
-      new Set(),
+      none,
     );
+    const names = (preset: string) =>
+      [...walkNodes(fragmentNode(out.presets[preset]!.root!))].flatMap((n) =>
+        n.kind === "segment" ? [n.name] : [],
+      );
     // The rows map renders the root's row, anchor and all, so the cell lands.
+    expect(names("rowsPreset")).toEqual(["a", "x", "b"]);
+    expect("rows" in out.presets.rowsPreset!.root!).toBe(false);
+    // The whole tree holds no "a": it carries its own tree, without the cell.
+    expect(names("treePreset")).toEqual(["b"]);
+  });
+
+  test("a missed anchor warns for the root only when a config file writes it", () => {
+    const missing = cells({ seg: "x", anchor: "nope", relation: "after" });
+    expect(placeInserts(config, missing, none).notices).toEqual([]);
     expect(
-      [...walkNodes(fragmentNode(out.presets.rowsPreset!.root!))].some(
-        (n) => n.kind === "segment" && n.name === "x",
-      ),
-    ).toBe(true);
-    // The whole tree holds no "a": it stays as written.
-    expect(out.presets.treePreset).toBe(config.presets.treePreset);
+      placeInserts(config, missing, { ...none, root: true }).notices,
+    ).toEqual([
+      '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
+    ]);
   });
 });
