@@ -1,3 +1,9 @@
+## [1.164.1](https://github.com/promptctl/cc-candybar/compare/v1.164.0...v1.164.1) (2026-10-30)
+
+### Bug Fixes
+
+* **proc:** a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga) ([#488](https://github.com/promptctl/cc-candybar/issues/488)) ([092f79f](https://github.com/promptctl/cc-candybar/commit/092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4))
+
 ## [1.164.0](https://github.com/promptctl/cc-candybar/compare/v1.163.0...v1.164.0) (2026-10-30)
 
 ### Features
