@@ -21,6 +21,7 @@
 // a bar to its theme.
 
 import { TEST_SIGNER } from "../test/helpers/link-signer";
+import { DIVIDER, drawnChars, isRgb, seams, type Drawn } from "../test/helpers/seams";
 import {
   ColorDepth,
   ColorRgba,
@@ -55,52 +56,35 @@ const PALETTE_FLOOR = 0.02;
 /** ΔE in OKLab, through rich-js's own arithmetic. */
 const deltaE = (a: ColorRgba, b: ColorRgba): number => Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
-const ARROW = "\u{e0b0}";
-const DIVIDER = "\u{e0b1}";
-const TOKEN = /\x1b\[([0-9;]*)m|\x1b\]8;[^\x1b]*\x1b\\/g;
-
-
-// A seam: the backgrounds either side and the glyph between them — the ground
-// of the column drawn just before the glyph, and the ground the glyph is drawn
-// on. An arrow's own ink is not read as its left side: the joiner draws it in
-// the left cell's background only where that stands off the right one, and
-// lifts it off the right one where it does not, so reading the ink would see
-// two neighbours on one ground as an arrow between two.
+// A seam: the backgrounds either side and the glyph between them, read by the
+// suite's one seam reader (test/helpers/seams.ts): the ground of the column
+// drawn just before the glyph, and the ground the glyph is drawn on. An
+// arrow's own ink is not read as its left side: the joiner draws it in the
+// left cell's background only where that stands off the right one, and lifts
+// it off the right one where it does not, so reading the ink would see two
+// neighbours on one ground as an arrow between two. Every bar here is drawn in
+// truecolor, so both grounds are RGB.
 interface Seam {
   readonly left: ColorRgba;
   readonly right: ColorRgba;
   readonly glyph: string;
 }
 
-function seams(rendered: string): Seam[] {
-  const out: Seam[] = [];
-  for (const line of rendered.split("\n")) {
-    let bg: ColorRgba | undefined;
-    // The ground of the column drawn last on the line, spaces included.
-    let ground: ColorRgba | undefined;
-    let pos = 0;
-    const text = (t: string): void => {
-      for (const ch of t) {
-        if ((ch === ARROW || ch === DIVIDER) && ground && bg) out.push({ left: ground, right: bg, glyph: ch });
-        ground = bg;
-      }
-    };
-    for (const m of line.matchAll(TOKEN)) {
-      text(line.slice(pos, m.index));
-      pos = m.index + m[0].length;
-      if (m[1] === undefined) continue;
-      const p = m[1].split(";").map(Number);
-      for (let i = 0; i < p.length; i++) {
-        if (p[i] === 0) bg = undefined;
-        else if ((p[i] === 38 || p[i] === 48) && p[i + 1] === 2) {
-          if (p[i] === 48) bg = new ColorRgba(p[i + 2]!, p[i + 3]!, p[i + 4]!);
-          i += 4;
-        }
-      }
-    }
-    text(line.slice(pos));
-  }
-  return out;
+const rgba = (c: Drawn): ColorRgba => {
+  if (!isRgb(c)) throw new Error(`a truecolor bar drew a seam on ansi slot ${c.ansi}`);
+  return new ColorRgba(...c);
+};
+
+function seamsIn(rendered: string): Seam[] {
+  const chars = drawnChars(rendered);
+  // A divider is a seam too, so that one drawn anywhere is found and fails.
+  const dividers = chars.flatMap(({ ch, bg, before }) =>
+    ch === DIVIDER && before !== undefined && bg !== undefined ? [{ left: rgba(before), right: rgba(bg), glyph: ch }] : [],
+  );
+  const arrows = seams(chars).flatMap(({ glyph, left, right }) =>
+    right === undefined ? [] : [{ left: rgba(left), right: rgba(right), glyph }],
+  );
+  return [...arrows, ...dividers];
 }
 
 const THEMES = listThemePalettes();
@@ -206,7 +190,7 @@ function bar(theme: string, calm: boolean, variant: Variant): string {
   return rendered;
 }
 const seamsOf = (theme: string, calm: boolean, variant: Variant): Seam[] =>
-  seams(bar(theme, calm, variant));
+  seamsIn(bar(theme, calm, variant));
 
 // Every background colour a rendered bar draws, in order: each 48;2 SGR.
 function backgrounds(rendered: string): ColorRgba[] {
@@ -265,7 +249,7 @@ describe("no two neighbouring cells blur", () => {
     const at = (s: (typeof seams)[number]) =>
       `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`;
     const arrows = seams
-      .filter((s) => s.glyph === ARROW && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
+      .filter((s) => s.glyph !== DIVIDER && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
       .map(at);
     expect([...new Set(arrows)]).toEqual([]);
     const dividers = seams.filter((s) => s.glyph === DIVIDER).map(at);

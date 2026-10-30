@@ -836,7 +836,8 @@ function placeOf(
 
 // The band the segment opens, read the one way for the background `{{ bgOf }}`
 // sees and every Style it can wear.
-const bandOf = (colours: Dealt) => bandFor(colours.palette, colours.disclosure);
+const bandOf = (colours: Dealt) =>
+  bandFor(colours.palette, colours.disclosure, colours.drawnAt);
 
 // [LAW:one-source-of-truth] What the segment is dealt is ONE `decorationFor`
 // read of its region (src/themes/decor.ts): the tint its closed cell wears and

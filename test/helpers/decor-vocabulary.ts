@@ -13,6 +13,7 @@ import {
   VARIATIONS,
   type AddressStep,
   type Decor,
+  type RoleShade,
   type ShadeName,
   type VariationName,
 } from "../../src/themes/decor";
@@ -21,6 +22,18 @@ export const REGISTRY = listThemePalettes().map((name) => getThemePalette(name))
 export const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
 export const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
 export const DRAWN = [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD] as const;
+
+// Textual's ladder for a role, darkest first — the rungs the dial's windows
+// slide along, spelled here in the tests' own words.
+export const LADDER: readonly RoleShade[] = [
+  "darken-3",
+  "darken-2",
+  "darken-1",
+  "base",
+  "lighten-1",
+  "lighten-2",
+  "lighten-3",
+];
 
 /** A colour as the terminal shows it at `drawnAt`. */
 export const shownAt =
