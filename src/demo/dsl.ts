@@ -9,7 +9,7 @@
 // [LAW:single-enforcer] One faked hook event, with the hints a statusline
 // client reports from this terminal (detectClientHints), goes through the
 // functions the daemon runs for a real one — parseClientHints,
-// buildRenderState, openView over the daemon's session source, settlePayload,
+// loadChain, openView over the daemon's session source, settlePayload,
 // drawDsl — over the providers the daemon builds (createPayloadProviders).
 // There is no demo-only payload: a field the daemon's payload gains is in the
 // demo's.
@@ -33,11 +33,11 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
-import { ConfigError } from "../config/loader/diagnostics.js";
 import {
-  buildRenderState,
+  loadChain,
   openView,
   UNOWNED_STORAGE,
+  type DslRenderState,
 } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -110,26 +110,33 @@ const sessionState = new SessionState();
 // The demo renders the file it was given or nothing. The advisories a file
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
-function loadState(): ReturnType<typeof buildRenderState> {
+// A config the load refused: the loader's message is the whole report.
+class Refused extends Error {}
+
+function loadState(): DslRenderState {
   const repos = repoGateAt(cwd);
-  const advisories: Array<string | null> = [...repoGateLines(repos)];
-  try {
-    return buildRenderState(
-      cwd,
-      { layers: [configPath], home: configPath, repo: repos.plugins },
-      advisories,
-      {
-        sessionState,
-        storage: UNOWNED_STORAGE,
-        signer: linkSignerFromKeyFile(),
-      },
-    );
-  } catch (err) {
-    if (err instanceof ConfigError) advisories.push(...err.warnings);
-    throw err;
-  } finally {
-    advisories.filter((a) => a !== null).forEach(warn);
-  }
+  const chain = { layers: [configPath], home: configPath, repo: repos.plugins };
+  // [LAW:single-enforcer] The daemon's own load and settle: the advisories
+  // come out of the one place every load composes them.
+  const loaded = loadChain(
+    {
+      layers: chain.layers,
+      home: chain.home,
+      repos,
+      advisories: repoGateLines(repos),
+      started: performance.now(),
+    },
+    cwd,
+    chain,
+    {
+      sessionState,
+      storage: UNOWNED_STORAGE,
+      signer: linkSignerFromKeyFile(),
+    },
+  );
+  loaded.warning?.split("\n").forEach(warn);
+  if (loaded.state === null) throw new Refused(loaded.error);
+  return loaded.state;
 }
 
 async function renderFrames(): Promise<void> {
@@ -218,7 +225,7 @@ try {
 } catch (err) {
   // A refused config is the demo's one expected failure: the loader's message
   // is the whole report. Anything else is a defect and keeps its stack.
-  if (!(err instanceof ConfigError)) throw err;
+  if (!(err instanceof Refused)) throw err;
   process.stderr.write(`error: ${err.message}\n`);
   process.exitCode = 1;
 } finally {

@@ -716,8 +716,15 @@ describe("a storage folder's watch", () => {
     const entry = r.cache.getOrCreate(dir, dir, file);
     const opened = r.counters.watchersOpened;
     const closed = r.counters.watchersClosed;
-    const edited = `${fs.readFileSync(file, "utf8")}\n`;
+    // An edit that changes what the config loads, so the reload builds a
+    // state: a reload of unchanged inputs keeps the one served.
+    const edited = fs
+      .readFileSync(file, "utf8")
+      .replace(`template: "mine"`, `template: "mine, edited"`);
+    expect(edited).toContain("mine, edited");
+    const before = entry.state;
     await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
+    expect(entry.state).not.toBe(before);
     expect(r.counters.watchersOpened).toBe(opened);
     expect(r.counters.watchersClosed).toBe(closed);
     expect(r.providers.managedStorage.stats().folders).toBe(1);
