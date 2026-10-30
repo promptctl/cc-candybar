@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "38412c68e7a12dce2557dc35449033e18226bae2",
+      "timestamp": "2026-10-30T19:04:51.811Z",
+      "commits": [
+        {
+          "sha": "38412c68e7a12dce2557dc35449033e18226bae2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T13:03:55-06:00",
+          "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk) (#507)\n\n* fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n\n* fix(diagnostics): the config watch retries a refused directory, and its warning is its own (candybar-plugins-vf6g.8uk)\n\nA kept config watch now retries its deaf directories on every load but a\nfailed window, as a watch_file path does, so the warning clears once the OS\nwill watch the directory again instead of standing until a restart. The\nwatch_file entry holds the derived and held watch as one value, the same pair\nthe cache entry holds; the watch's warning has its own type and reads as the\nconfig watch's, since its targets include plugin folders.\n\n* fix(watchers): follow retries a kept watch's deaf directories by one rule, for every consumer (candybar-plugins-vf6g.8uk)\n\nThe registry's follow takes what the watch heard and reopens deaf\ndirectories unless it answers a failed window, so config, plugin sources\nand git share the rule, and an answers-watch failure no longer retries.\nA repeated identical refusal logs once. The link-chain fault no longer\nprints its path twice. The e2e heal re-applies its write until heard.\n\n* fix(watchers): git and config follow only their own watch's failed window (candybar-plugins-vf6g.8uk)\n\nA git pass follows its watch with the failed window it heard since the\nlast pass, so a recurring handle error no longer loops reopen and pass.\nA config entry ignores the answers watch's failure, which says nothing\nabout its own directories."
+        }
+      ]
+    },
+    {
       "version": "pr-506",
       "ref": "refs/pull/506/merge",
       "sha": "63fa2b084e11af2e3b7a6338bf743c2a4bcc84e7",
@@ -55,64 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:21:13-06:00",
           "message": "fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686)\n\nA cell's shade is selected from its hue's window at the depth drawn: the\ndial position's tones the depth draws as distinct colours, by identity\nafter rounding (rich-js drawnColour), widened along the ladder to the\nnearest rung drawn apart where the depth draws them all as one. A pressed\nshade (the activated trigger, its band's leads and ✕) is the dial's\nactivated rung widened by the same function until it draws apart from its\nband's items, its trigger's neighbours and the press a depth up. Both are\nmemoised per palette and read by entryOf as before.\n\nThe closing sweep renders every bundled theme at truecolor, 256 and ansi,\nclosed and on each settings tab, through the session rig, and holds every\nseam to two grounds drawn as two colours. One seam reader in test/helpers\nserves the sweep, colour-256 and the theme-identity audit.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-507",
-      "ref": "refs/pull/507/merge",
-      "sha": "122a2655dffa88b9a23c6e2ad24c3645b2ed1087",
-      "timestamp": "2026-10-30T18:54:49.913Z",
-      "commits": [
-        {
-          "sha": "122a2655dffa88b9a23c6e2ad24c3645b2ed1087",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:53:25-06:00",
-          "message": "Merge b53c280a910823771b15f9446fc23abf95e03307 into 5b44ba9e047f7fd59d83562b39c5d23776c81d14\n"
-        },
-        {
-          "sha": "b53c280a910823771b15f9446fc23abf95e03307",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:52:35-06:00",
-          "message": "fix(watchers): git and config follow only their own watch's failed window (candybar-plugins-vf6g.8uk)\n\nA git pass follows its watch with the failed window it heard since the\nlast pass, so a recurring handle error no longer loops reopen and pass.\nA config entry ignores the answers watch's failure, which says nothing\nabout its own directories.\n"
-        },
-        {
-          "sha": "442dd8c8a988d4ef82d7f89ab3a262cf03824bb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:47:14-06:00",
-          "message": "fix(watchers): follow retries a kept watch's deaf directories by one rule, for every consumer (candybar-plugins-vf6g.8uk)\n\nThe registry's follow takes what the watch heard and reopens deaf\ndirectories unless it answers a failed window, so config, plugin sources\nand git share the rule, and an answers-watch failure no longer retries.\nA repeated identical refusal logs once. The link-chain fault no longer\nprints its path twice. The e2e heal re-applies its write until heard.\n"
-        },
-        {
-          "sha": "d3522fb54fc3b89b9f16a40d4931f24f8b34295b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:37:16-06:00",
-          "message": "fix(diagnostics): the config watch retries a refused directory, and its warning is its own (candybar-plugins-vf6g.8uk)\n\nA kept config watch now retries its deaf directories on every load but a\nfailed window, as a watch_file path does, so the warning clears once the OS\nwill watch the directory again instead of standing until a restart. The\nwatch_file entry holds the derived and held watch as one value, the same pair\nthe cache entry holds; the watch's warning has its own type and reads as the\nconfig watch's, since its targets include plugin folders.\n"
-        },
-        {
-          "sha": "3951cdd0db1d4c6f49752b8abad7d632ec7ef68c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:31:45-06:00",
-          "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5b44ba9e047f7fd59d83562b39c5d23776c81d14",
-      "timestamp": "2026-10-30T18:47:31.288Z",
-      "commits": [
-        {
-          "sha": "5b44ba9e047f7fd59d83562b39c5d23776c81d14",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:46:37-06:00",
-          "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014) (#505)\n\n* feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n\n* fix(feed): the viewer over a moving bar is drawn as the still text it is, and a wake's timer is set from one wall reading (candybar-animation-wbxz.014)\n\n- The diagnostics viewer takes the body's place, so the body's next change is\n  the viewer's (never) rather than the hidden bar's beat; a feed no longer\n  redraws an open viewer 30 times a second.\n- `arm` measures its wait from the caller's wall reading, so `hasten` no longer\n  rebuilds its due instant from a second, truncated one.\n- A test pins the closing flash's start and turns to the same host instant at\n  1x, 5x and 20x.\n- The rendering memory line names the concept, not the template functions.\n\n* fix(config): the effort gauge evaluates max's climbing colour only where it draws it, so a still rung never claims to move (candybar-animation-wbxz.014)\n\nA stepped colour tells the frame its next change when it is evaluated, drawn\nor not. The gauge computed max's climbing colour at every level, so the\nbundled bar at any effort below max reported motion: the doctor called it\nmoving, and a feed at 5x or 20x redrew it at that beat. Max's colour and\nframes now sit in max's branch; the bubble is still computed at every level.\n\nAlso renames the feed's clamped on-screen period, which read as a boolean.\n\n* docs(feed): the rate cell reads as a ceiling in the README, the authoring guide and the feed's comments (candybar-animation-wbxz.014)\n\n* fix(load-gate): the feed criterion reads the feed's ceiling, and a summary field it lacks fails the gate by name (candybar-animation-wbxz.014)"
         }
       ]
     },
