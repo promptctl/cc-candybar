@@ -1,5 +1,5 @@
 // [LAW:single-enforcer] Config-tooling CLI entry point for `schema`. It carries
-// no schema LOGIC — it serves the build-generated artifact (derived from the
+// no schema LOGIC — it serves the committed artifact (derived from the
 // loader's declarations), so it is a binding, not a reimplementation
 // [LAW:one-source-of-truth]. Config *validation* lives in `cc-candybar check`
 // (src/check.ts) — the full-pipeline verdict command; the old `lint` is its
@@ -13,7 +13,7 @@ import type { CliPlan } from "../cli-plan.js";
 const EXIT_VALID = 0;
 const EXIT_USAGE = 2;
 
-// Read the build-generated JSON Schema for the config file shape (RawDslConfig),
+// Read the committed JSON Schema for the config file shape (RawDslConfig),
 // or null when the artifact is absent. Pure read, folded by `schemaPlan` into a
 // plan that src/cli-plan.ts delivers, so the locate-and-read path is testable.
 export function loadSchemaText(): string | null {
@@ -23,9 +23,9 @@ export function loadSchemaText(): string | null {
 
 // `cc-candybar schema` — print the schema so an editor can annotate a config with
 // `"$schema": "<this output, saved somewhere>"` (or the stable published URL) for
-// autocomplete + structural validation. Emitted from the loader schemas at build
-// time (scripts/gen-schema.ts → emitConfigSchema); served verbatim here (the
-// emitter runs at build, not ship time).
+// autocomplete + structural validation. Emitted from the loader schemas by
+// `pnpm gen:schema` into the committed artifact; served verbatim here (the
+// emitter runs in a source checkout, never at ship time).
 export function schemaPlan(): CliPlan {
   // [LAW:no-silent-failure] A schema that exists but cannot be read (EACCES, a
   // deletion racing the existsSync in locateSchema) is a distinct failure from
