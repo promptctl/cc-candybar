@@ -225,7 +225,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       expect(indicatorOf(bar)).toBe("⚠ 2");
       const pages = await readDiagnostics(sockPath, sid, dir, bar, {}, []);
       expect(pages.map((p) => p.text)).toEqual([
-        expect.stringContaining(`config: cannot follow the links of ${link}`),
+        expect.stringContaining(`config watch: cannot follow the links of ${link}`),
         expect.stringContaining(`could not be checked: ${link}`),
       ]);
       const events = (await renderLines(env, sid, 1)).map(fieldOf("warn"));

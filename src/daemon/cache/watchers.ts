@@ -162,7 +162,8 @@ export function watchTargetsOf(paths: {
 }
 
 // A watch as a consumer holds it: where its paths can change, as last derived
-// from disk, and the registry's watch held for that.
+// from disk, and the watch the registry holds for it (the one bound before,
+// while a directory the derive names is briefly gone).
 export interface BoundWatch {
   readonly derived: PathsWatch;
   readonly held: HeldWatch;

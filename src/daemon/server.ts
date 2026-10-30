@@ -2458,7 +2458,7 @@ function drawRender(
   // [LAW:no-silent-failure] A config whose link chain the watch cannot walk,
   // or whose folder the OS will not watch, may miss an edit: the bar says so.
   const configWatch =
-    entry.watch === null ? null : watchFault("config", entry.watch);
+    entry.watch === null ? null : watchFault("config watch", entry.watch);
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...lifelineWarnings(),
@@ -2706,15 +2706,24 @@ function drawRender(
   };
 }
 
-// The warning a load carried, or what the config's watch cannot hear,
-// beside what a draw could not honour.
+// The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {
-  readonly kind: "load" | "config-watch";
+  readonly kind: "load";
+  readonly message: string;
+}
+
+// What the config's watch cannot hear, so an edit may not reload.
+interface ConfigWatchWarning {
+  readonly kind: "config-watch";
   readonly message: string;
 }
 
 // What stands before a draw, whatever the draw then meets.
-type StandingWarning = FileEventsWarning | LifelineWarning | LoadWarning;
+type StandingWarning =
+  | FileEventsWarning
+  | LifelineWarning
+  | ConfigWatchWarning
+  | LoadWarning;
 
 // What one render drew: the body — the bar, or the viewer in its place — and
 // what the statusline's handoff line is drawn from: whether the body is the

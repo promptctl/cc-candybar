@@ -514,8 +514,10 @@ export interface CacheEntry {
   lastWarning: string | null;
   state: DslRenderState;
   // [LAW:one-source-of-truth] The entry's watch: where its config can change,
-  // as the last load derived it, and the registry's watch held for that, set
-  // as one so the fault it shows reads both from the same bind. Null until the
+  // as the last load derived it, and the watch the registry holds for it, set
+  // as one on every load. While a directory the derive names is briefly gone
+  // the held watch is the one bound before, and both still state what is so:
+  // the disk's chains, and the directories actually heard. Null until the
   // first bind.
   watch: BoundWatch | null;
 }
@@ -1601,7 +1603,7 @@ export class RenderCache<
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, { kind: "open" });
     // An entry just created was drawn by no session.
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
 
@@ -2148,7 +2150,7 @@ export class RenderCache<
     this.fit(entry);
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, cause);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
 
@@ -2169,7 +2171,15 @@ export class RenderCache<
   // (including null↔non-null) is one way the set changes; a candidate's
   // parent directory appearing is another — the same rule covers both, so
   // there is no separate "did the path change" test to drift from it.
-  private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
+  //
+  // A kept watch's deaf directories are retried on any cause but a `failed`
+  // window, which the OS refuses again at once: a directory refused once is
+  // otherwise deaf until the target set moves, and the bar says so for good.
+  private refreshWatcher(
+    entry: CacheEntry,
+    loaded: LoadOutcome,
+    cause: LoadCause,
+  ): void {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
@@ -2192,6 +2202,9 @@ export class RenderCache<
     // Re-derived on every load, kept or rebound, so what the bar says the
     // watch cannot hear is what the disk says now.
     entry.watch = { derived: paths, held: watch };
+    const failed =
+      cause.kind === "config-watch" && cause.heard.kind === "failed";
+    if (move === "kept" && !failed) this.deps.watchers.listening(watch);
     if (move === "kept") return;
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the
