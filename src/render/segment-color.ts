@@ -32,7 +32,8 @@ import {
 } from "./active-segment.js";
 
 /**
- * Bind `color`, `ramp`, `bgOf` and `tint` to the segment the walk has published.
+ * Bind rich-js's palette functions (`color`, `ramp`, …), and `bgOf`, `tint`,
+ * `roleTextOn`, `keptOn` and `gauge`, to the segment the walk has published.
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
@@ -98,11 +99,11 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
   };
 
   // `roleTextOn role bg`: the colour the theme names for `role`'s text on
-  // `bg` (`roleText`). Every answer is an entry of the palette, as given.
+  // `bg` (`namedRoleText`). Every answer is an entry of the palette, as given.
   const roleTextOn: TemplateFunc = {
     fn: ((role: string, bgRef: string) => {
       const { palette } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return roleText(palette, role, resolveColorRef(palette, bgRef)).hex;
+      return namedRoleText(palette, role, resolveColorRef(palette, bgRef)).hex;
     }) as TemplateFunc["fn"],
     argTypes: ["string", "string"],
     arity: { kind: "exact" },
@@ -230,12 +231,12 @@ const RUNGS = Object.values(RUNGS_OUT).flat();
  * theme names for the role and never synthesised, so the text stays the
  * theme's own colour for the role on every ground: the role's text colour
  * (`text-<role>`, held by the palette to WCAG AA on `<role>-muted`) where it
- * clears TEXT_MIN_CONTRAST on `ground`; otherwise the first rung of the role's
- * ladder out from the role toward the pole `ground` stands farther from that
- * clears it; and where none of the role's colours clears it, whichever of
- * them stands farthest off `ground`, its text colour and the role itself
- * included. Each pair is measured as truecolor draws it, over black; the
- * depth's rounding is `keptOn`'s.
+ * clears TEXT_MIN_CONTRAST on `ground`; otherwise, walking the role's ladder
+ * out from the role itself toward the pole `ground` stands farther from, the
+ * first that clears it, the role first; and where none of the role's colours
+ * clears it, whichever of them stands farthest off `ground`, its text colour
+ * and the role itself included. Each pair is measured as truecolor draws it,
+ * over black; the depth's rounding is `keptOn`'s.
  *
  * [LAW:single-enforcer] The one place this choice is made.
  * [LAW:dataflow-not-control-flow] A fixed list of named entries, each
@@ -243,7 +244,7 @@ const RUNGS = Object.values(RUNGS_OUT).flat();
  * through lightness. [LAW:no-silent-failure] A role the palette names no
  * text colour or full ladder for fails loudly, naming the missing entry.
  */
-function roleText(
+function namedRoleText(
   palette: Palette,
   role: string,
   ground: ColorRgba,
@@ -267,15 +268,17 @@ function roleText(
   const rung = (step: Rung) => `${role}-${step}`;
   // Every colour the role names, measured up front, so a palette missing one
   // fails on every ground rather than only on the grounds that reach it.
-  const reds = new Map(
+  const colours = new Map(
     [text, role, ...RUNGS.map(rung)].map((name) => [name, named(name)]),
   );
-  // [LAW:no-defensive-null-guards] `reds` holds every name asked for here.
-  const preferred = [text, ...out.map(rung)].map((name) => reds.get(name)!);
+  // [LAW:no-defensive-null-guards] `colours` holds every name asked for here.
+  const preferred = [text, role, ...out.map(rung)].map(
+    (name) => colours.get(name)!,
+  );
   return (
     preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ??
-    [...reds.values()].reduce((farthest, red) =>
-      red.ratio > farthest.ratio ? red : farthest,
+    [...colours.values()].reduce((farthest, colour) =>
+      colour.ratio > farthest.ratio ? colour : farthest,
     )
   ).colour;
 }

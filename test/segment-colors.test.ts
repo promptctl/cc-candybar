@@ -257,9 +257,15 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
     expect(on("#000000")).toBe("#c86464");
   });
 
+  test("otherwise the role itself where it clears, though a rung stands farther off", () => {
+    // On white, whose pole is black: text-error 3.84:1, error 6.55:1,
+    // darken-1 9.20:1.
+    expect(on("#ffffff")).toBe("#a03c3c");
+  });
+
   test("otherwise the first rung out toward the pole the ground stands farther from that clears it, not the farthest", () => {
-    // On #202020, whose pole is white: text-error 4.23:1, lighten-1 3.26:1,
-    // lighten-2 5.20:1, lighten-3 7.94:1.
+    // On #202020, whose pole is white: text-error 4.23:1, error 2.49:1,
+    // lighten-1 3.26:1, lighten-2 5.20:1, lighten-3 7.94:1.
     expect(on("#202020")).toBe("#d27878");
   });
 
