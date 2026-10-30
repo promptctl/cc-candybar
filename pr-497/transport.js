@@ -34044,7 +34044,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.165.0";
+var PACKAGE_VERSION = "1.165.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -57306,6 +57306,24 @@ function presenceOf(segments, rendering) {
 function reportable(presence2) {
   return presence2.kind === "plugin" || presence2.kind === "missing";
 }
+function segmentsPlacedAs(config2, cells) {
+  const placed = /* @__PURE__ */ new Map();
+  const add2 = (id2, segment) => {
+    placed.set(id2, (placed.get(id2) ?? /* @__PURE__ */ new Set()).add(segment));
+  };
+  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
+  const fragments = [
+    config2.root,
+    ...Object.values(config2.presets).flatMap(
+      (p2) => p2.root === void 0 ? [] : [p2.root]
+    )
+  ];
+  for (const tree of fragments.flatMap(trees))
+    for (const node of walkNodes(tree))
+      if (node.kind === "segment") add2(placementId(node), node.name);
+  for (const cell3 of cells) add2(cell3.id ?? cell3.seg, cell3.seg);
+  return (id2) => [...placed.get(id2) ?? []];
+}
 function withoutUnplaced(config2) {
   let removed = 0;
   const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
@@ -59861,7 +59879,14 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
 }
 function layerInserts(top, beneath, presence2) {
   const layers = [...beneath].reverse().concat(top);
-  const anchored2 = (cell3) => presence2(cell3.anchor).kind !== "absent";
+  const placedAs = segmentsPlacedAs(
+    top.config,
+    layers.flatMap((layer) => layer.raw.insert ?? [])
+  );
+  const anchored2 = (cell3) => {
+    const on2 = placedAs(cell3.anchor);
+    return on2.length === 0 || on2.some((seg2) => presence2(seg2).kind !== "absent");
+  };
   const declared = (cell3) => presence2(cell3.seg).kind === "declared";
   const broken = (cell3) => reportable(presence2(cell3.seg));
   const own2 = (layer) => (layer.raw.insert ?? []).filter(anchored2);
@@ -78323,11 +78348,17 @@ var RenderCache = class {
   latestView() {
     return [...this.views.values()].at(-1) ?? null;
   }
-  // What the diagnostic the session's view last drew under `key` copies;
-  // undefined while it has no view or that draw listed none under it. Reads,
+  // What the diagnostic the session's view last delivered under `key`
+  // copies, from whichever renderer drew it; undefined while it has no view
+  // or no renderer's last frame listed it. Reads,
   // never opens, like latestView.
   drawnCopy(sessionId2, key) {
-    return this.views.get(sessionId2)?.drawnCopies.get(key);
+    const drawn = this.views.get(sessionId2)?.drawnCopies.values() ?? [];
+    for (const copies of drawn) {
+      const copy3 = copies.get(key);
+      if (copy3 !== void 0) return copy3;
+    }
+    return void 0;
   }
 };
 
@@ -82085,9 +82116,6 @@ function drawRender(setup, drawing2) {
       copy: w.message
     }))
   );
-  const keys2 = copyKeys(diagnostics);
-  view.drawnCopies.clear();
-  diagnostics.forEach((m, i) => view.drawnCopies.set(keys2[i], m.copy));
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
@@ -82137,6 +82165,11 @@ function drawRender(setup, drawing2) {
     // view's slots settle those names (src/dsl/parts.ts), the same ones its
     // payload's `.effective` fields read.
     { ...effective, effects, idleSince }
+  );
+  const keys2 = copyKeys(diagnostics);
+  view.drawnCopies.set(
+    drawing2.by,
+    new Map(diagnostics.map((m, i) => [keys2[i], m.copy]))
   );
   menuIdle.observe(sessionId2, at, frame.menuRows > 0, effective.menuTimeout);
   const menusSince = menuIdle.since(sessionId2, at);

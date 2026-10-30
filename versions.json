@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-497",
+      "ref": "refs/pull/497/merge",
+      "sha": "162462ca4f0eadce738bc86467cfa4ff519a0df8",
+      "timestamp": "2026-10-30T13:49:16.929Z",
+      "commits": [
+        {
+          "sha": "162462ca4f0eadce738bc86467cfa4ff519a0df8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T13:48:21Z",
+          "message": "Merge aead04de4f3662abe06783149093ab3fe4b171c1 into 12958c7fab6a69a0aecab8498b33d6418a34f8b5\n"
+        },
+        {
+          "sha": "aead04de4f3662abe06783149093ab3fe4b171c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:48:10-06:00",
+          "message": "fix(plugins): a copy click finds its message in whichever renderer delivered it, and an id anchor on an absent placement is absent with it (candybar-plugins-vf6g.odm)\n\nA request and a feed frame list different diagnostics, so each renderer's\ncopies are kept apart and recorded only once its frame exists. An insert\ncell's anchor is a placement id, so the segments placed under it are what\nits absence is judged by.\n"
+        },
+        {
+          "sha": "42d4ff839b25f5220607b0c1011c752e8fa97e08",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:34:46-06:00",
+          "message": "fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n"
+        },
+        {
+          "sha": "c1b636055f63ec1c3ce69e13996bfddc719dde33",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:17:46-06:00",
+          "message": "feat(plugins): a missing segment is an error only when its plugin is present, and its error copies a fix prompt (candybar-plugins-vf6g.odm)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-496",
       "ref": "refs/pull/496/merge",
       "sha": "c1c71944dec043af7495df42008936a8e5f9abbb",
@@ -34,35 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:17:10-06:00",
           "message": "test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-497",
-      "ref": "refs/pull/497/merge",
-      "sha": "d4242f57536e8886c6e576b19331954e059751fa",
-      "timestamp": "2026-10-30T13:36:51.077Z",
-      "commits": [
-        {
-          "sha": "d4242f57536e8886c6e576b19331954e059751fa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T13:35:52Z",
-          "message": "Merge 42d4ff839b25f5220607b0c1011c752e8fa97e08 into 592090572d8ec1c672f7c5994824e93e218f8291\n"
-        },
-        {
-          "sha": "42d4ff839b25f5220607b0c1011c752e8fa97e08",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:34:46-06:00",
-          "message": "fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n"
-        },
-        {
-          "sha": "c1b636055f63ec1c3ce69e13996bfddc719dde33",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:17:46-06:00",
-          "message": "feat(plugins): a missing segment is an error only when its plugin is present, and its error copies a fix prompt (candybar-plugins-vf6g.odm)\n"
         }
       ]
     },
