@@ -4,15 +4,22 @@
     {
       "version": "pr-511",
       "ref": "refs/pull/511/merge",
-      "sha": "e60c14e77a6ef4d0826cd887a9fd71c1694beb95",
-      "timestamp": "2026-10-30T22:13:53.522Z",
+      "sha": "6bbcb04835492640d2ffbfe737bcdabb82d56e9d",
+      "timestamp": "2026-10-30T22:16:03.344Z",
       "commits": [
         {
-          "sha": "e60c14e77a6ef4d0826cd887a9fd71c1694beb95",
+          "sha": "6bbcb04835492640d2ffbfe737bcdabb82d56e9d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T22:13:00Z",
-          "message": "Merge 5e5c47649a05f714b2f6f931055a74818817ab04 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+          "timestamp": "2026-10-30T22:15:10Z",
+          "message": "Merge 28ea307548ff84608b7a36308eb989fe3fefd784 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+        },
+        {
+          "sha": "28ea307548ff84608b7a36308eb989fe3fefd784",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:15:00-06:00",
+          "message": "test(menus): every speed table is keyed by the speed domain (brandon-menus-sjhy.why)\n\nA speed added to the domain no longer slips past the loop, fade and frames\ntables: each is a Record over every speed, so the omission fails to compile,\nwhile the expected values stay literal. The fade table gains its 5x row. The\nmenu map stops listing speed values it would have to track by hand.\n"
         },
         {
           "sha": "5e5c47649a05f714b2f6f931055a74818817ab04",
