@@ -1,3 +1,9 @@
+## [1.162.5](https://github.com/promptctl/cc-candybar/compare/v1.162.4...v1.162.5) (2026-10-30)
+
+### Bug Fixes
+
+* **daemon:** a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5) ([#484](https://github.com/promptctl/cc-candybar/issues/484)) ([df3c874](https://github.com/promptctl/cc-candybar/commit/df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7))
+
 ## [1.162.4](https://github.com/promptctl/cc-candybar/compare/v1.162.3...v1.162.4) (2026-10-29)
 
 ### Bug Fixes
