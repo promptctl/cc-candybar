@@ -38018,6 +38018,7 @@ var boundOf = (folder) => {
   }
 };
 var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
 // src/utils/watch-target.ts
 init_globals();
@@ -38070,8 +38071,7 @@ function watchTargetsOf(paths) {
   const bound = new Map(
     targets.dirs.map((d) => {
       const at = boundOf(d.path);
-      const bindable = typeof at !== "string" && "ino" in at;
-      return [d.path, bindable ? boundKey(at) : null];
+      return [d.path, bindsFolder(at) ? boundKey(at) : null];
     })
   );
   return {
@@ -38095,6 +38095,7 @@ var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
 });
+var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
@@ -38145,10 +38146,11 @@ var WatcherRegistry = class {
   // FSEvents keeps on its path for a slot the OS refuses. The next derive
   // that finds the directory there rebinds, since its key differs.
   //
-  // A deaf watch under an unchanged key is kept deaf. Config and git follow
-  // on a `failed` window, so a follow that retried would retry an error that
-  // recurs on every reopen within one debounce window; a consumer that
-  // retries says when, through `listening`.
+  // A deaf watch under an unchanged key is kept deaf: config and git follow
+  // on a `failed` window, and a follow that retried would retry an error that
+  // recurs on every reopen within one debounce window. A deaf directory is
+  // retried when a holder names it instead: an acquire that joins it, or a
+  // consumer's `listening`.
   follow(held, spec, onInvalidate) {
     if (held !== null && (held.key === spec.key || spec.unbound)) {
       return { watch: held, move: "kept" };
@@ -38229,10 +38231,8 @@ var WatcherRegistry = class {
       return;
     }
     const now2 = boundOf(dir.path);
-    if (typeof now2 !== "string" && "ino" in now2) {
-      if (boundKey(now2) !== dir.state.bound)
-        this.reopen(dir, "the folder at its path was made again");
-    }
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "the folder at its path was made again");
   }
   // [LAW:no-silent-failure] Every slot on the directory hears it change
   // state. Going deaf, it hears the fault. Listening again, it hears an
@@ -38256,12 +38256,13 @@ var WatcherRegistry = class {
       const handle = fs_default.watch(
         at,
         { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), bound, changed)
+        (_event, changed) => this.heard(dirOf(), handle, changed)
       );
       handle.on("error", (e) => {
-        const dir = dirOf();
         this.logger("warn", `watcher error ${at}: ${e.message}`);
         if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
         this.closeHandle(at, handle, "error");
         const deafness = {
           kind: "failed",
@@ -38296,8 +38297,10 @@ var WatcherRegistry = class {
   // refreshed, so a handle never stays bound to a folder no longer at its
   // path and every later event naming the directory is judged against the
   // folder there.
-  heard(dir, bound, changed) {
-    const moved = changed === import_node_path13.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== bound;
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
+    const moved = changed === import_node_path13.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
