@@ -1,16 +1,16 @@
 # Joiners: every join is a filled arrow between two shades
 
-The plan for the divider problem. The problem statement, with the measurements, routes and constraints, is `design-docs/JOINERS.md` beside this file. This plan supersedes the four plans on ticket brandon-menus-sjhy.57p, which it did not read. Brandon's requirements, in his words: "don't put the same color on two adjacent segments"; the divider is an error state to make "structurally impossible"; "i want this fixed in rich-js"; and the contrast floors around open menus were never his, so they go.
+The plan for the divider problem. The problem statement, with the measurements, routes and constraints, is `design-docs/JOINERS.md` beside this file. This plan supersedes the four plans on ticket brandon-menus-sjhy.57p, which it did not read. Brandon's requirements, in his words, from ticket brandon-menus-sjhy.57p and the session of 2026-10-30 that produced this plan: "don't put the same color on two adjascent segments"; the divider is an error state to make "structurally impossible"; "i want this fixed in rich-js. rich-js exists for this project"; and, of the contrast floors around open menus, "I didn't add or ask for those contrast rules", so they go.
 
 ## The decision
 
 Three rules, each with one owner.
 
 1. **rich-js's joiner always draws its filled seam.** Where the two cells' `bg`s are too close for the arrow to show, the arrow's `fg` is lifted off its own `bg` by the least visible step along its lightness. The thin divider form is deleted. This is the backstop that makes the error state impossible to draw, whatever the two colours are, including two alerts authored in one red. At ansi it holds as far as the terminal keeps its sixteen slots distinct, which the detached daemon cannot see.
-2. **Every background on the bar is one the theme names.** Closed cells already select a role at a shade. The segment whose menu is open (its activated state), the ✕ and blank leads of its menu, and the plane its menu rows sit on also select named shades. Nothing searches for a colour, nothing measures a contrast floor between cells, and nothing reports a shortfall. Two foregrounds are not named colours and stay that way: text, which keeps the one floor that is about reading (`fg` is chosen to clear AA on its `bg`, as today), and the lifted seam `fg` of rule 1.
+2. **Every background the policy chooses is one the theme names.** An authored `bg` (an alert, a threshold, the diagnostics indicator) is meaning and stays as authored. Closed cells already select a role at a shade. The segment whose menu is open (its activated state), the ✕ and blank leads of its menu, and the plane its menu rows sit on also select named shades. Nothing searches for a colour, nothing measures a contrast floor between cells, and nothing reports a shortfall. Two foregrounds are not named colours and stay that way: text, which keeps the one floor that is about reading (`fg` is chosen to clear AA on its `bg`, as today), and the lifted seam `fg` of rule 1.
 3. **cc-candybar's shade policy never gives two neighbours one shade where it has a choice.** Three places do today, and each becomes a rule with a test.
 
-The interface between the libraries after this work is cells with `bg` and `fg`, and the strip that joins them. cc-candybar imports no colour rounding or search from rich-js.
+The interface between the libraries after this work is cells with `bg` and `fg`, and the strip that joins them. cc-candybar states no floor between cells and runs no search for a colour; what it still imports from rich-js for colour is contrast for text and rounding for identity.
 
 ## rich-js
 
@@ -38,7 +38,7 @@ Measured through rich-js 0.24.1's own arithmetic, the lift between two identical
 
 ### Effects
 
-Today a join cell's colours are resolved once at join time, and an effect confined to some items moves each side of a join cell with whichever item owns it, leaving a mix (prism's inner thirds, torn's midpoint) where it was. `[LAW:one-source-of-truth]` A seam's colours are a function of its two neighbours' edges. After an effect has painted the item cells, every join cell is re-derived from the effected edges beside it through the same resolution the join-time path uses, lift included. Prism's thirds then move under a confined effect, and a fill that paints two neighbours one colour still shows each seam as a lifted notch. The closing flash, which fills a whole menu row, shows those notches; that is accepted.
+Today a join cell's colours are resolved once at join time, and an effect confined to some items moves each side of a join cell with whichever item owns it, leaving a mix (prism's inner thirds, torn's midpoint) where it was. `[LAW:one-source-of-truth]` A seam's colours are a function of its two neighbours' edges. After an effect has painted the item cells, every join cell is re-derived from the effected edges beside it through the same resolution the join-time path uses, lift included. Prism's thirds then move under a confined effect, and a fill that paints two neighbours one colour still shows each seam as a lifted notch. The closing flash, which fills a whole menu row, shows those notches; that is accepted. Between 0.25.0 and 0.25.1 an effect that paints two neighbours alike hides the seam exactly as today's code does, because a join cell's sides still follow their owners; the lift makes nothing worse under effects, and the re-derivation makes it right.
 
 ### What goes
 
@@ -46,6 +46,8 @@ Today a join cell's colours are resolved once at join time, and an effect confin
 - The thin forms of every family, the divider cells of `arrow`, `prism` and `torn`, and the `divider: seam` echoes on the seams that never had one.
 - Every test in `test/core/strip.test.ts` that asserts a divider, reversed: an equal-`bg` join draws the seam and its `fg` stands off its `bg` as drawn.
 - The passages of `docs/strip.md` that describe the divider.
+
+`gradientSeam` is a seam like any other and lifts per cell; between two near grounds its ramp of half-block samples zig-zags, and rich-joiners-er38.a1h decides its form. The byte guarantee above is stated for the named joiners.
 
 Released as 0.25.0 after the lift, 0.25.1 after the effects change if it lands separately.
 
@@ -59,7 +61,7 @@ Everything that searched for a colour or measured a floor between cells. By the 
 - `STATE_FLOOR`: `searchState` and its rays, `RAY_HALVINGS`, `STATE_STEPS`, the `StateSearch` anchor kept unrounded, `short`.
 - `BAND_FLOORS` and `PLANE_STEPS`: the plane blend toward `background` or `foreground`, `computeUnroundedBand`, the nested-plane floor.
 - `Band.shortfalls`, the `band-floor` warning kind and its producer in the render, and the cases over it in `check.ts` and the daemon.
-- The imports that round a colour or search drawable colours: `ensureDrawn`, `drawnColour`, `blendRgb`, `Oklch`, `SEAM_MIN_DELTA_E`. `contrastFor`, `contrastRatio` and `ensureContrast` stay: text is chosen with them.
+- The imports that exist for the floors: `ensureDrawn`, `blendRgb`, `Oklch`, `SEAM_MIN_DELTA_E`. `contrastFor`, `contrastRatio` and `ensureContrast` stay: text is chosen with them, and `ensureContrast` is the one search left, for a readable `fg` at the depth. `drawnColour` stays for one use, policy 3's identity test of rungs at a depth; rounding a named colour to ask whether the depth draws two of them alike predicts no decision.
 - `plainWith` and `stripPrivateGlyphs` in `src/render/strip.ts` follow the new `SeamForm`; the glyph probe draws two cells. `test/helpers/powerline.ts` loses `divider`. `test/doctor-nerd-font.test.ts` asserts the probe's output inline and changes with it. The two snapshot files regenerate with U+E0B0 where U+E0B1 was.
 - The lines in `.claude/memory/colour.md` on the state search, the floors, the band item repair, and "its cells parted by the joiner's divider" in the shade table's comment. The sentence in `docs/interaction-authoring.md` about cells parted by the divider.
 
@@ -75,7 +77,7 @@ The menu hue at each depth still comes from the lineage, and `Band` keeps `state
 
 ### Policy: neighbours never share a shade where policy chooses
 
-1. **Cells inside an authored `{ h }` group in a row, and the settings door with its frame-rate cell, take consecutive row positions.** Today a container inside a row is one address, so `{ h: ["context", "plugins.memento.ceiling", "autocompact"] }` wears one shade three times, and so do 🍫 and `polled`. The leaves of a row, through any nested `{ h }`, take positions among the row's leaves, computed from the authored tree alone, so hiding still recolours nothing. The position becomes part of the address when the authored tree is compiled, so a node's colour is still computable from its address alone and the per-region memo keys on it as before. A position is a place on a drawn line: what sits side by side on one line takes consecutive positions, and a `{ v }` inside a row lays its children on lines of their own, each counting from where the `{ v }` sits. Authoring a new cell inside a group shifts the shades of the cells after it, exactly as authoring a new cell in the row does today. Edit mode's chrome stays spliced into its cell as one unit, because entering edit mode must not recolour the bar.
+1. **Cells inside an authored `{ h }` group in a row, and the settings door with its frame-rate cell, take consecutive row positions.** Today a container inside a row is one address, so `{ h: ["context", "plugins.memento.ceiling", "autocompact"] }` wears one shade three times, and so do 🍫 and `polled`. The leaves of a row, through any nested `{ h }`, take positions among the row's leaves, computed from the authored tree alone, so hiding still recolours nothing. The position becomes part of the address when the authored tree is compiled, so a node's colour is still computable from its address alone and the per-region memo keys on it as before. A position is a place on a drawn line: what sits side by side on one line takes consecutive positions, and a `{ v }` inside a row lays its children on lines of their own, each counting from where the `{ v }` sits. Every reader of a cell's position reads the leaf position: the shade, the hue run under `alt`, the line-end keystone (the last leaf of the line wears it), and the set of colours a row's cells wear. Authoring a new cell inside a group shifts the shades of the cells after it, exactly as authoring a new cell in the row does today. Edit mode's chrome stays spliced into its cell as one unit, because entering edit mode must not recolour the bar.
 2. **Adjacent positions never select one tone** (brandon-menus-sjhy.hdw, folded in). Under van der Corput read by nearest point over three tones, positions 7 and 8 both land on tone 0, and so does every pair 8k−1, 8k. The fix is a property, stated once and tested once: for every dial position and every row length the bundled bar reaches, adjacent positions select different tones. The mechanism stays a function of the position alone, as van der Corput is, never of the row's length or of which siblings are shown, and holds for every position by construction, not only as far as the test reaches. The `muted` dial position has one tone and fails the property by construction; it becomes two tones, the role's muted form alternating with the role itself, read by bin, because nearest point ties on a two-tone window.
 3. **A dial window is the rungs the depth draws as distinct colours.** At 256 and ansi, neighbouring rungs round onto one entry or slot, and textual-ansi names several rungs alike. The window at a depth is the dial's rungs where the depth draws them distinct, by identity after rounding, with no threshold; where it draws two of them alike, the window widens along the ladder to the nearest rung that draws distinct, until it holds two tones. Its quantize follows its size: three rungs read by point, two by bin. Only a role whose whole ladder draws as one colour at a depth leaves a row in one tone with lifted arrows; that is the theme's look at that depth, and it is accepted here.
 
@@ -93,8 +95,9 @@ rich-js:
 
 cc-candybar:
 - The reversed tests on `fix/joiners-57p`, green: no divider glyph on any row of the closed bar or any settings tab under all bundled themes at truecolor, 256 and ansi; every join an arrow.
-- Every background the bar draws, closed cells, activated segments, leads, ✕ and planes, is a colour its palette names, at truecolor, under every bundled theme and every dial position.
-- `src/themes/decor.ts` imports nothing from rich-js that rounds a colour or searches drawable colours, and no `band-floor` warning exists.
+- Every background the policy chooses, closed cells, activated segments, leads, ✕, planes and items, is a colour its palette names, at truecolor, under every bundled theme and every dial position; authored `bg`s are exempt and listed once in the test.
+- `src/themes/decor.ts` no longer imports `ensureDrawn`, `blendRgb`, `Oklch` or `SEAM_MIN_DELTA_E`, defines no `STATE_FLOOR` or `BAND_FLOORS`, and no `band-floor` warning exists.
+- The epic's closing sweep: in every bundled frame (every theme, at truecolor, 256 and ansi, the closed bar and each settings tab), no arrow's `fg` had to lift: every join's `fg` as drawn is the left cell's `bg` as drawn. Once the lift exists, "no divider glyph" is true by construction, so this sweep is the test of the state Brandon named, and it lands with policy 3.
 - Policy 1: under every dial position, no two adjacent cells of Brandon's grouped status row share a tone, and 🍫 and `polled` wear two.
 - Policy 2: the adjacency property holds for every row length to 16 under every dial position, and the mechanism's argument for every position is written in the PR.
 - Policy 3: under textual-ansi at ansi, the bundled bar's window holds the tones the depth draws distinct and no more, and the adjacency test runs over the windows each depth produces.
@@ -106,13 +109,13 @@ Two lanes, built in parallel. cc-candybar publishes a 1.x on every merge, and a 
 rich-js lane:
 1. The lift, the divider deleted, tests and docs. Release 0.25.0.
 2. Join cells re-derived from effected edges. Release 0.25.1.
-3. cc-candybar: bump the dependency, land the reversed tests and snapshots, update the glyph helpers and the two doc lines. Waits on 1.
+3. cc-candybar: bump the dependency, land the reversed tests and snapshots, and in the same PR `plainWith` and the glyph probe in `src/render/strip.ts`, `test/helpers/powerline.ts` and `test/doctor-nerd-font.test.ts`, which read the field 0.25.0 removes, plus the two doc lines. Waits on 1.
 
 policy lane, cc-candybar:
 4. Delete the floor apparatus; the activated state and the plane select named shades; the named-colour test covers every background the bar draws. Merges after 3.
 5. Group leaves and the door's frame-rate cell take row positions.
 6. Adjacent positions never select one tone; the `muted` position gains a second tone.
-7. A window is the rungs the depth draws distinct.
+7. A window is the rungs the depth draws distinct, and the epic's closing sweep lands.
 
 cc-candybar stays 1.x throughout; each PR is a `fix`. The wire contract is untouched.
 
