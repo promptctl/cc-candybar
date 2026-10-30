@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "46745100f446a07971644e712c1ae93efc7f4a04",
+      "timestamp": "2026-10-30T17:33:10.571Z",
+      "commits": [
+        {
+          "sha": "46745100f446a07971644e712c1ae93efc7f4a04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:32:17-06:00",
+          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux (candybar-plugins-vf6g.qzx) (#499)\n\n* feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n\n* fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n\n* fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n\n* fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n\n* fix(tmux): rebase onto main — the picker reads the band by its palette and disclosure, and the default menu's toggles bytes drop the retired tmux toggle (candybar-plugins-vf6g.qzx)\n\n* test(tmux): the default menu's toggles bytes drop the retired tmux toggle, over main's menu (candybar-plugins-vf6g.qzx)"
+        },
+        {
+          "sha": "1bef42323069803286132c18409da954fece2264",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T17:01:29Z",
+          "message": "chore(release): set `package.json` to 1.166.3 [skip ci]\n\n## [1.166.3](https://github.com/promptctl/cc-candybar/compare/v1.166.2...v1.166.3) (2026-10-30)\n\n### Bug Fixes\n\n* **watchers:** the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx) ([#501](https://github.com/promptctl/cc-candybar/issues/501)) ([ac7fa00](https://github.com/promptctl/cc-candybar/commit/ac7fa0066116393d2e51df899b6ec19d31ba5071))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-503",
       "ref": "refs/pull/503/merge",
       "sha": "cd9e7cc5b8dad0c48c1ee591b8b6043d0b346888",
@@ -77,85 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T10:22:49-06:00",
           "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-499",
-      "ref": "refs/pull/499/merge",
-      "sha": "473eaf08ff4df6aa5cba3db0ef7de4e2b8f66d6c",
-      "timestamp": "2026-10-30T17:25:32.066Z",
-      "commits": [
-        {
-          "sha": "473eaf08ff4df6aa5cba3db0ef7de4e2b8f66d6c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T17:24:33Z",
-          "message": "Merge 5186295443dce49401c837bcfd35bfd6cf28058c into 1bef42323069803286132c18409da954fece2264\n"
-        },
-        {
-          "sha": "5186295443dce49401c837bcfd35bfd6cf28058c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:48:22-06:00",
-          "message": "test(tmux): the default menu's toggles bytes drop the retired tmux toggle, over main's menu (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "bea555c059356c8cd3f24f374f63a09bddd865f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:35:51-06:00",
-          "message": "fix(tmux): rebase onto main — the picker reads the band by its palette and disclosure, and the default menu's toggles bytes drop the retired tmux toggle (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "c12478a08e1e07f658a6bb74b486b2e2a1847840",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:15:12-06:00",
-          "message": "fix(picker): a catalogue page laid out as one line stays closed on its segment's ground (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "1aeec1a1e0ceecd15e0c53d43d03646ff6558a8b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:10:48-06:00",
-          "message": "fix(tmux): reset-all's memory line matches the gated reset, a refused tmux follower is told it needs a tmux pane, and a hintless click's in-tmux reading is cited (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "9d7d61d84d44d34c5cdf2b64cb55b09ca26683e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:02:51-06:00",
-          "message": "fix(tmux): a session outside tmux has no tmux status line to switch, reset-all and the drift mark count a control by its one gate, and a catalogue picker paints each row for the ground it is drawn on (candybar-plugins-vf6g.qzx)\n"
-        },
-        {
-          "sha": "2861f6b74be2b2f4707a317f8c5f098628164e86",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:43:47-06:00",
-          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ac7fa0066116393d2e51df899b6ec19d31ba5071",
-      "timestamp": "2026-10-30T16:51:44.011Z",
-      "commits": [
-        {
-          "sha": "ac7fa0066116393d2e51df899b6ec19d31ba5071",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:50:45-06:00",
-          "message": "fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx) (#501)\n\n* fix(watchers): the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx)\n\nOn Node 20 and 22, Linux's recursive fs.watch is Node's own walk, and its\nstart swallows every error but ENOENT: a tree behind a symlink loop or an\nunreadable folder came back as a watch that never fires, held as listening.\nThe registry now opens every directory before it watches it, so the open's\nerror is the refusal's reason whatever the platform or Node.\n\nThe git cache's ELOOP test asserts exactly two refusals instead of the\nplatform's count, and the registry suite pins an unreadable folder refused\nas a tree or not.\n\n* test(watchers): the unreadable-folder test skips under root, which ignores directory permissions (brandon-unfiled-3248.0mvx)"
-        },
-        {
-          "sha": "47d20efc00d49b49451de6917528d43ceb12d6ff",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T16:41:43Z",
-          "message": "chore(release): set `package.json` to 1.166.2 [skip ci]\n\n## [1.166.2](https://github.com/promptctl/cc-candybar/compare/v1.166.1...v1.166.2) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) ([#494](https://github.com/promptctl/cc-candybar/issues/494)) ([db7ae9e](https://github.com/promptctl/cc-candybar/commit/db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f))\n* **test:** a test that SIGKILLs a daemon waits for its session state to be saved (brandon-unfiled-3248.vfhf) ([#500](https://github.com/promptctl/cc-candybar/issues/500)) ([79eac59](https://github.com/promptctl/cc-candybar/commit/79eac595257ef87be616ea19c3ea787386d26db6))\n"
         }
       ]
     }
