@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7fa9b112cc7061c7e0e1a63a7955c56987054064",
-      "timestamp": "2026-10-30T22:24:27.813Z",
-      "commits": [
-        {
-          "sha": "7fa9b112cc7061c7e0e1a63a7955c56987054064",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:23:39-06:00",
-          "message": "feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) (#511)\n\n* feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why)\n\n* fix(menus): the schema, the speed tests and the menu map carry 10x (brandon-menus-sjhy.why)\n\nThe committed config schema offered only 1x/5x/20x, so check:schema failed\nand an editor flagged animationSpeed: \"10x\" the loader accepts. The fade and\nframes tables gain literal 10x rows so the rate is asserted, not derived from\nthe table under test.\n\n* test(menus): every speed table is keyed by the speed domain (brandon-menus-sjhy.why)\n\nA speed added to the domain no longer slips past the loop, fade and frames\ntables: each is a Record over every speed, so the omission fails to compile,\nwhile the expected values stay literal. The fade table gains its 5x row. The\nmenu map stops listing speed values it would have to track by hand."
-        },
-        {
-          "sha": "8c3367611eff3468d4e6dcbbdb2130db7083f5df",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T21:43:53Z",
-          "message": "chore(release): set `package.json` to 1.168.1 [skip ci]\n\n## [1.168.1](https://github.com/promptctl/cc-candybar/compare/v1.168.0...v1.168.1) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1) ([#508](https://github.com/promptctl/cc-candybar/issues/508)) ([b51f005](https://github.com/promptctl/cc-candybar/commit/b51f00510c4bcca14fc9ff4177320380f9052873))\n* **site:** the live bar and the landscape explorer link to each other ([#509](https://github.com/promptctl/cc-candybar/issues/509)) ([19183e1](https://github.com/promptctl/cc-candybar/commit/19183e1e39371f3a80b53ee9182655ebec2787f9))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-510",
       "ref": "refs/pull/510/merge",
-      "sha": "e3de505e3c45881ceb24aa2a8e7889847cd49aaa",
-      "timestamp": "2026-10-30T22:19:24.741Z",
+      "sha": "d4d164cf76b2833e89809d5675839ee4cf29116c",
+      "timestamp": "2026-10-30T22:24:53.938Z",
       "commits": [
         {
-          "sha": "e3de505e3c45881ceb24aa2a8e7889847cd49aaa",
+          "sha": "d4d164cf76b2833e89809d5675839ee4cf29116c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T22:18:37Z",
-          "message": "Merge c6df7a2dfbe56c92eca04752283f6f8ff9e31984 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+          "timestamp": "2026-10-30T22:24:06Z",
+          "message": "Merge df74cdc645e9758296c3aa2521d7b02299847fff into 7fa9b112cc7061c7e0e1a63a7955c56987054064\n"
+        },
+        {
+          "sha": "df74cdc645e9758296c3aa2521d7b02299847fff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:23:54-06:00",
+          "message": "fix(colour): the walk order keeps every tone of a window longer than three (candybar-joiners-e5r4.cfm)\n"
         },
         {
           "sha": "c6df7a2dfbe56c92eca04752283f6f8ff9e31984",
@@ -63,6 +48,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T15:34:15-06:00",
           "message": "fix(colour): a dial window widens to its position's count of tones, so every distribution keeps neighbours apart at every depth (candybar-joiners-e5r4.cfm)\n\nA window at a depth widened only until it held two tones. Golden angle\nkeeps neighbours apart only over three, so a three-tone position whose\ndepth rounds two tones alike left a golden-angle container with pairs\ndrawn as one colour at 256 and ansi. The window now widens, through the\none `widen`, rung by rung until it holds as many tones as its position\nnames, and holds fewer only where the role's ladder has no more drawn\napart. Truecolor windows are unchanged.\n\nThe adjacency test holds van der Corput over every window of a position\nnaming two or more and golden angle over every window of a position\nnaming three, at every depth, and states the edge: a window short of its\ncount holds exactly what the role draws. The preview test covers dracula\nat 256, whose accent window widens back to three.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7fa9b112cc7061c7e0e1a63a7955c56987054064",
+      "timestamp": "2026-10-30T22:24:27.813Z",
+      "commits": [
+        {
+          "sha": "7fa9b112cc7061c7e0e1a63a7955c56987054064",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:23:39-06:00",
+          "message": "feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) (#511)\n\n* feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why)\n\n* fix(menus): the schema, the speed tests and the menu map carry 10x (brandon-menus-sjhy.why)\n\nThe committed config schema offered only 1x/5x/20x, so check:schema failed\nand an editor flagged animationSpeed: \"10x\" the loader accepts. The fade and\nframes tables gain literal 10x rows so the rate is asserted, not derived from\nthe table under test.\n\n* test(menus): every speed table is keyed by the speed domain (brandon-menus-sjhy.why)\n\nA speed added to the domain no longer slips past the loop, fade and frames\ntables: each is a Record over every speed, so the omission fails to compile,\nwhile the expected values stay literal. The fade table gains its 5x row. The\nmenu map stops listing speed values it would have to track by hand."
+        },
+        {
+          "sha": "8c3367611eff3468d4e6dcbbdb2130db7083f5df",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T21:43:53Z",
+          "message": "chore(release): set `package.json` to 1.168.1 [skip ci]\n\n## [1.168.1](https://github.com/promptctl/cc-candybar/compare/v1.168.0...v1.168.1) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1) ([#508](https://github.com/promptctl/cc-candybar/issues/508)) ([b51f005](https://github.com/promptctl/cc-candybar/commit/b51f00510c4bcca14fc9ff4177320380f9052873))\n* **site:** the live bar and the landscape explorer link to each other ([#509](https://github.com/promptctl/cc-candybar/issues/509)) ([19183e1](https://github.com/promptctl/cc-candybar/commit/19183e1e39371f3a80b53ee9182655ebec2787f9))\n"
         }
       ]
     }

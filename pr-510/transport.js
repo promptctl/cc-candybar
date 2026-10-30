@@ -37658,10 +37658,10 @@ function windowAt(palette, hue, shade, drawnAt) {
 var inWalkOrder = (window2) => {
   if (window2.length < 3) return window2;
   const ladder = LADDER;
-  const [low, between, high] = [...window2].sort(
+  const [low, ...above] = [...window2].sort(
     (a, b) => ladder.indexOf(a) - ladder.indexOf(b)
   );
-  return [low, high, between];
+  return [low, above.at(-1), ...above.slice(0, -1)];
 };
 var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
 var WINDOWS = memoPerPalette();
@@ -38090,7 +38090,12 @@ var EFFECT_NAMES = Object.freeze([
   EFFECT_FLOOR,
   ...Object.keys(EFFECT_CATALOGUE.loops)
 ]);
-var ANIMATION_SPEEDS = Object.freeze({ "1x": 1, "5x": 5, "20x": 20 });
+var ANIMATION_SPEEDS = Object.freeze({
+  "1x": 1,
+  "5x": 5,
+  "10x": 10,
+  "20x": 20
+});
 var ANIMATION_SPEED_NAMES = Object.keys(
   ANIMATION_SPEEDS
 );
