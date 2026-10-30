@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-511",
+      "ref": "refs/pull/511/merge",
+      "sha": "445c2a9728df5597976d28e632d518d7af9c09bf",
+      "timestamp": "2026-10-30T22:10:39.259Z",
+      "commits": [
+        {
+          "sha": "445c2a9728df5597976d28e632d518d7af9c09bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:09:40-06:00",
+          "message": "Merge 97e75f55a59c75a1feb1a21322cd958f2124e705 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+        },
+        {
+          "sha": "97e75f55a59c75a1feb1a21322cd958f2124e705",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:09:30-06:00",
+          "message": "feat(menus): the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-510",
       "ref": "refs/pull/510/merge",
       "sha": "aa30000a9bdc3971f865946f469f2116b0d4a547",
