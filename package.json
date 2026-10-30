@@ -12,7 +12,7 @@
     "cc-candybar": "./bin/cc-candybar"
   },
   "scripts": {
-    "build": "tsx scripts/gen-schema.ts && tsdown",
+    "build": "tsdown",
     "build:rust": "cd rust-client && cargo build --release",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",

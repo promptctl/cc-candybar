@@ -57,7 +57,19 @@
             "accent",
             "duo",
             "mono",
-            "alt"
+            "alt",
+            "door-primary",
+            "door-secondary",
+            "door-alternate",
+            "start-primary",
+            "start-secondary",
+            "start-alternate",
+            "end-primary",
+            "end-secondary",
+            "end-alternate",
+            "ends-primary",
+            "ends-secondary",
+            "ends-alternate"
           ]
         },
         "shade": {
@@ -67,7 +79,11 @@
             "deeper",
             "middle",
             "brighter",
-            "brightest"
+            "brightest",
+            "wide",
+            "widest",
+            "pair",
+            "pair-wide"
           ]
         },
         "transitions": {
@@ -1229,7 +1245,19 @@
               "accent",
               "duo",
               "mono",
-              "alt"
+              "alt",
+              "door-primary",
+              "door-secondary",
+              "door-alternate",
+              "start-primary",
+              "start-secondary",
+              "start-alternate",
+              "end-primary",
+              "end-secondary",
+              "end-alternate",
+              "ends-primary",
+              "ends-secondary",
+              "ends-alternate"
             ]
           },
           "shade": {
@@ -1239,7 +1267,11 @@
               "deeper",
               "middle",
               "brighter",
-              "brightest"
+              "brightest",
+              "wide",
+              "widest",
+              "pair",
+              "pair-wide"
             ]
           }
         },
@@ -1307,7 +1339,19 @@
                   "accent",
                   "duo",
                   "mono",
-                  "alt"
+                  "alt",
+                  "door-primary",
+                  "door-secondary",
+                  "door-alternate",
+                  "start-primary",
+                  "start-secondary",
+                  "start-alternate",
+                  "end-primary",
+                  "end-secondary",
+                  "end-alternate",
+                  "ends-primary",
+                  "ends-secondary",
+                  "ends-alternate"
                 ]
               },
               "shade": {
@@ -1317,7 +1361,11 @@
                   "deeper",
                   "middle",
                   "brighter",
-                  "brightest"
+                  "brightest",
+                  "wide",
+                  "widest",
+                  "pair",
+                  "pair-wide"
                 ]
               },
               "transitions": {
@@ -1445,7 +1493,19 @@
             "accent",
             "duo",
             "mono",
-            "alt"
+            "alt",
+            "door-primary",
+            "door-secondary",
+            "door-alternate",
+            "start-primary",
+            "start-secondary",
+            "start-alternate",
+            "end-primary",
+            "end-secondary",
+            "end-alternate",
+            "ends-primary",
+            "ends-secondary",
+            "ends-alternate"
           ]
         },
         "shade": {
@@ -1455,7 +1515,11 @@
             "deeper",
             "middle",
             "brighter",
-            "brightest"
+            "brightest",
+            "wide",
+            "widest",
+            "pair",
+            "pair-wide"
           ]
         },
         "transitions": {

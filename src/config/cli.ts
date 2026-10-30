@@ -23,9 +23,9 @@ export function loadSchemaText(): string | null {
 
 // `cc-candybar schema` — print the schema so an editor can annotate a config with
 // `"$schema": "<this output, saved somewhere>"` (or the stable published URL) for
-// autocomplete + structural validation. Emitted from the loader schemas at build
-// time (scripts/gen-schema.ts → emitConfigSchema); served verbatim here (the
-// emitter runs at build, not ship time).
+// autocomplete + structural validation. Emitted from the loader schemas by
+// `pnpm gen:schema` into the committed artifact; served verbatim here (the
+// emitter runs in a source checkout, never at ship time).
 export function schemaPlan(): CliPlan {
   // [LAW:no-silent-failure] A schema that exists but cannot be read (EACCES, a
   // deletion racing the existsSync in locateSchema) is a distinct failure from

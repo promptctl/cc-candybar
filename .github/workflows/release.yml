@@ -35,6 +35,11 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # The committed schema is what editors fetch from main; nothing in this
+      # job may regenerate it before the guard reads it.
+      - name: Schema drift guard
+        run: pnpm run check:schema
+
       - name: Build
         run: pnpm run build
 
