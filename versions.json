@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-490",
+      "ref": "refs/pull/490/merge",
+      "sha": "9ff9b2efe88af52b35a48561597305b3b92d09c5",
+      "timestamp": "2026-10-30T11:53:15.627Z",
+      "commits": [
+        {
+          "sha": "9ff9b2efe88af52b35a48561597305b3b92d09c5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:52:37Z",
+          "message": "Merge 0a79253c7c79a1ee793ae63f65ccd3fdfe544a9b into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+        },
+        {
+          "sha": "0a79253c7c79a1ee793ae63f65ccd3fdfe544a9b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:52:33-06:00",
+          "message": "Merge branch 'main' into worktree-immutable-sleeping-barto"
+        },
+        {
+          "sha": "3b9f91c82fb1d0fa9665e805ac818704e95da725",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:41:32-06:00",
+          "message": "docs(joiners): fold the third review in — the closing sweep, enumerated imports, policy-chosen backgrounds, position readers, gradientSeam, sources quoted"
+        },
+        {
+          "sha": "ca37ca3160ba86a565d33805ae975ba84b5c7f8e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:29:18-06:00",
+          "message": "docs(joiners): fold the second review in — merge order, the muted dial's activated rung, byte identity without effects, 8k−1/8k, windows widen before they shrink, ansi caveat"
+        },
+        {
+          "sha": "ce1ad8fb2220cbcee891ac574d84fda3cc6731d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:20:03-06:00",
+          "message": "docs(joiners): the problem statement beside the plan"
+        },
+        {
+          "sha": "d7ba3fd451616b4238fa5d7be1469639a9aa52da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:20:02-06:00",
+          "message": "docs(joiners): fold the design review in — lift direction and ansi rule, byte-identity scope, imports text keeps, quantize per window size"
+        },
+        {
+          "sha": "7f39650bf5c406f389b84654f2f0610a76033923",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:00:36-06:00",
+          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n"
+        },
+        {
+          "sha": "70758536031569d8f24edcae8983e15cb75881ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:03:05-06:00",
+          "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
+        }
+      ]
+    },
+    {
       "version": "pr-492",
       "ref": "refs/pull/492/merge",
       "sha": "05e40aeb6dd4616a2179881fd84c4f9b628d4e67",
@@ -99,63 +163,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:29:42-06:00",
           "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-490",
-      "ref": "refs/pull/490/merge",
-      "sha": "c0a11734eae5ad79e1f967a482ea4fba3fd331ce",
-      "timestamp": "2026-10-30T11:42:20.272Z",
-      "commits": [
-        {
-          "sha": "c0a11734eae5ad79e1f967a482ea4fba3fd331ce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:41:37Z",
-          "message": "Merge 3b9f91c82fb1d0fa9665e805ac818704e95da725 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
-        },
-        {
-          "sha": "3b9f91c82fb1d0fa9665e805ac818704e95da725",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:41:32-06:00",
-          "message": "docs(joiners): fold the third review in — the closing sweep, enumerated imports, policy-chosen backgrounds, position readers, gradientSeam, sources quoted"
-        },
-        {
-          "sha": "ca37ca3160ba86a565d33805ae975ba84b5c7f8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:29:18-06:00",
-          "message": "docs(joiners): fold the second review in — merge order, the muted dial's activated rung, byte identity without effects, 8k−1/8k, windows widen before they shrink, ansi caveat"
-        },
-        {
-          "sha": "ce1ad8fb2220cbcee891ac574d84fda3cc6731d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:20:03-06:00",
-          "message": "docs(joiners): the problem statement beside the plan"
-        },
-        {
-          "sha": "d7ba3fd451616b4238fa5d7be1469639a9aa52da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:20:02-06:00",
-          "message": "docs(joiners): fold the design review in — lift direction and ansi rule, byte-identity scope, imports text keeps, quantize per window size"
-        },
-        {
-          "sha": "7f39650bf5c406f389b84654f2f0610a76033923",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:00:36-06:00",
-          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n"
-        },
-        {
-          "sha": "70758536031569d8f24edcae8983e15cb75881ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:03:05-06:00",
-          "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
         }
       ]
     },
