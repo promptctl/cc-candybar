@@ -2,45 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-504",
-      "ref": "refs/pull/504/merge",
-      "sha": "0f02db9a4f6f966ce7e23b40b2ae1e6ce9141283",
-      "timestamp": "2026-10-30T18:17:28.672Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7cc276c0c16ac5e07c5f963f30318fa6c43d9370",
+      "timestamp": "2026-10-30T18:22:29.043Z",
       "commits": [
         {
-          "sha": "0f02db9a4f6f966ce7e23b40b2ae1e6ce9141283",
+          "sha": "7cc276c0c16ac5e07c5f963f30318fa6c43d9370",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:16:40Z",
-          "message": "Merge 66a161607acc1ef1fcb87f75ccafd96a64e3a157 into f4289b24e290bb2dc07824ccd2014938750a5c6e\n"
+          "timestamp": "2026-10-30T12:21:37-06:00",
+          "message": "refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl) (#504)\n\n* refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl)\n\nEach chain layer is {path, scope}, the scope decided once where discovery\nfinds the file. repoLayers is gone from the resolution, the durable home,\nthe session, the render cache's chain and its load key, and the loader\nreads layer.scope instead of testing path membership. Hand-built chains\n(check's explicit file, demo, gallery, bench, the durable writer's home)\nstate the user's scope through one helper, homeLayer.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(config): check reports scoped layers, and a load reports the chain it loaded (candybar-plugins-vf6g.chl)\n\nReview: the check outcome dropped each layer's scope, so callers rebuilt a\ndifferent chain from it; an explicit check took its layer by hand instead of\nthe resolution's; the load frame carried a second copy of the chain's paths.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(check): a cwd config in an approved repository is a repo layer (candybar-plugins-vf6g.chl)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(check): an explicit target is one layer, spelled once (candybar-plugins-vf6g.chl)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         },
         {
-          "sha": "66a161607acc1ef1fcb87f75ccafd96a64e3a157",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:52:54-06:00",
-          "message": "refactor(check): an explicit target is one layer, spelled once (candybar-plugins-vf6g.chl)\n"
-        },
-        {
-          "sha": "a3727951a54e4ec0ae9a4e39b54354fc05ff00e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:48:04-06:00",
-          "message": "test(check): a cwd config in an approved repository is a repo layer (candybar-plugins-vf6g.chl)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "99218e9ee054b91401352f1767fb3c7498498db2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:47:42-06:00",
-          "message": "refactor(config): check reports scoped layers, and a load reports the chain it loaded (candybar-plugins-vf6g.chl)\n\nReview: the check outcome dropped each layer's scope, so callers rebuilt a\ndifferent chain from it; an explicit check took its layer by hand instead of\nthe resolution's; the load frame carried a second copy of the chain's paths.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "7937699092283678a762f47f58ab6796e62fabc3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:41:49-06:00",
-          "message": "refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl)\n\nEach chain layer is {path, scope}, the scope decided once where discovery\nfinds the file. repoLayers is gone from the resolution, the durable home,\nthe session, the render cache's chain and its load key, and the loader\nreads layer.scope instead of testing path membership. Hand-built chains\n(check's explicit file, demo, gallery, bench, the durable writer's home)\nstate the user's scope through one helper, homeLayer.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+          "sha": "f4289b24e290bb2dc07824ccd2014938750a5c6e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T18:15:35Z",
+          "message": "chore(release): set `package.json` to 1.167.1 [skip ci]\n\n## [1.167.1](https://github.com/promptctl/cc-candybar/compare/v1.167.0...v1.167.1) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30) ([#503](https://github.com/promptctl/cc-candybar/issues/503)) ([e03723c](https://github.com/promptctl/cc-candybar/commit/e03723ccfd5e2ed7bcd921e08ab6228dc1949671))\n"
         }
       ]
     },
@@ -99,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:53:27-06:00",
           "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e03723ccfd5e2ed7bcd921e08ab6228dc1949671",
-      "timestamp": "2026-10-30T18:07:43.630Z",
-      "commits": [
-        {
-          "sha": "e03723ccfd5e2ed7bcd921e08ab6228dc1949671",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:06:45-06:00",
-          "message": "fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30) (#503)\n\n* fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30)\n\nThe open door's ✖ now selects among the reds the theme names for its error\nrole instead of wearing the base red: `text-error` where it clears\nTEXT_MIN_CONTRAST on the pressed state as truecolor draws it, otherwise the\nfirst rung of the error ladder out toward the pole the ground stands farther\nfrom that clears, and where none clears, the named red standing farthest off.\nIt never slides lightness and is never a synthesised colour; `keptOn` still\nholds its contrast through rounding at 256 and ansi.\n\nA new rig test opens the door under every bundled theme and dial position at\ntruecolor, 256 and ansi and measures the ✖ as drawn; it lists the themes where\nno named red clears, with the red worn and the ratio reached. The palette\nidentity test now holds the ✖ to the theme's error reds.\n\n* test(colour): the door's ✖ is held on every ground a variation opens it on, and the design doc states its rule (candybar-joiners-e5r4.i30)\n\nThe sweep ran the default variation only, but the door's ground is its variation's menu hue at the dial's pressed rung, so a variation with another lineage gives the ✖ another ground. It now draws every dial position under the bundled variation and every variation at each pressed rung, split by theme so each test stays inside the suite's time limit, and lists the farthest-off red by the ground's palette name. 22 of 23 themes now list a ground; only textual-ansi clears everywhere.\n\n* fix(colour): roleTextOn walks out from the role's own colour, so the theme's red wins where it reads (candybar-joiners-e5r4.i30)\n\nThe walk after text-<role> skipped the role itself while the farthest-off fallback counted it, so on a ground where the base red clears and the text colour does not, a rung was taken over the theme's own red. No bundled door ground changes; roleTextOn is a template function, and its answer elsewhere now follows the rule it states. The private selector is renamed apart from decor's sliding roleText, and the seam's doc names every function it binds.\n\n* test(colour): the ✖ is held to a named red on every ground the sweep draws (candybar-joiners-e5r4.i30)\n\nThe palette-identity sweep draws the bundled variation only, and the contrast sweep checked the ink only on listed grounds, so a synthesised red that cleared the floor under another variation went unseen. The contrast sweep now holds every door's ink to the theme's named reds. The selector's doc says the fallback is taken whenever the walk finds none, and clears wherever any named colour does."
-        },
-        {
-          "sha": "60d9da3ab14bbf0a4f835357c392667f7dc1a884",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T17:46:31Z",
-          "message": "chore(release): set `package.json` to 1.167.0 [skip ci]\n\n## [1.167.0](https://github.com/promptctl/cc-candybar/compare/v1.166.3...v1.167.0) (2026-10-30)\n\n### Features\n\n* **tmux:** the tmux status line is a renderer the config menu offers inside tmux (candybar-plugins-vf6g.qzx) ([#499](https://github.com/promptctl/cc-candybar/issues/499)) ([4674510](https://github.com/promptctl/cc-candybar/commit/46745100f446a07971644e712c1ae93efc7f4a04))\n"
         }
       ]
     },
