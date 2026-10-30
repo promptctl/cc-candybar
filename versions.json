@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-499",
+      "ref": "refs/pull/499/merge",
+      "sha": "9fb4f7c20591a281988df8670b6ffdf2a20d5126",
+      "timestamp": "2026-10-30T14:45:15.282Z",
+      "commits": [
+        {
+          "sha": "9fb4f7c20591a281988df8670b6ffdf2a20d5126",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:44:20-06:00",
+          "message": "Merge ab74d23aefa8adf9e50b569a8c200d4b4dd988e4 into b1b30c3e8dc47d1989a6d2abe48e0e0eca3f232c\n"
+        },
+        {
+          "sha": "ab74d23aefa8adf9e50b569a8c200d4b4dd988e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:43:47-06:00",
+          "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-496",
       "ref": "refs/pull/496/merge",
       "sha": "7e976b419ecee242a29a71308c273c4ce64bb5de",
