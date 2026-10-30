@@ -716,13 +716,29 @@ function prependAnchor(node: LayoutNode): LayoutNode {
           children: [anchorRef, node],
         };
   }
-  return node.kind === "container" && node.when === undefined
-    ? { ...node, children: [anchorRef, ...node.children] }
-    : {
-        kind: "container",
-        direction: "horizontal",
-        children: [anchorRef, node],
-      };
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node],
+    };
+  }
+  if (node.when === undefined) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  // [LAW:one-source-of-truth] A gated row is led from outside its gate: it
+  // stays the row, now led by the door, and only its gate moves in, onto a
+  // container around its cells. A row nested in a row places nothing, so
+  // whatever makes it a row (its distribution) stays on the row its cells are
+  // laid on, as an ungated row's places the door beside its cells.
+  const { when, children, ...row } = node;
+  return {
+    ...row,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row.direction, when, children },
+    ],
+  };
 }
 
 // [LAW:parse-dont-validate] The checkpoint: in, a tree that may or may not name
@@ -837,8 +853,9 @@ function placeBody(place: Place): ContainerNode {
 //
 // [LAW:single-enforcer] The anchor is the one position every bar is
 // guaranteed, so what every bar carries hangs on it: the door and, beside it,
-// how the bar is redrawn (FRAME_RATE). One unit, so the two share the door's
-// band, and no preset or authored root has to remember the rate.
+// how the bar is redrawn (FRAME_RATE). One node, so no preset or authored root
+// has to remember the rate; a plain horizontal one, so the two take two places
+// of the row and differ in shade as any two cells side by side do.
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)

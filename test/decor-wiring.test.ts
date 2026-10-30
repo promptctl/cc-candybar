@@ -30,6 +30,7 @@ import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
+  decorEntryFor,
   decorFor,
   DISTRIBUTIONS,
   SHADES,
@@ -150,6 +151,35 @@ const SRC = `{
   ] },
 }`;
 
+const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
+// The one dial position whose window holds a single tone, so it parts no two
+// neighbours and the adjacency checks pass over it. candybar-joiners-e5r4.tx7
+// gives it a second tone; the guard in the adjacency test then fails, and the
+// exemption goes with it.
+const ONE_TONE: ShadeName = "muted";
+const FIVE = ["a", "b", "c", "d", "e"];
+
+/**
+ * A bar whose middle row is `cells`, with the row's own `fields` after them,
+ * each of a…e gated on its own input (`sa` … `se`, and `sg` for a group's
+ * gate), all shown by default. The settings door leads the first row and edit
+ * mode's `(?)` trails the last, so the row under test holds only what it
+ * authors.
+ */
+const groupedRow = (cells: string, fields = ""): string => `{
+  globals: { palette: '${THEME}' },
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    ${[...FIVE, "g"].map((g) => `s${g}: { kind: 'input', path: 's${g}', type: 'boolean', default: true }`).join(",\n    ")},
+  },
+  segments: {
+    y: { template: 'Y' },
+    z: { template: 'Z' },
+    ${FIVE.map((n) => `${n}: { template: '«${n}»', when: '{{ .s${n} }}' }`).join(",\n    ")},
+  },
+  root: { v: [ { h: ['y'] }, { h: ${cells}${fields} }, { h: ['z'] } ] },
+}`;
+
 describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFor", () => {
   test("a segment with no `bg:` wears the vocabulary entry its address selects", () => {
     const rt = build(SRC);
@@ -185,6 +215,30 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     rt.render({ show: false });
     expect(["a", "b", "meaning", "echo"].map((n) => rt.bgOf(n))).toEqual(shown);
     rt.dispose();
+    // Nor in a row whose middle cells are grouped, where every leaf takes its
+    // own place, one group deep or two: hiding any one cell, or the gated
+    // group, leaves every other cell's tone where it was, under every dial
+    // position.
+    const rows = [
+      ["[ 'a', { h: [ 'b', 'c', 'd' ], when: '{{ .sg }}' }, 'e' ]", ["b", "c", "d"]],
+      ["[ 'a', { h: [ 'b', { h: [ 'c', 'd' ], when: '{{ .sg }}' } ] }, 'e' ]", ["c", "d"]],
+    ] as const;
+    for (const [cells, group] of rows) {
+      const grouped = build(groupedRow(cells));
+      for (const shade of SHADE_NAMES) {
+        grouped.render({}, undefined, shade);
+        const before = new Map(FIVE.map((n) => [n, grouped.bgOf(n)]));
+        for (const gate of [...FIVE, "g"]) {
+          const drawn = grouped.render({ [`s${gate}`]: false }, undefined, shade);
+          const gone: readonly string[] = gate === "g" ? group : [gate];
+          expect([cells, gate, FIVE.filter((n) => drawn.includes(`«${n}»`))]).toEqual([cells, gate, FIVE.filter((n) => !gone.includes(n))]);
+          for (const name of FIVE.filter((n) => !gone.includes(n))) {
+            expect([cells, shade, gate, name, grouped.bgOf(name)]).toEqual([cells, shade, gate, name, before.get(name)]);
+          }
+        }
+      }
+      grouped.dispose();
+    }
   });
 
   test("colour comes from where a segment sits, not from how many leaves precede it", () => {
@@ -353,6 +407,7 @@ import type { SemanticRole } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { selectionFor } from "./helpers/selection";
+import { stripAnsi } from "./helpers/ansi";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.
@@ -458,12 +513,12 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     rt.render();
     const palette = transposePalette(getThemePalette(THEME), IDENTITY_KEY);
     for (const name of ["a", "b", "c"]) {
-      // The row places its cells at the step after the row's own; edit mode
-      // wraps each cell with its `+`/`-`, whose placer is not the row's.
+      // The row places every step under it: its cells, and whatever they
+      // nest — edit mode wraps each cell with its `+`/`-` in a unit that
+      // shares the cell's place, placed by the row too.
       const address = addressOf(plain.root, name);
-      const own = address.findLastIndex((step) => step.axis === "row") + 1;
-      const rePlaced: Address = address.map((step, i) =>
-        i === own ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
+      const rePlaced: Address = address.map((step) =>
+        step.axis === "cell" ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
       );
       expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, rePlaced).hex]);
     }
@@ -500,7 +555,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       );
       expect([name, moved]).toEqual([
         name,
-        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row" }],
+        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row", lineStart: 0, lineEnd: 1 }],
       ]);
       expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, authored).hex]);
     }
@@ -517,17 +572,51 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
   });
 
-  test("a distribution inside a bar cell is a load error: the cell's contents wear its tone", () => {
-    const nested = (field: string): string => `{
+  test("a distribution inside a row is a load error, one message wherever it sits there: the row places every cell along its line", () => {
+    const bar = (row: string): string => `{
       globals: { palette: '${THEME}' },
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
-      root: { v: [ { h: ['a', { h: ['b', 'c']${field} }] } ] },
+      root: { v: [ { h: ${row} } ] },
     }`;
-    build(nested("")).dispose();
-    expect(() => build(nested(", distribution: 'monotonic'"))).toThrow(
-      /sets "distribution" on a container inside a cell/,
-    );
+    const M = ", distribution: 'monotonic'";
+    build(bar(`['a', { h: ['b', { h: ['c'] }] }]`)).dispose();
+    // On a group nested in the row, on a container nested in that group, and
+    // on a `{ v }` in the row: each placed nothing, and each says so alike.
+    const refusals = [
+      [`['a', { h: ['b', 'c']${M} }]`, "root.children[0].children[1]"],
+      [`['a', { h: ['b', { h: ['c']${M} }] }]`, "root.children[0].children[1].children[1]"],
+      [`['a', { v: ['b', 'c']${M} }]`, "root.children[0].children[1]"],
+    ].map(([row, path]) => {
+      let message = "";
+      try {
+        build(bar(row!)).dispose();
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect([row, message]).toEqual([row, expect.stringContaining(`${path} sets "distribution" on a container inside a row`)]);
+      return message.slice(message.indexOf(`${path} sets`) + path!.length);
+    });
+    expect(new Set(refusals).size).toBe(1);
+  });
+
+  test("a gated first row places its cells by its own distribution, as an ungated one does, though the door leads it from outside its gate", () => {
+    const bar = (gate: string): string => `{
+      globals: { palette: '${THEME}' },
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        x: { kind: 'input', path: 'x', type: 'boolean', default: true },
+      },
+      segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
+      root: { v: [ { h: ['a', 'b', 'c'], distribution: 'monotonic'${gate} } ] },
+    }`;
+    const open = build(bar(""));
+    const gated = build(bar(", when: '{{ .x }}'"));
+    open.render();
+    gated.render();
+    expect(["a", "b", "c"].map((n) => gated.bgOf(n))).toEqual(["a", "b", "c"].map((n) => open.bgOf(n)));
+    open.dispose();
+    gated.dispose();
   });
 
   test("on the bar, a distribution on a vertical container whose rows stack further in is a load error", () => {
@@ -547,7 +636,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
   });
 
-  test("in a body, a distribution is refused where nothing reads it: inside a cell, or on a vertical container", () => {
+  test("in a body, a distribution is refused where nothing reads it: inside a row, or on a vertical container", () => {
     const body = (tree: string): string => `{
       globals: { palette: '${THEME}' },
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
@@ -567,10 +656,11 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
         /root\.children\[0\]\.opens\.body\.children\[0\] sets "distribution" on a vertical container in a disclosure body/,
       );
     }
-    // Inside a cell of a body it places nothing, as on the bar.
-    expect(() => build(body(`{ h: [ 'c', { h: ['a', 'b']${M} } ] }`))).toThrow(
-      /sets "distribution" on a container inside a cell/,
-    );
+    // Inside a body's row it places nothing, as on the bar: the row places
+    // every item along its line, through a group nested in it.
+    for (const tree of [`{ h: [ 'c', { h: ['a', 'b']${M} } ] }`, `{ h: [ 'c', { h: ['a', { h: ['b']${M} }] } ] }`]) {
+      expect(() => build(body(tree))).toThrow(/sets "distribution" on a container inside a row/);
+    }
   });
 
   test("a group carries the same field for its body", () => {
@@ -595,6 +685,118 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       /distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform/,
     );
     plain.dispose();
+    rt.dispose();
+  });
+});
+
+// candybar-joiners-e5r4.3m7: a container inside a row is layout, not a colour
+// unit. Its leaves sit side by side with the row's other cells, so each takes
+// its own place on the row's line, and a row reads as the flat row of its
+// leaves does, however it nests them.
+describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, however the row nests them", () => {
+  const tints = (rt: ReturnType<typeof build>, names: readonly string[]): string[] => names.map((n) => rt.bgOf(n));
+
+  test("a row authored as a, { h: [b, c, d] }, e draws five places: each cell wears what a flat row of five wears there, and no two neighbours share a tone", () => {
+    const grouped = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] }, 'e' ]"));
+    const flat = build(groupedRow("[ 'a', 'b', 'c', 'd', 'e' ]"));
+    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length === 1)).toEqual([ONE_TONE]);
+    for (const shade of SHADE_NAMES) {
+      grouped.render({}, undefined, shade);
+      flat.render({}, undefined, shade);
+      expect([shade, tints(grouped, FIVE)]).toEqual([shade, tints(flat, FIVE)]);
+      // The tone each cell's place selects, as the walk drew it. Only the
+      // one-tone position wears one tone everywhere.
+      const tones = FIVE.map((n) => decorEntryFor(decorOf(undefined, shade), addressOf(grouped.root, n)).shade);
+      const alike = FIVE.slice(1).filter((n, i) => shade !== ONE_TONE && tones[i + 1] === tones[i]);
+      expect([shade, alike]).toEqual([shade, []]);
+    }
+    grouped.dispose();
+    flat.dispose();
+  });
+
+  test("with a group ending a row, only its last leaf wears the line-end keystone; under alt the hue run counts the group's leaves as cells", () => {
+    const FOUR = FIVE.slice(0, 4);
+    const grouped = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] } ]"));
+    const flat = build(groupedRow("[ 'a', 'b', 'c', 'd' ]"));
+    const hues = (variation: VariationName) =>
+      FOUR.map((n) => decorEntryFor(decorOf(variation), addressOf(grouped.root, n)).hue);
+    expect(hues("end-primary")).toEqual(["secondary", "secondary", "secondary", "accent"]);
+    // The row under test is the bar's second, so alt starts it on its second
+    // step and turns after three cells: at d, the group's last leaf.
+    expect(hues("alt")).toEqual(["accent", "accent", "accent", "secondary"]);
+    for (const variation of ["end-primary", "alt"] as const) {
+      grouped.render({}, variation);
+      flat.render({}, variation);
+      expect([variation, tints(grouped, FOUR)]).toEqual([variation, tints(flat, FOUR)]);
+    }
+    grouped.dispose();
+    flat.dispose();
+  });
+
+  test("a { v } inside a row draws its first child on the row's line and each other on a line below, each counting from where the { v } sits; the row's count is the farthest place any line reaches, and each line has its own ends", () => {
+    // The { v } sits at place 1. Its second child, a group of three, draws on
+    // a line of its own below the row and reaches place 3, past the row line's
+    // last place: a count of the row line's two places would put d and e
+    // outside the row, where a count-reading distribution places nothing.
+    const rt = build(groupedRow("[ 'a', { v: [ 'b', { h: [ 'c', 'd', 'e' ] } ] } ]", ", distribution: 'monotonic'"));
+    const drawn = rt.render();
+    const lines = stripAnsi(drawn)
+      .split("\n")
+      .map((line) => [...line.matchAll(/«(\w)»/g)].map(([, name]) => name))
+      .filter((names) => names.length > 0);
+    expect(lines).toEqual([["a", "b"], ["c", "d", "e"]]);
+    const places = Object.fromEntries(
+      FIVE.map((n) => {
+        const { index, count } = addressOf(rt.root, n).at(-1)!;
+        return [n, [index, count]];
+      }),
+    );
+    expect(places).toEqual({ a: [0, 4], b: [1, 4], c: [1, 4], d: [2, 4], e: [3, 4] });
+    for (const shade of SHADE_NAMES) {
+      rt.render({}, undefined, shade);
+      expect([shade, tints(rt, FIVE)]).toEqual([shade, FIVE.map((n) => rt.expectedTint(n, undefined, shade))]);
+    }
+    // Every drawn line has its own ends: b ends the row's line though d and e
+    // reach further on the line below, and c starts that line.
+    const hues = (variation: VariationName) =>
+      FIVE.map((n) => decorEntryFor(decorOf(variation), addressOf(rt.root, n)).hue);
+    expect(hues("end-primary")).toEqual(["secondary", "accent", "secondary", "secondary", "accent"]);
+    expect(hues("start-primary")).toEqual(["accent", "secondary", "accent", "secondary", "secondary"]);
+    for (const variation of ["end-primary", "start-primary"] as const) {
+      rt.render({}, variation);
+      expect([variation, tints(rt, FIVE)]).toEqual([variation, FIVE.map((n) => rt.expectedTint(n, variation))]);
+    }
+    rt.dispose();
+  });
+
+  test("an empty container draws no line, so a { v } whose first child is empty draws its next child on the row's line, at a place of its own", () => {
+    const rt = build(groupedRow("[ 'a', { v: [ { h: [] }, 'b' ] }, 'c' ]"));
+    const lines = stripAnsi(rt.render())
+      .split("\n")
+      .map((line) => [...line.matchAll(/«(\w)»/g)].map(([, name]) => name))
+      .filter((names) => names.length > 0);
+    expect(lines).toEqual([["a", "b", "c"]]);
+    const THREE = FIVE.slice(0, 3);
+    const places = THREE.map((n) => {
+      const { index, count, lineStart, lineEnd } = addressOf(rt.root, n).at(-1)!;
+      return [n, index, count, lineStart, lineEnd];
+    });
+    expect(places).toEqual([
+      ["a", 0, 3, 0, 2],
+      ["b", 1, 3, 0, 2],
+      ["c", 2, 3, 0, 2],
+    ]);
+    rt.dispose();
+  });
+
+  test("edit chrome keeps one place per content cell, so a grouped row wears in edit mode what it wears outside it", () => {
+    const rt = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] }, 'e' ]"));
+    rt.render();
+    const closed = tints(rt, FIVE);
+    rt.sessionState.set("s1", EDIT_MODE_KEY, "arrange");
+    rt.sessionState.set("s1", EDIT_LIVE_KEY, "open");
+    rt.render();
+    expect(tints(rt, FIVE)).toEqual(closed);
     rt.dispose();
   });
 });

@@ -1064,8 +1064,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "model" },
-          // One cell unit: the auto-compact window reads against the context
-          // use beside it, and hidden it takes no colour slot from the row.
+          // The auto-compact window reads against the context use beside it,
+          // so the two are placed together; like any two cells side by side,
+          // each takes its own place in the row's colours.
           {
             kind: "container",
             direction: "horizontal",

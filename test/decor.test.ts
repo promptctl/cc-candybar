@@ -190,8 +190,15 @@ describe("the shade dial", () => {
     // A node alone on the cell axis is its line's first cell and its last.
     expect(decorEntryFor(under("end-primary"), [row(1, 2)]).hue).toBe("accent");
     expect(decorEntryFor(under("start-primary"), [row(1, 2)]).hue).toBe("accent");
-    // What is nested inside a keystone cell wears it.
-    expect(decorEntryFor(under("ends-primary"), [row(0, 2), cell(3, 4), cell(1, 3)]).hue).toBe("accent");
+    // A cell's place is its own however the row nests it: a group ending a row
+    // at place 1 holds places 1 to 3 of 4, and only its last leaf ends the line.
+    expect([1, 2, 3].map((i) => decorEntryFor(under("end-primary"), [row(0, 2), cell(1, 4), cell(i, 4)]).hue)).toEqual([
+      "secondary",
+      "secondary",
+      "accent",
+    ]);
+    // Edit chrome's unit shares its cell's place, so it wears the keystone too.
+    expect(decorEntryFor(under("ends-primary"), [row(0, 2), cell(3, 4), cell(3, 4)]).hue).toBe("accent");
   });
 
   test("every shipped theme carries every role the vocabulary names", () => {
@@ -245,14 +252,17 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     // Only the innermost row counts: a row stacked above the whole bar (edit
     // mode's reset banner wraps the content as row 1 of 2) recolours nothing.
     expect(decorEntryFor(TWO_STEP, [row(1, 2), row(0, 2), cell(3, 6)])).toEqual({ hue: "primary", shade: "base" });
-    // Anything nested inside a cell wears the cell's hue and shade: edit
-    // mode's `+`/`-` wrap each content cell as the middle of three, and a `{ v }`
-    // inside a cell stacks rows that are not the bar's.
-    for (const nested of [[cell(1, 3)], [row(0, 2)], [row(0, 2), cell(2, 3)]]) {
-      expect(decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6), ...nested])).toEqual(
-        decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6)]),
-      );
-    }
+    // A cell is a leaf of its row, at its own place on the row's line however
+    // the row nests it: the third leaf of a group at place 2 is at place 4,
+    // and wears what a cell the row holds directly at 4 wears.
+    expect(decorEntryFor(TWO_STEP, [row(1, 2), cell(2, 6), cell(4, 6)])).toEqual(
+      decorEntryFor(TWO_STEP, [row(1, 2), cell(4, 6)]),
+    );
+    // Edit mode's unit around a content cell shares that cell's place, every
+    // child of it, so entering edit mode recolours nothing.
+    expect(decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6), cell(3, 6)])).toEqual(
+      decorEntryFor(TWO_STEP, [row(1, 2), cell(3, 6)]),
+    );
     // A bar with no vertical container is one row, in the first bar hue.
     expect(decorEntryFor(TWO_STEP, [cell(1, 4)])).toEqual({ hue: TWO_STEP.variation.hues[0], shade: "base" });
   });
@@ -337,13 +347,14 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     expect(new Set(shades).size).toBe(3);
   });
 
-  test("anything nested inside an alt cell wears that cell's hue", () => {
+  test("alt's run counts leaves: a group's cells turn the hue as the row's own cells do", () => {
     const alt = decorWith(VARIATIONS.alt);
-    for (const nested of [[cell(0, 3)], [cell(2, 3)], [row(1, 2), cell(1, 3)]]) {
-      expect(decorEntryFor(alt, [row(0, 2), cell(4, 8), ...nested])).toEqual(
-        decorEntryFor(alt, [row(0, 2), cell(4, 8)]),
-      );
-    }
+    // A group at place 1 holding places 1 to 3: its last leaf is the row's
+    // fourth cell, past the first run of three.
+    const grouped = [1, 2, 3].map((i) => decorEntryFor(alt, [row(0, 2), cell(1, 8), cell(i, 8)]).hue);
+    const flat = [1, 2, 3].map((i) => decorEntryFor(alt, [row(0, 2), cell(i, 8)]).hue);
+    expect(grouped).toEqual(flat);
+    expect(grouped).toEqual(["secondary", "secondary", "accent"]);
   });
 
   test("a stack of rows inside a row restarts the alternation: siblings alternate, not lines", () => {
@@ -566,14 +577,16 @@ describe("a band item is placed by its step", () => {
         for (const r of [0, 1]) {
           expect([0, 1, 2].map((c) => inBand([row(r, 2), cell(c, 3)]))).toEqual([0, 1, 2].map(expected));
         }
-        // Whatever is nested inside a cell wears that cell's item: edit chrome
-        // wraps every content cell of a user's body in a unit (✚, label, the
-        // cell, ✚), so the cell is the unit's second child whichever cell it is.
-        expect([0, 1, 2].map((c) => inBand([cell(c, 3), cell(1, 4)]))).toEqual([0, 1, 2].map(expected));
+        // Edit chrome wraps every content cell of a user's body in a unit (✚,
+        // label, the cell, ✚) that shares the cell's place, so each wears that
+        // cell's item; a group's leaves take places along the row as its own
+        // cells do.
+        expect([0, 1, 2].map((c) => inBand([cell(c, 3), cell(c, 3)]))).toEqual([0, 1, 2].map(expected));
+        expect([1, 2].map((c) => inBand([row(0, 1), cell(1, 3), cell(c, 3)]))).toEqual([1, 2].map(expected));
         // A row picks nothing: a segment that is a row by itself is a first
         // cell, as edit chrome's one-cell row around it is.
         expect([0, 1].map((r) => inBand([row(r, 2)]))).toEqual([expected(0), expected(0)]);
-        expect([0, 1].map((r) => inBand([row(r, 2), cell(0, 1), cell(1, 4)]))).toEqual([expected(0), expected(0)]);
+        expect([0, 1].map((r) => inBand([row(r, 2), cell(0, 1), cell(0, 1)]))).toEqual([expected(0), expected(0)]);
         // A body that is one segment is a first item, beside its ✕.
         expect(inBand([])).toBe(expected(0));
         expect(item(undefined)).toBe(expected(0));

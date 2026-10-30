@@ -247,8 +247,8 @@ export const lineageHue = (lineage: Lineage, depth: number): DecorHue =>
  * A place along a drawn line that a variation may single out for the keystone
  * hue: the bar's first cell (the settings door under the default placement),
  * the first cell of every line, the last cell of every line. Read off a cell's
- * authored position among its row's siblings, as its shade is, so hiding a
- * cell moves no keystone — a hidden last cell leaves its line's end bare.
+ * authored place on its row's line, as its shade is, so hiding a cell moves no
+ * keystone — a hidden last cell leaves its line's end bare.
  */
 export type Keystone = "bar-start" | "line-start" | "line-end";
 
@@ -516,6 +516,14 @@ export type Axis = "row" | "cell";
 /** One step down the bar's tree: a placed position, and which axis it steps along. */
 export interface AddressStep extends PlacedStep {
   readonly axis: Axis;
+  /**
+   * The first and last places of the line the step's node is drawn on, so
+   * the keystones find the ends of every drawn line: a row's own line, or a
+   * line a `{ v }` inside it draws below, which starts where the `{ v }`
+   * sits. A row step's are the ends of its stack.
+   */
+  readonly lineStart: number;
+  readonly lineEnd: number;
 }
 
 /** The steps from the root to a node. The root's address is empty. */
@@ -585,19 +593,22 @@ export function vocabularySelect<T extends {}>(
 }
 
 /**
- * A bar address read as the rows it stacks through, then the cell of the
- * innermost of them, then whatever is nested inside that cell: the row it
- * stands in is the LAST of those rows, and its cell the step after it. An
- * absent step is a node alone on that axis — a bar with no vertical container,
- * a one-cell row — placed where a first child is.
+ * A bar address read as the rows it stacks through, then its place on the
+ * line of the innermost of them: the row it stands in is the LAST of those
+ * rows, and its cell the LAST cell step — the compile places every node under
+ * a row at its leaf's place on the row's line (`placeChildren` in
+ * src/dsl/node-registry.ts), so the innermost is the node's own. An absent
+ * step is a node alone on that axis — a bar with no vertical container, a
+ * one-cell row — placed where a first child is.
  */
 function rowAndCell(address: Address): {
   readonly row: AddressStep | undefined;
   readonly cell: AddressStep | undefined;
 } {
-  const at = address.findIndex((step) => step.axis === "cell");
+  const isCell = (step: AddressStep): boolean => step.axis === "cell";
+  const at = address.findIndex(isCell);
   const rows = at === -1 ? address : address.slice(0, at);
-  return { row: rows.at(-1), cell: address[rows.length] };
+  return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
 
 /** The step of the variation a row starts on: the bin its placement falls in. */
@@ -609,15 +620,18 @@ const rowStart = (variation: Variation, row: AddressStep | undefined): number =>
  * of the rows it stacks through chooses the hue the row starts on, so a row
  * stacked above the whole bar (edit mode's reset banner) recolours no row
  * beneath it; the cell chooses the shade, and its index how many of the
- * variation's runs it has passed along the row. Anything nested inside a cell
- * — edit mode's `+`/`-` around it, an authored `{ h }` or `{ v }` — wears the
- * cell's hue and shade: a row's cells are what sit side by side, so they are
- * what must differ, and the loader refuses a `distribution` authored inside a
- * cell, where it could place nothing. A cell's run counts its position among
- * its row's siblings in the tree the walk renders — authored, never what is
- * visible, so hiding one recolours none — and a synthesized cell counts like
- * an authored one: the settings door leading the first row takes that row's
- * first slot.
+ * variation's runs it has passed along the row. A cell is a leaf of its row,
+ * however the row nests it: the leaves of an authored `{ h }` inside a row
+ * sit side by side with the row's other cells, so each takes its own place
+ * on the line and they differ as any neighbours do. A `{ v }` inside a row
+ * draws its first child on the row's line and each other on a line of its
+ * own, each starting at the place the `{ v }` sits. Edit mode's chrome is
+ * spliced in as one unit with the cell it edits, so all of it wears that
+ * cell's place and entering edit mode recolours nothing. A cell's place is
+ * counted in the tree the walk renders — authored, never what is visible, so
+ * hiding one recolours none — and a synthesized cell counts like an authored
+ * one: the settings door leading the first row takes that row's first place,
+ * and its frame-rate cell the next.
  *
  * Rows alternate among SIBLINGS. A row that is itself a stack of rows restarts
  * the alternation inside it, so its last line can wear the hue of the row
@@ -647,19 +661,21 @@ export function decorEntryFor(decor: Decor, address: Address): DecorEntry {
   };
 }
 
-// Whether a cell stands at a keystone place, read off its authored position
-// among its row's siblings. A node alone on an axis (an absent step) is that
-// axis's first child and its last. [LAW:dataflow-not-control-flow] One
-// predicate per place, in a table the variation's list indexes.
+// Whether a cell stands at a keystone place, read off its authored place and
+// the ends of the line it is drawn on: a line's last place is the last leaf
+// laid along it, through any group nested in the row. A node alone on an axis
+// (an absent step) is that axis's first child and its last.
+// [LAW:dataflow-not-control-flow] One predicate per place, in a table the
+// variation's list indexes.
 const KEYSTONE_AT: Record<
   Keystone,
   (row: AddressStep | undefined, cell: AddressStep | undefined) => boolean
 > = {
   "bar-start": (row, cell) =>
     (row?.index ?? 0) === 0 && (cell?.index ?? 0) === 0,
-  "line-start": (_row, cell) => (cell?.index ?? 0) === 0,
-  "line-end": (_row, cell) =>
-    cell === undefined || cell.index === cell.count - 1,
+  "line-start": (_row, cell) =>
+    cell === undefined || cell.index === cell.lineStart,
+  "line-end": (_row, cell) => cell === undefined || cell.index === cell.lineEnd,
 };
 
 /**
@@ -956,7 +972,14 @@ export function sameRegion(a: Region, b: Region): boolean {
 }
 
 const sameAddress = sameEach(
-  sameBy<AddressStep>({ index: is, count: is, distribution: is, axis: is }),
+  sameBy<AddressStep>({
+    index: is,
+    count: is,
+    distribution: is,
+    axis: is,
+    lineStart: is,
+    lineEnd: is,
+  }),
 );
 
 export const sameDecor = sameBy<Decor>({ variation: is, shade: is });
@@ -1042,10 +1065,11 @@ export function decorationFor(
     case "band": {
       const { band, address } = region;
       // [LAW:one-source-of-truth] A band item is placed by its cell, read as
-      // the bar reads one (`rowAndCell`): whatever is nested in a cell — edit
-      // chrome's unit around each content cell of a user's body — wears that
-      // cell's item, and a row picks nothing, so a one-cell row and edit
-      // chrome's wrapping of it are both a first cell.
+      // the bar reads one (`rowAndCell`): a leaf's place on its row's line,
+      // through any group nested in the row — edit chrome's unit around each
+      // content cell of a user's body shares that cell's place, so wears its
+      // item — and a row picks nothing, so a one-cell row and edit chrome's
+      // wrapping of it are both a first cell.
       return {
         ...bandItem(palette, band, rowAndCell(address).cell, drawnAt),
         disclosure: nestedIn(band),

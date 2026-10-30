@@ -12,7 +12,7 @@ A closed cell's colour depends on where it sits. The row picks the hue: a decora
 
 No colour is synthesised. A closed cell wears its role at its shade exactly as the theme names it. A test checks that every background the bar draws, closed or with the settings menu open, is a colour its palette names.
 
-Anything nested inside a cell wears that cell's hue and shade. That's why edit mode's chrome is spliced in as one unit with the cell it edits. Spliced in as siblings, it would take positions and recolour the row.
+A cell is a leaf of its row. A horizontal group nested in a row is layout, not a colour unit, because its cells sit side by side with the row's other cells, and neighbours must differ: each of its leaves takes its own place on the line, as the settings door and its frame-rate cell do. Edit mode's chrome is the one exception. It is spliced in as one unit with the cell it edits, sharing that cell's place, because entering edit mode must not recolour the bar. Spliced in as siblings, it would take positions and recolour the row.
 
 Because colour follows address, hiding a sibling recolours nothing.
 

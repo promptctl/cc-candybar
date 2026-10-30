@@ -15,12 +15,13 @@ import {
   getThemePalette,
   listThemePalettes,
 } from "@promptctl/rich-js";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
-import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
+import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { SWATCH_GLYPH } from "../src/render/swatch";
-import { SHADES, type ShadeName } from "../src/themes/decor";
+import { DECOR_HUES, SHADES, paletteRole, shadeRole, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { POWERLINE } from "./helpers/powerline";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
@@ -162,5 +163,49 @@ describe("a lower depth draws each of those colours rounded once", () => {
     }
     expect(wrong).toEqual([]);
     expect(measured).toBeGreaterThan(LOOKS.length * THEMES.length * VIEWS.length * 100);
+  });
+});
+
+// candybar-joiners-e5r4.3m7: the door and the frame-rate cell beside it are
+// built as one unit, so every bar carries the rate wherever the door sits,
+// but they sit side by side on the row's line, so they take two of its places.
+describe("the settings door and its frame-rate cell take two places of the first row", () => {
+  // A theme that names every tone of every window apart, so two cells of one
+  // hue in two colours are two tones, and in one colour one.
+  const THEME = "textual-dark";
+  const palette = getThemePalette(THEME)!;
+  // The background under the first character of `text` on the bar's first line.
+  const groundUnder = (rendered: string, text: string): string | undefined => {
+    const line = decodeAnsi(rendered.split("\n")[0]!);
+    const at = line.plain.indexOf(text);
+    const span = line.spans.find(({ start, end }) => start <= at && at < end);
+    return span === undefined ? undefined : resolvedStyle(span.style).bgcolor?.value?.hex;
+  };
+
+  test("under every dial position whose window holds more than one tone, they wear two", () => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+    // `muted` is the one window of one tone, which wears it on every cell, so
+    // it can part no two. candybar-joiners-e5r4.tx7 gives it a second tone;
+    // this guard then fails, and the exemption goes with it.
+    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length === 1)).toEqual(["muted"]);
+    const parting = SHADE_NAMES.filter((shade) => shade !== "muted");
+    try {
+      bar.pick("theme", THEME);
+      VIEWS[0]!.show(bar);
+      for (const shade of parting) {
+        for (const hue of DECOR_HUES) {
+          const named = SHADES[shade].tones.map((tone) => paletteRole(palette, shadeRole(hue, tone)).hex);
+          expect([shade, hue, new Set(named).size]).toEqual([shade, hue, named.length]);
+        }
+        bar.pick("shade", shade);
+        const { text } = bar.render(AT);
+        const door = groundUnder(text, DOOR_GLYPH);
+        const rate = groundUnder(text, POLLED);
+        expect([shade, door === undefined, rate === undefined]).toEqual([shade, false, false]);
+        expect([shade, door]).not.toEqual([shade, rate]);
+      }
+    } finally {
+      bar.dispose();
+    }
   });
 });

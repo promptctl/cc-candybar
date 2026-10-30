@@ -80,8 +80,8 @@ export type Direction = (typeof DIRECTIONS)[number];
 // [LAW:one-source-of-truth] What a container's children are to the bar's
 // colour: a vertical container stacks ROWS (which choose the hue), a
 // horizontal one lines up the CELLS of a row (which choose the shade). Read by
-// the address builder (`childStep`) and by the loader's refusal of a
-// `distribution` inside a cell. [LAW:types-are-the-program] Total over
+// the address builder (`placeChildren`) and by the loader's refusal of a
+// `distribution` inside a row. [LAW:types-are-the-program] Total over
 // Direction, so a new direction is a compile error here.
 export const AXIS_OF: Readonly<Record<Direction, Axis>> = {
   vertical: "row",
@@ -259,9 +259,20 @@ export interface ContainerNode {
   // of the five shipped distributions. Absent ≡ `van-der-corput`, resolved once
   // at compile (`placedBy`). Per instance, not global: a `{{ menu }}`'s band is
   // the other kind of placer and carries the SAME field in its options dict.
-  // Choosing `monotonic` / `ends-interleaved` reads the sibling count, so adding
-  // a child re-spaces its siblings — a trade the author spends knowingly.
+  // Read on a row, which places every leaf it nests, and on a stack of rows;
+  // refused anywhere inside a row. Choosing `monotonic` / `ends-interleaved`
+  // reads the row's count, the farthest place any of its lines reaches, so
+  // adding a cell anywhere in the row re-spaces all of it — a trade the author
+  // spends knowingly.
   readonly distribution?: DistributionName;
+  // A horizontal container whose children share ONE place on the row: edit
+  // mode's chrome around the content cell it edits. Every other container
+  // inside a row is layout, and each leaf it holds takes its own place, since
+  // its cells sit side by side (`placeChildren` in src/dsl/node-registry.ts).
+  // A unit is one place so that entering edit mode recolours no cell.
+  // Synthesis-only, like a segment's `opens`: edit chrome is the one producer,
+  // and neither the node schema nor the root's lists the field.
+  readonly unit?: true;
 }
 
 export type LayoutNode = ContainerNode | SegmentNode;
@@ -283,10 +294,11 @@ export type LayoutNode = ContainerNode | SegmentNode;
 // whole bar, `distribution` places the rows — by derivation, not by listing: a
 // field added to ContainerNode reaches the root, its lowering (`rootOf`), its
 // projection (`rootNode`), and the rows-fragment schema (RecordSchema<Root>
-// fails to typecheck until it lists the field) without a second edit.
+// fails to typecheck until it lists the field) without a second edit. `unit`
+// is no field of a root: the root stacks rows, and only synthesis marks one.
 export type ContainerOwn = Omit<
   ContainerNode,
-  "kind" | "direction" | "children"
+  "kind" | "direction" | "children" | "unit"
 >;
 export interface Root extends ContainerOwn {
   readonly rows: Readonly<Record<string, LayoutNode>>;

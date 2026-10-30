@@ -2138,13 +2138,17 @@ unconditionally, whether or not any group/menu exists in your config.
 A segment with no `bg:` wears a tint selected from the theme's vocabulary by
 its position (the convention stated above every example): the placement of
 its row among the rows chooses the hue, and its placement among the cells of
-that row chooses the shade. A container nested inside a cell does not re-place
-the bar — everything in it wears that cell's hue and shade, so a `distribution`
-there is a load error (`sets "distribution" on a container inside a cell`).
-A disclosure body is read the same way: its items are placed along their
-rows, each cell wearing one of the band's item colours and everything
-nested in a cell wearing that cell's, so a `distribution` inside a body's cell
-is the same load error. A body's rows pick nothing, so one on a vertical
+that row chooses the shade. A row places every cell along it through any
+`{ h }` nested in it: a group's cells sit side by side with the row's other
+cells, so `["a", { h: ["b", "c"] }, "d"]` places its four cells as
+`["a", "b", "c", "d"]` does. A `{ v }` inside a row draws its first child on
+the row's line and each other child on a line of its own below the row, each
+placed from where the `{ v }` sits. Nothing nested in a row places anything
+of its own, so a `distribution` there is a load error
+(`sets "distribution" on a container inside a row`). A disclosure body is
+read the same way: its items are placed along their rows, each cell wearing
+one of the band's item colours, so a `distribution` inside a body's row is
+the same load error. A body's rows pick nothing, so one on a vertical
 container in a body is refused too (`sets "distribution" on a vertical
 container in a disclosure body`) — a group's `distribution` places its body's
 children only with `direction: 'horizontal'`.

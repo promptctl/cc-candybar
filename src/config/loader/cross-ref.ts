@@ -106,16 +106,17 @@ import {
 } from "./refs.js";
 import { payloadPathOf, valueReadsOf, type ValueRead } from "./value-reads.js";
 
-// Where a distribution nothing reads sits: inside a cell, on a bar vertical
-// container whose rows stack further in, or on a body's vertical container.
-type UnreadDistribution = "cell" | "bar" | "band";
+// Where a distribution nothing reads sits: on a container nested inside a
+// row, on a bar vertical container whose rows stack further in, or on a body's
+// vertical container.
+type UnreadDistribution = "nested" | "bar" | "band";
 // What each distribution nothing reads says, at the node it was found on.
 const UNREAD_DISTRIBUTION: Record<
   UnreadDistribution,
   (nodePath: string) => string
 > = {
-  cell: (nodePath) =>
-    `${nodePath} sets "distribution" on a container inside a cell — everything inside a cell wears that cell's colour, so it would place nothing. Set it on the row whose children are the cells (the horizontal container), or, on the bar, on the root, which places the rows.`,
+  nested: (nodePath) =>
+    `${nodePath} sets "distribution" on a container inside a row — the row's own container places every cell along it, through any { h } or { v } nested in it, so this one would place nothing. Set it on the row (the outermost horizontal container), or, on the bar, on the root, which places the rows.`,
   bar: (nodePath) =>
     `${nodePath} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container — a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
   band: (nodePath) =>
@@ -422,18 +423,20 @@ export function validateCrossReferences(
   };
   // [LAW:no-silent-failure] A `distribution` is honoured only where something
   // reads the steps it places. The bar reads two steps of an address — the
-  // innermost row, and the cell of that row — and a band one, the cell
-  // (rowAndCell, both). So nothing reads a distribution inside a cell, on the
-  // bar or in a body, nor one on a vertical container whose rows pick nothing:
-  // on the bar, one whose every row is itself a vertical container; in a body,
-  // any. Each would be accepted and ignored; each is refused at its node.
+  // innermost row, and the cell's place on that row's line — and a band one,
+  // the cell (rowAndCell, both). A row places every leaf along its line by its
+  // own distribution, through whatever it nests (placeChildren), so nothing
+  // reads one on a container inside a row, on the bar or in a body, nor one on
+  // a vertical container whose rows pick nothing: on the bar, one whose every
+  // row is itself a vertical container; in a body, any. Each would be
+  // accepted and ignored; each is refused at its node.
   function unreadAt(
     node: LayoutNode,
     where: UnreadDistribution,
   ): UnreadDistribution | undefined {
     if (node.kind === "segment" || node.distribution === undefined)
       return undefined;
-    if (where === "cell") return "cell";
+    if (where === "nested") return "nested";
     const placesRows =
       where === "bar" &&
       node.children.some(
@@ -442,8 +445,8 @@ export function validateCrossReferences(
       );
     return AXIS_OF[node.direction] === "row" && !placesRows ? where : undefined;
   }
-  // Where a node's children sit: a segment's body is a band, a horizontal
-  // container's children are cells.
+  // Where a node's children sit: a segment's body is a band, and everything
+  // under a horizontal container is inside its row.
   const whereBelow = (
     node: LayoutNode,
     where: UnreadDistribution,
@@ -451,7 +454,7 @@ export function validateCrossReferences(
     node.kind === "segment"
       ? "band"
       : AXIS_OF[node.direction] === "cell"
-        ? "cell"
+        ? "nested"
         : where;
   // A node's children with their diagnostic paths (walkNodePaths' spelling).
   const childPaths = (

@@ -725,11 +725,13 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
         ? editableUnit(child, spliced, i === firstContent, ctx)
         : insertedUnit(child, child.insertedBy, spliced, ctx);
     // [LAW:one-type-per-behavior] A content segment and its affordances are
-    // ONE unit of the row: a horizontal container holding them, so the row
-    // places its content cells and nothing else. Each child's position in its
-    // parent is what its colour derives from (src/themes/decor.ts); chrome
-    // spliced in as SIBLINGS took two of every three positions, so visible
-    // neighbours were never consecutive and the row's shades collided
+    // ONE unit of the row: a horizontal container marked `unit`, whose
+    // children share the one place in the row the content holds outside edit
+    // mode, so the row places its content cells and nothing else. A cell's
+    // place in its row is what its colour derives from (src/themes/decor.ts),
+    // and every leaf of a row takes its own place through any plain container;
+    // chrome given places took two of every three, so visible neighbours were
+    // never consecutive and the row's shades collided
     // (brandon-theme-picker-bgw.8fp). Under a VERTICAL container the content
     // was a whole row (presetRoot stacks every root's rows vertically, so a
     // bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this
@@ -741,6 +743,7 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       kind: "container",
       direction: "horizontal",
       children: cells,
+      unit: true,
     };
     children.push(
       node.direction === "vertical"

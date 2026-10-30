@@ -29,8 +29,8 @@ export const shownAt =
     drawnColour(c, drawnAt);
 
 export const VDC = DISTRIBUTIONS["van-der-corput"];
-export const row = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "row" });
-export const cell = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "cell" });
+export const row = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "row", lineStart: 0, lineEnd: count - 1 });
+export const cell = (index: number, count: number): AddressStep => ({ index, count, distribution: VDC, axis: "cell", lineStart: 0, lineEnd: count - 1 });
 
 // A cell as the SGR writer draws it: a translucent colour composited over
 // black, the writer's substrate. Text is chosen against this, so it is what a
