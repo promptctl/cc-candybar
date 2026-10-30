@@ -4,15 +4,22 @@
     {
       "version": "pr-511",
       "ref": "refs/pull/511/merge",
-      "sha": "445c2a9728df5597976d28e632d518d7af9c09bf",
-      "timestamp": "2026-10-30T22:10:39.259Z",
+      "sha": "e60c14e77a6ef4d0826cd887a9fd71c1694beb95",
+      "timestamp": "2026-10-30T22:13:53.522Z",
       "commits": [
         {
-          "sha": "445c2a9728df5597976d28e632d518d7af9c09bf",
+          "sha": "e60c14e77a6ef4d0826cd887a9fd71c1694beb95",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:09:40-06:00",
-          "message": "Merge 97e75f55a59c75a1feb1a21322cd958f2124e705 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+          "timestamp": "2026-10-30T22:13:00Z",
+          "message": "Merge 5e5c47649a05f714b2f6f931055a74818817ab04 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+        },
+        {
+          "sha": "5e5c47649a05f714b2f6f931055a74818817ab04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:12:50-06:00",
+          "message": "fix(menus): the schema, the speed tests and the menu map carry 10x (brandon-menus-sjhy.why)\n\nThe committed config schema offered only 1x/5x/20x, so check:schema failed\nand an editor flagged animationSpeed: \"10x\" the loader accepts. The fade and\nframes tables gain literal 10x rows so the rate is asserted, not derived from\nthe table under test.\n"
         },
         {
           "sha": "97e75f55a59c75a1feb1a21322cd958f2124e705",
