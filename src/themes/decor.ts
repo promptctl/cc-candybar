@@ -465,7 +465,8 @@ export type Tones = readonly [RoleShade, ...RoleShade[]];
  * the role has that many the depth draws as distinct colours. First the
  * position's tones the depth draws apart, in the position's order, up to that
  * size; then, for each tone short of it, the nearest rung of the ladder drawn
- * as none of the tones the window holds (`widen`). At 256 colours
+ * as none of the tones the window holds (`widen`); listed, where it holds
+ * three, as the dial lists a position (`inWalkOrder`). At 256 colours
  * neighbouring rungs round onto one table entry, at ansi onto one of the
  * hue's slots, and a theme can name two rungs alike at any depth, so a window
  * that kept them would deal two neighbours one colour where the role had
@@ -505,8 +506,8 @@ export function windowAt(
     // [LAW:single-enforcer] One widening per tone short of the size, each
     // taking every colour the window already holds: where the ladder has
     // nothing left, `widen` answers nothing for this tone and every one after.
-    return Array.from({ length: size - kept.length }).reduce<Tones>(
-      (window) => {
+    return inWalkOrder(
+      Array.from({ length: size - kept.length }).reduce<Tones>((window) => {
         const wider = widen(
           palette,
           hue,
@@ -515,11 +516,32 @@ export function windowAt(
           drawnAt,
         );
         return wider === undefined ? window : [...window, wider];
-      },
-      kept,
+      }, kept),
     );
   });
 }
+
+/**
+ * A window of three listed the way the dial lists every position of three
+ * (`ladderWindow`): its lowest rung, its highest, then the one between. The
+ * default distribution deals the third entry at every other cell, so in that
+ * order a row walks up and down the window a rung at a time, and a rung the
+ * depth widened to past the position's own tones is dealt at an end of the
+ * walk, not on every other cell. A window the depth left whole is in that
+ * order already, so it does not move. Over two tones the order decides no
+ * walk, so a window of two keeps the order it was built in.
+ */
+const inWalkOrder = (window: Tones): Tones => {
+  if (window.length < 3) return window;
+  // [LAW:no-defensive-null-guards] A window of three holds rungs of the
+  // ladder only: the muted form is a tone of the muted position alone, which
+  // names two, and a window never widens into it.
+  const ladder: readonly RoleShade[] = LADDER;
+  const [low, between, high] = [...window].sort(
+    (a, b) => ladder.indexOf(a) - ladder.indexOf(b),
+  );
+  return [low!, high!, between!];
+};
 
 /**
  * How many tones a window holds where its dial position names `count` and
