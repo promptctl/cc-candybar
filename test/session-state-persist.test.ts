@@ -10,7 +10,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { SessionState } from "../src/daemon/session-state";
 import { FileSessionStorage } from "../src/daemon/session-state-file";
-import { until } from "./helpers/until";
+import { throughout, until } from "./helpers/until";
 
 describe("SessionState disk persistence", () => {
   let dir: string;
@@ -256,8 +256,11 @@ describe("SessionState disk persistence", () => {
     );
     ss.set("s1", "theme", "nord");
     await settled(() => logged.some((l) => l.includes("save failed")));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+    await throughout(
+      () => logged.filter((l) => l.includes("save failed")).length === 1,
+      "one failed write, not retried",
+      100,
+    );
   });
 
   it("survives a daemon restart: a fresh instance reads identical values", () => {
