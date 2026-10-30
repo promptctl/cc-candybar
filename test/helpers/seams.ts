@@ -37,7 +37,7 @@ const xterm = (n: number): Drawn => {
 const { glyph, lead, tail } = POWERLINE;
 export const ARROWS: ReadonlySet<string> = new Set([glyph, lead, tail]);
 export const DIVIDER = "\u{E0B1}";
-const JOINERS = new Set([...ARROWS, "", ""]);
+const JOINERS = new Set([...ARROWS, "\uE0B4", "\uE0B6"]);
 
 export interface Char {
   readonly ch: string;

@@ -147,8 +147,11 @@ function seamInks(label: string, truecolor: Chars, drawn: Chars, depth: ColorCom
     // The oracle is fed the colours a cell wears before the writer rounds
     // them, which only the truecolor frame names: a lower depth can deal a
     // cell another shade of its role than truecolor does (src/themes/decor.ts
-    // `windowAt`, `pressedAt`), so there the lift is held as drawn — off the
-    // cell it enters.
+    // `windowAt`, `pressedAt`), and its bytes show only the rounding, which
+    // two shades can share while rich-js lifts from the unrounded colour.
+    // Asking the policy which shade it dealt would make the function under
+    // test its own oracle, so there the lift is held to what the joiner
+    // guarantees, as drawn: off the cell it enters.
     if (depth !== "truecolor") {
       if (!standsOff(ink, right))
         failures.push(`${where}: arrow ${JSON.stringify(ink)} between ${JSON.stringify(left)} and ${JSON.stringify(right)}, not lifted off the cell it enters`);

@@ -8,39 +8,43 @@
 // joiner lifts the arrow between them, they are still two colours, and the
 // lifted arrow is that theme's look.
 //
-// Two kinds of seam are not the policy's to hold, and are read as drawn:
+// Three kinds of seam are not the policy's to hold, each read off the cells it
+// joins, never off the colour they share, so a seam of two other cells that
+// happen to meet on that colour is still held:
 // - A seam beside a cell whose background the bundled config authors (an
 //   alert). The policy colours by address and cannot see an authored
 //   neighbour; reading one would make a cell's colour depend on its
 //   neighbours. Those cells are listed below, by name, with the line that
-//   authors each.
-// - A seam whose one colour is a shade of a role whose whole ladder the depth
-//   draws as one colour. That role has no second colour to give, so its cells
-//   meet on one (textual-ansi names every rung of every role alike).
-// - A seam whose one colour is a pressed shade whose role's ladder the depth
+//   authors each, and each must wear an alert in every frame: one wearing its
+//   tint is the policy's own cell.
+// - A seam between two cells of a role whose whole ladder the depth draws as
+//   one colour. That role has no second colour to give, so its cells meet on
+//   one (textual-ansi names every rung of every role alike).
+// - A seam beside a cell in a pressed shade whose role's ladder the depth
 //   draws only in colours that stand beside the press. The same rule read for
 //   the pressed state: at sixteen colours a ladder of three slots, two of them
 //   on the band's items and one on the press a depth up, has nothing left.
 //   Computed below from what the design stands beside a press, never listed.
+// A cell is known by its visible text, and what it wears by the shade the
+// render dealt it before the writer rounded it (the per-segment record).
 
-import { ColorDepth, drawnColour, getThemePalette, listThemePalettes } from "@promptctl/rich-js";
+import { ColorDepth, drawnColour, getThemePalette, listThemePalettes, type Palette, type RichText } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { resolvedStyle } from "../src/render/rich-theme";
 import {
   DECOR_HUES,
-  KEYSTONE_HUE,
   bandFor,
   hueOf,
   paletteRole,
   shadeRole,
-  windowAt,
   type DecorHue,
   type Disclosure,
   type RoleShade,
 } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
-import { LADDER, TODAY } from "./helpers/decor-vocabulary";
+import { LADDER, TODAY, besidePress } from "./helpers/decor-vocabulary";
 import { drawnChars, seams, shown, type Char } from "./helpers/seams";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
 
@@ -81,45 +85,38 @@ const FRAMES: ReadonlyArray<readonly [string, (bar: SessionBar) => void]> = [
   ),
 ];
 
-// Every colour, as `drawnAt` shows it, that is a shade of a role of `theme`
-// whose whole ladder draws as one colour there.
-function flatRoles(theme: string, drawnAt: ColorDepth): ReadonlySet<string> {
-  const palette = getThemePalette(theme)!;
-  const shown = (hue: (typeof DECOR_HUES)[number], shade: RoleShade) =>
-    drawnColour(paletteRole(palette, shadeRole(hue, shade)), drawnAt).hex;
+// Every shade of a role of `palette`, as the palette names it, whose whole
+// ladder `drawnAt` draws as one colour.
+function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> {
+  const named = (hue: DecorHue, shade: RoleShade) => paletteRole(palette, shadeRole(hue, shade));
   return new Set(
     DECOR_HUES.flatMap((hue) =>
-      new Set(LADDER.map((rung) => shown(hue, rung))).size === 1
-        ? [...LADDER, "muted" as const].map((shade) => shown(hue, shade))
+      new Set(LADDER.map((rung) => drawnColour(named(hue, rung), drawnAt).hex)).size === 1
+        ? [...LADDER, "muted" as const].map((shade) => named(hue, shade).hex)
         : [],
     ),
   );
 }
 
-// Every pressed colour, as `drawnAt` shows it under `theme` at the bundled
-// look, whose role's ladder has no rung the depth draws apart from what the
-// design stands beside the press: every tone of its own band's window (its ✕
-// and leads open each row), and every tone its trigger can stand beside — the
-// bar's cells in each hue a bar row wears, or the band one depth up, its items
-// and its leads in that band's pressed shade.
-function pressesWithNoneToGive(theme: string, drawnAt: ColorDepth): ReadonlySet<string> {
-  const palette = getThemePalette(theme)!;
-  const { variation, shade } = TODAY;
-  const shown = (hue: DecorHue, tone: RoleShade) => drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;
-  const dealt = (hue: DecorHue) => windowAt(palette, hue, shade, drawnAt).map((tone) => shown(hue, tone));
-  const keystone: readonly DecorHue[] = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
-  const pressedColour = (disclosure: Disclosure) => drawnColour(bandFor(palette, disclosure, drawnAt).state, drawnAt).hex;
+// Every pressed shade under the bundled look, as the palette names it, whose
+// role's ladder `drawnAt` draws only in colours the design stands beside the
+// press (`besidePress`).
+function pressesWithNoneToGive(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> {
   return new Set(
     [0, 1, 2, 3].flatMap((depth) => {
       const disclosure: Disclosure = { decor: TODAY, depth };
-      const up: Disclosure = { decor: TODAY, depth: depth - 1 };
       const hue = hueOf(disclosure);
-      const beside = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : [...dealt(hueOf(up)), pressedColour(up)];
-      const taken = new Set([...dealt(hue), ...beside]);
-      return LADDER.every((rung) => taken.has(shown(hue, rung))) ? [pressedColour(disclosure)] : [];
+      const taken = besidePress(palette, TODAY, depth, drawnAt);
+      return LADDER.every((rung) => taken.has(drawnColour(paletteRole(palette, shadeRole(hue, rung)), drawnAt).hex))
+        ? [bandFor(palette, disclosure, drawnAt).state.hex]
+        : [];
     }),
   );
 }
+
+// A cell's background as the render dealt it, before the writer rounds it.
+const dealt = (cell: RichText): string | undefined => resolvedStyle(cell.style).bgcolor?.value?.hex;
+const visible = (text: string): string => text.replace(/\s/g, "");
 
 // The visible text of the cell a seam leaves and the one it enters: the
 // characters back to the joiner before it, and on to the joiner after it.
@@ -138,12 +135,15 @@ test("no seam on any bundled frame joins two grounds drawn as one colour, under 
   const alike: string[] = [];
   const counts = { seams: 0, authored: 0, flat: 0, pressed: 0 };
   const authoredSeen = new Set<string>();
+  const onTint: string[] = [];
   for (const [compatibility, drawnAt] of DEPTHS) {
     const bar = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
     try {
       for (const theme of THEMES) {
-        const flat = flatRoles(theme, drawnAt);
-        const noneToGive = pressesWithNoneToGive(theme, drawnAt);
+        const palette = getThemePalette(theme)!;
+        const flat = flatShades(palette, drawnAt);
+        const noneToGive = pressesWithNoneToGive(palette, drawnAt);
+        const alerts = new Set((["warning", "error"] as const).map((role) => paletteRole(palette, role).hex));
         bar.pick("theme", theme);
         for (const [frame, show] of FRAMES) {
           show(bar);
@@ -154,9 +154,20 @@ test("no seam on any bundled frame joins two grounds drawn as one colour, under 
               const cells = segments.get(name);
               if (cells === undefined) return [];
               authoredSeen.add(name);
-              return [cells.map((cell) => cell.plain).join("").replace(/\s/g, "")];
+              if (!cells.every((cell) => alerts.has(dealt(cell) ?? "")))
+                onTint.push(`${theme} at ${compatibility}, ${frame}: ${name} wears ${cells.map(dealt).join()}`);
+              return [visible(cells.map((cell) => cell.plain).join(""))];
             }),
           );
+          // What each cell of the frame wears, by its visible text.
+          const worn = new Map<string, Set<string>>();
+          for (const cell of [...segments.values()].flat()) {
+            const bg = dealt(cell);
+            if (bg !== undefined) worn.set(visible(cell.plain), new Set([...(worn.get(visible(cell.plain)) ?? []), bg]));
+          }
+          const wearsOnly = (cell: string, shades: ReadonlySet<string>): boolean =>
+            worn.has(cell) && [...worn.get(cell)!].every((bg) => shades.has(bg));
+          const wearsAny = (cell: string, shades: ReadonlySet<string>): boolean => [...(worn.get(cell) ?? [])].some((bg) => shades.has(bg));
           const chars = drawnChars(text);
           for (const { left, right, at } of seams(chars)) {
             // A tail enters the terminal's own ground: no neighbour.
@@ -169,11 +180,11 @@ test("no seam on any bundled frame joins two grounds drawn as one colour, under 
             }
             const ground = shown(left);
             if (ground !== shown(right)) continue;
-            if (ground !== undefined && flat.has(ground)) {
+            if (wearsOnly(before, flat) && wearsOnly(after, flat)) {
               counts.flat++;
               continue;
             }
-            if (ground !== undefined && noneToGive.has(ground)) {
+            if (wearsAny(before, noneToGive) || wearsAny(after, noneToGive)) {
               counts.pressed++;
               continue;
             }
@@ -186,8 +197,11 @@ test("no seam on any bundled frame joins two grounds drawn as one colour, under 
     }
   }
   expect(alike).toEqual([]);
-  // Every listed cell is drawn, so the list names nothing that is not there.
+  // Every listed cell is drawn, so the list names nothing that is not there,
+  // and wears an alert wherever it is drawn, so no seam of the policy's own
+  // hides behind the list.
   expect([...authoredSeen].sort()).toEqual(Object.keys(AUTHORED).sort());
+  expect(onTint).toEqual([]);
   // Non-vacuous: every frame of every theme at every depth draws seams, and
   // the flat ladders the rule reads are textual-ansi's.
   expect(counts.seams).toBeGreaterThan(DEPTHS.length * THEMES.length * FRAMES.length * 10);
