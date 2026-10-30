@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad",
+      "timestamp": "2026-10-30T09:35:24.812Z",
+      "commits": [
+        {
+          "sha": "5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:34:38-06:00",
+          "message": "fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) (#485)\n\n* fix(daemon): one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h)\n\nThe daemon writes a probe into a folder of its own each period and judges\ndelivery for every watch it holds: delivering, stalled, or unmeasured with a\nreason. A stall or an unmeasured span draws an amber row naming the span's\nstart, daemon-stats prints a fileEvents line, and the span's close reloads\nevery config entry under events-resumed and re-reads every held plugin file.\nPlugin storage reads that one owner in place of a probe per folder, and keeps\njudging each folder's identity on the owner's period.\n\n* fix(daemon): a catch-up re-reads watch_file sources, and the row stands while the span is open (brandon-unfiled-3248.y66h)\n\nA `watch_file` source watches through its directory on the same OS stream\nthe probe tests, so a stall silenced it too, and nothing re-read it when\nevents resumed. Every registry now subscribes to the delivery owner's\ncatch-ups, and a catch-up fires each watched file's subscribers as its own\nwatch would have.\n\nThe bar's row and daemon-stats' line derive from the unvouched span, not\nthe state's label: a probe that landed after a stall is not one heard, so\ndelivering with the span open still warns, and the stats line names the\nspan's start in every state.\n\nThe causes that reload every entry are their own type, so a single entry's\ncause cannot be batched."
+        }
+      ]
+    },
+    {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
       "sha": "d89a742002c9bff384f6d131fd424de71ae5249f",
@@ -34,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:11:46-06:00",
           "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "4363d2a7982c76c6f6ada1028f154dd9a498309c",
-      "timestamp": "2026-10-30T09:00:03.151Z",
-      "commits": [
-        {
-          "sha": "4363d2a7982c76c6f6ada1028f154dd9a498309c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T02:59:06-06:00",
-          "message": "feat(diagnostics): every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) (#483)\n\n* feat(diagnostics): every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i)\n\nThe red and amber strip above the bar is gone. The settings door's own cell\ncarries an indicator (⚠ N, red if any error, amber otherwise, 9+ cap) that\nreads a per-draw diagnostics projection; clicking it opens a viewer that takes\nthe body's place and shows one message in full with ✕, ‹ ›, [k/N] and ⧉ copy.\nRender warnings are recorded per session and renderer, rewritten only when a\nframe is drawn from a new source. A placement of an undeclared segment drops\nonly its own cell and is reported as an error; check and the demo still refuse\nit. The handed-off statusline is the handoff line alone, so an error shows\nonce. The diagnostic dump, its file:// links and the show-config verbs are\ndeleted.\n\n* fix(diagnostics): every frame records its render warnings by value, and a moved record wakes the feed (candybar-plugins-vf6g.84i)\n\n* fix(diagnostics): the viewer holds its message's key, not a position (candybar-plugins-vf6g.84i)\n\n* feat(diagnostics): the statusline's handoff line carries the indicator and opens the viewer (candybar-plugins-vf6g.84i)\n\n* fix(config): a failed chain's lower layers are judged by the tolerant validation, and the dead trace seam goes (candybar-plugins-vf6g.84i)\n\n* docs(diagnostics): describe the indicator and viewer where the strip was (candybar-plugins-vf6g.84i)\n\n* fix(diagnostics): a warning record holds for the config and width it was drawn from, and nothing wakes a feed for it (candybar-plugins-vf6g.84i)\n\n* fix(diagnostics): the viewer pages within the terminal's rows, and its key is a message's first line and occurrence (candybar-plugins-vf6g.84i)\n\n* test(diagnostics): the viewer fact names its page, and a lane counts a warning on its next spaced frame (candybar-plugins-vf6g.84i)\n\n* fix(config): every dropped placement is reported, a replacement plugin is judged tolerantly, and a click never adds a drop (candybar-plugins-vf6g.84i)\n\n* fix(config): a click loads the file before it once, and a file that would not load does not blame the click for its drops (candybar-plugins-vf6g.84i)\n\n* fix(config): every refusal of a renderable config carries its drops, through one throw (candybar-plugins-vf6g.84i)\n\n* fix(diagnostics): a session's warnings are every renderer's on every surface, and a record names its config by generation (candybar-plugins-vf6g.84i)\n\n* fix(diagnostics): the viewer's header is measured as drawn, and a message has no page its key cannot name (candybar-plugins-vf6g.84i)\n\n* docs(diagnostics): the memory describes the warning records, the viewer's identity keys and why the handler dependency is accepted (candybar-plugins-vf6g.84i)\n\n* test(diagnostics): a lane counts the session's warnings from any renderer, still with no wake (candybar-plugins-vf6g.84i)\n\n* fix(diagnostics): a warning still met never looks gone, a message keeps its identity as its text changes, and each drop is blamed on the file that wrote it (candybar-plugins-vf6g.84i)\n\n- A renderer's own warning record stands until its next frame replaces it,\n  so a reload or resize never closes and reopens an open viewer.\n- A message's identity is what its producer says it is about (a load's\n  config, a drop's file, a repository, an update), not its headline.\n- The viewer pages within the shortest surface showing it: a feed's frame\n  the tmux status line shows gets five rows.\n- An undeclared placement owns no id, so two of one typo are two drops.\n- A drop a lower layer wrote is reported against that file, at its line.\n- A click loads the file before it only when a refusal reads it.\n- validateConfig leaves production: check and the demo refuse drops through\n  refuseDrops, and the strict form is a test helper."
-        },
-        {
-          "sha": "69a11c831d9f5ccef2f1064e0e51874166618e82",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T08:40:14Z",
-          "message": "chore(release): set `package.json` to 1.162.5 [skip ci]\n\n## [1.162.5](https://github.com/promptctl/cc-candybar/compare/v1.162.4...v1.162.5) (2026-10-30)\n\n### Bug Fixes\n\n* **daemon:** a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5) ([#484](https://github.com/promptctl/cc-candybar/issues/484)) ([df3c874](https://github.com/promptctl/cc-candybar/commit/df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7))\n"
         }
       ]
     }
