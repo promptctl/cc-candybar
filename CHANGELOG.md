@@ -1,3 +1,15 @@
+## [1.168.0](https://github.com/promptctl/cc-candybar/compare/v1.167.1...v1.168.0) (2026-10-30)
+
+### Features
+
+* **feed:** a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014) ([#505](https://github.com/promptctl/cc-candybar/issues/505)) ([5b44ba9](https://github.com/promptctl/cc-candybar/commit/5b44ba9e047f7fd59d83562b39c5d23776c81d14))
+
+### Bug Fixes
+
+* **colour:** a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686) ([#506](https://github.com/promptctl/cc-candybar/issues/506)) ([35846ae](https://github.com/promptctl/cc-candybar/commit/35846ae8042324805c53b14c0c5fc02d669edcd3))
+* **diagnostics:** what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk) ([#507](https://github.com/promptctl/cc-candybar/issues/507)) ([38412c6](https://github.com/promptctl/cc-candybar/commit/38412c68e7a12dce2557dc35449033e18226bae2))
+* **test:** the build-currency e2e waits on the daemon's own signal, so a loaded runner cannot fail it (brandon-unfiled-3248.cuvv) ([#502](https://github.com/promptctl/cc-candybar/issues/502)) ([b100e43](https://github.com/promptctl/cc-candybar/commit/b100e4391f45deea8b68df49f4ebdd4a6ee988cb))
+
 ## [1.167.1](https://github.com/promptctl/cc-candybar/compare/v1.167.0...v1.167.1) (2026-10-30)
 
 ### Bug Fixes
