@@ -883,13 +883,10 @@ function lineAt(
     run,
     keystones.join(","),
     decor.shade.tones.join(","),
-    rowStart(decor.variation, row),
-    // The bar-start keystone reads whether the row is the bar's first.
-    (row?.index ?? 0) === 0,
-    distributionName(cell.distribution),
-    cell.count,
-    cell.lineStart,
-    cell.lineEnd,
+    row === undefined ? "" : stepKey(row),
+    // One answer for every place along the line, so the cell is keyed at
+    // the line's first.
+    stepKey(cell, cell.lineStart),
     drawnAt,
   ].join("|");
   return LINES(palette, key, () =>
@@ -913,6 +910,32 @@ function lineAt(
 // Every cell of every frame reads its line, and the line is a pure function
 // of what the key names: one per drawn line of the bar per palette and depth.
 const LINES = memoPerPalette<readonly DecorEntry[]>();
+
+/**
+ * A placed step as a memo key holds it, at place `at`: every field of it,
+ * rather than what a place's deal reads of it today, so a keystone or a deal
+ * that comes to read another field can never fold two lines into one answer.
+ * [LAW:one-source-of-truth] The step is the key; no list of what is read
+ * from it is kept beside the code that reads it.
+ */
+function stepKey(
+  {
+    axis,
+    index,
+    count,
+    distribution,
+    lineStart,
+    lineEnd,
+    ...unkeyed
+  }: AddressStep,
+  at: number = index,
+): string {
+  // [LAW:types-are-the-program] A field a step gains and this key does not
+  // name is a compile error here, not two lines sharing one answer.
+  const none: Record<string, never> = unkeyed;
+  void none;
+  return `${axis},${at},${count},${distributionName(distribution)},${lineStart},${lineEnd}`;
+}
 
 /**
  * A distribution's name in the table, which is what a memo key can hold.
