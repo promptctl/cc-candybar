@@ -104,11 +104,7 @@ function resolve(
 }
 
 // This file is about bg/fg resolution; the disclosure only rides the record.
-const DISCLOSURE: Disclosure = {
-  decor: DEFAULT_DECOR,
-  depth: 0,
-  ground: [{ hue: "primary", shade: "base" }],
-};
+const DISCLOSURE: Disclosure = { decor: DEFAULT_DECOR, depth: 0 };
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
 const TINT = parseRgbHex("102030");

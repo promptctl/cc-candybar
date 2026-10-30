@@ -717,7 +717,7 @@ describe("toggle round trip + drop stacking", () => {
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
     const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
-    const band = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
+    const band = bandFor(palette, disclosure);
     const cells = sink.get("themepicker")!;
     // Row 0 is the trigger: state colour, text from the pole that reads on it.
     const trigger = cells[0]!;
@@ -752,7 +752,7 @@ describe("toggle round trip + drop stacking", () => {
             index: options.indexOf(name),
             count: options.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          }, ColorDepth.TRUECOLOR).hex,
+          }).hex,
       );
     }
   });
@@ -1337,11 +1337,11 @@ describe("a menu's `distribution` option places its band", () => {
       const style = resolvedStyle(span.style);
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }, ColorDepth.TRUECOLOR).hex,
+        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }).hex,
       );
       if (
         style.bgcolor?.value?.hex !==
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }, ColorDepth.TRUECOLOR).hex
+        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }).hex
       )
         differsFromDefault++;
     }
@@ -1609,7 +1609,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
             index: WORDS.indexOf(cell.name),
             count: WORDS.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          }, ColorDepth.TRUECOLOR).hex,
+          }).hex,
       );
     }
   });

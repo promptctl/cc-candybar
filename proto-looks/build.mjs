@@ -36,7 +36,7 @@ function runsOf(row) {
   if (/\x1b/.test(runs.map((r) => r[0]).join(""))) throw new Error("escape left in text");
   return runs;
 }
-const picture = ({ text, warnings }) => ({ rows: text.split("\n").map(runsOf), warnings });
+const picture = ({ text }) => ({ rows: text.split("\n").map(runsOf) });
 const drawn = JSON.parse(fs.readFileSync(`${OUT}/renders.json`, "utf8"));
 const taken = new Set();
 const take = (from, key) => {

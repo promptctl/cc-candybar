@@ -43,7 +43,6 @@ const SHOWN: Record<State, (base: Payload) => Payload> = {
 
 interface Rendered {
   readonly text: string;
-  readonly warnings: readonly string[];
 }
 interface Views {
   readonly closed: Rendered;
@@ -53,11 +52,10 @@ interface Views {
 const bar = sessionBar(`{}`, 170);
 const at = instantOf(new Date("2026-10-23T12:00:00Z"));
 
-// Only a band's floor is a fact about the look; any other warning is a fault in the harness.
+// No warning is a fact about the look; any warning is a fault in the harness.
 const judged = ({ text, warnings }: SessionRender): Rendered => {
-  const faults = warnings.filter((w) => w.kind !== "band-floor");
-  if (faults.length > 0) throw new Error(`render warned: ${faults.map((w) => w.message).join("; ")}`);
-  return { text, warnings: [...new Set(warnings.map((w) => w.message))] };
+  if (warnings.length > 0) throw new Error(`render warned: ${warnings.map((w) => w.message).join("; ")}`);
+  return { text };
 };
 
 // The menu the open view shows: the door open on ⚡ session, the theme's ⚙

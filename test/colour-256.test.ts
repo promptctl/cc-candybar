@@ -22,6 +22,7 @@ import {
   listThemePalettes,
   ColorRgba,
   JOINERS as RICH_JOINERS,
+  Oklch,
   RichText,
   SEAM_MIN_DELTA_E,
   Strip,
@@ -30,7 +31,6 @@ import {
   resolveDestination,
   segmentsToString,
 } from "@promptctl/rich-js";
-import { deltaE as deltaERgba } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
 import { NO_REPO, prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -84,7 +84,8 @@ const ratio = (a: Rgb, b: Rgb): number => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
 };
-const deltaE = (a: Rgb, b: Rgb): number => deltaERgba(new ColorRgba(...a), new ColorRgba(...b));
+const deltaE = (a: Rgb, b: Rgb): number =>
+  Oklch.fromRgba(new ColorRgba(...a)).deltaE(Oklch.fromRgba(new ColorRgba(...b)));
 
 // The joiners' glyphs, and U+E0B1, the thin divider: no joiner draws it, so
 // any divider on a row is a failure.

@@ -10,7 +10,7 @@ All colour arithmetic (palettes, references, mixing, contrast, OKLCH) lives in r
 
 A closed cell's colour depends on where it sits. The row picks the hue: a decorative role chosen by the variation. The cell picks a shade from the window the shade dial is turned to. So neighbouring cells differ by shade, and the hue changes only at a new row or at the end of a run. A new hue in every cell reads as team colours.
 
-No colour is synthesised. A closed cell wears its role at its shade exactly as the theme names it. A test checks that every background the bundled closed bar draws is close to a colour its palette names.
+No colour is synthesised. A closed cell wears its role at its shade exactly as the theme names it. A test checks that every background the bar draws, closed or with the settings menu open, is a colour its palette names.
 
 Anything nested inside a cell wears that cell's hue and shade. That's why edit mode's chrome is spliced in as one unit with the cell it edits. Spliced in as siblings, it would take positions and recolour the row.
 
@@ -20,19 +20,15 @@ The shade dial is a table, so a new position or a wider window is one more row. 
 
 In some themes the accent is the warning colour, so their accent cells read as orange. That's the theme's own choice, and it's accepted.
 
-## Open triggers and bands
+## Open menus
 
-An open trigger wears the open colour its variation's lineage gives its depth. It stands apart from the closed cells of its own row by contrast, not by hue alone. Its colour is searched along the hue's own rays through OKLCH lightness, toward white and toward black, keeping the hue's angle and chroma, until it clears the floor. Sliding toward the theme's own light and dark ends would grey the hue instead. Where no step clears, it enumerates every colour the terminal can draw along the rays rather than bisecting toward where a floor starts holding, because a floor measured on drawn colours is not monotone along a ray, and a bisection misses the one drawable colour that clears. The floors give way in order: told from the items it sits beside and clear of its cells, then clear of its cells alone, since items whose shades are one colour leave no room to be told from and the trigger must still read. The search never throws, because the settings door is itself a trigger: a throw there would leave no way to change the setting back. Where nothing clears, it takes the candidate that stands furthest off and reports a shortfall.
+The segment whose menu is open is a pressed button, and like every other cell it selects a named shade: its menu's hue at the shade the dial names for the pressed state, which the ✕ and blank leads of that menu's rows wear too. The rows sit on the theme's surface. Both are named shades so that nothing on the bar is a synthesised colour, and the joiner guarantees every seam, so nothing here predicts a join or measures one cell against another. Where a theme names two neighbours alike, the seam is the joiner's to show.
 
-A trigger's ground is the set of colours its row's cells actually wear. It is computed per row, because no single colour can stand off the whole bar at once.
-
-A band is a plane hung under the trigger that opened it, not a position in the tree. A band's items are the header's hue at the tones of the dial's window, so a menu reads as a variation on the colour of the header that opened it. A trigger stands off its items as well as its plane. A trigger takes its colour from what it opens. Depth is the number of enclosing bodies and is never stored. A nested trigger stands off the plane and the state colour of the band it sits in, not off the bar row. Held off the bar row, nested states drift to the same end of the lightness axis as their parent's and merge with it.
-
-Band colours are computed unrounded from one settled candidate and rounded once. They are never blended from a colour that was already rounded.
+A band is a plane hung under the trigger that opened it, not a position in the tree. Its items are the header's hue at the tones of the dial's window, so a menu reads as a variation on the colour of the header that opened it. A trigger takes its colour from what it opens. Depth is the number of enclosing bodies and is never stored. The plane is the backing behind a band's rows, the same at every depth: a nested band is told by its leads and its hue, not by its backing.
 
 ## Every floor is measured as drawn
 
-Every contrast floor is measured on the colours the terminal will actually draw at the configured depth, composited over black, never on raw RGBA. At 256 colours, text and background round independently, so a colour that loses its floor after rounding is swapped for the nearest one that clears it. At ansi depth, colours are measured as the VGA palette rich-js assumes. The SGR writer still rounds each colour itself, so an arrow is drawn exactly in its cell's colour wherever that colour stands off the next cell's as drawn; where it doesn't, rich-js's joiner lifts the arrow's ink off the next cell's, so a join never vanishes and is never a divider. Between bands, floors are measured as ΔE in OKLab, because a contrast ratio can't separate two hues at the same lightness.
+Every contrast floor is measured on the colours the terminal will actually draw at the configured depth, composited over black, never on raw RGBA. At 256 colours, text and background round independently, so a colour that loses its floor after rounding is swapped for the nearest one that clears it. At ansi depth, colours are measured as the VGA palette rich-js assumes. The SGR writer still rounds each colour itself, so an arrow is drawn exactly in its cell's colour wherever that colour stands off the next cell's as drawn; where it doesn't, rich-js's joiner lifts the arrow's ink off the next cell's, so a join never vanishes and is never a divider.
 
 ## Text
 

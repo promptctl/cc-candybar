@@ -616,8 +616,8 @@ export async function renderEffective(
   // a bare name could not tell them apart
   // (nor stop a segment named `globals.palette` from displacing the slot).
   const failures = new Map<string, string>();
-  // What the daemon shows on the bar as a warning and check lists beside its
-  // verdict, without failing it: a fact about the look the config chose.
+  // What check lists beside its verdict without failing it: a source still
+  // running at the pass's deadline, which the bar draws as pending.
   const advisories = new Set<string>();
   // [LAW:types-are-the-program] Exhaustive over every kind a render can warn
   // of, so a new kind is a compile error here until check says what it means.
@@ -644,11 +644,6 @@ export async function renderEffective(
           `variable "${warning.variable}"`,
           `cannot refresh: ${warning.error}`,
         );
-        return;
-      // An open band the chosen look leaves short of a floor: the bar draws it
-      // as near as it comes, and the message names what clears it.
-      case "band-floor":
-        advisories.add(warning.message);
         return;
       default:
         warning satisfies never;

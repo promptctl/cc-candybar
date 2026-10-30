@@ -155,8 +155,6 @@ import {
   type NodeGate,
   type NodeRenderCtx,
   type Visibility,
-  type EvaluatedSegment,
-  type PlacementParts,
 } from "./node-registry.js";
 
 // ─── Compiled config ───────────────────────────────────────────────────────────
@@ -1133,10 +1131,7 @@ export interface RenderObservers {
   // callers listen — the daemon records each for the bar's diagnostics
   // (src/daemon/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
   // variable that cannot refresh, so each is visible whether or not anyone is
-  // looking at a bar. Check lists
-  // a band-floor shortfall only where its own renders open a trigger — one open
-  // by default; it opens none itself, so a shortfall behind a closed trigger
-  // reaches the bar alone.
+  // looking at a bar.
   readonly onRenderWarning?: (warning: RenderWarning) => void;
 }
 
@@ -1188,11 +1183,6 @@ export type RenderWarning =
       readonly error: string;
       readonly message: string;
     }
-  // A floor an open band stands short of as drawn (decor.ts `bandFor`): its
-  // trigger off the cells of the row it stands in, or its plane off its
-  // trigger. Drawn as near as it comes, and the message names the setting that
-  // clears it — a fact about the chosen look, not a fault in the config.
-  | { readonly kind: "band-floor"; readonly message: string }
   // A variable whose cache policy cannot fire — its key template throws, or
   // the OS refused its watch — so the bar draws its last value with no cell of
   // its own to say it has stopped refreshing (brandon-var-system-7wl9).
@@ -1333,9 +1323,6 @@ export function drawDsl(
 ): DrawnFrame {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
-  // The band-floor shortfalls of the bands this render opens, each reported
-  // once after the walk however many triggers open a band that falls short.
-  const shortfalls = new Set<string>();
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` animate by this reading, and the
   // effects below by the same value (brandon-menus-sjhy.nt2).
@@ -1496,21 +1483,6 @@ export function drawDsl(
   // throws on.
   const lookupSegment = (name: string) => config.segments[name];
 
-  // [LAW:no-silent-failure] Every floor an open band stands short of, from
-  // what the placement evaluated to, reported once after the walk.
-  const collected = (evaluated: EvaluatedSegment): EvaluatedSegment => {
-    for (const shortfall of evaluated.shortfalls) shortfalls.add(shortfall);
-    return evaluated;
-  };
-  const placement = (node: CompiledSegmentNode): PlacementParts => {
-    const own = parts.placement(node);
-    return {
-      gate: () => own.gate(),
-      bodyGate: () => own.bodyGate(),
-      evaluate: (palette, region) => collected(own.evaluate(palette, region)),
-    };
-  };
-
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
   // (serialization deferred to the root). The driver owns the cross-cutting
   // `when`: a node under a parent not shown is hidden, and any other is gated
@@ -1551,18 +1523,16 @@ export function drawDsl(
       region,
       perSegmentSink,
       onSegmentError,
-      placement,
+      placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
-        collected(
-          evaluateOnce(
-            compiled.activeSegment,
-            node,
-            palette,
-            region,
-            registry.drawnAt(),
-            body,
-            scope,
-          ),
+        evaluateOnce(
+          compiled.activeSegment,
+          node,
+          palette,
+          region,
+          registry.drawnAt(),
+          body,
+          scope,
         ),
       lookupSegment,
       renderChild: (child, held, step: AddressStep) =>
@@ -1650,7 +1620,6 @@ export function drawDsl(
     : armed()
       ? "can-move"
       : "still";
-  for (const message of shortfalls) warn({ kind: "band-floor", message });
   // Read after the walk: the payload this render pushed is what a key reads.
   for (const [variable, fault] of registry.cachePolicyFaults())
     warn({

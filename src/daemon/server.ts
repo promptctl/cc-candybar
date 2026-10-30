@@ -2598,7 +2598,6 @@ function drawRender(
         return `${w.kind}:${w.state}`;
       case "load":
       case "lifeline":
-      case "band-floor":
       case "when":
         return w.kind;
     }

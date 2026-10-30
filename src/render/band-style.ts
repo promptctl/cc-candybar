@@ -27,7 +27,7 @@ import type { ActiveSegment } from "./active-segment.js";
  * whichever theme pole reads better on it. A fixed foreground measurably fails
  * on pure hues (design doc, Decisions), so text on a state cell is CHOSEN, never
  * inherited from the segment's `fg:`. [LAW:one-source-of-truth] The one
- * spelling, so a trigger, a band's floor and a band's items agree on how text
+ * spelling, so a trigger, a band's plane and a band's items agree on how text
  * meets a state colour.
  */
 export function stateCell(

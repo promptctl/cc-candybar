@@ -374,9 +374,6 @@ export interface EvaluatedSegment {
   // Whether anything hangs open under the segment — a dropped menu body or
   // its open disclosure body — so it wears its band's state colour.
   readonly open: boolean;
-  // The floors the band it opens stands short of as drawn (`bandFor`), none
-  // while nothing hangs open under it.
-  readonly shortfalls: readonly string[];
 }
 
 // [LAW:one-source-of-truth] A placement's parts as its view keeps them

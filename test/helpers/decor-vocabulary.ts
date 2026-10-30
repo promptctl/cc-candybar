@@ -9,12 +9,10 @@ import { ColorRgba, getThemePalette, listThemePalettes } from "@promptctl/rich-j
 import { floorOf } from "../../src/config/globals-fields";
 import {
   DISTRIBUTIONS,
-  rowGround,
   SHADES,
   VARIATIONS,
   type AddressStep,
   type Decor,
-  type Ground,
   type ShadeName,
   type VariationName,
 } from "../../src/themes/decor";
@@ -41,7 +39,3 @@ export const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new Colo
 
 // The default bar's decor: the dial's floor variation at its floor shade.
 export const TODAY: Decor = { variation: VARIATIONS[floorOf("variation")], shade: SHADES[floorOf("shade")] };
-
-// The ground the band facts are stated on where one suffices: a trigger in
-// the default bar's first row, at the default shade.
-export const FIRST_ROW: Ground = rowGround(TODAY, [row(0, 2), cell(0, 5)]);
