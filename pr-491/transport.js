@@ -12707,7 +12707,7 @@ var require_pipeline = __commonJS({
     var PassThrough;
     var Readable;
     var addAbortListener;
-    function destroyer(stream, reading, writing) {
+    function destroyer(stream, reading, writing2) {
       let finished = false;
       stream.on("close", () => {
         finished = true;
@@ -12716,7 +12716,7 @@ var require_pipeline = __commonJS({
         stream,
         {
           readable: reading,
-          writable: writing
+          writable: writing2
         },
         (err) => {
           finished = !err;
@@ -12884,7 +12884,7 @@ var require_pipeline = __commonJS({
       for (let i = 0; i < streams.length; i++) {
         const stream = streams[i];
         const reading = i < streams.length - 1;
-        const writing = i > 0;
+        const writing2 = i > 0;
         const end = reading || (opts === null || opts === void 0 ? void 0 : opts.end) !== false;
         const isLastStream = i === streams.length - 1;
         if (isNodeStream(stream)) {
@@ -12895,7 +12895,7 @@ var require_pipeline = __commonJS({
           };
           var onError = onError2;
           if (end) {
-            const { destroy, cleanup } = destroyer(stream, reading, writing);
+            const { destroy, cleanup } = destroyer(stream, reading, writing2);
             destroys.push(destroy);
             if (isReadable(stream) && isLastStream) {
               lastStreamCleanup.push(cleanup);
@@ -34622,19 +34622,25 @@ function jobGroupAlive(pid2) {
 }
 function endJob(pid2, status, end) {
   const staged = `${status}.${process_default.pid}`;
-  writeFileSync(staged, `${formatJobEnd(end)}
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}
 `);
+  } catch (err) {
+    if (err.code === "ENOENT") return false;
+    throw err;
+  }
+  let stands = true;
   try {
     linkSync(staged, status);
   } catch (err) {
-    if (err.code === "EEXIST") return false;
-    throw err;
+    if (err.code !== "EEXIST") throw err;
+    stands = false;
   } finally {
     rmSync(staged, { force: true });
   }
   signalGroup(pid2, "SIGTERM");
   setTimeout(() => signalGroup(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return true;
+  return stands;
 }
 
 // src/utils/atomic-write.ts
@@ -69068,29 +69074,25 @@ function readRecord(actDir) {
     throw err;
   }
 }
+var writing = (facts) => facts !== null && facts.alive;
+var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2 = readStartTime) {
   let known = null;
   function factsOf2(act) {
     const actDir = import_node_path33.default.join(dir, String(act));
-    if (known?.act !== act) {
-      const record2 = readRecord(actDir);
-      if (record2 === null) return null;
-      known = { act, record: record2, ours: isRecordedJob(record2, read2), final: null };
+    const record2 = readRecord(actDir);
+    if (record2 === null) return null;
+    if (known === null || !sameJob(known.record, record2)) {
+      known = { record: record2, ours: isRecordedJob(record2, read2), final: null };
     }
     if (known.final !== null) return known.final;
-    known.ours = known.ours && jobGroupAlive(known.record.pid);
+    known.ours = known.ours && jobGroupAlive(record2.pid);
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
     if (!fs_default.existsSync(recordOf2(actDir))) return null;
-    const facts = {
-      act,
-      record: known.record,
-      alive: known.ours,
-      end,
-      lastLine
-    };
-    if (!facts.alive || end !== null) known.final = facts;
+    const facts = { act, record: record2, alive: known.ours, end, lastLine };
+    if (!facts.alive) known.final = facts;
     return facts;
   }
   return {
@@ -69359,11 +69361,27 @@ function makeUpdateWatch(opts) {
     logRelease(describeRelease(release3));
     syncGate();
   }
+  let unreadable = null;
+  const logUnreadable = changeLogger(log);
+  function readActs() {
+    try {
+      const facts = acts.read();
+      unreadable = null;
+      return { ok: true, facts };
+    } catch (err) {
+      unreadable = `update act files (${actsDir2}): ${err.message}`;
+      logUnreadable(["error", unreadable]);
+      return { ok: false, error: unreadable };
+    }
+  }
   function watchAct() {
-    const facts = acts.read();
+    const read2 = readActs();
+    if (!read2.ok) return;
+    const { facts } = read2;
     const next2 = judgeAct(facts);
-    if (facts !== null && next2.kind === "running" && Date.now() > facts.record.deadline && endOverdue(actsDir2, facts)) {
-      log("error", `apply-update: act ${facts.act} timed out; ending it`);
+    if (facts?.alive && Date.now() > facts.record.deadline) {
+      const why2 = endOverdue(actsDir2, facts) ? "timed out" : "outlived its verdict";
+      log("error", `apply-update: act ${facts.act} ${why2}; ending it`);
     }
     if (seen === null && next2.kind === "running") {
       log("info", `apply-update: act ${next2.act} is running; watching it`);
@@ -69393,15 +69411,21 @@ function makeUpdateWatch(opts) {
       }
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
-    running: () => judgeAct(acts.read()).kind === "running",
+    running() {
+      const read2 = readActs();
+      return !read2.ok || writing(read2.facts);
+    },
+    error: () => unreadable,
     act() {
       const update = current();
       if (update === null) {
         throw new BadVerbArgs("apply-update: nothing newer is known to apply");
       }
       const facts = factsOf(update);
-      const newest = acts.read();
-      if (judgeAct(newest).kind === "running") {
+      const read2 = readActs();
+      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
+      const newest = read2.facts;
+      if (writing(newest)) {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
       const claim = claimAct(
@@ -81560,6 +81584,7 @@ function drawRender(setup, drawing2) {
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
     { about: "load", text: entry.lastError },
+    { about: "update-act", text: updateWatch.error() },
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message
@@ -82255,13 +82280,13 @@ async function render2(size) {
   return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text3) {
-  let writing;
+  let writing2;
   try {
-    writing = navigator.clipboard.writeText(text3);
+    writing2 = navigator.clipboard.writeText(text3);
   } catch (e) {
-    writing = Promise.reject(e);
+    writing2 = Promise.reject(e);
   }
-  return writing.then(
+  return writing2.then(
     () => null,
     (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text3}`
   );
