@@ -116,7 +116,7 @@
 // The page draws what a transport answers. `pnpm bar:web` serves an HTTP transport to an
 // isolated daemon; the Pages build serves one that runs the daemon in this page. Either:
 //   render(size), click(url, size), restart(size) → { ansi, links: [{ text, url, does }], refused }
-//   about?: string (HTML)   nav?: string (HTML, the site's other pages)   scenario?: see the scenario strip below
+//   about?: string (HTML)   landscape?: string | null (path to the landscape explorer)   scenario?: see the scenario strip below
 import { transport } from "./transport.js";
 
 const GROUNDS = {
@@ -323,8 +323,11 @@ document.fonts.load("14px 'Rich Powerline'", "").then(() => {
     $("about").innerHTML = transport.about;
     $("about").hidden = false;
   }
-  if (transport.nav) {
-    $("nav").innerHTML = transport.nav;
+  if (transport.landscape) {
+    const a = document.createElement("a");
+    a.href = transport.landscape;
+    a.textContent = "Statusline landscape →";
+    $("nav").append(a);
     $("nav").hidden = false;
   }
   if (transport.scenario) mountScenario(transport.scenario);
