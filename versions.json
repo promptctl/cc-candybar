@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-507",
+      "ref": "refs/pull/507/merge",
+      "sha": "1705b1022ae6d9220aabfea36962946701186f63",
+      "timestamp": "2026-10-30T18:32:47.255Z",
+      "commits": [
+        {
+          "sha": "1705b1022ae6d9220aabfea36962946701186f63",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:32:03-06:00",
+          "message": "Merge a3e26357cc22cc5ea47f53631f026368a80d6762 into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
+        },
+        {
+          "sha": "a3e26357cc22cc5ea47f53631f026368a80d6762",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:31:45-06:00",
+          "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-505",
       "ref": "refs/pull/505/merge",
       "sha": "e917a09e716e182e12dbb20f0b68099e1f7d8c55",
