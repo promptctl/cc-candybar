@@ -34915,7 +34915,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.166.3";
+var PACKAGE_VERSION = "1.167.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -54913,14 +54913,17 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ is the theme's `DOOR_CLOSE_ROLE` exactly as the theme gives it,
-      // with no contrast floor: a floor moves its lightness until the red no
-      // longer reads as red on the state colour, and the ✖ must be red on
-      // every theme. `keptOn` only stops the terminal's rounding from costing
-      // it the contrast it has. Closed, the author's glyph keeps the cell's
-      // own text.
+      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
+      // gives it (`roleTextOn`): the theme's text-red where that reads on the
+      // pressed state, otherwise the role's own red or the nearest rung of its
+      // ladder out toward the pole the pressed state stands farther from that
+      // does, and where none does, the named red standing farthest off. It
+      // never slides lightness: a slid red stops reading as red, and the ✖
+      // must be red on every theme. `keptOn` only stops the terminal's
+      // rounding from costing it the contrast it has. Closed, the author's
+      // glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -76211,6 +76214,15 @@ function segmentColorFuncs(ref) {
     arity: { kind: "exact" },
     returnType: "string"
   };
+  const roleTextOn = {
+    fn: ((role, bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
+      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
+    }),
+    argTypes: ["string", "string"],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
   const keptOn = {
     fn: ((fgRef, bgRef) => {
       const { palette: palette2 } = requireActiveSegment(ref, "{{ keptOn }}");
@@ -76260,7 +76272,40 @@ function segmentColorFuncs(ref) {
     arity: { kind: "variadic" },
     returnType: "T"
   };
-  return { ...palette, bgOf, tint, keptOn, gauge };
+  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+}
+var RUNGS_OUT = {
+  "#000000": ["darken-1", "darken-2", "darken-3"],
+  "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
+};
+var RUNGS = Object.values(RUNGS_OUT).flat();
+function namedRoleText(palette, role, ground) {
+  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
+  const named3 = (name) => {
+    const colour = resolveColorRef(palette, name);
+    return {
+      colour,
+      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown)
+    };
+  };
+  const pole = contrastFor(shown).hex;
+  const out = RUNGS_OUT[pole];
+  if (out === void 0) {
+    throw new Error(
+      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
+    );
+  }
+  const text4 = `text-${role}`;
+  const rung = (step4) => `${role}-${step4}`;
+  const colours = new Map(
+    [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
+  );
+  const preferred = [text4, role, ...out.map(rung)].map(
+    (name) => colours.get(name)
+  );
+  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
+    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
+  )).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {
