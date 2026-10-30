@@ -57,6 +57,7 @@ export function laneHandoff(
     severity: HANDOFF_SEVERITY,
     about: "lane-handoff",
     message,
+    copy: message,
     lines: [
       [
         diagnosticSpan(

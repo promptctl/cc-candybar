@@ -38,6 +38,7 @@ export function validateConfig(
 ): ValidatedConfig {
   const { config, dropped } = validateRenderable(
     authored,
+    new Map(),
     filePath,
     allowedPalettes,
   );

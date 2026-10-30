@@ -209,6 +209,7 @@ import { productionLaneEdge } from "./lane-edge.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
+  type SourcedText,
   diagnosticsProjection,
   handoffRows,
   type DiagnosticList,
@@ -2388,18 +2389,31 @@ function drawRender(
   // drop about the file that wrote it, so their text may change under an open
   // viewer (an issue fixed) without becoming another message; a request's
   // refusal, its hints' and a click's are about exactly what their text says.
+  // Each copies its own text, but a drop copies the prompt that fixes it.
   const said = (text: string | null | undefined) => ({ about: text, text });
+  const shown = (
+    ...all: ReadonlyArray<{
+      about: string | null | undefined;
+      text: string | null | undefined;
+    }>
+  ): SourcedText[] =>
+    all.flatMap(({ about, text }) =>
+      about && text ? [{ about, text, copy: text }] : [],
+    );
   const errors = [
-    said(refusedArgsError(req.refusedArgs)),
-    said(hintsError),
-    { about: "load", text: entry.lastError },
-    { about: "update-act", text: updateWatch.error() },
+    ...shown(
+      said(refusedArgsError(req.refusedArgs)),
+      said(hintsError),
+      { about: "load", text: entry.lastError },
+      { about: "update-act", text: updateWatch.error() },
+    ),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
+      copy: e.prompt,
     })),
-    said(clickShown?.text),
-  ].flatMap(({ about, text }) => (about && text ? [{ about, text }] : []));
+    ...shown(said(clickShown?.text)),
+  ];
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, and the warning this
   // config's load carried.
@@ -2425,7 +2439,11 @@ function drawRender(
     [
       ...standing,
       ...renderWarnings.ofSession(sessionId, drawing.by, scope),
-    ].map((w) => ({ about: `${w.kind}\0${w.message}`, text: w.message })),
+    ].map((w) => ({
+      about: `${w.kind}\0${w.message}`,
+      text: w.message,
+      copy: w.message,
+    })),
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),

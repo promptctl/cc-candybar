@@ -215,6 +215,7 @@ export function updateNotice(
       severity: UPDATE_SEVERITY,
       about: `update\0${identity}`,
       message,
+      copy: message,
       lines: [first, ...rest],
     },
   ];

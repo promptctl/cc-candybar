@@ -480,7 +480,7 @@ describe("the bar's row and daemon-stats' line", () => {
     const diagnostics = collectDiagnostics(
       [],
       [],
-      warned.map((w) => ({ about: w.kind, text: w.message })),
+      warned.map((w) => ({ about: w.kind, text: w.message, copy: w.message })),
     );
     expect(diagnostics).toEqual([
       expect.objectContaining({

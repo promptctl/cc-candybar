@@ -37,6 +37,7 @@ import {
   dslConfigCandidatePaths,
   detectConfigCollisions,
   ConfigError,
+  type DroppedFileError,
 } from "../../config/dsl-loader.js";
 import type {
   DslConfig,
@@ -286,7 +287,7 @@ export interface DslRenderState {
   readonly config: ValidatedConfig;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
   // dropped to draw the rest of the bar, one error per file that wrote one.
-  readonly dropped: readonly ConfigError[];
+  readonly dropped: readonly DroppedFileError[];
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
   // it was compiled from): states carrying one key carry one compile.
   readonly compileKey: string;

@@ -69,6 +69,7 @@ import {
   pluginNs,
   scopeOf,
   SELF,
+  type NamedDefinition,
   type PluginId,
   type PluginScope,
 } from "./plugin-scope.js";
@@ -138,10 +139,9 @@ export const DEFINITION_FILE = "plugin.json5";
 // template path cannot spell.
 const PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 
-// [LAW:types-are-the-program] A definition and the plugin it is: its scope,
-// and its name, undefined when its folder's name cannot be a plugin's. Its
-// namespace is derived (`pluginNs`), never carried beside it.
-export type NamedDefinition = PluginId & { readonly path: string };
+// A definition, named (plugin-scope.ts) or not: its name is undefined when its
+// folder's name cannot be a plugin's.
+export type { NamedDefinition };
 export type PluginDefinition =
   | NamedDefinition
   | {
@@ -637,6 +637,7 @@ function fragmentOf(
     groups: [],
     unplaced: [],
     inherited: [],
+    presence: () => ({ kind: "missing" }),
   };
   // [LAW:one-source-of-truth] The data variable is parsed by the validator
   // every `file` source goes through, from the declaration a user would write.

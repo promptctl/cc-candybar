@@ -1061,6 +1061,23 @@ add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads
 the bar.
 
+A placement of a plugin that is not present in the session draws nothing
+and is no error: no `⚠`, and `check` passes. So your own config can place
+`repo.lit.ticket` for every repository that ships `lit`, and in any other
+directory the cell is simply not there; the same goes for a `plugins.` cell
+whose plugin is not installed. A placement under a plugin that IS present
+but declares no such segment is an error: the message names the plugin file
+that won and every segment and setting it declares, and clicking it in the
+bar copies a prompt for Claude that names your config file and asks it to
+fix the placement.
+
+```json5 check:pass
+{
+  segments: { mine: { template: "mine" } },
+  root: { h: ["mine", "repo.lit.ticket", "plugins.notinstalled.status"] },
+}
+```
+
 ### Adding your segment to the user's bar from a repo
 
 A repository's `.cc-candybar.json5` merges over the user's config, so it

@@ -182,16 +182,17 @@ describe("a config that cannot be drawn as written", () => {
     expect(events.at(0)).toMatch(/ viewer=-( |$)/);
   });
 
-  test("the viewer wraps one message at the client's width; › and ‹ page; ⧉ copies the message it shows, whole", async () => {
+  test("the viewer wraps one message at the client's width; › and ‹ page; ⧉ copies the prompt that fixes the message it shows; an absent plugin's cell adds nothing", async () => {
     const sid = "broken-many";
     const hints = { termCols: 40 };
     const a = args(
       "many",
-      `{ globals: { padding: 1, padding: 1 }, segments: { mine: { template: "MINE" } }, root: { h: ["mine", "first-missing-segment", "second-missing"] } }`,
+      `{ globals: { padding: 1, padding: 1 }, segments: { mine: { template: "MINE" } }, root: { h: ["mine", "first-missing-segment", "repo.lit.ticket", "second-missing"] } }`,
     );
     const bar = await render(sockPath, sid, projectDir, hints, a);
     // One error (both drops, one load's) and one warning (the duplicate key):
-    // red, since one is an error.
+    // red, since one is an error. The cell of a plugin absent here adds
+    // nothing to either.
     expect(indicatorOf(bar)).toBe("⚠ 2");
     const pages = await readDiagnostics(
       sockPath,
@@ -205,6 +206,7 @@ describe("a config that cannot be drawn as written", () => {
     expect(pages[0]!.text).toContain("first-missing-segment");
     expect(pages[0]!.text).toContain("second-missing");
     expect(pages[0]!.text).not.toContain("duplicate key");
+    expect(pages.map((p) => p.text).join("\n")).not.toContain("repo.lit");
     expect(pages[1]!.text).toContain('duplicate key "padding"');
     for (const page of pages)
       for (const row of stripAnsi(page.rendered).trimEnd().split("\n"))
@@ -222,9 +224,11 @@ describe("a config that cannot be drawn as written", () => {
     const copies = linkUrls(shown)
       .flatMap((u) => effectsOf(u))
       .filter((e) => e.verb === "copy");
-    expect(copies).toHaveLength(1);
+    // ⧉ and the message's first line both copy the prompt that fixes it.
+    expect(copies.length).toBeGreaterThan(0);
+    for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
     expect(copies[0]!.args[0]).toMatch(
-      /^Invalid config in .*many\.json5[\s\S]*first-missing-segment[\s\S]*second-missing/,
+      /^Fix my cc-candybar statusline config\.[\s\S]*Config file to edit: .*many\.json5\n\nInvalid config in .*many\.json5[\s\S]*first-missing-segment[\s\S]*second-missing[\s\S]*Edit only the config file/,
     );
     expect(copies[0]!.args[0]).not.toContain("duplicate key");
     await click(sockPath, viewerLink(shown, "✕")!.url);

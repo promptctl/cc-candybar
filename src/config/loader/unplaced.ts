@@ -1,11 +1,12 @@
 // A placement of a segment nothing declares draws nothing: the loader drops
 // that one cell and keeps the rest of the bar, and the drop is reported as an
-// error beside it (src/config/dsl-loader.ts validateRenderable). One unknown
-// name in a config must not cost the user every other cell they placed.
+// error beside it (src/config/dsl-loader.ts validateRenderable), unless its
+// plugin is absent from the session, which is no error. One unknown name in a
+// config must not cost the user every other cell they placed.
 //
-// [LAW:one-source-of-truth] Which names are dropped is the same question the
-// layout walk's "does not match any declared segment" asks
-// (cross-ref.ts): declared in `segments`, or the settings menu's anchor.
+// [LAW:one-source-of-truth] Which names are dropped, and which of those are
+// reported, is one question, answered here for the layout walk (cross-ref.ts),
+// the insert cells and the drop alike.
 
 import { isRowsFragment } from "../root.js";
 import { isSettingsAnchor } from "../settings-menu.js";
@@ -18,14 +19,44 @@ import type {
   RootFragment,
 } from "../dsl-types.js";
 import { mapOpens } from "../dsl-types.js";
+import {
+  ownedBy,
+  scopeOf,
+  type NamedDefinition,
+  type SegmentPresence,
+} from "./plugin-scope.js";
+
+// [LAW:single-enforcer] The one place a placed name's presence is decided.
+// The namespaces matched are the ones that render, never parsed out of the
+// name, because a plugin's name may itself hold a dot.
+export function presenceOf(
+  segments: Readonly<Record<string, unknown>>,
+  rendering: ReadonlyMap<string, NamedDefinition>,
+): (name: string) => SegmentPresence {
+  return (name) => {
+    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
+      return { kind: "declared" };
+    const owner = [...rendering].find(([ns]) => ownedBy(ns)(name));
+    if (owner !== undefined) return { kind: "plugin", definition: owner[1] };
+    const scope = scopeOf(name);
+    return scope !== undefined && scope !== name
+      ? { kind: "absent" }
+      : { kind: "missing" };
+  };
+}
 
 // `config` with every placement of an undeclared segment removed from its
 // root and every preset's root, at any depth, disclosure bodies included. A
-// tree that was nothing but such a placement becomes an empty row.
+// tree that was nothing but such a placement becomes an empty row. A config
+// with none comes back as itself, so its trees keep their identity.
 export function withoutUnplaced(config: DslConfig): DslConfig {
-  const placed = (name: string): boolean =>
-    isSettingsAnchor(name) ||
-    Object.prototype.hasOwnProperty.call(config.segments, name);
+  let removed = 0;
+  const declared = presenceOf(config.segments, new Map());
+  const placed = (name: string): boolean => {
+    const keep = declared(name).kind === "declared";
+    if (!keep) removed += 1;
+    return keep;
+  };
   const container = (node: ContainerNode): ContainerNode => ({
     ...node,
     children: node.children.flatMap((child) => nodes(child)),
@@ -47,13 +78,14 @@ export function withoutUnplaced(config: DslConfig): DslConfig {
     isRowsFragment(f) ? root(f) : tree(f);
   const preset = (p: PresetDecl): PresetDecl =>
     p.root === undefined ? p : { ...p, root: fragment(p.root) };
-  return {
+  const result = {
     ...config,
     root: root(config.root),
     presets: Object.fromEntries(
       Object.entries(config.presets).map(([name, p]) => [name, preset(p)]),
     ),
   };
+  return removed === 0 ? config : result;
 }
 
 const EMPTY_ROW: ContainerNode = {

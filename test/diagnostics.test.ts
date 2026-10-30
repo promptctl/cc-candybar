@@ -34,7 +34,7 @@ import { links, linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SID = "sid-1";
 // Messages each about their own text, unless a test says otherwise.
-const sourced = (text: string) => ({ about: text, text });
+const sourced = (text: string) => ({ about: text, text, copy: text });
 const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
@@ -62,6 +62,7 @@ const notice = (text: string): DiagnosticMessage => ({
   severity: UPDATE_SEVERITY,
   about: text,
   message: text,
+  copy: text,
   lines: [[diagnosticSpan(text, null)]],
 });
 
@@ -74,6 +75,7 @@ describe("the diagnostic list", () => {
       severity: APPROVAL_SEVERITY,
       about: "run it?",
       message: "run it?",
+      copy: "run it?",
       lines: [[diagnosticSpan("run it?", null)]],
     };
     const list = collectDiagnostics(
@@ -168,7 +170,16 @@ describe("the viewer", () => {
     const keyOf = (
       errors: { about: string; text: string }[],
       warnings: { about: string; text: string }[],
-    ) => viewerKey(collectSourced(errors, [], warnings), 0, 0);
+    ) =>
+      viewerKey(
+        collectSourced(
+          errors.map((e) => ({ ...e, copy: e.text })),
+          [],
+          warnings.map((w) => ({ ...w, copy: w.text })),
+        ),
+        0,
+        0,
+      );
     const load = (text: string) => ({ about: "load", text });
     expect(keyOf([load("Invalid config in a (3 issues):")], [])).toBe(
       keyOf([load("Invalid config in a (2 issues):")], []),
@@ -253,7 +264,7 @@ describe("the viewer", () => {
     expect(header(2)).toBe("✕ ‹ [2/3] › ⧉ copy ");
     expect(header(3)).toBe("✕ ‹ [3/3]   ⧉ copy ");
     const writes = links(viewerRows(list, at(2), SID, geometry(80)))
-      .filter((l) => stripAnsi(l.text) !== "⧉ copy ")
+      .filter((l) => effectsOf(l.url).every((e) => e.verb !== "copy"))
       .map((l) => [stripAnsi(l.text).trim(), effectsOf(l.url)]);
     const [a, , c] = list.map((_, i) => viewerKey(list, i, 0));
     expect(writes).toEqual([
@@ -282,15 +293,45 @@ describe("the viewer", () => {
     }
   });
 
-  test("⧉ copies the viewed message verbatim, and nothing else in it clicks", () => {
+  test("⧉ and the message's first line copy the viewed message verbatim, and nothing else in it clicks", () => {
     const list = collectDiagnostics([ERROR, "second"], [], []);
     const out = viewerRows(list, at(1), SID, geometry(60));
     const copies = linkUrls(out)
       .flatMap((u) => effectsOf(u))
       .filter((e) => e.verb === "copy");
-    expect(copies).toEqual([{ verb: "copy", args: [ERROR] }]);
+    expect(copies.length).toBeGreaterThan(1);
+    for (const c of copies) expect(c).toEqual({ verb: "copy", args: [ERROR] });
+    // Only the first line's words click; the issue lines below carry none.
     const bodyLinks = links(out.split("\n").slice(1).join("\n"));
-    expect(bodyLinks).toEqual([]);
+    const firstLine = ERROR.split("\n")[0]!;
+    for (const l of bodyLinks) {
+      expect(firstLine).toContain(stripAnsi(l.text).trim().split(" ")[0]);
+      expect(effectsOf(l.url)).toEqual([{ verb: "copy", args: [ERROR] }]);
+    }
+  });
+
+  test("a message whose copy is a prompt copies the prompt, from ⧉ and its first line alike", () => {
+    const list = collectSourced(
+      [
+        {
+          about: "dropped",
+          text: 'root entry "x" is broken\nmore',
+          copy: "FIX PROMPT",
+        },
+      ],
+      [],
+      [],
+    );
+    expect(list[0]!.lines[0]![0].link).not.toBeNull();
+    expect(effectsOf(list[0]!.lines[0]![0].link!)).toEqual([
+      { verb: "copy", args: ["FIX PROMPT"] },
+    ]);
+    expect(list[0]!.lines[1]![0].link).toBeNull();
+    const copies = linkUrls(viewerRows(list, at(1), SID, geometry(80)))
+      .flatMap((u) => effectsOf(u))
+      .filter((e) => e.verb === "copy");
+    expect(copies.length).toBeGreaterThan(0);
+    for (const c of copies) expect(c.args).toEqual(["FIX PROMPT"]);
   });
 
   test("a message's control characters are neutralized before they reach the terminal", () => {

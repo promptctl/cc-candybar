@@ -76,8 +76,8 @@ export const HANDOFF_SEVERITY: DiagnosticSeverity = {
 };
 
 // [LAW:parse-dont-validate] A run of words sharing one click, or none: a plain
-// message's words carry no click (its copy is the viewer's ⧉), while an update
-// notice's and a repository question's answers each carry their own. The text
+// message.s first line copies what ⧉ copies, its other lines carry no click
+// (one link per message bounds a frame.s bytes), while an update notice.s and a repository question's answers each carry their own. The text
 // is sanitized at construction — `diagnosticSpan` is the only constructor — so
 // every span the viewer meets is already safe to emit, whatever produced it.
 export interface DiagnosticSpan {
@@ -92,8 +92,9 @@ export function diagnosticSpan(
 }
 export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 
-// One message: its severity, what it is about, its verbatim text (what ⧉
-// copies), and the lines the viewer shows. Non-empty by construction — a
+// One message: its severity, what it is about, its verbatim text, what ⧉
+// copies (the text, or a prompt that fixes what the text reports), and the
+// lines the viewer shows. Non-empty by construction — a
 // message with no visible line is no message. `about` is named by the message's
 // producer — its source, and the file or repository it concerns — and stays
 // put while the text changes (an issue fixed, a failure line gained).
@@ -101,6 +102,7 @@ export interface DiagnosticMessage {
   readonly severity: DiagnosticSeverity;
   readonly about: string;
   readonly message: string;
+  readonly copy: string;
   readonly lines: readonly [DiagnosticLine, ...DiagnosticLine[]];
 }
 
@@ -112,6 +114,7 @@ export type DiagnosticList = readonly DiagnosticMessage[];
 export interface SourcedText {
   readonly about: string;
   readonly text: string;
+  readonly copy: string;
 }
 
 // [LAW:parse-dont-validate] The one place a draw's diagnostics become a list,
@@ -131,20 +134,30 @@ export function collectDiagnostics(
   ];
 }
 
-// A plain message: every visible line one span with no click. Blank lines are
-// dropped; a message with no visible line is none.
+// A plain message: every visible line one span, the first a click that copies
+// what ⧉ copies and the rest none. Blank lines are dropped; a message with no
+// visible line is none.
 export function plainMessage(
-  { about, text: message }: SourcedText,
+  { about, text: message, copy }: SourcedText,
   severity: DiagnosticSeverity,
 ): DiagnosticMessage[] {
   const [first, ...rest] = message
     .split(/\r\n|\r|\n/)
-    .map((line) => diagnosticSpan(line, null))
-    .filter((span) => span.text !== "")
-    .map((span): DiagnosticLine => [span]);
-  return first === undefined
-    ? []
-    : [{ severity, about, message, lines: [first, ...rest] }];
+    .filter((line) => diagnosticSpan(line, null).text !== "");
+  if (first === undefined) return [];
+  const copyLink = effectsUrl([{ verb: VERB_COPY, args: [copy] }]);
+  return [
+    {
+      severity,
+      about,
+      message,
+      copy,
+      lines: [
+        [diagnosticSpan(first, copyLink)],
+        ...rest.map((line): DiagnosticLine => [diagnosticSpan(line, null)]),
+      ],
+    },
+  ];
 }
 
 // The level the list counts as: the worst of its members, none when empty.
@@ -330,10 +343,7 @@ export function viewerRows(
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
-        button(
-          "⧉ copy",
-          effectsUrl([{ verb: VERB_COPY, args: [shown.message] }]),
-        ),
+        button("⧉ copy", effectsUrl([{ verb: VERB_COPY, args: [shown.copy] }])),
       ],
       opts,
     );
