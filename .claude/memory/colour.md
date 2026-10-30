@@ -16,7 +16,7 @@ A cell is a leaf of its row. A horizontal group nested in a row is layout, not a
 
 Because colour follows address, hiding a sibling recolours nothing.
 
-The shade dial is a table, so a new position or a wider window is one more row. Tones within a window are ordered so the default distribution walks a row up and down one rung at a time, and turning the dial one step moves every cell exactly one rung. The shade is picked by nearest point, not by bin, because bins put neighbouring cells on the same shade.
+The shade dial is a table, so a new position or a wider window is one more row. Tones within a window are ordered so the default distribution walks a row up and down one rung at a time, and turning the dial one step moves every cell exactly one rung. The rule that reads a placement as a tone belongs to the distribution, not the window, because whether neighbours ever share a tone is a property of the pair: the default keeps them apart only read by halves, golden angle by equal bins, and the even spreads ramp evenly and in order only by equal bins. Every position deals at least two tones, the muted one included, because a one-tone position puts every pair of neighbours on one shade.
 
 In some themes the accent is the warning colour, so their accent cells read as orange. That's the theme's own choice, and it's accepted.
 
