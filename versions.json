@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9",
+      "timestamp": "2026-10-30T11:59:56.387Z",
+      "commits": [
+        {
+          "sha": "84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:59:11-06:00",
+          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted (#490)\n\n* docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n\n* docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n\n* docs(joiners): fold the design review in — lift direction and ansi rule, byte-identity scope, imports text keeps, quantize per window size\n\n* docs(joiners): the problem statement beside the plan\n\n* docs(joiners): fold the second review in — merge order, the muted dial's activated rung, byte identity without effects, 8k−1/8k, windows widen before they shrink, ansi caveat\n\n* docs(joiners): fold the third review in — the closing sweep, enumerated imports, policy-chosen backgrounds, position readers, gradientSeam, sources quoted"
+        },
+        {
+          "sha": "eab87b692ee34d4652e60c0a4c1042bcd41da053",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T11:12:47Z",
+          "message": "chore(release): set `package.json` to 1.164.1 [skip ci]\n\n## [1.164.1](https://github.com/promptctl/cc-candybar/compare/v1.164.0...v1.164.1) (2026-10-30)\n\n### Bug Fixes\n\n* **proc:** a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga) ([#488](https://github.com/promptctl/cc-candybar/issues/488)) ([092f79f](https://github.com/promptctl/cc-candybar/commit/092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-489",
       "ref": "refs/pull/489/merge",
       "sha": "33f8b5da9929d4fb644411530c1ba713f66ebb38",
@@ -88,70 +110,6 @@
       ]
     },
     {
-      "version": "pr-490",
-      "ref": "refs/pull/490/merge",
-      "sha": "9ff9b2efe88af52b35a48561597305b3b92d09c5",
-      "timestamp": "2026-10-30T11:53:15.627Z",
-      "commits": [
-        {
-          "sha": "9ff9b2efe88af52b35a48561597305b3b92d09c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:52:37Z",
-          "message": "Merge 0a79253c7c79a1ee793ae63f65ccd3fdfe544a9b into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
-        },
-        {
-          "sha": "0a79253c7c79a1ee793ae63f65ccd3fdfe544a9b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:52:33-06:00",
-          "message": "Merge branch 'main' into worktree-immutable-sleeping-barto"
-        },
-        {
-          "sha": "3b9f91c82fb1d0fa9665e805ac818704e95da725",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:41:32-06:00",
-          "message": "docs(joiners): fold the third review in — the closing sweep, enumerated imports, policy-chosen backgrounds, position readers, gradientSeam, sources quoted"
-        },
-        {
-          "sha": "ca37ca3160ba86a565d33805ae975ba84b5c7f8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:29:18-06:00",
-          "message": "docs(joiners): fold the second review in — merge order, the muted dial's activated rung, byte identity without effects, 8k−1/8k, windows widen before they shrink, ansi caveat"
-        },
-        {
-          "sha": "ce1ad8fb2220cbcee891ac574d84fda3cc6731d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:20:03-06:00",
-          "message": "docs(joiners): the problem statement beside the plan"
-        },
-        {
-          "sha": "d7ba3fd451616b4238fa5d7be1469639a9aa52da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:20:02-06:00",
-          "message": "docs(joiners): fold the design review in — lift direction and ansi rule, byte-identity scope, imports text keeps, quantize per window size"
-        },
-        {
-          "sha": "7f39650bf5c406f389b84654f2f0610a76033923",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:00:36-06:00",
-          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n"
-        },
-        {
-          "sha": "70758536031569d8f24edcae8983e15cb75881ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:03:05-06:00",
-          "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
-        }
-      ]
-    },
-    {
       "version": "pr-492",
       "ref": "refs/pull/492/merge",
       "sha": "05e40aeb6dd4616a2179881fd84c4f9b628d4e67",
@@ -177,28 +135,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:38:08-06:00",
           "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4",
-      "timestamp": "2026-10-30T11:04:59.871Z",
-      "commits": [
-        {
-          "sha": "092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:04:04-06:00",
-          "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga) (#488)\n\n* fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n\n* fix(proc): the update act outlives the daemon, and a downed lifeline stands as a warning (brandon-unfiled-3248.86ga)\n\nHigh review of the lifeline:\n\n- The update act rewrites the bundle, so any daemon exit now killed it\n  half-written. A waited launch can say it outlives its launcher, and the\n  act does; the binary watch still holds the restart while it runs.\n- Why the lifeline is down is one state: the log says each change, and the\n  daemon shows it beside the file-events warning, so a broken lifeline\n  reaches the bar instead of only daemon.log.\n- awk is found on the launcher's PATH, as every launched program is, so a\n  machine without /usr/bin/awk (NixOS) is guarded.\n- The binary watch says its wait once, through the shared change logger.\n- The demo shim's resident programs are programs that answer RESIDENT, one\n  registry instead of two.\n\n* fix(proc): the update act dies with the daemon like every child, and a lifeline change redraws every feed (brandon-unfiled-3248.86ga)\n\nMedium review of the lifeline:\n\n- Exempting the update act from the lifeline did not let it outlive the\n  daemon: its output pipes lead to the dead daemon, so a shell in it dies of\n  SIGPIPE at its next write, and the next daemon has no record of it and\n  would start a second. The act is a launch child like any other again; the\n  binary watch still holds the restart while it runs.\n- The lifeline's seam is an observer of its fault rather than a log. The\n  daemon's observer logs each change and wakes every feed, as file events'\n  delivery does, so the warning comes and goes on pushed frames too.\n\n* fix(proc): a lifeline's start clears its fault only while it is the current one, and the warning names no daemon (brandon-unfiled-3248.86ga)\n\nSecond high review of the lifeline:\n\n- A spawn event from a lifeline already lost no longer clears the fault while\n  nothing guards.\n- The warning says \"their launcher\", since bar-pane and the CLI print it too.\n- The architecture memory says which children the lifeline holds (those not\n  blocking the daemon) and the one window it leaves: a daemon death while the\n  update writes the bundle tears it. The durable update act that closes it is\n  brandon-unfiled-3248.z676."
-        },
-        {
-          "sha": "abe2b7909fcf52f5b03f459d550ad4f260f545ac",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T10:47:14Z",
-          "message": "chore(release): set `package.json` to 1.164.0 [skip ci]\n\n## [1.164.0](https://github.com/promptctl/cc-candybar/compare/v1.163.0...v1.164.0) (2026-10-30)\n\n### Features\n\n* **config:** a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) ([#486](https://github.com/promptctl/cc-candybar/issues/486)) ([cd51ad0](https://github.com/promptctl/cc-candybar/commit/cd51ad088846247d4d8d328c870849e2b81ba424))\n\n### Bug Fixes\n\n* **ci:** the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) ([#487](https://github.com/promptctl/cc-candybar/issues/487)) ([e31c958](https://github.com/promptctl/cc-candybar/commit/e31c958417e5127d95819930643df17eb59fe2bf))\n"
         }
       ]
     }
