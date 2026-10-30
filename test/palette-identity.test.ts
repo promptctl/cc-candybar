@@ -54,8 +54,11 @@ const VIEWS: readonly View[] = [
 
 /**
  * Every visible character of a rendered frame with the background it is drawn
- * on, read through rich-js's `decodeAnsi`, the writer's inverse. A swatch is
- * left out: it shows another palette's colours on purpose.
+ * on, read through rich-js's `decodeAnsi`, the writer's inverse. The one
+ * exemption is a swatch, which shows another palette's colours on purpose. An
+ * authored `bg` is meaning, not policy; it needs no exemption only because
+ * every one the bundled bar draws is a palette role (`warning`, `error`), and
+ * an authored colour that is not belongs on this list.
  */
 function grounds(rendered: string): { readonly ch: string; readonly at: string; readonly bg: ColorSpec }[] {
   return rendered.split("\n").flatMap((line, row) => {
