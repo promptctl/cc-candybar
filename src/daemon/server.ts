@@ -2338,13 +2338,13 @@ function drawRender(
   // indicator reads it as the `diagnostics` projection and the viewer pages
   // the same object, so the two cannot disagree within a frame. The render
   // warnings are this renderer's recorded ones — known only after a walk, so
-  // the frame before this one's, drawn from this config at this width
-  // (src/daemon/render-warnings.ts).
+  // the frame before this one's, drawn from this config at this width — with
+  // every other renderer's for the session (src/daemon/render-warnings.ts).
   const scope = { config: state.config, width };
   const diagnostics = collectDiagnostics(
     errors,
     [...updates, ...questions],
-    [...loadWarnings, ...renderWarnings.of(sessionId, drawing.by, scope)].map(
+    [...loadWarnings, ...renderWarnings.ofSession(sessionId, drawing.by, scope)].map(
       (w) => w.message,
     ),
   );

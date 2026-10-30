@@ -66,4 +66,16 @@ describe("a renderer's warning record", () => {
     expect(records.of("a", "request", S)).toEqual([warning("a")]);
     expect(records.of("c", "request", S)).toEqual([warning("c")]);
   });
+
+  test("the session's list is every renderer's, the same on each surface, a shared warning once", () => {
+    const records = new RenderWarningRecords();
+    const lane = { ...S, width: 120 };
+    records.drawn("s", "request", S, [warning("both"), warning("statusline")]);
+    records.drawn("s", "feed", lane, [warning("lane"), warning("both")]);
+    const expected = [warning("both"), warning("statusline"), warning("lane")];
+    expect(records.ofSession("s", "request", S)).toEqual(expected);
+    expect(records.ofSession("s", "feed", lane)).toEqual(expected);
+    // Another renderer's record from a retired config is not counted.
+    expect(records.ofSession("s", "request", { ...S, config: {} })).toEqual([]);
+  });
 });
