@@ -1,3 +1,13 @@
+## [1.164.0](https://github.com/promptctl/cc-candybar/compare/v1.163.0...v1.164.0) (2026-10-30)
+
+### Features
+
+* **config:** a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) ([#486](https://github.com/promptctl/cc-candybar/issues/486)) ([cd51ad0](https://github.com/promptctl/cc-candybar/commit/cd51ad088846247d4d8d328c870849e2b81ba424))
+
+### Bug Fixes
+
+* **ci:** the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) ([#487](https://github.com/promptctl/cc-candybar/issues/487)) ([e31c958](https://github.com/promptctl/cc-candybar/commit/e31c958417e5127d95819930643df17eb59fe2bf))
+
 ## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)
 
 ### Features
