@@ -455,30 +455,28 @@ function commit(
   home: ConfigHome,
   before: string | null,
   after: string,
-  refuse: (
-    home: ConfigHome,
-    was: LoadedChain | null,
-    will: LoadedChain,
-  ) => void,
+  refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
 ): void {
   const will = loadOrRefuse(home, after);
-  // [LAW:one-source-of-truth] The file before the click is loaded once, and
-  // every refusal judges against that one load.
-  const was = loadedOrNull(home, before);
+  // [LAW:one-source-of-truth] The file before the click is loaded at most
+  // once, and only by a refusal that reads it; every refusal judges against
+  // that one load.
+  let held: { readonly chain: LoadedChain | null } | undefined;
+  const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
 
+// The chain the file before a click loads to, loaded when first asked; null
+// when that file does not load.
+type Was = () => LoadedChain | null;
+
 // A write the home takes and a layer above hides would change the file and
 // not the bar — refused, naming the layer that holds it.
-function refuseHidden(
-  home: ConfigHome,
-  was: LoadedChain | null,
-  will: LoadedChain,
-): void {
-  const hidden = hiddenBy(home, was, will);
+function refuseHidden(home: ConfigHome, was: Was, will: LoadedChain): void {
+  const hidden = hiddenBy(home, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
       `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
@@ -594,19 +592,23 @@ function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
 // click over it would lock the bar's own controls. A file that does not load
 // now has drops nobody can know — the bar runs on its last good load, as
 // hiddenBy reads it — so a click that repairs it is not blamed for them.
-function refuseNewDrops(
-  home: ConfigHome,
-  was: LoadedChain | null,
-  will: LoadedChain,
-): void {
-  if (was === null) return;
-  const held = new Set((was.dropped?.issues ?? []).map((i) => i.message));
-  const added = (will.dropped?.issues ?? []).filter(
-    (i) => !held.has(i.message),
+function refuseNewDrops(home: ConfigHome, was: Was, will: LoadedChain): void {
+  if (will.dropped.length === 0) return;
+  const prior = was();
+  if (prior === null) return;
+  const issuesOf = (chain: LoadedChain) =>
+    chain.dropped.flatMap((e) =>
+      e.issues.map((issue) => ({ file: e.file, issue })),
+    );
+  const held = new Set(
+    issuesOf(prior).map(({ file, issue }) => `${file}\0${issue.message}`),
+  );
+  const added = issuesOf(will).filter(
+    ({ file, issue }) => !held.has(`${file}\0${issue.message}`),
   );
   if (added.length > 0) {
     throw new BadVerbArgs(
-      `refused: this click would leave a placement of a segment nothing declares — ${new ConfigError(home.path, added).message}`,
+      `refused: this click would leave a placement of a segment nothing declares — ${added.map(({ file, issue }) => new ConfigError(file, [issue]).message).join("\n")}`,
     );
   }
 }

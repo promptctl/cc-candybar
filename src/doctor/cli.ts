@@ -118,7 +118,8 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
     layers: loaded.layers,
     // [LAW:no-silent-failure] A placement the bar drew past is still the
     // config's error.
-    error: loaded.error ?? state.dropped?.message ?? null,
+    error:
+      loaded.error ?? (state.dropped.map((e) => e.message).join("\n") || null),
     warning: loaded.warning,
     unused: state.unused,
     config: state.config,

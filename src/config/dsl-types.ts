@@ -48,12 +48,12 @@ import {
 //                     Output of `loadConfig`. Cross-refs and cycles have NOT
 //                     yet been checked at this stage.
 //
-//   ValidatedConfig — DslConfig + a phantom brand proving validateConfig()
+//   ValidatedConfig — DslConfig + a phantom brand proving validateRenderable()
 //                     has run. The renderer accepts only this type, so the
 //                     compiler structurally enforces "no unvalidated config
 //                     can reach rendering." The brand is module-scoped via
 //                     `unique symbol`, so the only construction site is
-//                     `validateConfig` itself.
+//                     `validateRenderable` itself.
 // [LAW:types-are-the-program] The recursive layout substrate collapses to
 // exactly two kinds: a `segment` leaf (a ref into the named `segments` block —
 // THE unit of rendering, a single template that IS its content) or a
@@ -498,7 +498,7 @@ export interface DslConfig {
 
 // [LAW:single-enforcer] The brand symbol is `unique` and module-private —
 // nothing outside this file can construct a value carrying it. The only
-// production-path producer is validateConfig() in dsl-loader.ts (one
+// production-path producer is validateRenderable() in dsl-loader.ts (one
 // callsite of `config as ValidatedConfig`). Renderer signatures require
 // ValidatedConfig; the type system therefore proves the validation step
 // ran before any render path consumed the config.

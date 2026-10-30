@@ -55,6 +55,7 @@ export function laneHandoff(
   ]);
   return {
     severity: HANDOFF_SEVERITY,
+    about: "lane-handoff",
     message,
     lines: [
       [

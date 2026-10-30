@@ -11,12 +11,12 @@
 //     declaration under a bundled name is a delta), by-name merge of root's
 //     rows (a whole tree replaces). Pure function.
 //
-//   validateConfig (DslConfig → ValidatedConfig)
+//   validateRenderable (DslConfig → ValidatedConfig)
 //     Cross-references + cycle detection on the merged shape. Sole producer
 //     of ValidatedConfig. Throws ConfigError on cross-ref / cycle problems.
 //
 // loadConfig (path|null → DslConfig) wires parse+merge for the daemon's
-// production path. validateConfig finishes the chain.
+// production path. validateRenderable finishes the chain.
 //
 // [LAW:dataflow-not-control-flow] Validation passes accumulate issues into
 // a list; consumers see every problem at once (compiler-style).
@@ -37,6 +37,7 @@ import {
   ConfigError,
   editabilityNotice,
   findKeyLine,
+  DroppedPlacements,
   type ConfigIssue,
 } from "./loader/diagnostics.js";
 import {
@@ -77,6 +78,8 @@ import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
+  authoredPlacement,
+  unplacedMessage,
   validateCrossReferences,
   validateDeclarations,
 } from "./loader/cross-ref.js";
@@ -146,7 +149,7 @@ export type { DroppedPlugin } from "./loader/plugins.js";
  * resolves explicitly by importing DEFAULT_DSL_CONFIG themselves.
  *
  * [LAW:one-source-of-truth] The source and the parsed raw shape are returned
- * alongside the config, so the whole result is validateConfig's input —
+ * alongside the config, so the whole result is validateRenderable's input —
  * cross-ref diagnostics walk the fragments the file wrote and quote its lines
  * — and the caller can ask the raw shape what the file itself AUTHORS (which
  * preset roots it declares; candybar-config-dqe's `preset.customized`), all
@@ -159,7 +162,7 @@ export type { DroppedPlugin } from "./loader/plugins.js";
  * fails instead, the thrown ConfigError carries them.
  *
  * Throws ConfigError on JSON5 syntax / structural / per-record validation
- * failures. Cross-references and cycles are validateConfig()'s job.
+ * failures. Cross-references and cycles are validateRenderable()'s job.
  *
  * [LAW:dataflow-not-control-flow] One function, one branch, same operations
  * each call.
@@ -435,7 +438,12 @@ export function loadConfigChain(
       layers,
       base,
       installed,
-      ...validateRenderable(top, top.path, allowedPalettes),
+      ...validateRenderable(
+        top,
+        top.path,
+        allowedPalettes,
+        layers.slice(0, -1).reverse(),
+      ),
     };
   } catch (e) {
     // [LAW:single-enforcer] Blame goes to the lowest layer that fails on its
@@ -481,7 +489,7 @@ export interface LoadedChain {
   // The merged config the bar draws, and the placements it dropped
   // (validateRenderable).
   readonly config: ValidatedConfig;
-  readonly dropped: ConfigError | null;
+  readonly dropped: readonly ConfigError[];
 }
 
 export interface LoadedFile {
@@ -546,6 +554,7 @@ function checkPlugin(
     allowedPalettes: new Set(),
     groups: [],
     unplaced: [],
+    inherited: [],
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
@@ -578,37 +587,16 @@ const NO_FILE: LoadedFile = {
   },
 };
 
-/**
- * Promote a merged DslConfig to a ValidatedConfig by running cross-references
- * and cycle detection, refusing it outright on any issue — a placement of an
- * undeclared segment included. What a plugin replacing one its layer held is
- * judged by (checkPlugin). The bar, `check` and every write load through
- * loadConfigChain's tolerant validateRenderable instead; `check` then refuses
- * the placements it dropped.
- *
- * Throws ConfigError aggregating every issue.
- */
-export function validateConfig(
-  authored: AuthoredConfig,
-  filePath = "<config>",
-  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
-): ValidatedConfig {
-  const { config, dropped } = validateRenderable(
-    authored,
-    filePath,
-    allowedPalettes,
-  );
-  if (dropped !== null) throw dropped;
-  return config;
-}
-
 // A config the bar can draw, and the placements it dropped to draw it.
 export interface Renderable {
   readonly config: ValidatedConfig;
-  // [LAW:no-silent-failure] Each placement of an undeclared segment, as the
-  // error the strict load would have refused the config with; null for none.
-  readonly dropped: ConfigError | null;
+  // [LAW:no-silent-failure] Each placement of an undeclared segment, as one
+  // error per file that wrote one; empty for none. `check` refuses them.
+  readonly dropped: readonly ConfigError[];
 }
+
+// A file beneath the one validated, by its path.
+export type AuthoredLayer = AuthoredConfig & { readonly path: string };
 
 /**
  * The same validation, except that a placement of an undeclared segment drops
@@ -626,6 +614,8 @@ export function validateRenderable(
   { config: merged, raw, source }: AuthoredConfig,
   filePath = "<config>",
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+  // The files it merges over, nearest first.
+  beneath: readonly AuthoredLayer[] = [],
 ): Renderable {
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = {
@@ -634,22 +624,26 @@ export function validateRenderable(
     allowedPalettes,
     groups: [],
     unplaced: [],
+    inherited: [],
   };
   // [LAW:single-enforcer] The one refusal every stage throws through, so the
   // drops ride with whichever issue refuses the config.
   const refuseIfIssues = (): void => {
     if (issues.length > 0) {
-      throw new ConfigError(filePath, [...issues, ...ctx.unplaced]);
+      throw new ConfigError(filePath, [
+        ...issues,
+        ...ctx.unplaced,
+        ...ctx.inherited,
+      ]);
     }
   };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped =
-    ctx.unplaced.length === 0 ? null : new ConfigError(filePath, ctx.unplaced);
+  const dropped = droppedByFile(filePath, ctx, beneath);
   // A config with nothing to drop is the merged one itself, so its trees keep
   // their identity.
-  const config = dropped === null ? merged : withoutUnplaced(merged);
+  const config = dropped.length === 0 ? merged : withoutUnplaced(merged);
   // [LAW:one-source-of-truth] A menu's keys are its PLACEMENT's, so they are
   // minted over the trees that render — which exist only now, merged and
   // cross-referenced — before the settings menu and edit chrome add their own.
@@ -686,10 +680,47 @@ export function validateRenderable(
   return { config: withChrome as ValidatedConfig, dropped };
 }
 
+// [LAW:single-enforcer] What `check` and the demo refuse that the bar draws
+// past: every dropped placement, each file's error in turn.
+export function refuseDrops(dropped: readonly ConfigError[]): void {
+  if (dropped.length > 0) throw new DroppedPlacements(dropped);
+}
+
+// [LAW:no-silent-failure] Each dropped placement reported against the file
+// that wrote it: this file's own, and each one inherited against the nearest
+// file beneath whose own layout places it, at its path and line there. One no
+// file wrote (an installed plugin's layout) stays under the tree that renders
+// it.
+function droppedByFile(
+  filePath: string,
+  ctx: ValidateCtx,
+  beneath: readonly AuthoredLayer[],
+): ConfigError[] {
+  const byFile = new Map<string, ConfigIssue[]>();
+  const add = (file: string, issue: ConfigIssue): void => {
+    byFile.set(file, [...(byFile.get(file) ?? []), issue]);
+  };
+  for (const issue of ctx.unplaced) add(filePath, issue);
+  for (const { name, ...issue } of ctx.inherited) {
+    const author = beneath.flatMap((layer) => {
+      const at = authoredPlacement(layer.raw, name);
+      return at === undefined ? [] : [{ layer, ...at }];
+    })[0];
+    if (author === undefined) add(filePath, issue);
+    else
+      add(author.layer.path, {
+        path: author.path,
+        message: unplacedMessage(author.layoutKey, name),
+        line: findKeyLine(author.layer.source, author.path.split(".")),
+      });
+  }
+  return [...byFile].map(([file, issues]) => new ConfigError(file, issues));
+}
+
 /**
  * Parse a JSON5 DSL config source into a RawDslConfig. JSON5 syntax + per-
  * record structural validation. Cross-references and cycles are NOT checked
- * here — they belong to validateConfig, which runs on the merged shape.
+ * here — they belong to validateRenderable, which runs on the merged shape.
  *
  * Returned shape preserves absence: top-level keys are optional in RawDslConfig.
  *
@@ -749,6 +780,7 @@ function parseDslFile<L>(
     allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
+    inherited: [],
   };
 
   // ── Stage 2: top-level shape + per-record shape. Absence survives as
@@ -892,19 +924,19 @@ function validateTopLevel(
   synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] The `menus.` reservation and every `{{ menu }}`
   // call's shape, checked where the author wrote them; the keys each placement
-  // derives are minted after merge (validateConfig).
+  // derives are minted after merge (validateRenderable).
   checkMenuDecls(ctx, out);
   // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-
   // 2gc.3) — unconditional, like the reservation above, so `edit.mode`/
   // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger
   // segment cross-ref-checks normally. The CHROME half (the per-position +/-
-  // affordances) runs later, in validateConfig, once the merged/preset-
+  // affordances) runs later, in validateRenderable, once the merged/preset-
   // resolved tree exists to derive it from.
   synthesizeEditModeToggle(ctx, out);
   // [LAW:one-source-of-truth] The global settings menu reserves its namespace
   // here and synthesizes NOTHING here: the tree it must be present in only
   // exists after merge (a user `root` replaces the default's), so the artifacts
-  // are minted in validateConfig. The reservation is unconditional all the same,
+  // are minted in validateRenderable. The reservation is unconditional all the same,
   // mirroring every other namespace above — "you never author candybar.*" is a
   // stable contract, not a rule that switches on when the pass happens to fire.
   reservedNamespaceCollisions(

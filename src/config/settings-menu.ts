@@ -19,7 +19,7 @@
 // three call, so a synthesized global menu and a hand-authored group are
 // indistinguishable to the render walk.
 //
-// WHY THIS RUNS FROM validateConfig, BEFORE synthesizeEditChrome — the two
+// WHY THIS RUNS FROM validateRenderable, BEFORE synthesizeEditChrome — the two
 // passes both rewrite every preset root, so their order is a real decision:
 //   • It cannot run at parse time (loader/*.ts) like group/menu synthesis,
 //     because the tree it must splice into only exists after merge: a file's
@@ -1164,7 +1164,7 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
-// validateConfig after cross-ref/cycle checks pass and before edit chrome.
+// validateRenderable after cross-ref/cycle checks pass and before edit chrome.
 // Every declared preset — the floor `default` included — gets an explicit
 // `presets[name].root` carrying its anchored, expanded tree; `config.root`
 // itself is left untouched, exactly as synthesizeEditChrome leaves it, because

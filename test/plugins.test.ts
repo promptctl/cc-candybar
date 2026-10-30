@@ -755,7 +755,7 @@ describe("an installed plugin", () => {
     const warnings: string[] = [];
     // `check` refuses the drop, naming the placement — never the plugin.
     await expect(prepareConfig([user, project], null, dir, warnings, instantOf(new Date()))).rejects.toThrow(
-      /"gti" that does not match any declared segment/,
+      /user\.json5[\s\S]*"gti" does not match any declared segment/,
     );
     expect(warnings.join("\n")).not.toContain("was not loaded");
   });

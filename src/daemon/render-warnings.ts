@@ -8,11 +8,14 @@
 // owns its own and neither overwrites the other's. The session's warnings are
 // every renderer's together, in one fixed order, so every surface counts and
 // pages the same list and a viewer opened on one surface finds its message on
-// the other. A record holds only for the config it was drawn from, and the
-// drawing renderer's own only for its width: a reloaded config or a resized
-// terminal may draw past what another walk met, so it reads none until its own
-// walk records, never a stale count. A config is named by a generation number,
-// never held, so a record does not keep a retired config alive.
+// the other. The drawing renderer reads its own last frame's record whatever
+// it was drawn from: its walk replaces it at this frame's end, and a record
+// emptied first would make a warning still met look gone for one frame,
+// closing an open viewer and reopening it on the next. Another renderer's
+// record counts only while drawn from the same config, since that renderer
+// may have stopped drawing and nothing would ever replace it. A config is
+// named by a generation number, never held, so a record does not keep a
+// retired config alive.
 //
 // [LAW:no-silent-failure] Every frame's warnings are the record's next value,
 // compared by value: a warning that starts or stops while nothing else about
@@ -28,12 +31,10 @@ const MAX_RECORDS = 512;
 // What a walk's warnings are a function of, beside the values it read.
 export interface RecordScope {
   readonly config: object;
-  readonly width: number;
 }
 
 interface WarningRecord {
   readonly generation: number;
-  readonly width: number;
   readonly warnings: readonly RenderWarning[];
 }
 
@@ -57,19 +58,9 @@ export class RenderWarningRecords {
 
   constructor(private readonly maxRecords: number = MAX_RECORDS) {}
 
-  // The warnings `by` last recorded for `sessionId` in `scope`; none before
-  // its first, or once its last frame was drawn from another scope.
-  of(
-    sessionId: string,
-    by: Drawing["by"],
-    scope: RecordScope,
-  ): readonly RenderWarning[] {
-    const held = this.records.get(keyOf(sessionId, by));
-    return held !== undefined &&
-      held.generation === generationOf(scope.config) &&
-      held.width === scope.width
-      ? held.warnings
-      : [];
+  // The warnings `by` last recorded for `sessionId`; none before its first.
+  of(sessionId: string, by: Drawing["by"]): readonly RenderWarning[] {
+    return this.records.get(keyOf(sessionId, by))?.warnings ?? [];
   }
 
   // The session's warnings as `by` draws them in `scope`: its own record, and
@@ -86,7 +77,7 @@ export class RenderWarningRecords {
       const held = this.records.get(keyOf(sessionId, renderer));
       const own =
         renderer === by
-          ? this.of(sessionId, by, scope)
+          ? this.of(sessionId, by)
           : held?.generation === generation
             ? held.warnings
             : [];
@@ -102,19 +93,18 @@ export class RenderWarningRecords {
   }
 
   // Records what a frame warned. Says whether that changed what the
-  // renderer's next frame in `scope` shows.
+  // renderer's next frame shows.
   drawn(
     sessionId: string,
     by: Drawing["by"],
     scope: RecordScope,
     warnings: readonly RenderWarning[],
   ): boolean {
-    const held = this.of(sessionId, by, scope);
+    const held = this.of(sessionId, by);
     const key = keyOf(sessionId, by);
     this.records.delete(key);
     this.records.set(key, {
       generation: generationOf(scope.config),
-      width: scope.width,
       warnings,
     });
     for (const oldest of this.records.keys()) {

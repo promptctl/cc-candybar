@@ -9,7 +9,7 @@
 import { RichText } from "@promptctl/rich-js";
 import {
   APPROVAL_SEVERITY,
-  collectDiagnostics,
+  collectDiagnostics as collectSourced,
   diagnosticSpan,
   diagnosticsProjection,
   ERROR_SEVERITY,
@@ -17,6 +17,7 @@ import {
   viewerKey,
   viewedIndex,
   viewerRows,
+  viewerRowCap,
   PAGES,
   WARNING_SEVERITY,
   worstLevel,
@@ -32,6 +33,13 @@ import { effectsOf } from "./helpers/click";
 import { links, linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SID = "sid-1";
+// Messages each about their own text, unless a test says otherwise.
+const sourced = (text: string) => ({ about: text, text });
+const collectDiagnostics = (
+  errors: readonly string[],
+  notices: readonly DiagnosticMessage[],
+  warnings: readonly string[],
+) => collectSourced(errors.map(sourced), notices, warnings.map(sourced));
 const at = (index: number) => ({ index, page: 0 });
 const geometry = (width: number): DiagnosticGeometry => ({
   width,
@@ -52,6 +60,7 @@ const ERROR = [
 
 const notice = (text: string): DiagnosticMessage => ({
   severity: UPDATE_SEVERITY,
+  about: text,
   message: text,
   lines: [[diagnosticSpan(text, null)]],
 });
@@ -63,6 +72,7 @@ describe("the diagnostic list", () => {
   test("errors first, then notices and questions, then warnings — each its own message", () => {
     const question: DiagnosticMessage = {
       severity: APPROVAL_SEVERITY,
+      about: "run it?",
       message: "run it?",
       lines: [[diagnosticSpan("run it?", null)]],
     };
@@ -154,14 +164,21 @@ describe("the viewer", () => {
     expect(viewedIndex(a!, collectDiagnostics(["z"], [], []))).toBeNull();
   });
 
-  test("a message's key is its severity and first line: a later line it gains keeps it, a warning and an error of one text differ", () => {
-    const keyOf = (errors: string[], warnings: string[]) =>
-      viewerKey(collectDiagnostics(errors, [], warnings), 0, 0);
-    expect(keyOf(["same"], [])).toBe(keyOf(["same"], []));
-    expect(keyOf(["same"], [])).toBe(keyOf(["same\nact failed: why"], []));
-    expect(keyOf(["same"], [])).not.toBe(keyOf([], ["same"]));
-    expect(keyOf(["same"], [])).toMatch(/^[1-9]\d*$/u);
-    expect(Number(keyOf(["same"], []))).toBeLessThan(2 ** 53);
+  test("a message's key is its severity and what it is about: its text may change under it, a warning and an error of one source differ", () => {
+    const keyOf = (
+      errors: { about: string; text: string }[],
+      warnings: { about: string; text: string }[],
+    ) => viewerKey(collectSourced(errors, [], warnings), 0, 0);
+    const load = (text: string) => ({ about: "load", text });
+    expect(keyOf([load("Invalid config in a (3 issues):")], [])).toBe(
+      keyOf([load("Invalid config in a (2 issues):")], []),
+    );
+    expect(keyOf([load("same")], [])).not.toBe(
+      keyOf([{ about: "dropped", text: "same" }], []),
+    );
+    expect(keyOf([load("same")], [])).not.toBe(keyOf([], [load("same")]));
+    expect(keyOf([load("same")], [])).toMatch(/^[1-9]\d*$/u);
+    expect(Number(keyOf([load("same")], []))).toBeLessThan(2 ** 53);
   });
 
   test("two alike messages are two stops: › from the first reaches the second, and past it", () => {
@@ -280,5 +297,15 @@ describe("the viewer", () => {
     const list = collectDiagnostics(["x\x1b[31mred\x9bCSI"], [], []);
     const body = viewerRows(list, at(1), SID, geometry(80)).split("\n")[1]!;
     expect(stripAnsi(body)).not.toMatch(/[\x1b\x9b]/);
+  });
+});
+
+describe("the viewer's row cap", () => {
+  test("is the least of its own ceiling, the terminal's rows and every surface showing it", () => {
+    expect(viewerRowCap(undefined, [])).toBe(20);
+    expect(viewerRowCap(12, [])).toBe(12);
+    // A feed's frame the tmux status line shows pages within its five rows.
+    expect(viewerRowCap(40, [5])).toBe(5);
+    expect(viewerRowCap(3, [5])).toBe(3);
   });
 });

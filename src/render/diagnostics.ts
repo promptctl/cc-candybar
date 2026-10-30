@@ -92,11 +92,14 @@ export function diagnosticSpan(
 }
 export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 
-// One message: its severity, its verbatim text (what ⧉ copies), and the lines
-// the viewer shows. Non-empty by construction — a message with no visible line
-// is no message.
+// One message: its severity, what it is about, its verbatim text (what ⧉
+// copies), and the lines the viewer shows. Non-empty by construction — a
+// message with no visible line is no message. `about` is named by the message's
+// producer — its source, and the file or repository it concerns — and stays
+// put while the text changes (an issue fixed, a failure line gained).
 export interface DiagnosticMessage {
   readonly severity: DiagnosticSeverity;
+  readonly about: string;
   readonly message: string;
   readonly lines: readonly [DiagnosticLine, ...DiagnosticLine[]];
 }
@@ -105,15 +108,21 @@ export interface DiagnosticMessage {
 // order the viewer pages them. Empty is "nothing to show".
 export type DiagnosticList = readonly DiagnosticMessage[];
 
+// A message's text and what it is about (see DiagnosticMessage).
+export interface SourcedText {
+  readonly about: string;
+  readonly text: string;
+}
+
 // [LAW:parse-dont-validate] The one place a draw's diagnostics become a list,
 // in severity order: each error, then the notices and questions (already
 // shaped — their lines carry per-word clicks), then each warning. A text with
 // nothing visible in it — empty, whitespace, control characters — is no
 // message, decided here.
 export function collectDiagnostics(
-  errors: readonly string[],
+  errors: readonly SourcedText[],
   notices: readonly DiagnosticMessage[],
-  warnings: readonly string[],
+  warnings: readonly SourcedText[],
 ): DiagnosticList {
   return [
     ...errors.flatMap((e) => plainMessage(e, ERROR_SEVERITY)),
@@ -125,7 +134,7 @@ export function collectDiagnostics(
 // A plain message: every visible line one span with no click. Blank lines are
 // dropped; a message with no visible line is none.
 export function plainMessage(
-  message: string,
+  { about, text: message }: SourcedText,
   severity: DiagnosticSeverity,
 ): DiagnosticMessage[] {
   const [first, ...rest] = message
@@ -135,7 +144,7 @@ export function plainMessage(
     .map((span): DiagnosticLine => [span]);
   return first === undefined
     ? []
-    : [{ severity, message, lines: [first, ...rest] }];
+    : [{ severity, about, message, lines: [first, ...rest] }];
 }
 
 // The level the list counts as: the worst of its members, none when empty.
@@ -151,18 +160,19 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 // message's identity, never as a position: a list that shifts under an open
 // viewer would otherwise show another message under the same position, and
 // one that shrank and grew again would reopen it. The identity is the
-// severity and the message's first line, digested — what a message is about,
-// which a later line it gains (an update act's failure) does not change — and
-// which of the list's messages of that identity it is, so two alike are two
-// stops. The page of the message shown rides in the same key, so a message has
+// severity and what the message is about, digested — never its text, which
+// moves while the message stays the same one (an issue count, a failure line
+// gained) — and which of the list's messages of that identity it is, so two
+// alike are two stops. The page of the message shown rides in the same key, so a message has
 // at most PAGES pages: the viewer never draws a page its key cannot name.
 const IDENTITY_BITS = 32;
 const OCCURRENCES = 256;
 export const PAGES = 4096;
 function identityOf(message: DiagnosticMessage): number {
-  const headline = message.message.split(/\r\n|\r|\n/, 1)[0];
   const digest = createHash("sha256")
-    .update(`${message.severity.level}\0${message.severity.glyph}\0${headline}`)
+    .update(
+      `${message.severity.level}\0${message.severity.glyph}\0${message.about}`,
+    )
     .digest("hex");
   return (
     Number.parseInt(digest.slice(0, IDENTITY_BITS / 4 + 1), 16) %
@@ -247,12 +257,16 @@ export function viewedIndex(
 }
 
 // [LAW:one-source-of-truth] The viewer's ceiling: a bar that eats the screen
-// is its own failure, so the viewer is at most this many rows, and at most
-// the client's reported rows. Rows absent (an older client, or no TTY on
-// stderr) reads as "no client ceiling", not as a guess.
+// is its own failure, so the viewer is at most this many rows, at most the
+// client's reported rows, and at most what the surface drawing it shows (a
+// lane's own ceiling, for a feed's frame). Rows absent (an older client, or no
+// TTY on stderr) reads as "no client ceiling", not as a guess.
 export const MAX_VIEWER_ROWS = 20;
-export function viewerRowCap(termRows: number | undefined): number {
-  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS);
+export function viewerRowCap(
+  termRows: number | undefined,
+  surfaceRows: readonly number[],
+): number {
+  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
 }
 
 export interface DiagnosticGeometry {

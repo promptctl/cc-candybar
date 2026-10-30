@@ -9,14 +9,13 @@ import {
   loadConfigChain,
   mergeWithDefault,
   parseDslConfig,
-  validateConfig,
   validateRenderable,
 } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { placementIds } from "../src/config/dsl-types";
 import { rootNode } from "../src/config/root";
 import { presetRoot } from "../src/config/presets";
-import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, validateConfig } from "./helpers/parse-and-validate";
 
 const authored = (source: string) => {
   const raw = parseDslConfig(
@@ -44,12 +43,13 @@ describe("a placement of an undeclared segment", () => {
     const other = placementIds(presetRoot(config, "other").node);
     expect(other).toContain("b");
     expect(other).not.toContain("phantom");
-    expect(dropped).toBeInstanceOf(ConfigError);
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]).toBeInstanceOf(ConfigError);
     for (const gone of ["ghost", "wraith", "spectre"])
-      expect(dropped!.message).toContain(
+      expect(dropped[0]!.message).toContain(
         `"${gone}" does not match any declared segment`,
       );
-    expect(dropped!.message).toMatch(
+    expect(dropped[0]!.message).toMatch(
       /"phantom" does not match any declared segment/,
     );
   });
@@ -57,7 +57,7 @@ describe("a placement of an undeclared segment", () => {
   test("the strict load refuses it with the same message", () => {
     const { dropped } = validateRenderable(authored(SOURCE), "<test>");
     expect(() => validateConfig(authored(SOURCE), "<test>")).toThrow(
-      dropped!.message,
+      dropped[0]!.message,
     );
   });
 
@@ -87,7 +87,7 @@ describe("a placement of an undeclared segment", () => {
       `{ segments: { a: { template: "a" } }, root: { h: ["a"] } }`,
     );
     const { config, dropped } = validateRenderable(clean, "<test>");
-    expect(dropped).toBeNull();
+    expect(dropped).toEqual([]);
     expect(config.root).toBe(clean.config.root);
   });
 });
@@ -125,7 +125,7 @@ describe("a lower layer's undeclared placement", () => {
     );
   const LOWER = `{ segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`;
 
-  test("is dropped and reported under the file above it, whether or not that file drops its own", () => {
+  test("is dropped and reported against the file that wrote it, at its own line, whether or not the file above drops its own", () => {
     for (const upper of [
       `{ segments: { u: { template: "u" } } }`,
       `{ segments: { u: { template: "u" } }, presets: { p: { root: { h: ["u", "bar"] } } } }`,
@@ -135,9 +135,31 @@ describe("a lower layer's undeclared placement", () => {
         "/upper.json5": upper,
       });
       expect(placementIds(rootNode(config.root))).not.toContain("gti");
-      expect(dropped?.message).toMatch(
-        /"gti" that does not match any declared segment/,
-      );
+      const lower = dropped.find((e) => e.file === "/lower.json5");
+      expect(lower?.issues).toEqual([
+        {
+          path: "root.children[1]",
+          message: 'root entry "gti" does not match any declared segment',
+          line: 1,
+        },
+      ]);
+      expect(
+        dropped.filter((e) => e.file === "/upper.json5").map((e) => e.message),
+      ).not.toContainEqual(expect.stringMatching(/gti/));
     }
+  });
+});
+
+describe("two placements of one undeclared name", () => {
+  test("cost their own two cells, reported as drops, never a duplicate id", () => {
+    const { config, dropped } = validateRenderable(
+      authored(
+        `{ segments: { a: { template: "a" } }, root: { v: [{ h: ["a", "gti"] }, { h: ["gti"] }] } }`,
+      ),
+      "<test>",
+    );
+    expect(placementIds(rootNode(config.root))).toEqual(["a"]);
+    expect(dropped[0]!.message).toMatch(/"gti" does not match/);
+    expect(dropped[0]!.message).not.toMatch(/placements with the id/);
   });
 });

@@ -276,8 +276,8 @@ export type ReloadedEntry = Readonly<
 export interface DslRenderState {
   readonly config: ValidatedConfig;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
-  // dropped to draw the rest of the bar, as one error; null for none.
-  readonly dropped: ConfigError | null;
+  // dropped to draw the rest of the bar, one error per file that wrote one.
+  readonly dropped: readonly ConfigError[];
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
   // it was compiled from): states carrying one key carry one compile.
   readonly compileKey: string;
@@ -579,7 +579,7 @@ function cacheKey(
 // does this preset's layout live" (src/config/presets.ts), projected onto
 // the raw shape rather than re-derived here.
 // [LAW:one-source-of-truth] `config` must be the MERGED tree, before
-// validateConfig: edit chrome materializes an explicit `presets.<n>.root`
+// validateRenderable: edit chrome materializes an explicit `presets.<n>.root`
 // for every preset, so asked of the validated tree presetRoot() never
 // reports `root` and a file customizing a root-staging preset reads as
 // pristine.
@@ -713,7 +713,7 @@ export function buildRenderState(
 ): DslRenderState {
   // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
   // straight-line composition. `loadConfig(null)` returns the bundled
-  // default (uniform merge against empty raw); `validateConfig` is the
+  // default (uniform merge against empty raw); `validateRenderable` is the
   // sole producer of `ValidatedConfig`. The renderer accepts only
   // `ValidatedConfig`, so the compiler enforces the chain — there is no
   // "skip validate" path that typechecks downstream.

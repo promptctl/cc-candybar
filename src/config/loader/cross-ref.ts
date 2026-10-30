@@ -163,6 +163,33 @@ function presetIdentCollisions(
   }
 }
 
+// Where a file's own layout places `name`: the layout key (`root`, or a
+// preset's) and the node's path under it; none when it places no such entry.
+export function authoredPlacement(
+  raw: RawDslConfig,
+  name: string,
+): { readonly layoutKey: string; readonly path: string } | undefined {
+  const layouts: Array<readonly [string, RootFragment | undefined]> = [
+    ["root", raw.root],
+    ...Object.entries(raw.presets ?? {}).map(
+      ([preset, p]) => [`presets.${preset}.root`, p.root] as const,
+    ),
+  ];
+  for (const [layoutKey, fragment] of layouts) {
+    if (fragment === undefined) continue;
+    for (const [node, path] of fragmentNodePaths(fragment, layoutKey)) {
+      if (node.kind === "segment" && node.name === name)
+        return { layoutKey, path };
+    }
+  }
+  return undefined;
+}
+
+// The message a placement of an undeclared segment is reported with, at the
+// layout key that places it.
+export const unplacedMessage = (layoutKey: string, name: string): string =>
+  `${layoutKey} entry "${name}" does not match any declared segment${renamedHint(name)}`;
+
 export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
@@ -329,9 +356,11 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
+    // A placement of an undeclared segment is dropped, not drawn, so it owns
+    // no id: one bad name costs its own cell and is reported as a drop.
     const byId = new Map<string, SegmentNode[]>();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment") continue;
+      if (node.kind !== "segment" || !declared(node.name)) continue;
       const id = placementId(node);
       byId.set(id, [...(byId.get(id) ?? []), node]);
     }
@@ -406,6 +435,9 @@ export function validateCrossReferences(
   // wrote that names no declared segment. The undeclared names reported, so
   // each is told once.
   const reported = new Set<string>();
+  const declared = (name: string): boolean =>
+    isSettingsAnchor(name) ||
+    Object.prototype.hasOwnProperty.call(cfg.segments, name);
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root)
@@ -452,7 +484,7 @@ export function validateCrossReferences(
         reported.add(node.name);
         ctx.unplaced.push({
           path,
-          message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
+          message: unplacedMessage(layoutKey, node.name),
           line,
         });
       }
@@ -479,8 +511,10 @@ export function validateCrossReferences(
   }
   // [LAW:no-silent-failure] Every placement the bar drops (loader/unplaced.ts)
   // is reported: one this file wrote above, at its own line; one a layer below
-  // wrote, here, under the tree that renders it — a home config's typo is
-  // still the user's to fix when a repo config sits above it.
+  // wrote, here, for the loader to report against the file that wrote it
+  // (validateRenderable) — a home config's typo is still the user's to fix
+  // when a repo config sits above it. Its issue under the tree that renders it
+  // stands when no file wrote it.
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
       if (
@@ -492,7 +526,8 @@ export function validateCrossReferences(
         continue;
       }
       reported.add(node.name);
-      ctx.unplaced.push({
+      ctx.inherited.push({
+        name: node.name,
         path: key,
         message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
         line: findKeyLine(ctx.source, key.split(".")),

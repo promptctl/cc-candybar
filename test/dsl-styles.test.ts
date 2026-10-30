@@ -16,7 +16,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import { ownValidators } from "./helpers/ambient-chrome";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -29,7 +29,6 @@ import {
   mergeWithDefault,
   parseDslConfig,
   unauthored,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/verbs/state-validators";

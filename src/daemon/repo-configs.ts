@@ -174,6 +174,11 @@ export function repoQuestions(
       ),
     );
     const line: DiagnosticLine = [diagnosticSpan(message, null), ...answers];
-    return { severity: APPROVAL_SEVERITY, message, lines: [line] };
+    return {
+      severity: APPROVAL_SEVERITY,
+      about: `repo-question\0${dir}`,
+      message,
+      lines: [line],
+    };
   });
 }

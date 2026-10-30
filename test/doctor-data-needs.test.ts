@@ -4,10 +4,10 @@
 // [LAW:behavior-not-structure] Every case is a config file's text through the
 // real loader; the expectation is the segment names the doctor would report.
 
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   loadConfigSource,
   NO_PROJECT,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { dataNeeds } from "../src/doctor/data-needs";

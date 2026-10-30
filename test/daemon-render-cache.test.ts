@@ -788,7 +788,7 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
-      expect(entry.state.dropped?.message).toMatch(
+      expect(entry.state.dropped[0]?.message).toMatch(
         /root entry "nope" does not match any declared segment/,
       );
       const placed = JSON.stringify(entry.state.config.root);

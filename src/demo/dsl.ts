@@ -33,7 +33,11 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
-import { ConfigError } from "../config/loader/diagnostics.js";
+import {
+  ConfigError,
+  DroppedPlacements,
+} from "../config/loader/diagnostics.js";
+import { refuseDrops } from "../config/dsl-loader.js";
 import {
   buildRenderState,
   openView,
@@ -136,9 +140,11 @@ async function renderFrames(): Promise<void> {
   const state = loadState();
   // [LAW:no-silent-failure] The daemon draws past a placement of an undeclared
   // segment; the demo, like `check`, refuses it with the loader's message.
-  if (state.dropped !== null) {
+  try {
+    refuseDrops(state.dropped);
+  } catch (e) {
     state.registry.dispose();
-    throw state.dropped;
+    throw e;
   }
   // The session's view of the state, as the daemon opens one per session,
   // declared with the one request the demo's frames draw by.
@@ -224,7 +230,8 @@ try {
 } catch (err) {
   // A refused config is the demo's one expected failure: the loader's message
   // is the whole report. Anything else is a defect and keeps its stack.
-  if (!(err instanceof ConfigError)) throw err;
+  if (!(err instanceof ConfigError || err instanceof DroppedPlacements))
+    throw err;
   process.stderr.write(`error: ${err.message}\n`);
   process.exitCode = 1;
 } finally {

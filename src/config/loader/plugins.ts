@@ -619,6 +619,7 @@ function fragmentOf(
     allowedPalettes: new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
+    inherited: [],
   };
   // [LAW:one-source-of-truth] The data variable is parsed by the validator
   // every `file` source goes through, from the declaration a user would write.

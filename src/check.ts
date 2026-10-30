@@ -17,7 +17,7 @@
 // [LAW:single-enforcer] No parallel validation path: the verdict is reached
 // through the exact functions the daemon runs (RenderCache.reloadInto →
 // buildState, then the per-request render in server.ts) — resolveDslConfig →
-// detectConfigCollisions → loadConfig → validateConfig → registerDslConfig →
+// detectConfigCollisions → loadConfig → validateRenderable → registerDslConfig →
 // deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
 // cannot diverge, because they are one code path — check additionally waits,
 // before each pass, for the shell/file runs that pass's payload started, under
@@ -37,6 +37,7 @@ import {
   configResolutionNotice,
   detectConfigCollisions,
   ConfigError,
+  refuseDrops,
   type DroppedPlugin,
 } from "./config/dsl-loader.js";
 import { cliConfigTarget } from "./config-hint.js";
@@ -510,7 +511,7 @@ export async function prepareConfig(
   );
   // [LAW:no-silent-failure] The bar draws past a placement of an undeclared
   // segment; a check refuses it, as the file's author has to fix it.
-  if (loaded.dropped !== null) throw loaded.dropped;
+  refuseDrops(loaded.dropped);
   const { config } = loaded;
 
   const store = new VariableStore();

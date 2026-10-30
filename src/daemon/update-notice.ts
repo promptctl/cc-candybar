@@ -217,7 +217,14 @@ export function updateNotice(
     ),
   ];
   const rest = failure.map((f): DiagnosticLine => [diagnosticSpan(f, null)]);
-  return [{ severity: UPDATE_SEVERITY, message, lines: [first, ...rest] }];
+  return [
+    {
+      severity: UPDATE_SEVERITY,
+      about: `update\0${identity}`,
+      message,
+      lines: [first, ...rest],
+    },
+  ];
 }
 
 // [LAW:dataflow-not-control-flow] The two currency facts folded into one

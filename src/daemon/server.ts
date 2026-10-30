@@ -164,6 +164,7 @@ import {
 } from "./frame-feed.js";
 import {
   LANE_NAMES,
+  LANES,
   parseLane,
   ANSWERING,
   type Drawing,
@@ -2322,14 +2323,22 @@ function drawRender(
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.repos, sessionId, linkSigner);
-  // What a load or a request could not honour: each its own message.
+  // What a load or a request could not honour: each its own message, named by
+  // what it is about. A load's error is about the session's config, and a
+  // drop about the file that wrote it, so their text may change under an open
+  // viewer (an issue fixed) without becoming another message; a request's
+  // refusal, its hints' and a click's are about exactly what their text says.
+  const said = (text: string | null | undefined) => ({ about: text, text });
   const errors = [
-    refusedArgsError(req.refusedArgs),
-    hintsError,
-    entry.lastError,
-    state.dropped?.message ?? null,
-    clickShown?.text ?? null,
-  ].filter((e): e is string => Boolean(e));
+    said(refusedArgsError(req.refusedArgs)),
+    said(hintsError),
+    { about: "load", text: entry.lastError },
+    ...state.dropped.map((e) => ({
+      about: `dropped\0${e.file}`,
+      text: e.message,
+    })),
+    said(clickShown?.text),
+  ].flatMap(({ about, text }) => (about && text ? [{ about, text }] : []));
   const loadWarnings: readonly LoadWarning[] =
     entry.lastWarning === null
       ? []
@@ -2338,16 +2347,16 @@ function drawRender(
   // indicator reads it as the `diagnostics` projection and the viewer pages
   // the same object, so the two cannot disagree within a frame. The render
   // warnings are this renderer's recorded ones — known only after a walk, so
-  // the frame before this one's, drawn from this config at this width — with
-  // every other renderer's for the session (src/daemon/render-warnings.ts).
-  const scope = { config: state.config, width };
+  // the frame before this one's — with every other renderer's for the
+  // session (src/daemon/render-warnings.ts).
+  const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
     errors,
     [...updates, ...questions],
     [
       ...loadWarnings,
       ...renderWarnings.ofSession(sessionId, drawing.by, scope),
-    ].map((w) => w.message),
+    ].map((w) => ({ about: `${w.kind}\0${w.message}`, text: w.message })),
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -2430,7 +2439,17 @@ function drawRender(
   );
   const geometry: DiagnosticGeometry = {
     width,
-    rows: viewerRowCap(hints.termRows),
+    // A feed's one frame is shown by every lane switched on, so it pages
+    // within the shortest of their surfaces.
+    rows: viewerRowCap(
+      hints.termRows,
+      drawing.by === "feed"
+        ? LANE_NAMES.flatMap((lane) => {
+            const rows = LANES[lane].rows;
+            return lanes[lane] && rows !== null ? [rows] : [];
+          })
+        : [],
+    ),
     colorCompatibility: effective.colorCompatibility,
   };
   // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's

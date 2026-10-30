@@ -4,10 +4,10 @@
 // renderer accepts only ValidatedConfig, so the chain proven here is the chain
 // used in production.
 
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   mergeWithDefault,
   unauthored,
-  validateConfig,
   ConfigError,
 } from "../src/config/dsl-loader";
 import { rootNode, rootOf } from "../src/config/root";

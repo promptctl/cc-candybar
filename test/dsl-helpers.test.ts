@@ -10,10 +10,10 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { stripAnsi } from "./helpers/ansi";
 
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   parseDslConfig,
   mergeWithDefault,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
