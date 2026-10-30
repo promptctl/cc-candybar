@@ -4,39 +4,39 @@
     {
       "version": "pr-491",
       "ref": "refs/pull/491/merge",
-      "sha": "45c37ac7111741df320a9e5e358bd1a5cfbe3dc1",
-      "timestamp": "2026-10-30T12:04:27.875Z",
+      "sha": "929de01d9335822bb7b59f210adfa76dadcd1f6d",
+      "timestamp": "2026-10-30T12:05:20.971Z",
       "commits": [
         {
-          "sha": "45c37ac7111741df320a9e5e358bd1a5cfbe3dc1",
+          "sha": "929de01d9335822bb7b59f210adfa76dadcd1f6d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:03:32Z",
-          "message": "Merge a1ff29ebfc95e92f594acdc8d67c2b80197d5222 into 84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9\n"
+          "timestamp": "2026-10-30T12:04:26Z",
+          "message": "Merge 0792818686c7434c9a1db2666f1a0b682f87aa6f into 84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9\n"
         },
         {
-          "sha": "a1ff29ebfc95e92f594acdc8d67c2b80197d5222",
+          "sha": "0792818686c7434c9a1db2666f1a0b682f87aa6f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T06:03:23-06:00",
           "message": "fix(daemon): an act runs while its group is alive, and every touch of its files is one edge (brandon-unfiled-3248.z676)\n\nSecond high review of the update act as a job:\n- An act runs while anything of its group is alive, whatever its verdict, so\n  the notice, the restart hold and the click refusal agree, and the verdict\n  (and the restart after a success) lands once nothing can still be writing.\n- Ending an overdue act goes through the same guarded edge as reading, so a\n  failure there is the indicator's error, not a daemon's death.\n- Act files that can't be read hold no restart: nothing repairs them, so the\n  hold would be for good. A click is still refused with the error.\n- An act is removed by renaming it away first, so a reader never finds its\n  record without its verdict.\n- A job `ps` can't fingerprint runs with no start time, as the daemon's own\n  fingerprint policy allows; the boot check still rules out a recycled pid\n  after a reboot.\n- The last line of an act's output is read with the shared tail reader, and\n  the acts directory is keyed by the bundle constant the daemon already holds.\n"
         },
         {
-          "sha": "768b9dae3a662e787e17977fbf50806a336a1211",
+          "sha": "a3ce5ba1324312edb7f9db77da6597ca2b8c21ff",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:53:19-06:00",
           "message": "fix(daemon): act files that can't be read show as an error, and a restart waits while anything of the act is alive (brandon-unfiled-3248.z676)\n\nMedium review of the update act as a job:\n- The act files are read at one edge: a read that throws is an error the\n  indicator shows, holds a restart and refuses a click, never a throw out of a\n  timer that ends every daemon on the bundle.\n- A restart and a second click wait while the act's group is alive, whatever\n  its verdict, so a timed-out group still dying, or a child a program left\n  behind, holds them as the old in-process child did. An overdue live group is\n  ended even when the job's verdict landed first.\n- Ending a job whose files are gone is a no-op.\n- The reader knows an act by its job, so an act number claimed again names the\n  new act.\n- The e2e stand-in appends its pid, so a second run fails the test, and ends\n  itself after two minutes as well.\n"
         },
         {
-          "sha": "6b363b32d1f68f5ed09d3c0a10656e737691e8be",
+          "sha": "6c4db958574fbe39183dda0580fb67a3f6c91702",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:43:14-06:00",
           "message": "fix(daemon): an act's record proves its job by boot and start time, and a reader survives a prune under it (brandon-unfiled-3248.z676)\n\nReview of the update act as a job:\n- A reader that lists an act and then finds it pruned by a newer claim looks\n  again instead of throwing out of the poll timer and ending the daemon.\n- A group seen gone stays gone for that act, so a recycled pid never reads as\n  the job again, and an overdue act needs no fresh `ps` to end.\n- A record must carry the job's start time, and a job started before this boot\n  is never the recorded one; a group the daemon may not signal is someone\n  else's. An unfingerprinted job is never started.\n- Any throw while claiming withdraws the gated job and its staging.\n- An ended act's facts are final and are not read again.\n"
         },
         {
-          "sha": "440a7d2993e17cefbe8cd518924ceeffc59a2775",
+          "sha": "2a80776823b2bd778dd093081b591de2c6e09521",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:29:42-06:00",
