@@ -1,3 +1,13 @@
+## [1.165.0](https://github.com/promptctl/cc-candybar/compare/v1.164.1...v1.165.0) (2026-10-30)
+
+### Features
+
+* **plugins:** a repo's own plugins load as repo.<name> beside installed plugins.<name> (candybar-plugins-vf6g.3gg) ([#489](https://github.com/promptctl/cc-candybar/issues/489)) ([c7c3ecd](https://github.com/promptctl/cc-candybar/commit/c7c3ecda46896168f06ef5bc176b5bb541bd0a28))
+
+### Bug Fixes
+
+* **daemon:** the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676) ([#491](https://github.com/promptctl/cc-candybar/issues/491)) ([3ac1f0e](https://github.com/promptctl/cc-candybar/commit/3ac1f0ebd17dcc49615d30cb2f79602aa362240d))
+
 ## [1.164.1](https://github.com/promptctl/cc-candybar/compare/v1.164.0...v1.164.1) (2026-10-30)
 
 ### Bug Fixes
