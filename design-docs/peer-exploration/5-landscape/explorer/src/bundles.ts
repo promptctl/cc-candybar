@@ -18,18 +18,35 @@ const inflate = (packed: string): Promise<Group> => {
   arrived.get(`${kind}:${n}`)?.(inflate(packed));
 };
 
+// A bundle that fails to arrive (a missing file, a dropped connection, a script that never calls
+// ccBundle with its key) rejects with what went wrong, and is forgotten, so the next ask retries it.
+// [LAW:no-silent-failure] every caller shows the rejection.
+const WAIT_MS = 20_000;
+
 export function bundle<T>(kind: Kind, n: number): Promise<Record<string, T>> {
   const key = `${kind}:${n}`;
   let p = loading.get(key);
   if (p === undefined) {
+    const s = document.createElement('script');
     p = new Promise<Group>((resolve, reject) => {
-      arrived.set(key, resolve);
-      const s = document.createElement('script');
+      const timer = setTimeout(() => reject(new Error(`${kind} bundle ${n} loaded but never handed over its contents`)), WAIT_MS);
+      arrived.set(key, (g) => {
+        clearTimeout(timer);
+        resolve(g);
+      });
       // Resolved against the page's own address, not the document base: a deploy may inject a base tag
       // pointing at its version root, and the bundles sit beside this page.
       s.src = new URL(`${kind}/b${String(n).padStart(3, '0')}.js`, location.href).href;
-      s.onerror = () => reject(new Error(`${kind} bundle ${n} did not load`));
+      s.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error(`${kind} bundle ${n} did not load`));
+      };
       document.head.append(s);
+    });
+    p.catch(() => {
+      loading.delete(key);
+      arrived.delete(key);
+      s.remove();
     });
     loading.set(key, p);
   }

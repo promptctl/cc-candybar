@@ -4,9 +4,9 @@
     forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY,
     type SimulationLinkDatum, type SimulationNodeDatum,
   } from 'd3-force';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { Explorer, GraphEdge, GraphNode, NodeId } from './explorer.svelte';
-  import { members, projectById, traitById } from './model';
+  import { projectById, traitById } from './model';
   import { SECTIONS } from './traits';
 
   // The simulation owns positions; cytoscape only draws them. Each frame the simulation's
@@ -54,12 +54,13 @@
   function definition(id: NodeId): ElementDefinition {
     if (id.startsWith('t:')) {
       const t = traitById.get(id.slice(2))!;
-      const n = members.get(t.id)!.length;
+      // [LAW:one-source-of-truth] the count is the pool the explorer pages through.
+      const n = explorer.pool(t.id).length;
       return { data: { id, label: `${t.label} · ${n}`, colour: SECTIONS[t.section].colour, size: 16 + Math.sqrt(n) * 2.2 }, classes: 'trait' };
     }
     if (id.startsWith('more:')) {
       const t = id.slice(5);
-      const left = members.get(t)!.length - (explorer.pages.get(t) ?? 0);
+      const left = explorer.pool(t).length - (explorer.pages.get(t) ?? 0);
       return { data: { id, label: `+${left} more`, size: 12 }, classes: 'more' };
     }
     const p = projectById.get(id)!;
@@ -183,7 +184,9 @@
       for (const n of simNodes.values()) {
         const have = cy.getElementById(n.id);
         if (have.nonempty()) {
-          if (n.id.startsWith('more:')) have.data('label', definition(n.id).data.label);
+          // a count can change under a node that stays (the pool filter, a page): its label and size follow
+          const { label, size } = definition(n.id).data;
+          have.data({ label, size });
           continue;
         }
         const def = definition(n.id);
@@ -242,22 +245,40 @@
       sim.alphaTarget(0);
     });
     // Cytoscape draws text at the zoom level, so the sizes are divided by zoom to hold them still on screen.
+    // A wheel fires many zoom events per frame; the work runs once per frame, for the zoom it ends at.
+    let zoomFrame = 0;
     core.on('zoom', () => {
-      core.style().fromJson(sheet(textScale / core.zoom())).update();
-      updateLabels();
-      wake();
+      if (zoomFrame) return;
+      zoomFrame = requestAnimationFrame(() => {
+        zoomFrame = 0;
+        core.style().fromJson(sheet(textScale / core.zoom())).update();
+        updateLabels();
+        wake();
+      });
     });
     // A lens under the cursor: text grows with closeness, and nearby projects show their names.
     // [LAW:dataflow-not-control-flow] the cursor writes one number per node; the style reads it.
     // Full size inside FULL (about the diameter of a large dot), then a ramp to nothing at LENS.
     const FULL = 60;
     const LENS = 600;
+    // The lens is computed once per frame for the latest cursor, in tenths, so the label force is
+    // woken when a label's size steps, not on every pixel the cursor moves.
+    let cursor: { x: number; y: number } | null = null;
+    let lensFrame = 0;
     core.on('mousemove', (e) => {
+      cursor = e.position;
+      if (lensFrame) return;
+      lensFrame = requestAnimationFrame(lens);
+    });
+    function lens() {
+      lensFrame = 0;
+      const at = cursor;
+      if (!at) return;
       let changed = false;
       core.batch(() => {
         core.nodes().forEach((n) => {
-          const d = Math.hypot(n.position('x') - e.position.x, n.position('y') - e.position.y);
-          const b = Math.round(Math.min(1, Math.max(0, (LENS - d) / (LENS - FULL))) * 50) / 50;
+          const d = Math.hypot(n.position('x') - at.x, n.position('y') - at.y);
+          const b = Math.round(Math.min(1, Math.max(0, (LENS - d) / (LENS - FULL))) * 10) / 10;
           if (b !== n.data('boost')) {
             n.data('boost', b);
             changed = true;
@@ -266,9 +287,10 @@
         });
       });
       if (changed) wake();
-    });
+    }
     core.on('mouseout', (e) => {
       if (e.target !== core) return;
+      cursor = null;
       core.batch(() => {
         core.nodes().forEach((n) => {
           n.data('boost', 0);
@@ -290,6 +312,8 @@
     graphCore = core;
     return () => {
       sim.stop();
+      cancelAnimationFrame(zoomFrame);
+      cancelAnimationFrame(lensFrame);
       core.destroy();
     };
   });
@@ -310,7 +334,9 @@
     const nodes = explorer.nodes;
     const edges = explorer.edges;
     if (!graphCore) return;
-    sync(nodes, edges);
+    // Only what is shown drives a sync; the selection it reads for labels has its own effect, so
+    // selecting a node already on screen relabels without re-energising the layout.
+    untrack(() => sync(nodes, edges));
   });
 
   $effect(() => {
