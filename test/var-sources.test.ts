@@ -9,6 +9,7 @@ import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 import { EventEmitter } from "events";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
   VariableStore,
   SourceRegistry,
@@ -1440,6 +1441,42 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
   // A linked path changes wherever any link in its chain is re-pointed, and
   // where the file at its end is replaced or first appears; each lives in a
   // directory of its own here, so only the watch on that directory can hear it.
+  // One owner opens, counts and logs every directory watch in the daemon:
+  // a directory home and its session's view watching one path hold one slot
+  // on one handle, which closes with the last of them.
+  it("a watch_file watch is the watcher registry's, shared by a directory home and its view", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1");
+      const counters = {
+        watchersOpened: 0,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+        dirWatchesOpened: 0,
+        dirWatchesClosed: 0,
+      };
+      const watchers = new WatcherRegistry({ counters, logger: () => {} });
+      const home = registryOver(new VariableStore(), "", undefined, null, new RefreshLedger(), undefined, watchers);
+      const view = home.view();
+      live.add(view);
+      home.declareFile("a", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      view.declareFile("b", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      await ran(home);
+      await ran(view);
+      expect(watchers.size()).toBe(1);
+      expect(counters).toMatchObject({ watchersOpened: 1, dirWatchesOpened: 1 });
+      view.dispose();
+      expect(counters).toMatchObject({ watchersClosed: 0, dirWatchesClosed: 0 });
+      home.dispose();
+      expect(counters).toMatchObject({ watchersClosed: 1, dirWatchesClosed: 1 });
+      expect(watchers.size()).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
   describe("through a chain of links", () => {
     // `ln -sfn`: a new link renamed over the old one.
     const relink = (link: string, to: string) => {
@@ -1558,7 +1595,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only at the next event", async () => {
       const { dir, cleanup } = makeTmpDir();
       const opened: Array<{ dir: string; handle: EventEmitter; listener: (event: string, changed: string | null) => void }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, listener: (event: string, changed: string | null) => void) => {
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
         const handle = Object.assign(new EventEmitter(), { close: () => {} });
         opened.push({ dir: d, handle, listener });
         return handle;
@@ -1587,6 +1624,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
 
         // An event on the link's own directory re-derives, which opens it again.
         opensOf(real)[0]!.listener("rename", "a");
+        await until(() => opensOf(one).length === 2, "the failed directory opened again");
         expect(opensOf(one)).toHaveLength(2);
         expect(registry.cachePolicyFaults().has("val")).toBe(false);
       } finally {
@@ -1602,7 +1640,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     it("a watched directory removed and made again is watched again", async () => {
       const { dir, cleanup } = makeTmpDir();
       const opened: Array<{ dir: string; closed: boolean; listener: (event: string, changed: string | null) => void }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, listener: (event: string, changed: string | null) => void) => {
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
         const record = { dir: d, closed: false, listener };
         opened.push(record);
         return Object.assign(new EventEmitter(), { close: () => void (record.closed = true) });
@@ -1623,6 +1661,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         fs.rmSync(one, { recursive: true });
         fs.mkdirSync(one);
         opensOf(one)[0]!.listener("rename", "one");
+        await until(() => opensOf(one).length === 2, "the directory watched again");
         expect(opensOf(one)).toHaveLength(2);
         expect(opensOf(one)[0]!.closed).toBe(true);
 

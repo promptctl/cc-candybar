@@ -144,12 +144,16 @@ export interface StatsSnapshot {
   tmuxStatus: TmuxStatusStats;
   // Watch slots: open now, opened with every target watched, closed, opened
   // with a target the OS refused, and errors watches reported after opening.
+  // `dirs`: the OS directory watches the slots share, open now, opened and
+  // closed, a reopen counting one of each; on macOS each open or close
+  // rebuilds the one FSEvents stream, so this is the churn that costs.
   watchers: {
     active: number;
     opened: number;
     closed: number;
     refused: number;
     errors: number;
+    dirs: { active: number; opened: number; closed: number };
   };
   subprocesses: {
     total: number;
@@ -198,6 +202,8 @@ export class RuntimeStats {
   watchersClosed = 0;
   watchRefusals = 0;
   watchErrors = 0;
+  dirWatchesOpened = 0;
+  dirWatchesClosed = 0;
 
   // [LAW:dataflow-not-control-flow] Subprocess metering. Every launch carries
   // its category through one boundary; the per-category state below is a
@@ -370,6 +376,7 @@ export class RuntimeStats {
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 0,
+      dirWatchesActive: 0,
       handlerProbes: [],
       clients: [],
       bundle: "/",
@@ -401,6 +408,7 @@ export class RuntimeStats {
     frameFeeds: FeedStats;
     tmuxStatus: TmuxStatusStats;
     watchersActive: number;
+    dirWatchesActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
     clients: readonly RenderSighting[];
@@ -446,6 +454,11 @@ export class RuntimeStats {
         closed: this.watchersClosed,
         refused: this.watchRefusals,
         errors: this.watchErrors,
+        dirs: {
+          active: extras.dirWatchesActive,
+          opened: this.dirWatchesOpened,
+          closed: this.dirWatchesClosed,
+        },
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,

@@ -1419,6 +1419,7 @@ export async function replyTo(
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
+        dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: establishedLimits().describeNextRestart(),
         handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantOf(new Date())),

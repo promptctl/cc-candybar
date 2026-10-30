@@ -178,7 +178,7 @@ export class FileEventDelivery {
     };
     this.instrument = probing;
     this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.refused;
+    const [refusal] = probing.handle.deaf;
     if (refusal !== undefined) {
       this.end(
         period,

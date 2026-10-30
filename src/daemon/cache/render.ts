@@ -210,6 +210,10 @@ export interface StateDeps {
   // The daemon's file-event catch-ups, which a state's `watch_file` sources
   // re-read on. A build outside the daemon leaves it out, and hears none.
   readonly catchUps?: CatchUps;
+  // The daemon's one watcher registry, which holds a state's `watch_file`
+  // watches. A build outside the daemon leaves it out, and its registries
+  // keep their own.
+  readonly watchers?: WatcherRegistry;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -895,6 +899,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     null,
     deps.ledger,
     deps.catchUps,
+    deps.watchers,
   );
 
   let registration: Registration;
@@ -2196,7 +2201,7 @@ export class RenderCache<
     // entry now hears: a change that fires nothing is read against this line.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} refused=${watch.handle.refused.length}`,
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(

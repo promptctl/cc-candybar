@@ -61,3 +61,7 @@ export const boundKey = (bound: Bound): string =>
   typeof bound === "string" || "ino" in bound
     ? identityKey(bound)
     : `unreadable:${bound.unreadable}`;
+
+// Whether a watch on the path binds a folder now, not nothing yet.
+export const bindsFolder = (bound: Bound): bound is FolderIdentity =>
+  typeof bound !== "string" && "ino" in bound;

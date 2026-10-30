@@ -89,6 +89,8 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
     watchersClosed: 0,
     watchRefusals: 0,
     watchErrors: 0,
+    dirWatchesOpened: 0,
+    dirWatchesClosed: 0,
   };
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
