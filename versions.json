@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
-      "timestamp": "2026-10-30T10:02:09.763Z",
-      "commits": [
-        {
-          "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:01:16-06:00",
-          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) (#487)\n\n* fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n\n* fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated."
-        },
-        {
-          "sha": "059a45e0880e4967c0f0fee60def00a4f4153ac0",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T09:48:48Z",
-          "message": "chore(release): set `package.json` to 1.163.0 [skip ci]\n\n## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)\n\n### Features\n\n* **diagnostics:** every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) ([#483](https://github.com/promptctl/cc-candybar/issues/483)) ([4363d2a](https://github.com/promptctl/cc-candybar/commit/4363d2a7982c76c6f6ada1028f154dd9a498309c))\n\n### Bug Fixes\n\n* **daemon:** one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) ([#485](https://github.com/promptctl/cc-candybar/issues/485)) ([5a804ba](https://github.com/promptctl/cc-candybar/commit/5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
-      "sha": "912f6cdd3d3e32fe3d6ba4e56ef0919d39e28481",
-      "timestamp": "2026-10-30T09:53:07.622Z",
+      "sha": "9da905307ecff66703b3b8503230f130db15db05",
+      "timestamp": "2026-10-30T10:09:45.592Z",
       "commits": [
         {
-          "sha": "912f6cdd3d3e32fe3d6ba4e56ef0919d39e28481",
+          "sha": "9da905307ecff66703b3b8503230f130db15db05",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:52:17Z",
-          "message": "Merge 8727efdabcf0e728f4c5478891980b3a40b26b65 into 059a45e0880e4967c0f0fee60def00a4f4153ac0\n"
+          "timestamp": "2026-10-30T10:08:53Z",
+          "message": "Merge 042c528bcb1d4ee2d97614adff3e5b583da60c4e into e31c958417e5127d95819930643df17eb59fe2bf\n"
+        },
+        {
+          "sha": "042c528bcb1d4ee2d97614adff3e5b583da60c4e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:05:52-06:00",
+          "message": "fix(config): an inserted cell hides with its anchor, only a preset a cell lands in is rewritten, and each missed entry warns once (candybar-plugins-vf6g.99v)\n\nThe unused-declaration report reads the trees with inserts placed, so a\nsegment only an insert entry places is used. A cell spliced beside an anchor\ninside a container carries the anchor's when, as a row anchor's cell is\ngated by the row. A preset no cell lands in keeps the fragment it was\nwritten as. One entry that misses several trees is one notice naming them\nall. Edit mode's label names the inserting file by its directory and name.\n\n(candybar-plugins-vf6g.99v)\n"
         },
         {
           "sha": "8727efdabcf0e728f4c5478891980b3a40b26b65",
@@ -63,6 +48,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:11:46-06:00",
           "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
+      "timestamp": "2026-10-30T10:02:09.763Z",
+      "commits": [
+        {
+          "sha": "e31c958417e5127d95819930643df17eb59fe2bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:01:16-06:00",
+          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) (#487)\n\n* fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n\n* fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated."
+        },
+        {
+          "sha": "059a45e0880e4967c0f0fee60def00a4f4153ac0",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T09:48:48Z",
+          "message": "chore(release): set `package.json` to 1.163.0 [skip ci]\n\n## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)\n\n### Features\n\n* **diagnostics:** every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) ([#483](https://github.com/promptctl/cc-candybar/issues/483)) ([4363d2a](https://github.com/promptctl/cc-candybar/commit/4363d2a7982c76c6f6ada1028f154dd9a498309c))\n\n### Bug Fixes\n\n* **daemon:** one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) ([#485](https://github.com/promptctl/cc-candybar/issues/485)) ([5a804ba](https://github.com/promptctl/cc-candybar/commit/5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad))\n"
         }
       ]
     }
