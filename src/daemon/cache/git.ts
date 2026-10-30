@@ -254,19 +254,7 @@ function optionsKey(options: GitOptions): string {
 // key. Every pass derives the spec again, so a recreated repo is heard within
 // one period, and a layout change at the same path (a clone replaced by a
 // worktree) is the same case.
-//
-// `unbound`: a directory the spec names is not there, or cannot be stat'd, so
-// there is nothing to bind yet.
-interface RepoWatchSpec {
-  readonly spec: WatchSpec;
-  readonly unbound: boolean;
-}
-
-function watchSpec(
-  root: string,
-  gitDir: string,
-  commonDir: string,
-): RepoWatchSpec {
+function watchSpec(root: string, gitDir: string, commonDir: string): WatchSpec {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
@@ -274,7 +262,8 @@ function watchSpec(
   const bounds = dirs.map((d) => boundOf(d.path));
   const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
   return {
-    spec: { key: `git:${root}:${named.join("|")}`, targets: { dirs } },
+    key: `git:${root}:${named.join("|")}`,
+    targets: { dirs },
     unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b),
   };
 }
@@ -554,19 +543,15 @@ export class GitDataProvider {
     held: HeldWatch | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
-    const { spec, unbound } = watchSpec(
+    const spec = watchSpec(
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir),
     );
-    // A directory that is gone, or cannot be stat'd this pass (a mount's
-    // transient fault), binds nothing yet. The pass that lands between a
-    // worktree's removal and its re-add (the removal fires the watch) keeps
-    // the watch it holds rather than trade it for a slot the OS refuses:
-    // FSEvents keeps a held watch on its path, and the period rebinds once the
-    // path names a directory again, whose key differs. The build holds
-    // nothing, and takes the refused slot the period refreshes.
-    if (held !== null && unbound) return { watch: held, move: "kept" };
+    // A pass between a worktree's removal and its re-add keeps the watch it
+    // holds (`follow`), and the period rebinds once the path names a
+    // directory again. The build holds nothing, and takes the refused slot
+    // the period refreshes.
     const followed = this.watchers.follow(held, spec, () => this.changed(root));
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
