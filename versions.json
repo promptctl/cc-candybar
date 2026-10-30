@@ -4,15 +4,22 @@
     {
       "version": "pr-508",
       "ref": "refs/pull/508/merge",
-      "sha": "1105fce05f02af321b55e17cfd0a4d929966be6c",
-      "timestamp": "2026-10-30T20:39:29.612Z",
+      "sha": "0f99e4d6806c031ece6235828eda135821eca8c7",
+      "timestamp": "2026-10-30T20:50:58.553Z",
       "commits": [
         {
-          "sha": "1105fce05f02af321b55e17cfd0a4d929966be6c",
+          "sha": "0f99e4d6806c031ece6235828eda135821eca8c7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T20:38:37Z",
-          "message": "Merge 77fe4c0c6dee2a0f453de91e04160f7282280056 into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+          "timestamp": "2026-10-30T20:50:02Z",
+          "message": "Merge ca1b63bd387351a1da3e6b68f58fbc005c43bfb9 into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+        },
+        {
+          "sha": "ca1b63bd387351a1da3e6b68f58fbc005c43bfb9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T14:49:51-06:00",
+          "message": "test(colour): a cell moves at a turn only where the cell across it is drawn like it (candybar-joiners-e5r4.5x1)\n\nThe turn property and the preview test held that a cell leaves its dealt tone only beside a turn, so a rule that moved cells at every turn passed them. Both now hold that a moved cell was dealt the colour of the cell across the turn, as dealt or as it stands. The preview's docs say it samples the decorations a closed cell wears, not every one it can.\n"
         },
         {
           "sha": "77fe4c0c6dee2a0f453de91e04160f7282280056",
