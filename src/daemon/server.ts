@@ -1891,7 +1891,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   try {
     using setup = setUpFrame(sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, motion, evaluated, lanes } = drawRender(setup, {
+    const { drawn, motion, evaluated, lanes, recorded } = drawRender(setup, {
       by: "feed",
       fps,
     });
@@ -1910,6 +1910,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       },
       moves: motion === "moves",
       evaluated,
+      wakes: recorded,
       failure: null,
     };
   } catch (error) {
@@ -1927,6 +1928,7 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
       statusline: failed,
       moves: false,
       evaluated: 0,
+      wakes: false,
       failure: { level, line: `frame ${line}` },
     };
   }
@@ -2272,6 +2274,8 @@ function drawRender(
   clickShown: ClickErrorRecord | null;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
+  // Whether this frame's warnings moved its renderer's record.
+  recorded: boolean;
 } {
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -2413,13 +2417,11 @@ function drawRender(
         ? "-"
         : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`,
   });
-  // A new source's warnings are recorded by its first frame, and only then.
-  const recorded = renderWarnings.drawn(
-    sessionId,
-    drawing.by,
-    frame.source,
-    drawnWarnings,
-  );
+  // [LAW:no-silent-failure] Every frame records what it warned; a record that
+  // moved is shown by the renderer's next frame. A feed wakes for it after
+  // this frame (FeedFrame.wakes); a request's next frame is Claude Code's next
+  // poll.
+  const recorded = renderWarnings.drawn(sessionId, drawing.by, drawnWarnings);
   const geometry: DiagnosticGeometry = {
     width,
     colorCompatibility: effective.colorCompatibility,
@@ -2492,8 +2494,8 @@ function drawRender(
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
-    // What the indicator counted, and whether this frame recorded its
-    // renderer's warnings anew (a new source) or kept the record.
+    // What the indicator counted, and whether this frame's warnings moved
+    // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
     warnRecord: recorded ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
@@ -2511,6 +2513,7 @@ function drawRender(
     evaluated: frame.evaluated,
     clickShown,
     lanes,
+    recorded,
   };
 }
 

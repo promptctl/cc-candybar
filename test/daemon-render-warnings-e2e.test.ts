@@ -6,7 +6,7 @@
 // or not — and read the messages the bar's indicator offers beside the event,
 // so the two cannot disagree unseen. A render warning is known only after the
 // walk, so the bar counts it from the frame after the one that met it, and a
-// renderer records a source's warnings once.
+// renderer records every frame's warnings by value.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -37,6 +37,7 @@ const GLOBALS = `globals: { palette: '${RULE}', style: '${STYLE_RULE}' }`;
 const CONFIGS = {
   clean: `{ ${GLOBALS}, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   dup: `{ ${GLOBALS}, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
+  clock: `{ globals: { palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   stuck: `{ ${GLOBALS}, variables: { stamp: { kind: "shell", command: "echo hi", cache: { key: '{{ fail "no key" }}' } } }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
@@ -141,7 +142,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
     },
   );
 
-  test("a renderer records a source's warnings once: the count holds across frames, and a new source records anew", async () => {
+  test("the record follows every frame: the count holds across frames, and opening the viewer moves nothing", async () => {
     // `-bad` makes the palette rule name no theme.
     const sid = "record-once-bad";
     const args = argsOf("clean");
@@ -152,8 +153,9 @@ describe("a daemon render's event names every warning, and the indicator offers 
     for (const bar of bars) expect(indicatorOf(bar)).toBe("⚠ 1");
     const records = (await renderLines(env, sid, 4)).map(fieldOf("warnRecord"));
     expect(records).toEqual(["new", "kept", "kept", "kept"]);
-    // Opening the viewer writes the session's state: a new source, whose first
-    // frame records anew, and the count it shows does not move.
+    // Opening the viewer writes the session's state and draws the viewer in
+    // the body's place, then the bar again with its indicator: none of those
+    // frames moves the record, so the count cannot flip between them.
     const pages = await readDiagnostics(
       sockPath,
       sid,
@@ -164,15 +166,33 @@ describe("a daemon render's event names every warning, and the indicator offers 
     );
     expect(pages.map((p) => p.position)).toEqual(["1/1"]);
     expect(indicatorOf(await draw())).toBe("⚠ 1");
-    const all = (await renderLines(env, sid, 6)).map(fieldOf("warnRecord"));
-    expect(all.slice(4)).toEqual(["new", "new"]);
-    expect((await renderLines(env, sid, 6)).map(fieldOf("diag"))).toEqual([
-      "0",
-      "1",
-      "1",
-      "1",
-      "1",
-      "1",
-    ]);
+    const all = await renderLines(env, sid, 6);
+    expect(all.slice(4).map(fieldOf("warnRecord"))).toEqual(["kept", "kept"]);
+    expect(all.map(fieldOf("diag"))).toEqual(["0", "1", "1", "1", "1", "1"]);
+  });
+
+  test("a warning that starts while nothing about the frame moves is counted by the next frame, and cleared once it stops", async () => {
+    // The palette rule names no theme for two seconds of every four: the
+    // config, the session's state and the width stay the same throughout.
+    const sid = "record-clock";
+    const args = argsOf("clock");
+    const draw = () => render(sockPath, sid, projectDir, {}, args);
+    const phase = (): number => (Date.now() / 1000) % 4;
+    const enter = async (from: number): Promise<void> => {
+      const wait = (from - phase() + 4) % 4;
+      await new Promise((resolve) => setTimeout(resolve, wait * 1000 + 150));
+    };
+    // The first draw compiles the config, which can outlast a window.
+    await draw();
+    await enter(2);
+    await draw();
+    await enter(0);
+    await draw();
+    expect(indicatorOf(await draw())).toBe("⚠ 1");
+    await enter(2);
+    await draw();
+    expect(indicatorOf(await draw())).toBeNull();
+    const records = (await renderLines(env, sid, 5)).map(fieldOf("warnRecord"));
+    expect(records).toEqual(["kept", "new", "kept", "new", "kept"]);
   });
 });

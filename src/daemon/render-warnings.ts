@@ -7,20 +7,12 @@
 // answer, the feed's frames): they draw at their own widths and roots, so each
 // owns its own and neither overwrites the other's.
 //
-// [LAW:no-ambient-temporal-coupling] A record is rewritten only when a frame
-// is drawn from another source (src/render/frame-memory.ts sameSource). So a
-// source's warnings are recorded once, by its first frame, and no frame
-// records again from what its own indicator changed: the count cannot
-// oscillate between frames of one source.
+// [LAW:no-silent-failure] Every frame's warnings are the record's next value,
+// compared by value: a warning that starts or stops while nothing else about
+// the frame moved is counted, or cleared, by the very next frame.
 
 import type { Drawing } from "../config/lanes.js";
 import type { RenderWarning } from "../dsl/render.js";
-import { sameSource, type FrameSource } from "../render/frame-memory.js";
-
-interface Recorded {
-  readonly source: FrameSource;
-  readonly warnings: readonly RenderWarning[];
-}
 
 // The same bound session state and effect memory keep, so an idle session's
 // record goes when they would.
@@ -29,36 +21,31 @@ const MAX_RECORDS = 512;
 // [LAW:no-shared-mutable-globals] Single owner, hard cap, least recently drawn
 // evicted first.
 export class RenderWarningRecords {
-  private readonly records = new Map<string, Recorded>();
+  private readonly records = new Map<string, readonly RenderWarning[]>();
 
   constructor(private readonly maxRecords: number = MAX_RECORDS) {}
 
   // The warnings `by` last recorded for `sessionId`; none before its first.
   of(sessionId: string, by: Drawing["by"]): readonly RenderWarning[] {
-    return this.records.get(keyOf(sessionId, by))?.warnings ?? [];
+    return this.records.get(keyOf(sessionId, by)) ?? [];
   }
 
-  // Records what a frame drawn from `source` warned, unless its record already
-  // holds that source. Says whether it recorded.
+  // Records what a frame warned. Says whether that changed the record, which
+  // is what the renderer's next frame shows.
   drawn(
     sessionId: string,
     by: Drawing["by"],
-    source: FrameSource,
     warnings: readonly RenderWarning[],
   ): boolean {
     const key = keyOf(sessionId, by);
-    const held = this.records.get(key);
+    const held = this.records.get(key) ?? [];
     this.records.delete(key);
-    const kept =
-      held !== undefined && sameSource(held.source, source)
-        ? held
-        : { source, warnings };
-    this.records.set(key, kept);
+    this.records.set(key, warnings);
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
-    return kept !== held;
+    return JSON.stringify(held) !== JSON.stringify(warnings);
   }
 }
 

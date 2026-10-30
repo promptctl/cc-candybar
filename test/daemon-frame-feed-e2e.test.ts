@@ -92,6 +92,9 @@ const CONFIGS = {
   // Moves, and carries a load warning (a duplicate key) the indicator
   // shows on every frame.
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
+  // Still, and its palette rule names no theme for two seconds of every four:
+  // a render warning that comes and goes while nothing else moves.
+  clock: `{ globals: { experimentalStatusline: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
@@ -791,6 +794,35 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       feeds: before.feeds,
       subscribers: before.subscribers,
     });
+  });
+
+  // A render warning is known only after the walk that met it, so the frame
+  // that met it is followed at once by one that counts it: an idle lane draws
+  // once a second, and would otherwise show a second-old count.
+  test("a warning an idle lane's frame meets is counted by a frame woken straight after it", async () => {
+    const sid = "feed-clock-warning";
+    await render(sockPath, sid, projectDir, {}, args("clock"));
+    const frames = await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(
+        () =>
+          received.some(
+            (f, i) =>
+              i > 0 &&
+              shows([f], "⚠ 1") &&
+              !shows([received[i - 1]!], "⚠ 1"),
+          ),
+        "a frame that counts the warning",
+        8000,
+      );
+    });
+    const shown = outputs(frames).map((o) => stripAnsi(o).includes("⚠ 1"));
+    const onsets = frames.filter((_, i) => i > 0 && shown[i] && !shown[i - 1]);
+    expect(onsets.length).toBeGreaterThan(0);
+    // Each frame that first counts it came well inside the still second.
+    for (const onset of onsets) {
+      const i = frames.indexOf(onset);
+      expect(onset.at - frames[i - 1]!.at).toBeLessThan(500);
+    }
   });
 
   test("a frame records nothing: no session-state write", async () => {

@@ -146,6 +146,7 @@ function barFrame(
     statusline: { ok: true, output: handoff ?? output },
     moves,
     evaluated: EVALUATED,
+    wakes: false,
     failure: null,
   };
 }
@@ -158,6 +159,7 @@ function failedFrame(req: string): FeedFrame {
     statusline: resp,
     moves: false,
     evaluated: 0,
+    wakes: false,
     failure: { level: "error", line: `frame ${req} threw` },
   };
 }
@@ -474,7 +476,7 @@ describe("on a faked clock", () => {
     // close may have cancelled: every other wake was coalesced.
     const moved = state.renders - 1;
     const summary = log.at(-1)!;
-    expect(summary).toContain(" woke=data:50,state:50,reload:50,visibility:50 ");
+    expect(summary).toContain(" woke=data:50,state:50,reload:50,visibility:50,frame:0 ");
     const coalesced = Number(/ coalesced=(\d+) /.exec(summary)![1]);
     expect([200 - moved, 200 - moved - 1]).toContain(coalesced);
   });
@@ -529,7 +531,7 @@ describe("on a faked clock", () => {
     close();
     expect(state.renders).toBe(2);
     expect(log.at(-1)).toContain(
-      " woke=data:1,state:0,reload:0,visibility:0 coalesced=1 ",
+      " woke=data:1,state:0,reload:0,visibility:0,frame:0 coalesced=1 ",
     );
   });
 
