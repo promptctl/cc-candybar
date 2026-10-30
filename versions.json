@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-497",
+      "ref": "refs/pull/497/merge",
+      "sha": "c04cce5091f498ab1c5d35ee05a5b137437340ef",
+      "timestamp": "2026-10-30T13:20:53.644Z",
+      "commits": [
+        {
+          "sha": "c04cce5091f498ab1c5d35ee05a5b137437340ef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:19:54-06:00",
+          "message": "Merge 040cbcb389ab73e52840ec82b85f9417231c323e into de52a356dd72f020a4f914a98688bac6a27ebd13\n"
+        },
+        {
+          "sha": "040cbcb389ab73e52840ec82b85f9417231c323e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T07:17:46-06:00",
+          "message": "feat(plugins): a missing segment is an error only when its plugin is present, and its error copies a fix prompt (candybar-plugins-vf6g.odm)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-496",
       "ref": "refs/pull/496/merge",
       "sha": "c9212a54b1d2677a73c41eedf0b3ca4ca3696c38",
