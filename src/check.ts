@@ -402,9 +402,7 @@ export async function checkConfig(
   const layers =
     configPath === null
       ? searchedLayers(resolution, warnings)
-      : resolution.kind === "chain"
-        ? resolution.layers
-        : [homeLayer(configPath)];
+      : [homeLayer(configPath)];
   if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
