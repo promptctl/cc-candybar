@@ -77,10 +77,10 @@ const CONFIGS = {
 // ordering the test owns, not a bet on how slow a render is. Only a render
 // whose client reports a tmux pane runs it.
 //
-// The stub's life is the connection's. A `launch` child leads its own process
-// group, so killing the daemon never reaches it, and src/proc/tmux.ts's 2 s
-// kill dies with the daemon. Closing the gate, which afterAll does and the
-// kernel does when the worker dies, ends the stub's read, and it exits 1; a
+// The stub's life is the connection's. One the daemon launched dies with the
+// daemon too, by the launcher's lifeline, but the test below starts one
+// itself, which only its gate ends. Closing the gate, which afterAll does and
+// the kernel does when the worker dies, ends the stub's read, and it exits 1; a
 // stub started once the gate is closed finds nothing listening and exits at
 // once. So a run that ends before its gate opens, however it ends, leaves no
 // stub behind. The stub runs on the worker's own node, so it needs nothing
@@ -891,10 +891,10 @@ describe("every render request writes one render event, whatever its outcome", (
 });
 
 describe("the tmux stub's wait is its gate's", () => {
-  // [LAW:no-ambient-temporal-coupling] Started as `launch` starts it, leading
-  // its own process group, the stub is out of reach of anything that kills
-  // its spawner: the daemon above, or this test. Only its gate ends it, so a
-  // run that ends before the gate opens leaves nothing behind.
+  // [LAW:no-ambient-temporal-coupling] Started here, leading its own process
+  // group, the stub is out of reach of anything that kills this test, and no
+  // lifeline holds it. Only its gate ends it, so a run that ends before the
+  // gate opens leaves nothing behind.
   test("a stub whose gate closes before it opens exits", async () => {
     const dir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-render-event-e2e-"),

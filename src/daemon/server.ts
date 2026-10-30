@@ -128,7 +128,13 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { launch, setLaunchStats } from "../proc/launch";
+import {
+  launch,
+  lifelineWarnings,
+  setLaunchStats,
+  setLifelineObserver,
+  type LifelineWarning,
+} from "../proc/launch";
 import { decodeWire } from "./verb-error";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -492,6 +498,18 @@ fileEvents.subscribe((notice) => {
       return;
   }
 });
+// [LAW:no-silent-failure] Each change in whether what the daemon launches
+// dies with it is said in daemon.log, and every feed redraws, so its warning
+// comes and goes on frames too.
+setLifelineObserver((fault) => {
+  dlog(
+    fault === null ? "info" : "warn",
+    fault === null
+      ? "launch lifeline running again"
+      : `launch lifeline ${fault}; the next launch starts another`,
+  );
+  frameFeeds.wakeWhere("data", () => true);
+});
 
 // One cadence for "how often does the daemon look at its build on disk" —
 // the binary watch (exit on a changed bundle) and the update watch (does the
@@ -515,6 +533,10 @@ const binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs.statSync,
+  // The update notice's act rewrites the bundle from a launch child, which
+  // dies with the daemon: a restart waits for it. A success samples again at
+  // once; after a failure the next tick does.
+  held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog,
 });
@@ -2374,9 +2396,13 @@ function drawRender(
     said(clickShown?.text),
   ].flatMap(({ about, text }) => (about && text ? [{ about, text }] : []));
   // What stands before the draw: whether the daemon can vouch that a config
-  // edit reloads, and the warning this config's load carried.
-  const standing: ReadonlyArray<FileEventsWarning | LoadWarning> = [
+  // edit reloads and that what it launches dies with it, and the warning this
+  // config's load carried.
+  const standing: ReadonlyArray<
+    FileEventsWarning | LifelineWarning | LoadWarning
+  > = [
     ...fileEventsWarnings(fileEvents.delivery()),
+    ...lifelineWarnings(),
     ...(entry.lastWarning === null
       ? []
       : [{ kind: "load" as const, message: entry.lastWarning }]),
@@ -2515,7 +2541,7 @@ function drawRender(
   // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
   // compile error here until the event says how to name it.
   const tagOf = (
-    w: FileEventsWarning | LoadWarning | RenderWarning,
+    w: FileEventsWarning | LifelineWarning | LoadWarning | RenderWarning,
   ): string => {
     switch (w.kind) {
       case "rule":
@@ -2525,6 +2551,7 @@ function drawRender(
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "lifeline":
       case "band-floor":
       case "when":
         return w.kind;

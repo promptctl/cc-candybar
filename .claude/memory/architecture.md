@@ -28,6 +28,8 @@ There is one daemon per user, guarded by a pid file in the state directory. The 
 
 Restarts are normal, and every cache rebuilds cold. There is no idle or age shutdown, because either one would interrupt an active session. The only hard limit is the memory backstop (daemon-memory.md). The daemon also ends itself when the bundle it runs from changes or disappears, so a rebuild takes effect without a manual restart.
 
+A child the daemon launches without blocking on it dies with the daemon, however the daemon ends. A SIGKILL runs no cleanup in the dying process, so the end comes from a second process, the lifeline, which reads a pipe only the launcher holds and, at EOF, signals every child group still in flight. The daemon's own update is one of those children, so a restart for a changed bundle waits while the update rewrites that bundle. A daemon that dies mid-update for any other reason takes the update with it. The next daemon offers it again, unless the death landed while the update was writing the bundle, which leaves the bundle torn. Exempting the update from the lifeline doesn't save it: its output pipes lead to the dead daemon, so a shell in it dies of SIGPIPE at its next write, and the next daemon has no record that it is still running and would start a second one.
+
 The update notice compares two content digests of the source tree: one baked into the bundle at build time and one recomputed from the tree beside it. It uses digests rather than mtimes because a branch switch rewrites mtimes on unchanged bytes. A published install has no source tree beside it, so it polls the registry instead and never shows a source warning.
 
 ## Logs and stats
