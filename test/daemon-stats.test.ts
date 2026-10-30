@@ -360,7 +360,7 @@ describe("formatStats", () => {
       "plugin storage folders=1 lost=1 faults unusable:0 refused:1 error:0",
     );
     expect(out).toContain(
-      "fileEvents    stalled since 2026-10-27T04:00:00.000Z stalls=2 catchUps=1 probes=7 probeFailures=1",
+      "fileEvents    stalled unvouched since 2026-10-27T04:00:00.000Z stalls=2 catchUps=1 probes=7 probeFailures=1",
     );
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");

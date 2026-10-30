@@ -1396,6 +1396,45 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       cleanup();
     }
   });
+
+  it("a catch-up re-reads every watch_file source, in a view too, as if its watch had reported; a disposed registry hears none", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      // The watched file is never written: only the catch-up can trigger.
+      const watchedFile = path.join(dir, "watched");
+      const f = path.join(dir, "f");
+      fs.writeFileSync(watchedFile, "w");
+      fs.writeFileSync(f, "v1");
+      const listeners = new Set<() => void>();
+      const catchUp = () => [...listeners].forEach((l) => l());
+      const store = new VariableStore();
+      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), (caughtUp) => {
+        listeners.add(caughtUp);
+        return () => void listeners.delete(caughtUp);
+      });
+      const view = registry.view();
+      live.add(view);
+      registry.declareFile("home", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      view.declareFile("own", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      await ran(registry);
+      await ran(view);
+      expect(store.read("home")).toBe("v1");
+      expect(view.variableStore.read("own")).toBe("v1");
+
+      fs.writeFileSync(f, "v2");
+      catchUp();
+      await until(
+        () => store.read("home") === "v2" && view.variableStore.read("own") === "v2",
+        "both registries re-reading v2",
+      );
+
+      view.dispose();
+      registry.dispose();
+      expect(listeners.size).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ─── dispose ──────────────────────────────────────────────────────────────────

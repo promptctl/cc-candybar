@@ -239,7 +239,7 @@ describe("FileEventDelivery", () => {
     ]);
   });
 
-  test("stalled, then unmeasured by a failed write, then delivering by a write that lands and is reported: one catch-up carrying the stall's start", async () => {
+  test("stalled, then unmeasured by a failed write, then delivering by a write that lands and is reported: the row stands until one catch-up carrying the stall's start", async () => {
     const watches = fakeWatches();
     fakeClock();
     const r = rig();
@@ -264,6 +264,13 @@ describe("FileEventDelivery", () => {
       kind: "delivering",
       missedSince: first,
     });
+    // A probe that landed is not one heard: the stall's span stays open.
+    expect(fileEventsWarnings(r.events.delivery())).toEqual([
+      expect.objectContaining({
+        state: "delivering",
+        message: expect.stringContaining(new Date(first).toISOString()),
+      }),
+    ]);
     watches[0]!.listener("change", PROBE_FILE);
     await until(() => r.events.stats().catchUps === 1, "the catch-up");
     expect(r.notices.filter((n) => n.kind === "caught-up")).toEqual([
@@ -273,6 +280,7 @@ describe("FileEventDelivery", () => {
       kind: "delivering",
       missedSince: null,
     });
+    expect(fileEventsWarnings(r.events.delivery())).toEqual([]);
   });
 
   describe("an instrument that ends is unmeasured for good", () => {
@@ -441,6 +449,23 @@ describe("the bar's row and daemon-stats' line", () => {
     ).toEqual([]);
   });
 
+  test("delivering with the span still open names its start: nothing has been heard since", () => {
+    expect(
+      fileEventsWarnings({
+        kind: "delivering",
+        unreported: [LATER],
+        missedSince: AT,
+      }),
+    ).toEqual([
+      {
+        kind: "file-events",
+        state: "delivering",
+        message:
+          "file events unconfirmed since 2026-10-27T04:00:00.000Z: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded",
+      },
+    ]);
+  });
+
   test("a stall names the span's start, and composes into one warning", () => {
     const delivery: Delivery = { kind: "stalled", missedSince: AT };
     const warned = fileEventsWarnings(delivery);
@@ -506,17 +531,29 @@ describe("the bar's row and daemon-stats' line", () => {
       line({ kind: "delivering", unreported: [LATER], missedSince: AT }),
     ).toBe(`delivering unvouched since 2026-10-27T04:00:00.000Z ${tail}`);
     expect(line({ kind: "stalled", missedSince: AT })).toBe(
-      `stalled since 2026-10-27T04:00:00.000Z ${tail}`,
+      `stalled unvouched since 2026-10-27T04:00:00.000Z ${tail}`,
+    );
+    // A stall then a failed write: the span is the stall's, older than the
+    // reason, and the line names both, as the bar's row names the span.
+    expect(
+      line({
+        kind: "unmeasured",
+        since: LATER,
+        reason: "the probe could not be written: ENOSPC",
+        missedSince: AT,
+      }),
+    ).toBe(
+      `unmeasured since 2026-10-27T04:01:30.000Z reason="the probe could not be written: ENOSPC" unvouched since 2026-10-27T04:00:00.000Z ${tail}`,
     );
     expect(
       line({
         kind: "unmeasured",
         since: AT,
-        reason: "the probe folder was removed; restart the daemon",
-        missedSince: AT,
+        reason: "not started",
+        missedSince: null,
       }),
     ).toBe(
-      `unmeasured since 2026-10-27T04:00:00.000Z reason="the probe folder was removed; restart the daemon" ${tail}`,
+      `unmeasured since 2026-10-27T04:00:00.000Z reason="not started" ${tail}`,
     );
   });
 });

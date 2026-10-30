@@ -368,51 +368,43 @@ export class FileEventDelivery {
   }
 }
 
-// [LAW:no-silent-failure] The bar's row while the daemon cannot vouch that a
-// config edit reloads: none while delivering. Its time is the span's start,
-// since an edit made after it may never have been heard.
+// [LAW:no-silent-failure] The bar's row for as long as the span is open,
+// whatever state delivery is in: an edit made after the span's start may never
+// have been heard, and only an event the watch reports closes it. With no span
+// open nothing can have gone unheard, so a delivering watch draws none, and
+// neither does an owner never started, whose host (the page's simulated
+// machine) watches nothing an edit could depend on.
 export interface FileEventsWarning {
   readonly kind: "file-events";
-  readonly state: "stalled" | "unmeasured";
+  readonly state: Delivery["kind"];
   readonly message: string;
 }
 
 export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
-  switch (d.kind) {
-    case "delivering":
-      return [];
-    case "stalled":
-      return [
-        {
-          kind: "file-events",
-          state: "stalled",
-          message: `file events stopped at ${iso(d.missedSince)}: the OS has delivered no file event since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume`,
-        },
-      ];
-    // With no span open nothing can have gone unheard: only an owner never
-    // started is unmeasured without one, and its host (the page's simulated
-    // machine) watches nothing that an edit could depend on.
-    case "unmeasured":
-      return d.missedSince === null
-        ? []
-        : [
-            {
-              kind: "file-events",
-              state: "unmeasured",
-              message: `the daemon cannot check whether file events are arriving: ${d.reason}, since ${iso(d.missedSince)}`,
-            },
-          ];
-  }
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message = (): string => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+      case "stalled":
+        return `file events stopped at ${since}: the OS has delivered no file event since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume`;
+      case "unmeasured":
+        return `the daemon cannot check whether file events are arriving: ${d.reason}, since ${since}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message() }];
 }
 
-// daemon-stats' `fileEvents` line.
+// daemon-stats' `fileEvents` line: the state, then the span's start whenever
+// one is open, the same instant the bar's row names.
 export function fileEventsLine(s: FileEventsStats): string {
   const { delivery: d } = s;
   const state =
-    d.kind === "delivering"
-      ? `delivering${d.missedSince === null ? "" : ` unvouched since ${iso(d.missedSince)}`}`
-      : d.kind === "stalled"
-        ? `stalled since ${iso(d.missedSince)}`
-        : `unmeasured since ${iso(d.since)} reason=${JSON.stringify(d.reason)}`;
-  return `${state} stalls=${s.stalls} catchUps=${s.catchUps} probes=${s.probes} probeFailures=${s.probeFailures}`;
+    d.kind === "unmeasured"
+      ? `unmeasured since ${iso(d.since)} reason=${JSON.stringify(d.reason)}`
+      : d.kind;
+  const span =
+    d.missedSince === null ? "" : ` unvouched since ${iso(d.missedSince)}`;
+  return `${state}${span} stalls=${s.stalls} catchUps=${s.catchUps} probes=${s.probes} probeFailures=${s.probeFailures}`;
 }
