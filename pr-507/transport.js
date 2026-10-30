@@ -49392,13 +49392,15 @@ var PathWatches = class {
   arm(filePath2) {
     const watch2 = derived(filePath2);
     const entry = {
-      watch: watch2,
-      subscribers: /* @__PURE__ */ new Map(),
-      held: this.watchers.follow(
-        null,
-        watch2,
-        (heard) => this.heard(filePath2, entry, heard)
-      ).watch
+      bound: {
+        derived: watch2,
+        held: this.watchers.follow(
+          null,
+          watch2,
+          (heard) => this.heard(filePath2, entry, heard)
+        ).watch
+      },
+      subscribers: /* @__PURE__ */ new Map()
     };
     this.entries.set(filePath2, entry);
     return entry;
@@ -49409,22 +49411,23 @@ var PathWatches = class {
   // are retried on any cause but a `failed` window: the OS refuses an
   // immediate retry the way it refused the first.
   rederive(filePath2, entry, cause) {
-    entry.watch = derived(filePath2);
+    const paths = derived(filePath2);
     const { watch: watch2, move } = this.watchers.follow(
-      entry.held,
-      entry.watch,
+      entry.bound.held,
+      paths,
       (heard) => this.heard(filePath2, entry, heard)
     );
-    entry.held = watch2;
+    entry.bound = { derived: paths, held: watch2 };
     if (cause.kind !== "failed" && move === "kept")
-      this.watchers.listening(entry.held);
+      this.watchers.listening(watch2);
     this.report(filePath2, entry);
   }
   // A window re-derives and re-reads.
   heard(filePath2, entry, heard) {
-    const wasLeaf = entry.watch.reached;
+    const wasLeaf = entry.bound.derived.reached;
     this.rederive(filePath2, entry, heard);
-    if (heard.kind !== "failed" && !wasLeaf && !entry.watch.reached) return;
+    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
+      return;
     for (const cb of entry.subscribers.keys()) cb();
   }
   report(filePath2, entry) {
@@ -49446,12 +49449,13 @@ var PathWatches = class {
     if (!entry) return;
     entry.subscribers.delete(callback);
     if (entry.subscribers.size === 0) {
-      entry.held.handle.release();
+      entry.bound.held.handle.release();
       this.entries.delete(filePath2);
     }
   }
   dispose() {
-    for (const entry of this.entries.values()) entry.held.handle.release();
+    for (const entry of this.entries.values())
+      entry.bound.held.handle.release();
     this.entries.clear();
   }
   size() {
@@ -49459,10 +49463,7 @@ var PathWatches = class {
   }
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-var faultOf = (filePath2, entry) => watchFault(`watch_file ${filePath2}`, {
-  derived: entry.watch,
-  held: entry.held
-});
+var faultOf = (filePath2, entry) => watchFault(`watch_file ${filePath2}`, entry.bound);
 var TtlBucketManager = class {
   buckets = /* @__PURE__ */ new Map();
   subscribe(durationMs, callback) {
@@ -78789,7 +78790,7 @@ var RenderCache = class {
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, { kind: "open" });
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
     return entry;
   }
@@ -79202,7 +79203,7 @@ var RenderCache = class {
       this.retire(served, "reload", { entry, state: loaded.state });
     }
     this.fit(entry);
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, cause);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
   // Every entry, re-read for `cause`: the answers on disk moved, and any
@@ -79221,7 +79222,11 @@ var RenderCache = class {
   // (including null↔non-null) is one way the set changes; a candidate's
   // parent directory appearing is another — the same rule covers both, so
   // there is no separate "did the path change" test to drift from it.
-  refreshWatcher(entry, loaded) {
+  //
+  // A kept watch's deaf directories are retried on any cause but a `failed`
+  // window, which the OS refuses again at once: a directory refused once is
+  // otherwise deaf until the target set moves, and the bar says so for good.
+  refreshWatcher(entry, loaded, cause) {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
@@ -79234,6 +79239,8 @@ var RenderCache = class {
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard })
     );
     entry.watch = { derived: paths, held: watch2 };
+    const failed2 = cause.kind === "config-watch" && cause.heard.kind === "failed";
+    if (move === "kept" && !failed2) this.deps.watchers.listening(watch2);
     if (move === "kept") return;
     this.log(
       "info",
@@ -83025,7 +83032,7 @@ function drawRender(setup, drawing2) {
   ].flatMap(
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
-  const configWatch = entry.watch === null ? null : watchFault("config", entry.watch);
+  const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...lifelineWarnings(),
