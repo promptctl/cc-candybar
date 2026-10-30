@@ -4,15 +4,29 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "8186cb43b1b454e20570478450cfd9155aaa87f1",
-      "timestamp": "2026-10-30T07:12:03.119Z",
+      "sha": "06386e072718bc4e3359f4c4ad771c25a314fc33",
+      "timestamp": "2026-10-30T07:20:24.816Z",
       "commits": [
         {
-          "sha": "8186cb43b1b454e20570478450cfd9155aaa87f1",
+          "sha": "06386e072718bc4e3359f4c4ad771c25a314fc33",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:11:36Z",
-          "message": "Merge b2e706abca8b2c758fe5089445f82b62419a32fe into 0861c4b866aa16f3f014fa1afeef7a2a853e3701\n"
+          "timestamp": "2026-10-30T07:19:52Z",
+          "message": "Merge ba12cb85484a8306447086aaf1a2dad9180be07c into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+        },
+        {
+          "sha": "ba12cb85484a8306447086aaf1a2dad9180be07c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:19:39-06:00",
+          "message": "fix(landscape): one label font formula, grid label force, fit animation stopped on reselect, bundle failures settle at load, and deep links normalise or say not found\n"
+        },
+        {
+          "sha": "23dc273e55ac2ab036eea48dc1198a75b9c05fa4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:17:27-06:00",
+          "message": "fix(capture): keychain refused in the sandbox, every published frame checked for credential shapes, profile paths passed in, and docs say what the sandbox does\n"
         },
         {
           "sha": "b2e706abca8b2c758fe5089445f82b62419a32fe",
