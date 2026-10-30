@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-498",
+      "ref": "refs/pull/498/merge",
+      "sha": "f0e3e242ca476ee3609ac96377cefc499ec0378b",
+      "timestamp": "2026-10-30T15:19:05.232Z",
+      "commits": [
+        {
+          "sha": "f0e3e242ca476ee3609ac96377cefc499ec0378b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:18:16Z",
+          "message": "Merge cfbc300f7e8fb69f1fa938aba385235f1a5b90c0 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
+        },
+        {
+          "sha": "cfbc300f7e8fb69f1fa938aba385235f1a5b90c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:18:05-06:00",
+          "message": "test(git-cache): a looped git directory's open count is the platform's, as its deaf count is (brandon-unfiled-3248.pijr)\n\nLinux's recursive watcher swallows the symlink loop under refs/heads and\nopens it; macOS refuses it. The directory watches opened are the targets\nless the deaf ones, read from the bind line.\n"
+        },
+        {
+          "sha": "bcdc01d9c7a939bc71f2197404aa154108106115",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:06:10-06:00",
+          "message": "fix(watchers): a retry reopens deaf directories and judges no folder's identity (brandon-unfiled-3248.pijr)\n\nReview of #498 (second high):\n- listening retries deaf directories only. Judging identity there gave the\n  reopen's unknown window a path back to another reopen wherever a folder's\n  identity is unstable; a moved folder is the next derive's new key, which\n  acquires and refreshes.\n- The config and git bind log lines say deaf=, which counts directories\n  that failed after opening as well as those refused.\n"
+        },
+        {
+          "sha": "044f61a381fab0e309faa28cdd877922faac0468",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:54:49-06:00",
+          "message": "fix(watchers): a directory's state is its current handle's to change (brandon-unfiled-3248.pijr)\n\nReview of #498 (medium):\n- An error or event from a handle a reopen replaced no longer marks the\n  directory deaf or fires its slots; the bound folder is read from the\n  current state, not a closure copy.\n- One predicate says whether a path binds a folder, for the watch key and\n  the refresh.\n- The follow comment says where a deaf directory is retried; the memory\n  lines say the handle follows a folder made again, and why storage still\n  recovers through a reload.\n"
+        },
+        {
+          "sha": "96370e71411b052f4ddb7e95c9f5a15fa0941e39",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:46:23-06:00",
+          "message": "fix(watchers): a directory watch follows the folder at its path, and every slot on it hears it recover (brandon-unfiled-3248.pijr)\n\nReview of #498:\n- An event naming a directory whose folder was made again moves the handle\n  onto the new folder, so later own-name events (macOS: a child came or went)\n  no longer pass every name filter.\n- A reopen that listens tells every slot an unknown window, so a shared\n  directory's other holders re-read what went unheard and clear their fault.\n- Joining a slot refreshes its directories as opening one does, so a rebind\n  onto a key another holder owns retries its deaf directory.\n- Managed storage judges an unknown window against the disk: it may hold the\n  folder's own event.\n- watch_file's follow-then-retry is one step, the window's cause its input.\n"
+        },
+        {
+          "sha": "cc730a84157e9ceb1c284adb42d49e65d5fb1838",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T08:32:12-06:00",
+          "message": "refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr)\n\nThe var-system's own watch manager opened, filtered, failed and closed its\nfs.watch handles beside the watcher registry, so its handles never reached\nthe daemon's counters or log. It is gone: a watch_file path follows its\nspec through the registry's `follow`, as the config and git watches do.\n\nThe registry gains what that needed, as rules for every consumer:\n- one OS handle per directory, refcounted by the slots on it, and `follow`\n  acquires before it releases, so a key move (a link re-pointed to a new\n  name) keeps every directory both keys name open;\n- a directory made again at its path is reopened in place when a slot\n  acquires it; a deaf one is reopened only through `listening`, which only\n  watch_file calls, at a real event on a kept watch, never on a failed one;\n- every holder of a key hears each window; a directory going deaf is told\n  to every slot on it; the handle's `deaf` list is live;\n- a directory's own name under a name filter is judged by the folder at the\n  path, not the event type; an unnamed event under a filter is `unknown`;\n- daemon-stats counts directory handles opened, closed and open beside the\n  slots, and the registry logs every open, close and reopen with its cause.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-499",
       "ref": "refs/pull/499/merge",
       "sha": "66547782e5fc86dca12ead03aff5ad3d2e649083",
@@ -41,49 +91,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-498",
-      "ref": "refs/pull/498/merge",
-      "sha": "84e2efb5e47c1a0a202143b985237b05df84c78d",
-      "timestamp": "2026-10-30T15:13:39.105Z",
-      "commits": [
-        {
-          "sha": "84e2efb5e47c1a0a202143b985237b05df84c78d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T15:12:40Z",
-          "message": "Merge bcdc01d9c7a939bc71f2197404aa154108106115 into 16ba284b459a5bc135c21f529414a4020a2b2b46\n"
-        },
-        {
-          "sha": "bcdc01d9c7a939bc71f2197404aa154108106115",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:06:10-06:00",
-          "message": "fix(watchers): a retry reopens deaf directories and judges no folder's identity (brandon-unfiled-3248.pijr)\n\nReview of #498 (second high):\n- listening retries deaf directories only. Judging identity there gave the\n  reopen's unknown window a path back to another reopen wherever a folder's\n  identity is unstable; a moved folder is the next derive's new key, which\n  acquires and refreshes.\n- The config and git bind log lines say deaf=, which counts directories\n  that failed after opening as well as those refused.\n"
-        },
-        {
-          "sha": "044f61a381fab0e309faa28cdd877922faac0468",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:54:49-06:00",
-          "message": "fix(watchers): a directory's state is its current handle's to change (brandon-unfiled-3248.pijr)\n\nReview of #498 (medium):\n- An error or event from a handle a reopen replaced no longer marks the\n  directory deaf or fires its slots; the bound folder is read from the\n  current state, not a closure copy.\n- One predicate says whether a path binds a folder, for the watch key and\n  the refresh.\n- The follow comment says where a deaf directory is retried; the memory\n  lines say the handle follows a folder made again, and why storage still\n  recovers through a reload.\n"
-        },
-        {
-          "sha": "96370e71411b052f4ddb7e95c9f5a15fa0941e39",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:46:23-06:00",
-          "message": "fix(watchers): a directory watch follows the folder at its path, and every slot on it hears it recover (brandon-unfiled-3248.pijr)\n\nReview of #498:\n- An event naming a directory whose folder was made again moves the handle\n  onto the new folder, so later own-name events (macOS: a child came or went)\n  no longer pass every name filter.\n- A reopen that listens tells every slot an unknown window, so a shared\n  directory's other holders re-read what went unheard and clear their fault.\n- Joining a slot refreshes its directories as opening one does, so a rebind\n  onto a key another holder owns retries its deaf directory.\n- Managed storage judges an unknown window against the disk: it may hold the\n  folder's own event.\n- watch_file's follow-then-retry is one step, the window's cause its input.\n"
-        },
-        {
-          "sha": "cc730a84157e9ceb1c284adb42d49e65d5fb1838",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:32:12-06:00",
-          "message": "refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr)\n\nThe var-system's own watch manager opened, filtered, failed and closed its\nfs.watch handles beside the watcher registry, so its handles never reached\nthe daemon's counters or log. It is gone: a watch_file path follows its\nspec through the registry's `follow`, as the config and git watches do.\n\nThe registry gains what that needed, as rules for every consumer:\n- one OS handle per directory, refcounted by the slots on it, and `follow`\n  acquires before it releases, so a key move (a link re-pointed to a new\n  name) keeps every directory both keys name open;\n- a directory made again at its path is reopened in place when a slot\n  acquires it; a deaf one is reopened only through `listening`, which only\n  watch_file calls, at a real event on a kept watch, never on a failed one;\n- every holder of a key hears each window; a directory going deaf is told\n  to every slot on it; the handle's `deaf` list is live;\n- a directory's own name under a name filter is judged by the folder at the\n  path, not the event type; an unnamed event under a filter is `unknown`;\n- daemon-stats counts directory handles opened, closed and open beside the\n  slots, and the registry logs every open, close and reopen with its cause.\n"
         }
       ]
     },
