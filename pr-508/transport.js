@@ -37739,13 +37739,10 @@ function lineAt(palette, decor, row2, cell3, drawnAt) {
     run3,
     keystones.join(","),
     decor.shade.tones.join(","),
-    rowStart(decor.variation, row2),
-    // The bar-start keystone reads whether the row is the bar's first.
-    (row2?.index ?? 0) === 0,
-    distributionName(cell3.distribution),
-    cell3.count,
-    cell3.lineStart,
-    cell3.lineEnd,
+    row2 === void 0 ? "" : stepKey(row2),
+    // One answer for every place along the line, so the cell is keyed at
+    // the line's first.
+    stepKey(cell3, cell3.lineStart),
     drawnAt
   ].join("|");
   return LINES(
@@ -37769,6 +37766,19 @@ function lineAt(palette, decor, row2, cell3, drawnAt) {
   );
 }
 var LINES = memoPerPalette();
+function stepKey({
+  axis,
+  index,
+  count,
+  distribution,
+  lineStart,
+  lineEnd,
+  ...unkeyed
+}, at = index) {
+  const none = unkeyed;
+  void none;
+  return `${axis},${at},${count},${distributionName(distribution)},${lineStart},${lineEnd}`;
+}
 function distributionName(distribution) {
   const name = DISTRIBUTION_NAME.get(distribution);
   if (name === void 0)

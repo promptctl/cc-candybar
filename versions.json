@@ -4,15 +4,22 @@
     {
       "version": "pr-508",
       "ref": "refs/pull/508/merge",
-      "sha": "0f99e4d6806c031ece6235828eda135821eca8c7",
-      "timestamp": "2026-10-30T20:50:58.553Z",
+      "sha": "8a3e846077809f48809876771f6289f370e51f8e",
+      "timestamp": "2026-10-30T21:04:17.848Z",
       "commits": [
         {
-          "sha": "0f99e4d6806c031ece6235828eda135821eca8c7",
+          "sha": "8a3e846077809f48809876771f6289f370e51f8e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T20:50:02Z",
-          "message": "Merge ca1b63bd387351a1da3e6b68f58fbc005c43bfb9 into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+          "timestamp": "2026-10-30T21:03:28Z",
+          "message": "Merge 0b8913c9f498ec6e4585a30b2d2fa83c7504062a into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+        },
+        {
+          "sha": "0b8913c9f498ec6e4585a30b2d2fa83c7504062a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T15:03:18-06:00",
+          "message": "refactor(colour): a line is memoised by its whole row and line steps, not a copy of what its deal reads (candybar-joiners-e5r4.5x1)\n\nThe line memo's key named the row's starting step and whether it is the bar's first row, which is what the keystones and the deal read today. A keystone that came to read another field of the row would have folded two lines into one answer with no error. The key now holds every field of the row step and of the line's cell step, and a field a step gains without a place in the key is a compile error.\n"
         },
         {
           "sha": "ca1b63bd387351a1da3e6b68f58fbc005c43bfb9",
