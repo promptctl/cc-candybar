@@ -75712,6 +75712,7 @@ function joinWarnings(parts) {
   return parts.filter(Boolean).join("\n") || null;
 }
 var thrown = (err) => err instanceof Error ? err.message : String(err);
+var blamed = (layers) => layers.length === 1 ? layers[0].path : null;
 function plugins(p2) {
   return {
     loaded: p2.loaded,
@@ -75782,6 +75783,7 @@ function resolveLoad(cwd2, chain2, storage) {
       },
       { repo: chain2.repo, cwd: cwd2 }
     );
+    failing = blamed(loaded.layers);
     const inputs = {
       cwd: cwd2,
       chain: chain2,
@@ -75791,12 +75793,7 @@ function resolveLoad(cwd2, chain2, storage) {
     return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
   } catch (err) {
     if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return {
-      kind: "failed",
-      error: thrown(err),
-      failedFile: failing,
-      warnings
-    };
+    return { kind: "failed", cause: err, failedFile: failing, warnings };
   }
 }
 function buildRenderState(load, deps) {
@@ -75835,10 +75832,8 @@ function buildRenderState(load, deps) {
     if (err instanceof ConfigError) warnings.push(...err.warnings);
     return {
       kind: "failed",
-      error: thrown(err),
-      // Past the chain, a failure is the one file's when there is one, and
-      // no file's when several merged into what failed.
-      failedFile: layers.length === 1 ? layers[0].path : null,
+      cause: err,
+      failedFile: blamed(layers),
       warnings
     };
   }
@@ -75905,16 +75900,19 @@ function settle2(frame, resolveWarnings, attempt4) {
         kind: "failed",
         warning: warning(attempt4.warnings),
         state: null,
-        error: attempt4.error,
+        error: thrown(attempt4.cause),
+        cause: attempt4.cause,
         failedFile: attempt4.failedFile
       };
   }
 }
-function loadChain(frame, cwd2, chain2, deps, attempt4 = (load) => buildRenderState(load, deps)) {
+function loadChain(frame, cwd2, chain2, deps, served = null) {
   const resolved = resolveLoad(cwd2, chain2, deps.storage);
-  return resolved.kind === "failed" ? settle2(frame, [], resolved) : settle2(frame, resolved.warnings, attempt4(resolved));
+  if (resolved.kind === "failed") return settle2(frame, [], resolved);
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle2(frame, resolved.warnings, attempt4);
 }
-function loadFromDisk(projectDir, cwd2, configFile, deps, attempt4) {
+function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
   const resolution = resolveDslConfig(
     repoConfigs().read(),
@@ -75938,7 +75936,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, attempt4) {
     cwd2,
     chain2,
     deps,
-    attempt4
+    served
   );
 }
 function fallbackState(cwd2, repo2, deps) {
@@ -75949,7 +75947,9 @@ function fallbackState(cwd2, repo2, deps) {
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   if (built.kind === "failed")
-    throw new Error(`bundled default failed to load: ${built.error}`);
+    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+      cause: built.cause
+    });
   return built.state;
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
@@ -76141,7 +76141,7 @@ var RenderCache = class {
       this.entries.set(key, existing);
       return existing;
     }
-    const loaded = this.load(projectDir, cwd2, configFile);
+    const loaded = this.load(projectDir, cwd2, configFile, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     const entry = {
@@ -76412,9 +76412,9 @@ var RenderCache = class {
   // config watch firing after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(projectDir, cwd2, configFile, attempt4) {
+  load(projectDir, cwd2, configFile, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd2, configFile, this.deps, attempt4);
+    return loadFromDisk(projectDir, cwd2, configFile, this.deps, served);
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
   // goes, the map stops serving it, and its state is retired.
@@ -76564,7 +76564,7 @@ var RenderCache = class {
       entry.projectDir,
       entry.cwd,
       entry.configFile,
-      (load) => load.key === served.loadKey ? { kind: "kept", state: served } : buildRenderState(load, this.deps)
+      served
     );
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
