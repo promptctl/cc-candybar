@@ -34044,7 +34044,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.165.1";
+var PACKAGE_VERSION = "1.166.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -38124,7 +38124,10 @@ var WatcherRegistry = class {
         }))
       };
     }
-    const slot = this.slots.get(key) ?? this.opened(key, targets);
+    const shared = this.slots.get(key);
+    for (const { dir } of shared?.listeners ?? [])
+      this.refreshed(dir, "acquire");
+    const slot = shared ?? this.opened(key, targets);
     const holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
@@ -38157,16 +38160,15 @@ var WatcherRegistry = class {
     held?.handle.release();
     return { watch: watch2, move: "rebound" };
   }
-  // Reopen, in place, every directory of the held watch the OS is not
-  // listening to, for every slot that shares it; a listening directory keeps
-  // its handle. A reopen delivers no window of its own (inotify's mask has no
-  // open bit, and an FSEvents stream starts from now), so a consumer calling
-  // this on a window it heard cannot loop on it.
+  // Refresh, in place, every directory of the held watch, for every slot that
+  // shares it: one the OS is not listening to is opened again. A reopen that
+  // listens tells an `unknown` window, so a consumer calling this on a window
+  // it heard is called once more and finds nothing deaf; a retry the OS
+  // refuses tells nothing, so it cannot loop.
   listening(held) {
     const slot = this.slots.get(held.key);
     if (slot === void 0) return;
-    for (const { dir } of slot.listeners)
-      if (dir.state.kind === "deaf") this.reopen(dir, "retry");
+    for (const { dir } of slot.listeners) this.refreshed(dir, "retry");
   }
   opened(key, targets) {
     const slot = {
@@ -38193,45 +38195,56 @@ var WatcherRegistry = class {
     }
     return slot;
   }
-  // The directory watch a new slot's target joins, named as the directory is
-  // now: a deaf one is opened again, and a listening one whose path holds
-  // another folder than the one it bound (removed and made again: inotify
-  // hears the old inode) is reopened in place. A path that binds nothing right
-  // now keeps the listening handle, as `follow` keeps a held watch: a macOS
-  // watch on the path hears the folder come back.
+  // The directory watch a new slot's target joins: the one already open
+  // there, refreshed, or a new one.
   dirFor(target) {
     const id2 = dirId(target);
     const existing = this.dirs.get(id2);
-    if (existing === void 0) {
-      const where = { path: target.path, recursive: target.recursive === true };
-      const dir = {
-        id: id2,
-        ...where,
-        listeners: /* @__PURE__ */ new Set(),
-        state: this.open(where, () => dir, "acquire")
-      };
-      this.dirs.set(id2, dir);
-      return dir;
-    }
-    if (existing.state.kind === "deaf") {
-      this.reopen(existing, "acquire");
+    if (existing !== void 0) {
+      this.refreshed(existing, "acquire");
       return existing;
     }
-    const now2 = boundOf(existing.path);
-    if (typeof now2 !== "string" && "ino" in now2) {
-      if (boundKey(now2) !== existing.state.bound)
-        this.reopen(existing, "the folder at its path was made again");
-    }
-    return existing;
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, "acquire")
+    };
+    this.dirs.set(id2, dir);
+    return dir;
   }
-  // [LAW:no-silent-failure] A directory moving from listening to deaf is told
-  // to every slot on it, so a shared directory's other holders see the fault
-  // as the one that reopened it does. Deaf staying deaf is no change.
+  // [LAW:single-enforcer] The one rule that a directory watch listens to the
+  // folder at its path, applied whenever a holder names the directory and
+  // whenever an event says the folder there moved. A deaf one is opened
+  // again; a listening one whose path holds another folder than the one it
+  // bound (removed and made again: inotify hears the old inode, and the bound
+  // folder is what an event naming the directory is judged against) is
+  // reopened in place. A path that binds nothing right now keeps the
+  // listening handle, as `follow` keeps a held watch: a macOS watch on the
+  // path hears the folder come back.
+  refreshed(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (typeof now2 !== "string" && "ino" in now2) {
+      if (boundKey(now2) !== dir.state.bound)
+        this.reopen(dir, "the folder at its path was made again");
+    }
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, it hears the fault. Listening again, it hears an
+  // `unknown` window: whatever changed while the directory was deaf or bound
+  // to another folder went unheard, and a holder that re-derives on it reports
+  // its fault cleared. Deaf staying deaf is no change and tells nothing.
   reopen(dir, cause) {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
     dir.state = this.open(dir, () => dir, cause);
-    if (was.kind === "listening" && dir.state.kind === "deaf")
+    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening")
       this.tell(dir, failedOf(dir.state.deafness));
   }
   // `dirOf` names the watch the handle belongs to; its callbacks run only
@@ -38279,13 +38292,17 @@ var WatcherRegistry = class {
   // one this handle bound (its removal or replacement, which macOS reports as
   // a change and Linux as a rename) reaches the slot. The same name with the
   // folder unchanged is macOS reporting a child that came or went, or a chmod,
-  // and is not. Judged once per event, for every listener.
+  // and is not. Judged once per event, for every listener. A move is then
+  // refreshed, so a handle never stays bound to a folder no longer at its
+  // path and every later event naming the directory is judged against the
+  // folder there.
   heard(dir, bound, changed) {
     const moved = changed === import_node_path13.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
     }
+    if (moved) this.refreshed(dir, "moved");
   }
   tell(dir, invalidation) {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
@@ -48769,9 +48786,12 @@ var PathWatches = class {
     this.entries.set(filePath2, entry);
     return entry;
   }
-  // Derive where the path can change and follow it: a new key acquires its
-  // watch, keeping every directory both keys name.
-  followed(filePath2, entry) {
+  // Derive where the path can change, follow it, and say the watch's fault.
+  // A new key acquires its watch, keeping every directory both keys name and
+  // retrying any the OS is not listening to. A kept watch's deaf directories
+  // are retried on any cause but a `failed` window: the OS refuses an
+  // immediate retry the way it refused the first.
+  rederive(filePath2, entry, cause) {
     entry.watch = derived(filePath2);
     const { watch: watch2, move } = this.watchers.follow(
       entry.held,
@@ -48779,18 +48799,14 @@ var PathWatches = class {
       (heard) => this.heard(filePath2, entry, heard)
     );
     entry.held = watch2;
-    return move;
-  }
-  // A window re-derives and re-reads. A kept watch's deaf directories are
-  // opened again here, at an event the OS reported, never at the `failed`
-  // window that made them deaf: the OS refuses an immediate retry the way it
-  // refused the first, and a rebound watch was just opened.
-  heard(filePath2, entry, heard) {
-    const wasLeaf = entry.watch.reached;
-    const move = this.followed(filePath2, entry);
-    if (heard.kind !== "failed" && move === "kept")
+    if (cause.kind !== "failed" && move === "kept")
       this.watchers.listening(entry.held);
     this.report(filePath2, entry);
+  }
+  // A window re-derives and re-reads.
+  heard(filePath2, entry, heard) {
+    const wasLeaf = entry.watch.reached;
+    this.rederive(filePath2, entry, heard);
     if (heard.kind !== "failed" && !wasLeaf && !entry.watch.reached) return;
     for (const cb of entry.subscribers.keys()) cb();
   }
@@ -48804,9 +48820,7 @@ var PathWatches = class {
   // reported.
   caughtUp() {
     for (const [filePath2, entry] of this.entries) {
-      if (this.followed(filePath2, entry) === "kept")
-        this.watchers.listening(entry.held);
-      this.report(filePath2, entry);
+      this.rederive(filePath2, entry, { kind: "unknown" });
       for (const cb of entry.subscribers.keys()) cb();
     }
   }
@@ -73398,17 +73412,19 @@ var ManagedStorage = class {
     watched.handle.release();
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
-  // held files it names re-read; an unnamed event re-reads every held file in
-  // the folder; the folder's own name or an error is judged against the disk.
-  // The OS reports a change to the watched folder itself under the folder's
-  // own name, as though it were a child, so that path is the folder joined
-  // with its own name.
+  // held files it names re-read; the folder's own name or an error is judged
+  // against the disk. An `unknown` window may hold the folder's own event (an
+  // unnamed one, or a named one the window folded), so it is judged as the
+  // folder's own name is, re-reading every held file in the folder still
+  // there. The OS reports a change to the watched folder itself under the
+  // folder's own name, as though it were a child, so that path is the folder
+  // joined with its own name.
   invalidated(watched, invalidation) {
     const { key } = watched;
     const inFolder = (f) => sameKey(f.storage, key);
     switch (invalidation.kind) {
       case "unknown":
-        this.sessions.changed(inFolder);
+        this.judged(watched, () => this.sessions.changed(inFolder));
         return;
       case "changed": {
         const { paths } = invalidation;
