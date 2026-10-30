@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "16ba284b459a5bc135c21f529414a4020a2b2b46",
+      "timestamp": "2026-10-30T15:09:25.861Z",
+      "commits": [
+        {
+          "sha": "16ba284b459a5bc135c21f529414a4020a2b2b46",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:08:27-06:00",
+          "message": "fix(render): bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr) (#496)\n\n* test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n\n* fix(render): bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr)\n\nrich-js 0.25's joiner has no divider: it always draws its seam and lifts\nan arrow's ink off a ground it would vanish into. The seam adapters\nfollow the new SeamForm (plainWith has no divider; the glyph probe draws\ntwo cells), the glyph lists and doctor fixtures lose U+E0B1, and the\ndocs' render fences and the two byte snapshots show U+E0B0 where U+E0B1\nwas, each a lifted arrow between the door and its rate cell.\n\nThe reversed tests' arrow checks read the lift: in colour-256 an arrow's\nink is its cell's ground wherever that stands off the next ground as\ndrawn, and otherwise the colour rich-js's own joiner draws for the two\ntruecolor grounds, at truecolor, 256 and ansi. The theme-identity audit\nreads an arrow's left side from the column before it, since the ink no\nlonger says it.\n\nThe 33 other rich-js commits in 0.25.0 change four APIs the render\nuses: Effected takes its time from RenderOptions.frame, an effect frame\ncarries CellLook attributes, Transition is a class with a schedule, and\nanimationFuncs takes a TemplateFrame (only frames and stepped are\nregistered, as before).\n\n* fix(render): a passage keeps only the effect it draws, and each depth of a bar is compared at one instant (candybar-joiners-e5r4.0hr)\n\nHigh review pass on #496:\n- Passage keeps the transition's done and its grounded effect, never the transition as made, whose own effect veils toward the terminal's ground.\n- colour-256 draws every render of a comparison at one instant, so the depths compared are the same bar glyph for glyph.\n- The audit, segment-render-unit and engine comments say what rich-js 0.25 does: one ground gets a lifted arrow; tween, loop and glyphs are refused as unknown functions.\n\n* fix(deps): require rich-js ^0.25.1, since 0.25.0's color module reads `pattern` before its import and no suite loads under ts-jest (candybar-joiners-e5r4.0hr)\n\n* docs(render): the unregistered animation functions and the seams test say what is drawn (candybar-joiners-e5r4.0hr)\n\nMedium review pass on #496: engine.ts gives the reason tween, loop and glyphs are not registered, and what registering each takes; settings-menu-seams' header says two rungs spelled alike share a ground under a lifted arrow."
+        },
+        {
+          "sha": "b1b30c3e8dc47d1989a6d2abe48e0e0eca3f232c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-30T14:38:34Z",
+          "message": "chore(release): set `package.json` to 1.166.0 [skip ci]\n\n## [1.166.0](https://github.com/promptctl/cc-candybar/compare/v1.165.1...v1.166.0) (2026-10-30)\n\n### Features\n\n* **plugins:** a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) ([#497](https://github.com/promptctl/cc-candybar/issues/497)) ([5577ddd](https://github.com/promptctl/cc-candybar/commit/5577ddd8731d529e5500113fe2febc34aff9f5b2))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-498",
       "ref": "refs/pull/498/merge",
       "sha": "7b877478bd89d78e027f58d27641135870f19017",
@@ -70,85 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-496",
-      "ref": "refs/pull/496/merge",
-      "sha": "c888c6999539d420af3f276c310efb2433a1202d",
-      "timestamp": "2026-10-30T14:46:48.741Z",
-      "commits": [
-        {
-          "sha": "c888c6999539d420af3f276c310efb2433a1202d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T14:45:46Z",
-          "message": "Merge e9e56ffcdeb8ea8dd33581bdbcfbfb654af8d9d6 into b1b30c3e8dc47d1989a6d2abe48e0e0eca3f232c\n"
-        },
-        {
-          "sha": "e9e56ffcdeb8ea8dd33581bdbcfbfb654af8d9d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:45:41-06:00",
-          "message": "Merge branch 'main' into fix/joiners-bump-0hr"
-        },
-        {
-          "sha": "9c0ebb9168b4d432f9868f860a210def56b1dffb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:38:48-06:00",
-          "message": "docs(render): the unregistered animation functions and the seams test say what is drawn (candybar-joiners-e5r4.0hr)\n\nMedium review pass on #496: engine.ts gives the reason tween, loop and glyphs are not registered, and what registering each takes; settings-menu-seams' header says two rungs spelled alike share a ground under a lifted arrow.\n"
-        },
-        {
-          "sha": "b7a010ab993eb0551675d50f27274906c05698dc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:30:04-06:00",
-          "message": "fix(deps): require rich-js ^0.25.1, since 0.25.0's color module reads `pattern` before its import and no suite loads under ts-jest (candybar-joiners-e5r4.0hr)\n"
-        },
-        {
-          "sha": "9ef66fec4afb7b6cc282940668514836bec9de85",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:39:07-06:00",
-          "message": "fix(render): a passage keeps only the effect it draws, and each depth of a bar is compared at one instant (candybar-joiners-e5r4.0hr)\n\nHigh review pass on #496:\n- Passage keeps the transition's done and its grounded effect, never the transition as made, whose own effect veils toward the terminal's ground.\n- colour-256 draws every render of a comparison at one instant, so the depths compared are the same bar glyph for glyph.\n- The audit, segment-render-unit and engine comments say what rich-js 0.25 does: one ground gets a lifted arrow; tween, loop and glyphs are refused as unknown functions.\n"
-        },
-        {
-          "sha": "0859b3ec9ab39b3c07a7552865eac0fd6564808d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:12:41-06:00",
-          "message": "fix(render): bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr)\n\nrich-js 0.25's joiner has no divider: it always draws its seam and lifts\nan arrow's ink off a ground it would vanish into. The seam adapters\nfollow the new SeamForm (plainWith has no divider; the glyph probe draws\ntwo cells), the glyph lists and doctor fixtures lose U+E0B1, and the\ndocs' render fences and the two byte snapshots show U+E0B0 where U+E0B1\nwas, each a lifted arrow between the door and its rate cell.\n\nThe reversed tests' arrow checks read the lift: in colour-256 an arrow's\nink is its cell's ground wherever that stands off the next ground as\ndrawn, and otherwise the colour rich-js's own joiner draws for the two\ntruecolor grounds, at truecolor, 256 and ansi. The theme-identity audit\nreads an arrow's left side from the column before it, since the ink no\nlonger says it.\n\nThe 33 other rich-js commits in 0.25.0 change four APIs the render\nuses: Effected takes its time from RenderOptions.frame, an effect frame\ncarries CellLook attributes, Transition is a class with a schedule, and\nanimationFuncs takes a TemplateFrame (only frames and stepped are\nregistered, as before).\n"
-        },
-        {
-          "sha": "80a1e55480af7d54a457cc64b83300411171fd83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T01:17:10-06:00",
-          "message": "test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5577ddd8731d529e5500113fe2febc34aff9f5b2",
-      "timestamp": "2026-10-30T14:27:45.298Z",
-      "commits": [
-        {
-          "sha": "5577ddd8731d529e5500113fe2febc34aff9f5b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T08:26:42-06:00",
-          "message": "feat(plugins): a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) (#497)\n\n* feat(plugins): a missing segment is an error only when its plugin is present, and its error copies a fix prompt (candybar-plugins-vf6g.odm)\n\n* fix(plugins): a failed plugin's insert cell shows its drop, and a diagnostic's copy click names its message by key (candybar-plugins-vf6g.odm)\n\nAn insert cell placing a segment of an installed plugin that failed to load\nnow stands in and reaches the drop, so the drop shows in the ⚠ viewer\nexactly as a tree placement of it does, instead of only in the daemon log.\nAn insert cell anchored on a cell of a plugin absent from the session is\nabsent with it: not placed and not reported as a missing anchor.\n\nA diagnostic's copy click (its first line and ⧉ alike) now carries only the\nmessage's key. The copy-diagnostic verb reads what to copy from the\nsession's last draw, so frame bytes no longer grow with the fix prompt and\nterminals that cap OSC 8 link length keep the click. A key the last draw no\nlonger lists is refused loudly through the click error.\n\nPlacement presence is passed to the cross-reference walk as a parameter\nrather than through the shared validation context, and one reportable\npredicate decides which placements are errors at every site.\n\n* fix(plugins): a copy click finds its message in whichever renderer delivered it, and an id anchor on an absent placement is absent with it (candybar-plugins-vf6g.odm)\n\nA request and a feed frame list different diagnostics, so each renderer's\ncopies are kept apart and recorded only once its frame exists. An insert\ncell's anchor is a placement id, so the segments placed under it are what\nits absence is judged by.\n\n* fix(plugins): an insert cell is absent through any chain of absent anchors, its own typo is reported whatever it stands on, and a closed feed's copies retire with it (candybar-plugins-vf6g.odm)\n\n* fix(plugins): a copy click names the renderer whose frame it reads, held across a view's successor and recorded once delivered; an insert entry places its segment for the unused check; absent placements are a linear fixpoint (candybar-plugins-vf6g.odm)\n\n* docs(click): the copy-diagnostic verb's args name the renderer that drew the link (candybar-plugins-vf6g.odm)"
-        },
-        {
-          "sha": "12958c7fab6a69a0aecab8498b33d6418a34f8b5",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T13:45:18Z",
-          "message": "chore(release): set `package.json` to 1.165.1 [skip ci]\n\n## [1.165.1](https://github.com/promptctl/cc-candybar/compare/v1.165.0...v1.165.1) (2026-10-30)\n\n### Bug Fixes\n\n* **var-system:** a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24) ([#495](https://github.com/promptctl/cc-candybar/issues/495)) ([5920905](https://github.com/promptctl/cc-candybar/commit/592090572d8ec1c672f7c5994824e93e218f8291))\n"
         }
       ]
     },
