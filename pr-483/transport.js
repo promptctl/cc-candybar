@@ -56673,6 +56673,7 @@ function validateCrossReferences(ctx, cfg, authored) {
       yield* unreadBelow(childPaths(child, path39), whereBelow(child, where));
     }
   }
+  const reported = /* @__PURE__ */ new Set();
   const checkLayoutTree = (root, layoutKey) => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
@@ -56706,6 +56707,7 @@ function validateCrossReferences(ctx, cfg, authored) {
         continue;
       }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+        reported.add(node.name);
         ctx.unplaced.push({
           path: path39,
           message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
@@ -56728,6 +56730,19 @@ function validateCrossReferences(ctx, cfg, authored) {
   }
   for (const [key, tree] of rendered) {
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
+  }
+  for (const [key, tree] of rendered) {
+    for (const [node] of walkNodePaths(tree, key)) {
+      if (node.kind !== "segment" || isSettingsAnchor(node.name) || Object.prototype.hasOwnProperty.call(cfg.segments, node.name) || reported.has(node.name)) {
+        continue;
+      }
+      reported.add(node.name);
+      ctx.unplaced.push({
+        path: key,
+        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
+        line: findKeyLine(ctx.source, key.split("."))
+      });
+    }
   }
   validateDeclarations(ctx, cfg, templateScope, () => true);
 }
@@ -58561,7 +58576,7 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
 }
 function checkPlugin(config2, plugin, replaces, filePath2, allowedPalettes) {
   if (replaces) {
-    validateConfig(unauthored(config2), filePath2, allowedPalettes);
+    validateRenderable(unauthored(config2), filePath2, allowedPalettes);
     return;
   }
   const owned = ownedBy(plugin);
@@ -58596,15 +58611,6 @@ var NO_FILE = {
     rendering: /* @__PURE__ */ new Map()
   }
 };
-function validateConfig(authored, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames())) {
-  const { config: config2, dropped: dropped2 } = validateRenderable(
-    authored,
-    filePath2,
-    allowedPalettes
-  );
-  if (dropped2 !== null) throw dropped2;
-  return config2;
-}
 function validateRenderable({ config: merged, raw, source }, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames())) {
   const issues = [];
   const ctx = {
@@ -61284,7 +61290,9 @@ function requireValueTarget(key) {
   return target;
 }
 function commit(store, home, before, after, refuse2) {
-  refuse2(home, before, loadOrRefuse(home, after));
+  const will = loadOrRefuse(home, after);
+  refuseNewDrops(home, before, will);
+  refuse2(home, before, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
@@ -61360,6 +61368,25 @@ function loadOrRefuse(home, text3) {
     throw new BadVerbArgs(
       `refused: the config file would not load after this click \u2014 ${e.message}`
     );
+  }
+}
+function refuseNewDrops(home, before, will) {
+  const held = new Set(dropsOf(home, before).map((i) => i.message));
+  const added = (will.dropped?.issues ?? []).filter(
+    (i) => !held.has(i.message)
+  );
+  if (added.length > 0) {
+    throw new BadVerbArgs(
+      `refused: this click would leave a placement of a segment nothing declares \u2014 ${new ConfigError(home.path, added).message}`
+    );
+  }
+}
+function dropsOf(home, text3) {
+  try {
+    return chainOver(home, text3).dropped?.issues ?? [];
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    return [];
   }
 }
 function readValue(file, key) {
@@ -62294,11 +62321,25 @@ function plainMessage(message, severity) {
 function worstLevel(list2) {
   return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
 }
-function diagnosticKey(message) {
-  const digest2 = createHash("sha256").update(
-    `${message.severity.level}\0${message.severity.glyph}\0${message.message}`
-  ).digest("hex");
-  return String(Number.parseInt(digest2.slice(0, 12), 16) + 1);
+var IDENTITY_BITS = 38;
+var OCCURRENCES = 256;
+var PAGES = 64;
+function identityOf(message) {
+  const headline = message.message.split(/\r\n|\r|\n/, 1)[0];
+  const digest2 = createHash("sha256").update(`${message.severity.level}\0${message.severity.glyph}\0${headline}`).digest("hex");
+  return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
+}
+function stopsOf(list2) {
+  const seen = /* @__PURE__ */ new Map();
+  return list2.map((m) => {
+    const id2 = identityOf(m);
+    const n = seen.get(id2) ?? 0;
+    seen.set(id2, n + 1);
+    return id2 * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
+  });
+}
+function viewerKey(list2, at, page2) {
+  return String(stopsOf(list2)[at] * PAGES + Math.min(page2, PAGES - 1) + 1);
 }
 var INDICATOR_CAP = 9;
 var LEVEL_COLORS = {
@@ -62313,40 +62354,49 @@ function diagnosticsProjection(list2) {
     label: level === null ? "" : `\u26A0 ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
-    open: list2[0] === void 0 ? VIEWER_CLOSED : diagnosticKey(list2[0])
+    open: list2.length === 0 ? VIEWER_CLOSED : viewerKey(list2, 0, 0)
   };
 }
 var VIEWER_CLOSED = "0";
 function viewedIndex(raw, list2) {
-  const at = list2.findIndex((m) => diagnosticKey(m) === raw);
-  return at === -1 ? null : at + 1;
+  const key = Number(raw) - 1;
+  const at = stopsOf(list2).indexOf(Math.floor(key / PAGES));
+  return raw === null || at === -1 ? null : { index: at + 1, page: key % PAGES };
 }
-function viewerRows(list2, index, sessionId2, geometry) {
+var MAX_VIEWER_ROWS = 20;
+function viewerRowCap(termRows) {
+  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS);
+}
+function viewerRows(list2, at, sessionId2, geometry) {
+  const { index } = at;
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
+  const perPage = Math.max(1, geometry.rows - 1);
+  const body = channelRows(shown, opts, []);
+  const pages = Math.ceil(body.length / perPage);
+  const page2 = Math.min(at.page, pages - 1);
   const style = new Style({
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg
   });
   const go = (key) => viewerLink(sessionId2, key);
   const button = (text3, link) => cell(text3, link === null ? style : style.withLink(link));
-  const step4 = (glyph, to) => {
-    const neighbour = list2[to - 1];
-    return neighbour === void 0 ? button(" ", null) : button(glyph, go(diagnosticKey(neighbour)));
-  };
+  const step4 = (glyph, to) => to === null ? button(" ", null) : button(glyph, go(viewerKey(list2, to.index - 1, to.page)));
+  const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
+  const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
+  const steps2 = list2.length > 1 || pages > 1;
+  const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
   const header = [
     button("\u2715", go(VIEWER_CLOSED)),
-    ...list2.length > 1 ? [step4("\u2039", index - 1)] : [],
-    button(`[${index}/${list2.length}]`, null),
-    ...list2.length > 1 ? [step4("\u203A", index + 1)] : [],
+    ...steps2 ? [step4("\u2039", back2)] : [],
+    button(position, null),
+    ...steps2 ? [step4("\u203A", on2)] : [],
     button("\u29C9 copy", effectsUrl([{ verb: VERB_COPY, args: [shown.message] }]))
   ];
-  return [renderStripCells(header, opts), messageRows(shown, geometry)].join(
-    "\n"
-  );
-}
-function messageRows(message, geometry) {
-  return channelRows(message, viewerOptions(geometry), []).join("\n");
+  return [
+    renderStripCells(header, opts),
+    ...body.slice(page2 * perPage, (page2 + 1) * perPage)
+  ].join("\n");
 }
 function handoffRows(handoff, list2, sessionId2, geometry) {
   const { label, fg, bg, open: open2 } = diagnosticsProjection(list2);
@@ -74231,9 +74281,6 @@ function nodeType(kind) {
 
 // src/render/frame-memory.ts
 init_globals();
-function sameSource(a, b) {
-  return a.config === b.config && a.preset === b.preset && a.revision === b.revision && a.width === b.width;
-}
 var FrameMemory = class {
   last = null;
   // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
@@ -74244,7 +74291,7 @@ var FrameMemory = class {
   // against.
   from(source) {
     const { last: last2 } = this;
-    return last2 !== null && sameSource(last2.source, source) ? last2 : null;
+    return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
   }
   begin(source, returned) {
     const placements = /* @__PURE__ */ new Map();
@@ -75478,8 +75525,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       menuRows,
       evaluated: parts.evaluated - evaluatedBefore,
       pending: [...waited].sort(),
-      rules,
-      source
+      rules
     };
   } catch (_) {
     var _error = _, _hasError = true;
@@ -76988,7 +77034,7 @@ var FEED_PERIODS = {
   still: 1e3
 };
 var RATE_WINDOW_S = 1;
-var WAKE_CAUSES = ["data", "state", "reload", "visibility", "frame"];
+var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
 function feedsFact(feeds) {
   return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
     const { subscribers, fps, shown } = feeds[lane];
@@ -77169,7 +77215,7 @@ var FrameFeeds = class {
       pace: paceOf(this.deps.periods.still),
       drawMs: 0,
       evaluated: 0,
-      woke: { data: 0, state: 0, reload: 0, visibility: 0, frame: 0 },
+      woke: { data: 0, state: 0, reload: 0, visibility: 0 },
       coalesced: 0,
       summarizedAt: now2,
       refreshesAtOpen: this.deps.refreshes()
@@ -77236,7 +77282,6 @@ var FrameFeeds = class {
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     this.schedule(feed, frame, started2);
-    if (frame.wakes) this.wake(feed.sessionId, "frame");
   }
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
   // this one STARTED, so the rate holds whatever a render costs, up to a
@@ -79118,17 +79163,19 @@ var RenderWarningRecords = class {
   }
   maxRecords;
   records = /* @__PURE__ */ new Map();
-  // The warnings `by` last recorded for `sessionId`; none before its first.
-  of(sessionId2, by) {
-    return this.records.get(keyOf(sessionId2, by)) ?? [];
+  // The warnings `by` last recorded for `sessionId` in `scope`; none before
+  // its first, or once its last frame was drawn from another scope.
+  of(sessionId2, by, scope) {
+    const held = this.records.get(keyOf(sessionId2, by));
+    return held !== void 0 && held.scope.config === scope.config && held.scope.width === scope.width ? held.warnings : [];
   }
-  // Records what a frame warned. Says whether that changed the record, which
-  // is what the renderer's next frame shows.
-  drawn(sessionId2, by, warnings) {
+  // Records what a frame warned. Says whether that changed what the
+  // renderer's next frame in `scope` shows.
+  drawn(sessionId2, by, scope, warnings) {
+    const held = this.of(sessionId2, by, scope);
     const key = keyOf(sessionId2, by);
-    const held = this.records.get(key) ?? [];
     this.records.delete(key);
-    this.records.set(key, warnings);
+    this.records.set(key, { scope, warnings });
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
@@ -79975,7 +80022,7 @@ function renderFrame(sessionId2, fps) {
     try {
       const setup = __using(_stack, setUpFrame(sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, motion, evaluated: evaluated2, lanes, recorded } = drawRender(setup, {
+      const { drawn, motion, evaluated: evaluated2, lanes } = drawRender(setup, {
         by: "feed",
         fps
       });
@@ -79994,7 +80041,6 @@ function renderFrame(sessionId2, fps) {
         },
         moves: motion === "moves",
         evaluated: evaluated2,
-        wakes: recorded,
         failure: null
       };
     } catch (_) {
@@ -80017,7 +80063,6 @@ function renderFrame(sessionId2, fps) {
       statusline: failed2,
       moves: false,
       evaluated: 0,
-      wakes: false,
       failure: { level, line: `frame ${line}` }
     };
   }
@@ -80234,10 +80279,11 @@ function drawRender(setup, drawing2) {
     clickShown?.text ?? null
   ].filter((e) => Boolean(e));
   const loadWarnings = entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }];
+  const scope = { config: state.config, width };
   const diagnostics = collectDiagnostics(
     errors2,
     [...updates, ...questions],
-    [...loadWarnings, ...renderWarnings.of(sessionId2, drawing2.by)].map(
+    [...loadWarnings, ...renderWarnings.of(sessionId2, drawing2.by, scope)].map(
       (w) => w.message
     )
   );
@@ -80296,9 +80342,15 @@ function drawRender(setup, drawing2) {
   noteFacts(facts, {
     menuIdle: menusSince === void 0 ? "-" : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
-  const recorded = renderWarnings.drawn(sessionId2, drawing2.by, drawnWarnings);
+  const recorded = renderWarnings.drawn(
+    sessionId2,
+    drawing2.by,
+    scope,
+    drawnWarnings
+  );
   const geometry = {
     width,
+    rows: viewerRowCap(hints.termRows),
     colorCompatibility: effective.colorCompatibility
   };
   const viewing = viewedIndex(
@@ -80357,7 +80409,7 @@ function drawRender(setup, drawing2) {
     diag: String(diagnostics.length),
     warnRecord: recorded ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
-    viewer: viewing === null ? "-" : `${viewing}/${diagnostics.length}`
+    viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
   });
   return {
     drawn: {
@@ -80369,8 +80421,7 @@ function drawRender(setup, drawing2) {
     motion: frame.motion,
     evaluated: frame.evaluated,
     clickShown,
-    lanes,
-    recorded
+    lanes
   };
 }
 function composeBar(drawn) {

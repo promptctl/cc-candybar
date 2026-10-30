@@ -2,39 +2,45 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-484",
-      "ref": "refs/pull/484/merge",
-      "sha": "5181700afa61d9cb18c31b92fc9acd9ac1413e11",
-      "timestamp": "2026-10-30T08:08:49.443Z",
-      "commits": [
-        {
-          "sha": "5181700afa61d9cb18c31b92fc9acd9ac1413e11",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T02:07:53-06:00",
-          "message": "Merge 30ae0cc47739c988ad94253e9dc5265bd822a810 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
-        },
-        {
-          "sha": "30ae0cc47739c988ad94253e9dc5265bd822a810",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T02:07:28-06:00",
-          "message": "fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5)\n\nA save reloads its config, and the config's watch then reloads the same\nbytes. Each reload built a new state and reopened every session view drawing\nfrom the entry, restarting its sources.\n\nA load now resolves its inputs, keys them, then builds. The render cache's\nreload keeps the served state when the key matches. The key is a digest over\na projection typed over every field of what a load reads, so a field added\nlater fails to compile until it is keyed, and no Set or Map is hashed as {}.\nOne settle composes the warning for every reader. A kept state carries the\nwarnings its build earned, and a failed build carries its own beside the\nerror. `config loaded` says state=built|kept|failed.\n\nTests that reloaded unchanged inputs to drive a build now edit the config\nfirst.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-483",
       "ref": "refs/pull/483/merge",
-      "sha": "7ca81be2ce9e5cd34bf36441cbef083fac3990b4",
-      "timestamp": "2026-10-30T07:52:08.971Z",
+      "sha": "7fae045f0947ac2d51fa3da1fbfe1d4ed515e2ae",
+      "timestamp": "2026-10-30T08:10:48.608Z",
       "commits": [
         {
-          "sha": "7ca81be2ce9e5cd34bf36441cbef083fac3990b4",
+          "sha": "7fae045f0947ac2d51fa3da1fbfe1d4ed515e2ae",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:51:16Z",
-          "message": "Merge 18f3040cc9cbfa100d6da40e56597c6750282d98 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+          "timestamp": "2026-10-30T08:09:58Z",
+          "message": "Merge 5a9f0c37765508135e6b7214e08efc222a2bd395 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+        },
+        {
+          "sha": "5a9f0c37765508135e6b7214e08efc222a2bd395",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:09:46-06:00",
+          "message": "fix(config): every dropped placement is reported, a replacement plugin is judged tolerantly, and a click never adds a drop (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "a508388479117f858d874dc321b7e2377112d7c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:09:46-06:00",
+          "message": "test(diagnostics): the viewer fact names its page, and a lane counts a warning on its next spaced frame (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "f6ba7f7c8684f43b5b43e694843e71472d7bb185",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:00:30-06:00",
+          "message": "fix(diagnostics): the viewer pages within the terminal's rows, and its key is a message's first line and occurrence (candybar-plugins-vf6g.84i)\n"
+        },
+        {
+          "sha": "34b6415ae36fb0cb42af417ac8cceaa996a9b838",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:58:20-06:00",
+          "message": "fix(diagnostics): a warning record holds for the config and width it was drawn from, and nothing wakes a feed for it (candybar-plugins-vf6g.84i)\n"
         },
         {
           "sha": "18f3040cc9cbfa100d6da40e56597c6750282d98",
@@ -77,6 +83,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T01:31:26-06:00",
           "message": "feat(diagnostics): every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i)\n\nThe red and amber strip above the bar is gone. The settings door's own cell\ncarries an indicator (⚠ N, red if any error, amber otherwise, 9+ cap) that\nreads a per-draw diagnostics projection; clicking it opens a viewer that takes\nthe body's place and shows one message in full with ✕, ‹ ›, [k/N] and ⧉ copy.\nRender warnings are recorded per session and renderer, rewritten only when a\nframe is drawn from a new source. A placement of an undeclared segment drops\nonly its own cell and is reported as an error; check and the demo still refuse\nit. The handed-off statusline is the handoff line alone, so an error shows\nonce. The diagnostic dump, its file:// links and the show-config verbs are\ndeleted.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-484",
+      "ref": "refs/pull/484/merge",
+      "sha": "5181700afa61d9cb18c31b92fc9acd9ac1413e11",
+      "timestamp": "2026-10-30T08:08:49.443Z",
+      "commits": [
+        {
+          "sha": "5181700afa61d9cb18c31b92fc9acd9ac1413e11",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:07:53-06:00",
+          "message": "Merge 30ae0cc47739c988ad94253e9dc5265bd822a810 into 0fecc7dac290bccba99b620d1915bd2d7219f366\n"
+        },
+        {
+          "sha": "30ae0cc47739c988ad94253e9dc5265bd822a810",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T02:07:28-06:00",
+          "message": "fix(daemon): a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5)\n\nA save reloads its config, and the config's watch then reloads the same\nbytes. Each reload built a new state and reopened every session view drawing\nfrom the entry, restarting its sources.\n\nA load now resolves its inputs, keys them, then builds. The render cache's\nreload keeps the served state when the key matches. The key is a digest over\na projection typed over every field of what a load reads, so a field added\nlater fails to compile until it is keyed, and no Set or Map is hashed as {}.\nOne settle composes the warning for every reader. A kept state carries the\nwarnings its build earned, and a failed build carries its own beside the\nerror. `config loaded` says state=built|kept|failed.\n\nTests that reloaded unchanged inputs to drive a build now edit the config\nfirst.\n"
         }
       ]
     },
