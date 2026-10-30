@@ -34616,8 +34616,7 @@ function jobGroupAlive(pid2) {
     return true;
   } catch (err) {
     const code = err.code;
-    if (code === "ESRCH") return false;
-    if (code === "EPERM") return true;
+    if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
   }
 }
@@ -68999,6 +68998,7 @@ function releaseRegistration(registryPath, myPid, readEntry, removeFile) {
 
 // src/daemon/update-act.ts
 init_globals();
+init_os();
 var import_node_path33 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
@@ -69054,28 +69054,60 @@ function lastLineOf(file) {
     fs_default.closeSync(fd);
   }
 }
-function isRecordedJob(record2, read2 = readStartTime) {
-  if (!jobGroupAlive(record2.pid)) return false;
-  if (record2.startTime === null) return true;
+var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
+function isRecordedJob(record2, read2 = readStartTime, boot = bootedAt()) {
+  if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
   const leader = read2(record2.pid);
   return leader.kind === "unavailable" || leader.token === record2.startTime;
 }
+function readRecord(actDir) {
+  try {
+    return JSON.parse(fs_default.readFileSync(recordOf2(actDir), "utf8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+}
 function makeActReader(dir, read2 = readStartTime) {
-  const ours = /* @__PURE__ */ new Map();
+  let known = null;
+  function factsOf2(act) {
+    const actDir = import_node_path33.default.join(dir, String(act));
+    if (known?.act !== act) {
+      const record2 = readRecord(actDir);
+      if (record2 === null) return null;
+      known = { act, record: record2, ours: isRecordedJob(record2, read2), final: null };
+    }
+    if (known.final !== null) return known.final;
+    known.ours = known.ours && jobGroupAlive(known.record.pid);
+    const files = filesOf(actDir);
+    const end = readJobEnd(files.status);
+    const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
+    if (!fs_default.existsSync(recordOf2(actDir))) return null;
+    const facts = {
+      act,
+      record: known.record,
+      alive: known.ours,
+      end,
+      lastLine
+    };
+    if (!facts.alive || end !== null) known.final = facts;
+    return facts;
+  }
   return {
     read() {
-      const act = actNumbers(dir).at(-1);
-      if (act === void 0) return null;
-      const actDir = import_node_path33.default.join(dir, String(act));
-      const record2 = JSON.parse(
-        fs_default.readFileSync(recordOf2(actDir), "utf8")
-      );
-      const files = filesOf(actDir);
-      if (!ours.has(act)) ours.set(act, isRecordedJob(record2, read2));
-      const alive = ours.get(act) && jobGroupAlive(record2.pid);
-      const end = readJobEnd(files.status);
-      const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
-      return { act, record: record2, alive, end, lastLine };
+      let vanished = null;
+      for (; ; ) {
+        const act = actNumbers(dir).at(-1);
+        if (act === void 0) return null;
+        if (act === vanished) {
+          throw new Error(
+            `${import_node_path33.default.join(dir, String(act))}: an act with no record`
+          );
+        }
+        const facts = factsOf2(act);
+        if (facts !== null) return facts;
+        vanished = act;
+      }
     }
   };
 }
@@ -69089,39 +69121,49 @@ function claimAct(dir, after, identity3, command, timeoutMs, now2, read2 = readS
     fs_default.rmSync(staging, { recursive: true, force: true });
     throw new Error(`apply-update: ${job.error}`);
   }
-  const start = read2(job.pid);
-  const record2 = {
-    identity: identity3,
-    pid: job.pid,
-    startTime: start.kind === "start" ? start.token : null,
-    deadline: now2 + timeoutMs
-  };
-  fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
+  let stood = false;
   try {
-    fs_default.renameSync(staging, actDir);
-  } catch (err) {
-    job.withdraw();
-    fs_default.rmSync(staging, { recursive: true, force: true });
-    const code = err.code;
-    if (code === "ENOTEMPTY" || code === "EEXIST") {
-      return { ok: false, reason: "another act claimed this bundle first" };
+    const start = read2(job.pid);
+    if (start.kind !== "start") {
+      throw new Error(
+        `apply-update: the act's job has no fingerprint: ${start.detail}`
+      );
     }
-    throw err;
+    const record2 = {
+      identity: identity3,
+      pid: job.pid,
+      startTime: start.token,
+      started: now2,
+      deadline: now2 + timeoutMs
+    };
+    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
+    try {
+      fs_default.renameSync(staging, actDir);
+    } catch (err) {
+      const code = err.code;
+      if (code === "ENOTEMPTY" || code === "EEXIST") return CLAIMED_FIRST;
+      throw err;
+    }
+    if (actNumbers(dir).some((n) => n > act)) {
+      fs_default.rmSync(actDir, { recursive: true, force: true });
+      return CLAIMED_FIRST;
+    }
+    stood = true;
+  } finally {
+    if (stood) job.release();
+    else job.withdraw();
+    fs_default.rmSync(staging, { recursive: true, force: true });
   }
-  const acts = actNumbers(dir);
-  if (acts.some((n) => n > act)) {
-    job.withdraw();
-    fs_default.rmSync(actDir, { recursive: true, force: true });
-    return { ok: false, reason: "another act claimed this bundle first" };
-  }
-  job.release();
-  for (const n of acts.filter((n2) => n2 < act)) {
+  for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
     fs_default.rmSync(import_node_path33.default.join(dir, String(n)), { recursive: true, force: true });
   }
   return { ok: true, act };
 }
-function endOverdue(dir, facts, read2 = readStartTime) {
-  if (!isRecordedJob(facts.record, read2)) return false;
+var CLAIMED_FIRST = {
+  ok: false,
+  reason: "another act claimed this bundle first"
+};
+function endOverdue(dir, facts) {
   const status = filesOf(import_node_path33.default.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
 }

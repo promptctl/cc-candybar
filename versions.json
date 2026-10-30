@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-491",
+      "ref": "refs/pull/491/merge",
+      "sha": "d7a4adf639feb50d137efc2d43bfcf0318b2ab31",
+      "timestamp": "2026-10-30T11:44:48.320Z",
+      "commits": [
+        {
+          "sha": "d7a4adf639feb50d137efc2d43bfcf0318b2ab31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:43:24Z",
+          "message": "Merge 6b363b32d1f68f5ed09d3c0a10656e737691e8be into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
+        },
+        {
+          "sha": "6b363b32d1f68f5ed09d3c0a10656e737691e8be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:43:14-06:00",
+          "message": "fix(daemon): an act's record proves its job by boot and start time, and a reader survives a prune under it (brandon-unfiled-3248.z676)\n\nReview of the update act as a job:\n- A reader that lists an act and then finds it pruned by a newer claim looks\n  again instead of throwing out of the poll timer and ending the daemon.\n- A group seen gone stays gone for that act, so a recycled pid never reads as\n  the job again, and an overdue act needs no fresh `ps` to end.\n- A record must carry the job's start time, and a job started before this boot\n  is never the recorded one; a group the daemon may not signal is someone\n  else's. An unfingerprinted job is never started.\n- Any throw while claiming withdraws the gated job and its staging.\n- An ended act's facts are final and are not read again.\n"
+        },
+        {
+          "sha": "440a7d2993e17cefbe8cd518924ceeffc59a2775",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T05:29:42-06:00",
+          "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n"
+        }
+      ]
+    },
+    {
       "version": "pr-490",
       "ref": "refs/pull/490/merge",
       "sha": "c0a11734eae5ad79e1f967a482ea4fba3fd331ce",
@@ -113,28 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T04:49:53-06:00",
           "message": "feat(plugins): a repo's own plugins load as repo.<name> beside installed plugins.<name>, never replacing them (candybar-plugins-vf6g.3gg)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-491",
-      "ref": "refs/pull/491/merge",
-      "sha": "9c799eb80edc60128be914a345f46da2ed4ded4d",
-      "timestamp": "2026-10-30T11:31:44.585Z",
-      "commits": [
-        {
-          "sha": "9c799eb80edc60128be914a345f46da2ed4ded4d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:30:51Z",
-          "message": "Merge 440a7d2993e17cefbe8cd518924ceeffc59a2775 into eab87b692ee34d4652e60c0a4c1042bcd41da053\n"
-        },
-        {
-          "sha": "440a7d2993e17cefbe8cd518924ceeffc59a2775",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:29:42-06:00",
-          "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n"
         }
       ]
     },
