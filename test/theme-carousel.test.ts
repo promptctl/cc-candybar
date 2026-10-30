@@ -956,8 +956,9 @@ describe("the preview is the bar's own colours", () => {
 
   // A depth deals a closed cell its hue's window there, which can hold a rung
   // the dial does not name: where the depth draws two of the dial's tones
-  // alike, the window widens back to the dial's count (catppuccin-mocha and
-  // default at ansi widen both of the default's hues, dracula at 256 one).
+  // alike, the window widens along the ladder (catppuccin-mocha and default
+  // at ansi widen both of the default's hues; dracula at 256 widens one back
+  // to the dial's three).
   test.each([
     ["nord", "truecolor"],
     ["gruvbox", "truecolor"],

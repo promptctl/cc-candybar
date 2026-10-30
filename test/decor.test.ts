@@ -108,6 +108,12 @@ const rung = (shade: RoleShade): number => LADDER.indexOf(shade);
 // the muted form (the role blended into the background) standing one rung past
 // the ladder's end on the background's side; at an equal distance, the rung
 // away from the background first.
+// How many tones a window holds, in the test's own words: the dial position's
+// count, short of the last colour the depth draws of a ladder that draws more
+// than two (the pressed button in that hue needs one), and never fewer than
+// two.
+const windowSizeOf = (count: number, ladderColours: number): number => Math.max(2, Math.min(count, ladderColours - 1));
+
 const nearestFrom = (from: readonly RoleShade[], dark: boolean): RoleShade[] => {
   const place = (shade: RoleShade): number => (shade === "muted" ? (dark ? -1 : LADDER.length) : rung(shade));
   const distance = (r: RoleShade): number => Math.min(...from.map((f) => Math.abs(rung(r) - place(f))));
@@ -232,48 +238,49 @@ describe("the shade dial", () => {
 // [LAW:verifiable-goals] candybar-joiners-e5r4.686: a window holds only the
 // tones the depth draws as distinct colours, by identity after rounding.
 describe("a dial window at a depth", () => {
-  // [LAW:verifiable-goals] candybar-joiners-e5r4.cfm: a window holds as many
-  // tones as its dial position names wherever the role has that many drawn
-  // apart, because that count is what the distributions keep neighbours
-  // apart over; fewer only where the ladder has no more.
-  test("holds as many tones as the dial names wherever the role has that many drawn apart: the dial's tones the depth draws apart, in the dial's order, then for each drawn alike the nearest rung drawn apart from all the window holds; fewer only where the role has no more, and one only where its whole ladder draws as one colour", () => {
+  // [LAW:verifiable-goals] candybar-joiners-e5r4.cfm: a window widens toward
+  // its dial position's count, because that count is what the distributions
+  // keep neighbours apart over, but never takes the last colour of a ladder
+  // that draws more than two, which the pressed button in that hue needs.
+  test("holds as many tones as its size — the dial's count, short of the last colour a ladder of more than two draws, never fewer than two — wherever the role has them: the dial's tones the depth draws apart, in the dial's order, then the nearest rungs drawn apart from all the window holds", () => {
     const wrong: string[] = [];
-    const seen = { kept: 0, widened: 0, short: 0, flat: 0 };
+    const seen = { kept: 0, widened: 0, heldForPress: 0, flat: 0 };
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
         for (const hue of DECOR_HUES) {
           const drawn = (tone: RoleShade): string => shown(paletteRole(palette, shadeRole(hue, tone))).hex;
+          const size = (count: number): number => windowSizeOf(count, new Set(LADDER.map(drawn)).size);
           for (const shade of SHADE_NAMES) {
-            const { tones } = SHADES[shade];
-            const apart = tones.filter((tone, i) => tones.slice(0, i).every((t) => drawn(t) !== drawn(tone)));
+            const tones: readonly RoleShade[] = SHADES[shade].tones;
+            const apart = tones.filter((tone, i) => tones.slice(0, i).every((t) => drawn(t) !== drawn(tone))).slice(0, size(tones.length));
             // Every rung nearest the dial's tones first, each taken where it
             // is drawn apart from all the window holds by then, until the
-            // window holds the dial's count.
+            // window holds its size.
             const expected = nearestFrom(tones, palette.dark).reduce<RoleShade[]>(
-              (held, r) => (held.length < tones.length && held.every((t) => drawn(t) !== drawn(r)) ? [...held, r] : held),
+              (held, r) => (held.length < size(tones.length) && held.every((t) => drawn(t) !== drawn(r)) ? [...held, r] : held),
               apart,
             );
             const window = windowAt(palette, hue, SHADES[shade], drawnAt);
             const where = `${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}`;
             if (window.join() !== expected.join()) wrong.push(`${where}: ${window.join()}, expected ${expected.join()}`);
-            // As many as the dial names, else as many colours as the role's
-            // shades draw — its ladder and the dial's own tones — and the
-            // tones it holds draw as that many colours.
+            // Its size, else as many colours as the role's shades draw — its
+            // ladder and the dial's own tones — and the tones it holds draw
+            // as that many colours.
             const has = new Set([...LADDER, ...tones].map(drawn)).size;
-            if (window.length !== Math.min(tones.length, has)) wrong.push(`${where}: ${window.length} tones, the dial names ${tones.length} and the role draws ${has}`);
+            if (window.length !== Math.min(size(tones.length), has)) wrong.push(`${where}: ${window.length} tones, its size is ${size(tones.length)} and the role draws ${has}`);
             if (new Set(window.map(drawn)).size !== window.length) wrong.push(`${where}: ${window.join()} draws as fewer colours than it holds`);
-            seen[has === 1 ? "flat" : window.length < tones.length ? "short" : apart.length < tones.length ? "widened" : "kept"]++;
+            seen[has === 1 ? "flat" : size(tones.length) < tones.length ? "heldForPress" : window.some((t) => !tones.includes(t)) ? "widened" : "kept"]++;
           }
         }
       }
     }
     expect(wrong).toEqual([]);
-    // Every case is met: windows kept whole, widened back to the dial's
-    // count, held short where the role has no more, and the flat ladders
-    // (textual-ansi's) — and at truecolor, outside a flat ladder, every window
-    // is the dial's own.
-    expect([seen.kept > 0, seen.widened > 0, seen.short > 0, seen.flat > 0]).toEqual([true, true, true, true]);
+    // Every case is met: windows kept whole, widened along the ladder, held
+    // short of the dial's count to leave the press a colour, and the flat
+    // ladders (textual-ansi's) — and at truecolor, outside a flat ladder,
+    // every window is the dial's own.
+    expect([seen.kept > 0, seen.widened > 0, seen.heldForPress > 0, seen.flat > 0]).toEqual([true, true, true, true]);
     for (const palette of REGISTRY.filter((p) => p.name !== "textual-ansi")) {
       for (const hue of DECOR_HUES) {
         for (const shade of SHADE_NAMES) {
@@ -419,16 +426,17 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   // over the windows each depth produces, in every bundled theme and hue, and
   // judged on the colours the depth draws, not the names of the tones.
   // candybar-joiners-e5r4.cfm: over every window a dial position that names
-  // that many produces at every depth, since a window holds its position's
-  // count wherever the role has it; where the role has fewer drawn apart, the
-  // window holds exactly what the role has, and a distribution whose least
-  // window that is not is not claimed over it.
+  // that many produces at every depth. A window holds its size — the
+  // position's count, short of the last colour a ladder of more than two
+  // draws, never fewer than two — so at ansi a three-slot ladder's window
+  // holds two, and a distribution whose least window that is not is not
+  // claimed over it: the edge is stated instead.
   const KEEP_NEIGHBOURS_APART: ReadonlyArray<readonly [DistributionName, number]> = [
     ["van-der-corput", 2],
     ["golden-angle", 3],
   ];
 
-  test("no two cells side by side are drawn in one colour, in any row up to sixteen long, under every theme, hue, dial position and depth: by van der Corput over every window of a position naming two tones or more, and by golden angle over every window of a position naming three; a window short of its position's count holds exactly what the role draws", () => {
+  test("no two cells side by side are drawn in one colour, in any row up to sixteen long, under every theme, hue, dial position and depth: by van der Corput over every window of two tones or more, and by golden angle over every window of three; a window holds its size wherever the role has it, and a window short of its position's count is that edge", () => {
     const alike: string[] = [];
     const short: string[] = [];
     let rows = 0;
@@ -444,13 +452,13 @@ describe("the colour is its role at a shade, as the palette names it", () => {
             const tones: readonly RoleShade[] = SHADES[shade].tones;
             const window = windowAt(palette, hue, SHADES[shade], drawnAt);
             const where = `${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}`;
-            // The rule's edge: a window short of the position's count holds
-            // every colour the role's shades draw, no fewer.
+            // The rule's edge, in the test's words: a window holds its size
+            // wherever the role's shades draw that many colours, and every
+            // colour they draw where they draw fewer.
+            const size = windowSizeOf(tones.length, new Set(LADDER.map(drawnTone)).size);
             const has = new Set([...LADDER, ...tones].map(drawnTone)).size;
-            if (window.length < tones.length) {
-              held.edge++;
-              if (window.length !== has) short.push(`${where}: ${window.length} tones, the role draws ${has}`);
-            }
+            if (window.length !== Math.min(size, has)) short.push(`${where}: ${window.length} tones, its size is ${size} and the role draws ${has}`);
+            if (window.length < tones.length) held.edge++;
             for (const [name, least] of KEEP_NEIGHBOURS_APART) {
               // A position naming fewer tones than the distribution's least
               // window is outside its guarantee (over two, no rule keeps
@@ -481,9 +489,9 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     expect(short).toEqual([]);
     expect(rows).toBeGreaterThan(DRAWN.length * REGISTRY.length * DECOR_HUES.length * SHADE_NAMES.length * 10);
     // Non-vacuous: golden angle is held over windows a depth widened back to
-    // three, and the edge — a role with fewer colours than its position
-    // names (textual-ansi's flat ladders, and two-slot ladders at ansi) — is
-    // met and stated.
+    // three, and the edge — a window short of its position's count (a
+    // three-slot ladder at ansi, textual-ansi's flat ladders) — is met and
+    // stated.
     expect([held.goldenAngle > 0, held.widenedUnderGoldenAngle > 0, held.edge > 0]).toEqual([true, true, true]);
   });
 
@@ -715,22 +723,22 @@ describe("where a row turns hue", () => {
       const entries = Array.from({ length: count }, (_, i) => decorEntryFor(palette, { variation: VARIATIONS.alt, shade: SHADES[shade] }, [row(1, 2), cell(i, count)], ansi));
       return { entries, drawn: entries.map((entry) => shown(decorEntryColour(palette, entry)).hex) };
     };
-    // catppuccin-mocha: the accent after the second turn is dealt grey
-    // beside the secondary's grey, and its window's silver stands apart from
-    // it.
-    const mocha = line("catppuccin-mocha", "middle", 7);
-    expect(mocha.entries[6]).toEqual({ hue: "accent", shade: "darken-1" });
-    expect(mocha.drawn.slice(5)).toEqual(["#808080", "#c0c0c0"]);
-    // catppuccin-frappe on the pair dial: the secondary after the first turn
-    // is dealt silver beside the accent's silver, and its window's other tone
-    // is the grey of the cell after it, so it takes the nearest rung of its
-    // ladder drawn as neither: olive. Only a window of two tones can be
-    // spent this way: two neighbours take at most two of a window's colours,
-    // so a window holding three always has one to give.
-    const frappe = line("catppuccin-frappe", "pair", 7);
+    // catppuccin-frappe: the accent after the second turn is dealt silver
+    // beside the secondary's silver, and its window's white stands apart
+    // from it.
+    const frappe = line("catppuccin-frappe", "middle", 7);
+    expect(frappe.entries[6]).toEqual({ hue: "accent", shade: "lighten-1" });
+    expect(frappe.drawn.slice(5)).toEqual(["#c0c0c0", "#ffffff"]);
+    // The secondary after the first turn is dealt silver beside the accent's
+    // silver, and its window's other tone is the grey of the cell after it,
+    // so it takes the nearest rung of its ladder drawn as neither: olive. Its
+    // ladder draws three slots at ansi, so its window holds two of them and
+    // leaves olive, the last, to the press. Only a window of two tones can
+    // be spent this way: two neighbours take at most two of a window's
+    // colours, so a window holding three always has one to give.
     expect(frappe.entries[3]).toEqual({ hue: "secondary", shade: "darken-3" });
     expect(frappe.drawn.slice(2, 5)).toEqual(["#c0c0c0", "#808000", "#808080"]);
-    expect(windowAt(getThemePalette("catppuccin-frappe"), "secondary", SHADES.pair, ansi)).not.toContain("darken-3");
+    expect(windowAt(getThemePalette("catppuccin-frappe"), "secondary", SHADES.middle, ansi)).toEqual(["darken-1", "lighten-1"]);
     // textual-ansi on the muted dial: the secondary's whole ladder and the
     // accent's muted form are teal, and the accent's ladder is blue. The
     // secondary after the turn has teal alone, and the accent before it has

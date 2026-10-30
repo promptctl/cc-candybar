@@ -413,8 +413,8 @@ export interface DecorEntry {
  * The decorations a theme's preview samples of a closed cell under `decor`
  * in `palette` at `drawnAt`: each of its roles at the tones of that role's
  * window there (`windowAt`), in the window's order, dealt across as many
- * places as the dial position names tones: every tone of the window, which
- * holds that count wherever the role has it drawn apart. The count is the
+ * places as the dial position names tones: every tone of the window, dealt
+ * again from its first where the window holds fewer. The count is the
  * dial's at every depth, so a frame keeps its shape at every depth, while
  * the colours are the ones the depth deals; and a window of two or more
  * tones never puts one colour on two places side by side. The roles sit side
@@ -448,7 +448,7 @@ export const vocabularyOf = (
 /**
  * The tones a row of one hue deals at one depth, in the order a cell's place
  * selects them, no two of them drawn as one colour there, and as many as the
- * dial position names wherever the role has that many drawn apart.
+ * window's size at that depth (`windowSize`) wherever the role has them.
  * [LAW:types-are-the-program] Never empty, and one tone only where the role's
  * whole ladder draws as one colour at the depth: there is no second rung to
  * deal, so the row wears that one and the joiner shows each seam, which is
@@ -461,22 +461,15 @@ export type Tones = readonly [RoleShade, ...RoleShade[]];
 
 /**
  * The window a row of `hue` deals under the dial position `shade`, drawn at
- * `drawnAt`: as many tones as the position names, wherever the role has that
- * many the depth draws as distinct colours. First the position's tones the
- * depth draws apart, in the position's order; then, for each tone it drew
- * like one already held, the nearest rung of the ladder drawn as none of the
- * tones the window holds (`widen`). At 256 colours neighbouring rungs round
- * onto one table entry, at ansi onto one of the hue's slots, and a theme can
- * name two rungs alike at any depth, so a window that kept them would deal
- * two neighbours one colour where the role had another to give.
- *
- * It widens back to the position's count rather than settling for fewer,
- * because the count is what a distribution keeps neighbours apart over: van
- * der Corput by halves over two or more, golden angle by bins only over three
- * (`DISTRIBUTIONS`). A window of three narrowed to two would leave golden
- * angle's neighbours on one colour, and one tone puts every pair of
- * neighbours on one shade under any distribution. It holds fewer only where
- * the role's ladder has nothing left the depth draws apart.
+ * `drawnAt`: as many tones as its size at the depth (`windowSize`), wherever
+ * the role has that many the depth draws as distinct colours. First the
+ * position's tones the depth draws apart, in the position's order, up to that
+ * size; then, for each tone short of it, the nearest rung of the ladder drawn
+ * as none of the tones the window holds (`widen`). At 256 colours
+ * neighbouring rungs round onto one table entry, at ansi onto one of the
+ * hue's slots, and a theme can name two rungs alike at any depth, so a window
+ * that kept them would deal two neighbours one colour where the role had
+ * another to give.
  *
  * Alike means drawn as one colour: rich-js's `drawnColour`, the ground the
  * writer emits at that depth, compared for identity. No distance between two
@@ -496,26 +489,59 @@ export function windowAt(
 ): Tones {
   return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
     const drawn = drawnIn(palette, hue, drawnAt);
+    const size = windowSize(
+      shade.tones.length,
+      new Set(LADDER.map(drawn)).size,
+    );
     const [first, ...rest] = shade.tones;
     const kept: [RoleShade, ...RoleShade[]] = [first];
     for (const tone of rest) {
-      if (kept.every((held) => drawn(held) !== drawn(tone))) kept.push(tone);
+      if (
+        kept.length < size &&
+        kept.every((held) => drawn(held) !== drawn(tone))
+      )
+        kept.push(tone);
     }
-    // [LAW:single-enforcer] One widening per tone the depth drew alike, each
+    // [LAW:single-enforcer] One widening per tone short of the size, each
     // taking every colour the window already holds: where the ladder has
     // nothing left, `widen` answers nothing for this tone and every one after.
-    return shade.tones.slice(kept.length).reduce<Tones>((window) => {
-      const wider = widen(
-        palette,
-        hue,
-        shade.tones,
-        window.map(drawn),
-        drawnAt,
-      );
-      return wider === undefined ? window : [...window, wider];
-    }, kept);
+    return Array.from({ length: size - kept.length }).reduce<Tones>(
+      (window) => {
+        const wider = widen(
+          palette,
+          hue,
+          shade.tones,
+          window.map(drawn),
+          drawnAt,
+        );
+        return wider === undefined ? window : [...window, wider];
+      },
+      kept,
+    );
   });
 }
+
+/**
+ * How many tones a window holds where its dial position names `count` and
+ * the depth draws the role's ladder as `colours` distinct colours (the muted
+ * form not among them): the position's count, short of the ladder's last
+ * colour where it has more than two, and never fewer than two.
+ *
+ * Toward the count, because the count is what a distribution keeps
+ * neighbours apart over: van der Corput by halves over two or more, golden
+ * angle by bins only over three (`DISTRIBUTIONS`), so a three-tone position
+ * held at two leaves golden angle's neighbours on one colour. Short of the
+ * last colour, because the button pressed in that hue stands beside every
+ * tone of its band's window (`pressedAt`) and needs a colour none of them
+ * wears: a press drawn as its neighbour is two neighbours on one colour,
+ * while a third closed tone is only the look. So at ansi, where a ladder
+ * often draws three slots, a window holds two. Never fewer than two, because
+ * one tone puts every pair of neighbours on one shade under any
+ * distribution; a window holds one only where the whole ladder draws as one
+ * colour, with no second rung to give.
+ */
+const windowSize = (count: number, colours: number): number =>
+  Math.max(2, Math.min(count, colours - 1));
 
 // Every window a render deals is read once per cell per frame, and the answer
 // is a pure function of (palette, hue, position, depth): a handful per palette.
