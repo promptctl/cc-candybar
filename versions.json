@@ -2,45 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-491",
-      "ref": "refs/pull/491/merge",
-      "sha": "929de01d9335822bb7b59f210adfa76dadcd1f6d",
-      "timestamp": "2026-10-30T12:05:20.971Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3ac1f0ebd17dcc49615d30cb2f79602aa362240d",
+      "timestamp": "2026-10-30T12:12:33.705Z",
       "commits": [
         {
-          "sha": "929de01d9335822bb7b59f210adfa76dadcd1f6d",
+          "sha": "3ac1f0ebd17dcc49615d30cb2f79602aa362240d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:04:26Z",
-          "message": "Merge 0792818686c7434c9a1db2666f1a0b682f87aa6f into 84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9\n"
-        },
-        {
-          "sha": "0792818686c7434c9a1db2666f1a0b682f87aa6f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T06:03:23-06:00",
-          "message": "fix(daemon): an act runs while its group is alive, and every touch of its files is one edge (brandon-unfiled-3248.z676)\n\nSecond high review of the update act as a job:\n- An act runs while anything of its group is alive, whatever its verdict, so\n  the notice, the restart hold and the click refusal agree, and the verdict\n  (and the restart after a success) lands once nothing can still be writing.\n- Ending an overdue act goes through the same guarded edge as reading, so a\n  failure there is the indicator's error, not a daemon's death.\n- Act files that can't be read hold no restart: nothing repairs them, so the\n  hold would be for good. A click is still refused with the error.\n- An act is removed by renaming it away first, so a reader never finds its\n  record without its verdict.\n- A job `ps` can't fingerprint runs with no start time, as the daemon's own\n  fingerprint policy allows; the boot check still rules out a recycled pid\n  after a reboot.\n- The last line of an act's output is read with the shared tail reader, and\n  the acts directory is keyed by the bundle constant the daemon already holds.\n"
-        },
-        {
-          "sha": "a3ce5ba1324312edb7f9db77da6597ca2b8c21ff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:53:19-06:00",
-          "message": "fix(daemon): act files that can't be read show as an error, and a restart waits while anything of the act is alive (brandon-unfiled-3248.z676)\n\nMedium review of the update act as a job:\n- The act files are read at one edge: a read that throws is an error the\n  indicator shows, holds a restart and refuses a click, never a throw out of a\n  timer that ends every daemon on the bundle.\n- A restart and a second click wait while the act's group is alive, whatever\n  its verdict, so a timed-out group still dying, or a child a program left\n  behind, holds them as the old in-process child did. An overdue live group is\n  ended even when the job's verdict landed first.\n- Ending a job whose files are gone is a no-op.\n- The reader knows an act by its job, so an act number claimed again names the\n  new act.\n- The e2e stand-in appends its pid, so a second run fails the test, and ends\n  itself after two minutes as well.\n"
-        },
-        {
-          "sha": "6c4db958574fbe39183dda0580fb67a3f6c91702",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:43:14-06:00",
-          "message": "fix(daemon): an act's record proves its job by boot and start time, and a reader survives a prune under it (brandon-unfiled-3248.z676)\n\nReview of the update act as a job:\n- A reader that lists an act and then finds it pruned by a newer claim looks\n  again instead of throwing out of the poll timer and ending the daemon.\n- A group seen gone stays gone for that act, so a recycled pid never reads as\n  the job again, and an overdue act needs no fresh `ps` to end.\n- A record must carry the job's start time, and a job started before this boot\n  is never the recorded one; a group the daemon may not signal is someone\n  else's. An unfingerprinted job is never started.\n- Any throw while claiming withdraws the gated job and its staging.\n- An ended act's facts are final and are not read again.\n"
-        },
-        {
-          "sha": "2a80776823b2bd778dd093081b591de2c6e09521",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:29:42-06:00",
-          "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n"
+          "timestamp": "2026-10-30T06:11:42-06:00",
+          "message": "fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676) (#491)\n\n* fix(daemon): the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676)\n\nThe act rewrites the bundle the daemon runs from, and as a launch child it\ndied with its daemon, leaving the bundle torn when the death landed mid-write.\nIt now runs as a job, a third lifetime beside the waited child and the orphan:\nits stdout, stderr and verdict are files it owns, so no pipe leads back to a\ndead daemon, and its running is a record keyed by the bundle it writes.\n\n- The record is claimed by renaming a staged act directory to the next act\n  number, so one claim wins per bundle whichever socket a daemon serves.\n- The job's shell waits on a start gate that opens only once the claim\n  stands: a claimer that loses or dies never runs the program.\n- A verdict is claimed by link, never overwritten: a deadline cannot replace\n  an exit that landed first.\n- A second click and the restart's hold read the record at the moment they\n  decide; a 2 s clock notices an end, logs it, and restarts on a success.\n\nDone-when, as e2e on the built bundle: SIGKILL the daemon mid-act; the next\ndaemon shows it running, refuses a second, and restarts on the rebuilt bundle,\nor shows the failure it did not start.\n\n[LAW:escape-local-minima]\n\n* fix(daemon): an act's record proves its job by boot and start time, and a reader survives a prune under it (brandon-unfiled-3248.z676)\n\nReview of the update act as a job:\n- A reader that lists an act and then finds it pruned by a newer claim looks\n  again instead of throwing out of the poll timer and ending the daemon.\n- A group seen gone stays gone for that act, so a recycled pid never reads as\n  the job again, and an overdue act needs no fresh `ps` to end.\n- A record must carry the job's start time, and a job started before this boot\n  is never the recorded one; a group the daemon may not signal is someone\n  else's. An unfingerprinted job is never started.\n- Any throw while claiming withdraws the gated job and its staging.\n- An ended act's facts are final and are not read again.\n\n* fix(daemon): act files that can't be read show as an error, and a restart waits while anything of the act is alive (brandon-unfiled-3248.z676)\n\nMedium review of the update act as a job:\n- The act files are read at one edge: a read that throws is an error the\n  indicator shows, holds a restart and refuses a click, never a throw out of a\n  timer that ends every daemon on the bundle.\n- A restart and a second click wait while the act's group is alive, whatever\n  its verdict, so a timed-out group still dying, or a child a program left\n  behind, holds them as the old in-process child did. An overdue live group is\n  ended even when the job's verdict landed first.\n- Ending a job whose files are gone is a no-op.\n- The reader knows an act by its job, so an act number claimed again names the\n  new act.\n- The e2e stand-in appends its pid, so a second run fails the test, and ends\n  itself after two minutes as well.\n\n* fix(daemon): an act runs while its group is alive, and every touch of its files is one edge (brandon-unfiled-3248.z676)\n\nSecond high review of the update act as a job:\n- An act runs while anything of its group is alive, whatever its verdict, so\n  the notice, the restart hold and the click refusal agree, and the verdict\n  (and the restart after a success) lands once nothing can still be writing.\n- Ending an overdue act goes through the same guarded edge as reading, so a\n  failure there is the indicator's error, not a daemon's death.\n- Act files that can't be read hold no restart: nothing repairs them, so the\n  hold would be for good. A click is still refused with the error.\n- An act is removed by renaming it away first, so a reader never finds its\n  record without its verdict.\n- A job `ps` can't fingerprint runs with no start time, as the daemon's own\n  fingerprint policy allows; the boot check still rules out a recycled pid\n  after a reboot.\n- The last line of an act's output is read with the shared tail reader, and\n  the acts directory is keyed by the bundle constant the daemon already holds."
         }
       ]
     },
@@ -84,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T05:38:08-06:00",
           "message": "fix(colour): the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6)\n\nThe segment whose menu is open, the ✕ and blank leads of that menu's rows,\nand the plane the rows sit on now select colours the theme names, the way\nevery closed cell already does. The activated state is the menu hue at a new\n`activated` column of the shade table: the hue's muted form on every window\nof the ladder, its second lightening on the `muted` position. The plane is\n`surface` at every depth. Items are unchanged.\n\nDeleted: the open-trigger colour search and its rays, the plane blend and\nits floors, the band item repair at 256 and ansi, every floor stated in\nSTATE_FLOOR, BAND_FLOORS or SEAM_MIN_DELTA_E, the shortfalls a band carried,\nand the `band-floor` render warning with its cases in check and the daemon.\nA disclosure no longer carries the ground its row dealt, since nothing reads\nit. Text is unchanged: it is still chosen to clear AA on whatever it is\ndrawn on.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9",
-      "timestamp": "2026-10-30T11:59:56.387Z",
-      "commits": [
-        {
-          "sha": "84d764df4ed9279d0e4d1c9f8a61aaf32847b9f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T05:59:11-06:00",
-          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted (#490)\n\n* docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n\n* docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n\n* docs(joiners): fold the design review in — lift direction and ansi rule, byte-identity scope, imports text keeps, quantize per window size\n\n* docs(joiners): the problem statement beside the plan\n\n* docs(joiners): fold the second review in — merge order, the muted dial's activated rung, byte identity without effects, 8k−1/8k, windows widen before they shrink, ansi caveat\n\n* docs(joiners): fold the third review in — the closing sweep, enumerated imports, policy-chosen backgrounds, position readers, gradientSeam, sources quoted"
-        },
-        {
-          "sha": "eab87b692ee34d4652e60c0a4c1042bcd41da053",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T11:12:47Z",
-          "message": "chore(release): set `package.json` to 1.164.1 [skip ci]\n\n## [1.164.1](https://github.com/promptctl/cc-candybar/compare/v1.164.0...v1.164.1) (2026-10-30)\n\n### Bug Fixes\n\n* **proc:** a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga) ([#488](https://github.com/promptctl/cc-candybar/issues/488)) ([092f79f](https://github.com/promptctl/cc-candybar/commit/092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4))\n"
         }
       ]
     },
