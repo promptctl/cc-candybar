@@ -268,7 +268,7 @@ describe("preset compile diagnostics name the authored path", () => {
 
 // ─── Selection: the render actually changes ───────────────────────────────────
 
-// Mirrors the daemon's per-render resolution verbatim (server.ts): the preset
+// Mirrors the daemon's per-render resolution verbatim (draw-bar.ts): the preset
 // resolves FIRST, its fragment's globals feed everything else, and its compiled
 // root is the tree renderDsl walks.
 describe("preset selection — the arrangement the bar renders", () => {

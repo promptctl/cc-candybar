@@ -118,7 +118,7 @@ function buildRuntime(source = src(RULE)): Runtime {
       instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
-      // Resolved as src/daemon/server.ts resolves it, over the session's picks.
+      // Resolved as src/daemon/draw-bar.ts resolves it, over the session's picks.
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: renderDsl clears

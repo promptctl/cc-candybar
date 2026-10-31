@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { getEventListeners } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,10 +7,12 @@ import path from "node:path";
 import {
   launch,
   launchDetachedSync,
+  launchJobSync,
   launchSync,
   lifelineWarnings,
-  setLaunchStats,
-  setLifelineObserver,
+  refuseSecondDaemon,
+  retireLifeline,
+  setLaunchScope,
   __lifelineForTest,
   __resetRateLimitsForTest,
 } from "../../src/proc/launch";
@@ -72,7 +75,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-launch-"));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 afterEach(() => {
-  setLaunchStats(null);
+  setLaunchScope({});
   __resetRateLimitsForTest();
 });
 
@@ -249,7 +252,7 @@ describe("launch (async)", () => {
     const controller = new AbortController();
     controller.abort();
     const { handle, starts } = makeSpyHandle();
-    setLaunchStats(handle);
+    setLaunchScope({ stats: handle });
     const r = await launch({
       bin: "/bin/sh",
       args: ["-c", "echo ran"],
@@ -291,7 +294,7 @@ describe("launch (async)", () => {
     // The process's first launch also starts its lifeline, a spawn of its own.
     await launch({ bin: "/bin/echo", args: ["up"], category: "git" });
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchStats(handle);
+    setLaunchScope({ stats: handle });
     await launch({ bin: "/bin/echo", args: ["x"], category: "git" });
     expect(starts).toEqual(["git"]);
     expect(ends).toHaveLength(1);
@@ -319,7 +322,7 @@ describe("launchSync", () => {
 
   it("meters via the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchStats(handle);
+    setLaunchScope({ stats: handle });
     launchSync({ bin: "/bin/echo", args: ["m"], category: "user-shell" });
     expect(starts).toEqual(["user-shell"]);
     expect(ends).toHaveLength(1);
@@ -353,7 +356,7 @@ describe("launchDetachedSync", () => {
 
   it("meters detached launches through the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchStats(handle);
+    setLaunchScope({ stats: handle });
     launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "true"],
@@ -440,7 +443,7 @@ describe("launch — per-category rate-limit", () => {
 
   it("rate-limited rejection does NOT record stats (no spawn happened)", () => {
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchStats(handle);
+    setLaunchScope({ stats: handle });
     launchSync({ bin: "/bin/echo", args: ["x"], category: "click.pbcopy" });
     launchSync({ bin: "/bin/echo", args: ["y"], category: "click.pbcopy" });
     // Only the first spawn went through onStart/onEnd. The second is data,
@@ -488,7 +491,7 @@ describe("the lifeline", () => {
   let heard: Array<string | null>;
   beforeEach(() => {
     heard = [];
-    setLifelineObserver((fault) => heard.push(fault));
+    setLaunchScope({ observeLifeline: (fault) => heard.push(fault) });
   });
 
   it("ends every group in flight when the launcher's pipe closes", async () => {
@@ -534,5 +537,152 @@ describe("the lifeline", () => {
       () => !running("30.862") && !running("30.863"),
       "both grandchild sleeps ending",
     );
+  });
+});
+
+// [LAW:single-enforcer] Every spawn crosses this module, so what a closed
+// daemon left running is ended here, whichever owner's work it was.
+describe("the launch scope", () => {
+  const touching = (file: string) => ({
+    bin: "/usr/bin/touch",
+    args: [file],
+    category: "user-shell" as const,
+  });
+
+  it("refuses every kind of launch once its signal has aborted, spawning nothing", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    closing.abort();
+    const marker = path.join(scratch, "scope-refused");
+
+    expect(await launch(touching(marker))).toMatchObject({
+      ok: false,
+      reason: "aborted",
+    });
+    expect(launchSync(touching(marker))).toMatchObject({
+      ok: false,
+      reason: "aborted",
+    });
+    expect(launchDetachedSync(touching(marker))).toMatchObject({
+      ok: false,
+      reason: "aborted",
+    });
+    expect(
+      launchJobSync(touching(marker), {
+        stdout: path.join(scratch, "job.out"),
+        stderr: path.join(scratch, "job.err"),
+        status: path.join(scratch, "job.status"),
+      }),
+    ).toEqual({ ok: false, error: "the daemon closed" });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it("terminates a launch in flight that has no signal of its own", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    const marker = path.join(scratch, "scope-started");
+    const pending = launch({
+      bin: "/bin/sh",
+      args: ["-c", `touch '${marker}'; exec sleep 30`],
+      category: "user-shell",
+    });
+    await until(() => fs.existsSync(marker), "the child started");
+
+    closing.abort();
+
+    expect(await pending).toMatchObject({ ok: false, reason: "aborted" });
+  });
+
+  // [LAW:no-silent-failure] Its signal lives as long as the daemon, so the
+  // launches in flight share one listener on it, however many there are.
+  it("ends every launch in flight through one listener on its signal", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    const pending = Array.from({ length: 12 }, () =>
+      launch({ bin: "/bin/sleep", args: ["30"], category: "user-shell" }),
+    );
+    expect(getEventListeners(closing.signal, "abort")).toHaveLength(1);
+
+    closing.abort();
+
+    for (const result of await Promise.all(pending))
+      expect(result).toMatchObject({ ok: false, reason: "aborted" });
+  });
+
+  it("a launch that outlasts its daemon's close reports to that daemon, not the next", async () => {
+    const closing = new AbortController();
+    const closed = makeSpyHandle();
+    setLaunchScope({ stats: closed.handle, signal: closing.signal });
+    const pending = launch({
+      bin: "/bin/sleep",
+      args: ["30"],
+      category: "user-shell",
+    });
+
+    closing.abort();
+    const next = new AbortController();
+    const successor = makeSpyHandle();
+    setLaunchScope({ stats: successor.handle, signal: next.signal });
+    await pending;
+
+    expect(closed.ends.map((end) => end.category)).toEqual(["user-shell"]);
+    expect(successor.ends).toEqual([]);
+    next.abort();
+  });
+
+  it("the next daemon's scope lets launches through again", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    closing.abort();
+    const next = new AbortController();
+    setLaunchScope({ signal: next.signal });
+    expect(
+      await launch({ bin: "/bin/echo", args: ["hi"], category: "user-shell" }),
+    ).toMatchObject({ ok: true });
+    next.abort();
+  });
+
+  it("refuses a second daemon until the first has closed", () => {
+    refuseSecondDaemon();
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    expect(() => refuseSecondDaemon()).toThrow(/already live/);
+    closing.abort();
+    refuseSecondDaemon();
+  });
+
+  it("a retired lifeline takes its fault with it, so the next daemon warns of none", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    await launch({ bin: "/bin/echo", category: "user-shell" });
+    __lifelineForTest().cut();
+    expect(lifelineWarnings()).not.toEqual([]);
+
+    closing.abort();
+    retireLifeline();
+
+    expect(lifelineWarnings()).toEqual([]);
+  });
+
+  it("a retired lifeline records no fault, and nothing starts another while the scope refuses", async () => {
+    const heard: Array<string | null> = [];
+    const closing = new AbortController();
+    setLaunchScope({
+      signal: closing.signal,
+      observeLifeline: (fault) => heard.push(fault),
+    });
+    await launch({ bin: "/bin/echo", category: "user-shell" });
+    const { pid } = __lifelineForTest();
+    expect(pid).toBeDefined();
+
+    closing.abort();
+    retireLifeline();
+    await launch({ bin: "/bin/echo", category: "user-shell" });
+
+    expect(__lifelineForTest().pid).toBeUndefined();
+    await until(() => spawnSync("kill", ["-0", String(pid)]).status !== 0, "the lifeline exiting");
+    expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });

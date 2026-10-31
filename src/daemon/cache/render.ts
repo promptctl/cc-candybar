@@ -490,9 +490,9 @@ export function configDisposeLine(
 // they get distinct channels. `lastError` is load-fatal (config didn't
 // parse / validate); `lastWarning` is advisory (e.g., extension collision —
 // load succeeded but something the user should know about). The render path
-// surfaces both through one diagnostics composer in src/daemon/server.ts.
+// surfaces both through one diagnostics composer in src/daemon/draw-bar.ts.
 // [LAW:types-are-the-program] `projectDir` and `cwd` are required inputs to
-// every render request. The wire boundary in server.ts validates the
+// every render request. The wire boundary in render-checkpoint.ts validates the
 // underlying hookData and returns BAD_REQUEST when either is absent, so by
 // the time a cache entry is built they are real non-empty paths. `configFile`
 // is the explicit path a session's render origin names (a load-config pick,

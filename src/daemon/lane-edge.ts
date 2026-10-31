@@ -233,10 +233,14 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
 const FOLLOW_POLL_MS = 200;
 
 // `following` is the daemon's FrameFeeds' answer: the lanes whose subscribers
-// follow a session's frames now.
+// follow a session's frames now. `closing` ends what is no launch, as the
+// launch scope ends what is: a poll's wait, and the one signal sent directly.
 export function productionLaneEdge(
   following: (sessionId: string) => ReadonlySet<Lane>,
+  closing: AbortSignal,
 ): LaneEdge {
+  const wait = (ms: number): Promise<void> =>
+    sleep(ms, undefined, { signal: closing });
   return {
     claudeInput: productionClaudeInputEdge(),
     barPanes: (hint) =>
@@ -313,7 +317,7 @@ export function productionLaneEdge(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
           );
         }
-        await sleep(EXIT_POLL_MS);
+        await wait(EXIT_POLL_MS);
       }
     },
     launcherNode: (pathVariable) =>
@@ -332,7 +336,7 @@ export function productionLaneEdge(
       const until = Date.now() + withinMs;
       while (!following(sessionId).has(lane)) {
         if (Date.now() > until) return false;
-        await sleep(FOLLOW_POLL_MS);
+        await wait(FOLLOW_POLL_MS);
       }
       return true;
     },
@@ -356,6 +360,7 @@ export function productionLaneEdge(
     // [LAW:no-silent-failure] A kill the OS refuses says which process it was
     // sent to, not a bare `kill ESRCH`.
     terminate: (pid) => {
+      closing.throwIfAborted();
       try {
         process.kill(pid, "SIGTERM");
       } catch (err) {
@@ -368,7 +373,7 @@ export function productionLaneEdge(
       const until = Date.now() + withinMs;
       while (pidAlive(pid)) {
         if (Date.now() > until) return false;
-        await sleep(EXIT_POLL_MS);
+        await wait(EXIT_POLL_MS);
       }
       return true;
     },

@@ -14,7 +14,7 @@
 // ./: the style constants in ./diagnostic-style (shared with the daemon's
 // diagnostics viewer so the diagnostic visual language cannot drift) and
 // the sanitize-and-truncate primitive in ./diagnostic-text (shared with
-// src/daemon/server.ts so the security-critical control-char neutralization
+// src/daemon/draw-bar.ts so the security-critical control-char neutralization
 // (C0 + DEL + C1/8-bit-CSI) cannot drift between the two callers).
 
 import type { PermanentOutcome } from "../daemon/client-transport";

@@ -51,7 +51,7 @@ export interface RenderRequest {
   // The client's own path, then the flags the statusline command gave it —
   // the native binary's, the Node script's, never the node interpreter's.
   // Anything after the path that is not `--config <file>` is refused as the
-  // bar's error (parseRenderArgs, server.ts).
+  // bar's error (parseRenderArgs, render-checkpoint.ts).
   args: string[];
   cwd: string;
   // When the client hangs up, in epoch milliseconds: the daemon's wait for

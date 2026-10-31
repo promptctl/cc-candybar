@@ -278,7 +278,8 @@ export interface LimitsHandle {
   // [LAW:one-source-of-truth] The one producer of `ServingDaemon`, from one
   // memory reading: daemon-stats carries it, a doctor click calls it.
   serving(): ServingDaemon;
-  arm(intervalMs?: number): { disarm(): void };
+  arm(intervalMs?: number): void;
+  disarm(): void;
 }
 
 export function makeLimits(deps: LimitsDeps): LimitsHandle {
@@ -292,6 +293,10 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   // second caller while one is out waits on the same reading rather than
   // taking its own, so a breach is judged — and recorded — once.
   let inFlight: Promise<boolean> | null = null;
+  // [LAW:no-ambient-temporal-coupling] A reading landing after the disarm
+  // judges nothing: no report, no snapshot, no exit from a daemon closed.
+  let disarmed = false;
+  let timer: NodeJS.Timeout | undefined;
 
   function check(): Promise<boolean> {
     inFlight ??= measure().finally(() => {
@@ -309,7 +314,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
     deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (charge.bytes <= limit) return false;
+    if (disarmed || charge.bytes <= limit) return false;
     triggered = true;
     deps.log(
       "warn",
@@ -386,31 +391,26 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   // [LAW:no-ambient-temporal-coupling] A reading at once, then each next one
   // scheduled only once the last has answered: a probe slower than the
   // interval delays the next instead of overlapping it.
-  function arm(intervalMs: number = DEFAULT_CHECK_INTERVAL): {
-    disarm(): void;
-  } {
-    let timer: NodeJS.Timeout | undefined;
-    let armed = true;
+  function arm(intervalMs: number = DEFAULT_CHECK_INTERVAL): void {
     const tick = async (): Promise<void> => {
       try {
         if (await check()) return;
       } catch (e) {
         deps.log("warn", `memory check failed: ${(e as Error).message}`);
       }
-      if (!armed) return;
+      if (disarmed) return;
       timer = setTimeout(() => void tick(), intervalMs);
       timer.unref();
     };
     void tick();
-    return {
-      disarm: () => {
-        armed = false;
-        clearTimeout(timer);
-      },
-    };
   }
 
-  return { check, describeNextRestart, serving, arm };
+  function disarm(): void {
+    disarmed = true;
+    clearTimeout(timer);
+  }
+
+  return { check, describeNextRestart, serving, arm, disarm };
 }
 
 // [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the

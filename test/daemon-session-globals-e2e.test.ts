@@ -2,7 +2,7 @@
 // measured the only way it means anything: a REAL daemon, a REAL user config
 // file, two REAL sessions on one socket. The in-process suite
 // (test/session-globals.test.ts) proves the resolvers; this proves the wiring
-// they had to be threaded into — server.ts reads SessionState for `autoWrap`
+// they had to be threaded into — draw-bar.ts reads SessionState for `autoWrap`
 // and `padding`, which is the line that was missing and the reason a click on
 // either did nothing for the clicking session before this ticket.
 //

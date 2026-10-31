@@ -3,7 +3,7 @@
 // reshape lives in the daemon's PER-RENDER strip-style resolution
 // (resolveEffectiveGlobals -> renderOpts.endcaps), OUTSIDE renderDsl — the exact twin
 // of how a theme click recolors via basePalette (see dsl-theme-picker-recolor).
-// This test replicates that resolution exactly as src/daemon/server.ts does, so
+// This test replicates that resolution exactly as src/daemon/draw-bar.ts does, so
 // it proves the end-to-end loop: a set-state `style` click changes the bytes the
 // joiner emits between cells.
 //
@@ -58,7 +58,7 @@ function buildRuntime() {
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
   // daemon does — the session's clicked style over the config default over the
   // "powerline" floor. Freezing it would silently pass while the real daemon
-  // reshapes. (server.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
+  // reshapes. (draw-bar.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
   const render = (): string =>
     renderDsl(config, compiled, store, registry, { session_id: SID }, instantOf(new Date()), {
       endcaps: globalsFor(config, (key) => sessionState.get(SID, key)).endcaps,

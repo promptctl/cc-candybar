@@ -49,6 +49,7 @@ export interface BinaryWatchOptions {
 export interface BinaryWatch {
   arm(): void;
   checkNow(): void;
+  close(): void;
 }
 
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
@@ -99,5 +100,8 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       timer.unref();
     },
     checkNow: sample,
+    close() {
+      if (timer) clearInterval(timer);
+    },
   };
 }

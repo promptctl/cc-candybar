@@ -32,6 +32,14 @@ A child the daemon launches without blocking on it dies with the daemon, however
 
 The update notice compares two content digests of the source tree: one baked into the bundle at build time and one recomputed from the tree beside it. It uses digests rather than mtimes because a branch switch rewrites mtimes on unchanged bytes. A published install has no source tree beside it, so it polls the registry instead and never shows a source warning.
 
+## The daemon is a value inside a process
+
+The daemon is built by the process that serves it, never at import, because every subcommand imports the entry. Everything a process owns (signals, the socket, the lease, the exit) stays in the shell over it, so a test can run the daemon's own request handling in a jest worker. The shell and a test tear down by one close: a second teardown would be a second list of what the daemon holds, and a process's exit hides whatever that list misses.
+
+After a close nothing launches, no timer stays armed, and only the log is written; a read already under way may finish. Launches end at one checkpoint in the launcher rather than in each owner, because a git pass or a multi-step lane setup folds a killed child into a field and goes on to the next launch, which an owner-by-owner close never sees. A launch carries no owner, so that scope is the process's: one daemon is live at a time, and a closed one's scope stays in force until the next is built. So a daemon built while a closed one's work is still unwinding lends that work a live scope: its next launch runs, and the next close ends it. Session state stops persisting at close instead of refusing writes, because a render that was awaiting still has to land somewhere, and it must not land over the file a next daemon has taken up.
+
+The daemon's paths are not inputs. The log and the repository answers read them at write time, so a path passed at construction would be honoured by half the daemon and split the state directory with nothing to say so. A test sets the env before it builds a daemon.
+
 ## Logs and stats
 
 Every render request writes exactly one render event, and every click request one click event. Fields are added stage by stage as the request goes through, so an absent field means the request stopped before that stage, and `-` means none. A session id is recorded only once it passes the session-id checkpoint, and a click's verb only once the daemon knows it, because nothing an untrusted request says is recorded as fact: a refused request's own words appear only in its problems. Any value a client could shape into something that parses as several fields (a session id, for example) is written as a JSON string. When a change introduces a new fact, put it on that event or on its source's refresh event. Counters go in the stats snapshot.

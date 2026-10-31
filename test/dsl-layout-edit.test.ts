@@ -1029,7 +1029,7 @@ function originCtx(
   durable.seedOrigin(sessionState, sessionId);
   return {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
-    // The daemon's own wiring (server.ts): the config a session renders with
+    // The daemon's own wiring (daemon.ts): the config a session renders with
     // is its cache entry's, and a click that must not act on the old config
     // reloads that entry from the file it just wrote.
     configFor: (origin) =>

@@ -111,6 +111,16 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     expect(closes).toEqual([{ sid: "s", idleS: 30, timeoutS: 30 }]);
   });
 
+  // [LAW:no-ambient-temporal-coupling] A render that was awaiting as the daemon
+  // closed lands here: disposed, it arms nothing.
+  test("a frame landing after dispose arms no close", () => {
+    idle.dispose();
+    idle.observe("s1", at(now), true, 30);
+    expect(idle.getStats().armed).toBe(0);
+    advance(31);
+    expect(closes).toEqual([]);
+  });
+
   test("a click moves the close with no render after it", () => {
     idle.observe("s", at(now), true, 30);
     advance(20);

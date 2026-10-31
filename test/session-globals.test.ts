@@ -5,7 +5,7 @@
 // The resolution lives in the daemon's per-render globals pass
 // (resolveEffectiveGlobals -> BuildLineOptions), OUTSIDE renderDsl —
 // the exact twin of how an endcaps click reshapes (see dsl-endcaps-picker-reshape).
-// This test replicates that resolution as src/daemon/server.ts performs it and
+// This test replicates that resolution as src/daemon/draw-bar.ts performs it and
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
 
@@ -83,7 +83,7 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
-  // server.ts does — the session's clicked value over the config default over
+  // draw-bar.ts does — the session's clicked value over the config default over
   // the floor. Freezing either would pass here while the real daemon moved.
   const globals = (sid: string): EffectiveGlobals =>
     globalsFor(config, (key) => sessionState.get(sid, key));

@@ -168,7 +168,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   });
 
   // The three spellings of an explicit config have ONE precedence, composed
-  // at the request boundary (server.ts): a load-config pick over the
+  // at the request boundary (draw-bar.ts): a load-config pick over the
   // `--config` flag over the `configEnv` hint. Each render below carries the
   // two lower spellings naming DIFFERENT files, so the bar itself says which
   // one won. An empty `--config` is no override at all — the hint applies —

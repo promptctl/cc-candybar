@@ -520,7 +520,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // own applyTheme/applyStyle actions (clickUrl → VERBS → the gate of the
   // config the session renders, the same chain the daemon runs),
   // then re-renders with theme.effective/style.effective recomputed exactly as
-  // server.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
+  // draw-bar.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
   test("clicking a theme/style option changes theme.effective/style.effective on the next render", () => {
     const SID = "theming-8uj-1";
@@ -563,7 +563,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         undefined,
         // Both `.effective` fields are renderDsl's to publish, so the payload
         // carries neither and the SELECTION is what crosses the seam — resolved
-        // over the session's picks, as src/daemon/server.ts resolves it.
+        // over the session's picks, as src/daemon/draw-bar.ts resolves it.
         selectionFor(parsed, {}, (key) => sessionState.get(SID, key)),
       );
     };
@@ -1717,7 +1717,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 // those branches only run when their data is present.
 //
 // [LAW:single-enforcer] Resolves through resolveEffectiveGlobals — the one
-// function server.ts and check.ts both call — so EffectiveGlobals here cannot
+// function draw-bar.ts and check.ts both call — so EffectiveGlobals here cannot
 // diverge from what a real render would compute for that preset.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];

@@ -260,7 +260,8 @@ export type LaunchResult =
       ok: false;
       // [LAW:one-type-per-behavior] Distinct termination causes get distinct
       // tags so callers + stats can attribute correctly. "timeout" means the
-      // local timer fired; "aborted" means the caller's `signal` fired;
+      // local timer fired; "aborted" means the caller's `signal` or the launch
+      // scope's fired;
       // "signal" means the OS or external killer ended the child for some
       // other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...); "non-zero" is a
       // clean exit with a non-zero code; "spawn-error" is a failure before
@@ -284,6 +285,15 @@ export type LaunchResult =
       error?: string;
     };
 
+const refusedAsAborted = (): LaunchResult => ({
+  ok: false,
+  reason: "aborted",
+  stdout: "",
+  stderr: "",
+  exitCode: null,
+  signal: null,
+});
+
 function rateLimitedResult(
   category: LaunchCategory,
   minIntervalMs: number,
@@ -300,12 +310,50 @@ function rateLimitedResult(
   };
 }
 
-let statsHandle: LaunchStatsHandle | null = null;
+// What a process's launches belong to while a daemon runs in it.
+export interface LaunchScope {
+  // Meters every launch into the daemon's stats. Null pays no metering cost.
+  readonly stats: LaunchStatsHandle | null;
+  // Hears each change in why the lifeline is down (`fault`, below). The daemon
+  // logs it and redraws its feeds, so its warning comes and goes on pushed
+  // frames too.
+  readonly observeLifeline: (fault: string | null) => void;
+  // [LAW:single-enforcer] The one checkpoint for "nothing launches after the
+  // daemon closed": every spawn crosses this module, so a launch in flight is
+  // terminated and a later one refused, whichever owner's work it was.
+  readonly signal: AbortSignal;
+}
 
-// Install the stats handle once, at daemon startup. Other runtimes (Node
-// fallback, install path) leave it null and pay no metering cost.
-export function setLaunchStats(handle: LaunchStatsHandle | null): void {
-  statsHandle = handle;
+const NO_DAEMON = new AbortController().signal;
+// Any other process (the CLI, bar-pane, a test) says the warning on stderr.
+const NO_SCOPE: LaunchScope = {
+  stats: null,
+  observeLifeline: () =>
+    lifelineWarnings().forEach((w) => process.emitWarning(w.message)),
+  signal: NO_DAEMON,
+};
+let scope: LaunchScope = NO_SCOPE;
+
+// What ends each launch in flight, on the scope's abort.
+// [LAW:no-silent-failure] One listener, on a signal as long-lived as its daemon:
+// `AbortSignal.any` over it grows the heap launch by launch on Node 20 and 24,
+// and a listener per launch warns of a leak past ten in flight on 20 and 22.
+const inFlight = new Set<() => void>();
+const endInFlight = (): void => inFlight.forEach((end) => end());
+
+// [LAW:no-shared-mutable-globals] One daemon is live in a process: launches
+// carry no owner, so a second would run them under the first's signal.
+export function refuseSecondDaemon(): void {
+  if (scope.signal !== NO_DAEMON && !scope.signal.aborted) {
+    throw new Error("a daemon is already live in this process");
+  }
+}
+
+// A scope stays in force once its signal has aborted, so the work a closed
+// daemon left running is refused until the next daemon takes its place.
+export function setLaunchScope(next: Partial<LaunchScope>): void {
+  scope = { ...NO_SCOPE, ...next };
+  scope.signal.addEventListener("abort", endInFlight, { once: true });
 }
 
 // [LAW:types-are-the-program] Grace between SIGTERM and SIGKILL on the timeout
@@ -314,19 +362,6 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
 // resolve. SIGTERM lets well-behaved children flush/clean up; SIGKILL is the
 // backstop so the promise cannot resolve while the child is still alive.
 const TIMEOUT_KILL_GRACE_MS = 250;
-
-// Who hears each change in why the lifeline is down (`fault`, below). The
-// daemon logs it and redraws its feeds, so its warning comes and goes on
-// pushed frames too; any other process (the CLI, bar-pane, a test) says the
-// warning on stderr.
-let lifelineObserver: (fault: string | null) => void = () =>
-  lifelineWarnings().forEach((w) => process.emitWarning(w.message));
-
-export function setLifelineObserver(
-  observe: (fault: string | null) => void,
-): void {
-  lifelineObserver = observe;
-}
 
 // --- the lifeline ---
 //
@@ -372,7 +407,7 @@ let fault: string | null = null;
 function setFault(next: string | null): void {
   if (next === fault) return;
   fault = next;
-  lifelineObserver(next);
+  scope.observeLifeline(next);
 }
 
 function lose(line: ChildProcess, reason: string): void {
@@ -402,7 +437,7 @@ export function lifelineWarnings(): LifelineWarning[] {
 // on the launcher's PATH, as every launched program is: where a machine keeps
 // it is the machine's fact (NixOS has no /usr/bin/awk).
 function spawnLifeline(): Lifeline | null {
-  statsHandle?.onStart("lifeline");
+  scope.stats?.onStart("lifeline");
   const t0 = Date.now();
   let line: ChildProcess;
   try {
@@ -411,11 +446,11 @@ function spawnLifeline(): Lifeline | null {
       detached: true,
     });
   } catch (err) {
-    statsHandle?.onEnd("lifeline", Date.now() - t0);
+    scope.stats?.onEnd("lifeline", Date.now() - t0);
     setFault(`did not start: ${spawnErrorText(err, undefined)}`);
     return null;
   }
-  statsHandle?.onEnd("lifeline", Date.now() - t0);
+  scope.stats?.onEnd("lifeline", Date.now() - t0);
   // stdio[0] is "pipe", so Node hands back a socket.
   const pipe = line.stdin as Socket;
   line.once("spawn", () => {
@@ -441,6 +476,17 @@ function guard(group: number): void {
 function unguard(group: number): void {
   liveGroups.delete(group);
   lifeline?.pipe.write(`- ${group}\n`);
+}
+
+// A closed daemon's lifeline goes with it: the EOF a dying launcher gives it,
+// on purpose, so no fault is recorded, and one it had goes too, or the next
+// daemon would warn of a lifeline it never held. Nothing launches after the
+// abort that precedes this, so nothing starts another.
+export function retireLifeline(): void {
+  const line = lifeline;
+  lifeline = null;
+  fault = null;
+  line?.pipe.end();
 }
 
 // Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
@@ -473,16 +519,10 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
 }
 
 export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
-  if (opts.signal?.aborted) {
-    return {
-      ok: false,
-      reason: "aborted",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null,
-    };
-  }
+  // The scope it starts under, which it reports to however late it ends: a
+  // launch can outlast its daemon's close.
+  const { stats } = scope;
+  if (opts.signal?.aborted || scope.signal.aborted) return refusedAsAborted();
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
     return rateLimitedResult(
@@ -493,7 +533,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
   }
   recordStart(opts.category);
   const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
+  stats?.onStart(opts.category);
 
   return new Promise<LaunchResult>((resolve) => {
     let child: ChildProcess;
@@ -505,7 +545,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
         detached: true,
       });
     } catch (err) {
-      statsHandle?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, Date.now() - t0);
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -535,15 +575,19 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     let terminated: Terminated | null = null;
 
     const onAbort = () => terminate("aborted");
+    const unlisten = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      inFlight.delete(onAbort);
+    };
 
     const finish = (deliver: () => void) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
-      opts.signal?.removeEventListener("abort", onAbort);
+      unlisten();
       if (group !== undefined) unguard(group);
-      statsHandle?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
@@ -581,7 +625,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     const terminate = (cause: Terminated) => {
       terminated = cause;
       if (timer) clearTimeout(timer);
-      opts.signal?.removeEventListener("abort", onAbort);
+      unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
@@ -647,6 +691,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
+    inFlight.add(onAbort);
 
     if (opts.stdinInput !== undefined && child.stdin) {
       child.stdin.end(opts.stdinInput);
@@ -659,6 +704,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
 // Sync variant. For callers that genuinely cannot be async — the spawn
 // outcome must be settled before the function returns.
 export function launchSync(opts: LaunchOpts): LaunchResult {
+  if (scope.signal.aborted) return refusedAsAborted();
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
     return rateLimitedResult(
@@ -669,7 +715,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
   }
   recordStart(opts.category);
   const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
+  scope.stats?.onStart(opts.category);
 
   const stdio: StdioOptions = ["pipe", "pipe", "pipe"];
   try {
@@ -683,7 +729,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       encoding: "utf8",
     });
 
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
+    scope.stats?.onEnd(opts.category, Date.now() - t0);
 
     const stdout = typeof result.stdout === "string" ? result.stdout : "";
     const stderr = typeof result.stderr === "string" ? result.stderr : "";
@@ -729,7 +775,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       signal: result.signal ?? null,
     };
   } catch (err) {
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
+    scope.stats?.onEnd(opts.category, Date.now() - t0);
     return {
       ok: false,
       reason: "spawn-error",
@@ -749,6 +795,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
 // `ok: false` rather than a discarded Promise reporting success), and meters
 // through the stats handle so orphan spawns still show up in daemon-stats.
 export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
+  if (scope.signal.aborted) return refusedAsAborted();
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
     return rateLimitedResult(
@@ -759,9 +806,9 @@ export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
   }
   recordStart(opts.category);
   const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
+  scope.stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(opts);
-  statsHandle?.onEnd(opts.category, Date.now() - t0);
+  scope.stats?.onEnd(opts.category, Date.now() - t0);
   return result;
 }
 
@@ -872,9 +919,10 @@ export type JobLaunch =
 // it leads its own group, which nothing aimed at the launcher reaches; never
 // guarded by the lifeline; unref'd, so it never holds the launcher open.
 export function launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch {
+  if (scope.signal.aborted) return { ok: false, error: "the daemon closed" };
   recordStart(opts.category);
   const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
+  scope.stats?.onStart(opts.category);
   let child: ChildProcess;
   try {
     child = spawn(
@@ -897,10 +945,10 @@ export function launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch {
       },
     );
   } catch (err) {
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
+    scope.stats?.onEnd(opts.category, Date.now() - t0);
     return { ok: false, error: spawnErrorText(err, opts.cwd) };
   }
-  statsHandle?.onEnd(opts.category, Date.now() - t0);
+  scope.stats?.onEnd(opts.category, Date.now() - t0);
   // An async spawn failure has no pid; its `error` needs a listener or Node
   // crashes the launcher, and the missing pid already says it failed.
   child.once("error", () => {});

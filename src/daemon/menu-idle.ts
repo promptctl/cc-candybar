@@ -44,6 +44,7 @@ const MAX_SESSIONS = 256;
 
 export class MenuIdle {
   private readonly sessions = new Map<string, Idle>();
+  private disposed = false;
 
   constructor(private readonly deps: MenuIdleDeps) {}
 
@@ -90,6 +91,7 @@ export class MenuIdle {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const idle of this.sessions.values()) this.disarm(idle);
     this.sessions.clear();
   }
@@ -116,7 +118,10 @@ export class MenuIdle {
   // [LAW:single-enforcer] The one place the timer follows the record.
   private settle(sessionId: string): void {
     const idle = this.sessions.get(sessionId)!;
-    const due = idle.shown ? closesAt(idle.since, idle.timeoutS) : null;
+    // [LAW:no-ambient-temporal-coupling] Disposed, nothing is due: a render
+    // that was awaiting when the daemon closed arms no timer as it lands.
+    const due =
+      idle.shown && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;

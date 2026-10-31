@@ -129,7 +129,7 @@ test("the refusal report names the phase and quotes the daemon's reason", async 
     );
     expect(failure.message).toContain("never got as far as binding");
     expect(failure.message).toMatch(
-      /refusing to boot: CC_CANDYBAR_RSS_LIMIT_MB must be a positive integer/,
+      /refusing to boot: Error: CC_CANDYBAR_RSS_LIMIT_MB must be a positive integer/,
     );
     // The budget-expiry arm is the one an exit excludes: seeing it here would
     // mean the helper waited the whole budget out to learn what the process had

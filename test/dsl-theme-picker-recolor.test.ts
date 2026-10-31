@@ -4,7 +4,7 @@
 // omit the theme selection entirely — so they render the floor theme every time
 // and never exercise the recolor. The recolor lives in the daemon's PER-RENDER
 // theme resolution (resolveThemeSelection), OUTSIDE renderDsl. This test
-// replicates that resolution exactly as src/daemon/server.ts does, so it proves
+// replicates that resolution exactly as src/daemon/draw-bar.ts does, so it proves
 // the end-to-end loop: a set-state `theme` click changes the bytes a
 // non-picker segment renders.
 //
@@ -94,7 +94,7 @@ function buildRuntime() {
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
-  // pass while the real daemon recolors. (server.ts hands renderDsl
+  // pass while the real daemon recolors. (draw-bar.ts hands renderDsl
   // `theme: resolveThemeSelection(staged, sessionState.get(sid,'theme'),
   // globals.palette)`, and the SELECTION carries the palette, so there is no
   // separate base palette here to fall out of step with the name.)

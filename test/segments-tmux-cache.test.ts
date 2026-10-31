@@ -4,7 +4,7 @@ import path from "node:path";
 import { NAME_PERIOD_MS, TmuxService } from "../src/segments/tmux";
 import { Holds } from "../src/utils/holds";
 import {
-  setLaunchStats,
+  setLaunchScope,
   __resetRateLimitsForTest,
 } from "../src/proc/launch";
 import type { LaunchCategory } from "../src/proc/launch";
@@ -79,14 +79,14 @@ beforeEach(() => {
     onStart: (c) => starts.push(c),
     onEnd: () => {},
   };
-  setLaunchStats(handle);
+  setLaunchScope({ stats: handle });
   svc = new TmuxService();
   holds = new Holds();
 });
 
 afterEach(() => {
   svc.close();
-  setLaunchStats(null);
+  setLaunchScope({});
   jest.useRealTimers();
 });
 
