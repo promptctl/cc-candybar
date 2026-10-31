@@ -354,8 +354,13 @@ export function templateActionRefs(
 // `templateActionRefs` reads only spelled names, so such a template may bind
 // any declared action. A keyword with no argument (`{{ themePreview }}`)
 // binds none.
-const COMPUTED_BINDING_RE =
-  /(?<![\w.$])(?:(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+|(?:picker|carousel|swatches)\s+""\s+)(?=[^\s"`)|}])/;
+const namesTaking = (min: number): string =>
+  Object.keys(NAME_ARGS)
+    .filter((keyword) => NAME_ARGS[keyword]! >= min)
+    .join("|");
+const COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`,
+);
 export function bindsComputedAction(
   template: string,
   helpers: Readonly<Record<string, string>>,

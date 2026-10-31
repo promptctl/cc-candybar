@@ -133,7 +133,7 @@ export function carouselFuncs(runtime: ActionRuntime): FuncMap {
       fn: (applyName: string, openName: string, label: string) => {
         // [LAW:no-silent-failure] A computed label can come up empty, and a
         // control with no name says nothing and leaves no text to click.
-        if (label === "") {
+        if (label.trim() === "") {
           throw new Error(`carousel "${applyName}": label is empty`);
         }
         if (!runtime.compiled.has(openName)) {
