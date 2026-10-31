@@ -37618,7 +37618,7 @@ var TRIAL_VARIATION_NAMES = Object.keys(
 );
 var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
   palette,
-  decor.shade,
+  decor,
   decor.variation.hues.flatMap((hue) => {
     const window2 = windowAt(palette, hue, decor.shade, drawnAt);
     return decor.shade.tones.map((_, at) => ({
@@ -37756,12 +37756,14 @@ function dealtAt(palette, decor, row2, cell3, drawnAt) {
   };
 }
 function lineAt(palette, decor, row2, cell3, drawnAt) {
-  const { hues, run: run3, keystones } = decor.variation;
+  const { hues, run: run3, keystones, open: open2 } = decor.variation;
   const key = [
     hues.join(","),
     run3,
     keystones.join(","),
+    open2.join(","),
     decor.shade.tones.join(","),
+    decor.shade.activated,
     row2 === void 0 ? "" : stepKey(row2),
     // One answer for every place along the line, so the cell is keyed at
     // the line's first.
@@ -37773,7 +37775,7 @@ function lineAt(palette, decor, row2, cell3, drawnAt) {
     key,
     () => turnsHeld(
       palette,
-      decor.shade,
+      decor,
       Array.from(
         { length: cell3.lineEnd - cell3.lineStart + 1 },
         (_, at) => dealtAt(
@@ -37811,31 +37813,34 @@ function distributionName(distribution) {
 var DISTRIBUTION_NAME = new Map(
   DISTRIBUTION_NAMES.map((name) => [DISTRIBUTIONS[name], name])
 );
-function turnsHeld(palette, shade, dealt, drawnAt) {
+function turnsHeld(palette, decor, dealt, drawnAt) {
   const line = [...dealt];
   const drawn = (at) => {
     const entry = line[at];
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
-  const apart = (at) => {
+  const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
+  const apart = (at, off) => {
     const { hue } = line[at];
-    const taken = [drawn(at - 1), drawn(at + 1)].filter(
+    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
       (colour) => colour !== void 0
     );
-    const window2 = windowAt(palette, hue, shade, drawnAt);
+    const window2 = windowAt(palette, hue, decor.shade, drawnAt);
     const tone = window2.find((t2) => !taken.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken, drawnAt);
     return tone === void 0 ? void 0 : { hue, shade: tone };
   };
+  const moves = (at) => [[pressed], []].flatMap(
+    (off) => [at, at - 1].map((place) => ({ place, off }))
+  );
   for (let at = 1; at < line.length; at++) {
     if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
       continue;
-    const after = apart(at);
-    if (after !== void 0) {
-      line[at] = after;
-      continue;
+    for (const { place, off } of moves(at)) {
+      const entry = apart(place, off);
+      if (entry === void 0) continue;
+      line[place] = entry;
+      break;
     }
-    const before = apart(at - 1);
-    if (before !== void 0) line[at - 1] = before;
   }
   return line;
 }
@@ -37896,7 +37901,7 @@ function pressedAt(palette, disclosure, drawnAt) {
     const keystone = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
     const besideBand = (up) => [
       ...dealt(hueOf2(up)),
-      drawnIn(palette, hueOf2(up), drawnAt)(pressedAt(palette, up, drawnAt))
+      drawnPress(palette, up, drawnAt)
     ];
     const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
     const taken = [...dealt(hue), ...besideTrigger];
@@ -37906,6 +37911,11 @@ function pressedAt(palette, disclosure, drawnAt) {
   });
 }
 var PRESSED = memoPerPalette();
+var drawnPress = (palette, disclosure, drawnAt) => drawnIn(
+  palette,
+  hueOf2(disclosure),
+  drawnAt
+)(pressedAt(palette, disclosure, drawnAt));
 var nestedIn = (disclosure) => ({
   ...disclosure,
   depth: disclosure.depth + 1
