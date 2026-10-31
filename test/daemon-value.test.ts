@@ -29,6 +29,7 @@ import { memoryLimitBytes } from "../src/daemon/limits";
 import { pidAlive } from "../src/daemon/parent-watchdog";
 import { sessionStatePath, settingsHistoryPath } from "../src/daemon/paths";
 import { PROTOCOL_VERSION, type RenderRequest } from "../src/daemon/protocol";
+import type { SessionStorage } from "../src/daemon/session-state";
 import { FileSessionStorage } from "../src/daemon/session-state-file";
 import { fileHistoryStorage } from "../src/daemon/settings-history";
 import { parseHandlerUrl } from "../src/install/index";
@@ -80,12 +81,14 @@ describe("the daemon is a value", () => {
     inputs: {
       clock?: DaemonClock;
       checkout?: string;
+      session?: SessionStorage;
     } = {},
   ): Daemon => {
     const daemon = createDaemon({
       bundle: bundleIn(inputs.checkout ?? path.join(root, "checkout")),
       storage: {
-        session: new FileSessionStorage(sessionStatePath(), 0),
+        session:
+          inputs.session ?? new FileSessionStorage(sessionStatePath(), 0),
         history: fileHistoryStorage(settingsHistoryPath(), () => {}),
       },
       memoryLimitBytes: memoryLimitBytes(process.env),
@@ -182,6 +185,54 @@ describe("the daemon is a value", () => {
     root: { h: ["pad"] },
   }`;
   const width = (bar: string): number => stripAnsi(bar).trimEnd().length;
+
+  test("a closed daemon refuses what reaches it, and a click writes nothing", async () => {
+    writeConfig(PADDED);
+    const daemon = construct();
+    await answer(daemon, renderRequest("value-refused"));
+    close(daemon);
+    const closed = "the daemon closed";
+
+    await expect(
+      answer(daemon, renderRequest("value-refused")),
+    ).rejects.toThrow(closed);
+    await expect(
+      clickLink(
+        daemon,
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
+        ]),
+      ),
+    ).rejects.toThrow(closed);
+    expect(existsSync(settingsHistoryPath())).toBe(false);
+    const refused = jest.fn();
+    expect(() =>
+      daemon.subscribe("value-refused", {
+        lane: "band",
+        frame: () => {},
+        refused,
+        drawing: () => true,
+      }),
+    ).toThrow(closed);
+  });
+
+  test("a build that throws stands in the way of no next build", async () => {
+    writeConfig(PADDED);
+    const unreadable: SessionStorage = {
+      load: () => {
+        throw new Error("the session file cannot be read");
+      },
+      save: () => {},
+      flush: () => {},
+    };
+    expect(() => construct({ session: unreadable })).toThrow(
+      "the session file cannot be read",
+    );
+
+    const daemon = construct();
+    await answer(daemon, renderRequest("value-rebuilt"));
+    close(daemon);
+  });
 
   test("a render and a click go through the socket's own request handling", async () => {
     writeConfig(PADDED);

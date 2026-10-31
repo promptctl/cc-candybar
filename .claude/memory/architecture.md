@@ -34,7 +34,7 @@ The update notice compares two content digests of the source tree: one baked int
 
 ## The daemon is a value inside a process
 
-The daemon is built by the process that serves it, never at import, because every subcommand imports the entry. Everything a process owns (signals, the socket, the lease, the exit) stays in the shell over it, so a test can run the daemon's own request handling in a jest worker. The shell and a test tear down by one close: a second teardown would be a second list of what the daemon holds, and the process's exit used to hide what the first one missed.
+The daemon is built by the process that serves it, never at import, because every subcommand imports the entry. Everything a process owns (signals, the socket, the lease, the exit) stays in the shell over it, so a test can run the daemon's own request handling in a jest worker. The shell and a test tear down by one close: a second teardown would be a second list of what the daemon holds, and a process's exit hides whatever that list misses.
 
 After a close nothing launches, no timer stays armed, and only the log is written; a read already under way may finish. Launches end at one checkpoint in the launcher rather than in each owner, because a git pass or a multi-step lane setup folds a killed child into a field and goes on to the next launch, which an owner-by-owner close never sees. A launch carries no owner, so that scope is the process's: one daemon is live at a time, and a closed one's scope stays in force until the next is built. Session state stops persisting at close instead of refusing writes, because a render that was awaiting still has to land somewhere, and it must not land over the file a next daemon has taken up.
 

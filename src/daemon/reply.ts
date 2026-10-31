@@ -200,8 +200,7 @@ export async function replyTo(
     clock,
     frameFeeds,
     renderCache,
-    gitService,
-    usageStore,
+    payloadProviders: { gitProvider, usageStore },
     fileEvents,
     runs,
     effectSessions,
@@ -251,7 +250,7 @@ export async function replyTo(
     return stay({
       ok: true,
       stats: stats.snapshot({
-        gitCache: gitService.getStats(),
+        gitCache: gitProvider.getStats(),
         usageCache: usageStore.getStats(),
         sources: sourceSnapshots(parts),
         fileEvents: fileEvents.stats(),
@@ -489,15 +488,17 @@ export async function replyTo(
 // how many homes of each scope the owners keep and how many a view holds.
 function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
   const {
-    gitService,
-    tmuxService,
-    usageStore,
-    managedStorage,
+    payloadProviders: {
+      gitProvider,
+      tmuxService,
+      usageStore,
+      managedStorage,
+      hostService,
+    },
     renderCache,
     refreshLedger,
-    hostService,
   } = parts;
-  const git = gitService.getStats();
+  const git = gitProvider.getStats();
   const tmux = tmuxService.getStats();
   const today = usageStore.scanStats();
   const storage = managedStorage.stats();

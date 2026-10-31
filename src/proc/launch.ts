@@ -334,6 +334,13 @@ const NO_SCOPE: LaunchScope = {
 };
 let scope: LaunchScope = NO_SCOPE;
 
+// What ends each launch in flight, on the scope's abort.
+// [LAW:no-silent-failure] One listener, on a signal as long-lived as its daemon:
+// `AbortSignal.any` over it grows the heap launch by launch on Node 20 and 24,
+// and a listener per launch warns of a leak past ten in flight on 20 and 22.
+const inFlight = new Set<() => void>();
+const endInFlight = (): void => inFlight.forEach((end) => end());
+
 // A scope stays in force once its signal has aborted, so the work a closed
 // daemon left running is refused until the next daemon takes its place.
 // [LAW:no-shared-mutable-globals] One daemon is live in a process: launches
@@ -343,6 +350,7 @@ export function setLaunchScope(next: Partial<LaunchScope>): void {
     throw new Error("a daemon's launch scope replaced while it is live");
   }
   scope = { ...NO_SCOPE, ...next };
+  scope.signal.addEventListener("abort", endInFlight, { once: true });
 }
 
 // [LAW:types-are-the-program] Grace between SIGTERM and SIGKILL on the timeout
@@ -506,12 +514,10 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
 }
 
 export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
-  // Its own signal each, derived rather than listening on the scope's: a
-  // daemon's concurrent launches would otherwise pile listeners on one signal.
-  const cancelled = AbortSignal.any(
-    opts.signal === undefined ? [scope.signal] : [opts.signal, scope.signal],
-  );
-  if (cancelled.aborted) return refusedAsAborted();
+  // The scope it starts under, which it reports to however late it ends: a
+  // launch can outlast its daemon's close.
+  const { stats } = scope;
+  if (opts.signal?.aborted || scope.signal.aborted) return refusedAsAborted();
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
     return rateLimitedResult(
@@ -522,7 +528,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
   }
   recordStart(opts.category);
   const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
+  stats?.onStart(opts.category);
 
   return new Promise<LaunchResult>((resolve) => {
     let child: ChildProcess;
@@ -534,7 +540,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
         detached: true,
       });
     } catch (err) {
-      scope.stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, Date.now() - t0);
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -564,15 +570,19 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     let terminated: Terminated | null = null;
 
     const onAbort = () => terminate("aborted");
+    const unlisten = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      inFlight.delete(onAbort);
+    };
 
     const finish = (deliver: () => void) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
-      cancelled.removeEventListener("abort", onAbort);
+      unlisten();
       if (group !== undefined) unguard(group);
-      scope.stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
@@ -610,7 +620,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     const terminate = (cause: Terminated) => {
       terminated = cause;
       if (timer) clearTimeout(timer);
-      cancelled.removeEventListener("abort", onAbort);
+      unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
@@ -675,7 +685,8 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
-    cancelled.addEventListener("abort", onAbort, { once: true });
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    inFlight.add(onAbort);
 
     if (opts.stdinInput !== undefined && child.stdin) {
       child.stdin.end(opts.stdinInput);

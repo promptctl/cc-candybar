@@ -435,8 +435,6 @@ export function drawRender(
     payloadProviders,
     effectSessions,
     menuIdle,
-    gitService,
-    usageStore,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -675,8 +673,8 @@ export function drawRender(
           nextChange: Infinity,
           motion: frame.motion === "still" ? "still" : "can-move",
         };
-  const g = gitService.getStats();
-  const u = usageStore.getStats();
+  const g = payloadProviders.gitProvider.getStats();
+  const u = payloadProviders.usageStore.getStats();
   const fx = effects.lastFrame();
   // Each placement wearing its own effect, on its own clock; `-` for none.
   const own =

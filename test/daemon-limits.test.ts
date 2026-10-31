@@ -488,7 +488,7 @@ describe("the charge is the verdict", () => {
             ),
         }),
       );
-      const armed = limits.arm(1000);
+      limits.arm(1000);
       expect(answers).toHaveLength(1);
       // A probe slower than the interval delays the next, never overlaps it.
       await jest.advanceTimersByTimeAsync(5000);
@@ -498,7 +498,7 @@ describe("the charge is the verdict", () => {
       expect(answers).toHaveLength(1);
       await jest.advanceTimersByTimeAsync(1);
       expect(answers).toHaveLength(2);
-      armed.disarm();
+      limits.disarm();
       answers[1]!();
       await jest.advanceTimersByTimeAsync(5000);
       expect(answers).toHaveLength(2);
@@ -670,8 +670,8 @@ describe("a breach landing after disarm", () => {
         memoryCharge: () => new Promise((resolve) => (answer = resolve)),
       }),
     );
-    const { disarm } = limits.arm();
-    disarm();
+    limits.arm();
+    limits.disarm();
     answer({ kind: "charged", measure: "rss", bytes: 10_000 });
     await limits.check();
 

@@ -162,24 +162,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats();
-  // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
-  // the scope meters them into daemon-stats and ends them with this daemon.
-  setLaunchScope({
-    stats: stats.launchStats,
-    signal: closing.signal,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it is said in daemon.log, and every feed redraws, so its warning
-    // comes and goes on frames too.
-    observeLifeline: (fault) => {
-      dlog(
-        fault === null ? "info" : "warn",
-        fault === null
-          ? "launch lifeline running again"
-          : `launch lifeline ${fault}; the next launch starts another`,
-      );
-      frameFeeds.wakeWhere("data", () => true);
-    },
-  });
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
   const limits = makeLimits(
@@ -209,7 +191,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // the providers', and each config's user sources (the render cache's).
   const refreshLedger = new RefreshLedger(dlog);
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
-  // events: one owner, started once the bind is won (onListening).
+  // events: one owner, started once the bind is won (`arm`).
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
     logger: dlog,
@@ -459,11 +441,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // The registry is a network resource with releases hours apart; ask rarely.
   const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-  // Watch the resolved entry point, not the bin shim — a build updates
-  // dist/index.mjs but the bin/cc-candybar shim never changes — and argv[1]
-  // beside it (global installs, symlinks).
   const binaryWatch = makeBinaryWatch({
-    // One target per path: run as `node dist/index.mjs`, both name one file.
     targets: bundle.targets,
     intervalMs: BIN_CHECK_INTERVAL_MS,
     stat: fs.statSync,
@@ -569,11 +547,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     refreshLedger,
     fileEvents,
     payloadProviders,
-    gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage,
     sessionState,
     effectSessions,
     menuIdle,
@@ -589,22 +562,52 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     verbCtx,
   };
 
-  let disarmLimits = (): void => {};
+  // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
+  // the scope meters them into daemon-stats and ends them with this daemon.
+  // [LAW:no-ambient-temporal-coupling] The last step of building, so a build that
+  // throws leaves no live scope behind it, and the scope reads a whole daemon.
+  setLaunchScope({
+    stats: stats.launchStats,
+    signal: closing.signal,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it is said in daemon.log, and every feed redraws, so its warning
+    // comes and goes on frames too.
+    observeLifeline: (fault) => {
+      dlog(
+        fault === null ? "info" : "warn",
+        fault === null
+          ? "launch lifeline running again"
+          : `launch lifeline ${fault}; the next launch starts another`,
+      );
+      frameFeeds.wakeWhere("data", () => true);
+    },
+  });
 
   return {
     stats,
     memoryLimitBytes,
-    handle: (req, timedOut, accepted) =>
-      handleRequest(parts, req, timedOut, accepted),
-    reply: (req, timedOut, accepted) => replyTo(parts, req, timedOut, accepted),
-    subscribe: (sessionId, subscriber) =>
-      frameFeeds.subscribe(sessionId, subscriber),
+    // [LAW:single-enforcer] A closed daemon serves nothing, and these three are
+    // the way in. A click runs in the turn it enters, so one that got in has
+    // landed before any close; a subscribe its request reached as the daemon
+    // closed is refused here and opens no feed.
+    handle: async (req, timedOut, accepted) => {
+      closing.signal.throwIfAborted();
+      return handleRequest(parts, req, timedOut, accepted);
+    },
+    reply: async (req, timedOut, accepted) => {
+      closing.signal.throwIfAborted();
+      return replyTo(parts, req, timedOut, accepted);
+    },
+    subscribe: (sessionId, subscriber) => {
+      closing.signal.throwIfAborted();
+      return frameFeeds.subscribe(sessionId, subscriber);
+    },
     reloadConfig: verbCtx.reloadConfig,
     arm() {
       fileEvents.start(watchProbeDir());
       binaryWatch.arm();
       updateWatch.arm();
-      disarmLimits = limits.arm().disarm;
+      limits.arm();
     },
     close() {
       // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every teardown step
@@ -617,12 +620,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, and
         // what is in flight is terminated, whichever owner's work it was.
-        ["launches abort", () => closing.abort()],
+        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
-        ["limits disarm", () => disarmLimits()],
+        ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],

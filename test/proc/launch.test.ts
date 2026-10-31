@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { getEventListeners } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -591,6 +592,43 @@ describe("the launch scope", () => {
     closing.abort();
 
     expect(await pending).toMatchObject({ ok: false, reason: "aborted" });
+  });
+
+  // [LAW:no-silent-failure] Its signal lives as long as the daemon, so the
+  // launches in flight share one listener on it, however many there are.
+  it("ends every launch in flight through one listener on its signal", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    const pending = Array.from({ length: 12 }, () =>
+      launch({ bin: "/bin/sleep", args: ["30"], category: "user-shell" }),
+    );
+    expect(getEventListeners(closing.signal, "abort")).toHaveLength(1);
+
+    closing.abort();
+
+    for (const result of await Promise.all(pending))
+      expect(result).toMatchObject({ ok: false, reason: "aborted" });
+  });
+
+  it("a launch that outlasts its daemon's close reports to that daemon, not the next", async () => {
+    const closing = new AbortController();
+    const closed = makeSpyHandle();
+    setLaunchScope({ stats: closed.handle, signal: closing.signal });
+    const pending = launch({
+      bin: "/bin/sleep",
+      args: ["30"],
+      category: "user-shell",
+    });
+
+    closing.abort();
+    const next = new AbortController();
+    const successor = makeSpyHandle();
+    setLaunchScope({ stats: successor.handle, signal: next.signal });
+    await pending;
+
+    expect(closed.ends.map((end) => end.category)).toEqual(["user-shell"]);
+    expect(successor.ends).toEqual([]);
+    next.abort();
   });
 
   it("the next daemon's scope lets launches through again", async () => {

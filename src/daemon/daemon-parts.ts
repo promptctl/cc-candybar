@@ -38,11 +38,6 @@ export interface DaemonParts {
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;
   readonly payloadProviders: PayloadProviders;
-  readonly gitService: PayloadProviders["gitProvider"];
-  readonly usageStore: PayloadProviders["usageStore"];
-  readonly tmuxService: PayloadProviders["tmuxService"];
-  readonly hostService: PayloadProviders["hostService"];
-  readonly managedStorage: PayloadProviders["managedStorage"];
   readonly sessionState: SessionState;
   readonly effectSessions: EffectSessions<RenderedLine>;
   readonly menuIdle: MenuIdle;
