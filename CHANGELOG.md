@@ -1,3 +1,14 @@
+## [1.169.0](https://github.com/promptctl/cc-candybar/compare/v1.168.1...v1.169.0) (2026-10-31)
+
+### Features
+
+* **menus:** the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) ([#511](https://github.com/promptctl/cc-candybar/issues/511)) ([7fa9b11](https://github.com/promptctl/cc-candybar/commit/7fa9b112cc7061c7e0e1a63a7955c56987054064))
+
+### Bug Fixes
+
+* **colour:** a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r) ([#512](https://github.com/promptctl/cc-candybar/issues/512)) ([0160616](https://github.com/promptctl/cc-candybar/commit/016061643ad23b49d130b2c30124599d4beab3bb))
+* **colour:** a dial window widens toward its position's count of tones and leaves its ladder's last colour to the pressed button (candybar-joiners-e5r4.cfm) ([#510](https://github.com/promptctl/cc-candybar/issues/510)) ([0ed75d1](https://github.com/promptctl/cc-candybar/commit/0ed75d194e35c845f139e257b73bd2118c63d722))
+
 ## [1.168.1](https://github.com/promptctl/cc-candybar/compare/v1.168.0...v1.168.1) (2026-10-30)
 
 ### Bug Fixes
