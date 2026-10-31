@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-520",
+      "ref": "refs/pull/520/merge",
+      "sha": "0f972c489a2234915ea1146f9f5e6fb07eca9ee3",
+      "timestamp": "2026-10-31T12:58:43.541Z",
+      "commits": [
+        {
+          "sha": "0f972c489a2234915ea1146f9f5e6fb07eca9ee3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T06:57:52-06:00",
+          "message": "Merge a244c9ddc7c622478e50c1132c554d29ced17854 into 196c9029832167dd5178243f96554cec4c614836\n"
+        },
+        {
+          "sha": "a244c9ddc7c622478e50c1132c554d29ced17854",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T06:57:27-06:00",
+          "message": "refactor(daemon): the daemon is a value, built and closed by the process that serves it (candybar-testing-0x6u.3c7)\n\nserver.ts is the process shell; daemon.ts builds what import built, and owns arm and close. Nothing runs at import, so a jest worker can load the daemon, drive its own request handling, close it with nothing left running, and build it again over the same storage. The shell and a test tear down by one close. Launches end at one scope in the launcher, session state stops persisting at close, and a throw anywhere in the boot takes the death funnel.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3405285f6ee15d063c84e720f6659f9babe4bc6a",
