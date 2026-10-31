@@ -37819,7 +37819,7 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
     const entry = line[at];
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
-  const pressed = pressedOnBar(palette, decor, drawnAt);
+  const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
   const apart = (at, off) => {
     const { hue } = line[at];
     const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
@@ -37901,7 +37901,7 @@ function pressedAt(palette, disclosure, drawnAt) {
     const keystone = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
     const besideBand = (up) => [
       ...dealt(hueOf2(up)),
-      drawnIn(palette, hueOf2(up), drawnAt)(pressedAt(palette, up, drawnAt))
+      drawnPress(palette, up, drawnAt)
     ];
     const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
     const taken = [...dealt(hue), ...besideTrigger];
@@ -37911,14 +37911,11 @@ function pressedAt(palette, disclosure, drawnAt) {
   });
 }
 var PRESSED = memoPerPalette();
-var pressedOnBar = (palette, decor, drawnAt) => {
-  const opened = { decor, depth: 0 };
-  return drawnIn(
-    palette,
-    hueOf2(opened),
-    drawnAt
-  )(pressedAt(palette, opened, drawnAt));
-};
+var drawnPress = (palette, disclosure, drawnAt) => drawnIn(
+  palette,
+  hueOf2(disclosure),
+  drawnAt
+)(pressedAt(palette, disclosure, drawnAt));
 var nestedIn = (disclosure) => ({
   ...disclosure,
   depth: disclosure.depth + 1

@@ -4,15 +4,22 @@
     {
       "version": "pr-512",
       "ref": "refs/pull/512/merge",
-      "sha": "717ea407f02f11356ad3a53791d388a41b994024",
-      "timestamp": "2026-10-30T23:53:27.586Z",
+      "sha": "2b57ebe3aefe7c0c5ebd781591d7fa6eee1e4714",
+      "timestamp": "2026-10-31T00:06:09.618Z",
       "commits": [
         {
-          "sha": "717ea407f02f11356ad3a53791d388a41b994024",
+          "sha": "2b57ebe3aefe7c0c5ebd781591d7fa6eee1e4714",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:52:45Z",
-          "message": "Merge ebba12810ec98b5eb79234b4173edca35b350dfe into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+          "timestamp": "2026-10-31T00:05:24Z",
+          "message": "Merge 214ea1ede8ccb40054263b30b838b3c190b4f699 into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+        },
+        {
+          "sha": "214ea1ede8ccb40054263b30b838b3c190b4f699",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T18:05:14-06:00",
+          "message": "refactor(colour): one reader of the colour a press is drawn in, and the press is kept off only where a ladder has a rung (candybar-joiners-e5r4.34r)\n\nSecond review pass of #512. The press one depth up and the bar's press that a cell at a hue turn keeps off are now read through one helper. Before, the same drawn colour was spelled out twice.\n\nThe memory line and the pressed shade's doc now say a moved cell keeps off the press wherever its ladder has a rung to give, since the fallback can still leave it on the press. The theme preview's comment says a swatch on either side of a turn can move.\n\nThe frame test drops a counter nothing read. It names a cell by the same visible-text rule as the sweep, which now lives beside cellBefore and cellAfter.\n"
         },
         {
           "sha": "ebba12810ec98b5eb79234b4173edca35b350dfe",
