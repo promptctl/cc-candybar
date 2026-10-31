@@ -705,70 +705,6 @@ describe("every render request writes one render event, whatever its outcome", (
     for (const event of (await eventsOf("ev-keyed", 3)).slice(1))
       expect(field(event, "ended")).toBe("answered");
   });
-
-  // The connection's backstop answers TIMEOUT whatever the render is still
-  // doing. A wait ends before it, so what outlives it is a synchronous turn:
-  // here the first request's compile of a config big enough to take several
-  // times the backstop. The render's event says the client read another
-  // reply, and the hold it drew under is released when it ends. Last, since
-  // so big a compile slows whatever the daemon does next.
-  test("a render that outlives its request timeout writes timedOut=Y", async () => {
-    const segments = Object.fromEntries(
-      Array.from({ length: 600 }, (_, i) => [
-        `s${i}`,
-        { template: `{{ .session.id }} ${i}` },
-      ]),
-    );
-    const config = path.join(projectDir, "heavy.json5");
-    writeFileSync(
-      config,
-      JSON.stringify({
-        variables: {
-          slow: {
-            kind: "shell",
-            command: "sleep 0.05; echo slow",
-            cache: { key: "once" },
-          },
-        },
-        segments: { ...segments, slow: { template: "{{ .slow }}" } },
-        root: { h: [...Object.keys(segments), "slow"] },
-      }),
-    );
-    // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
-    // task on the daemon's loop, so it cannot be written until the
-    // synchronous compile yields: this client's wait is bounded by the
-    // compile, seconds on CI's two cores, not by the backstop. The running
-    // source is what yields: with nothing in flight the answer is written on
-    // microtasks, ahead of the overdue backstop. The helper's
-    // default budget is for an answered request, so the budget here is the
-    // test's own timeout, and nothing ends the wait before Jest would. The
-    // event's `took` below is what says the render outlived the backstop.
-    await expect(
-      sendDaemonRequest(
-        daemon,
-        {
-          v: PROTOCOL_VERSION,
-          kind: "render",
-          ...renderBody("ev-backstop", projectDir, {}, [
-            "cc-candybar",
-            "--config",
-            config,
-          ]),
-          deadline: Date.now() + TOTAL_BUDGET_MS,
-        },
-        TEST_TIMEOUT_MS,
-      ),
-    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
-    const late = only(await eventsOf("ev-backstop"));
-    expect(field(late, "outcome")).toBe("ok");
-    expect(field(late, "timedOut")).toBe("Y");
-    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(
-      REQUEST_TIMEOUT_MS,
-    );
-    await expect(
-      sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "stats" }),
-    ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
-  });
 });
 
 // A request is answered by its client's deadline, whatever its sources are
@@ -777,8 +713,9 @@ describe("every render request writes one render event, whatever its outcome", (
 // answers only once the test opens the gate, so the source provably outlives
 // the deadline — an ordering the test owns, not a bet on how slow a render is.
 // A real process, because that answer's cold first draw has to fit the draw's
-// reserve in wall time, the bound test/draw-reserve.test.ts holds.
-describe("a client's deadline", () => {
+// reserve in wall time, the bound test/draw-reserve.test.ts holds, and because
+// what the backstop answers below is decided by the loop's own turns.
+describe("a request's time limits", () => {
   let env: NodeJS.ProcessEnv;
   let sockPath: string;
   let removeTmpDirs: () => void;
@@ -896,6 +833,58 @@ describe("a client's deadline", () => {
     // Its stub is still reading: let it answer rather than be killed.
     await stub!.asked(2);
     await stub!.open(2);
+  });
+
+  // The connection's backstop answers TIMEOUT whatever the render is still
+  // doing. A wait ends before it, so what outlives it is a synchronous turn:
+  // here the first request's compile of a config big enough to take several
+  // times the backstop. The render's event says the client read another
+  // reply, and the hold it drew under is released when it ends. Last, since
+  // so big a compile slows whatever the daemon does next.
+  test("a render that outlives its request timeout writes timedOut=Y", async () => {
+    const segments = Object.fromEntries(
+      Array.from({ length: 600 }, (_, i) => [
+        `s${i}`,
+        { template: `{{ .session.id }} ${i}` },
+      ]),
+    );
+    const config = path.join(projectDir, "heavy.json5");
+    writeFileSync(
+      config,
+      JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
+    );
+    // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
+    // task on the daemon's loop, so it cannot be written until the
+    // synchronous compile yields: this client's wait is bounded by the
+    // compile, seconds on CI's two cores, not by the backstop. The helper's
+    // default budget is for an answered request, so the budget here is the
+    // test's own timeout, and nothing ends the wait before Jest would. The
+    // event's `took` below is what says the render outlived the backstop.
+    await expect(
+      sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          ...renderBody("ev-backstop", projectDir, {}, [
+            "cc-candybar",
+            "--config",
+            config,
+          ]),
+          deadline: Date.now() + TOTAL_BUDGET_MS,
+        },
+        TEST_TIMEOUT_MS,
+      ),
+    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
+    const late = only(await landedEvents(env, "ev-backstop", 1));
+    expect(field(late, "outcome")).toBe("ok");
+    expect(field(late, "timedOut")).toBe("Y");
+    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(
+      REQUEST_TIMEOUT_MS,
+    );
+    await expect(
+      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
+    ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
   });
 });
 

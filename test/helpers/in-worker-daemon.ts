@@ -25,6 +25,7 @@ import { fileStorage } from "../../src/daemon/file-storage";
 import { drained } from "../../src/daemon/log";
 import { logPath, stateDir } from "../../src/daemon/paths";
 import { sendOne, type Request } from "../../src/daemon/protocol";
+import { reserveUpdateKeys } from "../../src/daemon/update-notice";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
@@ -154,6 +155,9 @@ export function startDaemon(
     placeEnv(before);
     throw e;
   }
+  // A booted daemon holds these from arming, so every config's gate here is
+  // built against them too.
+  const releaseUpdateKeys = reserveUpdateKeys();
   const open = new Set<Duplex>();
   const servers: net.Server[] = [];
 
@@ -179,7 +183,11 @@ export function startDaemon(
         const server = net.createServer(serve);
         servers.push(server);
         server.once("error", reject);
-        server.listen(sockPath, resolve);
+        server.listen(sockPath, () => {
+          // A server's later error is nobody's rejection: left unheard, it's loud.
+          server.off("error", reject);
+          resolve();
+        });
       }),
     send: (req, budgetMs) =>
       sendOne(connect(), req as unknown as Request, Date.now() + budgetMs),
@@ -199,6 +207,7 @@ export function startDaemon(
         ),
       );
       await drained();
+      releaseUpdateKeys();
       placeEnv(before);
     },
   };

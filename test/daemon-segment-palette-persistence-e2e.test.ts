@@ -179,8 +179,8 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       });
       const afterFirstWrite = readFileSync(userConfigPath, "utf8");
 
-      // Stop this daemon and build a FRESH one against the SAME config file:
-      // nothing of the first is left but what it wrote.
+      // Stop this daemon and build a FRESH one against the SAME config file,
+      // the only place a saved value lives.
       await daemon.stop();
       daemon = startDaemon(env);
 

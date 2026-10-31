@@ -129,9 +129,9 @@ export async function serveBar(
     // old bar is stopped only once the new one runs, so a failed start leaves
     // the page on a working bar.
     "/restart": async (body) => {
-      const next = await startBar({ ...opts, ...sizeOf(body) }, startDaemon);
-      await bar.stop();
-      bar = next;
+      const stopping = bar;
+      bar = await startBar({ ...opts, ...sizeOf(body) }, startDaemon);
+      await stopping.stop();
       return view(await bar.render(), null);
     },
   };

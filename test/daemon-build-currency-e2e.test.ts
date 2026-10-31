@@ -163,12 +163,12 @@ function scratchLayout(source: Source): Scratch {
   };
 }
 
-// A daemon in this worker running from `scratch`'s bundle, built from this
-// source: an update notice is read off a checkout and a digest, and both are
-// inputs, so it takes no build.
 const layBundle = (scratch: Scratch): void =>
   fs.copyFileSync(REPO_BUNDLE, path.join(scratch.root, "dist", "index.mjs"));
 
+// A daemon in this worker running from `scratch`'s bundle, built from this
+// source: an update notice is read off a checkout and a digest, and both are
+// inputs, so it takes no build.
 async function withDaemon<T>(
   scratch: Scratch,
   envOverride: NodeJS.ProcessEnv,

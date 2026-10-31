@@ -2,8 +2,9 @@
 // CC_CANDYBAR_CONFIG on the statusline command and saw a rejected config render
 // byte-identically to no config — because the variable was read from the
 // DAEMON's own environment, which the client's shell never reaches once a
-// daemon is running. So this daemon is given NO such variable, and every override arrives the only way a client can send one:
-// as the `configEnv` hint, the `--config` flag, or a load-config click.
+// daemon is running. So this daemon is given NO such variable, and every
+// override arrives the only way a client can send one: as the `configEnv` hint,
+// the `--config` flag, or a load-config click.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -28,7 +29,6 @@ import type { DaemonTarget } from "./helpers/daemon-wire";
 import { readDiagnostics } from "./helpers/diagnostics-viewer";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import type { ClientHints } from "../src/daemon/protocol";
-import { reserveUpdateKeys } from "../src/daemon/update-notice";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -59,7 +59,6 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   let removeTmpDirs: () => void;
   let projectDir: string;
   let daemon: InWorkerDaemon;
-  let releaseUpdateKeys: () => void;
   // The shape every shipped template failed with (brandon-plugin-templates-irq):
   // a top-level key the loader does not know.
   let rejected: string;
@@ -84,15 +83,11 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       override,
       `{ segments: { a: { template: 'OVERRIDE-WINS' } }, root: { h: ['a'] } }`,
     );
-    // The durable click below writes the update notice's field, whose keys only
-    // an armed daemon holds, so this file holds them as `check` does.
-    releaseUpdateKeys = reserveUpdateKeys();
     daemon = startDaemon(prepared.env);
   });
 
   afterAll(async () => {
     await daemon?.stop();
-    releaseUpdateKeys?.();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -330,16 +325,6 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       }),
     ).rejects.toThrow(/request 'cwd' is not an absolute path: "proj".*BAD_REQUEST/);
   });
-
-  // The production wiring end to end: the REAL client (`dist/index.mjs`,
-  // the bundle `cc-candybar install` stages) reads the hook payload from
-  // stdin, lifts CC_CANDYBAR_CONFIG from ITS OWN environment into the
-  // `configEnv` hint (src/index.ts), and relays it over the socket — the
-  // daemon, spawned without the variable, renders the hinted file's bar.
-  //
-  // brandon-config-nuq6: a RELATIVE value names a file relative to the
-  // client's cwd. The daemon runs in another directory, so the client must
-  // resolve it before it crosses the wire.
 });
 
 // The wire of a real client: its own process, env and cwd, over a socket. A
@@ -374,6 +359,15 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
     removeTmpDirs();
   });
 
+  // The production wiring end to end: the REAL client (`dist/index.mjs`,
+  // the bundle `cc-candybar install` stages) reads the hook payload from
+  // stdin, lifts CC_CANDYBAR_CONFIG from ITS OWN environment into the
+  // `configEnv` hint (src/index.ts), and relays it over the socket — the
+  // daemon, spawned without the variable, renders the hinted file's bar.
+  //
+  // brandon-config-nuq6: a RELATIVE value names a file relative to the
+  // client's cwd. The daemon runs in another directory, so the client must
+  // resolve it before it crosses the wire.
   test.each([
     ["an absolute", () => override],
     ["a relative", () => path.basename(override)],

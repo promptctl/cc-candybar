@@ -284,8 +284,8 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
         .replace("padding: 1", "padding: 2");
       expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
 
-      // Stop this daemon and build a FRESH one against the SAME config file:
-      // nothing of the first is left but what it wrote.
+      // Stop this daemon and build a FRESH one against the SAME config file,
+      // the only place a saved value lives.
       await daemon.stop();
       daemon = startDaemon(env);
 
