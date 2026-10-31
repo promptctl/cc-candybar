@@ -4,15 +4,22 @@
     {
       "version": "pr-514",
       "ref": "refs/pull/514/merge",
-      "sha": "31f37dd456bc1da954296139d8c1f38d9e7e76d6",
-      "timestamp": "2026-10-31T02:11:16.060Z",
+      "sha": "a6efdd8801ef389d321b263fccba2558c0ec4266",
+      "timestamp": "2026-10-31T02:21:43.454Z",
       "commits": [
         {
-          "sha": "31f37dd456bc1da954296139d8c1f38d9e7e76d6",
+          "sha": "a6efdd8801ef389d321b263fccba2558c0ec4266",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T02:10:37Z",
-          "message": "Merge 6862a95fda50f02959ed821d33e33b84bef8bc1c into 1f26d9a6ce86b1e21391e6076c7dac31adbd74ac\n"
+          "timestamp": "2026-10-31T02:20:49Z",
+          "message": "Merge 9904b32b2f00ec821a1164ac9e902484286c39bb into 1f26d9a6ce86b1e21391e6076c7dac31adbd74ac\n"
+        },
+        {
+          "sha": "9904b32b2f00ec821a1164ac9e902484286c39bb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T20:20:33-06:00",
+          "message": "test(render-cache): the parent-rename test proves the judgment closed a handle before any window lands (brandon-unfiled-3248.erwl)\n\nOn macOS the watch follows the path and would hear the write by itself, so the entry reading the new tree proved nothing about the judgment there. The synchronous close is the reopen, on both platforms.\n"
         },
         {
           "sha": "6862a95fda50f02959ed821d33e33b84bef8bc1c",
