@@ -4,15 +4,22 @@
     {
       "version": "pr-514",
       "ref": "refs/pull/514/merge",
-      "sha": "ffff2325e95f831a6f30c532bbe8e7f3499f3b88",
-      "timestamp": "2026-10-31T01:50:04.403Z",
+      "sha": "31f37dd456bc1da954296139d8c1f38d9e7e76d6",
+      "timestamp": "2026-10-31T02:11:16.060Z",
       "commits": [
         {
-          "sha": "ffff2325e95f831a6f30c532bbe8e7f3499f3b88",
+          "sha": "31f37dd456bc1da954296139d8c1f38d9e7e76d6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T19:49:12-06:00",
-          "message": "Merge b1f031418a9f07970b9f609c51985ce405c58074 into 1f26d9a6ce86b1e21391e6076c7dac31adbd74ac\n"
+          "timestamp": "2026-10-31T02:10:37Z",
+          "message": "Merge 6862a95fda50f02959ed821d33e33b84bef8bc1c into 1f26d9a6ce86b1e21391e6076c7dac31adbd74ac\n"
+        },
+        {
+          "sha": "6862a95fda50f02959ed821d33e33b84bef8bc1c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T20:10:19-06:00",
+          "message": "fix(watchers): a reload that keeps its watch is what retries nothing, and the git watch asks for its pass directly (brandon-unfiled-3248.erwl)\n\nThe memory sentence and the judgment's comment claimed the period was the only retry of a deaf directory; an acquire judges the directories it names too. The git provider's heard wrapper had no job left once the failed window went.\n"
         },
         {
           "sha": "b1f031418a9f07970b9f609c51985ce405c58074",

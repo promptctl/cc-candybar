@@ -38979,9 +38979,9 @@ var WatcherRegistry = class {
   // wires it). It is the one trigger for a replacement no event reaches a
   // handle for (a strict ancestor renamed away and another tree put at its
   // path: inotify reports a directory's own removal or self-move, never its
-  // parent's) and the one retry of a directory the OS refused or whose handle
-  // errored. A directory staying as it is costs one stat, or one refused
-  // open, and tells nothing.
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing.
   judge() {
     for (const dir of this.dirs.values()) this.judged(dir, "period");
   }
@@ -71707,11 +71707,8 @@ var GitDataProvider = class {
       )
     };
   }
-  // A watch's window, whatever it says, asks for a pass.
-  heard(root) {
-    this.changed(root);
-  }
-  // A watch fire: the repo changed since any read in flight began.
+  // A watch's window, whatever it says: the repo changed since any read in
+  // flight began.
   changed(root) {
     const state = this.repos.get(root);
     if (!state) return;
@@ -71761,7 +71758,7 @@ var GitDataProvider = class {
       gitDir,
       this.inner.resolveCommonGitDir(gitDir)
     );
-    const followed = this.watchers.follow(held, spec, () => this.heard(root));
+    const followed = this.watchers.follow(held, spec, () => this.changed(root));
     if (followed.move === "rebound") {
       this.logger(
         "info",
