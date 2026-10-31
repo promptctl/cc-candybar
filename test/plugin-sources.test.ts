@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -130,6 +131,7 @@ function rig(): Rig {
   };
   const watchers = new WatcherRegistry({ counters, logger: log });
   const providers = createPayloadProviders({
+    launcher: processLauncher,
     watchers,
     fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
@@ -139,6 +141,7 @@ function rig(): Rig {
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
     {
+      launcher: processLauncher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
@@ -254,6 +257,7 @@ describe("a source's declaration", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -339,6 +343,7 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -367,6 +372,7 @@ describe("a source's declaration", () => {
          root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -476,6 +482,7 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -589,7 +596,7 @@ describe("a session reads its source", () => {
 describe("a source's document", () => {
   function sourceDoc(payload: () => unknown) {
     const store = new VariableStore();
-    const registry = new SourceRegistry(store);
+    const registry = new SourceRegistry(processLauncher, store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
       read: (p) => resolvePath(payload(), p),

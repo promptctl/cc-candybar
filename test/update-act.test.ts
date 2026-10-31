@@ -9,7 +9,7 @@ import path from "node:path";
 
 import {
   endJob,
-  launchJobSync,
+  processLauncher,
   readJobEnd,
   type JobFiles,
 } from "../src/proc/launch";
@@ -124,7 +124,7 @@ const marker = () => path.join(scratch, "ran");
 describe("launchJobSync: a job whose output and verdict are files", () => {
   test("released, it runs: output and the exit land in its files", async () => {
     const files = jobFiles();
-    const job = launchJobSync(
+    const job = processLauncher.launchJobSync(
       {
         bin: "sh",
         args: ["-c", "echo out; echo err >&2; touch ran; exit 3"],
@@ -144,7 +144,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
 
   test("withdrawn, the program never runs and no verdict is written", async () => {
     const files = jobFiles();
-    const job = launchJobSync(
+    const job = processLauncher.launchJobSync(
       { bin: "touch", args: [marker()], category: "update.apply" },
       files,
     );
@@ -160,7 +160,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
 
   test("a program that is not found fails in its own stderr, as a non-zero exit", async () => {
     const files = jobFiles();
-    const job = launchJobSync(
+    const job = processLauncher.launchJobSync(
       { bin: "ccb-no-such-program", category: "update.apply" },
       files,
     );
@@ -173,7 +173,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
 
   test("the first verdict wins: a timeout never overwrites an exit, and a late exit never overwrites a timeout", async () => {
     const exited = jobFiles();
-    const quick = launchJobSync(
+    const quick = processLauncher.launchJobSync(
       { bin: "true", category: "update.apply" },
       exited,
     );
@@ -187,7 +187,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
       ...jobFiles(),
       status: path.join(scratch, "status-2"),
     };
-    const slow = launchJobSync(
+    const slow = processLauncher.launchJobSync(
       { bin: "sleep", args: ["30"], category: "update.apply" },
       ended,
     );
@@ -200,7 +200,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
 
   test("ending a job whose program exited still ends what it left running, and keeps the exit", async () => {
     const files = jobFiles();
-    const job = launchJobSync(
+    const job = processLauncher.launchJobSync(
       {
         bin: "sh",
         args: ["-c", "sleep 30 & exit 0"],
@@ -259,6 +259,7 @@ describe("claimAct: one act per bundle", () => {
   test("a claim starts the job, and every daemon reading the bundle sees it running, then its verdict", async () => {
     const dir = dirOf();
     const claim = claimAct(
+      processLauncher,
       dir,
       null,
       "id-1",
@@ -289,6 +290,7 @@ describe("claimAct: one act per bundle", () => {
   test("a claim onto an act that exists loses, and its program never runs", async () => {
     const dir = dirOf();
     const first = claimAct(
+      processLauncher,
       dir,
       null,
       "id-1",
@@ -301,6 +303,7 @@ describe("claimAct: one act per bundle", () => {
     ended.push(makeActReader(dir, sameLeader).read()!.record.pid);
     // A second daemon that judged the bundle idle from the same empty read.
     const second = claimAct(
+      processLauncher,
       dir,
       null,
       "id-1",
@@ -327,6 +330,7 @@ describe("claimAct: one act per bundle", () => {
     );
     // A claimer that read act 2 as newest before act 5 was claimed.
     const stale = claimAct(
+      processLauncher,
       dir,
       2,
       "id-1",
@@ -345,6 +349,7 @@ describe("claimAct: one act per bundle", () => {
     const dir = dirOf();
     expect(
       claimAct(
+        processLauncher,
         dir,
         null,
         "id-1",
@@ -360,7 +365,7 @@ describe("claimAct: one act per bundle", () => {
       "the first act to succeed",
     );
     expect(
-      claimAct(dir, 1, "id-2", TOUCH(marker()), 60_000, Date.now(), sameLeader),
+      claimAct(processLauncher, dir, 1, "id-2", TOUCH(marker()), 60_000, Date.now(), sameLeader),
     ).toEqual({ ok: true, act: 2 });
     expect(fs.readdirSync(dir)).toEqual(["2"]);
     await until(
@@ -377,6 +382,7 @@ describe("claimAct: one act per bundle", () => {
     });
     expect(
       claimAct(
+        processLauncher,
         dir,
         null,
         "id-1",
@@ -397,7 +403,7 @@ describe("claimAct: one act per bundle", () => {
 
   test("a job started before this boot is not the recorded one, whatever holds its pid", () => {
     const dir = dirOf();
-    claimAct(dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
+    claimAct(processLauncher, dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
     const { record } = makeActReader(dir, sameLeader).read()!;
     ended.push(record.pid);
     expect(isRecordedJob(record, sameLeader)).toBe(true);
@@ -437,6 +443,7 @@ describe("claimAct: one act per bundle", () => {
   test("an act number claimed again names the new act, not the one this reader knew", async () => {
     const dir = dirOf();
     claimAct(
+      processLauncher,
       dir,
       null,
       "id-1",
@@ -451,7 +458,7 @@ describe("claimAct: one act per bundle", () => {
       "the first act to succeed",
     );
     fs.rmSync(dir, { recursive: true });
-    claimAct(dir, null, "id-2", SLEEP, 60_000, Date.now(), sameLeader);
+    claimAct(processLauncher, dir, null, "id-2", SLEEP, 60_000, Date.now(), sameLeader);
     const again = reader.read()!;
     ended.push(again.record.pid);
     expect(again.record.identity).toBe("id-2");
@@ -464,6 +471,7 @@ describe("claimAct: one act per bundle", () => {
     fs.writeFileSync(path.join(dir, "1", "record.json"), "{ torn");
     const logged: string[] = [];
     const watch = makeUpdateWatch({
+      launcher: processLauncher,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dir,
       intervalMs: 60_000,
@@ -489,6 +497,7 @@ describe("claimAct: one act per bundle", () => {
   test("a closed watch keeps no dismiss gate, and a late release poll registers none", async () => {
     let answer!: (latest: Response) => void;
     const watch = makeUpdateWatch({
+      launcher: processLauncher,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dirOf(),
       intervalMs: 60_000,

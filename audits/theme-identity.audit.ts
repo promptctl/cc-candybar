@@ -45,6 +45,7 @@ import {
   type ShadeName,
   type VariationName,
 } from "../src/themes/decor";
+import { processLauncher } from "../src/proc/launch";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
@@ -125,7 +126,7 @@ const CALM = {
 // over between renders but the compiled config itself. One instant for every
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore();
-const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
+const REGISTRY = new SourceRegistry(processLauncher, STORE, "", new SessionState());
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());

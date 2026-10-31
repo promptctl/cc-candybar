@@ -19,7 +19,7 @@ import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { handlerCommand, handlerScriptPath } from "../install/index.js";
-import { launchSync, type LaunchCategory } from "../proc/launch.js";
+import { processLauncher, type LaunchCategory } from "../proc/launch.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
 
 const ok = <T>(value: T): Asked<T> => ({ kind: "ok", value });
@@ -176,7 +176,7 @@ function run(
   bin: string,
   args: readonly string[],
 ): Asked<string> {
-  const result = launchSync({
+  const result = processLauncher.launchSync({
     bin,
     args: [...args],
     category,

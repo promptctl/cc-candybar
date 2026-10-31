@@ -9,6 +9,7 @@
 // and one real darwin probe is run at the end, where the claim genuinely is
 // about this machine.
 
+import { processLauncher } from "../src/proc/launch";
 import os from "node:os";
 
 import {
@@ -78,21 +79,21 @@ describe("platformProbes", () => {
   // The rows are the platform fact — asserted by the command each one would run,
   // because that string is what a human re-runs by hand from the report.
   test("darwin prefers footprint, then vmmap, both naming the pid", () => {
-    expect(platformProbes("darwin", 4242).map((p) => p.name)).toEqual([
+    expect(platformProbes(processLauncher, "darwin", 4242).map((p) => p.name)).toEqual([
       "/usr/bin/footprint -p 4242",
       "/usr/bin/vmmap --summary 4242",
     ]);
   });
 
   test("linux reads the rollup first, then status — no subprocess either way", () => {
-    expect(platformProbes("linux", 4242).map((p) => p.name)).toEqual([
+    expect(platformProbes(processLauncher, "linux", 4242).map((p) => p.name)).toEqual([
       "/proc/self/smaps_rollup",
       "/proc/self/status",
     ]);
   });
 
   test("an unknown platform contributes no probes rather than a wrong one", () => {
-    expect(platformProbes("win32", 4242)).toEqual([]);
+    expect(platformProbes(processLauncher, "win32", 4242)).toEqual([]);
   });
 });
 
@@ -105,7 +106,7 @@ const REAL = os.platform() === "darwin" || os.platform() === "linux";
 (REAL ? test : test.skip)(
   "the real probes attribute this process on this host",
   () => {
-    const report = memoryReport(platformProbes(os.platform(), process.pid));
+    const report = memoryReport(platformProbes(processLauncher, os.platform(), process.pid));
     expect(report).toContain("# memory report from:");
     expect(report).not.toContain("no probe answered");
     // Whatever answered, it must carry a size — the one thing every probe on
@@ -164,11 +165,11 @@ describe("the memory charge", () => {
   });
 
   test("off macOS, RSS is the charge", async () => {
-    expect(await chargeProbe("linux", 1)(42)).toEqual({ kind: "charged", measure: "rss", bytes: 42 });
+    expect(await chargeProbe(processLauncher, "linux", 1)(42)).toEqual({ kind: "charged", measure: "rss", bytes: 42 });
   });
 
   (os.platform() === "darwin" ? test : test.skip)("on this Mac, footprint answers for this process", async () => {
-    const charge = await chargeProbe("darwin", process.pid)(process.memoryUsage().rss);
+    const charge = await chargeProbe(processLauncher, "darwin", process.pid)(process.memoryUsage().rss);
     expect(charge).toMatchObject({ kind: "charged", measure: "phys_footprint" });
     expect(charge.bytes).toBeGreaterThan(0);
   });

@@ -6,6 +6,7 @@
 // a string becomes drawn characters, and this pins that every segment's text
 // takes that path on the production render.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { stripAnsi } from "./helpers/ansi";
@@ -36,7 +37,7 @@ const CONFIG = parseAndValidate(
 
 function render(s: string): string {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     return renderDsl(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS);

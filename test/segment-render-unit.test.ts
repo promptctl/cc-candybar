@@ -12,6 +12,7 @@
 //   2. Two adjacent segments are always joined by a filled arrow, whatever
 //      their grounds: no thin divider is drawn in its place.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -48,7 +49,7 @@ function render(src: string, hookData: Record<string, unknown>): string {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return renderDsl(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
 }

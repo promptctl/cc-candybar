@@ -1,4 +1,4 @@
-import { launchSync, type LaunchOpts, type LaunchResult } from "../proc/launch";
+import type { Launcher } from "../proc/launch";
 
 // ─── Process start-time fingerprint ──────────────────────────────────────────
 //
@@ -57,8 +57,6 @@ export type StartTimeRead =
 
 // The subprocess boundary, injected so the parse/branch logic is exercised by
 // input enumeration with a fake launcher while the real path runs the real `ps`.
-export type Launcher = (opts: LaunchOpts) => LaunchResult;
-
 // [LAW:effects-at-boundaries][LAW:single-enforcer] The sole effect (spawning
 // `ps`) goes through the one subprocess enforcer, `launchSync`. The ONLY sound
 // signal `ps` gives is a printed start-time row (a live pid we could read);
@@ -68,7 +66,7 @@ export type Launcher = (opts: LaunchOpts) => LaunchResult;
 // code that cannot distinguish "gone" from "cannot read".
 export function readStartTime(
   pid: number,
-  launch: Launcher = launchSync,
+  launch: Launcher["launchSync"],
 ): StartTimeRead {
   const res = launch({
     bin: "ps",
@@ -139,7 +137,7 @@ export function sameLiveProcess(
 // impossible for our own live pid; if it somehow occurs we also record null.
 export function readOwnStartTime(
   pid: number,
-  read: (pid: number) => StartTimeRead = readStartTime,
+  read: (pid: number) => StartTimeRead,
 ): string | null {
   const r = read(pid);
   return r.kind === "start" ? r.token : null;

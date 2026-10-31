@@ -17,6 +17,7 @@
 // drawn, and otherwise lifted off the cell it enters: in truecolor to the very
 // colour rich-js's joiner lifts it to, with rich-js itself as the oracle.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   listThemePalettes,
@@ -343,7 +344,7 @@ function forEachStage(
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   recordRender(sessionState, "s1");
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });

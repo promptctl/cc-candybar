@@ -20,6 +20,7 @@
 //     opens is the depth-0 band of the bar's lineage every bar trigger opens —
 //     the anchor of the chain.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -185,7 +186,7 @@ function build(src: string, withDefault = false) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();

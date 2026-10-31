@@ -10,6 +10,7 @@
 //   - a global the menu has never seen — a throwaway enum — gets a working
 //     control from the same generator, with its option domain and its gate.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -229,7 +230,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const render = () =>
       renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);

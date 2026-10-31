@@ -47,7 +47,7 @@ export async function loggedLines(
 export const renderEventsOf = (
   lines: readonly string[],
   sessionId: string,
-): string[] => lines.filter((l) => l.includes(` render sid=${sessionId} `));
+): string[] => lines.filter((l) => l.includes(`] render sid=${sessionId} `));
 
 // [LAW:one-source-of-truth] A render event whose reply its client read: an
 // attempt the client gave up on is logged too, so a count of a session's

@@ -1,3 +1,4 @@
+import type { Launcher } from "../proc/launch";
 import { runTmuxAsync } from "../proc/tmux";
 import type { TmuxHint } from "../tmux-hint";
 import type { Holds } from "../utils/holds";
@@ -29,12 +30,11 @@ const MAX_ENTRIES = 64;
 export class TmuxService {
   private readonly names: KeyedSource<TmuxHint, string>;
 
-  constructor(
-    opts: {
-      readonly logger?: DaemonLogger;
-      readonly ledger?: RefreshLedger;
-    } = {},
-  ) {
+  constructor(opts: {
+    readonly launcher: Launcher;
+    readonly logger?: DaemonLogger;
+    readonly ledger?: RefreshLedger;
+  }) {
     const logger = opts.logger ?? quietLogger;
     this.names = new KeyedSource({
       name: "tmux",
@@ -44,7 +44,7 @@ export class TmuxService {
       keyOf: (hint) => `${hint.socket}\n${hint.pane}`,
       fields: (hint) =>
         `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
-      read: askSessionName,
+      read: (hint) => askSessionName(opts.launcher, hint),
       every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
       maxEntries: MAX_ENTRIES,
       logger,
@@ -73,8 +73,11 @@ export class TmuxService {
   }
 }
 
-async function askSessionName(hint: TmuxHint): Promise<Outcome<string>> {
-  const run = await runTmuxAsync(hint, "tmux", [
+async function askSessionName(
+  launcher: Launcher,
+  hint: TmuxHint,
+): Promise<Outcome<string>> {
+  const run = await runTmuxAsync(launcher, hint, "tmux", [
     "display-message",
     "-p",
     "-t",

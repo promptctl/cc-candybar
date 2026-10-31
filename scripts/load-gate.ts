@@ -51,6 +51,7 @@ import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
 import { logPath } from "../src/daemon/paths.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
+import { processLauncher } from "../src/proc/launch.js";
 import {
   openFrameStream,
   type StreamEnd,
@@ -621,7 +622,7 @@ interface Sample {
 const samples: Sample[] = [];
 // A daemon too busy to answer stats inside the stats client's budget.
 const unanswered: string[] = [];
-const charge = (pid: number) => chargeProbe(process.platform, pid);
+const charge = (pid: number) => chargeProbe(processLauncher, process.platform, pid);
 
 async function sample(started: number): Promise<void> {
   // [LAW:no-ambient-temporal-coupling] The phase and offset of the instant the

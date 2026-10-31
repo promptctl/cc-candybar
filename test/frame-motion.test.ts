@@ -2,6 +2,7 @@
 // off the cells it drew, so a template's `frames` moves the bar exactly as an
 // effect does, and a bar with neither is still.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { SessionState } from "../src/daemon/session-state";
@@ -33,7 +34,7 @@ function frameOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp",

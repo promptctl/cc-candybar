@@ -10,6 +10,7 @@
 //   - A file that puts them out of order, or still declares a retired
 //     threshold variable, fails to load and says what to write instead.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
@@ -62,7 +63,7 @@ function buildRuntime(src: string, utilization: number) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, SID);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const render = (): string =>
     renderDsl(

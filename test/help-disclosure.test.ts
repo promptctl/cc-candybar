@@ -15,6 +15,7 @@
 //   3. It is declared as every `(?)` is: one `declareHelp` call.
 //   4. Width, mechanically, at 80 and 120 columns.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -73,7 +74,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, SID);
 

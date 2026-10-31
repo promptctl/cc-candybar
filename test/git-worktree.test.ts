@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +19,7 @@ describe("GitService isWorktree", () => {
   let root: string;
   let mainRepo: string;
   let worktree: string;
-  const gitService = new GitService();
+  const gitService = new GitService(processLauncher);
 
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "candybar-worktree-test-"));

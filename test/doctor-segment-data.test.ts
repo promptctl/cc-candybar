@@ -7,6 +7,7 @@
 // event field, and what a payload or the daemon's stats say — never on how
 // they are computed.
 
+import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -373,18 +374,18 @@ describe("the forge probe over a real checkout", () => {
   };
 
   test("a directory in no checkout names no forge", () => {
-    expect(forgeLogin(bin)).toEqual({ kind: "ok", value: null });
+    expect(forgeLogin(processLauncher, bin)).toEqual({ kind: "ok", value: null });
   });
 
   test("a checkout with no forge remote names none", () => {
     remote("/srv/git/mirror.git");
-    expect(forgeLogin(repo())).toEqual({ kind: "ok", value: null });
+    expect(forgeLogin(processLauncher, repo())).toEqual({ kind: "ok", value: null });
   });
 
   test("gh asked for the remote's own host, and logged in", () => {
     remote("git@github.com:o/r.git");
     gh('[ "$*" = "auth token --hostname github.com" ] && echo tok || exit 3');
-    expect(forgeLogin(repo())).toEqual({
+    expect(forgeLogin(processLauncher, repo())).toEqual({
       kind: "ok",
       value: { cli: "gh", host: "github.com", status: "ready" },
     });
@@ -393,7 +394,7 @@ describe("the forge probe over a real checkout", () => {
   test("gh asked for github.com under an ssh-over-443 remote, as gh keys its login", () => {
     remote("ssh://git@ssh.github.com:443/o/r.git");
     gh('[ "$*" = "auth token --hostname github.com" ] && echo tok || exit 3');
-    expect(forgeLogin(repo())).toEqual({
+    expect(forgeLogin(processLauncher, repo())).toEqual({
       kind: "ok",
       value: { cli: "gh", host: "github.com", status: "ready" },
     });
@@ -402,7 +403,7 @@ describe("the forge probe over a real checkout", () => {
   test("gh with no token for the host is logged out, with its line", () => {
     remote("https://github.com/o/r.git");
     gh('echo "no oauth token found for github.com" >&2; exit 1');
-    expect(forgeLogin(repo())).toEqual({
+    expect(forgeLogin(processLauncher, repo())).toEqual({
       kind: "ok",
       value: {
         cli: "gh",
@@ -414,7 +415,7 @@ describe("the forge probe over a real checkout", () => {
 
   test("no gh on PATH is missing", () => {
     remote("https://github.com/o/r.git");
-    expect(forgeLogin(repo())).toMatchObject({
+    expect(forgeLogin(processLauncher, repo())).toMatchObject({
       kind: "ok",
       value: { status: "missing" },
     });

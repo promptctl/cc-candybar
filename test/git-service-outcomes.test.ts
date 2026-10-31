@@ -5,6 +5,7 @@
 // [LAW:types-are-the-program] These assert the states the old
 // catch-and-substitute blocks made unrepresentable.
 
+import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +21,7 @@ function run(cmd: string, cwd: string): void {
 describe("GitService outcome classification", () => {
   let root: string;
   let repo: string;
-  const svc = new GitService();
+  const svc = new GitService(processLauncher);
 
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "candybar-git-outcome-"));

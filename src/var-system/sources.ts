@@ -9,7 +9,7 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
-import { launch } from "../proc/launch";
+import type { Launcher } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import {
@@ -198,6 +198,7 @@ interface SourceReader {
 }
 
 function shellReader(
+  launcher: Launcher,
   command: string,
   cwd: string,
   signal: AbortSignal,
@@ -208,14 +209,14 @@ function shellReader(
     // no-match, JSON parse — names where it ran.
     where: `output of "${command}" in ${cwd}`,
     read: async () => {
-      const r = await launch({
+      const r = await launcher.launch({
         bin: "/bin/sh",
         args: ["-c", command],
         cwd,
         category: "user-shell",
         signal,
       });
-      // Only the source's own abort ends a run. The launch scope's is a daemon
+      // Only the source's own abort ends a run. The launcher's is a daemon
       // closing under a live source: a failed read, like any other.
       if (!r.ok && r.reason === "aborted" && signal.aborted)
         throw signal.reason;
@@ -694,6 +695,8 @@ export class SourceRegistry {
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
+    // Who a shell source's program belongs to.
+    private readonly launcher: Launcher,
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
     sessionState?: SessionStateReader,
@@ -725,6 +728,7 @@ export class SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view(): SourceRegistry {
     return new SourceRegistry(
+      this.launcher,
       new VariableStore(this.store),
       this.defaultEmptyValue,
       this.sessionState,
@@ -858,7 +862,7 @@ export class SourceRegistry {
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
-      shellReader(command, opts.cwd, this.abort.signal),
+      shellReader(this.launcher, command, opts.cwd, this.abort.signal),
       clampShellCache(name, opts.cache),
       opts.parse,
     );

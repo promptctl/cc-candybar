@@ -5,12 +5,11 @@
 // (src/tmux-hint.ts); this is the one place that spells `tmux -S <socket>`,
 // its timeout, and how a failure reads.
 
-import {
-  launch,
-  launchSync,
-  type LaunchCategory,
-  type LaunchOpts,
-  type LaunchResult,
+import type {
+  LaunchCategory,
+  LaunchOpts,
+  LaunchResult,
+  Launcher,
 } from "./launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
 
@@ -52,26 +51,28 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
 // Holds the daemon's loop until tmux answers: for a click, which must finish
 // before its handler returns.
 export function runTmux(
+  launcher: Launcher,
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
   stdinInput?: string,
 ): TmuxRun {
   return tmuxRun(
-    launchSync(invocation(hint, category, args, stdinInput)),
+    launcher.launchSync(invocation(hint, category, args, stdinInput)),
     args,
   );
 }
 
 // The same invocation off the loop: for a render lane.
 export async function runTmuxAsync(
+  launcher: Launcher,
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
   stdinInput?: string,
 ): Promise<TmuxRun> {
   return tmuxRun(
-    await launch(invocation(hint, category, args, stdinInput)),
+    await launcher.launch(invocation(hint, category, args, stdinInput)),
     args,
   );
 }

@@ -8,6 +8,7 @@
 //   - with no `fg:` the cell carries no text colour either: the terminal's own
 //     text on its own ground, the one pair known to read there.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
@@ -43,7 +44,7 @@ function render() {
     new Set(listResolvablePaletteNames()),
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const out = renderDsl(

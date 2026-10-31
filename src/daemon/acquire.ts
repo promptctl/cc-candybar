@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { launchDetachedSync } from "../proc/launch";
+import { processLauncher } from "../proc/launch";
 import { heapCapMb } from "./limits";
 import process from "node:process";
 import {
@@ -681,7 +681,7 @@ function spawnDaemonDetachedReal(): boolean {
   // process-table pressure) propagates as `false` instead of being silently
   // reported as success. The previous `void launch({detached:true})` form
   // discarded the Promise and unconditionally returned true.
-  const result = launchDetachedSync({
+  const result = processLauncher.launchDetachedSync({
     bin: node,
     args: daemonArgs(script, process.env),
     category: "daemon-spawn",

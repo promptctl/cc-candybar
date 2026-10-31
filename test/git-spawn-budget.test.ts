@@ -9,6 +9,7 @@
 // invented one: this budget is only meaningful for the flags production asks
 // for.
 
+import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
 import {
   mkdirSync,
@@ -74,7 +75,7 @@ describe("git spawns per cache miss", () => {
   });
 
   test("one fetch with the gitaculous option set costs the invocations listed here", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const info = await svc.getGitInfo(repo, GITACULOUS_OPTIONS);
 
     expect(info.kind).toBe("ok");
@@ -90,7 +91,7 @@ describe("git spawns per cache miss", () => {
   // deliberately not cached (only `ok` is), so this cost was paid once per
   // render, forever, by every non-repo session. The ascent takes it to nothing.
   test("a cwd outside any repo spawns no git at all", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const info = await svc.getGitInfo(root, GITACULOUS_OPTIONS);
 
     expect(info.kind).toBe("absent");
@@ -101,7 +102,7 @@ describe("git spawns per cache miss", () => {
   // does not happen. A commit's committer date never changes, so the only honest
   // lifetime for it is "until HEAD moves" — which is what this measures.
   test("a second fetch at the same commit does not re-ask for the timestamp", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     await svc.getGitInfo(repo, GITACULOUS_OPTIONS);
 
     svc.invocations.length = 0;
@@ -114,7 +115,7 @@ describe("git spawns per cache miss", () => {
   });
 
   test("a new commit is asked about exactly once", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const moving = join(root, "moving");
     mkdirSync(moving);
     run("git init -q -b main", moving);
@@ -141,7 +142,7 @@ describe("git spawns per cache miss", () => {
   // reported is the answer — so it costs no spawn at all, where the old implicit
   // `git log -1` had to fail to find that out.
   test("an unborn HEAD costs no timestamp spawn", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const empty = join(root, "empty");
     mkdirSync(empty);
     run("git init -q -b main", empty);
@@ -156,7 +157,7 @@ describe("git spawns per cache miss", () => {
   // [LAW:verifiable-goals] The remotes memo, and the two ways it must come loose:
   // a config edit, and never on its own.
   test("a second fetch does not re-read remotes, and a config edit makes it", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const stable = join(root, "remotes");
     mkdirSync(stable);
     run("git init -q -b main", stable);
@@ -193,7 +194,7 @@ describe("git spawns per cache miss", () => {
   // git's own writes replace the file — while a hand edit from an editor that
   // truncates and rewrites would have been invisible for the daemon's lifetime.
   test("an in-place config edit invalidates the memo", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const inplace = join(root, "inplace");
     mkdirSync(inplace);
     run("git init -q -b main", inplace);
@@ -224,7 +225,7 @@ describe("git spawns per cache miss", () => {
   // memo is keyed by that file rather than by the directory asking, which is what
   // makes this true rather than coincidental.
   test("a worktree shares the main repo's remotes memo", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const shared = join(root, "shared");
     mkdirSync(shared);
     run("git init -q -b main", shared);
@@ -247,7 +248,7 @@ describe("git spawns per cache miss", () => {
   });
 
   test("a cwd below the repo root finds the root without spawning git", async () => {
-    const svc = new CountingGitService();
+    const svc = new CountingGitService(processLauncher);
     const info = await svc.getGitInfo(nested, GITACULOUS_OPTIONS);
 
     expect(info.kind).toBe("ok");

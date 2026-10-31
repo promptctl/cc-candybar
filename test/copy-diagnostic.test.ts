@@ -3,27 +3,20 @@
 // under that key: the full prompt reaches the clipboard while the link stays
 // short, and a key that draw does not list is refused loudly.
 
-import type { LaunchOpts } from "../src/proc/launch";
-
-const launched: LaunchOpts[] = [];
-jest.mock("../src/proc/launch", () => {
-  const actual =
-    jest.requireActual<typeof import("../src/proc/launch")>(
-      "../src/proc/launch",
-    );
-  return {
-    ...actual,
-    launchSync: (opts: LaunchOpts) => {
-      launched.push(opts);
-      return { ok: true, exitCode: 0, stdout: "", stderr: "" };
-    },
-  };
-});
-
+import { processLauncher, type LaunchOpts } from "../src/proc/launch";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/daemon/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
 import { clickUrl, testVerbContext } from "./helpers/click";
+
+const launched: LaunchOpts[] = [];
+const recording = {
+  ...processLauncher,
+  launchSync: (opts: LaunchOpts) => {
+    launched.push(opts);
+    return { ok: true as const, exitCode: 0, stdout: "", stderr: "" };
+  },
+};
 
 const SID = "sid-copy";
 const PROMPT = `Fix my config.\n\n${"a placement that names nothing; ".repeat(200)}`;
@@ -52,6 +45,7 @@ test("the first line's click copies the full prompt, though its link carries onl
   expect(link).not.toContain("placement");
   clickUrl(link, {
     ...testVerbContext(new SessionState()),
+    launcher: recording,
     diagnosticCopy: (sid, by, key) =>
       sid === SID && by === "request" ? copies.get(key) : undefined,
   });
@@ -66,6 +60,7 @@ test("a key the session's last draw no longer lists is refused, and nothing is c
   expect(() =>
     clickUrl(link, {
       ...testVerbContext(new SessionState()),
+    launcher: recording,
       diagnosticCopy: () => undefined,
     }),
   ).toThrow(/no longer listed/);

@@ -9,6 +9,7 @@
 import path from "node:path";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
+import { processLauncher } from "../../../src/proc/launch.js";
 import { GitService } from "../../../src/segments/git.js";
 import { hookData } from "../../lib/hook-data.js";
 import {
@@ -53,7 +54,7 @@ const gitBenchmark = ([name, shape, samples]: (typeof REPOS)[number]): Benchmark
     try {
       const repo = path.join(root, "repo");
       makeRepo(repo, shape);
-      const service = new GitService();
+      const service = new GitService(processLauncher);
       const ms = await repeat(plan.samples, async () => {
         const info = await service.getGitInfo(repo, EVERYTHING);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other

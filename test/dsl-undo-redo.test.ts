@@ -22,6 +22,7 @@
 //   9. Undo refuses loudly when a target changed since the step — a hand
 //      edit or another session's write — and never overwrites it.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { chmodSync, writeFileSync } from "node:fs";
@@ -159,7 +160,7 @@ function buildRuntime(
   const history = shared?.history ?? durable.historyFor(sessionState);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (): string =>
     renderDsl(

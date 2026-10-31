@@ -3,11 +3,13 @@
 // carry the cause, not only the class of failure.
 
 import { clickLaunch } from "../src/daemon/verbs";
+import { processLauncher } from "../src/proc/launch";
 
 describe("clickLaunch", () => {
   test("a program that cannot start is a throw naming the spawn's own error", () => {
     expect(() =>
       clickLaunch(
+        processLauncher,
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],

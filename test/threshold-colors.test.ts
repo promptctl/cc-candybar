@@ -17,6 +17,7 @@
 // change. [LAW:behavior-not-structure] — the contract is the colour at each
 // value, whichever spelling computes it.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import {
@@ -214,7 +215,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     return renderDsl(

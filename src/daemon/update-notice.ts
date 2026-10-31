@@ -34,7 +34,7 @@ import {
   type Currency,
   type Version,
 } from "../install/currency";
-import type { LaunchOpts } from "../proc/launch";
+import type { LaunchOpts, Launcher } from "../proc/launch";
 import {
   diagnosticSpan,
   UPDATE_SEVERITY,
@@ -58,6 +58,7 @@ import {
   type ActFacts,
   type ActState,
 } from "./update-act";
+import { readStartTime } from "./process-fingerprint";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
@@ -253,6 +254,8 @@ export function updateOf(
 }
 
 export interface UpdateWatchOptions {
+  // Who the act's job and its `ps` belong to.
+  readonly launcher: Launcher;
   // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
   readonly entryUrl: string;
   // Where this bundle's acts are recorded (src/daemon/update-act.ts).
@@ -350,6 +353,7 @@ export function reserveUpdateKeys(): () => void {
 
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
+    launcher,
     entryUrl,
     actsDir,
     intervalMs,
@@ -363,7 +367,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // honestly unchecked — a notice asked for before arm() renders nothing.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
-  const acts = makeActReader(actsDir);
+  const acts = makeActReader(actsDir, (pid) =>
+    readStartTime(pid, launcher.launchSync),
+  );
   // [LAW:one-source-of-truth] The act as last read, for the notice's render
   // and for noticing an end; null until the first read. Every decision — a
   // second click, a restart's hold — reads the record afresh instead, since a
@@ -517,6 +523,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       // The child inherits the daemon's environment (PATH included): no env
       // is passed, so nothing about the command is composed from data.
       const claim = claimAct(
+        launcher,
         actsDir,
         newest === null ? null : newest.act,
         updateIdentity(update),

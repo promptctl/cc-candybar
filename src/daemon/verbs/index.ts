@@ -18,7 +18,7 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import { launchSync, type LaunchOpts } from "../../proc/launch";
+import type { LaunchOpts, Launcher } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
@@ -184,6 +184,8 @@ export interface DaemonContext {
   // [LAW:effects-at-boundaries] The daemon's clock.
   readonly now: () => Instant;
   readonly dlog: (level: "info" | "warn" | "error", msg: string) => void;
+  // Who a click's programs belong to.
+  readonly launcher: Launcher;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
@@ -325,11 +327,12 @@ function oneArg(value: string): string {
 // one outcome among many — the click is acknowledged and the rejection is
 // logged. Other failures are genuine errors that surface as RENDER_FAILED.
 export function clickLaunch(
+  launcher: Launcher,
   opts: LaunchOpts,
   what: string,
   dlog: DaemonContext["dlog"],
 ): void {
-  const result = launchSync(opts);
+  const result = launcher.launchSync(opts);
   if (result.ok) return;
   if (result.reason === "rate-limited") {
     dlog("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
@@ -347,6 +350,7 @@ export function clickLaunch(
 // segment) and the diagnostic verbs (already hold a plain message) funnel here.
 function pbcopy(text: string, ctx: VerbContext): void {
   clickLaunch(
+    ctx.launcher,
     { bin: "/usr/bin/pbcopy", stdinInput: text, category: "click.pbcopy" },
     "pbcopy",
     ctx.dlog,
@@ -385,6 +389,7 @@ const copyDiagnostic: VerbHandler = (value, ctx) => {
 
 const openVscode: VerbHandler = (value, ctx) =>
   clickLaunch(
+    ctx.launcher,
     {
       bin: "/usr/bin/open",
       args: ["-a", "Visual Studio Code", oneArg(value)],

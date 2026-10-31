@@ -14,6 +14,7 @@
 // checkConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
@@ -193,6 +194,7 @@ describe("preset compile diagnostics name the authored path", () => {
     try {
       const config = parseAndValidate("<presets>", src, ALLOWED);
       const registry = new SourceRegistry(
+        processLauncher,
         new VariableStore(),
         "",
         new SessionState(),
@@ -295,7 +297,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const config = parseAndValidate("<presets>", src, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // A click is gated by the config its session renders; record the render so
     // the click below resolves this config and passes through its real gate.

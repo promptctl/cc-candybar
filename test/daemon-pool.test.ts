@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -78,7 +79,7 @@ describe("daemon pool", () => {
       stdio: "ignore",
     });
     const deadPid = dead.pid!;
-    const startTimeRead = readStartTime(deadPid);
+    const startTimeRead = readStartTime(deadPid, processLauncher.launchSync);
     const deadStartTime = startTimeRead.kind === "start" ? startTimeRead.token : null;
     dead.kill("SIGKILL");
     await new Promise<void>((resolve) => dead.once("exit", () => resolve()));

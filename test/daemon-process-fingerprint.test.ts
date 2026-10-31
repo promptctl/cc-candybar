@@ -3,14 +3,20 @@ import {
   readStartTime,
   readOwnStartTime,
   sameLiveProcess,
-  type Launcher,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
-import { type LaunchResult } from "../src/proc/launch";
+import {
+  processLauncher,
+  type LaunchResult,
+  type Launcher,
+} from "../src/proc/launch";
+
+const realRead = (pid: number): StartTimeRead =>
+  readStartTime(pid, processLauncher.launchSync);
 
 // A fake launcher yielding a fixed LaunchResult, so readStartTime's parse/branch
 // logic is exercised without a real `ps`.
-const launcher = (res: LaunchResult): Launcher => () => res;
+const launcher = (res: LaunchResult): Launcher["launchSync"] => () => res;
 const okStdout = (stdout: string): LaunchResult => ({
   ok: true,
   stdout,
@@ -28,7 +34,7 @@ const okStdout = (stdout: string): LaunchResult => ({
 
 describe("readStartTime (real ps)", () => {
   test("our own live pid → start with a non-empty token", () => {
-    const r = readStartTime(process.pid);
+    const r = realRead(process.pid);
     expect(r.kind).toBe("start");
     if (r.kind === "start") expect(r.token.length).toBeGreaterThan(0);
   });
@@ -40,7 +46,7 @@ describe("readStartTime (real ps)", () => {
     const deadPid: number = await new Promise((resolve) => {
       child.once("exit", () => resolve(child.pid as number));
     });
-    expect(readStartTime(deadPid).kind).toBe("unavailable");
+    expect(realRead(deadPid).kind).toBe("unavailable");
   });
 });
 
@@ -63,7 +69,7 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
   // locale (strftime format) and the timezone (localtime rendering).
   test("pins LC_ALL=C and TZ=UTC on the ps subprocess (locale- and tz-independent token)", () => {
     let seenEnv: NodeJS.ProcessEnv | undefined;
-    const capture: Launcher = (opts) => {
+    const capture: Launcher["launchSync"] = (opts) => {
       seenEnv = opts.env;
       return okStdout("Thu Jul  9 05:04:25 2026");
     };
@@ -170,7 +176,7 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
 
 describe("readOwnStartTime", () => {
   test("our own pid → a non-null token", () => {
-    expect(readOwnStartTime(process.pid)).not.toBeNull();
+    expect(readOwnStartTime(process.pid, realRead)).not.toBeNull();
   });
 
   test("unavailable read → null (unfingerprinted lease)", () => {

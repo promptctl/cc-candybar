@@ -15,7 +15,7 @@ import {
   userPluginRoot,
 } from "./config/loader/plugin-folders.js";
 import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
-import { launchSync } from "./proc/launch.js";
+import { processLauncher } from "./proc/launch.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -90,7 +90,12 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // every call acts on the clone. `shown` stands for `url` in messages.
 function cloneRepo(url: string, shown: string, into: string): void {
   const git = (env: NodeJS.ProcessEnv, ...args: string[]): string => {
-    const run = launchSync({ bin: "git", args, env, category: "plugin.git" });
+    const run = processLauncher.launchSync({
+      bin: "git",
+      args,
+      env,
+      category: "plugin.git",
+    });
     if (!run.ok)
       throw new Error(
         `git ${args.map((a) => (a === url ? shown : a)).join(" ")} failed (${run.reason}): ${run.stderr.trim() || run.error || ""}`,

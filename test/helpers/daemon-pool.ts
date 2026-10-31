@@ -25,6 +25,7 @@
 // forcing them through one type would be the "wrong abstraction stretched
 // over a shape it wasn't designed for" the carrying-cost law warns against.
 
+import { processLauncher } from "../../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -101,9 +102,12 @@ function readSlot(p: string): SlotRecord | null {
   }
 }
 
+const readTheStartTime = (pid: number) =>
+  readStartTime(pid, processLauncher.launchSync);
+
 function isSlotLive(record: SlotRecord): boolean {
   return sameLiveProcess(record.pid, record.startTime, {
-    readStartTime,
+    readStartTime: readTheStartTime,
     pidAlive,
   });
 }
@@ -152,7 +156,7 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     const timeoutMs = opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS;
     const retryIntervalMs = opts.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS;
     const myPid = process.pid;
-    const myStartTime = readOwnStartTime(myPid);
+    const myStartTime = readOwnStartTime(myPid, readTheStartTime);
     const deadline = Date.now() + timeoutMs;
     // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
     // silently — a full pool means the caller MUST fail loudly so the

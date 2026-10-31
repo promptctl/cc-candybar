@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createRequire } from "node:module";
-import { launchSync } from "../proc/launch";
+import { processLauncher } from "../proc/launch";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
@@ -325,7 +325,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   }
 
   process.stdout.write(`Building ${bundle}\n`);
-  const osa = launchSync({
+  const osa = processLauncher.launchSync({
     bin: "/usr/bin/osacompile",
     args: ["-o", bundle, "-e", appleScriptSource(process.execPath, stagedDist)],
     category: "install.osacompile",
@@ -340,7 +340,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   for (const { key } of infoPlistPatch()) {
     // plutil errors if the key already exists; pre-delete so the operation is
     // idempotent. Ignore failures (key may not exist on a fresh build).
-    launchSync({
+    processLauncher.launchSync({
       bin: "/usr/bin/plutil",
       args: ["-remove", key, plistPath],
       category: "install.plutil",
@@ -348,7 +348,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   }
 
   for (const { key, xml } of infoPlistPatch()) {
-    const r = launchSync({
+    const r = processLauncher.launchSync({
       bin: "/usr/bin/plutil",
       args: ["-insert", key, "-xml", xml, plistPath],
       category: "install.plutil",
@@ -360,7 +360,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   }
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
-  const lsr = launchSync({
+  const lsr = processLauncher.launchSync({
     bin: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
     args: ["-f", bundle],
     category: "install.lsregister",

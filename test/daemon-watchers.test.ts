@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -712,7 +713,7 @@ describe("WatcherRegistry", () => {
 class StubInner extends GitService {
   public calls = 0;
   constructor(private repo: string) {
-    super();
+    super(processLauncher);
   }
   override findGitRoot(): Outcome<string> {
     return ok(this.repo);
@@ -746,7 +747,7 @@ async function hearsRefOnlyMove(
 ): Promise<void> {
   // The real reader: what it stores is what git reads off the repo, so the
   // test can ask whether the value is the ref's after a move.
-  const inner = new GitService();
+  const inner = new GitService(processLauncher);
   const svc = new GitDataProvider({ inner, periodMs: 600_000 });
   const lane = svc.declare(new Holds(), workingDir, {});
   await laneOutcome(lane);

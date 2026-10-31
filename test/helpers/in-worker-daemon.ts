@@ -112,13 +112,9 @@ export function startDaemon(
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
     // go, and a request's backstop goes with its stream. What is logged by now
     // is awaited before the env goes back, because the log reads its path when
-    // it writes.
-    // [LAW:escape-local-minima] exception: a closed daemon's work can still be
-    // unwinding: a launch of its would run under the next daemon built here, and
-    // a line of its lands in whichever log the env names by then. No fact says
-    // that work has settled, so this waits for none; polling a count of children
-    // would read zero between one pass's launches. The fix is a launch that
-    // carries its owner: candybar-testing-0x6u.snf.
+    // it writes. Nothing says a closed daemon's work has settled, so this waits
+    // for none of it: its launches are refused, by its own launcher, and a line
+    // of its says it came after the close, whichever log the env names by then.
     stop: async () => {
       daemon.close();
       for (const end of open) end.destroy();

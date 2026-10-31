@@ -15,7 +15,7 @@
 
 import fs from "node:fs";
 
-import { launch, launchSync, type LaunchResult } from "../proc/launch.js";
+import type { LaunchResult, Launcher } from "../proc/launch.js";
 
 // [LAW:parse-dont-validate] A probe either produced text or could not, and the
 // reason travels with the failure — it is what the post-mortem reads when no
@@ -68,6 +68,7 @@ const FOOTPRINT = "/usr/bin/footprint";
 const VMMAP = "/usr/bin/vmmap";
 
 export function platformProbes(
+  launcher: Launcher,
   platform: NodeJS.Platform,
   pid: number,
 ): readonly MemoryProbe[] {
@@ -75,9 +76,9 @@ export function platformProbes(
     return [
       // The whole-process category table: V8's mappings, the MALLOC_* regions
       // with their reclaimable share, and page tables, each with a size.
-      commandProbe(FOOTPRINT, ["-p", String(pid)]),
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid)]),
       // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(VMMAP, ["--summary", String(pid)]),
+      commandProbe(launcher, VMMAP, ["--summary", String(pid)]),
     ];
   }
   if (platform === "linux") {
@@ -126,12 +127,13 @@ export type ChargeProbe = (rss: number) => Promise<MemoryCharge>;
 // [LAW:dataflow-not-control-flow] The platform is the discriminator, chosen
 // once: the backstop asks the probe it was handed, never which platform runs.
 export function chargeProbe(
+  launcher: Launcher,
   platform: NodeJS.Platform,
   pid: number,
 ): ChargeProbe {
   return platform === "darwin"
     ? footprintCharge(pid, (args) =>
-        launch({
+        launcher.launch({
           bin: FOOTPRINT,
           args,
           timeoutMs: PROBE_TIMEOUT_MS,
@@ -180,7 +182,11 @@ export function physFootprintOf(text: string): number | null {
   return m === null ? null : Number(m[1]);
 }
 
-function commandProbe(bin: string, args: readonly string[]): MemoryProbe {
+function commandProbe(
+  launcher: Launcher,
+  bin: string,
+  args: readonly string[],
+): MemoryProbe {
   return {
     name: `${bin} ${args.join(" ")}`,
     read: () => {
@@ -188,7 +194,7 @@ function commandProbe(bin: string, args: readonly string[]): MemoryProbe {
       // this codebase: it is the one place that carries the timeout, the
       // category accounting, and a TOTAL result — a raw execFileSync here would
       // be both an unaccounted child and a throw on the death path.
-      const result = launchSync({
+      const result = launcher.launchSync({
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,

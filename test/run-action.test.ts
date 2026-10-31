@@ -6,6 +6,7 @@
 // cache over the payload providers, declared by `declareLanes`, drawn from
 // `sessionSource`.
 
+import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
 import os from "node:os";
@@ -28,7 +29,6 @@ import { checkConfig, type CheckOutcome } from "../src/check";
 import { parseDslConfig } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { instantOf } from "../src/utils/instant";
-import { launch } from "../src/proc/launch";
 import { Runs, type RunRequest } from "../src/daemon/runs";
 import { sessionEnv } from "../src/daemon/session-env";
 import { lastClickError } from "../src/daemon/click-error";
@@ -158,6 +158,7 @@ function rig(timeoutMs?: number): Rig {
   };
   const watchers = new WatcherRegistry({ logger: log });
   const providers = createPayloadProviders({
+    launcher: processLauncher,
     watchers,
     fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
@@ -166,6 +167,7 @@ function rig(timeoutMs?: number): Rig {
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
     {
+      launcher: processLauncher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
@@ -184,7 +186,7 @@ function rig(timeoutMs?: number): Rig {
   );
   const runs = new Runs({
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
-    launch,
+    launch: processLauncher.launch,
     state: sessionState,
     log,
     now: () => instantOf(new Date()),
@@ -326,6 +328,7 @@ describe("a run's declaration", () => {
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
     const loaded = loadFromDisk(dir, dir, config(["mine"]), {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -351,6 +354,7 @@ describe("a run's declaration", () => {
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, file, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -604,7 +608,7 @@ describe("the run owner", () => {
         held.push(`supersede ${key.folder} ${sid}`);
         return () => held.push(`resume ${key.folder} ${sid}`);
       },
-      launch,
+      launch: processLauncher.launch,
       state: sessionState,
       log: (level, message) => lines.push(`${level} ${message}`),
       now: () => instantOf(new Date()),

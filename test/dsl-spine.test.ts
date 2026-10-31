@@ -6,6 +6,7 @@
 // [LAW:verifiable-goals] Success is a byte string that matches a committed
 // snapshot. Any byte drift fails loudly.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { readFileSync } from "node:fs";
@@ -77,7 +78,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   function buildRuntime(cwd: string) {
     const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd });
     return { config, compiled, store, registry };
   }
@@ -227,7 +228,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         new Set(["textual-dark"]),
       );
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
       const compiled = registerDslConfig(config, registry, {
         signer: TEST_SIGNER,
         cwd: HOOK_DATA.workspace.current_dir,

@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
-import { launchSync } from "../proc/launch.js";
+import type { Launcher } from "../proc/launch.js";
 import type { Asked, FontInUse } from "./checks.js";
 import { itermDrawsItself, type ConfiguredTerminal } from "./terminal.js";
 import { DoctorBusy } from "./busy.js";
@@ -98,8 +98,8 @@ function run(argv) {
 }
 `;
 
-function jxa<T>(args: readonly string[]): Asked<T> {
-  const run = launchSync({
+function jxa<T>(launcher: Launcher, args: readonly string[]): Asked<T> {
+  const run = launcher.launchSync({
     bin: "osascript",
     args: ["-l", "JavaScript", "-e", JXA, ...args],
     timeoutMs: 3000,
@@ -137,8 +137,12 @@ interface Coverage {
   readonly lacks: readonly string[] | null;
 }
 
-function macCoverage(ref: FontRef, glyphs: string): Asked<Coverage> {
-  const answer = jxa<{ readonly lacks: readonly string[] | null }>([
+function macCoverage(
+  launcher: Launcher,
+  ref: FontRef,
+  glyphs: string,
+): Asked<Coverage> {
+  const answer = jxa<{ readonly lacks: readonly string[] | null }>(launcher, [
     "font",
     ref.kind,
     ref.name,
@@ -239,6 +243,7 @@ export function itermFontInUse(
 }
 
 function itermFont(
+  launcher: Launcher,
   version: string | null,
   env: TerminalEnvHint,
   glyphs: string,
@@ -251,7 +256,7 @@ function itermFont(
     readonly profiles: ReadonlyArray<
       Omit<ItermProfile, "lacks"> & { readonly lacks: string[] | null }
     >;
-  }>(["iterm", wanted ?? "", pointsArg(glyphs)]);
+  }>(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
   if (answer.kind === "failed") return answer;
   const profiles = answer.value.profiles.map((p) => ({
     ...p,
@@ -311,8 +316,12 @@ const fcEscape = (value: string): string => value.replace(/[\\:,=-]/g, "\\$&");
 
 // What fontconfig draws a family with — the font a fontconfig terminal ends
 // up using, alias or not, and the fonts it falls back to.
-function fcCoverage(family: string, glyphs: string): Asked<Coverage> {
-  const run = launchSync({
+function fcCoverage(
+  launcher: Launcher,
+  family: string,
+  glyphs: string,
+): Asked<Coverage> {
+  const run = launcher.launchSync({
     bin: "fc-match",
     args: [
       "--sort",
@@ -331,10 +340,14 @@ function fcCoverage(family: string, glyphs: string): Asked<Coverage> {
   return fcMatchCoverage(run.stdout, glyphs);
 }
 
-function coverage(ref: FontRef, glyphs: string): Asked<Coverage> {
+function coverage(
+  launcher: Launcher,
+  ref: FontRef,
+  glyphs: string,
+): Asked<Coverage> {
   return process.platform === "darwin"
-    ? macCoverage(ref, glyphs)
-    : fcCoverage(ref.name, glyphs);
+    ? macCoverage(launcher, ref, glyphs)
+    : fcCoverage(launcher, ref.name, glyphs);
 }
 
 // ─── Alacritty ──────────────────────────────────────────────────────────────
@@ -426,7 +439,11 @@ function alacrittyFamilyIn(
 
 // The config is found under the SESSION's XDG_CONFIG_HOME (the client's
 // hint), never the detached daemon's own.
-function alacrittyFont(env: TerminalEnvHint, glyphs: string): Asked<FontInUse> {
+function alacrittyFont(
+  launcher: Launcher,
+  env: TerminalEnvHint,
+  glyphs: string,
+): Asked<FontInUse> {
   const home = os.homedir();
   const config = alacrittyConfigPaths(home, env.XDG_CONFIG_HOME).find((p) =>
     fs.existsSync(p),
@@ -443,7 +460,7 @@ function alacrittyFont(env: TerminalEnvHint, glyphs: string): Asked<FontInUse> {
     (config === undefined
       ? "Alacritty's default, no config file"
       : `Alacritty's default, ${config} sets none`);
-  const drawn = coverage({ kind: "family", name: family }, glyphs);
+  const drawn = coverage(launcher, { kind: "family", name: family }, glyphs);
   if (drawn.kind === "failed") return drawn;
   const { font, lacks } = drawn.value;
   return {
@@ -463,6 +480,7 @@ const READERS: Readonly<
   Record<
     ConfiguredTerminal,
     (
+      launcher: Launcher,
       version: string | null,
       env: TerminalEnvHint,
       glyphs: string,
@@ -470,10 +488,12 @@ const READERS: Readonly<
   >
 > = {
   iterm2: itermFont,
-  alacritty: (_version, env, glyphs) => alacrittyFont(env, glyphs),
+  alacritty: (launcher, _version, env, glyphs) =>
+    alacrittyFont(launcher, env, glyphs),
 };
 
 export function fontInUse(
+  launcher: Launcher,
   terminal: {
     readonly name: ConfiguredTerminal;
     readonly version: string | null;
@@ -481,5 +501,5 @@ export function fontInUse(
   env: TerminalEnvHint,
   glyphs: string,
 ): Asked<FontInUse> {
-  return READERS[terminal.name](terminal.version, env, glyphs);
+  return READERS[terminal.name](launcher, terminal.version, env, glyphs);
 }

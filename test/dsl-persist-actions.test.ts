@@ -20,6 +20,7 @@
 //   5. reset-config is gated by key membership and deletes the key's path
 //      from the file, so the next reload falls back to the bundled default.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -406,7 +407,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (width = Number.POSITIVE_INFINITY): string =>
@@ -558,7 +559,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -837,7 +838,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

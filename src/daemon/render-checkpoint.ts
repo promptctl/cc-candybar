@@ -1,7 +1,6 @@
 // The one crossing an untrusted render request makes into a checked one.
 
 import { parseArgs } from "node:util";
-import { dlog } from "./log";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import { requestedConfigTarget, type RequestedOrigin } from "../config-hint";
@@ -9,6 +8,7 @@ import { parseClientHints } from "./protocol";
 import type { ClientHints, RefusedArg, RenderRequest } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import type { RuntimeStats } from "./stats";
+import type { DaemonLogger } from "../utils/logger";
 import { validateHookData } from "../utils/schema-validator.js";
 import { rateLimitsSeen, type RateLimitsSeen } from "./render-sightings";
 import {
@@ -102,6 +102,7 @@ export type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
 export function checkRenderRequest(
   req: RenderRequest,
   stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
+  log: DaemonLogger,
 ): { ok: true; req: CheckedRenderRequest } | { ok: false; problems: string[] } {
   // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
   // The validator reports missing/wrong-typed required fields and unknown
@@ -165,7 +166,7 @@ export function checkRenderRequest(
   // passed adds one: what a refused request says is not recorded as fact.
   for (const field of report.unknownTopLevelFields) {
     if (stats.firstSightOfUnknownHookField(field)) {
-      dlog(
+      log(
         "info",
         `schema: unknown field ${JSON.stringify(field)} — Anthropic may have added it`,
       );

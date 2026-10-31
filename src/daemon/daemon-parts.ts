@@ -21,6 +21,8 @@ import type { VerbContext } from "./verbs";
 import type { DoctorStores } from "../doctor/edge";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
+import type { DaemonLogger } from "../utils/logger";
+import type { Launcher } from "../proc/launch";
 import type { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 
@@ -29,6 +31,8 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 // its own.
 export interface DaemonParts {
   readonly clock: DaemonClock;
+  readonly launcher: Launcher;
+  readonly log: DaemonLogger;
   readonly bundle: string;
   readonly doctorStores: DoctorStores;
   readonly stats: RuntimeStats;

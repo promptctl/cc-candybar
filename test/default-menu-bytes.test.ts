@@ -21,6 +21,7 @@
 // (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
 // menus left to pin are edit mode's `+` insert affordances.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { createEngine } from "@promptctl/go-template-js";
 
@@ -125,7 +126,7 @@ function buildRuntime(root: string) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // No theme handed in: renderDsl resolves it from `globals.palette`, so these
   // bytes are the bundled default's own declared theme (tokyo-night) — the ones

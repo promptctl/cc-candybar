@@ -3,6 +3,7 @@
 // show its colour, on a clock of its own, and every other cell of the row is
 // drawn exactly as it is without the setting.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { decodeAnsi } from "@promptctl/rich-js";
@@ -73,7 +74,7 @@ function renderer(
   const store = new VariableStore();
   const session = new SessionState();
   for (const [key, value] of Object.entries(state)) session.set("s", key, value);
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(processLauncher, store, "", session);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

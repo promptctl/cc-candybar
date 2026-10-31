@@ -7,6 +7,7 @@ import {
   sameLiveProcess,
   type ProcessIdentity,
 } from "./process-fingerprint";
+import { processLauncher } from "../proc/launch";
 import { pidAlive } from "./parent-watchdog";
 
 // ─── Daemon-side fork-bomb circuit breaker ───────────────────────────────────
@@ -287,7 +288,11 @@ export function realBreakerDeps(
     pid: process.pid,
     startTime: myStartTime,
     isSameLiveProcess: (pid, startTime) =>
-      sameLiveProcess(pid, startTime, { readStartTime, pidAlive }),
+      sameLiveProcess(pid, startTime, {
+        readStartTime: (candidate) =>
+          readStartTime(candidate, processLauncher.launchSync),
+        pidAlive,
+      }),
     listFiles: listRegistryFiles,
     readEntry: readRegistryEntry,
     removeFile: (filePath) => {

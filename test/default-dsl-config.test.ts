@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
@@ -202,6 +203,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -277,6 +279,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -527,7 +530,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -652,6 +655,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const render = (padding: number): string => {
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -716,6 +720,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -774,6 +779,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -804,6 +810,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -911,6 +918,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -1123,7 +1131,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         variables: { ...narrowed.variables, ...variables },
       };
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", sessionState);
+      const registry = new SourceRegistry(processLauncher, store, "", sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -1446,6 +1454,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -1538,6 +1547,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore();
         const registry = new SourceRegistry(
+          processLauncher,
           store,
           "",
           new SessionState(),
@@ -1617,6 +1627,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // for the session segment here, but the fixture should exercise the
       // genuinely-complete default config, not a partially-registered one.
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -1766,7 +1777,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not
     // from a fresh SessionState that disagrees with it about edit mode.
-    const registry = new SourceRegistry(store, "", {
+    const registry = new SourceRegistry(processLauncher, store, "", {
       get: (_sessionId, key) => sessionPick(key, name),
       revision: () => 0,
     });

@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -19,7 +20,7 @@ import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
-import { setLaunchScope } from "../src/proc/launch";
+import { createLauncher, type Launcher } from "../src/proc/launch";
 import { answerRepo } from "./helpers/repo-approval";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
@@ -47,6 +48,7 @@ function makeCache(
     log?: (line: string) => void;
     declare?: Declare;
   } = {},
+  launcher: Launcher = processLauncher,
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
@@ -55,7 +57,7 @@ function makeCache(
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -487,16 +489,16 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  setLaunchScope({
+  const launcher = createLauncher({
     stats: {
-    onStart: (c) => {
-      if (c === "user-shell") shells++;
-    },
-    onEnd: () => {},
+      onStart: (c) => {
+        if (c === "user-shell") shells++;
+      },
+      onEnd: () => {},
+      onRefused: () => {},
     },
   });
-  cleanups.push(() => setLaunchScope({}));
-  const { cache } = makeCache();
+  const { cache } = makeCache({}, launcher);
 
   const entry = cache.getOrCreate(dir, dir, undefined);
   expect(entry.lastError).toBeNull();

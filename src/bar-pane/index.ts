@@ -21,6 +21,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { socketPath } from "../daemon/paths";
 import { planOutcome } from "../render/outcome-plan";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
+import { processLauncher } from "../proc/launch";
 import { runTmuxAsync, type TmuxRun } from "../proc/tmux";
 import {
   LIST_CLIENTS_FORMAT,
@@ -79,7 +80,7 @@ async function askPlacement(
   { readonly kind: "ok"; readonly placement: Placement } | TmuxMissed
 > {
   const [panes, clients] = await Promise.all([
-    runTmuxAsync(tmux, "bar-pane.tmux", [
+    runTmuxAsync(processLauncher, tmux, "bar-pane.tmux", [
       "list-panes",
       "-a",
       "-f",
@@ -87,7 +88,7 @@ async function askPlacement(
       "-F",
       LIST_PANES_FORMAT,
     ]),
-    runTmuxAsync(tmux, "bar-pane.tmux", [
+    runTmuxAsync(processLauncher, tmux, "bar-pane.tmux", [
       "list-clients",
       "-F",
       LIST_CLIENTS_FORMAT,
@@ -202,7 +203,7 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
     if (next.rows !== process.stdout.rows && !placement.zoomed)
       // Missed: the pane keeps its height, and the next draw asks again.
       resizeAnswered(
-        await runTmuxAsync(tmux, "bar-pane.tmux", [
+        await runTmuxAsync(processLauncher, tmux, "bar-pane.tmux", [
           "resize-pane",
           "-t",
           tmux.pane,

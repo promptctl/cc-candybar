@@ -278,6 +278,9 @@ export function formatStats(s: StatsSnapshot): string {
         : "";
     lines.push(`  ${cat.padEnd(colWidth)} ${n}${timing}`);
   }
+  for (const [cat, n] of Object.entries(s.subprocesses.refused)) {
+    lines.push(`  ${`${cat} refused`.padEnd(colWidth)} ${n}`);
+  }
   if (s.nextRestartReason) {
     lines.push(``);
     lines.push(`nextRestart    ${s.nextRestartReason}`);

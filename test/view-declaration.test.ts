@@ -7,6 +7,7 @@
 // first draw that read it, and released only by a sweep 2.5 to 5 minutes
 // after the last draw that did.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -97,7 +98,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
       },
     }),
   );
-  const inner = new OneRepo();
+  const inner = new OneRepo(processLauncher);
   const git = new GitDataProvider({ inner, logger: () => {} });
   cleanups.push(() => git.close());
   const sessionState = new SessionState();
@@ -111,7 +112,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -231,7 +232,7 @@ function gitCache() {
     path.join(dir, ".cc-candybar.json5"),
     JSON.stringify({ root: { h: ["gitaculous"] } }),
   );
-  const inner = new OneRepo();
+  const inner = new OneRepo(processLauncher);
   const git = new GitDataProvider({ inner, logger: () => {} });
   cleanups.push(() => git.close());
   const watchers = new WatcherRegistry({ logger: () => {} });
@@ -242,7 +243,7 @@ function gitCache() {
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
