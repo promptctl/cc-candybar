@@ -36,8 +36,12 @@ import { sessionIdOf } from "../src/daemon/session-id";
 import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { RuntimeStats } from "../src/daemon/stats";
-import { hookData, stripAnsi } from "./helpers/daemon-e2e";
-import { renderLines } from "./helpers/daemon-log";
+import {
+  TIMEOUT_RETRY_BUDGET,
+  renderBody,
+  stripAnsi,
+} from "./helpers/daemon-e2e";
+import { loggedLines, renderEventsOf } from "./helpers/daemon-log";
 import { memoryConnection } from "./helpers/memory-connection";
 import { until } from "./helpers/until";
 
@@ -257,6 +261,45 @@ describe("a connection over a stream", () => {
     expect(delivered).not.toHaveBeenCalled();
   });
 
+  test("the exit a reply carries survives a backstop that answered first", async () => {
+    const request = held();
+    const { send, received } = open(standIn({ handle: request.handle }));
+    send(STATS);
+    await settled();
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+
+    request.answer(replyWith({ exitAfterFlush: 0 }));
+    await settled();
+
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(received).toEqual([expect.objectContaining({ code: "TIMEOUT" })]);
+  });
+
+  test("a late reply leaves a subscription streaming, and its exit still runs", async () => {
+    const request = held();
+    const { client, send, received, ended } = open(
+      standIn({
+        handle: async (req, timedOut, accepted) =>
+          req.kind === "subscribe"
+            ? SUBSCRIBED
+            : request.handle(req, timedOut, accepted),
+      }),
+    );
+    send(STATS);
+    send(SUBSCRIBE);
+    await settled();
+    expect(subscriptions).toHaveLength(1);
+
+    request.answer(replyWith({ exitAfterFlush: 0 }));
+    await settled();
+
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(received).toEqual([]);
+    expect(ended()).toBe(false);
+    client.destroy();
+  });
+
   test("a frame that does not parse is answered BAD_REQUEST", async () => {
     const { client, received, ended } = open(standIn());
     const header = Buffer.alloc(FRAME_HEADER_BYTES);
@@ -417,6 +460,7 @@ describe("a connection to a daemon built in this worker", () => {
   let config: string;
   let built: Daemon | null = null;
   const exit = jest.fn();
+  const stateHome = process.env.XDG_STATE_HOME;
 
   const construct = (clock: DaemonClock = SYSTEM_CLOCK): Daemon => {
     const file = path.join(root, "dist", "index.mjs");
@@ -439,24 +483,56 @@ describe("a connection to a daemon built in this worker", () => {
     return built;
   };
 
-  const renderRequest = (sessionId: string, deadline: number): Request => ({
-    v: PROTOCOL_VERSION,
-    kind: "render",
-    hookData: hookData(sessionId, projectDir),
-    args: ["cc-candybar", "--config", config],
-    cwd: projectDir,
-    termCols: 200,
-    termRows: 40,
-    deadline,
-  });
+  const renderRequest = (sessionId: string, deadline: number): Request =>
+    ({
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      ...renderBody(sessionId, projectDir, { termCols: 200, termRows: 40 }, [
+        "cc-candybar",
+        "--config",
+        config,
+      ]),
+      deadline,
+    }) as Request;
 
   const answered = async (opened: Opened): Promise<Response> => {
     await until(() => opened.received.length > 0, "the connection's answer");
     return opened.received[0]!;
   };
 
+  // What an answer drew. Anything else is named, where a bare read of `output`
+  // would leave the assertion to fail without saying what came back.
+  const drawn = (resp: Response): string => {
+    if (!("output" in resp))
+      throw new Error(`no drawn output: ${JSON.stringify(resp)}`);
+    return stripAnsi(resp.output);
+  };
+
+  // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
+  // cold first render on a loaded runner outlasts it. TIMEOUT is a client's
+  // transient, answered by asking again on its next tick (test/helpers/daemon-e2e.ts);
+  // a test has no next tick, so it asks again here, on a new connection.
+  const rendered = async (
+    daemon: Daemon,
+    sessionId: string,
+  ): Promise<string> => {
+    for (let attempt = 1; ; attempt++) {
+      const opened = open(daemon);
+      opened.send(renderRequest(sessionId, Date.now() + 2_000));
+      const resp = await answered(opened);
+      const again =
+        "code" in resp &&
+        resp.code === "TIMEOUT" &&
+        attempt < TIMEOUT_RETRY_BUDGET;
+      if (!again) return drawn(resp);
+    }
+  };
+
   beforeAll(() => {
     root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-connection-"));
+    // A daemon in a worker holds no socket lease, so another run's global
+    // teardown would sweep the state dir test/setup.ts names, log and all.
+    process.env.XDG_STATE_HOME = path.join(root, "state");
     projectDir = root;
     config = path.join(root, "bar.json5");
     writeFileSync(
@@ -472,30 +548,23 @@ describe("a connection to a daemon built in this worker", () => {
   });
 
   afterAll(() => {
+    process.env.XDG_STATE_HOME = stateHome;
     rmSync(root, { recursive: true, force: true });
   });
 
   test("a render is answered by the daemon's own handling", async () => {
-    const opened = open(construct());
-    opened.send(renderRequest("connection-render", Date.now() + 2_000));
-    const resp = await answered(opened);
-    expect("output" in resp && stripAnsi(resp.output)).toContain(
+    expect(await rendered(construct(), "connection-render")).toContain(
       "a drawn mark",
     );
   });
 
   test("a subscribe receives the frames the daemon draws", async () => {
     const daemon = construct();
-    const rendered = open(daemon);
-    rendered.send(renderRequest("connection-feed", Date.now() + 2_000));
-    await answered(rendered);
+    await rendered(daemon, "connection-feed");
 
     const feed = open(daemon);
     feed.send({ ...SUBSCRIBE, sessionId: "connection-feed" } as Request);
-    const frame = await answered(feed);
-    expect("output" in frame && stripAnsi(frame.output)).toContain(
-      "a drawn mark",
-    );
+    expect(drawn(await answered(feed))).toContain("a drawn mark");
     expect(daemon.stats.inFlight).toBe(0);
     feed.client.destroy();
   });
@@ -518,9 +587,15 @@ describe("a connection to a daemon built in this worker", () => {
     const opened = open(daemon);
     monotonic += 500;
     opened.send(renderRequest("connection-clock", at.getTime() + 2_000));
-    await answered(opened);
 
-    const [event] = await renderLines(process.env, "connection-clock");
+    // Read off the render's own event: a backstop that answered first abandons
+    // the answer, not the render, and the attempt is logged either way.
+    const [event] = await loggedLines(
+      process.env,
+      (lines) => renderEventsOf(lines, "connection-clock"),
+      (events) => events.length > 0,
+      "the render event of connection-clock",
+    );
     expect(event).toContain(" queued=500ms ");
   });
 });

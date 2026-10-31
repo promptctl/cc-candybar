@@ -1,6 +1,8 @@
 // A daemon's connection: one request answered, or one session's frames pushed,
 // over a stream. The socket is what a daemon's process hands it, and nothing
 // here needs one, so a test runs a connection's behaviour in a jest worker.
+// What it does need of a stream is a socket's one duty to a writer: a peer that
+// vanished destroys it, because a flush that never settles strands the exit.
 
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
@@ -46,50 +48,45 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   };
 
   // [LAW:no-ambient-temporal-coupling] respond owns the response→exit
-  // ordering. exitAfterFlush (an exit code; null = stay up) is performed
-  // by sock.end's completion callback, which Node invokes on 'finish' OR
-  // 'error' — a total signal. A peer that vanished mid-flush still settles,
-  // so the exit wish can never be stranded on a dead socket, and a live
-  // peer always has the frame in the kernel buffer before process.exit
-  // (unix-socket data survives writer exit). No fixed sleep stands between
-  // respond and exit; the SIGKILL backstop inside shutdown() is the
-  // unrelated last-resort safety.
+  // ordering. exitAfterFlush (an exit code; null = stay up) waits on this
+  // flush, which sock.end's completion callback settles, and Node invokes that
+  // on 'finish' OR 'error' — a total signal. A peer that vanished mid-flush
+  // still settles, so the exit wish can never be stranded on a dead socket,
+  // and a live peer always has the frame in the kernel buffer before
+  // process.exit (unix-socket data survives writer exit). No fixed sleep
+  // stands between respond and exit; the SIGKILL backstop inside shutdown()
+  // is the unrelated last-resort safety.
+  let settleFlush!: () => void;
+  const flushSettled = new Promise<void>((resolve) => {
+    settleFlush = resolve;
+  });
+
   const respond = (
     resp: Response,
     exitAfterFlush: number | null,
     delivered: () => void,
   ): void => {
-    if (responded) {
-      // First responder owns the flush. Reaching here with an exit wish is
-      // unreachable today (both exit-carrying arms resolve synchronously,
-      // far inside the request timeout) — but if it ever happens, say so
-      // instead of silently leaving a daemon up that was told to exit.
-      // [LAW:no-silent-failure]
-      if (exitAfterFlush !== null) {
-        dlog(
-          "warn",
-          "exit-after-flush dropped: an earlier responder settled this socket",
-        );
-      }
-      return;
+    // An exit is the request's work, which the backstop abandons no more than
+    // any other: a request can arrive already answered, read late by a busy
+    // daemon, and a client that was told TIMEOUT still told this daemon to exit.
+    if (exitAfterFlush !== null) {
+      void flushSettled.then(() => daemon.exit(exitAfterFlush));
     }
+    // First responder owns the flush.
+    if (responded) return;
     responded = true;
-    const settle =
-      exitAfterFlush === null
-        ? undefined
-        : (): void => daemon.exit(exitAfterFlush);
     try {
       // A peer that already left fails the flush (it ended its side), so a
       // clean one is the client holding the response.
       sock.end(encodeFrame(resp), (err?: Error | null) => {
         if (err == null) delivered();
-        settle?.();
+        settleFlush();
       });
     } catch (e) {
       // [LAW:no-silent-failure] The response is lost (socket already torn
       // down), but the exit wish must not be.
       dlog("warn", `response write failed: ${(e as Error).message}`);
-      settle?.();
+      settleFlush();
     }
   };
 
@@ -181,6 +178,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     // the connection's `handler threw`, answered RENDER_FAILED and ended,
     // never an open socket nothing feeds.
     responded = true;
+    // A subscription has no flush for an exit to wait on.
+    settleFlush();
     sock.on("close", unsubscribe);
   };
 

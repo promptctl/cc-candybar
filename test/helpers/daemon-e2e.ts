@@ -34,7 +34,7 @@ export { linkUrls, stripAnsi } from "./ansi";
 
 const REPLY_BUDGET_MS = 5000;
 
-// [LAW:no-ambient-temporal-coupling] `TIMEOUT` (server.ts's REQUEST_TIMEOUT_MS
+// [LAW:no-ambient-temporal-coupling] `TIMEOUT` (request-deadline.ts's REQUEST_TIMEOUT_MS
 // — a real 200ms per-request guard protecting the daemon from one slow request
 // blocking every other connection) is classified `transient` by the real client
 // (client-transport.ts's interpretResponse): the daemon is up, just slow for
@@ -46,7 +46,7 @@ const REPLY_BUDGET_MS = 5000;
 // "next tick" to lean on, so it retries inline, bounded, matching the
 // documented transient contract rather than treating an expected-occasionally
 // condition as a hard failure.
-const TIMEOUT_RETRY_BUDGET = 5;
+export const TIMEOUT_RETRY_BUDGET = 5;
 
 // [LAW:no-ambient-temporal-coupling] The same contract for an answer drawn at
 // its deadline: a request is answered by its client's deadline, and a source
