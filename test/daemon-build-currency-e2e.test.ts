@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] brandon-build-notice-5d6's done-when: a daemon assesses
 // the checkout its bundle sits in against the digest its bundle carries. A case
 // about the notice hands those two in, on a daemon in this worker, over a
-// scratch checkout; a case about the built bundle itself spawns a copy of it
-// there. Each reads the bar's messages, each in the viewer its indicator opens;
-// every click is the affordance the viewer rendered, found by what it does and
-// dispatched through the wire.
+// scratch checkout; the built bundle itself is in
+// test/daemon-build-currency-e2e.process.test.ts. Each reads the bar's messages,
+// each in the viewer its indicator opens; every click is the affordance the
+// viewer rendered, found by what it does and dispatched through the wire.
 
 import fs from "node:fs";
 import http from "node:http";

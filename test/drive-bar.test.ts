@@ -4,8 +4,8 @@
 // durable one included; a durable click writes the harness's copy of the
 // config, never the file it was started from; a click that would act on the
 // developer's machine is not sent; a click on text the bar did not draw fails, naming what
-// it did draw. One case runs what `pnpm bar` runs, a real daemon; the rest are
-// about the bar, and draw on a daemon in this worker.
+// it did draw. These cases are about the bar, and draw on a daemon in this worker;
+// what `pnpm bar` itself runs is in test/drive-bar.process.test.ts.
 
 import fs from "node:fs";
 import os from "node:os";

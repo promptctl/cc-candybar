@@ -1,7 +1,6 @@
 import {
   judgeDaemonStarts,
   parseLedger,
-  withDaemonLedger,
 } from "./helpers/process-tier.cjs";
 
 const TIER = "test/daemon-shutdown.process.test.ts";
@@ -74,11 +73,4 @@ test("parseLedger reads one start per line", () => {
     start("a", "helper"),
     start(null, "raw"),
   ]);
-});
-
-test("withDaemonLedger keeps what NODE_OPTIONS already held", () => {
-  expect(withDaemonLedger("--trace-warnings")).toMatch(
-    /^--trace-warnings --import=file:.*daemon-ledger\.cjs$/,
-  );
-  expect(withDaemonLedger(undefined)).toMatch(/^--import=file:/);
 });

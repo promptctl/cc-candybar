@@ -6,9 +6,6 @@
 // it there. CommonJS because the preload and jest.worker.config.js load it
 // untransformed.
 
-const { pathToFileURL } = require("node:url");
-const path = require("node:path");
-
 // A string, because jest's testPathIgnorePatterns takes strings and fails on a
 // RegExp.
 const PROCESS_TIER_PATTERN = "\\.process\\.test\\.ts$";
@@ -27,16 +24,6 @@ const ROUTE_ENV = "CC_CANDYBAR_TEST_DAEMON_ROUTE";
  * @typedef {{ file: string | null, route: DaemonRoute }} DaemonStart
  * @typedef {{ helper: number, client: number, problems: string[] }} DaemonVerdict
  */
-
-// The NODE_OPTIONS that record a run's daemons: whatever they already held, plus
-// the preload, spelled as the version stamp spells its own.
-/** @param {string | undefined} nodeOptions */
-function withDaemonLedger(nodeOptions) {
-  const preload = pathToFileURL(path.join(__dirname, "daemon-ledger.cjs")).href;
-  return [nodeOptions ?? "", `--import=${preload}`]
-    .filter((s) => s !== "")
-    .join(" ");
-}
 
 /** @param {string} ledger @returns {DaemonStart[]} */
 function parseLedger(ledger) {
@@ -92,5 +79,4 @@ module.exports = {
   TEST_FILE_ENV,
   judgeDaemonStarts,
   parseLedger,
-  withDaemonLedger,
 };

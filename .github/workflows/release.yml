@@ -40,11 +40,17 @@ jobs:
       - name: Schema drift guard
         run: pnpm run check:schema
 
+      # [LAW:verifiable-goals] Before the build, so a test outside the process
+      # tier that comes to need one fails here. The two steps are the whole suite:
+      # one run ignores exactly what the other's filter matches.
+      - name: Test outside the process tier
+        run: pnpm test:worker
+
       - name: Build
         run: pnpm run build
 
-      - name: Test
-        run: pnpm test
+      - name: Test the process tier
+        run: pnpm test '\.process\.test\.ts$'
 
       - name: Protocol-version guard
         run: pnpm run check:protocol

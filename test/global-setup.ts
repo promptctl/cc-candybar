@@ -4,14 +4,19 @@
 // reads the worker's real one, so a preload set there misses that child.
 
 import fs from "node:fs";
+import path from "node:path";
 
-import { LEDGER_ENV, withDaemonLedger } from "./helpers/process-tier.cjs";
+import { LEDGER_ENV } from "./helpers/process-tier.cjs";
 import { jestTmpDir } from "./helpers/jest-tmp";
+import { withPreload } from "../scripts/version-stamp.cjs";
 
 export default function globalSetup(): void {
   // Named for this process, so a concurrent run's teardown leaves it alone.
   const ledger = jestTmpDir("ledger");
   fs.writeFileSync(ledger, "");
   process.env[LEDGER_ENV] = ledger;
-  process.env.NODE_OPTIONS = withDaemonLedger(process.env.NODE_OPTIONS);
+  process.env.NODE_OPTIONS = withPreload(
+    process.env.NODE_OPTIONS,
+    path.join(__dirname, "helpers", "daemon-ledger.cjs"),
+  );
 }

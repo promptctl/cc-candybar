@@ -176,7 +176,9 @@ describe("the pool holds a spawn to its ceiling", () => {
       });
       await until(started(3), "the 3rd stand-in starting once a slot freed");
     } finally {
-      await third;
+      // Settled, not awaited: a third that fails is named by the wait above, and
+      // the kills below run either way.
+      await Promise.allSettled([third]);
       for (const proc of spawned) {
         proc.killTree();
         proc.release();
