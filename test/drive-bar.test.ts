@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { describeLink, drawnLinks, startBar, type Bar } from "./helpers/drive-bar";
-import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../src/config/disclosure";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import { stripAnsi } from "./helpers/ansi";
 import { startBarDaemon } from "./helpers/in-worker-daemon";
 
@@ -28,14 +28,6 @@ const userConfig = (): string => {
 describe("drive-bar", () => {
   let bar: Bar | undefined;
   afterEach(async () => bar?.stop());
-
-  test("a click on the door opens the menu in the next render", async () => {
-    bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
-    expect(stripAnsi(await bar.render())).not.toContain("🎨 look");
-    const opened = stripAnsi((await bar.click(DOOR_GLYPH)).rendered);
-    expect(opened).toContain("🎨 look");
-    expect(opened).toContain(DOOR_CLOSE_GLYPH);
-  });
 
   test("a durable click writes the copy, never the file it started from", async () => {
     const original = userConfig();

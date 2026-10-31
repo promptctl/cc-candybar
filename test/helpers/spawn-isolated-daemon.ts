@@ -1,7 +1,7 @@
 // [LAW:single-enforcer] The ONE place that spins up a real, request-serving
 // `cc-candybar daemon` subprocess against an isolated XDG_STATE_HOME/
 // XDG_CACHE_HOME/XDG_CONFIG_HOME + short socket path — extracted from
-// daemon-shutdown.test.ts (candybar-config-engine-71o.5) so every test that
+// daemon-shutdown.process.test.ts (candybar-config-engine-71o.5) so every test that
 // needs a real daemon over a real socket (not spawnTestDaemon's bare
 // process-lifecycle probe) shares one spawn+readiness+cleanup
 // implementation instead of re-deriving the short-socket-path /
@@ -222,7 +222,7 @@ const READINESS_POLL_MS = 25;
 // own child has reached its EADDRINUSE decision at all (measured), so an
 // exit-based check would catch that case only when the scheduler happened to
 // cooperate. A coin-flip detector for a race is worse than a documented one —
-// see the accepted-incumbent case in test/spawn-isolated-daemon.test.ts.
+// see the accepted-incumbent case in test/spawn-isolated-daemon.process.test.ts.
 type BootPhase = "booting" | "bound" | "serving";
 type FailedPhase = Exclude<BootPhase, "serving">;
 

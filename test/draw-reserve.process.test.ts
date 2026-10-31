@@ -3,7 +3,9 @@
 // fit inside it. This holds the constant to the slowest draw a request makes
 // — a session's first draw of its view, every part evaluated cold — at p99,
 // over the bundled default and the load gate's full config, as the render
-// cache's byte constants are held to their measured heap.
+// cache's byte constants are held to their measured heap. A real process,
+// because the bound is the draw's wall time, and on CI's runner a draw in a jest
+// worker reads well past what the same draw in a daemon does.
 
 import fs from "node:fs";
 import os from "node:os";
