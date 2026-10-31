@@ -281,7 +281,7 @@ ever bypassed, and an idle limit puts an upper bound on the orphan count.
 
 ### F4 — **Medium / structural.** Per-request budget < per-subprocess timeout
 
-**Where:** `src/daemon/server.ts` (`REQUEST_TIMEOUT_MS = 200ms`) vs.
+**Where:** `src/daemon/request-deadline.ts` (`REQUEST_TIMEOUT_MS = 200ms`) vs.
 `src/segments/git.ts` (per-`git`-call timeout `2000ms`).
 
 **Effect:** When the daemon hits a cold git-cache for a slow repo (large

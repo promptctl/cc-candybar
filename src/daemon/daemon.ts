@@ -124,11 +124,14 @@ export interface DaemonInputs {
 
 // The daemon as a value: built by `createDaemon`, driven by calling `handle`,
 // ended by `close`. Everything about a process — a socket, signals, an exit —
-// is server.ts's, over this.
+// is server.ts's, over this; `exit` is only the funnel it handed in.
 export interface Daemon {
   readonly stats: RuntimeStats;
   readonly memoryLimitBytes: number;
   readonly clock: DaemonClock;
+  // [LAW:one-source-of-truth] The funnel this daemon was built with, which a
+  // connection reaches once a reply carrying an exit has flushed.
+  readonly exit: DaemonInputs["exit"];
   // The request handling a connection calls. `accepted` is when its connection
   // came in, on `clock`'s monotonic reading.
   readonly handle: (
@@ -597,6 +600,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     stats,
     memoryLimitBytes,
     clock,
+    exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click runs in the turn it enters, so one that got in has
     // landed before any close; a subscribe its request reached as the daemon

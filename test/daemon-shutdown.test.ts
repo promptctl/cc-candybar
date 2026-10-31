@@ -76,7 +76,7 @@ describe("daemon shutdown contract", () => {
     try {
       // Send the shutdown request. The daemon writes ok:true and sequences
       // `shutdown(0)` on the response flush completion (see respond() in
-      // server.ts). Receiving the frame at all proves flush-before-exit —
+      // connection.ts). Receiving the frame at all proves flush-before-exit —
       // a premature exit kills the socket frameless. The contract under
       // test is ALSO the *process exit*, not just the response — the
       // 452-corpse incident produced responses but never produced exits.
