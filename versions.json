@@ -4,15 +4,22 @@
     {
       "version": "pr-521",
       "ref": "refs/pull/521/merge",
-      "sha": "5ee7c30d76890b77f3ce7720b703257e74fefd19",
-      "timestamp": "2026-10-31T14:30:05.902Z",
+      "sha": "c430f6455cadbfbeea94e1ffd5c4e7aca5de3ac3",
+      "timestamp": "2026-10-31T14:44:17.931Z",
       "commits": [
         {
-          "sha": "5ee7c30d76890b77f3ce7720b703257e74fefd19",
+          "sha": "c430f6455cadbfbeea94e1ffd5c4e7aca5de3ac3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T08:29:05-06:00",
-          "message": "Merge 194076806a083332914e1dba2199f01493c2496c into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+          "timestamp": "2026-10-31T14:43:25Z",
+          "message": "Merge 61d9e983022c6099445ff80a91d661e650c92bc6 into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+        },
+        {
+          "sha": "61d9e983022c6099445ff80a91d661e650c92bc6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T08:43:13-06:00",
+          "message": "fix(daemon): an exit a reply carries survives whoever answered first (candybar-testing-0x6u.spa)\n\nA request read after the backstop answered it dropped its exit, because the first responder owned the flush and the late reply only logged. An exit is the request's work, which the backstop does not abandon, so every reply's exit now waits on the one flush, and a subscription, which has none to wait on, lets it through. The connection also states what it needs of a stream: a vanished peer destroys it.\n\nThe in-worker cases took the first answer of a cold daemon under the real 200 ms backstop, so a loaded runner read TIMEOUT as a failure. They ask again as a client does, and name what came back. The clock case reads the render event, which an answered backstop does not abandon, from a state dir of its own, because another run's teardown sweeps a lease-less one.\n"
         },
         {
           "sha": "194076806a083332914e1dba2199f01493c2496c",
