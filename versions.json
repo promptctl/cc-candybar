@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-528",
+      "ref": "refs/pull/528/merge",
+      "sha": "a9b63efe6dfeda669ce8bed21adbb7ac415374d2",
+      "timestamp": "2026-10-31T23:43:14.455Z",
+      "commits": [
+        {
+          "sha": "a9b63efe6dfeda669ce8bed21adbb7ac415374d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:42:16Z",
+          "message": "Merge 2467fb49091de727a7a4de54683b28f7df8d3404 into 8433e004510534547d91ea68a0e77f398becab3d\n"
+        },
+        {
+          "sha": "2467fb49091de727a7a4de54683b28f7df8d3404",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T17:42:06-06:00",
+          "message": "fix(effect): the bar's frame names only what drew it, and the docs say a moved segment changes colour (brandon-menus-sjhy.ju8)\n"
+        },
+        {
+          "sha": "abb0cb67d5d63d1c884e6e9472ca2dc12bd5d060",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T17:23:41-06:00",
+          "message": "feat(effect): the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8)\n\nThe wheel lives in rich-js, and 0.27.0 reads a segment's place from the\nframe it is handed, so moving to it is the feature and the row wrapping\nhere does not change.\n\n0.27.0's Palette is built from a total set of roles, so paletteRole's\nundefined branch cannot run. paletteRole, DecorRole and ThemePole go, and\nso do the two tests of a palette that can no longer be built.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-527",
       "ref": "refs/pull/527/merge",
       "sha": "013f8fcc46ce6121ee3bf7f1ba89eb71724f77be",
@@ -27,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T17:17:29-06:00",
           "message": "feat(settings): a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-528",
-      "ref": "refs/pull/528/merge",
-      "sha": "61e4ce213b1bcd55714e59f4ecc938faa84b533e",
-      "timestamp": "2026-10-31T23:29:33.675Z",
-      "commits": [
-        {
-          "sha": "61e4ce213b1bcd55714e59f4ecc938faa84b533e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:28:36-06:00",
-          "message": "Merge abb0cb67d5d63d1c884e6e9472ca2dc12bd5d060 into 8433e004510534547d91ea68a0e77f398becab3d\n"
-        },
-        {
-          "sha": "abb0cb67d5d63d1c884e6e9472ca2dc12bd5d060",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:23:41-06:00",
-          "message": "feat(effect): the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8)\n\nThe wheel lives in rich-js, and 0.27.0 reads a segment's place from the\nframe it is handed, so moving to it is the feature and the row wrapping\nhere does not change.\n\n0.27.0's Palette is built from a total set of roles, so paletteRole's\nundefined branch cannot run. paletteRole, DecorRole and ThemePole go, and\nso do the two tests of a palette that can no longer be built.\n"
         }
       ]
     },

@@ -53603,6 +53603,7 @@ var EffectSessions = class {
 
 // src/render/strip.ts
 var UNBOUNDED_DRAW_WIDTH = 80;
+var ROW_HOST = {};
 function draw(renderable, options) {
   const destination = resolveDestination(options.colorSystem);
   const { time } = options;
@@ -53614,7 +53615,7 @@ function draw(renderable, options) {
       asciiOnly: false,
       theme: RENDER_THEME,
       colorSystem: destination.colorSystem,
-      ...time === void 0 ? {} : { frame: { time, host: { frameTime: time } } },
+      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
       // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
       // as no style at all; a name the theme lacks is a broken config, so it
       // throws here exactly as the cell splitter throws on it.
