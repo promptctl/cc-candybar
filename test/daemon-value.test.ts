@@ -126,7 +126,11 @@ describe("the daemon is a value", () => {
     daemon: Daemon,
     req: RenderRequest | Parameters<Daemon["reply"]>[0],
   ): Promise<string> => {
-    const handled = await daemon.handle(req, () => false, performance.now());
+    const handled = await daemon.handle(
+      req,
+      () => false,
+      daemon.clock.monotonic(),
+    );
     if (handled.kind !== "reply") throw new Error("expected a reply");
     handled.delivered();
     if (!handled.resp.ok) throw new Error(handled.resp.error);
@@ -239,9 +243,11 @@ describe("the daemon is a value", () => {
       save: () => {},
       flush: () => {},
     };
+    const settled = [...live.keys()];
     expect(() => construct({ session: unreadable })).toThrow(
       "the session file cannot be read",
     );
+    expect([...live.keys()].filter((id) => !settled.includes(id))).toEqual([]);
 
     const daemon = construct();
     await answer(daemon, renderRequest("value-rebuilt"));
@@ -348,7 +354,7 @@ describe("the daemon is a value", () => {
     const midWait = daemon.handle(
       renderRequest("value-close", 20_000),
       () => false,
-      performance.now(),
+      daemon.clock.monotonic(),
     );
 
     const sessionFile = sessionStatePath();

@@ -128,7 +128,9 @@ export interface DaemonInputs {
 export interface Daemon {
   readonly stats: RuntimeStats;
   readonly memoryLimitBytes: number;
-  // The request handling a connection calls.
+  readonly clock: DaemonClock;
+  // The request handling a connection calls. `accepted` is when its connection
+  // came in, on `clock`'s monotonic reading.
   readonly handle: (
     req: Request,
     timedOut: () => boolean,
@@ -168,6 +170,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats();
+  // Before every owner that arms a timer: storage that cannot be read refuses
+  // the build with nothing running.
+  const sessionState = new SessionState(storage.session);
+  const settingsHistory = new SettingsHistory(
+    sessionState,
+    dlog,
+    storage.history,
+  );
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
   const limits = makeLimits(
@@ -215,12 +225,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     hostService,
     managedStorage,
   } = payloadProviders;
-  const sessionState = new SessionState(storage.session);
-  const settingsHistory = new SettingsHistory(
-    sessionState,
-    dlog,
-    storage.history,
-  );
   const navigationHistory = new NavigationHistory();
   // Each session's effect memory — when its effect came into force — held in
   // daemon memory only: a restarted daemon starts every session's effect again.
@@ -592,6 +596,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   return {
     stats,
     memoryLimitBytes,
+    clock,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click runs in the turn it enters, so one that got in has
     // landed before any close; a subscribe its request reached as the daemon
@@ -642,8 +647,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["usageStore close", () => usageStore.close()],
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
-        // Before the storage it resumes: an aborted run resumes its sources once
-        // its program is gone.
         ["runs close", () => runs.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],

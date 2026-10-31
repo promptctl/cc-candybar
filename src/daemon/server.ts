@@ -135,8 +135,7 @@ export function runDaemon(): void {
   try {
     boot();
   } catch (err) {
-    const { message, stack } = err as Error;
-    dlog("error", `refusing to boot: ${message}\n${stack}`);
+    dlog("error", `refusing to boot: ${inspect(err)}`);
     shutdown(1);
   }
 }
@@ -491,7 +490,7 @@ function shutdown(code: number): void {
 function handleConnection(daemon: Daemon, sock: net.Socket): void {
   // [LAW:effects-at-boundaries] When the connection was accepted, on the
   // monotonic clock: a render says how long it waited from here to begin.
-  const accepted = performance.now();
+  const accepted = daemon.clock.monotonic();
   daemon.stats.inFlight++;
   let responded = false;
   // A connection is in flight until it is answered and closes, or until it

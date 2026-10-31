@@ -653,6 +653,19 @@ describe("the launch scope", () => {
     refuseSecondDaemon();
   });
 
+  it("a retired lifeline takes its fault with it, so the next daemon warns of none", async () => {
+    const closing = new AbortController();
+    setLaunchScope({ signal: closing.signal });
+    await launch({ bin: "/bin/echo", category: "user-shell" });
+    __lifelineForTest().cut();
+    expect(lifelineWarnings()).not.toEqual([]);
+
+    closing.abort();
+    retireLifeline();
+
+    expect(lifelineWarnings()).toEqual([]);
+  });
+
   it("a retired lifeline records no fault, and nothing starts another while the scope refuses", async () => {
     const heard: Array<string | null> = [];
     const closing = new AbortController();

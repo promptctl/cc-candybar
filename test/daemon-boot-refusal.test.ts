@@ -21,7 +21,7 @@ test("a malformed budget is refused through daemon.log before any resource is co
     expect(exit.code).toBe(1);
     const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
     expect(log).toMatch(
-      /\[error\] refusing to boot: CC_CANDYBAR_RSS_LIMIT_MB must be a positive integer \(MB\), got "512MB"/,
+      /\[error\] refusing to boot: Error: CC_CANDYBAR_RSS_LIMIT_MB must be a positive integer \(MB\), got "512MB"/,
     );
     expect(log).not.toMatch(/daemon up/);
     expect(fs.existsSync(iso.sockPath)).toBe(false);
@@ -44,7 +44,7 @@ test("an unsafe socket parent is refused through daemon.log", async () => {
     expect(exit.code).toBe(1);
     const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
     expect(log).toMatch(
-      /\[error\] refusing to boot: directory has unsafe permissions[^]*\n\s+at /,
+      /\[error\] refusing to boot: Error: directory has unsafe permissions[^]*\n\s+at /,
     );
     expect(log).not.toMatch(/daemon up/);
   } finally {

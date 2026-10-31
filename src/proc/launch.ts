@@ -479,11 +479,13 @@ function unguard(group: number): void {
 }
 
 // A closed daemon's lifeline goes with it: the EOF a dying launcher gives it,
-// on purpose, so no fault is recorded. Nothing launches after the abort that
-// precedes this, so nothing starts another.
+// on purpose, so no fault is recorded, and one it had goes too, or the next
+// daemon would warn of a lifeline it never held. Nothing launches after the
+// abort that precedes this, so nothing starts another.
 export function retireLifeline(): void {
   const line = lifeline;
   lifeline = null;
+  fault = null;
   line?.pipe.end();
 }
 
