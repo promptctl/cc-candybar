@@ -1591,8 +1591,11 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     });
 
     // No real directory can be made to fail its watch on demand, so each
-    // directory's handle is a stand-in the test can make fail.
-    it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only at the next event", async () => {
+    // directory's handle is a stand-in the test can make fail. A failed
+    // directory is the watcher registry's period to open again: an event on
+    // another directory of the watch re-derives and re-reads, and keeps the
+    // failed one as it is.
+    it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
       const { dir, cleanup } = makeTmpDir();
       const opened: Array<{ dir: string; handle: EventEmitter; listener: (event: string, changed: string | null) => void }> = [];
       const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
@@ -1607,7 +1610,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const a = path.join(dir, "a");
         fs.writeFileSync(state, "v1");
         fs.symlinkSync(state, a);
-        const { store, registry } = make();
+        const watchers = new WatcherRegistry({ logger: () => {} });
+        const store = new VariableStore();
+        const registry = registryOver(store, undefined, undefined, null, new RefreshLedger(), undefined, watchers);
         registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
@@ -1622,11 +1627,18 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
         expect(opensOf(one)).toHaveLength(1);
 
-        // An event on the link's own directory re-derives, which opens it again.
+        // An event on the link's own directory re-derives and re-reads, and
+        // the failed directory stays as it is.
+        fs.writeFileSync(state, "v3");
         opensOf(real)[0]!.listener("rename", "a");
-        await until(() => opensOf(one).length === 2, "the failed directory opened again");
+        await until(() => store.read("val") === "v3", "the store reading v3");
+        expect(opensOf(one)).toHaveLength(1);
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
+
+        // The period's judgment opens it again, and the fault clears.
+        watchers.judge();
         expect(opensOf(one)).toHaveLength(2);
-        expect(registry.cachePolicyFaults().has("val")).toBe(false);
+        await until(() => !registry.cachePolicyFaults().has("val"), "the fault cleared");
       } finally {
         watch.mockRestore();
         cleanup();

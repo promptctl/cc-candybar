@@ -345,11 +345,8 @@ class PathWatches {
     const entry: WatchEntry = {
       bound: {
         derived: watch,
-        held: this.watchers.follow(
-          null,
-          watch,
-          (heard) => this.heard(filePath, entry, heard),
-          null,
+        held: this.watchers.follow(null, watch, (heard) =>
+          this.heard(filePath, entry, heard),
         ).watch,
       },
       subscribers: new Map(),
@@ -359,19 +356,11 @@ class PathWatches {
   }
 
   // Derive where the path can change, follow it, and say the watch's fault.
-  // A new key acquires its watch, keeping every directory both keys name and
-  // retrying any the OS is not listening to.
-  private rederive(
-    filePath: string,
-    entry: WatchEntry,
-    cause: Invalidation,
-  ): void {
+  // A new key acquires its watch, keeping every directory both keys name.
+  private rederive(filePath: string, entry: WatchEntry): void {
     const paths = derived(filePath);
-    const { watch } = this.watchers.follow(
-      entry.bound.held,
-      paths,
-      (heard) => this.heard(filePath, entry, heard),
-      cause,
+    const { watch } = this.watchers.follow(entry.bound.held, paths, (heard) =>
+      this.heard(filePath, entry, heard),
     );
     entry.bound = { derived: paths, held: watch };
     this.report(filePath, entry);
@@ -384,7 +373,7 @@ class PathWatches {
     heard: Invalidation,
   ): void {
     const wasLeaf = entry.bound.derived.reached;
-    this.rederive(filePath, entry, heard);
+    this.rederive(filePath, entry);
     // Ancestor churn on the way DOWN is not a change to the path; a move
     // up from the leaf is its removal, which the subscribers must read. A
     // failed directory may have missed a change, so its window always reads.
@@ -404,7 +393,7 @@ class PathWatches {
   // reported.
   caughtUp(): void {
     for (const [filePath, entry] of this.entries) {
-      this.rederive(filePath, entry, { kind: "unknown" });
+      this.rederive(filePath, entry);
       for (const cb of entry.subscribers.keys()) cb();
     }
   }

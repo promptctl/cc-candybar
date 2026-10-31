@@ -18,7 +18,6 @@ import {
   WatcherRegistry,
   type DirTarget,
   type HeldWatch,
-  type Invalidation,
   type WatchMove,
   type WatchSpec,
 } from "./watchers";
@@ -183,9 +182,6 @@ interface RepoState {
   holders: number;
   // The reasons a pass was asked for since the last one began.
   readonly asked: Set<PassReason>;
-  // A `failed` window the watch told since the last pass followed it: that
-  // pass's follow answers it, and so leaves the deaf directories deaf.
-  failed: Invalidation | null;
   pr: PrSource | null;
 }
 
@@ -496,14 +492,8 @@ export class GitDataProvider {
     };
   }
 
-  // A watch's window: a failed one is kept for the next pass's follow.
-  private heard(root: string, heard: Invalidation): void {
-    const state = this.repos.get(root);
-    if (state && heard.kind === "failed") state.failed = heard;
-    this.changed(root);
-  }
-
-  // A watch fire: the repo changed since any read in flight began.
+  // A watch's window, whatever it says: the repo changed since any read in
+  // flight began.
   changed(root: string): void {
     const state = this.repos.get(root);
     if (!state) return;
@@ -532,14 +522,13 @@ export class GitDataProvider {
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watch: this.followWatch(root, null, null).watch,
+      watch: this.followWatch(root, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
       values: new Map(),
       holders: 0,
       asked: new Set(),
-      failed: null,
       pr: null,
     };
     this.repos.set(root, state);
@@ -553,7 +542,6 @@ export class GitDataProvider {
   private followWatch(
     root: string,
     held: HeldWatch | null,
-    after: Invalidation | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
     const spec = watchSpec(
@@ -563,14 +551,9 @@ export class GitDataProvider {
     );
     // A pass between a worktree's removal and its re-add keeps the watch it
     // holds (`follow`), and the period rebinds once the path names a
-    // directory again. The build holds nothing, and takes the refused slot
-    // the period refreshes.
-    const followed = this.watchers.follow(
-      held,
-      spec,
-      (heard) => this.heard(root, heard),
-      after,
-    );
+    // directory again. The build holds nothing, and a slot the OS refused is
+    // the registry's period to retry.
+    const followed = this.watchers.follow(held, spec, () => this.changed(root));
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
     // against this line, as the config cache's bind line.
@@ -704,8 +687,7 @@ export class GitDataProvider {
     const startedAt = Date.now();
     const asked = [...state.asked];
     state.asked.clear();
-    const followed = this.followWatch(state.root, state.watch, state.failed);
-    state.failed = null;
+    const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
     const values: GitValue[] = [];
     // A value something reads, or something waits on, is read; the rest are
