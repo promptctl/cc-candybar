@@ -271,6 +271,7 @@ export interface UpdateWatchOptions {
 
 export interface UpdateWatch {
   arm(): void;
+  close(): void;
   notice(ctx: NoticeContext): DiagnosticMessage[];
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
   // to apply or an act is already running on this bundle.
@@ -373,7 +374,17 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
 
-  const current = (): Update | null => updateOf(build, release);
+  // [LAW:no-ambient-temporal-coupling] A closed watch knows of no update, so a
+  // release poll landing after the close registers no gate.
+  let closed = false;
+  const armed: Array<() => void> = [];
+  const every = (run: () => void, ms: number): void => {
+    const timer = setInterval(run, ms).unref();
+    armed.push(() => clearInterval(timer));
+  };
+
+  const current = (): Update | null =>
+    closed ? null : updateOf(build, release);
 
   // The dismiss gate follows the identity: dispose the old allow-list, register
   // the new one, none when nothing is newer.
@@ -468,19 +479,22 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   return {
     arm() {
-      // Daemon-lifetime registration: the disposer would only matter to a
-      // watch that is torn down, and the daemon exits instead.
-      reserveUpdateKeys();
+      armed.push(reserveUpdateKeys());
       sampleBuild();
-      setInterval(sampleBuild, intervalMs).unref();
+      every(sampleBuild, intervalMs);
       watchAct();
-      setInterval(watchAct, ACT_POLL_MS).unref();
+      every(watchAct, ACT_POLL_MS);
       // The registry is a question only a published install asks: a checkout
       // rebuilds from the source beside it, whatever npm has.
       if (build.kind === "not-source-checkout") {
         void pollRelease();
-        setInterval(() => void pollRelease(), releaseIntervalMs).unref();
+        every(() => void pollRelease(), releaseIntervalMs);
       }
+    },
+    close() {
+      closed = true;
+      syncGate();
+      armed.forEach((release) => release());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
     running() {

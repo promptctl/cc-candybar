@@ -24,6 +24,7 @@ import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { RenderSightings } from "../../src/daemon/render-sightings";
 import { PACKAGE_VERSION } from "../../src/version";
+import { instantOf } from "../../src/utils/instant";
 import {
   laneSwitches,
   resolveEffectiveGlobals,
@@ -68,6 +69,7 @@ export function testVerbContext(
     history,
     navigation: new NavigationHistory(),
     dlog: () => {},
+    now: () => instantOf(new Date()),
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");
     },

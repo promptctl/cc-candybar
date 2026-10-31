@@ -49,7 +49,7 @@ const result = await build({
   outfile: path.join(dist, "transport.js"),
   alias,
   inject: [shim("globals.ts")],
-  define: { global: "globalThis", "import.meta.url": JSON.stringify("file:///app/dist/index.mjs"), __SOURCE_DIGEST__: "undefined",
+  define: { global: "globalThis", __SOURCE_DIGEST__: "undefined",
     __LANDSCAPE__: JSON.stringify(landscape),
     __PACKAGE_VERSION__: JSON.stringify(JSON.parse(readFileSync(path.join(here, "..", "package.json"), "utf8")).version) },
   logLevel: "warning",

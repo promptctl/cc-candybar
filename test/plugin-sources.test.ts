@@ -114,7 +114,7 @@ interface Rig {
   readonly lines: string[];
 }
 
-// The daemon's own composition of a render cache (src/daemon/server.ts).
+// The daemon's own composition of a render cache (src/daemon/daemon.ts).
 function rig(): Rig {
   const counters: WatcherCounters = {
     watchersOpened: 0,

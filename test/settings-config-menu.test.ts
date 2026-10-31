@@ -170,7 +170,7 @@ function rig(
       drawing: Drawing = { by: "request" },
     ) => {
       const { config, compiled, store, registry } = entry;
-      // [LAW:one-source-of-truth] The daemon's own projection (server.ts): one
+      // [LAW:one-source-of-truth] The daemon's own projection (draw-bar.ts): one
       // `resolveEffectiveGlobals` over the session's picks feeds the payload's
       // `.effective` labels, the render options and the selection, through the
       // same `effectiveInputs`/`renderOptionsOf` and the resolution itself, so a preset
@@ -197,7 +197,7 @@ function rig(
             added_dirs: [],
           },
           ...effectiveInputs(effective),
-          // The daemon derives these per render (server.ts) through the same
+          // The daemon derives these per render (draw-bar.ts) through the same
           // function.
           ...settingCounts(config, entry.fileHeld, sessionPick),
           // What the daemon publishes from the session's settings history.
@@ -207,7 +207,7 @@ function rig(
           },
           feeds,
           tmux: { pane: tmuxPane },
-          // What the daemon sets beside the payload (server.ts).
+          // What the daemon sets beside the payload (draw-bar.ts).
           drawing,
         },
         at,

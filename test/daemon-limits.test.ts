@@ -657,3 +657,26 @@ describe("post-mortems", () => {
     }
   });
 });
+
+// [LAW:no-ambient-temporal-coupling] A reading out when the daemon closes lands
+// on a daemon that is gone.
+describe("a breach landing after disarm", () => {
+  test("writes nothing and asks for no exit", async () => {
+    const rec = newRec();
+    let answer!: (charge: MemoryCharge) => void;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 100,
+        memoryCharge: () => new Promise((resolve) => (answer = resolve)),
+      }),
+    );
+    const { disarm } = limits.arm();
+    disarm();
+    answer({ kind: "charged", measure: "rss", bytes: 10_000 });
+    await limits.check();
+
+    expect(rec.reportsWritten).toEqual([]);
+    expect(rec.snapshotsWritten).toEqual([]);
+    expect(rec.shutdownCalls).toEqual([]);
+  });
+});

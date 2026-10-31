@@ -16,7 +16,7 @@
 //
 // [LAW:single-enforcer] No parallel validation path: the verdict is reached
 // through the exact functions the daemon runs (RenderCache.reloadInto →
-// buildState, then the per-request render in server.ts) — resolveDslConfig →
+// buildState, then the per-request render in draw-bar.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateRenderable → registerDslConfig →
 // deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
 // cannot diverge, because they are one code path — check additionally waits,
@@ -172,7 +172,7 @@ function bindPass(
 // field-name typo in the git/directory/metrics/budget branches slip through —
 // those branches only run when their data is present.
 //
-// `effective` is threaded in exactly as the daemon threads it (server.ts
+// `effective` is threaded in exactly as the daemon threads it (draw-bar.ts
 // resolves one EffectiveGlobals struct per render and feeds BOTH the
 // payload's `*.effective` fields and BuildLineOptions/basePalette below)
 // [LAW:one-source-of-truth].

@@ -7,7 +7,7 @@
 //
 // [LAW:one-source-of-truth] Only the bytes Claude Code's statusline receives
 // change: the lanes draw from the session's full render, which the feed is
-// handed before this line replaces it (src/daemon/server.ts).
+// handed before this line replaces it (src/daemon/draw-bar.ts).
 
 import {
   LANES,

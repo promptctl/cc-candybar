@@ -23,7 +23,12 @@ import {
   type ActRecord,
 } from "../src/daemon/update-act";
 import type { StartTimeRead } from "../src/daemon/process-fingerprint";
-import { makeUpdateWatch } from "../src/daemon/update-notice";
+import {
+  makeUpdateWatch,
+  UPDATE_DISMISSED_KEY,
+} from "../src/daemon/update-notice";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { stateGate } from "../src/daemon/verbs/state-validators";
 import { until } from "./helpers/until";
 
 let scratch: string;
@@ -477,6 +482,36 @@ describe("claimAct: one act per bundle", () => {
     );
     expect(watch.running()).toBe(false);
     expect(watch.error()).toBeNull();
+  });
+
+  // [LAW:no-ambient-temporal-coupling] A release poll out when the daemon
+  // closes lands on a watch that knows of no update, and leaves no gate.
+  test("a closed watch keeps no dismiss gate, and a late release poll registers none", async () => {
+    let answer!: (latest: Response) => void;
+    const watch = makeUpdateWatch({
+      entryUrl: "file:///some/bundle/index.mjs",
+      actsDir: dirOf(),
+      intervalMs: 60_000,
+      releaseIntervalMs: 60_000,
+      registryUrl: "http://127.0.0.1:1",
+      fetchImpl: () => new Promise((resolve) => (answer = resolve)),
+      onApplied: () => {},
+      log: () => {},
+    });
+    const gate = (): string[] => [
+      ...stateGate(DEFAULT_DSL_CONFIG).listKeys(),
+    ];
+    watch.arm();
+    expect(gate()).toContain(UPDATE_DISMISSED_KEY);
+
+    watch.close();
+    answer(new Response(JSON.stringify({ latest: "999.0.0" })));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(gate()).not.toContain(UPDATE_DISMISSED_KEY);
+    expect(
+      watch.notice({ sessionId: "s", dismissed: null, enabled: true }),
+    ).toEqual([]);
   });
 
   test("acts are kept per bundle", () => {

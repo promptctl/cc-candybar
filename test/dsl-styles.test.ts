@@ -353,7 +353,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
 
 // ─── Live recolor: the whole loop, composing with the theme ───────────────────
 
-// Mirrors the daemon's per-render resolution verbatim (server.ts): basePalette
+// Mirrors the daemon's per-render resolution verbatim (draw-bar.ts): basePalette
 // from resolveThemeSelection, the style ThemeKey from effectiveStyleName →
 // styleKeyByName, threaded into renderDsl. The click drives the REAL wire.
 describe("style click — live whole-bar recolor over the active theme", () => {
@@ -483,7 +483,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
 //
 // The rig mirrors the daemon verbatim: `resolveStyleSelection` over the three
 // rungs, threaded into renderDsl as `RenderSelection.style`, exactly as
-// payloadOf → server.ts does.
+// payloadOf → draw-bar.ts does.
 describe("globals.style as an expression — a style chosen by data", () => {
   // The expression reads a payload field, which is the point: `.context.pct` is
   // stand-in for the rate-limit/idle facts the ticket names. Two declared styles

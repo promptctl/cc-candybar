@@ -1,6 +1,6 @@
 // [LAW:single-enforcer] One registry that maps click verb names to their
 // handlers. Adding a new verb is one entry — no branching in handleClick,
-// no scattered if/else in server.ts. The dispatcher does table lookup
+// no scattered if/else in reply.ts. The dispatcher does table lookup
 // only; verb semantics live in the per-verb handler functions.
 //
 // [LAW:dataflow-not-control-flow] The verb is data, the lookup is data;
@@ -21,7 +21,7 @@
 import { launchSync, type LaunchOpts } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
-import { instantOf } from "../../utils/instant";
+import type { Instant } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
 import {
   disclosureNest,
@@ -181,6 +181,8 @@ import { typeSlash, type ClaudeInputEdge } from "../../claude-input/edge";
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
 export interface DaemonContext {
   readonly sessionState: SessionStateRW;
+  // [LAW:effects-at-boundaries] The daemon's clock.
+  readonly now: () => Instant;
   readonly dlog: (level: "info" | "warn" | "error", msg: string) => void;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
@@ -280,7 +282,7 @@ export type ClickContext = Journaled<VerbContext>;
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
 // raw wire-level `value` string and the daemon's verb context; it returns
 // nothing (clicks have no payload). User-facing failures throw an Error;
-// the dispatcher in server.ts converts that to a RENDER_FAILED response.
+// the dispatcher in reply.ts converts that to a RENDER_FAILED response.
 // Invalid-shape inputs (e.g. missing required slash-delimited subfield)
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: ClickContext) => void;
@@ -422,7 +424,7 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 // branch's `value` is the only thing it may write) and cannot proceed
 // on `ok: false` (it throws BadVerbArgs with the reason verbatim,
 // naming the failing pair so the operator can localize the typo). The
-// dispatcher in server.ts maps BadVerbArgs to BAD_REQUEST.
+// dispatcher in reply.ts maps BadVerbArgs to BAD_REQUEST.
 //
 // [LAW:no-silent-failure] Batch atomicity: every pair is validated
 // BEFORE any write happens. Any single failure rejects the whole
@@ -642,7 +644,7 @@ function stepFrom(
 export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
 
 // [LAW:one-source-of-truth] The one place a load-config pick outranks the
-// path the request named: what the render draws from (server.ts) and what a
+// path the request named: what the render draws from (draw-bar.ts) and what a
 // durable click resolves (sessionOrigin) both come through here, so a click
 // made right after a pick lands in the file the bar now draws from, without
 // waiting for the session's next request to record it.
@@ -1282,7 +1284,7 @@ const applyUpdate: VerbHandler = (value, ctx) => {
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] Where the daemon records each session's STAMPED
-// client hints (server.ts writes `JSON.stringify(parseClientHints(req))` here
+// client hints (draw-bar.ts writes `JSON.stringify(parseClientHints(req))` here
 // on every render request that changes them) — the SESSION_RENDER_ORIGIN_KEY move for
 // client facts. A click carries no hints, so the doctor reasons over the facts
 // of the session's last render, read back through the SAME checkpoint the live
@@ -1336,7 +1338,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     sessionId: sid,
     via: ctx.arrival.via,
   } as const;
-  const said = ctx.clients.ofSession(sid, instantOf(new Date()));
+  const said = ctx.clients.ofSession(sid, ctx.now());
   let gathered: ReturnType<typeof gatherFacts>;
   try {
     gathered = gatherFacts(
@@ -1870,7 +1872,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
         ctx.sessionState,
         session.id,
         errors.join("\n"),
-        instantOf(new Date()),
+        ctx.now(),
       );
     }
     const message = `dispatch: ${errors.join("; ")}`;

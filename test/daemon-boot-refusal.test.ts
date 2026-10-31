@@ -31,3 +31,25 @@ test("a malformed budget is refused through daemon.log before any resource is co
     iso.removeTmpDirs();
   }
 });
+
+// [LAW:single-enforcer] A throw anywhere in the boot takes the death funnel: it
+// lands in index.ts's catch otherwise, whose stderr the detached spawn discards.
+test("an unsafe socket parent is refused through daemon.log", async () => {
+  const iso = prepareIsolatedDaemonEnv("ccb-boot-parent");
+  const parent = path.dirname(iso.sockPath);
+  fs.chmodSync(parent, 0o755);
+  const { child, killTree, release } = await spawnTestDaemon(iso.env);
+  try {
+    const exit = await waitForExit(child);
+    expect(exit.code).toBe(1);
+    const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
+    expect(log).toMatch(
+      /\[error\] refusing to boot: directory has unsafe permissions/,
+    );
+    expect(log).not.toMatch(/daemon up/);
+  } finally {
+    killTree();
+    release();
+    iso.removeTmpDirs();
+  }
+});

@@ -4,7 +4,7 @@
 // [LAW:single-enforcer] Only the statusline CLIENT can observe these: Claude
 // Code spawns it with Claude Code's exact environment, while the daemon is
 // detached and one-per-user, its env answering for whichever shell spawned it.
-// So the client reports and the daemon records (server.ts,
+// So the client reports and the daemon records (draw-bar.ts,
 // SESSION_CLIENT_HINTS_KEY) — the doctor reasons over the facts of the
 // session's last render, never over the daemon's own env.
 //

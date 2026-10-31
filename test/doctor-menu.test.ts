@@ -2,7 +2,7 @@
 // route, driven through the real loader, the real spine (registerDslConfig +
 // renderDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
 // probe answers `RGB`, and a settings.json in a temp Claude Code directory the
-// recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
+// recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way draw-bar.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -129,7 +129,7 @@ function buildRuntime(
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  // What server.ts records on a render: the stamped hints, as JSON.
+  // What draw-bar.ts records on a render: the stamped hints, as JSON.
   sessionState.set(
     "s1",
     SESSION_CLIENT_HINTS_KEY,

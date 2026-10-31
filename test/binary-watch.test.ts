@@ -29,6 +29,20 @@ const watch = (
     log: (level, msg) => lines.push([level, msg]),
   });
 
+test("a closed watch samples no more", () => {
+  jest.useFakeTimers();
+  try {
+    const closing = watch();
+    closing.arm();
+    closing.close();
+    fs.rmSync(bundle);
+    jest.advanceTimersByTime(120_000);
+    expect(exits).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "binary-watch-"));
   fs.mkdirSync(path.join(dir, "dist"));

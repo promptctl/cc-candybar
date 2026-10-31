@@ -149,7 +149,7 @@ interface Rig {
   readonly lines: string[];
 }
 
-// The daemon's own composition (src/daemon/server.ts): the render cache, the
+// The daemon's own composition (src/daemon/daemon.ts): the render cache, the
 // storage owner, and the run owner over the same storage and session state.
 function rig(timeoutMs?: number): Rig {
   const lines: string[] = [];

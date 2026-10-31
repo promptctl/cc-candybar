@@ -19,7 +19,7 @@ import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
-import { setLaunchStats } from "../src/proc/launch";
+import { setLaunchScope } from "../src/proc/launch";
 import { answerRepo } from "./helpers/repo-approval";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
@@ -487,13 +487,15 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  setLaunchStats({
+  setLaunchScope({
+    stats: {
     onStart: (c) => {
       if (c === "user-shell") shells++;
     },
     onEnd: () => {},
+    },
   });
-  cleanups.push(() => setLaunchStats(null));
+  cleanups.push(() => setLaunchScope({}));
   const { cache } = makeCache();
 
   const entry = cache.getOrCreate(dir, dir, undefined);

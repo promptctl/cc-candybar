@@ -494,6 +494,13 @@ export class FrameFeeds<Req> {
     return feed;
   }
 
+  // The daemon's close: every feed ends as its last subscriber's leaving ends
+  // it, and the pane follow with the last of them.
+  close(): void {
+    for (const feed of [...this.feeds.values()])
+      for (const sub of [...feed.followers.keys()]) this.unsubscribe(feed, sub);
+  }
+
   private unsubscribe(feed: Feed, sub: Subscriber): void {
     if (!feed.followers.delete(sub)) return;
     if (![...feed.followers.keys()].some((s) => s.lane === sub.lane))

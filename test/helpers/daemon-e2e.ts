@@ -232,7 +232,7 @@ export function sendClick(
 //
 // [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
 // daemon's 200 ms guard abandons a request's reply, never its work, so a click
-// answered TIMEOUT still runs and its effect still lands (server.ts records it
+// answered TIMEOUT still runs and its effect still lands (reply.ts records it
 // as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
 // read; a click is a write, so sending it again applies it twice, and a second
 // apply-update is refused as already running. On TIMEOUT the click's outcome
@@ -357,7 +357,7 @@ export function urlWriting(
 // does not care how the daemon dies, and SIGKILL cannot hang. It is the WRONG
 // signal for a test that restarts the daemon and expects durable state to come
 // back: SIGKILL bypasses server.ts's `shutdown()` funnel, and with it the
-// `sessionState.flush()` that lands writes still inside FileSessionStorage's
+// session state close that lands writes still inside FileSessionStorage's
 // 500ms debounce. Pass "SIGTERM" to exercise the graceful path a real restart
 // takes (a signal, the RSS backstop, or the parent watchdog — all three go
 // through that one funnel).

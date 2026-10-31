@@ -8,7 +8,7 @@
 // expressible within the Node runtime.
 //
 // [LAW:one-way-deps] A leaf: imports nothing, so both the daemon
-// (src/daemon/server.ts) and the client render path
+// (src/daemon/draw-bar.ts) and the client render path
 // (src/render/error-glyph.ts) can import it without daemon↔client coupling —
 // the same direction already used for ./diagnostic-text.
 //

@@ -292,6 +292,9 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   // second caller while one is out waits on the same reading rather than
   // taking its own, so a breach is judged — and recorded — once.
   let inFlight: Promise<boolean> | null = null;
+  // [LAW:no-ambient-temporal-coupling] A reading landing after the disarm
+  // judges nothing: no report, no snapshot, no exit from a daemon closed.
+  let disarmed = false;
 
   function check(): Promise<boolean> {
     inFlight ??= measure().finally(() => {
@@ -309,7 +312,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
     deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (charge.bytes <= limit) return false;
+    if (disarmed || charge.bytes <= limit) return false;
     triggered = true;
     deps.log(
       "warn",
@@ -390,21 +393,20 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     disarm(): void;
   } {
     let timer: NodeJS.Timeout | undefined;
-    let armed = true;
     const tick = async (): Promise<void> => {
       try {
         if (await check()) return;
       } catch (e) {
         deps.log("warn", `memory check failed: ${(e as Error).message}`);
       }
-      if (!armed) return;
+      if (disarmed) return;
       timer = setTimeout(() => void tick(), intervalMs);
       timer.unref();
     };
     void tick();
     return {
       disarm: () => {
-        armed = false;
+        disarmed = true;
         clearTimeout(timer);
       },
     };
