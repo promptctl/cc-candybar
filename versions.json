@@ -4,15 +4,22 @@
     {
       "version": "pr-520",
       "ref": "refs/pull/520/merge",
-      "sha": "0f972c489a2234915ea1146f9f5e6fb07eca9ee3",
-      "timestamp": "2026-10-31T12:58:43.541Z",
+      "sha": "dfb82b0f8820caf8c858c5c76b024d4693eb41d5",
+      "timestamp": "2026-10-31T13:24:58.822Z",
       "commits": [
         {
-          "sha": "0f972c489a2234915ea1146f9f5e6fb07eca9ee3",
+          "sha": "dfb82b0f8820caf8c858c5c76b024d4693eb41d5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T06:57:52-06:00",
-          "message": "Merge a244c9ddc7c622478e50c1132c554d29ced17854 into 196c9029832167dd5178243f96554cec4c614836\n"
+          "timestamp": "2026-10-31T13:24:06Z",
+          "message": "Merge 7b28d0d2f24ff6a6dcf88d30b16d74d79fc6921b into 196c9029832167dd5178243f96554cec4c614836\n"
+        },
+        {
+          "sha": "7b28d0d2f24ff6a6dcf88d30b16d74d79fc6921b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T07:23:54-06:00",
+          "message": "fix(daemon): a closed daemon refuses what reaches it, and launches share one listener on its signal (candybar-testing-0x6u.3c7)\n\nA per-launch AbortSignal.any over the scope's signal grows the heap on Node 20 and 24 even with its listener removed, and a listener per launch warns past ten on Node 20 and 22, so the launches in flight share one listener over a set.\n\nA launch reports to the scope it started under, so one outlasting its daemon's close no longer lands in the next daemon's stats. The scope is installed last, so a build that throws leaves no live scope behind it.\n\nhandle, reply and subscribe refuse once the daemon has closed. A click runs in the turn it enters, so this one check also covers a late settings-history write.\n\nlimits.disarm() replaces the per-arm handle, and DaemonParts carries the providers once, in payloadProviders.\n"
         },
         {
           "sha": "a244c9ddc7c622478e50c1132c554d29ced17854",

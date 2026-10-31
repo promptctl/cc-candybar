@@ -35146,11 +35146,14 @@ var NO_SCOPE = {
   signal: NO_DAEMON
 };
 var scope = NO_SCOPE;
+var inFlight = /* @__PURE__ */ new Set();
+var endInFlight = () => inFlight.forEach((end) => end());
 function setLaunchScope(next2) {
   if (scope.signal !== NO_DAEMON && !scope.signal.aborted) {
     throw new Error("a daemon's launch scope replaced while it is live");
   }
   scope = { ...NO_SCOPE, ...next2 };
+  scope.signal.addEventListener("abort", endInFlight, { once: true });
 }
 var TIMEOUT_KILL_GRACE_MS = 250;
 var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
@@ -35227,10 +35230,8 @@ function signalGroup(pid2, sig) {
   }
 }
 async function launch(opts) {
-  const cancelled = AbortSignal.any(
-    opts.signal === void 0 ? [scope.signal] : [opts.signal, scope.signal]
-  );
-  if (cancelled.aborted) return refusedAsAborted();
+  const { stats } = scope;
+  if (opts.signal?.aborted || scope.signal.aborted) return refusedAsAborted();
   const gate2 = checkRateLimit(opts.category);
   if (!gate2.allowed) {
     return rateLimitedResult(
@@ -35241,7 +35242,7 @@ async function launch(opts) {
   }
   recordStart(opts.category);
   const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
+  stats?.onStart(opts.category);
   return new Promise((resolve) => {
     let child;
     try {
@@ -35252,7 +35253,7 @@ async function launch(opts) {
         detached: true
       });
     } catch (err) {
-      scope.stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, Date.now() - t0);
       resolve({
         ok: false,
         reason: "spawn-error",
@@ -35273,14 +35274,18 @@ async function launch(opts) {
     let killTimer = null;
     let terminated = null;
     const onAbort = () => terminate("aborted");
+    const unlisten = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      inFlight.delete(onAbort);
+    };
     const finish = (deliver) => {
       if (settled3) return;
       settled3 = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
-      cancelled.removeEventListener("abort", onAbort);
+      unlisten();
       if (group !== void 0) unguard(group);
-      scope.stats?.onEnd(opts.category, Date.now() - t0);
+      stats?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
@@ -35302,7 +35307,7 @@ async function launch(opts) {
     const terminate = (cause) => {
       terminated = cause;
       if (timer) clearTimeout(timer);
-      cancelled.removeEventListener("abort", onAbort);
+      unlisten();
       const pid2 = child.pid;
       if (pid2 !== void 0) {
         killTimer = setTimeout(
@@ -35358,7 +35363,8 @@ async function launch(opts) {
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
-    cancelled.addEventListener("abort", onAbort, { once: true });
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    inFlight.add(onAbort);
     if (opts.stdinInput !== void 0 && child.stdin) {
       child.stdin.end(opts.stdinInput);
     } else if (child.stdin) {
@@ -36211,13 +36217,14 @@ function makeLimits(deps) {
   const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
   let latest = { kind: "unmeasured" };
-  let inFlight = null;
+  let inFlight2 = null;
   let disarmed = false;
+  let timer;
   function check() {
-    inFlight ??= measure3().finally(() => {
-      inFlight = null;
+    inFlight2 ??= measure3().finally(() => {
+      inFlight2 = null;
     });
-    return inFlight;
+    return inFlight2;
   }
   async function measure3() {
     if (triggered) return true;
@@ -36272,7 +36279,6 @@ function makeLimits(deps) {
     return { pid: deps.pid, memory: latest, limit, postMortems };
   }
   function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
-    let timer;
     const tick = async () => {
       try {
         if (await check()) return;
@@ -36284,14 +36290,12 @@ function makeLimits(deps) {
       timer.unref();
     };
     void tick();
-    return {
-      disarm: () => {
-        disarmed = true;
-        clearTimeout(timer);
-      }
-    };
   }
-  return { check, describeNextRestart, serving, arm: arm2 };
+  function disarm() {
+    disarmed = true;
+    clearTimeout(timer);
+  }
+  return { check, describeNextRestart, serving, arm: arm2, disarm };
 }
 function chargeWords(charge) {
   return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
@@ -53122,13 +53126,13 @@ var SessionEffects = class {
     const made = /* @__PURE__ */ new Map();
     const own2 = [];
     const { last: last2 } = given2;
-    const inFlight = this.passages;
-    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
+    const inFlight2 = this.passages;
+    const basis = !given2.transitions ? "off" : inFlight2 !== null && last2 !== null ? "compared" : "fresh";
     const before = basis === "compared" ? (id2) => {
       const record2 = last2.placements.get(id2);
       return record2?.kind === "drew" ? {
         drawing: record2.drawing,
-        passage: inFlight.get(id2) ?? null
+        passage: inFlight2.get(id2) ?? null
       } : void 0;
     } : null;
     const reachedIds = /* @__PURE__ */ new Set();
@@ -75600,9 +75604,7 @@ function drawRender(parts, setup, drawing2) {
     renderWarnings,
     payloadProviders,
     effectSessions,
-    menuIdle,
-    gitService,
-    usageStore
+    menuIdle
   } = parts;
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const effective = view.source.effective();
@@ -75756,8 +75758,8 @@ function drawRender(parts, setup, drawing2) {
     nextChange: Infinity,
     motion: frame.motion === "still" ? "still" : "can-move"
   };
-  const g = gitService.getStats();
-  const u = usageStore.getStats();
+  const g = payloadProviders.gitProvider.getStats();
+  const u = payloadProviders.usageStore.getStats();
   const fx = effects.lastFrame();
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
   const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
@@ -76384,8 +76386,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     clock,
     frameFeeds,
     renderCache,
-    gitService,
-    usageStore,
+    payloadProviders: { gitProvider, usageStore },
     fileEvents,
     runs,
     effectSessions,
@@ -76426,7 +76427,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     return stay({
       ok: true,
       stats: stats.snapshot({
-        gitCache: gitService.getStats(),
+        gitCache: gitProvider.getStats(),
         usageCache: usageStore.getStats(),
         sources: sourceSnapshots(parts),
         fileEvents: fileEvents.stats(),
@@ -76584,15 +76585,17 @@ async function replyTo(parts, req, timedOut, accepted) {
 }
 function sourceSnapshots(parts) {
   const {
-    gitService,
-    tmuxService,
-    usageStore,
-    managedStorage,
+    payloadProviders: {
+      gitProvider,
+      tmuxService,
+      usageStore,
+      managedStorage,
+      hostService
+    },
     renderCache,
-    refreshLedger,
-    hostService
+    refreshLedger
   } = parts;
-  const git = gitService.getStats();
+  const git = gitProvider.getStats();
   const tmux3 = tmuxService.getStats();
   const today = usageStore.scanStats();
   const storage = managedStorage.stats();
@@ -83345,20 +83348,6 @@ function createDaemon(inputs) {
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
   const stats = new RuntimeStats();
-  setLaunchScope({
-    stats: stats.launchStats,
-    signal: closing.signal,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it is said in daemon.log, and every feed redraws, so its warning
-    // comes and goes on frames too.
-    observeLifeline: (fault2) => {
-      dlog(
-        fault2 === null ? "info" : "warn",
-        fault2 === null ? "launch lifeline running again" : `launch lifeline ${fault2}; the next launch starts another`
-      );
-      frameFeeds.wakeWhere("data", () => true);
-    }
-  });
   const limits = makeLimits(
     realLimitsDeps(stats.startedAt.getTime(), exit2, {
       limitBytes: memoryLimitBytes2
@@ -83567,7 +83556,6 @@ function createDaemon(inputs) {
   const BIN_CHECK_INTERVAL_MS = 60 * 1e3;
   const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
   const binaryWatch = makeBinaryWatch({
-    // One target per path: run as `node dist/index.mjs`, both name one file.
     targets: bundle.targets,
     intervalMs: BIN_CHECK_INTERVAL_MS,
     stat: fs_default.statSync,
@@ -83655,11 +83643,6 @@ function createDaemon(inputs) {
     refreshLedger,
     fileEvents,
     payloadProviders,
-    gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage,
     sessionState,
     effectSessions,
     menuIdle,
@@ -83674,20 +83657,45 @@ function createDaemon(inputs) {
     limits,
     verbCtx
   };
-  let disarmLimits = () => {
-  };
+  setLaunchScope({
+    stats: stats.launchStats,
+    signal: closing.signal,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it is said in daemon.log, and every feed redraws, so its warning
+    // comes and goes on frames too.
+    observeLifeline: (fault2) => {
+      dlog(
+        fault2 === null ? "info" : "warn",
+        fault2 === null ? "launch lifeline running again" : `launch lifeline ${fault2}; the next launch starts another`
+      );
+      frameFeeds.wakeWhere("data", () => true);
+    }
+  });
   return {
     stats,
     memoryLimitBytes: memoryLimitBytes2,
-    handle: (req, timedOut, accepted) => handleRequest(parts, req, timedOut, accepted),
-    reply: (req, timedOut, accepted) => replyTo(parts, req, timedOut, accepted),
-    subscribe: (sessionId2, subscriber) => frameFeeds.subscribe(sessionId2, subscriber),
+    // [LAW:single-enforcer] A closed daemon serves nothing, and these three are
+    // the way in. A click runs in the turn it enters, so one that got in has
+    // landed before any close; a subscribe its request reached as the daemon
+    // closed is refused here and opens no feed.
+    handle: async (req, timedOut, accepted) => {
+      closing.signal.throwIfAborted();
+      return handleRequest(parts, req, timedOut, accepted);
+    },
+    reply: async (req, timedOut, accepted) => {
+      closing.signal.throwIfAborted();
+      return replyTo(parts, req, timedOut, accepted);
+    },
+    subscribe: (sessionId2, subscriber) => {
+      closing.signal.throwIfAborted();
+      return frameFeeds.subscribe(sessionId2, subscriber);
+    },
     reloadConfig: verbCtx.reloadConfig,
     arm() {
       fileEvents.start(watchProbeDir());
       binaryWatch.arm();
       updateWatch.arm();
-      disarmLimits = limits.arm().disarm;
+      limits.arm();
     },
     close() {
       const teardown = [
@@ -83697,12 +83705,12 @@ function createDaemon(inputs) {
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, and
         // what is in flight is terminated, whichever owner's work it was.
-        ["launches abort", () => closing.abort()],
+        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
-        ["limits disarm", () => disarmLimits()],
+        ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],
