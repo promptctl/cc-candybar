@@ -1,6 +1,6 @@
 // [LAW:one-type-per-behavior] How an option of a picker is DRAWN — the one
-// rule a `{{ menu }}` body, a bare `{{ picker }}`, a `{{ carousel }}` and a
-// `{{ swatches }}` row draw their options by, so no two of them can show one
+// rule a `{{ menu }}` body, a bare `{{ picker }}` and a `{{ swatches }}` row
+// draw their options by, so no two of them can show one
 // option two ways. A paint is the cell without its link: the picker that lays
 // the option out lays the click over every span of it (`linkOver`).
 //
@@ -100,14 +100,12 @@ const named = (label: string, text: Style | undefined, palette: Palette) =>
  * segment's own colours, as the arrows beside it are, and, when the domain is
  * colour-valued, the swatch of `option` beside it.
  */
-export function valuePaint(
+export function labelPaint(
   render: RenderPalettes,
   paletteOf: OptionPalette | undefined,
-): ItemPaint {
-  if (paletteOf === undefined)
-    return (_position, _option, label) => cell(label);
-  return (_position, option, label) =>
-    named(label, undefined, paletteOf(option, render));
+): (option: string, label: string) => RichText {
+  if (paletteOf === undefined) return (_option, label) => cell(label);
+  return (option, label) => named(label, undefined, paletteOf(option, render));
 }
 
 /**

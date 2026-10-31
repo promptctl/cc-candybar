@@ -73,8 +73,20 @@ describe("{{ carousel }} names what it sets", () => {
       /template references unknown action "nope" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/,
     );
     expect(
-      stripAnsi(renderOf('{{ carousel "pick" (printf "no%s" "pe") (printf "zoom") }}')),
+      stripAnsi(renderOf('{{ carousel "pick" (printf "no%s" "pe") "zoom" }}')),
     ).toMatch(/open must name a declared action/);
+  });
+
+  test("a computed open leaves a spelled label a label, never an action name", () => {
+    expect(
+      stripAnsi(renderOf('{{ $o := "hello" }}{{ carousel "pick" $o "zoom" }}')),
+    ).toContain("zoom");
+  });
+
+  test("a computed label that comes up empty is refused: a control needs a name", () => {
+    expect(
+      stripAnsi(renderOf('{{ carousel "pick" "hello" (printf "") }}')),
+    ).toMatch(/label is empty/);
   });
 
   test("an open action that writes a bound value is refused: the label binds none", () => {

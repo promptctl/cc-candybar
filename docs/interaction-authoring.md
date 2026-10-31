@@ -1708,8 +1708,9 @@ domain, the same gated click — drawn as one control that says what it sets:
 All three arguments are required strings. `▶` applies the option after the
 value the action's key holds now and `◀` the one before it, wrapping round the
 ends, so the bar changes on every click. The label is the third argument and
-never the value; clicking it fires `openAction`, which is how the control
-expands the list of every option. Where the domain is colour-valued, the swatch
+never the value. Clicking it fires `openAction`, and what opens is yours to
+wire: the action below flips a key, and a `{{ menu "applyTheme" }}` segment
+shown `when` that key is `"open"` is the list. Where the domain is colour-valued, the swatch
 of the value in force sits beside the label: `◀ style ▀▀▀ ▶`.
 
 ```json5 check:pass

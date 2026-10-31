@@ -32,7 +32,7 @@ import {
   renderLook,
   type ActionRuntime,
 } from "./action.js";
-import { valuePaint } from "./option-paint.js";
+import { labelPaint } from "./option-paint.js";
 import { assemble, requireOptionKind, type OptionAction } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
@@ -80,10 +80,9 @@ export function renderCarousel(
   const declared = runtime.compiled.get(applyName)!;
   const sessionId = readVar(store, "session.id");
   const { options } = apply;
-  const count = options.length;
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.
-  if (count === 0) return assemble([], true);
+  if (options.length === 0) return assemble([], true);
   const indexAt = ringAround(options, readVar(store, apply.stateVar));
   const ring = (offset: number): string => options[indexAt(offset)]!;
   const step = (offset: number): string =>
@@ -105,11 +104,9 @@ export function renderCarousel(
         // Drawn as the arrows are, in the segment's own colours (Brandon: "The
         // name loses its styling"), beside the swatch of the value in force
         // when the domain is colour-valued.
-        valuePaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
-          { index: indexAt(0), count },
+        labelPaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
           ring(0),
           label,
-          false,
         ),
         effectsUrl(
           realize(
@@ -132,6 +129,11 @@ export function carouselFuncs(runtime: ActionRuntime): FuncMap {
   return {
     carousel: {
       fn: (applyName: string, openName: string, label: string) => {
+        // [LAW:no-silent-failure] A computed label can come up empty, and a
+        // control with no name says nothing and leaves no text to click.
+        if (label === "") {
+          throw new Error(`carousel "${applyName}": label is empty`);
+        }
         if (!runtime.compiled.has(openName)) {
           throw new Error(
             `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`,

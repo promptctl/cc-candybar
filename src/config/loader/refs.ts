@@ -279,16 +279,16 @@ export type ActionSite = "action" | "options";
 // its page cursor is synthesized from identity, and the dict's option-name
 // literals must never be misread as action refs — and a `carousel` binds its
 // (apply, open) pair the same way (`{{ carousel "applyTheme" "openThemes"
-// "theme" }}`): its label comes last so a computed one cannot shift them.
+// "theme" }}`).
 // A `swatches` row binds (apply, page) as a picker does; a `swatch` binds only
 // its apply action — the literal after it names an option, not an action —
 // and a `themePreview` binds the apply action it is named, when it is.
 // One scan arms on any keyword with that keyword's own arg count
-// [LAW:single-enforcer], and a name is a literal among the call's OWN
-// arguments: one inside a parenthesised argument belongs to that expression,
-// and the call ends at its closing `)` or a `|`, so an optional name left out
-// is never filled from whatever follows. A keyword after `.` or `$` is a field
-// read (`eq .menu "open"`), never a call.
+// [LAW:single-enforcer], and names are the unbroken run of literals straight
+// after it: any other token (a computed argument, a variable, a closing `)`, a
+// `|`) ends the run, so what follows a computed or omitted name, such as a
+// carousel's spelled label, is never misread as one. A keyword after `.` or
+// `$` is a field read (`eq .menu "open"`), never a call.
 const BINDING_KEYWORD_RE =
   /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
 const NAME_ARGS: Readonly<Record<string, number>> = {
@@ -305,23 +305,17 @@ function* actionBindings(
 ): IterableIterator<{ name: string; site: ActionSite; index: number }> {
   let cursor = 0;
   let pending = 0; // remaining name args to capture for the current call
-  let depth = 0; // parentheses open inside the current call's argument list
   let site: ActionSite = "action";
   for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
     const between = code.slice(cursor, s.index);
     const kw = BINDING_KEYWORD_RE.exec(between);
     if (kw !== null) {
       pending = NAME_ARGS[kw[1]!]!;
-      depth = 0;
       site = kw[1] === "action" ? "action" : "options";
-    } else {
-      for (const ch of between) {
-        if (ch === "(") depth++;
-        if (ch === ")") depth--;
-        if (depth < 0 || (ch === "|" && depth === 0)) pending = 0;
-      }
+    } else if (between.trim() !== "") {
+      pending = 0;
     }
-    if (pending > 0 && depth === 0) {
+    if (pending > 0) {
       yield { name: s[0].slice(1, -1), site, index: s.index };
       pending--;
     }
@@ -355,12 +349,13 @@ export function templateActionRefs(
 
 // Whether a template — through its own text or any helper it calls — binds an
 // action by a name it computes (`{{ action $name "x" }}`, `{{ menu .which }}`)
-// rather than spells: a binding keyword whose first argument is no literal.
+// rather than spells: a binding keyword with a name argument that is no literal,
+// the second of the pairs included.
 // `templateActionRefs` reads only spelled names, so such a template may bind
 // any declared action. A keyword with no argument (`{{ themePreview }}`)
 // binds none.
 const COMPUTED_BINDING_RE =
-  /(?<![\w.$])(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+(?=[^\s"`)|}])/;
+  /(?<![\w.$])(?:(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+|(?:picker|carousel|swatches)\s+""\s+)(?=[^\s"`)|}])/;
 export function bindsComputedAction(
   template: string,
   helpers: Readonly<Record<string, string>>,

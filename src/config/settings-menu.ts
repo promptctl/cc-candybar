@@ -477,6 +477,7 @@ const menuControl = (
   name: SettingName,
   id: string,
   place: Place,
+  label: string,
   domain: ControlDomain,
   laidAfter: Pick<MenuControl, "help" | "submenus">,
 ): MenuControl => {
@@ -487,7 +488,7 @@ const menuControl = (
     id,
     place,
     control: settingControl(
-      { label: row.label, domain },
+      { label, domain },
       row.sessionKey,
       row.effectiveVar,
       controlApply(id),
@@ -504,6 +505,7 @@ const CONTROLS: readonly MenuControl[] = (
     name,
     name,
     PLACE[name],
+    SETTINGS[name].label,
     offeredHere(
       name,
       settingControlDomain(SETTINGS[name].configKey),
@@ -527,6 +529,9 @@ const TRIAL_CONTROLS: readonly MenuControl[] = (
       name,
       `${name}.trials`,
       "trials",
+      // Beside the setting's own control and over the same key, so only the
+      // label says this one ranges the trial values.
+      `🧪 ${name}`,
       { from: SETTINGS[name].trials },
       { help: [], submenus: [] },
     ),
