@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-515",
+      "ref": "refs/pull/515/merge",
+      "sha": "d17218d06549535df9d04a449f68ff850242a25e",
+      "timestamp": "2026-10-31T05:14:19.703Z",
+      "commits": [
+        {
+          "sha": "d17218d06549535df9d04a449f68ff850242a25e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:13:30-06:00",
+          "message": "Merge 3f237d92f2563a145a1c133244d8c8c11fff2c10 into 71f9a26bd1aaa0a15fda13105bdf616ee70d078b\n"
+        },
+        {
+          "sha": "3f237d92f2563a145a1c133244d8c8c11fff2c10",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:13:21-06:00",
+          "message": "fix(site): the live bar defines Symbol.dispose where Safari has none\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0d7e32730906f412f757614cd2ea4aed3dbd3cac",
