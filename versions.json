@@ -4,15 +4,22 @@
     {
       "version": "pr-522",
       "ref": "refs/pull/522/merge",
-      "sha": "60b6a1d5611147d74f90f09035d816516723bee1",
-      "timestamp": "2026-10-31T15:55:14.650Z",
+      "sha": "c1fa33d49eb084d64b959b0343541e06ecf8ad96",
+      "timestamp": "2026-10-31T16:09:04.061Z",
       "commits": [
         {
-          "sha": "60b6a1d5611147d74f90f09035d816516723bee1",
+          "sha": "c1fa33d49eb084d64b959b0343541e06ecf8ad96",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T09:54:28-06:00",
-          "message": "Merge 795c6f2436bed87c28ec76d0d351f68794a0a453 into 82152d4ea6859d018e7af98d2651d77804e31aad\n"
+          "timestamp": "2026-10-31T16:08:14Z",
+          "message": "Merge 9758b8ea8146279e1d71091b8efc29f55655cc6b into 82152d4ea6859d018e7af98d2651d77804e31aad\n"
+        },
+        {
+          "sha": "9758b8ea8146279e1d71091b8efc29f55655cc6b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T10:07:27-06:00",
+          "message": "test(daemon): the harness holds what its migrated files claim (candybar-testing-0x6u.c3x)\n\nFrom CI and the high review of #522.\n\nA client's give-up raced a cold render in the worker: both share a thread, so\na render that holds it past the client's timer answers first. The case moves to\na held stand-in on fake time, where nothing but the hang-up can end the request.\n\nThe harness saved session state with no debounce, so a restart proof passed with\nthe close's flush removed. It now takes the daemon's own window, named once.\n\nIts env is replaced, not merged: what a spawned daemon is given is its whole\nenvironment, and a migrating file deletes keys from it.\n\nA stopped connection's backstop is proven quiet past when it would have fired,\nread from the count at its own start, because a cold render can time out first.\n"
         },
         {
           "sha": "795c6f2436bed87c28ec76d0d351f68794a0a453",
