@@ -78544,7 +78544,7 @@ function pluginLoadLine(layers, {
   );
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
-  return `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
+  return `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
 }
 var heardField = (heard) => {
   switch (heard.kind) {
@@ -78571,7 +78571,7 @@ var causeField = (cause) => {
 };
 function configLoadedLine(entry, cause, settled3) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;

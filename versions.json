@@ -4,15 +4,22 @@
     {
       "version": "pr-519",
       "ref": "refs/pull/519/merge",
-      "sha": "53961ea50bd66ffc68f1b619153e1197dd365a2d",
-      "timestamp": "2026-10-31T11:37:39.070Z",
+      "sha": "f769439960891430843408398415d33412937086",
+      "timestamp": "2026-10-31T11:44:19.764Z",
       "commits": [
         {
-          "sha": "53961ea50bd66ffc68f1b619153e1197dd365a2d",
+          "sha": "f769439960891430843408398415d33412937086",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T11:36:45Z",
-          "message": "Merge b9f06536ac17957ce5a6841d2453596924de52be into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+          "timestamp": "2026-10-31T11:43:25Z",
+          "message": "Merge 5f20a806b8e0a11ac7a81a058f538d7a7cf124e1 into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+        },
+        {
+          "sha": "5f20a806b8e0a11ac7a81a058f538d7a7cf124e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:43:07-06:00",
+          "message": "fix(doctor): every chain joins through one function, and comments say what is true (brandon-unfiled-3248.hpxb)\n\nThe render cache's log lines spelled the join twice more; they go through\nchainName with their bytes kept. Comments that still placed the precedence in\nserver.ts or said a config was not found are corrected, and the UI map's\nsamples show the absolute paths the row prints.\n"
         },
         {
           "sha": "b9f06536ac17957ce5a6841d2453596924de52be",
