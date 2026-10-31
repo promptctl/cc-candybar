@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-516",
+      "ref": "refs/pull/516/merge",
+      "sha": "14ef72c1292cfa485e494a26e750745bcdd8f9be",
+      "timestamp": "2026-10-31T05:34:58.273Z",
+      "commits": [
+        {
+          "sha": "14ef72c1292cfa485e494a26e750745bcdd8f9be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:34:13-06:00",
+          "message": "Merge 63660b9d87d7988934aef25dde587239942658dd into 1eb0b0c4631cd6287997adbaddb0d7db1f9452a0\n"
+        },
+        {
+          "sha": "63660b9d87d7988934aef25dde587239942658dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:34:02-06:00",
+          "message": "feat(menu): the menu opens with no tab open, and its timeout defaults to 120s in 15s steps\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0a5c459f404f83438a0772eb02741da617b6a82b",
