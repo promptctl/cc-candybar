@@ -13,9 +13,9 @@
 // walk draws there — the shade's for a closed cell, `textOn` for the rest — so
 // a preview shows only colours its theme names, in the shades the bar deals.
 // Where one role's swatches meet the next's they are held apart by the rule a
-// bar row turning hue is (`vocabularyOf`), so a swatch there can wear a rung
-// past its role's window in place of the tone it was dealt, as the cell after
-// a turn on the bar can.
+// bar row turning hue is (`vocabularyOf`), so a swatch there can wear another
+// tone or a rung past its role's window in place of the tone it was dealt, as
+// a cell either side of a turn on the bar can.
 //
 // The palette sampled is the render's own, not the active segment's: a segment
 // pinned to another theme by `palette:` still previews the bar's theme, which
