@@ -52939,8 +52939,8 @@ function requestedConfigTarget(argument, environment) {
   }
   return { source: "search" };
 }
-function chainName(paths) {
-  return paths.join(" < ") || "bundled default (no config file found)";
+function chainName(paths, none = "bundled default (no config file loaded)") {
+  return paths.join(" < ") || none;
 }
 
 // src/render/strip.ts
@@ -53810,7 +53810,7 @@ var NAMED_BY = {
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
   pick: "load-config pick",
-  unrecorded: "source not recorded"
+  unknown: "source unknown"
 };
 function judgedConfig({ target, layers }) {
   if (target.source !== "search") {
@@ -69507,17 +69507,8 @@ function encodeRenderOrigin({
   });
 }
 function recordedTarget(source, configFile) {
-  switch (source) {
-    case void 0:
-      return configFile === null ? { source: "search" } : { source: "unrecorded", path: configFile };
-    case "search":
-      return configFile === null ? { source } : null;
-    case "argument":
-    case "environment":
-      return configFile === null ? null : { source, path: configFile };
-    default:
-      return null;
-  }
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
 }
 function parseRenderOrigin(raw) {
   let parsed2;
@@ -69533,11 +69524,7 @@ function parseRenderOrigin(raw) {
   if (typeof projectDir !== "string" || typeof cwd2 !== "string" || configFile !== null && typeof configFile !== "string") {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  const target = recordedTarget(source, configFile);
-  if (target === null) {
-    throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
-  }
-  return { projectDir, cwd: cwd2, target };
+  return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
 }
 function sessionOrigin(ctx, sid) {
   const origin = recordedOrigin(ctx, sid);

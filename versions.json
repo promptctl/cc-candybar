@@ -4,15 +4,22 @@
     {
       "version": "pr-519",
       "ref": "refs/pull/519/merge",
-      "sha": "2d78409cb37cd48b19d8b9ba03b874b0d9692a5d",
-      "timestamp": "2026-10-31T11:02:42.057Z",
+      "sha": "53961ea50bd66ffc68f1b619153e1197dd365a2d",
+      "timestamp": "2026-10-31T11:37:39.070Z",
       "commits": [
         {
-          "sha": "2d78409cb37cd48b19d8b9ba03b874b0d9692a5d",
+          "sha": "53961ea50bd66ffc68f1b619153e1197dd365a2d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:01:51-06:00",
-          "message": "Merge 04496a4c33f129f00a9c0f1d32a5ad50c63cffdf into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+          "timestamp": "2026-10-31T11:36:45Z",
+          "message": "Merge b9f06536ac17957ce5a6841d2453596924de52be into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+        },
+        {
+          "sha": "b9f06536ac17957ce5a6841d2453596924de52be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:36:32-06:00",
+          "message": "fix(doctor): an unreadable source no longer fails a click, and an empty chain says what is true (brandon-unfiled-3248.hpxb)\n\nA record's source only labels its path, so one this build cannot read now\nleaves the path standing with its source unknown instead of failing every\ndurable click on the session. An empty chain reads \"no config file loaded\":\na repository's config awaiting approval is left out of the chain, so \"found\"\nwas false.\n\ncheck's fatal arm joins through chainName, and the comments and the doctor's\nUI map stop naming what moved.\n"
         },
         {
           "sha": "04496a4c33f129f00a9c0f1d32a5ad50c63cffdf",
