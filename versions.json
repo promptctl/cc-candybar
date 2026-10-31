@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-518",
+      "ref": "refs/pull/518/merge",
+      "sha": "62aee6787245f7ebecc2c845d113bc24d744f71d",
+      "timestamp": "2026-10-31T22:36:52.512Z",
+      "commits": [
+        {
+          "sha": "62aee6787245f7ebecc2c845d113bc24d744f71d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:36:12Z",
+          "message": "Merge d7108bdef66e1ae5358ac7bee493db3ec6cb03e9 into 5906e458d69d135a44baeafed475d436482c7355\n"
+        },
+        {
+          "sha": "d7108bdef66e1ae5358ac7bee493db3ec6cb03e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:35:57-06:00",
+          "message": "fix(carousel): the label paint is a plain function, a control's label has one source, and the docs say what loads (brandon-menus-sjhy.vxr)\n"
+        },
+        {
+          "sha": "bb7818ebdc305a8c93b40ca091e9950b958971d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:00:24-06:00",
+          "message": "fix(carousel): names are the leading literals, trial controls say trials, and a removed themeSwitcher points somewhere (brandon-menus-sjhy.vxr)\n"
+        },
+        {
+          "sha": "99ba52642e2e8710a4e74c1f89e091d95bc99f9d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T04:45:01-06:00",
+          "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-526",
       "ref": "refs/pull/526/merge",
       "sha": "92f84fb741c471c81c8984fc3af85850b3d5a5ea",
@@ -27,35 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T16:32:08-06:00",
           "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-518",
-      "ref": "refs/pull/518/merge",
-      "sha": "9d8d52b225d35cf15f629c1f2d98f1f6fff66466",
-      "timestamp": "2026-10-31T22:29:05.320Z",
-      "commits": [
-        {
-          "sha": "9d8d52b225d35cf15f629c1f2d98f1f6fff66466",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:28:21Z",
-          "message": "Merge bb7818ebdc305a8c93b40ca091e9950b958971d8 into 5906e458d69d135a44baeafed475d436482c7355\n"
-        },
-        {
-          "sha": "bb7818ebdc305a8c93b40ca091e9950b958971d8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:00:24-06:00",
-          "message": "fix(carousel): names are the leading literals, trial controls say trials, and a removed themeSwitcher points somewhere (brandon-menus-sjhy.vxr)\n"
-        },
-        {
-          "sha": "99ba52642e2e8710a4e74c1f89e091d95bc99f9d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T04:45:01-06:00",
-          "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
         }
       ]
     },

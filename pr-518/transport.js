@@ -54994,6 +54994,7 @@ var menuControl = (name, id2, place, label2, domain, laidAfter) => {
     name,
     id: id2,
     place,
+    label: label2,
     control: settingControl(
       { label: label2, domain },
       row2.sessionKey,
@@ -72198,9 +72199,8 @@ var named2 = (label2, text4, palette) => cell2(
     swatch(palette)
   ])
 );
-function labelPaint(render3, paletteOf) {
-  if (paletteOf === void 0) return (_option, label2) => cell2(label2);
-  return (option, label2) => named2(label2, void 0, paletteOf(option, render3));
+function labelPaint(render3, paletteOf, option, label2) {
+  return paletteOf === void 0 ? cell2(label2) : named2(label2, void 0, paletteOf(option, render3));
 }
 function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
   const text4 = stateCell(active2.palette, ground, drawnAt);
@@ -72617,7 +72617,9 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
         // Drawn as the arrows are, in the segment's own colours (Brandon: "The
         // name loses its styling"), beside the swatch of the value in force
         // when the domain is colour-valued.
-        labelPaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
+        labelPaint(
+          renderLook(runtime, "{{ carousel }}"),
+          apply.paletteOf,
           ring(0),
           label2
         ),
