@@ -215,7 +215,10 @@ function shellReader(
         category: "user-shell",
         signal,
       });
-      if (!r.ok && r.reason === "aborted") throw signal.reason;
+      // Only the source's own abort ends a run. The launch scope's is a daemon
+      // closing under a live source: a failed read, like any other.
+      if (!r.ok && r.reason === "aborted" && signal.aborted)
+        throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why =
         r.exitCode === null

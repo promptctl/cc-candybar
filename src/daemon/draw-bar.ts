@@ -3,8 +3,11 @@
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import { dlog } from "./log";
-import { fileEventsWarnings } from "./cache/file-events";
-import { lifelineWarnings } from "../proc/launch";
+import {
+  fileEventsWarnings,
+  type FileEventsWarning,
+} from "./cache/file-events";
+import { lifelineWarnings, type LifelineWarning } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import { UPDATE_DISMISSED_KEY } from "./update-notice";
 import { type RenderOrigin } from "../config-hint";
@@ -16,7 +19,6 @@ import {
 } from "./protocol";
 import type { Response } from "./protocol";
 import { type SessionId } from "./session-id";
-import { type FileEventsWarning } from "./cache/file-events";
 import { repoQuestions } from "./repo-configs";
 import {
   type CacheEntry,
@@ -32,7 +34,6 @@ import {
   sessionRenderOrigin,
 } from "./verbs";
 import { roleOf, answeredOf } from "./render-sightings";
-import { type LifelineWarning } from "../proc/launch";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {

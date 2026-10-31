@@ -18,6 +18,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import type { RenderOrigin } from "../src/config-hint";
 import { LANES } from "../src/config/lanes";
 import {
   createDaemon,
@@ -214,6 +215,19 @@ describe("the daemon is a value", () => {
         drawing: () => true,
       }),
     ).toThrow(closed);
+    expect(() => daemon.arm()).toThrow(closed);
+    expect(() => daemon.reloadConfig({} as RenderOrigin)).toThrow(closed);
+  });
+
+  test("a second daemon while one is live is refused before it builds anything", () => {
+    writeConfig(PADDED);
+    const daemon = construct();
+    const load = jest.fn(() => ({}));
+    expect(() =>
+      construct({ session: { load, save: () => {}, flush: () => {} } }),
+    ).toThrow("a daemon is already live");
+    expect(load).not.toHaveBeenCalled();
+    close(daemon);
   });
 
   test("a build that throws stands in the way of no next build", async () => {

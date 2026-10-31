@@ -10,6 +10,7 @@ import {
   launchJobSync,
   launchSync,
   lifelineWarnings,
+  refuseSecondDaemon,
   retireLifeline,
   setLaunchScope,
   __lifelineForTest,
@@ -643,11 +644,13 @@ describe("the launch scope", () => {
     next.abort();
   });
 
-  it("refuses to replace a scope whose daemon is still live", () => {
+  it("refuses a second daemon until the first has closed", () => {
+    refuseSecondDaemon();
     const closing = new AbortController();
     setLaunchScope({ signal: closing.signal });
-    expect(() => setLaunchScope({})).toThrow(/replaced while it is live/);
+    expect(() => refuseSecondDaemon()).toThrow(/already live/);
     closing.abort();
+    refuseSecondDaemon();
   });
 
   it("a retired lifeline records no fault, and nothing starts another while the scope refuses", async () => {

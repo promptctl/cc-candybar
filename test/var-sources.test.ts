@@ -19,6 +19,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
+import { setLaunchScope } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
@@ -506,6 +507,22 @@ describe("SourceRegistry — shell: basic", () => {
     expect(err).toBeDefined();
     expect(err!.message).toMatch(/exited with code/);
     expect(err!.timestamp).toBeGreaterThanOrEqual(before);
+  });
+
+  it("a read the launch scope ended is a failed read, not the registry's abort", async () => {
+    const closing = new AbortController();
+    closing.abort();
+    setLaunchScope({ signal: closing.signal });
+    try {
+      const { registry } = make();
+      registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      await ran(registry);
+      expect(registry.getLastError("val")!.message).toBe(
+        `shell "echo x" aborted in ${process.cwd()}`,
+      );
+    } finally {
+      setLaunchScope({});
+    }
   });
 
   it("runs the command in its declared cwd, and every failure names that cwd", async () => {

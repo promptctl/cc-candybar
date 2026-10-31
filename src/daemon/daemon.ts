@@ -19,7 +19,12 @@ import {
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
-import { retireLifeline, setLaunchScope } from "../proc/launch";
+import {
+  launch,
+  refuseSecondDaemon,
+  retireLifeline,
+  setLaunchScope,
+} from "../proc/launch";
 import { actsDir } from "./update-act";
 import { makeUpdateWatch } from "./update-notice";
 import { makeBinaryWatch } from "./binary-watch";
@@ -44,7 +49,6 @@ import { closeIdleMenus } from "./verbs";
 import { fileStores, productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
-import { launch } from "../proc/launch";
 import { declareLanes } from "./render-payload.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import { EffectSessions } from "../render/effect.js";
@@ -153,6 +157,8 @@ export interface Daemon {
 
 // One Daemon per process at a time: launches and the log are the process's.
 export function createDaemon(inputs: DaemonInputs): Daemon {
+  // Before anything is built: a refused build hands back nothing to close.
+  refuseSecondDaemon();
   const { bundle, storage, memoryLimitBytes, registryUrl, clock, exit } =
     inputs;
   const instant = (): Instant => instantOf(clock.date());
@@ -586,7 +592,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   return {
     stats,
     memoryLimitBytes,
-    // [LAW:single-enforcer] A closed daemon serves nothing, and these three are
+    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click runs in the turn it enters, so one that got in has
     // landed before any close; a subscribe its request reached as the daemon
     // closed is refused here and opens no feed.
@@ -602,8 +608,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       closing.signal.throwIfAborted();
       return frameFeeds.subscribe(sessionId, subscriber);
     },
-    reloadConfig: verbCtx.reloadConfig,
+    reloadConfig: (origin) => {
+      closing.signal.throwIfAborted();
+      verbCtx.reloadConfig(origin);
+    },
     arm() {
+      closing.signal.throwIfAborted();
       fileEvents.start(watchProbeDir());
       binaryWatch.arm();
       updateWatch.arm();

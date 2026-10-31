@@ -341,14 +341,17 @@ let scope: LaunchScope = NO_SCOPE;
 const inFlight = new Set<() => void>();
 const endInFlight = (): void => inFlight.forEach((end) => end());
 
-// A scope stays in force once its signal has aborted, so the work a closed
-// daemon left running is refused until the next daemon takes its place.
 // [LAW:no-shared-mutable-globals] One daemon is live in a process: launches
 // carry no owner, so a second would run them under the first's signal.
-export function setLaunchScope(next: Partial<LaunchScope>): void {
+export function refuseSecondDaemon(): void {
   if (scope.signal !== NO_DAEMON && !scope.signal.aborted) {
-    throw new Error("a daemon's launch scope replaced while it is live");
+    throw new Error("a daemon is already live in this process");
   }
+}
+
+// A scope stays in force once its signal has aborted, so the work a closed
+// daemon left running is refused until the next daemon takes its place.
+export function setLaunchScope(next: Partial<LaunchScope>): void {
   scope = { ...NO_SCOPE, ...next };
   scope.signal.addEventListener("abort", endInFlight, { once: true });
 }

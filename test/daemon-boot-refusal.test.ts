@@ -44,7 +44,7 @@ test("an unsafe socket parent is refused through daemon.log", async () => {
     expect(exit.code).toBe(1);
     const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
     expect(log).toMatch(
-      /\[error\] refusing to boot: directory has unsafe permissions/,
+      /\[error\] refusing to boot: directory has unsafe permissions[^]*\n\s+at /,
     );
     expect(log).not.toMatch(/daemon up/);
   } finally {

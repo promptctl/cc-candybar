@@ -135,7 +135,8 @@ export function runDaemon(): void {
   try {
     boot();
   } catch (err) {
-    dlog("error", `refusing to boot: ${(err as Error).message}`);
+    const { message, stack } = err as Error;
+    dlog("error", `refusing to boot: ${message}\n${stack}`);
     shutdown(1);
   }
 }
@@ -420,8 +421,6 @@ function writeLeaseFile(sockPath: string): void {
   if (reason !== null) dlog("warn", `lease write failed: ${reason}`);
 }
 
-let inFlight = 0;
-
 // --- shutdown ---
 
 let shuttingDown = false;
@@ -493,8 +492,7 @@ function handleConnection(daemon: Daemon, sock: net.Socket): void {
   // [LAW:effects-at-boundaries] When the connection was accepted, on the
   // monotonic clock: a render says how long it waited from here to begin.
   const accepted = performance.now();
-  inFlight++;
-  daemon.stats.inFlight = inFlight;
+  daemon.stats.inFlight++;
   let responded = false;
   // A connection is in flight until it is answered and closes, or until it
   // becomes a subscription, which daemon-stats counts as one of
@@ -503,8 +501,7 @@ function handleConnection(daemon: Daemon, sock: net.Socket): void {
   const leaveInFlight = (): void => {
     if (!counted) return;
     counted = false;
-    inFlight = Math.max(0, inFlight - 1);
-    daemon.stats.inFlight = inFlight;
+    daemon.stats.inFlight--;
   };
 
   // [LAW:no-ambient-temporal-coupling] respond owns the response→exit
