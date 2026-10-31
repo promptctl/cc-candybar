@@ -34925,17 +34925,13 @@ function sourceCheckoutOf(bundlePath) {
   const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
   return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
 }
-function bakedStamp() {
-  const digest2 = bakedDigest();
+function bundleStamp(digest2) {
   if (digest2 === null) {
     throw new Error(
       "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
     );
   }
   return { version: PACKAGE_VERSION, digest: digest2 };
-}
-function bakedDigest() {
-  return true ? null : void 0;
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
@@ -68938,6 +68934,7 @@ var RuntimeStats = class _RuntimeStats {
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      sourceDigest: null,
       daemon: {
         pid: 0,
         memory: { kind: "unmeasured" },
@@ -68956,7 +68953,7 @@ var RuntimeStats = class _RuntimeStats {
     return {
       pid: process_default.pid,
       version: PACKAGE_VERSION,
-      sourceDigest: bakedDigest(),
+      sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1e3),
@@ -71142,6 +71139,7 @@ function makeUpdateWatch(opts) {
   const {
     launcher,
     entryUrl,
+    digest: digest2,
     actsDir: actsDir2,
     intervalMs,
     releaseIntervalMs,
@@ -71176,7 +71174,7 @@ function makeUpdateWatch(opts) {
     };
   }
   function sampleBuild() {
-    build = assessBuild(entryUrl, bakedStamp);
+    build = assessBuild(entryUrl, () => bundleStamp(digest2));
     logBuild(describeBuild(build));
     syncGate();
   }
@@ -76503,6 +76501,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     handlerProbes,
     renderSightings,
     bundle,
+    sourceDigest: sourceDigest2,
     doctorStores
   } = parts;
   if (req.kind === "shutdown") {
@@ -76554,6 +76553,7 @@ async function replyTo(parts, req, timedOut, accepted) {
         handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantOf(clock.date())),
         bundle,
+        sourceDigest: sourceDigest2,
         daemon: limits.serving(),
         doctorStores: readStores(doctorStores)
       })
@@ -83719,6 +83719,7 @@ function createDaemon(inputs) {
   const updateWatch = makeUpdateWatch({
     launcher,
     entryUrl: bundle.entryUrl,
+    digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
     // this daemon runs from.
     actsDir: actsDir(stateDir(), bundle.path),
@@ -83789,6 +83790,7 @@ function createDaemon(inputs) {
     log,
     clock,
     bundle: bundle.path,
+    sourceDigest: bundle.digest,
     doctorStores,
     stats,
     handlerProbes,
@@ -84206,6 +84208,7 @@ seedWorld(onClock(INITIAL_REPO));
 var pageDaemon = createDaemon({
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",
+    digest: null,
     path: "/app/dist/index.mjs",
     node: [],
     targets: []

@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-524",
-      "ref": "refs/pull/524/merge",
-      "sha": "88b9daa25b48c0c8bd61aa6faa458bd7408f3bb3",
-      "timestamp": "2026-10-31T20:22:15.225Z",
-      "commits": [
-        {
-          "sha": "88b9daa25b48c0c8bd61aa6faa458bd7408f3bb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:21:32Z",
-          "message": "Merge 4241cdf6ce8dc7d95c591982ed041bd89c9e6ad1 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
-        },
-        {
-          "sha": "4241cdf6ce8dc7d95c591982ed041bd89c9e6ad1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T14:21:21-06:00",
-          "message": "test(daemon): the backstop case goes back to a process, and the harness holds the update keys (candybar-testing-0x6u.1ur)\n\nThe running source from the last commit did not make the timedOut case\ndeterministic: CI's reply still beat the backstop, and it failed 2 of 6\nruns here. Whether the backstop wins is decided by the loop's own turns,\nso the case returns to a real process, after the deadline case as on\nmain, with its original config.\n\nAn in-worker daemon now holds the update keys as a booted one does, in\nthe one place that starts it, so the config-env file needs no workaround.\nA later listen error stays loud, and /restart keeps the new bar if the\nold one's stop rejects. Two comments move back beside their cases, and\nthe false \"nothing of the first is left\" comments go.\n"
-        },
-        {
-          "sha": "78095c24322c36a8bce8598036d194c423197985",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:58:21-06:00",
-          "message": "test(daemon): review fixes for the move to the worker (candybar-testing-0x6u.1ur)\n\nThe deadline case goes back to a real process in its own describe: its\nanswer's cold first draw has to fit the draw's reserve in wall time, which\nis the bound draw-reserve just left the worker for.\n\nThe timedOut case now owns the running source it depends on. With nothing\nin flight the answer is written on microtasks, ahead of the overdue\nbackstop, so it passed only while an earlier case left a read going.\n\nA held clock could not fail the dissolve case, so the clock now moves\nbetween its draws. A start refused beside a live daemon hands the env\nback. A stats case ties the bundle's digest to the snapshot. The config-env\nfile holds the update keys as `check` does, rather than arming a daemon.\n"
-        },
-        {
-          "sha": "c29c12bfff6d7cfd57395b524eb9671ac55570f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:37:17-06:00",
-          "message": "test(daemon): draw-reserve stays on a real process (candybar-testing-0x6u.1ur)\n\nIts verdict changed on CI's runner, where timing is judged: p99 57 ms in\nthe worker against the 40 ms constant, on the first run. The darwin\ncomparison that moved it reads 3-4 ms either way, and says nothing about\ntwo cores running four workers. Process runs miss the same gate by 2-5 ms,\nwhich is brandon-unfiled-3248.tl8u.\n"
-        },
-        {
-          "sha": "9b3372614fb30ce3d1fd88018cdd1ad1a6c18f60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:27:52-06:00",
-          "message": "test(daemon): the in-process daemon tests run in the jest worker (candybar-testing-0x6u.1ur)\n\nTwenty files, and the in-process cases of two mixed ones, move onto the harness\nand start no process. What stays on one is the census's process tier, the real\nclient's three cases, the built bundle's three, and the one drive-bar case that\nruns what `pnpm bar` runs.\n\nThe running bundle's digest is an input, read once at boot, so the update notice\nand daemon-stats give one answer to what a daemon is, and the notice's cases\nneed no build.\n\nA real socket serves in the worker for what opens one itself, so the frame stream\nand the doctor's CLI run unchanged. A bar takes how it gets its daemon. A held\nclock moves the effect, click-error and warning cases off real sleeps, on a daemon\neach owns, and that daemon's clients state their deadlines on it.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "e12259f251ecab0872cb94d03b6f9f536d80c2a9",
-      "timestamp": "2026-10-31T18:25:36.004Z",
+      "sha": "f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc",
+      "timestamp": "2026-10-31T20:30:48.988Z",
       "commits": [
         {
-          "sha": "e12259f251ecab0872cb94d03b6f9f536d80c2a9",
+          "sha": "f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T12:24:40-06:00",
-          "message": "refactor(daemon): a launch carries its owner, so a closed daemon's work is refused (candybar-testing-0x6u.snf) (#523)\n\n* refactor(daemon): a launch carries its owner, so a closed daemon's work is refused (candybar-testing-0x6u.snf)\n\nLaunch state lived in module globals, and a closed daemon's scope stayed in\nforce only until the next daemon replaced it. A closed daemon's unwinding pass\nthen read the new live scope on its next launch: it ran under the second\ndaemon, landed in its stats, and was ended by its close. Production never\nreaches this, because it builds one daemon per process. A jest worker does on\nevery restart, and the epic moves every restart onto one.\n\nLaunch state is now a value, `createLauncher`, holding the scope, the rate\nlimits, the launches in flight and the lifeline. `createDaemon` builds one and\nits work holds it, so a closed daemon's launches stay refused whichever daemon\nis live. There is no ambient `launch`: every call site names its owner, and\neslint keeps the process's launcher, `createLauncher` and `dlog` to their\nowners. One daemon is still live in a process, now because its paths and its\nlog are read from the process's environment.\n\nA refused launch is metered, so one that did nothing reads apart from one\nnobody tried. That count is the fact the restart test waits on; a count of\nchildren reads the same either way. A line logged after a close has finished\nsays so, because that file can be the next daemon's log.\n\n* refactor(daemon): a daemon's storage logs through it, and one gate answers every refusal (candybar-testing-0x6u.snf)\n\nFrom the high review of this branch.\n\nA write in flight at the close finishes after it, and what it logged had no\nstamp, so \"a line logged after a close says so\" was false for storage. Storage\nis built before the daemon, so it could not hold the daemon's log: `storage` is\nnow a function of that log, and `file-storage.ts` leaves the `dlog` owners.\n\nA launch its own caller had aborted skipped `admit`, so it was unmetered. A job\nreported every refusal as the daemon closing, whatever `admit` had said. A\nrefusal now always carries its reason, and the job passes it through.\n\nThe context field was `dlog` but held the stamped log, which is how the \"daemon\npasses `dlog`\" comments went stale, so it is now `log`. Also: the refused rows\ncount toward the stats column's width, `claimAct` takes its reader rather than\ndefaulting one for tests, and `__lifelineForTest` moves off `Launcher` onto\nwhat `createLauncher` returns.\n\n* refactor(daemon): a refusal says why in the words of whoever aborted it, and daemon-imported files launch through a launcher they are handed (candybar-testing-0x6u.snf)\n\nFrom the medium review of this branch.\n\nA refusal's text was one literal, so a closed daemon and a caller's abort read\nalike, and a shell source's failure gained a redundant \"aborted: aborted before\nit started\". The text now comes from the signal's own reason: the daemon's close\nalready says \"the daemon closed\", and a caller says what it means.\n\n`src/doctor/handler-probe.ts` and `src/install/index.ts` owned `processLauncher`\nwhile daemon code imports them, so a launch added there and reached from a click\nwould pass lint and escape the close. They now take a launcher, and the owners\nlist holds `src/index.ts` and the doctor's CLI instead.\n\n`subprocessRefused` is a read-only view, and its comment says what it counts,\nwhich includes a caller's abort. The bench and the draw-reserve reader anchor\non where the event starts, so the rule in testing.md has no exception."
+          "timestamp": "2026-10-31T14:30:05-06:00",
+          "message": "test(daemon): the in-process daemon tests run in the jest worker (candybar-testing-0x6u.1ur) (#524)\n\n* test(daemon): the in-process daemon tests run in the jest worker (candybar-testing-0x6u.1ur)\n\nTwenty files, and the in-process cases of two mixed ones, move onto the harness\nand start no process. What stays on one is the census's process tier, the real\nclient's three cases, the built bundle's three, and the one drive-bar case that\nruns what `pnpm bar` runs.\n\nThe running bundle's digest is an input, read once at boot, so the update notice\nand daemon-stats give one answer to what a daemon is, and the notice's cases\nneed no build.\n\nA real socket serves in the worker for what opens one itself, so the frame stream\nand the doctor's CLI run unchanged. A bar takes how it gets its daemon. A held\nclock moves the effect, click-error and warning cases off real sleeps, on a daemon\neach owns, and that daemon's clients state their deadlines on it.\n\n* test(daemon): draw-reserve stays on a real process (candybar-testing-0x6u.1ur)\n\nIts verdict changed on CI's runner, where timing is judged: p99 57 ms in\nthe worker against the 40 ms constant, on the first run. The darwin\ncomparison that moved it reads 3-4 ms either way, and says nothing about\ntwo cores running four workers. Process runs miss the same gate by 2-5 ms,\nwhich is brandon-unfiled-3248.tl8u.\n\n* test(daemon): review fixes for the move to the worker (candybar-testing-0x6u.1ur)\n\nThe deadline case goes back to a real process in its own describe: its\nanswer's cold first draw has to fit the draw's reserve in wall time, which\nis the bound draw-reserve just left the worker for.\n\nThe timedOut case now owns the running source it depends on. With nothing\nin flight the answer is written on microtasks, ahead of the overdue\nbackstop, so it passed only while an earlier case left a read going.\n\nA held clock could not fail the dissolve case, so the clock now moves\nbetween its draws. A start refused beside a live daemon hands the env\nback. A stats case ties the bundle's digest to the snapshot. The config-env\nfile holds the update keys as `check` does, rather than arming a daemon.\n\n* test(daemon): the backstop case goes back to a process, and the harness holds the update keys (candybar-testing-0x6u.1ur)\n\nThe running source from the last commit did not make the timedOut case\ndeterministic: CI's reply still beat the backstop, and it failed 2 of 6\nruns here. Whether the backstop wins is decided by the loop's own turns,\nso the case returns to a real process, after the deadline case as on\nmain, with its original config.\n\nAn in-worker daemon now holds the update keys as a booted one does, in\nthe one place that starts it, so the config-env file needs no workaround.\nA later listen error stays loud, and /restart keeps the new bar if the\nold one's stop rejects. Two comments move back beside their cases, and\nthe false \"nothing of the first is left\" comments go."
         }
       ]
     },
