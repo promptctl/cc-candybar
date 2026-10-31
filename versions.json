@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-522",
-      "ref": "refs/pull/522/merge",
-      "sha": "45f146a26c78cc2f8e7066948aeea4143566d5d2",
-      "timestamp": "2026-10-31T16:30:45.376Z",
-      "commits": [
-        {
-          "sha": "45f146a26c78cc2f8e7066948aeea4143566d5d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:29:56Z",
-          "message": "Merge 7ebfecd8689da4412c4ac6a44e61812cec7e34a2 into 82152d4ea6859d018e7af98d2651d77804e31aad\n"
-        },
-        {
-          "sha": "7ebfecd8689da4412c4ac6a44e61812cec7e34a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T10:29:19-06:00",
-          "message": "test(daemon): a stop's case holds a real subscriber (candybar-testing-0x6u.c3x)\n\nFrom the last high review of #522.\n\nThe case for a stop ending a subscriber never had one: its config left the lane\noff, so the subscribe was refused and the stream closed before the stop ran. It\nturns the lane on and asserts a frame on an open stream first.\n\nWith that fixed nothing proved the stop's drain, so a line logged just before\nit must land in that daemon's log.\n\nA directory's kind is a closed type, because a kind outside the shape its owner\nis read back by mints a name the sweep deletes while it is in use.\n"
-        },
-        {
-          "sha": "ed10c0bb534401a59c67857f3ef6d55e2393eb55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T10:17:35-06:00",
-          "message": "test(daemon): a signal's close is proven on a real process (candybar-testing-0x6u.c3x)\n\nFrom the medium review of #522.\n\nMoving the restart proof into the worker took the only case that held a signal\nto saving a click inside the session file's debounce. A signal is a process's,\nso the proof goes in the shutdown contract, on a real daemon.\n\nA process and a test's daemon build their storage through one function, rather\nthan a harness that respells boot's and a constant threaded through to keep the\ntwo agreeing.\n"
-        },
-        {
-          "sha": "9758b8ea8146279e1d71091b8efc29f55655cc6b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T10:07:27-06:00",
-          "message": "test(daemon): the harness holds what its migrated files claim (candybar-testing-0x6u.c3x)\n\nFrom CI and the high review of #522.\n\nA client's give-up raced a cold render in the worker: both share a thread, so\na render that holds it past the client's timer answers first. The case moves to\na held stand-in on fake time, where nothing but the hang-up can end the request.\n\nThe harness saved session state with no debounce, so a restart proof passed with\nthe close's flush removed. It now takes the daemon's own window, named once.\n\nIts env is replaced, not merged: what a spawned daemon is given is its whole\nenvironment, and a migrating file deletes keys from it.\n\nA stopped connection's backstop is proven quiet past when it would have fired,\nread from the count at its own start, because a cold render can time out first.\n"
-        },
-        {
-          "sha": "795c6f2436bed87c28ec76d0d351f68794a0a453",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T09:54:11-06:00",
-          "message": "test(daemon): a daemon-backed test runs in the jest worker through one harness (candybar-testing-0x6u.c3x)\n\ntest/helpers/in-worker-daemon.ts is the tests' one composition root over the\nconstructed daemon. A connection is the production handleConnection over a\nmemory stream, so delivered(), the 200 ms backstop and a subscribe are the\ndaemon's own, and daemon-e2e's helpers take the started daemon where they took\na socket path: their retry and event-reading bodies did not change.\n\nMoved onto it: a restart (daemon-session-globals-e2e), a watcher\n(daemon-render-warnings-e2e, whose heal is an edit with no click) and a spawned\ntool (daemon-pr-state-e2e). Their assertions differ only in the target argument.\nThe two hand builds of createDaemon are gone, with daemon-connection's private\nretry loop and state-dir dodge.\n\nThe ticket's open questions, settled:\n- A close leaves a connection open because a process's exit ends it, so ending\n  connections is the shell's: the harness's stop destroys them.\n- Every directory test setup mints is named for its worker's pid, and the\n  sweep keeps one exactly while that pid is alive and isn't the sweeper. That\n  replaces the lease check, which no state dir could ever pass, so a concurrent\n  run no longer deletes a running worker's state dir, log included.\n\nsendOne takes a Duplex and removes only its own listeners: removing all of them\nstripped a memory stream's hang-up, so a client that gave up went unheard until\nthe daemon answered.\n\nA harness stop does not wait for a closed daemon's work, because nothing says\nit has settled. That minimum is marked in the stop, and candybar-testing-0x6u.snf\nis its escape, ranked ahead of the migration.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "82152d4ea6859d018e7af98d2651d77804e31aad",
-      "timestamp": "2026-10-31T15:08:47.110Z",
+      "sha": "d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48",
+      "timestamp": "2026-10-31T16:48:32.727Z",
       "commits": [
         {
-          "sha": "82152d4ea6859d018e7af98d2651d77804e31aad",
+          "sha": "d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T09:07:52-06:00",
-          "message": "refactor(daemon): a connection runs over any stream, and the net server only hands it a socket (candybar-testing-0x6u.spa) (#521)\n\n* refactor(daemon): a connection runs over any stream, and the net server only hands it a socket (candybar-testing-0x6u.spa)\n\nThe request backstop, a half-close, a hang-up, the exit a reply carries and a subscriber's frames lived in server.ts, private to the process shell. They move as they stood to connection.ts, over a Duplex, so a jest worker drives them with no socket.\n\nThe connection now states its own half-close rule instead of leaving it to the listener's option, which any other stream would have to repeat. It reaches the exit through the funnel the daemon was built with, so a harness stands in for one exit, not two.\n\n* fix(daemon): an exit a reply carries survives whoever answered first (candybar-testing-0x6u.spa)\n\nA request read after the backstop answered it dropped its exit, because the first responder owned the flush and the late reply only logged. An exit is the request's work, which the backstop does not abandon, so every reply's exit now waits on the one flush, and a subscription, which has none to wait on, lets it through. The connection also states what it needs of a stream: a vanished peer destroys it.\n\nThe in-worker cases took the first answer of a cold daemon under the real 200 ms backstop, so a loaded runner read TIMEOUT as a failure. They ask again as a client does, and name what came back. The clock case reads the render event, which an answered backstop does not abandon, from a state dir of its own, because another run's teardown sweeps a lease-less one.\n\n* fix(daemon): an exit stays with its own reply (candybar-testing-0x6u.spa)\n\nA request exits only once its own response has flushed, so its client sees the diagnostic. Exiting on another responder's flush broke that, and on a subscription exited with nothing flushed. So a beaten reply's exit goes unsent with it, loudly, and the client told TIMEOUT asks again. The comment calling this path unreachable was the wrong part: a busy daemon reads a request the backstop has already answered.\n\nThe memory line saying no timer stays armed after a close now carves out a connection, which the daemon holds no list of.\n\n* docs(daemon): the connection's comments say what holds of it (candybar-testing-0x6u.spa)\n\nA stream also owes the connection Buffer chunks, a client told TIMEOUT asks again only if it runs on a tick, a subscriber has no backstop to end it after a close, and the pointers to moved code name where it lives now."
+          "timestamp": "2026-10-31T10:47:39-06:00",
+          "message": "test(daemon): a daemon-backed test runs in the jest worker through one harness (candybar-testing-0x6u.c3x) (#522)\n\n* test(daemon): a daemon-backed test runs in the jest worker through one harness (candybar-testing-0x6u.c3x)\n\ntest/helpers/in-worker-daemon.ts is the tests' one composition root over the\nconstructed daemon. A connection is the production handleConnection over a\nmemory stream, so delivered(), the 200 ms backstop and a subscribe are the\ndaemon's own, and daemon-e2e's helpers take the started daemon where they took\na socket path: their retry and event-reading bodies did not change.\n\nMoved onto it: a restart (daemon-session-globals-e2e), a watcher\n(daemon-render-warnings-e2e, whose heal is an edit with no click) and a spawned\ntool (daemon-pr-state-e2e). Their assertions differ only in the target argument.\nThe two hand builds of createDaemon are gone, with daemon-connection's private\nretry loop and state-dir dodge.\n\nThe ticket's open questions, settled:\n- A close leaves a connection open because a process's exit ends it, so ending\n  connections is the shell's: the harness's stop destroys them.\n- Every directory test setup mints is named for its worker's pid, and the\n  sweep keeps one exactly while that pid is alive and isn't the sweeper. That\n  replaces the lease check, which no state dir could ever pass, so a concurrent\n  run no longer deletes a running worker's state dir, log included.\n\nsendOne takes a Duplex and removes only its own listeners: removing all of them\nstripped a memory stream's hang-up, so a client that gave up went unheard until\nthe daemon answered.\n\nA harness stop does not wait for a closed daemon's work, because nothing says\nit has settled. That minimum is marked in the stop, and candybar-testing-0x6u.snf\nis its escape, ranked ahead of the migration.\n\n* test(daemon): the harness holds what its migrated files claim (candybar-testing-0x6u.c3x)\n\nFrom CI and the high review of #522.\n\nA client's give-up raced a cold render in the worker: both share a thread, so\na render that holds it past the client's timer answers first. The case moves to\na held stand-in on fake time, where nothing but the hang-up can end the request.\n\nThe harness saved session state with no debounce, so a restart proof passed with\nthe close's flush removed. It now takes the daemon's own window, named once.\n\nIts env is replaced, not merged: what a spawned daemon is given is its whole\nenvironment, and a migrating file deletes keys from it.\n\nA stopped connection's backstop is proven quiet past when it would have fired,\nread from the count at its own start, because a cold render can time out first.\n\n* test(daemon): a signal's close is proven on a real process (candybar-testing-0x6u.c3x)\n\nFrom the medium review of #522.\n\nMoving the restart proof into the worker took the only case that held a signal\nto saving a click inside the session file's debounce. A signal is a process's,\nso the proof goes in the shutdown contract, on a real daemon.\n\nA process and a test's daemon build their storage through one function, rather\nthan a harness that respells boot's and a constant threaded through to keep the\ntwo agreeing.\n\n* test(daemon): a stop's case holds a real subscriber (candybar-testing-0x6u.c3x)\n\nFrom the last high review of #522.\n\nThe case for a stop ending a subscriber never had one: its config left the lane\noff, so the subscribe was refused and the stream closed before the stop ran. It\nturns the lane on and asserts a frame on an open stream first.\n\nWith that fixed nothing proved the stop's drain, so a line logged just before\nit must land in that daemon's log.\n\nA directory's kind is a closed type, because a kind outside the shape its owner\nis read back by mints a name the sweep deletes while it is in use."
         }
       ]
     },
