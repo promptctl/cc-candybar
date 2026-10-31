@@ -11,6 +11,7 @@
 // helpers — nothing about menus, presets or edit chrome — so both callers
 // depend down onto it.
 
+import type { OptionSource } from "./action.js";
 import type { ActionDecl } from "./action.js";
 import {
   DISCLOSURE_CLOSED,
@@ -53,7 +54,7 @@ export type ThemeDomain = "themes" | typeof PLACEMENT_THEMES;
 export type ControlDomain =
   | "bool"
   | SettingRange
-  | { readonly from: OptionDomain }
+  | OptionSource
   | { readonly themes: ThemeDomain };
 
 // The option domain a control over named options ranges.
@@ -179,7 +180,7 @@ export function settingControl(
     };
   }
   if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
+    return optionPicker(key, name, listKey, domain, (n) => ({
       template: `{{ carousel "${n.apply}" "${n.open}" "${label}" }}`,
       rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`],
     }));
@@ -191,7 +192,7 @@ export function settingControl(
     // demo of the theme selected. Brandon: "The name loses its styling and
     // the swatch carries the colour." The name and the swatch are one button
     // (`[Theme [=]]`): each is a link to the same open.
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+    return optionPicker(key, name, listKey, { from: domain.themes }, (n) => ({
       template: `{{ action "${n.open}" "${label}" .${readVar} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
       rows: [
         `{{ swatches "${n.apply}" "${n.page}" }}`,
@@ -251,7 +252,7 @@ function optionPicker(
   key: string,
   name: string,
   listKey: string,
-  from: OptionDomain,
+  source: OptionSource,
   face: (names: PickerNames) => PickerFace,
 ): Affordance {
   const ref: DisclosureRef = { variable: listKey, key: listKey, member: name };
@@ -264,7 +265,7 @@ function optionPicker(
     kind: "picker",
     template,
     actions: {
-      [name]: { set: key, from },
+      [name]: { set: key, ...source },
       [toggle]: disclosureCycleAction(listKey, name),
       [page]: { set: page, int: true },
       [currentPage]: { set: page, to: PAGE_HOLDING_CURRENT },

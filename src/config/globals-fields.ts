@@ -79,9 +79,8 @@ export interface Control {
   readonly label: string;
   readonly place: Place;
   readonly previews: readonly PreviewName[];
-  // Members of the setting's domain offered by the settings menu's 🧪 trials
-  // submenu instead of by this control: values a user may choose, kept off
-  // the control everyone turns.
+  // Members of the setting's domain still on trial: the control's list marks
+  // each with 🧪.
   readonly trials: readonly string[];
   // A template expression, true in the sessions the control is offered to:
   // `true` for one every session may turn, or a session fact such as being

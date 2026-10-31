@@ -1328,6 +1328,19 @@ export function validateDeclarations(
       });
       continue;
     }
+    // [LAW:no-silent-failure] A label for no member would never be drawn.
+    if ("from" in a && a.labels !== undefined) {
+      const { members } = resolveOptionDomain(a.from, optionDomains);
+      for (const value of Object.keys(a.labels)) {
+        if (!members.includes(value)) {
+          ctx.issues.push({
+            path: `actions.${name}.labels`,
+            message: `actions.${name} labels: "${value}" is not a member of its from domain`,
+            line: findKeyLine(ctx.source, ["actions", name, "labels"]),
+          });
+        }
+      }
+    }
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({

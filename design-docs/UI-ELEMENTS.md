@@ -722,7 +722,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 
 Found while drawing the above. Each is for Brandon to decide; none is changed here.
 
-1. **A value outside a carousel's domain counts as its first member.** The settings menu splits shade and variation between the setting's own control and its `🧪` trial control, so whichever control's domain lacks the value steps from its first member, and `▶` skips that member. A stale value in a colour-valued domain shows the first member's swatch.
+1. **A value outside a carousel's domain counts as its first member.** A stale value steps from the first member, so `▶` skips that member, and a colour-valued domain shows the first member's swatch.
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
 3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.

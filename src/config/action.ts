@@ -35,6 +35,14 @@ import type { SlashLine } from "../claude-input/slash-line.js";
 import type { GlyphMark } from "../doctor/checks.js";
 export type { OptionDomain } from "./option-domain.js";
 
+// Where an action's options come from. A member is the value a click writes;
+// `labels` says what a list shows for a member, and a member it leaves out
+// shows as itself.
+export interface OptionSource {
+  readonly from: OptionDomain;
+  readonly labels?: Readonly<Record<string, string>>;
+}
+
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
 // click effect is keyed by which of these is present. The loader proves
 // exactly-one-of; the renderer and validator-derivation match with no fallthrough.
@@ -179,7 +187,7 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 // gated the same one-member-allow-list way a literal `to` already is.
 export type ActionDecl =
   | { readonly set: string; readonly to: string }
-  | { readonly set: string; readonly from: OptionDomain }
+  | ({ readonly set: string } & OptionSource)
   | {
       readonly set: string;
       readonly min: number;
@@ -189,7 +197,7 @@ export type ActionDecl =
   | { readonly set: string; readonly int: true }
   | { readonly set: string; readonly cycle: readonly string[] }
   | { readonly persist: string; readonly to: string }
-  | { readonly persist: string; readonly from: OptionDomain }
+  | ({ readonly persist: string } & OptionSource)
   | {
       readonly persist: string;
       readonly min: number;

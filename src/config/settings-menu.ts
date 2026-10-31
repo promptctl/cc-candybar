@@ -355,14 +355,9 @@ const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
 );
 
 // One control of the menu: its setting's row of SETTINGS and what the
-// generator made of that setting's declared domain. A setting has its own
-// control and, when its row names trials, a second one over them in the
-// 🧪 trials submenu; both write the setting's one key.
+// generator made of that setting's declared domain.
 interface MenuControl extends SettingProjection {
   readonly name: SettingName;
-  // The name its segments and actions are minted under: the setting's own,
-  // or `<setting>.trials` for its trials picker.
-  readonly id: string;
   readonly control: Affordance;
   readonly beneath: readonly SegmentDecl[];
   // What the menu lays right after it: its help, and the submenus beside it.
@@ -450,101 +445,60 @@ const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
 // The submenus laid right after a setting's control.
 const submenusBeside = (name: SettingName): SubmenuName[] =>
   SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-// A setting's trials are offered by its trials picker, so its own control
-// offers the rest of its domain.
-const offeredHere = (
+// A setting's trial members stay in its one list, marked as trials there. Only
+// a list of members can mark them.
+const markTrials = (
   name: SettingName,
   domain: ControlDomain,
   trials: readonly string[],
 ): ControlDomain => {
-  if (
-    typeof domain === "object" &&
-    "from" in domain &&
-    typeof domain.from !== "string"
-  ) {
-    return { from: domain.from.filter((member) => !trials.includes(member)) };
-  }
-  // [LAW:no-silent-failure] Only a list of members can leave its trials out:
-  // trials named on any other domain would sit on the control everyone turns.
-  if (trials.length > 0) {
+  if (trials.length === 0) return domain;
+  // [LAW:no-silent-failure] Trials named on any other domain would go unmarked.
+  if (typeof domain !== "object" || !("from" in domain)) {
     throw new Error(
-      `setting "${name}" names trials, but its control does not range a list of members to leave them out of`,
+      `setting "${name}" names trials, but its control does not range a list of members to mark them in`,
     );
   }
-  return domain;
+  return {
+    ...domain,
+    labels: Object.fromEntries(trials.map((t) => [t, `🧪 ${t}`])),
+  };
 };
-const menuControl = (
-  name: SettingName,
-  id: string,
-  place: Place,
-  label: string,
-  domain: ControlDomain,
-  laidAfter: Pick<MenuControl, "help" | "submenus">,
-): MenuControl => {
+const menuControl = (name: SettingName): MenuControl => {
   const row: SettingProjection = SETTINGS[name];
+  const place = PLACE[name];
   return {
     ...row,
     name,
-    id,
     place,
-    label,
     control: settingControl(
-      { label, domain },
+      {
+        label: row.label,
+        domain: markTrials(
+          name,
+          settingControlDomain(row.configKey),
+          row.trials,
+        ),
+      },
       row.sessionKey,
       row.effectiveVar,
-      controlApply(id),
+      controlApply(name),
       accordionOf(place),
     ),
     beneath: row.previews.map((preview) => PREVIEWS[preview]),
-    ...laidAfter,
+    help: [HELP[name]].filter((h) => h !== undefined),
+    submenus: submenusBeside(name),
   };
 };
 const CONTROLS: readonly MenuControl[] = (
   Object.keys(SETTINGS) as SettingName[]
-).map((name) =>
-  menuControl(
-    name,
-    name,
-    PLACE[name],
-    SETTINGS[name].label,
-    offeredHere(
-      name,
-      settingControlDomain(SETTINGS[name].configKey),
-      SETTINGS[name].trials,
-    ),
-    {
-      help: [HELP[name]].filter((h) => h !== undefined),
-      submenus: submenusBeside(name),
-    },
-  ),
-);
-// [LAW:one-source-of-truth] The trials pickers, one per setting whose row
-// names trials, derived from the same rows: the trials submenu holds exactly
-// what the rows put there.
-const TRIAL_CONTROLS: readonly MenuControl[] = (
-  Object.keys(SETTINGS) as SettingName[]
-)
-  .filter((name) => SETTINGS[name].trials.length > 0)
-  .map((name) =>
-    menuControl(
-      name,
-      `${name}.trials`,
-      "trials",
-      // Beside the setting's own control and over the same key, so only the
-      // label says this one ranges the trial values.
-      `🧪 ${name}`,
-      { from: SETTINGS[name].trials },
-      { help: [], submenus: [] },
-    ),
-  );
-// Every control the menu lays, its own and the trials pickers.
-const MENU_CONTROLS: readonly MenuControl[] = [...CONTROLS, ...TRIAL_CONTROLS];
+).map(menuControl);
 
 const controlsIn = (place: Place): readonly MenuControl[] =>
-  MENU_CONTROLS.filter((c) => c.place === place);
+  CONTROLS.filter((c) => c.place === place);
 // What a place holds, the controls inside its submenus included.
 const controlsUnder = (place: Place): readonly MenuControl[] =>
-  MENU_CONTROLS.filter((c) => within(c.place, place));
+  CONTROLS.filter((c) => within(c.place, place));
 // [LAW:one-source-of-truth] A trigger that opens a place — a tab, a submenu —
 // is marked `•` while a control inside it would change on reset
 // (brandon-menu-ia-q30.nk8), open or closed, so drift is findable without
@@ -667,7 +621,7 @@ const TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
 // control through the one disclosure lowering, dropped below the row it sits
 // in. Every picker's list joins one accordion (PICKER_KEY).
 function controlNode(c: MenuControl): LayoutNode {
-  const self = controlSeg(c.id);
+  const self = controlSeg(c.name);
   if (c.control.kind === "inline") return seg(self);
   return disclosureNode(
     self,
@@ -676,7 +630,7 @@ function controlNode(c: MenuControl): LayoutNode {
       kind: "container",
       direction: "vertical",
       children: [...c.control.list.rows, ...c.beneath].map((_, row) =>
-        seg(controlRow(c.id, row)),
+        seg(controlRow(c.name, row)),
       ),
     },
     "drop",
@@ -845,7 +799,6 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
     after: [seg(THEME_DEFAULT_SEG)],
   },
   toggles: { direction: "horizontal", content: [], after: [] },
-  trials: { direction: "horizontal", content: [], after: [] },
 };
 function placeBody(place: Place): ContainerNode {
   const { direction, content, after } = PLACE_BODY[place];
@@ -1142,7 +1095,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // preset root references this one anchor and both open states are session
 // keys, not tree positions.
 function declareSettingControls(artifacts: MenuArtifacts): void {
-  for (const c of MENU_CONTROLS) {
+  for (const c of CONTROLS) {
     Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
     artifacts.actions[reset] = { reset: c.configKey };
@@ -1158,7 +1111,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     Object.assign(artifacts.variables, c.control.variables);
     // Whom a control is offered to gates where it is laid (`controlsAt`); its
     // list hangs on it, so hiding it hides the list.
-    artifacts.segments[controlSeg(c.id)] = {
+    artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
     };
     if (c.control.kind === "picker") {
@@ -1166,7 +1119,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
         ...c.control.list.rows.map((template): SegmentDecl => ({ template })),
         ...c.beneath,
       ].forEach((row, i) => {
-        artifacts.segments[controlRow(c.id, i)] = row;
+        artifacts.segments[controlRow(c.name, i)] = row;
       });
     }
   }

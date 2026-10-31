@@ -87,7 +87,7 @@ declares exactly one value source:
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
-| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
+| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration. An optional `labels: { value: "text" }` sets what a list shows for a value; the click still writes the value |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -410,7 +410,7 @@ same two lines as any other picker:
 
 A name outside the table is a load error that lists the ones there are,
 the trial tunings of the accent variation among them, which the settings menu
-offers under the gear's `🧪 trials` rather than on the `🎼` control:
+marks with 🧪 in the `🎼` control's list:
 
 ```json5 check:fail
 {
@@ -457,8 +457,7 @@ registered domain and `{{ .shade.effective }}` its projection:
 
 A name outside the dial is a load error that lists its positions: the
 windows lowest first, then the trial jumps (`wide`, `widest`, `pair`,
-`pair-wide`), which the settings menu offers under the gear's `🧪 trials`
-rather than on the `🔆` control:
+`pair-wide`), which the settings menu marks with 🧪 in its list:
 
 ```json5 check:fail
 {

@@ -368,7 +368,7 @@ export function renderPicker(
   // A grid's cells are drawn once: measured to page them, then laid.
   const gridFaces =
     catalogue === undefined
-      ? apply.options.map((option, i) => optionFace(i, option))
+      ? apply.options.map((option, i) => optionFace(i, apply.labelOf(option)))
       : [];
   const pages: readonly LibraryPageLayout[] =
     catalogue !== undefined
@@ -508,18 +508,20 @@ export function renderPicker(
       );
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i) => cellWidth(apply.options[i]!)),
+      ...section.indices.map((i) =>
+        cellWidth(apply.labelOf(apply.options[i]!)),
+      ),
     );
     for (const i of section.indices) {
-      const option = apply.options[i]!;
+      const name = apply.labelOf(apply.options[i]!);
       // An authored description is free text and a row is one cell: control
       // characters and line breaks fold to single spaces, as a diagnostic's do.
       const authored = catalogue.entries[i]!.description;
       const description =
         authored === undefined ? undefined : sanitizeText(authored);
-      const gap = " ".repeat(nameWidth - cellWidth(option) + 2);
+      const gap = " ".repeat(nameWidth - cellWidth(name) + 2);
       const row =
-        description === undefined ? option : `${option}${gap}${description}`;
+        description === undefined ? name : `${name}${gap}${description}`;
       lines.push(
         assemble(
           [optionCell(optionFace(i, fitCells(row, available)), i)],

@@ -41,7 +41,7 @@ export const TAB_LABEL = Object.fromEntries(
 // [LAW:types-are-the-program] The submenu names are spelled as a type of their
 // own, before the table: a setting's row names its place, so the places must
 // not be computed from a table whose type reads the settings.
-export type SubmenuName = "gear" | "toggles" | "trials";
+export type SubmenuName = "gear" | "toggles";
 export const SUBMENUS: Readonly<
   Record<
     SubmenuName,
@@ -50,10 +50,6 @@ export const SUBMENUS: Readonly<
 > = {
   gear: { beside: "theme", trigger: "⚙" },
   toggles: { beside: "updateNotice", trigger: "🧪 toggles" },
-  // The looks still on trial (Brandon: "put them in a separate menu"): the
-  // members of a setting's domain its row names as `trials`, each setting's
-  // in a picker of its own, off the control everyone turns.
-  trials: { beside: "shade", trigger: "🧪 trials" },
 };
 export const SUBMENU_NAMES = Object.keys(SUBMENUS) as readonly SubmenuName[];
 
