@@ -46,6 +46,7 @@ import type { DaemonLogger } from "../src/utils/logger";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { editedConfig, editProjectConfig } from "./helpers/edited-config";
 import { ReloadSignal } from "./helpers/reload-signal";
+import { until } from "./helpers/until";
 import {
   walkNodes,
   type LayoutNode,
@@ -623,9 +624,10 @@ describe("RenderCache", () => {
     });
   });
 
-  // A config folder the OS refused is retried on the entry's next load, so
-  // the fault the bar shows clears once the OS will watch it again.
-  test("a refused config directory is heard again after the next load", () => {
+  // A config folder the OS refused is retried by the registry's period, never
+  // by a reload, so the fault the bar shows clears within one period of the
+  // OS watching it again.
+  test("a refused config directory is heard again on the period's judgment, and a reload leaves it as it is", () => {
     const { dir, cleanup } = mkConfigDir();
     const at = realpathSync(dir);
     const watch = fs.watch.bind(fs);
@@ -636,17 +638,66 @@ describe("RenderCache", () => {
       if (refuse && args[0] === at) throw new Error("EMFILE: too many open files");
       return watch(...args);
     }) as typeof fs.watch);
-    const { cache, cleanups } = makeCache();
+    const { cache, cleanups, watchers } = makeCache();
     try {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
       refuse = false;
       cache.reload(dir, dir, undefined, { kind: "doctor" });
+      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      watchers.judge();
       expect(entry.watch!.held.handle.deaf).toEqual([]);
     } finally {
       for (const fn of cleanups) fn();
       spy.mockRestore();
       cleanup();
+    }
+  });
+
+  // On Linux a directory watch binds an inode, and a strict ancestor renamed
+  // away reports nothing to it, so an entry whose project directory's parent
+  // is swapped (a project re-cloned beside the old one and moved into place)
+  // keeps a handle on the old tree, listening and deaf to the new one. The
+  // period's judgment rebinds it, and the edit after that is heard.
+  test("an entry whose project directory's parent is replaced by rename reads the new tree on the period's judgment, and hears the edit after it", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")));
+    const proj = join(root, "proj", "app");
+    const { cache, cleanups, reloads, watchers } = makeCache();
+    try {
+      mkdirSync(proj, { recursive: true });
+      answerRepo(proj);
+      const cfg = join(proj, ".cc-candybar.json5");
+      const config = (value: string): string =>
+        JSON.stringify({
+          globals: {},
+          variables: { x: { kind: "literal", value } },
+          segments: {
+            only: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
+          },
+          root: { h: ["only"] },
+        });
+      writeFileSync(cfg, config("old"));
+      const entry = cache.getOrCreate(proj, proj, undefined);
+      const x = (): unknown => {
+        const decl = entry.state.config.variables.x;
+        if (decl === undefined) return "absent";
+        return decl.kind === "literal" ? decl.value : decl.kind;
+      };
+      expect(entry.configLayers).toEqual([cfg]);
+      expect(x()).toBe("old");
+
+      renameSync(join(root, "proj"), join(root, "old"));
+      mkdirSync(proj, { recursive: true });
+      writeFileSync(cfg, config("new"));
+      watchers.judge();
+      await until(() => x() === "new", "the entry read the tree now at its path");
+      expect(entry.configLayers).toEqual([cfg]);
+
+      await reloads.after(entry, () => writeFileSync(cfg, config("edited")));
+      expect(x()).toBe("edited");
+    } finally {
+      for (const fn of cleanups) fn();
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

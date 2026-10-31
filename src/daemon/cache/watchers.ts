@@ -374,9 +374,8 @@ export class WatcherRegistry {
     }
     const shared = this.slots.get(key);
     // [LAW:single-enforcer] Every acquire names its directories as they are
-    // now: joining a slot refreshes its directories as opening one does.
-    for (const { dir } of shared?.listeners ?? [])
-      this.refreshed(dir, "acquire");
+    // now: joining a slot judges its directories as opening one does.
+    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
     const slot = shared ?? this.opened(key, targets);
     const holder: Holder = { onInvalidate };
     slot.holders.add(holder);
@@ -385,10 +384,10 @@ export class WatcherRegistry {
 
   // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
   // consumer derives its spec from disk again and the held watch follows it
-  // exactly when the key differs. The same key is the same directories, kept;
-  // a new key acquires the spec's watch and then releases the held one, so a
-  // directory both name keeps its OS handle through the move. Nothing held
-  // yet is a first acquire, which is a rebind from nothing.
+  // exactly when the key differs. The same key is the same directories, kept
+  // as they are; a new key acquires the spec's watch and then releases the
+  // held one, so a directory both name keeps its OS handle through the move.
+  // Nothing held yet is a first acquire, which is a rebind from nothing.
   //
   // A spec with a directory that binds nothing yet (gone, or a mount's
   // transient fault) keeps the watch held: a derive that lands between a
@@ -396,41 +395,24 @@ export class WatcherRegistry {
   // FSEvents keeps on its path for a slot the OS refuses. The next derive
   // that finds the directory there rebinds, since its key differs.
   //
-  // A kept watch reopens, in place, every directory the OS is not listening
-  // to, unless the follow answers a `failed` window (`after`): the OS
-  // refuses an immediate retry the way it refused the first, and a retry
-  // that fails again would tell another failed window. So every consumer
-  // that follows a moving spec retries its deaf directories by the same rule.
+  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
+  // directories are the period's to open again (`judge`). A follow that
+  // retried would answer the failed window its own handle's error told, and
+  // a handle that errors after every open would retry itself at the debounce
+  // cadence.
   follow(
     held: HeldWatch | null,
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
-    after: Invalidation | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    if (held !== null && (held.key === spec.key || spec.unbound)) {
-      if (after?.kind !== "failed") this.listening(held);
+    if (held !== null && (held.key === spec.key || spec.unbound))
       return { watch: held, move: "kept" };
-    }
     const watch = {
       key: spec.key,
       handle: this.acquire(spec.key, spec.targets, onInvalidate),
     };
     held?.handle.release();
     return { watch, move: "rebound" };
-  }
-
-  // Reopen, in place, every directory of the held watch the OS is not
-  // listening to, for every slot that shares it. A reopen that listens tells
-  // an `unknown` window, so a consumer calling this on a window it heard is
-  // called once more and finds nothing deaf; a retry the OS refuses tells
-  // nothing. It judges no folder's identity: a listening directory is left
-  // alone, so a window cannot lead back to a reopen through it, and a folder
-  // that moved is the next derive's new key.
-  private listening(held: HeldWatch): void {
-    const slot = this.slots.get(held.key);
-    if (slot === undefined) return;
-    for (const { dir } of slot.listeners)
-      if (dir.state.kind === "deaf") this.reopen(dir, "retry");
   }
 
   private opened(key: string, targets: WatchTargets): WatcherSlot {
@@ -460,12 +442,12 @@ export class WatcherRegistry {
   }
 
   // The directory watch a new slot's target joins: the one already open
-  // there, refreshed, or a new one.
+  // there, judged, or a new one.
   private dirFor(target: DirTarget): DirWatch {
     const id = dirId(target);
     const existing = this.dirs.get(id);
     if (existing !== undefined) {
-      this.refreshed(existing, "acquire");
+      this.judged(existing, "acquire");
       return existing;
     }
     const where = { path: target.path, recursive: target.recursive === true };
@@ -479,23 +461,36 @@ export class WatcherRegistry {
     return dir;
   }
 
-  // [LAW:single-enforcer] The one rule that a directory watch listens to the
-  // folder at its path, applied whenever a holder acquires the directory
-  // and whenever an event says the folder there moved. A deaf one is opened
-  // again; a listening one whose path holds another folder than the one it
-  // bound (removed and made again: inotify hears the old inode, and the bound
-  // folder is what an event naming the directory is judged against) is
-  // reopened in place. A path that binds nothing right now keeps the
-  // listening handle, as `follow` keeps a held watch: a macOS watch on the
-  // path hears the folder come back.
-  private refreshed(dir: DirWatch, cause: string): void {
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  private judged(dir: DirWatch, cause: string): void {
     if (dir.state.kind === "deaf") {
       this.reopen(dir, cause);
       return;
     }
     const now = boundOf(dir.path);
     if (bindsFolder(now) && boundKey(now) !== dir.state.bound)
-      this.reopen(dir, "the folder at its path was made again");
+      this.reopen(dir, "another folder is at its path");
+  }
+
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's) and the one retry of a directory the OS refused or whose handle
+  // errored. A directory staying as it is costs one stat, or one refused
+  // open, and tells nothing.
+  judge(): void {
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
   }
 
   // [LAW:no-silent-failure] Every slot on the directory hears it change
@@ -561,7 +556,7 @@ export class WatcherRegistry {
     } catch (e) {
       const reason = (e as Error).message;
       // [LAW:nothing-unseen] A refusal is logged when it starts or its reason
-      // changes; every reload retries a deaf directory, and the same refusal
+      // changes; every period retries a deaf directory, and the same refusal
       // repeated would bury the events around it.
       const same =
         was?.kind === "deaf" &&
@@ -582,9 +577,9 @@ export class WatcherRegistry {
   // a change and Linux as a rename) reaches the slot. The same name with the
   // folder unchanged is macOS reporting a child that came or went, or a chmod,
   // and is not. Judged once per event, for every listener. A move is then
-  // refreshed, so a handle never stays bound to a folder no longer at its
-  // path and every later event naming the directory is judged against the
-  // folder there.
+  // judged, so a handle never stays bound to a folder no longer at its path
+  // and every later event naming the directory is judged against the folder
+  // there.
   private heard(
     dir: DirWatch,
     handle: fs.FSWatcher,
@@ -599,7 +594,7 @@ export class WatcherRegistry {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
     }
-    if (moved) this.refreshed(dir, "moved");
+    if (moved) this.judged(dir, "moved");
   }
 
   private tell(dir: DirWatch, invalidation: Gathering): void {

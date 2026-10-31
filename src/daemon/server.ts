@@ -498,9 +498,14 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
 // [LAW:no-silent-failure] An edit made while file events went unheard is
 // re-read when they resume, in every entry, and every feed redraws when
 // delivery moves, so its row comes and goes on frames too.
+// [LAW:no-ambient-temporal-coupling] Every directory watch is judged against
+// the disk on the one period the daemon keeps time by: a folder replaced
+// beneath a renamed ancestor reports nothing to the handle bound to the old
+// one, and a directory the OS refused is heard again only by a retry.
 fileEvents.subscribe((notice) => {
   switch (notice.kind) {
     case "period":
+      watcherRegistry.judge();
       return;
     case "caught-up":
       renderCache.reloadEvery({ kind: "events-resumed", since: notice.since });

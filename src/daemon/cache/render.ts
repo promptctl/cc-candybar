@@ -442,12 +442,6 @@ const heardField = (heard: Invalidation): string => {
   }
 };
 
-// What the entry's own config watch heard to cause the load; `null` for a
-// load it did not cause, since another watch's failure says nothing about
-// the config directories.
-const heardOf = (cause: LoadCause): Invalidation | null =>
-  cause.kind === "config-watch" ? cause.heard : null;
-
 const causeField = (cause: LoadCause): string => {
   switch (cause.kind) {
     case "open":
@@ -1609,7 +1603,7 @@ export class RenderCache<
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
-    this.refreshWatcher(entry, loaded, { kind: "open" });
+    this.refreshWatcher(entry, loaded);
     // An entry just created was drawn by no session.
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
 
@@ -2156,7 +2150,7 @@ export class RenderCache<
     this.fit(entry);
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
-    this.refreshWatcher(entry, loaded, cause);
+    this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
 
@@ -2178,14 +2172,10 @@ export class RenderCache<
   // parent directory appearing is another — the same rule covers both, so
   // there is no separate "did the path change" test to drift from it.
   //
-  // A kept watch's deaf directories are retried on any cause but a `failed`
-  // window, which the OS refuses again at once: a directory refused once is
-  // otherwise deaf until the target set moves, and the bar says so for good.
-  private refreshWatcher(
-    entry: CacheEntry,
-    loaded: LoadOutcome,
-    cause: LoadCause,
-  ): void {
+  // A kept watch's deaf directories are the registry's period to retry,
+  // never a reload's: a reload that retried would answer the failed window
+  // its own handle's error told.
+  private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
@@ -2204,7 +2194,6 @@ export class RenderCache<
       entry.watch?.held ?? null,
       { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
-      heardOf(cause),
     );
     // Re-derived on every load, kept or rebound, so what the bar says the
     // watch cannot hear is what the disk says now.

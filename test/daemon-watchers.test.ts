@@ -89,7 +89,6 @@ describe("WatcherRegistry", () => {
       null,
       { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
-      null,
     );
     expect(first.move).toBe("rebound");
     expect(first.watch.key).toBe("a");
@@ -98,7 +97,6 @@ describe("WatcherRegistry", () => {
       first.watch,
       { key: "a", targets: { dirs: [] }, unbound: false },
       () => {},
-      null,
     );
     expect(kept.move).toBe("kept");
     expect(kept.watch).toBe(first.watch);
@@ -108,7 +106,6 @@ describe("WatcherRegistry", () => {
       kept.watch,
       { key: "b", targets: { dirs: [] }, unbound: false },
       () => {},
-      null,
     );
     expect(rebound.move).toBe("rebound");
     expect(rebound.watch.key).toBe("b");
@@ -119,7 +116,6 @@ describe("WatcherRegistry", () => {
       rebound.watch,
       { key: "c", targets: { dirs: [] }, unbound: true },
       () => {},
-      null,
     );
     expect(unbound.move).toBe("kept");
     expect(unbound.watch).toBe(rebound.watch);
@@ -510,8 +506,8 @@ describe("WatcherRegistry", () => {
         targets: { dirs: [{ path: "/w", filenames: [name] }] },
         unbound: false,
       });
-      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv), null);
-      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv), null);
+      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv));
+      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv));
       expect(moved.move).toBe("rebound");
       expect(fake.opened).toHaveLength(1);
       expect(fake.opened[0]!.closed).toBe(false);
@@ -552,10 +548,59 @@ describe("WatcherRegistry", () => {
     }
   });
 
-  // A failed directory is retried only when a holder says so (`listening`):
-  // config and git follow on a failed window, and a follow that retried would
-  // retry an error that recurs on every reopen.
-  test("a directory whose handle errors is deaf to every slot on it until a holder retries it, which reopens it alone", async () => {
+  // A strict ancestor renamed away and another tree put at its path reports
+  // nothing to the handle: inotify reports a directory's own removal or
+  // self-move, never its parent's, so the handle stays listening, bound to a
+  // folder no longer at its path. The period's judgment is the one trigger
+  // that reaches it; a folder unchanged or gone is left alone.
+  test("a directory whose strict ancestor is replaced by rename is reopened by the period's judgment, and its slot hears what went unheard", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-ancestor-"));
+    const conf = path.join(root, "proj", "conf");
+    fs.mkdirSync(conf, { recursive: true });
+    const fake = standIn();
+    try {
+      const counters = zeroCounters();
+      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const seen: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: conf, filenames: ["config.json5"] }] }, (inv) => seen.push(inv));
+      reg.judge();
+      fs.renameSync(path.join(root, "proj"), path.join(root, "old"));
+      reg.judge();
+      expect(fake.opensOf(conf)).toHaveLength(1);
+      expect(fake.opensOf(conf)[0]!.closed).toBe(false);
+      fs.mkdirSync(conf, { recursive: true });
+      reg.judge();
+      expect(fake.opensOf(conf)).toHaveLength(2);
+      expect(fake.opensOf(conf)[0]!.closed).toBe(true);
+      await until(() => seen.length === 1, "the reopen's window");
+      expect(seen).toEqual([{ kind: "unknown" }]);
+      // Bound to the folder there now: judged again, nothing reopens.
+      reg.judge();
+      expect(fake.opensOf(conf)).toHaveLength(2);
+      fake.opensOf(conf)[1]!.listener("rename", "config.json5");
+      await until(() => seen.length === 2, "the watched name's window");
+      expect(seen[1]).toEqual({
+        kind: "changed",
+        paths: new Set([path.join(conf, "config.json5")]),
+      });
+      expect(counters).toEqual({
+        ...zeroCounters(),
+        watchersOpened: 1,
+        dirWatchesOpened: 2,
+        dirWatchesClosed: 1,
+      });
+      reg.closeAll();
+    } finally {
+      fake.restore();
+      rmrf(root);
+    }
+  });
+
+  // A failed directory is the period's to retry and nobody else's: config,
+  // git and watch_file sources follow on the failed window its handle told,
+  // and a follow that retried would retry an error that recurs on every
+  // reopen at the debounce cadence.
+  test("a directory whose handle errors is deaf to every slot on it until the period's judgment reopens it alone; a kept follow opens nothing", async () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
@@ -567,7 +612,7 @@ describe("WatcherRegistry", () => {
       };
       const seen: Invalidation[] = [];
       const other: Invalidation[] = [];
-      const { watch } = reg.follow(null, spec, (inv) => seen.push(inv), null);
+      const { watch } = reg.follow(null, spec, (inv) => seen.push(inv));
       reg.acquire("other", { dirs: [{ path: "/w" }] }, (inv) => other.push(inv));
       fake.opensOf("/w")[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length === 1 && other.length === 1, "both slots' failed windows");
@@ -576,19 +621,18 @@ describe("WatcherRegistry", () => {
         { kind: "failed", path: "/w", reason: "EMFILE: too many open files" },
       ]);
 
-      // A follow answering the failed window keeps the watch deaf: the OS
-      // refuses an immediate retry the way it refused the first.
-      const failed = seen[0]!;
-      expect(reg.follow(watch, spec, () => {}, failed).move).toBe("kept");
+      // The follow answering the failed window keeps the watch as it is.
+      expect(reg.follow(watch, spec, () => {}).move).toBe("kept");
       expect(fake.opensOf("/w")).toHaveLength(1);
 
-      expect(reg.follow(watch, spec, () => {}, null).move).toBe("kept");
+      reg.judge();
       expect(fake.opensOf("/w")).toHaveLength(2);
       expect(fake.opensOf("/v")).toHaveLength(1);
       expect(fake.opensOf("/v")[0]!.closed).toBe(false);
       expect(watch.handle.deaf).toEqual([]);
-      // The other slot hears the recovery, so the fault it reported clears.
-      await until(() => other.length === 2, "the other slot's recovery window");
+      // Every slot on it hears the recovery, so the fault each reported clears.
+      await until(() => seen.length === 2 && other.length === 2, "both slots' recovery windows");
+      expect(seen[1]).toEqual({ kind: "unknown" });
       expect(other[1]).toEqual({ kind: "unknown" });
       expect(counters).toEqual({
         ...zeroCounters(),
