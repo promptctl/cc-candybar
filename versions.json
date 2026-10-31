@@ -4,15 +4,22 @@
     {
       "version": "pr-517",
       "ref": "refs/pull/517/merge",
-      "sha": "46a41c71e0f050d997ca1784dcc106917042307b",
-      "timestamp": "2026-10-31T05:44:58.414Z",
+      "sha": "28cc874e0227072420f15929df211bf6db15f120",
+      "timestamp": "2026-10-31T05:51:41.510Z",
       "commits": [
         {
-          "sha": "46a41c71e0f050d997ca1784dcc106917042307b",
+          "sha": "28cc874e0227072420f15929df211bf6db15f120",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:44:10-06:00",
-          "message": "Merge f7f6cbdf1f7063ae075aba3d7f56be52c4567f3f into 1eb0b0c4631cd6287997adbaddb0d7db1f9452a0\n"
+          "timestamp": "2026-10-31T05:50:47Z",
+          "message": "Merge 1b4479f5276864815f65006e8cbcf49ec2d79219 into 1eb0b0c4631cd6287997adbaddb0d7db1f9452a0\n"
+        },
+        {
+          "sha": "1b4479f5276864815f65006e8cbcf49ec2d79219",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:50:37-06:00",
+          "message": "feat(site): the live bar's font size is a control, and starts larger\n"
         },
         {
           "sha": "f7f6cbdf1f7063ae075aba3d7f56be52c4567f3f",
@@ -20,35 +27,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T23:43:59-06:00",
           "message": "feat(site): site:dev serves the live bar and reloads it on every rebuild\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-516",
-      "ref": "refs/pull/516/merge",
-      "sha": "57352be602bdf8eb41241dae6b77a85439c77aa7",
-      "timestamp": "2026-10-31T05:43:31.526Z",
-      "commits": [
-        {
-          "sha": "57352be602bdf8eb41241dae6b77a85439c77aa7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:42:47-06:00",
-          "message": "Merge e468717de322f14008edf8dca78a6237567a79e1 into 1eb0b0c4631cd6287997adbaddb0d7db1f9452a0\n"
-        },
-        {
-          "sha": "e468717de322f14008edf8dca78a6237567a79e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:42:45-06:00",
-          "message": "Merge branch 'main' into feat/menu-closed-timeout"
-        },
-        {
-          "sha": "63660b9d87d7988934aef25dde587239942658dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:34:02-06:00",
-          "message": "feat(menu): the menu opens with no tab open, and its timeout defaults to 120s in 15s steps\n"
         }
       ]
     },
