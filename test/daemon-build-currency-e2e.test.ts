@@ -1,12 +1,10 @@
-// [LAW:verifiable-goals] brandon-build-notice-5d6's done-when against the REAL
-// bundle: a daemon spawned from `<checkout>/dist/index.mjs` reads its own
-// `import.meta.url` and the digest baked into it, so only the built artifact
-// in a checkout-shaped directory can exercise the notice — the tsx harness
-// runs `src/index.ts`, whose entry resolves to `src/src` and is always
-// `not-source-checkout`. Each case copies the bundle into a scratch checkout
-// and reads the bar's messages over the socket, each in the viewer its
-// indicator opens; every click is the affordance the viewer rendered, found by
-// what it does and dispatched through the wire.
+// [LAW:verifiable-goals] brandon-build-notice-5d6's done-when: a daemon assesses
+// the checkout its bundle sits in against the digest its bundle carries. A case
+// about the notice hands those two in, on a daemon in this worker, over a
+// scratch checkout; a case about the built bundle itself spawns a copy of it
+// there. Each reads the bar's messages, each in the viewer its indicator opens;
+// every click is the affordance the viewer rendered, found by what it does and
+// dispatched through the wire.
 
 import fs from "node:fs";
 import http from "node:http";
@@ -43,7 +41,12 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { builtBundle } from "./helpers/spawn-test-daemon";
-import { waitForExit } from "./helpers/daemon-wire";
+import { waitForExit, type DaemonTarget } from "./helpers/daemon-wire";
+import {
+  bundleAt,
+  startArmedDaemon,
+  type InWorkerDaemon,
+} from "./helpers/in-worker-daemon";
 import { answerRepo } from "./helpers/repo-approval";
 
 const REPO_ROOT = process.cwd();
@@ -81,7 +84,7 @@ async function viewerClosedOnDisk(
 // Every message a session's bar offers, each read in the viewer: a notice is
 // one sentence however many rows it wrapped onto, so a page reads as flowed text.
 const pagesOf = async (
-  sock: string,
+  sock: DaemonTarget,
   sessionId: string,
   cwd: string,
 ): Promise<ViewerPage[]> =>
@@ -93,7 +96,7 @@ const hasNotice = (pages: readonly ViewerPage[]): boolean =>
 // [LAW:no-ambient-temporal-coupling] Reads the bar's messages until what is
 // waited for shows, or fails naming the last messages read.
 async function pagesUntil(
-  sock: string,
+  sock: DaemonTarget,
   sessionId: string,
   cwd: string,
   accepts: (pages: readonly ViewerPage[]) => boolean,
@@ -108,18 +111,6 @@ async function pagesUntil(
   );
   return last;
 }
-
-// [LAW:no-silent-failure] The feature checks its own test's precondition: a
-// bundle not built from the current `src/` carries another digest, and every
-// verdict below would be about that build. CI builds before `pnpm test`.
-beforeAll(() => {
-  const digest = sourceDigest(REPO_SRC);
-  if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(digest)) {
-    throw new Error(
-      "dist/index.mjs was not built from the current src/ — this test spawns the built bundle; run `pnpm build` first",
-    );
-  }
-});
 
 interface Scratch {
   readonly root: string;
@@ -138,14 +129,13 @@ function bumpMtimes(dir: string): void {
   }
 }
 
-// A checkout-shaped directory holding a copy of the built bundle and a
-// package.json naming the source's version, plus a project dir whose
+// A checkout-shaped directory holding a package.json naming the source's
+// version, plus a project dir whose
 // `.json5`/`.json` pair trips the collision detector so the render carries a
 // per-config warning to order against.
 function scratchLayout(source: Source): Scratch {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-"));
   fs.mkdirSync(path.join(root, "dist"));
-  fs.copyFileSync(REPO_BUNDLE, path.join(root, "dist", "index.mjs"));
   fs.writeFileSync(path.join(root, "package.json"), '{ "version": "9.9.9" }\n');
   const src = path.join(root, "src");
   if (source === "edited") {
@@ -172,11 +162,40 @@ function scratchLayout(source: Source): Scratch {
   };
 }
 
+// A daemon in this worker running from `scratch`'s bundle, built from this
+// source: an update notice is read off a checkout and a digest, and both are
+// inputs, so it takes no build.
+const layBundle = (scratch: Scratch): void =>
+  fs.copyFileSync(REPO_BUNDLE, path.join(scratch.root, "dist", "index.mjs"));
+
 async function withDaemon<T>(
+  scratch: Scratch,
+  envOverride: NodeJS.ProcessEnv,
+  body: (daemon: InWorkerDaemon) => Promise<T>,
+): Promise<T> {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
+  // The project's config (the collision the bar warns of) is approved.
+  answerRepo(scratch.projectDir, "approved", env);
+  const daemon = startArmedDaemon(
+    { ...env, ...envOverride },
+    bundleAt(scratch.root, sourceDigest(REPO_SRC)),
+  );
+  try {
+    return await body(daemon);
+  } finally {
+    await daemon.stop();
+    removeTmpDirs();
+    scratch.remove();
+  }
+}
+
+// A real daemon, spawned from a copy of the built bundle in `scratch`.
+async function withBuiltDaemon<T>(
   scratch: Scratch,
   envOverride: NodeJS.ProcessEnv,
   body: (sockPath: string, daemon: RunningDaemon) => Promise<T>,
 ): Promise<T> {
+  layBundle(scratch);
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
   // The project's config (the collision the bar warns of) is approved.
   answerRepo(scratch.projectDir, "approved", env);
@@ -318,175 +337,6 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     });
   });
 
-  test("[rebuild] success: pnpm build ran in the checkout root, and the daemon restarted itself on the rebuilt bundle", async () => {
-    const s = scratchLayout("edited");
-    // A build tool stand-in, first on the daemon's PATH: records where and how
-    // it was run, then does the one thing a build does to a running daemon —
-    // replaces the bundle it watches.
-    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
-    const record = path.join(binDir, "invocation.json");
-    fs.writeFileSync(
-      path.join(binDir, "pnpm"),
-      `#!/bin/sh\nprintf '{"cwd":"%s","args":"%s"}' "$(pwd -P)" "$*" > ${JSON.stringify(record)}\ntouch dist/index.mjs\n`,
-      { mode: 0o755 },
-    );
-    try {
-      await withDaemon(
-        s,
-        { PATH: `${binDir}:${process.env.PATH}` },
-        async (sock, daemon) => {
-          const before = noticeOf(
-            await pagesOf(sock, "bc-rebuilt", s.projectDir),
-          )!;
-          await click(sock, affordance(before.rendered, "apply-update"));
-          // The rebuilt bundle is the binary watch's restart signal: `onApplied`
-          // samples it at once and the daemon exits 0 for the next client to
-          // respawn from the fresh code — no minute-long wait, no failure line.
-          const exited = await Promise.race([
-            waitForExit(daemon.child),
-            new Promise<"timeout">((resolve) =>
-              setTimeout(resolve, 20_000, "timeout").unref(),
-            ),
-          ]);
-          expect(exited).toEqual({ code: 0, signal: null });
-          expect(JSON.parse(fs.readFileSync(record, "utf8"))).toEqual({
-            cwd: fs.realpathSync(s.root),
-            args: "build",
-          });
-        },
-      );
-    } finally {
-      fs.rmSync(binDir, { recursive: true, force: true });
-    }
-  });
-
-  // brandon-unfiled-3248.z676's done-when: the act is a job, not the daemon's
-  // child, so a daemon killed mid-act leaves it running; the next daemon reads
-  // it as running and refuses a second, and its verdict reaches whichever
-  // daemon is up when it lands.
-  describe("a daemon SIGKILLed mid-act", () => {
-    // A build tool stand-in, first on PATH: it waits for the test's gate and
-    // then does what a build does to a running daemon, rewriting the bundle it
-    // watches. It ends itself once the scratch checkout is gone or two minutes
-    // have passed, so a failed test, or a worker killed before its cleanup,
-    // leaves nothing behind: an act outlives every daemon by design.
-    function standIn(
-      s: Scratch,
-      then: string,
-    ): { binDir: string; gate: string; ran: string } {
-      const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
-      const gate = path.join(s.root, "gate");
-      const ran = path.join(binDir, "ran");
-      fs.writeFileSync(
-        path.join(binDir, "pnpm"),
-        [
-          "#!/bin/sh",
-          `n=0; while [ ! -e ${JSON.stringify(gate)} ]; do [ -d ${JSON.stringify(s.root)} ] && [ $n -lt 1200 ] || exit 1; n=$((n+1)); sleep 0.1; done`,
-          `echo $$ >> ${JSON.stringify(ran)}`,
-          then,
-          "",
-        ].join("\n"),
-        { mode: 0o755 },
-      );
-      return { binDir, gate, ran };
-    }
-
-    async function killedMidAct(
-      then: string,
-      afterGate: (
-        successor: RunningDaemon,
-        sock: string,
-        sid: string,
-        s: Scratch,
-      ) => Promise<void>,
-    ): Promise<{ ran: string }> {
-      const s = scratchLayout("edited");
-      const stub = standIn(s, then);
-      const {
-        env: isolated,
-        sockPath,
-        removeTmpDirs,
-      } = prepareIsolatedDaemonEnv("ccb-bc");
-      answerRepo(s.projectDir, "approved", isolated);
-      const env = { ...isolated, PATH: `${stub.binDir}:${process.env.PATH}` };
-      const bundle = builtBundle(path.join(s.root, "dist", "index.mjs"));
-      const sid = "bc-killed";
-      let successor: RunningDaemon | undefined;
-      try {
-        const starter = await spawnDaemonWithEnv(env, bundle);
-        try {
-          const before = noticeOf(await pagesOf(sockPath, sid, s.projectDir))!;
-          await click(sockPath, affordance(before.rendered, "apply-update"));
-          await viewerClosedOnDisk(env, sid);
-        } finally {
-          await killAndWait(starter, "SIGKILL");
-        }
-        successor = await spawnDaemonWithEnv(env, bundle);
-        const busy = await pagesUntil(
-          sockPath,
-          sid,
-          s.projectDir,
-          (pages) => noticeOf(pages)?.text.includes("[rebuilding…]") ?? false,
-          "the successor showing the act as running",
-        );
-        // The busy label carries no apply click; a click built by hand is refused.
-        expect(() =>
-          affordance(noticeOf(busy)!.rendered, "apply-update"),
-        ).toThrow();
-        await expect(
-          click(
-            sockPath,
-            effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
-          ),
-        ).rejects.toThrow(/already rebuilding/);
-        fs.writeFileSync(stub.gate, "");
-        await afterGate(successor, sockPath, sid, s);
-        return { ran: fs.readFileSync(stub.ran, "utf8") };
-      } finally {
-        if (successor) await killAndWait(successor);
-        removeTmpDirs();
-        s.remove();
-        fs.rmSync(stub.binDir, { recursive: true, force: true });
-      }
-    }
-
-    test("the act completes, the next daemon reports it running and refuses a second, then restarts on the whole bundle", async () => {
-      const { ran } = await killedMidAct(
-        "touch dist/index.mjs",
-        async (successor) => {
-          const exited = await Promise.race([
-            waitForExit(successor.child),
-            new Promise<"timeout">((resolve) =>
-              setTimeout(resolve, 20_000, "timeout").unref(),
-            ),
-          ]);
-          expect(exited).toEqual({ code: 0, signal: null });
-        },
-      );
-      // One program ran, once: the refused click started none.
-      expect(ran.trim().split("\n")).toEqual([expect.stringMatching(/^\d+$/)]);
-    });
-
-    test("a failed act's verdict reaches the daemon that did not start it", async () => {
-      await killedMidAct(
-        "echo 'tsdown: boom' >&2; exit 1",
-        async (_successor, sock, sid, s) => {
-          const failed = await pagesUntil(
-            sock,
-            sid,
-            s.projectDir,
-            (pages) => /rebuild failed:/.test(noticeOf(pages)?.text ?? ""),
-            "the failure the successor did not start",
-            10_000,
-          );
-          expect(noticeOf(failed)!.text).toMatch(
-            /rebuild failed: non-zero \(exit 1\): tsdown: boom/,
-          );
-        },
-      );
-    });
-  });
-
   test("a published install (no src/) behind the registry renders the release notice", async () => {
     const registry = http.createServer((_req, res) => {
       res.setHeader("content-type", "application/json");
@@ -517,5 +367,191 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     } finally {
       await new Promise<void>((resolve) => registry.close(() => resolve()));
     }
+  });
+
+  // The bundle itself: what a build does to a running daemon, and an act that
+  // outlives one. Only a process has these.
+  describe("a daemon spawned from the built bundle", () => {
+    // [LAW:no-silent-failure] The feature checks its own test's precondition: a
+    // bundle not built from the current `src/` carries another digest, and every
+    // verdict below would be about that build. CI builds before `pnpm test`.
+    beforeAll(() => {
+      const digest = sourceDigest(REPO_SRC);
+      if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(digest)) {
+        throw new Error(
+          "dist/index.mjs was not built from the current src/ — this test spawns the built bundle; run `pnpm build` first",
+        );
+      }
+    });
+
+    test("[rebuild] success: pnpm build ran in the checkout root, and the daemon restarted itself on the rebuilt bundle", async () => {
+      const s = scratchLayout("edited");
+      // A build tool stand-in, first on the daemon's PATH: records where and how
+      // it was run, then does the one thing a build does to a running daemon —
+      // replaces the bundle it watches.
+      const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
+      const record = path.join(binDir, "invocation.json");
+      fs.writeFileSync(
+        path.join(binDir, "pnpm"),
+        `#!/bin/sh\nprintf '{"cwd":"%s","args":"%s"}' "$(pwd -P)" "$*" > ${JSON.stringify(record)}\ntouch dist/index.mjs\n`,
+        { mode: 0o755 },
+      );
+      try {
+        await withBuiltDaemon(
+          s,
+          { PATH: `${binDir}:${process.env.PATH}` },
+          async (sock, daemon) => {
+            const before = noticeOf(
+              await pagesOf(sock, "bc-rebuilt", s.projectDir),
+            )!;
+            await click(sock, affordance(before.rendered, "apply-update"));
+            // The rebuilt bundle is the binary watch's restart signal: `onApplied`
+            // samples it at once and the daemon exits 0 for the next client to
+            // respawn from the fresh code — no minute-long wait, no failure line.
+            const exited = await Promise.race([
+              waitForExit(daemon.child),
+              new Promise<"timeout">((resolve) =>
+                setTimeout(resolve, 20_000, "timeout").unref(),
+              ),
+            ]);
+            expect(exited).toEqual({ code: 0, signal: null });
+            expect(JSON.parse(fs.readFileSync(record, "utf8"))).toEqual({
+              cwd: fs.realpathSync(s.root),
+              args: "build",
+            });
+          },
+        );
+      } finally {
+        fs.rmSync(binDir, { recursive: true, force: true });
+      }
+    });
+
+    // brandon-unfiled-3248.z676's done-when: the act is a job, not the daemon's
+    // child, so a daemon killed mid-act leaves it running; the next daemon reads
+    // it as running and refuses a second, and its verdict reaches whichever
+    // daemon is up when it lands.
+    describe("a daemon SIGKILLed mid-act", () => {
+      // A build tool stand-in, first on PATH: it waits for the test's gate and
+      // then does what a build does to a running daemon, rewriting the bundle it
+      // watches. It ends itself once the scratch checkout is gone or two minutes
+      // have passed, so a failed test, or a worker killed before its cleanup,
+      // leaves nothing behind: an act outlives every daemon by design.
+      function standIn(
+        s: Scratch,
+        then: string,
+      ): { binDir: string; gate: string; ran: string } {
+        const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
+        const gate = path.join(s.root, "gate");
+        const ran = path.join(binDir, "ran");
+        fs.writeFileSync(
+          path.join(binDir, "pnpm"),
+          [
+            "#!/bin/sh",
+            `n=0; while [ ! -e ${JSON.stringify(gate)} ]; do [ -d ${JSON.stringify(s.root)} ] && [ $n -lt 1200 ] || exit 1; n=$((n+1)); sleep 0.1; done`,
+            `echo $$ >> ${JSON.stringify(ran)}`,
+            then,
+            "",
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+        return { binDir, gate, ran };
+      }
+
+      async function killedMidAct(
+        then: string,
+        afterGate: (
+          successor: RunningDaemon,
+          sock: string,
+          sid: string,
+          s: Scratch,
+        ) => Promise<void>,
+      ): Promise<{ ran: string }> {
+        const s = scratchLayout("edited");
+        layBundle(s);
+        const stub = standIn(s, then);
+        const {
+          env: isolated,
+          sockPath,
+          removeTmpDirs,
+        } = prepareIsolatedDaemonEnv("ccb-bc");
+        answerRepo(s.projectDir, "approved", isolated);
+        const env = { ...isolated, PATH: `${stub.binDir}:${process.env.PATH}` };
+        const bundle = builtBundle(path.join(s.root, "dist", "index.mjs"));
+        const sid = "bc-killed";
+        let successor: RunningDaemon | undefined;
+        try {
+          const starter = await spawnDaemonWithEnv(env, bundle);
+          try {
+            const before = noticeOf(await pagesOf(sockPath, sid, s.projectDir))!;
+            await click(sockPath, affordance(before.rendered, "apply-update"));
+            await viewerClosedOnDisk(env, sid);
+          } finally {
+            await killAndWait(starter, "SIGKILL");
+          }
+          successor = await spawnDaemonWithEnv(env, bundle);
+          const busy = await pagesUntil(
+            sockPath,
+            sid,
+            s.projectDir,
+            (pages) => noticeOf(pages)?.text.includes("[rebuilding…]") ?? false,
+            "the successor showing the act as running",
+          );
+          // The busy label carries no apply click; a click built by hand is refused.
+          expect(() =>
+            affordance(noticeOf(busy)!.rendered, "apply-update"),
+          ).toThrow();
+          await expect(
+            click(
+              sockPath,
+              effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+            ),
+          ).rejects.toThrow(/already rebuilding/);
+          fs.writeFileSync(stub.gate, "");
+          await afterGate(successor, sockPath, sid, s);
+          return { ran: fs.readFileSync(stub.ran, "utf8") };
+        } finally {
+          if (successor) await killAndWait(successor);
+          removeTmpDirs();
+          s.remove();
+          fs.rmSync(stub.binDir, { recursive: true, force: true });
+        }
+      }
+
+      test("the act completes, the next daemon reports it running and refuses a second, then restarts on the whole bundle", async () => {
+        const { ran } = await killedMidAct(
+          "touch dist/index.mjs",
+          async (successor) => {
+            const exited = await Promise.race([
+              waitForExit(successor.child),
+              new Promise<"timeout">((resolve) =>
+                setTimeout(resolve, 20_000, "timeout").unref(),
+              ),
+            ]);
+            expect(exited).toEqual({ code: 0, signal: null });
+          },
+        );
+        // One program ran, once: the refused click started none.
+        expect(ran.trim().split("\n")).toEqual([expect.stringMatching(/^\d+$/)]);
+      });
+
+      test("a failed act's verdict reaches the daemon that did not start it", async () => {
+        await killedMidAct(
+          "echo 'tsdown: boom' >&2; exit 1",
+          async (_successor, sock, sid, s) => {
+            const failed = await pagesUntil(
+              sock,
+              sid,
+              s.projectDir,
+              (pages) => /rebuild failed:/.test(noticeOf(pages)?.text ?? ""),
+              "the failure the successor did not start",
+              10_000,
+            );
+            expect(noticeOf(failed)!.text).toMatch(
+              /rebuild failed: non-zero \(exit 1\): tsdown: boom/,
+            );
+          },
+        );
+      });
+    });
   });
 });

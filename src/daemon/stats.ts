@@ -20,7 +20,6 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
-import { bakedDigest } from "./build-currency";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -397,6 +396,7 @@ export class RuntimeStats {
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      sourceDigest: null,
       daemon: {
         pid: 0,
         memory: { kind: "unmeasured" },
@@ -430,6 +430,7 @@ export class RuntimeStats {
     handlerProbes: readonly ProbeArrival[];
     clients: readonly RenderSighting[];
     bundle: string;
+    sourceDigest: string | null;
     daemon: ServingDaemon;
     doctorStores: StoresRead;
   }): StatsSnapshot {
@@ -437,7 +438,7 @@ export class RuntimeStats {
     return {
       pid: process.pid,
       version: PACKAGE_VERSION,
-      sourceDigest: bakedDigest(),
+      sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),

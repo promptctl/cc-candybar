@@ -472,6 +472,7 @@ describe("claimAct: one act per bundle", () => {
     const logged: string[] = [];
     const watch = makeUpdateWatch({
       launcher: processLauncher,
+      digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dir,
       intervalMs: 60_000,
@@ -498,6 +499,7 @@ describe("claimAct: one act per bundle", () => {
     let answer!: (latest: Response) => void;
     const watch = makeUpdateWatch({
       launcher: processLauncher,
+      digest: null,
       entryUrl: "file:///some/bundle/index.mjs",
       actsDir: dirOf(),
       intervalMs: 60_000,

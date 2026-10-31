@@ -1,4 +1,4 @@
-// candybar-animation-wbxz.jmm.usl, measured on a REAL daemon: a subscriber
+// candybar-animation-wbxz.jmm.usl, measured on a daemon: a subscriber
 // receives one session's frames at the rate its bar moves. While an effect
 // moves the bar, the daemon draws it many times a second — faster than the one
 // a second Claude Code's statusline reaches — and pushes every frame whose
@@ -41,7 +41,6 @@ import {
 import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
-  killAndWait,
   sendClick,
   render,
   renderBody,
@@ -67,10 +66,9 @@ import {
   VERB_LOAD_CONFIG,
   VERB_SET_STATE,
 } from "../src/click/wire";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
@@ -116,7 +114,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   let removeTmpDirs: () => void;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   const args = (name: keyof typeof CONFIGS): string[] => [
     "cc-candybar",
@@ -232,14 +230,15 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 0 1 0 1\\n' ;; *) printf 'stub\\n' ;; esac\n`,
     );
     chmodSync(path.join(bin, "tmux"), 0o755);
-    daemon = await spawnDaemonWithEnv({
+    daemon = startDaemon({
       ...prepared.env,
       PATH: `${bin}:${prepared.env.PATH ?? ""}`,
     });
+    await daemon.listen(sockPath);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });

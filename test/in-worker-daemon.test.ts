@@ -39,7 +39,11 @@ import {
   stripAnsi,
 } from "./helpers/daemon-e2e";
 import { renderLines } from "./helpers/daemon-log";
-import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import {
+  heldClock,
+  startDaemon,
+  type InWorkerDaemon,
+} from "./helpers/in-worker-daemon";
 import { JEST_TMP_PREFIX, jestTmpDir, jestTmpOwner } from "./helpers/jest-tmp";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { throughout, until } from "./helpers/until";
@@ -123,13 +127,31 @@ describe("a daemon in this worker", () => {
     expect(events.at(-1)).toContain(" clickError=over ");
   });
 
+  // [LAW:one-source-of-truth] A request's budget is its deadline less its
+  // arrival, so a held daemon's client states the deadline on the daemon's clock.
+  // 100 ms is under the backstop the wait clamps to, so the event's figure is
+  // that deadline's and nothing else's.
+  test("a client of a held daemon states its deadline on that daemon's clock", async () => {
+    const sid = "in-worker-held";
+    const clock = heldClock(new Date(Date.now() - 60_000));
+    daemon = startDaemon(env, { clock });
+    clock.advance(5_000);
+    await renderRequest(daemon, {
+      ...renderBody(sid, projectDir),
+      deadline: daemon.now() + 100,
+    });
+    const [event] = await renderLines(env, sid);
+    expect(event).toContain(" deadline=stated:60ms ");
+  });
+
   test("a TIMEOUT is the helper's to ask again", async () => {
     daemon = startDaemon(env);
-    const { send, log } = daemon;
+    const { send, log, now } = daemon;
     let asked = 0;
     const out = await renderRequest(
       {
         log,
+        now,
         send: (req, budgetMs) =>
           ++asked === 1
             ? Promise.resolve({ ok: false, error: "slow", code: "TIMEOUT" })

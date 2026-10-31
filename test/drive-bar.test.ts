@@ -1,10 +1,11 @@
 // [LAW:verifiable-goals] scripts/drive-bar.ts is the tool a design doc's
 // drawings are reproduced with, so it is held to what it promises: a click on
-// what the bar drew lands in a real daemon's session and the next render shows
-// it, a durable one included; a durable click writes the harness's copy of the
+// what the bar drew lands in a daemon's session and the next render shows it, a
+// durable one included; a durable click writes the harness's copy of the
 // config, never the file it was started from; a click that would act on the
 // developer's machine is not sent; a click on text the bar did not draw fails, naming what
-// it did draw.
+// it did draw. One case runs what `pnpm bar` runs, a real daemon; the rest are
+// about the bar, and draw on a daemon in this worker.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -13,6 +14,7 @@ import path from "node:path";
 import { describeLink, drawnLinks, startBar, type Bar } from "./helpers/drive-bar";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../src/config/disclosure";
 import { stripAnsi } from "./helpers/ansi";
+import { startBarDaemon } from "./helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
 
@@ -25,7 +27,7 @@ const userConfig = (): string => {
 
 describe("drive-bar", () => {
   let bar: Bar | undefined;
-  afterEach(() => bar?.stop());
+  afterEach(async () => bar?.stop());
 
   test("a click on the door opens the menu in the next render", async () => {
     bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
@@ -38,7 +40,10 @@ describe("drive-bar", () => {
   test("a durable click writes the copy, never the file it started from", async () => {
     const original = userConfig();
     const before = fs.readFileSync(original, "utf8");
-    bar = await startBar({ width: 120, rows: 40, config: original, cwd: process.cwd(), ssh: false });
+    bar = await startBar(
+      { width: 120, rows: 40, config: original, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     await bar.render();
     await bar.click(DOOR_GLYPH);
     await bar.click("⚙ config");
@@ -55,7 +60,10 @@ describe("drive-bar", () => {
 
 
   test("a click that rewrites the config file shows in the very next render", async () => {
-    bar = await startBar({ width: 200, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    bar = await startBar(
+      { width: 200, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     await bar.render();
     await bar.click(DOOR_GLYPH);
     await bar.click("✎ arrange");
@@ -69,7 +77,10 @@ describe("drive-bar", () => {
 
 
   test("a click on text the bar did not draw names what it drew", async () => {
-    bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    bar = await startBar(
+      { width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     await bar.render();
     await expect(bar.click("no such button")).rejects.toThrow(
       new RegExp(`drew no link "no such button" #1; it drew: .*"${DOOR_GLYPH}"`),

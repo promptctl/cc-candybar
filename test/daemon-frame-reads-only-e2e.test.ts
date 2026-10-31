@@ -1,4 +1,4 @@
-// brandon-unfiled-3248.8ro6, measured on a REAL daemon: every input refreshes
+// brandon-unfiled-3248.8ro6, measured on a daemon: every input refreshes
 // on its own clock, and drawing a frame only reads. A feed draws a moving bar
 // many times a second between a session's statusline requests; across those
 // frames no source refreshes but the ones whose own period fell due, so a
@@ -13,13 +13,12 @@ import { openFrameStream, type FrameStream } from "../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import type { SourceRecord } from "../src/utils/refresh-ledger";
-import { killAndWait, render } from "./helpers/daemon-e2e";
+import { render } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { until } from "./helpers/until";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
@@ -38,7 +37,7 @@ describe("drawing a frame only reads", () => {
   let removeTmpDirs: () => void;
   let projectDir: string;
   let runs: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-reads-only-e2e");
@@ -66,11 +65,12 @@ describe("drawing a frame only reads", () => {
         root: { h: ['shell', 'lanes'] },
       }`,
     );
-    daemon = await spawnDaemonWithEnv(prepared.env);
+    daemon = startDaemon(prepared.env);
+    await daemon.listen(sockPath);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });

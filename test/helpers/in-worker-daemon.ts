@@ -5,6 +5,7 @@
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
@@ -14,6 +15,7 @@ import {
   createDaemon,
   SYSTEM_CLOCK,
   type Daemon,
+  type DaemonClock,
   type DaemonInputs,
   type DaemonStorage,
   type RunningBundle,
@@ -25,6 +27,7 @@ import { logPath, stateDir } from "../../src/daemon/paths";
 import { sendOne, type Request } from "../../src/daemon/protocol";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
+import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
 
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
@@ -33,23 +36,45 @@ export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
 // lays one down there.
-export function bundleAt(checkout: string): RunningBundle {
+export function bundleAt(
+  checkout: string,
+  digest: string | null = null,
+): RunningBundle {
   const file = path.join(checkout, "dist", "index.mjs");
   return {
     entryUrl: pathToFileURL(file).href,
+    digest,
     path: file,
     node: [process.execPath],
     targets: [file],
   };
 }
 
-// A daemon built as a process builds one, unarmed. Arming is a process's: the
-// memory backstop and the bundle watch end a daemon through `exit`, on the
-// worker's own memory and a bundle that isn't running. It also starts file-event
-// delivery, whose period drives the watcher's judge and the catch-up reload, so
-// a daemon here hears a watch only by a delivered event, which is what a watcher
-// case proves. Delivery unstarted is `unmeasured` with nothing missed, and adds
-// no warning (src/daemon/cache/file-events.ts).
+// A clock a test moves by hand. Both of its readings stand still until then, so
+// it belongs on a daemon its case owns, whose clients state their deadlines on
+// it: a request's budget is that deadline less this clock's arrival.
+export interface HeldClock extends DaemonClock {
+  advance(ms: number): void;
+}
+
+export function heldClock(start: Date = new Date()): HeldClock {
+  let elapsed = 0;
+  return {
+    date: () => new Date(start.getTime() + elapsed),
+    monotonic: () => elapsed,
+    advance: (ms) => {
+      elapsed += ms;
+    },
+  };
+}
+
+// A daemon built as a process builds one, unarmed unless its case arms it: the
+// memory backstop and the bundle watch would end it on the worker's own memory
+// and a bundle that isn't running. Arming also starts file-event delivery, whose
+// period drives the watcher's judge and the catch-up reload, so a daemon here
+// hears a watch only by a delivered event, which is what a watcher case proves.
+// Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
+// (src/daemon/cache/file-events.ts).
 export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
   fs.mkdirSync(stateDir(), { recursive: true });
   return createDaemon({
@@ -75,6 +100,10 @@ export interface InWorkerDaemon extends DaemonEndpoint {
   readonly daemon: Daemon;
   // A client's end of a new connection.
   connect(): Duplex;
+  // Serves a real socket too, for a client that opens one itself: the frame
+  // stream, and the doctor's CLI. Each connection is the daemon's own, as one
+  // from `connect` is.
+  listen(sockPath: string): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -85,6 +114,27 @@ function placeEnv(env: NodeJS.ProcessEnv): void {
   for (const key of Object.keys(process.env)) delete process.env[key];
   Object.assign(process.env, placed);
 }
+
+// A daemon a case arms, for what only an armed daemon does: the update notice.
+// Its memory backstop and bundle watch end a daemon through `exit`, so they get
+// nothing to act on: no file to stat, and a limit past any worker's memory.
+export function startArmedDaemon(
+  env: NodeJS.ProcessEnv,
+  bundle: RunningBundle,
+): InWorkerDaemon {
+  const started = startDaemon(env, {
+    bundle: { ...bundle, targets: [] },
+    memoryLimitBytes: Number.MAX_SAFE_INTEGER,
+  });
+  started.daemon.arm();
+  return started;
+}
+
+// A bar on a daemon in this worker (test/helpers/drive-bar.ts).
+export const startBarDaemon: StartBarDaemon = async (env) => {
+  const daemon = startDaemon(env);
+  return { target: daemon, stop: daemon.stop };
+};
 
 // A daemon serving this worker, placed by `env`: a daemon's paths are read from
 // the environment when it writes, so the env a spawned daemon would be given is
@@ -98,19 +148,32 @@ export function startDaemon(
   placeEnv(env);
   const daemon = buildDaemon(overrides);
   const open = new Set<Duplex>();
+  const servers: net.Server[] = [];
+
+  const serve = (end: Duplex): void => {
+    open.add(end);
+    end.once("close", () => open.delete(end));
+    handleConnection(daemon, end);
+  };
 
   const connect = (): Duplex => {
     const { daemonEnd, client } = memoryConnection();
-    open.add(daemonEnd);
-    daemonEnd.once("close", () => open.delete(daemonEnd));
-    handleConnection(daemon, daemonEnd);
+    serve(daemonEnd);
     return client;
   };
 
   return {
     daemon,
     log: logPath(),
+    now: () => daemon.clock.date().getTime(),
     connect,
+    listen: (sockPath) =>
+      new Promise((resolve, reject) => {
+        const server = net.createServer(serve);
+        servers.push(server);
+        server.once("error", reject);
+        server.listen(sockPath, resolve);
+      }),
     send: (req, budgetMs) =>
       sendOne(connect(), req as unknown as Request, Date.now() + budgetMs),
     // [LAW:single-enforcer] A close leaves a connection open because a process's
@@ -123,6 +186,11 @@ export function startDaemon(
     stop: async () => {
       daemon.close();
       for (const end of open) end.destroy();
+      await Promise.all(
+        servers.map(
+          (server) => new Promise((closed) => server.close(closed)),
+        ),
+      );
       await drained();
       placeEnv(before);
     },

@@ -211,6 +211,7 @@ export async function replyTo(
     handlerProbes,
     renderSightings,
     bundle,
+    sourceDigest,
     doctorStores,
   } = parts;
   if (req.kind === "shutdown") {
@@ -271,6 +272,7 @@ export async function replyTo(
         handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantOf(clock.date())),
         bundle,
+        sourceDigest,
         daemon: limits.serving(),
         doctorStores: readStores(doctorStores),
       }),

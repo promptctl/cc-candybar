@@ -12,6 +12,7 @@ import { cellLen } from "@promptctl/rich-js";
 import { serveBar, type BarWeb, type View } from "../scripts/bar-web/server";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../src/config/disclosure";
 import { stripAnsi } from "./helpers/ansi";
+import { startBarDaemon } from "./helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
 
@@ -31,7 +32,10 @@ describe("bar-web", () => {
   };
 
   test("serves the page and the Powerline font", async () => {
-    web = await serveBar({ port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    web = await serveBar(
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     const page = await fetch(web.url);
     expect(page.headers.get("content-type")).toMatch(/text\/html/);
     expect(await page.text()).toContain("linkHandler");
@@ -40,7 +44,10 @@ describe("bar-web", () => {
   });
 
   test("a click on a drawn link is the daemon's click, and the answer is the next render", async () => {
-    web = await serveBar({ port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    web = await serveBar(
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     const closed = await post("/render", { width: 80, rows: 40 });
     expect(closed.status).toBe(200);
     expect(stripAnsi(closed.json.ansi).split("\n").every((l) => cellLen(l) <= 80)).toBe(true);
@@ -59,7 +66,10 @@ describe("bar-web", () => {
   });
 
   test("only the page drives it: a request must be JSON, sent to this server's own host", async () => {
-    web = await serveBar({ port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    web = await serveBar(
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     // What another site's page can send without a preflight.
     const plain = await fetch(new URL("/render", web.url), { method: "POST", body: JSON.stringify({ width: 80, rows: 40 }) });
     expect(plain.status).toBe(415);
@@ -83,7 +93,10 @@ describe("bar-web", () => {
   });
 
   test("a size that is not whole cells is refused", async () => {
-    web = await serveBar({ port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+    web = await serveBar(
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
     const bad = await post("/render", { width: 0, rows: 40 });
     expect(bad.status).toBe(400);
     expect(bad.json.error).toMatch(/width and rows/);

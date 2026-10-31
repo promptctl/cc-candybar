@@ -17,12 +17,16 @@ import type { Request, Response } from "../../src/daemon/protocol";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 
-// What a test reaches a daemon through: one request's round trip, and the log
-// the daemon writes. `req` stays loosely typed: the wire is untrusted JSON from
-// the caller's perspective too.
+// What a test reaches a daemon through: one request's round trip, the log the
+// daemon writes, and the clock its clients state a deadline on. `req` stays
+// loosely typed: the wire is untrusted JSON from the caller's perspective too.
 export interface DaemonEndpoint {
   send(req: Record<string, unknown>, budgetMs: number): Promise<Response>;
   readonly log: string;
+  // [LAW:one-source-of-truth] A request's budget is its deadline less its
+  // arrival, so the two are read off one clock: the machine's, for a real
+  // daemon, and a daemon's own, for one a test holds the time of.
+  now(): number;
 }
 
 // A daemon built in this worker is its own endpoint
@@ -40,6 +44,7 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
     // (prepareIsolatedDaemonEnv), whose log is the one the daemon itself
     // writes (logPath).
     log: logPath({ XDG_STATE_HOME: path.dirname(path.dirname(target)) }),
+    now: Date.now,
   };
 }
 

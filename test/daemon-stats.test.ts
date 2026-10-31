@@ -78,6 +78,7 @@ describe("RuntimeStats.snapshot", () => {
     stats.dirWatchesClosed = 4;
 
     const snap = stats.snapshot({
+      sourceDigest: null,
       gitCache: {
         size: 4,
         held: 1,

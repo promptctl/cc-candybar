@@ -1,8 +1,8 @@
 // [LAW:verifiable-goals] brandon-themes-dzl's acceptance, measured where the
-// feature actually lands: a REAL daemon over a REAL socket, rendering a config
+// feature actually lands: the daemon's own request handling, rendering a config
 // whose `globals.palette` is a RULE rather than a name.
 //
-// Two facts, and the second is the one an in-process test cannot reach. The bar
+// Two facts, and the second is the one a test of renderDsl cannot reach. The bar
 // is painted in the theme the rule chose for THIS render's data, and the label
 // reading `.theme.effective` agrees with it — one producer, so a label cannot
 // name a theme the bar is not wearing. And when the rule names a theme nothing
@@ -18,11 +18,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
+import { render, stripAnsi } from "./helpers/daemon-e2e";
+import { startDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
@@ -66,9 +65,9 @@ function configFor(env: NodeJS.ProcessEnv): string {
   return configPath;
 }
 
-describe("brandon-themes-dzl: globals.palette as a rule, through the real daemon", () => {
+describe("brandon-themes-dzl: globals.palette as a rule, through the daemon", () => {
   test("the rule paints the bar and labels it; a result naming nothing renders the floor under a warning", async () => {
-    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-theme-rule-e2e",
     );
     configFor(env);
@@ -76,12 +75,11 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the real daemon
       path.join(os.tmpdir(), "cc-candybar-theme-rule-project-"),
     );
 
-    let daemon: RunningDaemon | undefined;
+    const daemon = startDaemon(env);
     try {
-      daemon = await spawnDaemonWithEnv(env);
 
       // ── the good branch ────────────────────────────────────────────────────
-      const good = await render(sockPath, "theme-rule-good", projectDir);
+      const good = await render(daemon, "theme-rule-good", projectDir);
       const goodText = stripAnsi(good);
       // The label is renderDsl's own publication of what the rule chose.
       expect(goodText).toContain("T=dracula");
@@ -91,7 +89,7 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the real daemon
       expect(goodText).not.toContain("⚠");
 
       // ── the branch whose result names nothing installed ────────────────────
-      const bad = await render(sockPath, BAD_SESSION, projectDir);
+      const bad = await render(daemon, BAD_SESSION, projectDir);
       const badText = stripAnsi(bad);
       // The bar is still there — that is the whole point of not throwing.
       expect(badText).toContain("◆ mark");
@@ -101,14 +99,14 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the real daemon
       // And the reason is the bar's message, from the frame after the one that
       // met it, naming the slot, the value the rule produced, and what was
       // rendered instead.
-      const again = await render(sockPath, BAD_SESSION, projectDir);
+      const again = await render(daemon, BAD_SESSION, projectDir);
       expect(indicatorOf(again)).toBe("⚠ 1");
-      const [page] = await readDiagnostics(sockPath, BAD_SESSION, projectDir, again);
+      const [page] = await readDiagnostics(daemon, BAD_SESSION, projectDir, again);
       expect(page!.text).toContain("globals.palette");
       expect(page!.text).toContain("no-such-theme");
       expect(page!.text).toContain("textual-dark");
     } finally {
-      if (daemon !== undefined) await killAndWait(daemon);
+      await daemon.stop();
       rmSync(projectDir, { recursive: true, force: true });
       removeTmpDirs();
     }

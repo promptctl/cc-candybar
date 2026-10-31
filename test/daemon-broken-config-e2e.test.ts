@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] A config that cannot be drawn as written, measured on
-// a REAL daemon over a REAL socket. A config that fails to load draws the
+// the daemon's own request handling. A config that fails to load draws the
 // bundled default with its settings menu and, beside the door, the indicator;
 // its error is read in full in the viewer, never in a strip above the bar. A
 // config that places a segment nothing declares draws everything else it
@@ -12,16 +12,14 @@ import path from "node:path";
 import { RichText } from "@promptctl/rich-js";
 import {
   click,
-  killAndWait,
   linkUrls,
   render,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import {
   indicatorOf,
@@ -38,25 +36,24 @@ jest.setTimeout(30_000);
 
 describe("a config that cannot be drawn as written", () => {
   let env: NodeJS.ProcessEnv;
-  let sockPath: string;
   let removeTmpDirs: () => void;
   let projectDir: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-broken-e2e");
-    ({ env, sockPath, removeTmpDirs } = prepared);
+    ({ env, removeTmpDirs } = prepared);
     mkdirSync(path.join(env.XDG_CONFIG_HOME!, "cc-candybar"), {
       recursive: true,
     });
     projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-broken-e2e-project-"),
     );
-    daemon = await spawnDaemonWithEnv(env);
+    daemon = startDaemon(env);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -71,7 +68,7 @@ describe("a config that cannot be drawn as written", () => {
   test("a config that will not parse draws the bundled default and the indicator; the viewer shows its error in full", async () => {
     const sid = "broken-parse";
     const a = args("unparsable", `{ root: { h: ["directory"] `);
-    const bar = await render(sockPath, sid, projectDir, {}, a);
+    const bar = await render(daemon, sid, projectDir, {}, a);
     const text = stripAnsi(bar);
     // The bundled default with its door, the indicator beside it, no strip.
     expect(text).toContain(DOOR_GLYPH);
@@ -79,13 +76,13 @@ describe("a config that cannot be drawn as written", () => {
     expect(text).not.toContain("unparsable.json5");
     expect(text.indexOf("⚠ 1")).toBeGreaterThan(text.indexOf(DOOR_GLYPH));
 
-    const pages = await readDiagnostics(sockPath, sid, projectDir, bar, {}, a);
+    const pages = await readDiagnostics(daemon, sid, projectDir, bar, {}, a);
     expect(pages.map((p) => p.position)).toEqual(["1/1"]);
     expect(pages[0]!.text).toContain("unparsable.json5");
     // The viewer takes the body's place: the bar's door is not drawn under it.
     expect(stripAnsi(pages[0]!.rendered)).not.toContain(DOOR_GLYPH);
     // ✕ brought the bar back.
-    expect(indicatorOf(await render(sockPath, sid, projectDir, {}, a))).toBe(
+    expect(indicatorOf(await render(daemon, sid, projectDir, {}, a))).toBe(
       "⚠ 1",
     );
   });
@@ -102,16 +99,16 @@ describe("a config that cannot be drawn as written", () => {
     // An unknown flag is this request's own error, ahead of the file's warning.
     const flagged = [...a, "--no-such-flag"];
     const draw = (argv: string[]) =>
-      render(sockPath, sid, projectDir, {}, argv);
+      render(daemon, sid, projectDir, {}, argv);
     const bar = await draw(a);
     expect(indicatorOf(bar)).toBe("⚠ 1");
-    await click(sockPath, viewerLink(bar, "open")!.url);
+    await click(daemon, viewerLink(bar, "open")!.url);
     let shown = await draw(flagged);
     // The error arrived ahead of it: still the warning, now second.
     expect(pageOf(shown).position).toBe("2/2");
     expect(pageOf(shown).text).toContain('duplicate key "padding"');
     // Paged to the flag's error, which then goes: closed, never the warning.
-    await click(sockPath, viewerLink(shown, "‹")!.url);
+    await click(daemon, viewerLink(shown, "‹")!.url);
     shown = await draw(flagged);
     expect(pageOf(shown).text).toContain("--no-such-flag");
     shown = await draw(a);
@@ -139,15 +136,15 @@ describe("a config that cannot be drawn as written", () => {
         root: { h: ["t"] },
       }),
     );
-    const bar = await render(sockPath, sid, projectDir, {}, a);
+    const bar = await render(daemon, sid, projectDir, {}, a);
     expect(indicatorOf(bar)).toBe("⚠ 1");
-    await click(sockPath, urlWriting(bar, SETTINGS_ANCHOR, "open"));
-    const opened = await render(sockPath, sid, projectDir, {}, a);
+    await click(daemon, urlWriting(bar, SETTINGS_ANCHOR, "open"));
+    const opened = await render(daemon, sid, projectDir, {}, a);
     expect(stripAnsi(opened)).toContain(DOOR_CLOSE_GLYPH);
     expect(stripAnsi(opened)).toContain("▦"); // preset switching is reachable
     expect(indicatorOf(opened)).toBe("⚠ 1"); // still loud
     const [page] = await readDiagnostics(
-      sockPath,
+      daemon,
       sid,
       projectDir,
       opened,
@@ -163,13 +160,13 @@ describe("a config that cannot be drawn as written", () => {
       "unknown",
       `{ segments: { mine: { template: "MINE" }, also: { template: "ALSO" } }, root: { h: ["mine", "nosuchseg", "also"] } }`,
     );
-    const bar = await render(sockPath, sid, projectDir, {}, a);
+    const bar = await render(daemon, sid, projectDir, {}, a);
     const text = stripAnsi(bar);
     expect(text).toContain("MINE");
     expect(text).toContain("ALSO");
     expect(indicatorOf(bar)).toBe("⚠ 1");
     expect(text).not.toContain("does not match");
-    const pages = await readDiagnostics(sockPath, sid, projectDir, bar, {}, a);
+    const pages = await readDiagnostics(daemon, sid, projectDir, bar, {}, a);
     expect(pages.map((p) => p.text)).toEqual([
       expect.stringMatching(/"nosuchseg" does not match any declared segment/),
     ]);
@@ -189,13 +186,13 @@ describe("a config that cannot be drawn as written", () => {
       "many",
       `{ globals: { padding: 1, padding: 1 }, segments: { mine: { template: "MINE" } }, root: { h: ["mine", "first-missing-segment", "repo.lit.ticket", "second-missing"] } }`,
     );
-    const bar = await render(sockPath, sid, projectDir, hints, a);
+    const bar = await render(daemon, sid, projectDir, hints, a);
     // One error (both drops, one load's) and one warning (the duplicate key):
     // red, since one is an error. The cell of a plugin absent here adds
     // nothing to either.
     expect(indicatorOf(bar)).toBe("⚠ 2");
     const pages = await readDiagnostics(
-      sockPath,
+      daemon,
       sid,
       projectDir,
       bar,
@@ -213,13 +210,13 @@ describe("a config that cannot be drawn as written", () => {
         expect(new RichText(row).cellLength).toBeLessThanOrEqual(40);
 
     // ‹ steps back from the second message to the first.
-    await click(sockPath, viewerLink(bar, "open")!.url);
-    let shown = await render(sockPath, sid, projectDir, hints, a);
-    await click(sockPath, viewerLink(shown, "›")!.url);
-    shown = await render(sockPath, sid, projectDir, hints, a);
+    await click(daemon, viewerLink(bar, "open")!.url);
+    let shown = await render(daemon, sid, projectDir, hints, a);
+    await click(daemon, viewerLink(shown, "›")!.url);
+    shown = await render(daemon, sid, projectDir, hints, a);
     expect(pageOf(shown).position).toBe("2/2");
-    await click(sockPath, viewerLink(shown, "‹")!.url);
-    shown = await render(sockPath, sid, projectDir, hints, a);
+    await click(daemon, viewerLink(shown, "‹")!.url);
+    shown = await render(daemon, sid, projectDir, hints, a);
     expect(pageOf(shown).position).toBe("1/2");
     const copyUrls = linkUrls(shown).filter((u) =>
       effectsOf(u).some((e) => e.verb.startsWith("copy")),
@@ -239,8 +236,8 @@ describe("a config that cannot be drawn as written", () => {
     expect(shown).not.toContain("Fix my cc-candybar");
     // A key no draw lists (the message fixed since) is refused loudly.
     await expect(
-      click(sockPath, copyUrls[0]!.replace(String(copies[0]!.args[2]), "1")),
+      click(daemon, copyUrls[0]!.replace(String(copies[0]!.args[2]), "1")),
     ).rejects.toThrow(/no longer listed/);
-    await click(sockPath, viewerLink(shown, "✕")!.url);
+    await click(daemon, viewerLink(shown, "✕")!.url);
   });
 });

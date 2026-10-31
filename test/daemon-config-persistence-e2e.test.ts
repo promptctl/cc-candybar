@@ -2,10 +2,10 @@
 // the epic's claim ("mutate the configuration via the menu system,
 // durably") is a COMPOSITION property — click, gate, persistent write,
 // watcher reload, re-render, daemon restart, fresh session — and every
-// sibling ticket (.1-.4) proved its own slice against an in-process rig,
-// never the composition against a REAL daemon over a REAL socket. This file
-// drives the actual `cc-candybar daemon` subprocess exactly as a real
-// client would: render → extract the rendered OSC-8 URLs → parseHandlerUrl
+// sibling ticket (.1-.4) proved its own slice against a rig of its own,
+// never the composition against the daemon's own request handling. This file
+// drives a daemon exactly as a real client would, across a stop and a fresh
+// build: render → extract the rendered OSC-8 URLs → parseHandlerUrl
 // (the same decode `cc-candybar url-handle` runs) → send verb+value as a
 // "click" wire request → render again.
 //
@@ -19,7 +19,7 @@
 //
 // [LAW:verifiable-goals] brandon-save-undo-bwi.hpi made every control a
 // session pick — a DRAFT — and `💾 save N` the one way a draft reaches the
-// file, so this test drives that over the real socket: the theme control emits
+// file, so this test drives that through the daemon: the theme control emits
 // only a session `set-state` write, the save cell appears counting the drafts
 // while the file stays untouched, and one save click writes them all and
 // releases the picks. Asserted on the wire and the file — not on the compiled
@@ -44,21 +44,19 @@ import {
   click,
   linkUrls,
   findUrl,
-  killAndWait,
   render,
   renderUntil,
 } from "./helpers/daemon-e2e";
+import { startDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 
-describe("candybar-config-engine-71o.5: real-daemon click → persist → restart", () => {
-  test("bundled default: clicking theme + padding forever, over the real socket, survives a cold daemon restart and a byte-identical config file", async () => {
-    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+describe("candybar-config-engine-71o.5: a daemon's click → persist → restart", () => {
+  test("bundled default: clicking theme + padding forever survives a cold daemon restart and a byte-identical config file", async () => {
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-config-e2e",
     );
     const projectDir = mkdtempSync(
@@ -87,16 +85,15 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 `;
     writeFileSync(userConfigPath, userConfigBody);
 
-    let daemon: RunningDaemon | undefined;
+    let daemon = startDaemon(env);
     try {
-      daemon = await spawnDaemonWithEnv(env);
       const SID = "e2e-session-1";
 
       // A render warms the daemon's per-(projectDir,cwd) cache entry, which
       // is what derives and registers the click gates (deriveActionValidators
       // / deriveConfigActionValidators) — a click before the first render
       // for this project has no gate to pass yet.
-      await render(sockPath, SID, projectDir);
+      await render(daemon, SID, projectDir);
 
       // The settings menu is collapsed by default — open it, the click a "🍫"
       // tap dispatches.
@@ -105,13 +102,13 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // directly matches test/default-dsl-config.test.ts's own precedent
       // rather than depending on extracting it.
       await click(
-        sockPath,
+        daemon,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
         ]),
       );
 
-      const menuOpen = await render(sockPath, SID, projectDir);
+      const menuOpen = await render(daemon, SID, projectDir);
 
       // The door's first line shows the theme picker, `🎨 theme ▀▀▀`, not its row of
       // swatches: the label is the row's toggle (a set-state write on the
@@ -127,11 +124,11 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ),
       );
       expect(themeMenuToggleUrl).toBeDefined();
-      await click(sockPath, themeMenuToggleUrl!);
+      await click(daemon, themeMenuToggleUrl!);
 
       // ── A control writes the SESSION key, and nothing durable: every pick
       // is a draft until it is saved.
-      const sessionOnly = await render(sockPath, SID, projectDir);
+      const sessionOnly = await render(daemon, SID, projectDir);
 
       // TWO themes, deliberately: one tried in-session and one committed
       // durably. Using the same name for both would let the session pick
@@ -182,9 +179,9 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // alone. That contrast is what "only this session" means, and only a
       // second live session can show it — the config file being unchanged
       // proves nothing about what another session renders.
-      await click(sockPath, sessionThemeUrl!);
+      await click(daemon, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
-      expect(showsTheme(await render(sockPath, SID, projectDir), sessionTheme)).toBe(true);
+      expect(showsTheme(await render(daemon, SID, projectDir), sessionTheme)).toBe(true);
       // Open the other session's menu to the same depth BEFORE asserting it
       // does not show the pick. A closed menu renders no theme name at all, so
       // asserting on a collapsed bar would pass whether or not the pick
@@ -192,22 +189,22 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // is what makes the absence evidence. It renders first, as any session
       // does before it has a link to click: a click is gated by the config
       // its session renders.
-      await render(sockPath, OTHER_SID, projectDir);
+      await render(daemon, OTHER_SID, projectDir);
       await click(
-        sockPath,
+        daemon,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
         ]),
       );
-      const otherBar = await render(sockPath, OTHER_SID, projectDir);
+      const otherBar = await render(daemon, OTHER_SID, projectDir);
       expect(showsTheme(otherBar, "tokyo-night")).toBe(true); // its own default, shown
       // Not named as current (a swatch beside it may well write it).
       expect(showsTheme(otherBar, sessionTheme)).toBe(false);
       expect(otherBar).not.toContain("💾"); // the draft is this session's alone
 
       // ── The draft is counted, and the file is untouched.
-      const drafted = await render(sockPath, SID, projectDir);
+      const drafted = await render(daemon, SID, projectDir);
       expect(drafted).toContain("💾 save 1");
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
 
@@ -218,15 +215,15 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         effects[0]!.args[2] === targetTheme,
       );
       expect(targetThemeUrl).toBeDefined();
-      await click(sockPath, targetThemeUrl!);
+      await click(daemon, targetThemeUrl!);
       // The padding stepper sits in the ⚙ config tab.
       await click(
-        sockPath,
+        daemon,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "config"] },
         ]),
       );
-      const configTab = await render(sockPath, SID, projectDir);
+      const configTab = await render(daemon, SID, projectDir);
       // The padding stepper's ▶: a relative step on the session key (the
       // step-state args are [sessionId, key, String(by)]) — the one whose `by`
       // is positive, so the file assertion below is pinned to the increment.
@@ -239,8 +236,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ),
       );
       expect(paddingUpUrl).toBeDefined();
-      await click(sockPath, paddingUpUrl!);
-      const twoDrafts = await render(sockPath, SID, projectDir);
+      await click(daemon, paddingUpUrl!);
+      const twoDrafts = await render(daemon, SID, projectDir);
       expect(twoDrafts).toContain("💾 save 2");
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
 
@@ -249,14 +246,14 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         effects.some((e) => e.verb === "save"),
       );
       expect(saveUrl).toBeDefined();
-      await click(sockPath, saveUrl!);
+      await click(daemon, saveUrl!);
 
       // Live, no daemon restart: the saved write rides the config file's own
       // watcher (RenderCache), so it is visible to a running daemon before any
       // restart. Read it on the CONCURRENT session, which never picked a theme
       // — its menu is already open from the isolation check above.
       const afterClicks = await renderUntil(
-        sockPath,
+        daemon,
         OTHER_SID,
         projectDir,
         (out) => showsTheme(out, targetTheme),
@@ -267,7 +264,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // …and the SAVING session shows it too, with nothing left to save: the
       // save reloaded the file and released the picks.
       const committing = await renderUntil(
-        sockPath,
+        daemon,
         SID,
         projectDir,
         (out) => showsTheme(out, targetTheme),
@@ -287,10 +284,10 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         .replace("padding: 1", "padding: 2");
       expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
 
-      // Kill this daemon and start a FRESH one against the SAME config file
-      // — a real cold restart, not an in-process cache rebuild.
-      await killAndWait(daemon);
-      daemon = await spawnDaemonWithEnv(env);
+      // Stop this daemon and build a FRESH one against the SAME config file:
+      // nothing of the first is left but what it wrote.
+      await daemon.stop();
+      daemon = startDaemon(env);
 
       // A brand-new session that never clicked anything. The persisted
       // theme is now every session's baseline PALETTE (colors the fresh
@@ -302,16 +299,16 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // prior clicks by THIS session, i.e. it came from the config default,
       // not a picked-and-remembered value.
       const FRESH_SID = "e2e-session-2-fresh";
-      await render(sockPath, FRESH_SID, projectDir);
+      await render(daemon, FRESH_SID, projectDir);
       await click(
-        sockPath,
+        daemon,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
         ]),
       );
       const freshOut = await renderUntil(
-        sockPath,
+        daemon,
         FRESH_SID,
         projectDir,
         (out) => showsTheme(out, targetTheme),
@@ -323,7 +320,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // restart reads it, never rewrites it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
     } finally {
-      if (daemon) daemon.killTree();
+      await daemon.stop();
       removeTmpDirs();
       rmSync(projectDir, { recursive: true, force: true });
     }

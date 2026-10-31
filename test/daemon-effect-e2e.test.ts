@@ -1,4 +1,4 @@
-// [LAW:nothing-unseen] brandon-effects-2gka.d2i, measured on a REAL daemon: the
+// [LAW:nothing-unseen] brandon-effects-2gka.d2i, measured on a daemon: the
 // render event — its `render sid=…` log line — names the effect the bar wore,
 // the effect's own clock, and whether each row's effect was made or reused —
 // and (brandon-effects-2gka.bm1) each placement wearing its own, on its clock.
@@ -9,41 +9,45 @@ import path from "node:path";
 
 import {
   hookData,
-  killAndWait,
   render,
   renderRequest,
 } from "./helpers/daemon-e2e";
 import {
+  heldClock,
+  startDaemon,
+  type HeldClock,
+  type InWorkerDaemon,
+} from "./helpers/in-worker-daemon";
+import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
 
 describe("a daemon render's event names the effect it wore", () => {
-  let sockPath: string;
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let projectDir: string;
   let config: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
+  let clock: HeldClock;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-effect-e2e");
-    ({ sockPath, env, removeTmpDirs } = prepared);
+    ({ env, removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-effect-e2e-"));
     config = path.join(projectDir, "shimmer.json5");
     writeFileSync(
       config,
       `{ globals: { effect: "shimmer" }, segments: { a: { template: 'steady' }, b: { template: 'own' } }, root: { h: ['a', { seg: 'b', settings: { effect: 'pulse' } }] } }`,
     );
-    daemon = await spawnDaemonWithEnv(prepared.env);
+    clock = heldClock();
+    daemon = startDaemon(prepared.env, { clock });
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -51,9 +55,9 @@ describe("a daemon render's event names the effect it wore", () => {
   test("the first render brings the effect into force; the next reuses each row's effect on its clock", async () => {
     const sessionId = "effect-e2e-session";
     const argv = ["cc-candybar", "--config", config];
-    await render(sockPath, sessionId, projectDir, {}, argv);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await render(sockPath, sessionId, projectDir, {}, argv);
+    await render(daemon, sessionId, projectDir, {}, argv);
+    clock.advance(50);
+    await render(daemon, sessionId, projectDir, {}, argv);
 
     const events = (await renderLines(env, sessionId, 2)).map((l) => ({
       effect: l.match(/ effect=(\S+) /)?.[1],
@@ -82,12 +86,12 @@ describe("a daemon render's event names the effect it wore", () => {
     });
     expect(first.made).toBeGreaterThan(0);
     expect(last.effect).toBe("shimmer");
-    expect(last.t).toBeGreaterThan(0);
+    expect(last.t).toBe(0.05);
     expect(last).toMatchObject({ made: 0, reused: first.made });
     // The placement's pulse came into force with the first render too, and
     // keeps its own clock.
     expect(ownT(first.own)).toBe(0);
-    expect(ownT(last.own)).toBeGreaterThan(0);
+    expect(ownT(last.own)).toBe(0.05);
   });
 
   // brandon-menus-sjhy.nt2: the event names the speed the session's animation
@@ -100,10 +104,10 @@ describe("a daemon render's event names the effect it wore", () => {
       `{ globals: { effect: "shimmer", animationSpeed: "20x" }, segments: { a: { template: 'steady' } }, root: { h: ['a'] } }`,
     );
     const argv = ["cc-candybar", "--config", fast];
-    await render(sockPath, sessionId, projectDir, {}, argv);
+    await render(daemon, sessionId, projectDir, {}, argv);
     const gapMs = 100;
-    await new Promise((resolve) => setTimeout(resolve, gapMs));
-    await render(sockPath, sessionId, projectDir, {}, argv);
+    clock.advance(gapMs);
+    await render(daemon, sessionId, projectDir, {}, argv);
 
     const events = (await renderLines(env, sessionId, 2)).map((l) => ({
       speed: l.match(/ speed=(\S+) /)?.[1],
@@ -111,11 +115,9 @@ describe("a daemon render's event names the effect it wore", () => {
     }));
     expect(events.length).toBeGreaterThanOrEqual(2);
     expect(events.every((e) => e.speed === "20x")).toBe(true);
-    // At least the gap passed between the first render and the last, so the
-    // effect's clock moved at least twenty gaps.
-    expect(events[events.length - 1]!.t).toBeGreaterThanOrEqual(
-      (20 * gapMs) / 1000,
-    );
+    // One gap passed between the first render and the last, so the effect's
+    // clock moved twenty.
+    expect(events[events.length - 1]!.t).toBe((20 * gapMs) / 1000);
   });
 
   // brandon-effects-2gka.3vt: a placement the payload hides dissolves out, and
@@ -128,7 +130,7 @@ describe("a daemon render's event names the effect it wore", () => {
       `{ globals: { transitions: true }, variables: { modelName: { kind: "input", path: "model.display_name", type: "string" } }, segments: { a: { template: 'steady' }, b: { template: 'leaves', when: '{{ ne .modelName "gone" }}' } }, root: { h: ['a', 'b'] } }`,
     );
     const renderAs = (displayName: string): Promise<string> =>
-      renderRequest(sockPath, {
+      renderRequest(daemon, {
         hookData: {
           ...hookData(sessionId, projectDir),
           model: { id: "claude-opus-4-7", display_name: displayName },

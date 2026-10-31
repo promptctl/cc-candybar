@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] candybar-settings-ui-aok.1's headline acceptance,
 // measured the only way the ticket accepts: from a USER CONFIG FILE whose
-// `root` is a whole tree of one row of two segments, resolved by a REAL
-// daemon over a REAL socket. A tree replaces the bundled rows, and the
+// `root` is a whole tree of one row of two segments, resolved by the daemon's
+// own request handling. A tree replaces the bundled rows, and the
 // maintainer's own config is exactly this shape, which is why presets, edit
 // mode, and the eight value controls were unreachable for the person they
 // were built for.
@@ -19,15 +19,13 @@ import path from "node:path";
 import {
   click,
   linkUrls,
-  killAndWait,
   render,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
+import { startDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
@@ -40,9 +38,9 @@ import { effectsOf } from "./helpers/click";
 
 jest.setTimeout(30_000);
 
-describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
+describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
   test("a user root of one row of two segments still reaches presets and edit mode", async () => {
-    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-settings-e2e",
     );
     // The acceptance config, written where the DAEMON resolves it.
@@ -56,21 +54,20 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       path.join(os.tmpdir(), "cc-candybar-settings-e2e-project-"),
     );
 
-    let daemon: RunningDaemon | undefined;
+    const daemon = startDaemon(env);
     try {
-      daemon = await spawnDaemonWithEnv(env);
       const SID = "settings-e2e-1";
 
       // 1. The door exists, from a config that declared only two segments.
-      const closed = await render(sockPath, SID, projectDir);
+      const closed = await render(daemon, SID, projectDir);
       expect(stripAnsi(closed)).toContain(DOOR_GLYPH);
       expect(stripAnsi(closed)).not.toContain("✎ arrange");
 
       // 2. Its click opens the body — found in the rendered bytes and
       //    dispatched through the real click gate, so a menu the derived
       //    validators did not admit would fail here rather than no-op.
-      await click(sockPath, urlWriting(closed, SETTINGS_ANCHOR, "open"));
-      const opened = stripAnsi(await render(sockPath, SID, projectDir));
+      await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, "open"));
+      const opened = stripAnsi(await render(daemon, SID, projectDir));
       expect(opened).toContain(DOOR_CLOSE_GLYPH);
       expect(opened).not.toContain(DOOR_GLYPH);
       expect(opened).toContain("✎ arrange"); // edit mode, on the first line
@@ -79,10 +76,10 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       // 3. Edit mode is genuinely entered from the menu's first line: the
       //    row's edit chrome is on screen the moment edit mode is, and the
       //    menu stays open above it.
-      const bodyOut = await render(sockPath, SID, projectDir);
+      const bodyOut = await render(daemon, SID, projectDir);
       expect(stripAnsi(bodyOut)).toContain("✎ arrange");
-      await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));
-      const editing = await render(sockPath, SID, projectDir);
+      await click(daemon, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));
+      const editing = await render(daemon, SID, projectDir);
       expect(stripAnsi(editing)).toContain(DOOR_CLOSE_GLYPH);
       expect(stripAnsi(editing)).toContain("📐 layout");
       expect(
@@ -90,7 +87,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
           .length,
       ).toBeGreaterThan(0);
     } finally {
-      if (daemon) await killAndWait(daemon);
+      await daemon.stop();
       removeTmpDirs();
       // removeTmpDirs only clears what prepareIsolatedDaemonEnv created; this
       // dir is ours, so orphaning it would leak one temp dir per run.
@@ -106,21 +103,20 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
 // click gate, must each come back to an open picker marking the new preset.
 describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", () => {
   test("pick compact, then default: open after each, the pick current", async () => {
-    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-preset-stays-open",
     );
     const projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-preset-stays-open-project-"),
     );
-    let daemon: RunningDaemon | undefined;
+    const daemon = startDaemon(env);
     try {
-      daemon = await spawnDaemonWithEnv(env);
       const SID = "preset-stays-open-1";
-      const bar = (): Promise<string> => render(sockPath, SID, projectDir);
+      const bar = (): Promise<string> => render(daemon, SID, projectDir);
 
-      await click(sockPath, urlWriting(await bar(), SETTINGS_ANCHOR, "open"));
+      await click(daemon, urlWriting(await bar(), SETTINGS_ANCHOR, "open"));
       await click(
-        sockPath,
+        daemon,
         urlWriting(
           await bar(),
           "menus.candybar_pickers",
@@ -130,7 +126,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
 
       for (const preset of ["compact", "default"]) {
         const pick = urlWriting(await bar(), "preset", preset);
-        await click(sockPath, pick);
+        await click(daemon, pick);
         const after = await bar();
         expect(stripAnsi(after)).toContain(`▦ ◀ ${preset} ▶`);
         // Still open: the list draws the other preset as an option, by name —
@@ -149,7 +145,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         expect(boldUrls(after)).toContain(option(preset)!.url);
       }
     } finally {
-      if (daemon) await killAndWait(daemon);
+      await daemon.stop();
       removeTmpDirs();
       rmSync(projectDir, { recursive: true, force: true });
     }

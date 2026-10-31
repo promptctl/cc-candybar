@@ -45,7 +45,7 @@ import { shortDigest } from "../source-digest";
 import { PACKAGE_VERSION } from "../version";
 import {
   assessBuild,
-  bakedStamp,
+  bundleStamp,
   type BuildCurrency,
   type SourceStamp,
 } from "./build-currency";
@@ -258,6 +258,9 @@ export interface UpdateWatchOptions {
   readonly launcher: Launcher;
   // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
   readonly entryUrl: string;
+  // The digest that bundle was stamped with, which the checkout is assessed
+  // against.
+  readonly digest: string | null;
   // Where this bundle's acts are recorded (src/daemon/update-act.ts).
   readonly actsDir: string;
   // How often the source tree is re-digested.
@@ -355,6 +358,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     launcher,
     entryUrl,
+    digest,
     actsDir,
     intervalMs,
     releaseIntervalMs,
@@ -408,7 +412,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   }
 
   function sampleBuild(): void {
-    build = assessBuild(entryUrl, bakedStamp);
+    build = assessBuild(entryUrl, () => bundleStamp(digest));
     logBuild(describeBuild(build));
     syncGate();
   }

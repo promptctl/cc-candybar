@@ -34,6 +34,7 @@ export interface DaemonParts {
   readonly launcher: Launcher;
   readonly log: DaemonLogger;
   readonly bundle: string;
+  readonly sourceDigest: string | null;
   readonly doctorStores: DoctorStores;
   readonly stats: RuntimeStats;
   readonly handlerProbes: ProbeArrivals;

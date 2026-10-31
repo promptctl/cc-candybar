@@ -10,12 +10,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { DRAW_RESERVE_MS } from "../src/daemon/request-deadline";
-import { killAndWait, renderBody, renderRequest } from "./helpers/daemon-e2e";
+import { renderBody, renderRequest } from "./helpers/daemon-e2e";
 import { loggedLines } from "./helpers/daemon-log";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(120_000);
@@ -24,15 +23,14 @@ const SAMPLES = 100;
 const LOAD_GATE = path.join(__dirname, "..", "scripts", "load-gate");
 
 describe("the draw's reserve", () => {
-  let daemon: RunningDaemon | undefined;
-  let sockPath: string;
+  let daemon: InWorkerDaemon;
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let root: string;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-draw-reserve");
-    ({ sockPath, removeTmpDirs } = prepared);
+    ({ removeTmpDirs } = prepared);
     root = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-draw-reserve-"));
     // The full config's plugin segment, where the daemon looks for plugins.
     const data = path.join(root, "data");
@@ -42,11 +40,11 @@ describe("the draw's reserve", () => {
       { recursive: true },
     );
     env = { ...prepared.env, XDG_DATA_HOME: data };
-    daemon = await spawnDaemonWithEnv(env);
+    daemon = startDaemon(env);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     fs.rmSync(root, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -63,7 +61,7 @@ describe("the draw's reserve", () => {
     fs.writeFileSync(config, text);
     const ask = (sid: string) =>
       renderRequest(
-        sockPath,
+        daemon,
         renderBody(sid, dir, { termCols: 160, termRows: 40 }, [
           "cc-candybar",
           "--config",

@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] The fit check: a plugin another program ships,
-// installed in the user's plugin root of a REAL daemon, shaped as such a
+// installed in the user's plugin root of a daemon, shaped as such a
 // program ships one: a session status file it writes, a segment gated on that
 // file, and moves that run the program the session's own status names. It
 // proves the plugin API carries all of it with nothing program-specific in
@@ -12,11 +12,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { hookData, killAndWait, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { loggedWhen } from "./helpers/daemon-log";
 import { effectsOf } from "./helpers/click";
@@ -98,9 +97,8 @@ interface Call {
   readonly env: Readonly<Record<string, string | null>>;
 }
 
-describe("another program's plugin, as such a program ships it, on a real daemon", () => {
+describe("another program's plugin, as such a program ships it, on a daemon", () => {
   let env: NodeJS.ProcessEnv;
-  let sockPath: string;
   let removeTmpDirs: () => void;
   let root: string;
   let projectDir: string;
@@ -109,11 +107,11 @@ describe("another program's plugin, as such a program ships it, on a real daemon
   let program: string;
   let folder: string;
   let config: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-plugin-fit");
-    ({ sockPath, env, removeTmpDirs } = prepared);
+    ({ env, removeTmpDirs } = prepared);
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-plugin-fit-")));
     projectDir = path.join(root, "project");
     claudeDir = path.join(root, "claude");
@@ -132,7 +130,7 @@ describe("another program's plugin, as such a program ships it, on a real daemon
     );
     // The daemon was spawned by some other session's shell: its session
     // variables are that session's, and must never reach this one's program.
-    daemon = await spawnDaemonWithEnv({
+    daemon = startDaemon({
       ...prepared.env,
       XDG_DATA_HOME: path.join(root, "data"),
       CLAUDE_CODE_SESSION_ID: "the-daemon-spawners-session",
@@ -144,7 +142,7 @@ describe("another program's plugin, as such a program ships it, on a real daemon
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     fs.rmSync(root, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -152,7 +150,7 @@ describe("another program's plugin, as such a program ships it, on a real daemon
   // The session's request: its hook JSON, and the Claude Code directory its
   // client reports.
   const renderRaw = (): Promise<string> =>
-    renderRequest(sockPath, {
+    renderRequest(daemon, {
       hookData: hookData(SESSION, projectDir),
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
@@ -244,7 +242,7 @@ describe("another program's plugin, as such a program ships it, on a real daemon
         env: { GAUGE_HOME: gaugeHome },
       });
 
-      expect(await sendClick(sockPath, url)).toMatchObject({ ok: true });
+      expect(await sendClick(daemon, url)).toMatchObject({ ok: true });
       await renderUntil((b) => calls().length > before && b.includes(shows), `${action}'s write`);
 
       expect(calls().slice(before)).toEqual([
