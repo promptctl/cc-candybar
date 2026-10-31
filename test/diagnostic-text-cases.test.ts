@@ -10,15 +10,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
+import {
+  ANSI_RESET,
+  DIAGNOSTIC_ERROR_BG,
+  DIAGNOSTIC_ERROR_FG,
+} from "../src/render/diagnostic-style";
 import { sanitizeAndTruncate, sanitizeText } from "../src/render/diagnostic-text";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
 
 interface Cases {
-  readonly glyph: readonly {
-    readonly cause: Extract<PermanentOutcome, { message: string }>["cause"];
-    readonly message: string;
-    readonly output: string;
-  }[];
+  readonly glyph: readonly { readonly outcome: PermanentOutcome; readonly output: string }[];
   readonly sanitize: readonly { readonly input: string; readonly output: string }[];
   readonly clip: readonly {
     readonly input: string;
@@ -38,10 +39,12 @@ const CASES = JSON.parse(
 const escaped = (s: string): string =>
   s.replace(/[^\x20-\x7e]/gu, (ch) => `\\u${ch.codePointAt(0)!.toString(16).padStart(4, "0")}`);
 
-test.each(CASES.glyph.map((c) => [c.cause, c] as const))(
-  "formatPermanentGlyph %s",
-  (cause, { message, output }) => {
-    expect(formatPermanentGlyph({ kind: "permanent", cause, message })).toBe(output);
+test.each(CASES.glyph.map((c) => [escaped(c.output), c] as const))(
+  'formatPermanentGlyph "%s"',
+  (_, { outcome, output }) => {
+    expect(formatPermanentGlyph(outcome)).toBe(
+      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}${output}${ANSI_RESET}\n`,
+    );
   },
 );
 

@@ -154,27 +154,6 @@ mod tests {
     const CLIENT_V: u32 = PROTOCOL_VERSION;
     const OTHER_V: u32 = PROTOCOL_VERSION + 1;
 
-    #[test]
-    fn version_mismatch_known_daemon_v() {
-        let g = format_permanent_glyph(&PermanentCause::VersionMismatch {
-            client_v: CLIENT_V,
-            daemon_v: OTHER_V,
-        });
-        assert_eq!(
-            g,
-            format!("{OPEN}⚠ cc-candybar: protocol mismatch (client v{CLIENT_V} ≠ daemon v{OTHER_V}){TAIL}")
-        );
-    }
-
-    #[test]
-    fn version_mismatch_unknown_daemon_v() {
-        let g = format_permanent_glyph(&PermanentCause::VersionMismatch {
-            client_v: CLIENT_V,
-            daemon_v: 0,
-        });
-        assert!(g.contains(&format!("client v{CLIENT_V} ≠ daemon unknown")));
-    }
-
     // [LAW:one-type-per-behavior] ESC + C0 sanitization paired with the TS
     // mirror. A crafted error message containing `\x1b[0m` would otherwise
     // prematurely terminate the glyph's styled envelope; the entire C0
@@ -216,8 +195,10 @@ mod tests {
     const CASES: &str = include_str!("../../test/fixtures/diagnostic-text-cases.json");
 
     fn cases(key: &str) -> Vec<serde_json::Value> {
-        let all: serde_json::Value = serde_json::from_str(CASES).expect("the fixture is JSON");
-        let cases = all[key].as_array().expect("the key is a list").clone();
+        let mut all: serde_json::Value = serde_json::from_str(CASES).expect("the fixture is JSON");
+        let serde_json::Value::Array(cases) = all[key].take() else {
+            panic!("{key} is a list");
+        };
         assert!(!cases.is_empty());
         cases
     }
@@ -257,27 +238,23 @@ mod tests {
     #[test]
     fn glyph_cases() {
         for case in cases("glyph") {
-            let message = case["message"].as_str().expect("message is a string").to_string();
+            let outcome = &case["outcome"];
+            let version = |key: &str| outcome[key].as_u64().expect("a version is a count") as u32;
+            let message = || outcome["message"].as_str().expect("message is a string").to_string();
             let output = case["output"].as_str().expect("output is a string");
-            let cause = match case["cause"].as_str().expect("cause is a string") {
-                "bad_request" => PermanentCause::BadRequest(message),
-                "render_failed" => PermanentCause::RenderFailed(message),
-                "switched_off" => PermanentCause::SwitchedOff(message),
-                "malformed_response" => PermanentCause::MalformedResponse(message),
-                other => panic!("no message-bearing cause {other}"),
+            let cause = match outcome["cause"].as_str().expect("cause is a string") {
+                "version_mismatch" => PermanentCause::VersionMismatch {
+                    client_v: version("clientV"),
+                    daemon_v: version("daemonV"),
+                },
+                "bad_request" => PermanentCause::BadRequest(message()),
+                "render_failed" => PermanentCause::RenderFailed(message()),
+                "switched_off" => PermanentCause::SwitchedOff(message()),
+                "malformed_response" => PermanentCause::MalformedResponse(message()),
+                other => panic!("no permanent cause {other}"),
             };
-            assert_eq!(format_permanent_glyph(&cause), output);
+            assert_eq!(format_permanent_glyph(&cause), format!("{OPEN}{output}{TAIL}"));
         }
-    }
-
-    #[test]
-    fn malformed_response_keeps_short_message_unchanged() {
-        let g = format_permanent_glyph(&PermanentCause::MalformedResponse(
-            "decode response: expected value at line 1 column 1".into(),
-        ));
-        assert!(g.starts_with(OPEN));
-        assert!(g.ends_with(TAIL));
-        assert!(g.contains("malformed daemon response: decode response:"));
     }
 
     // Every cause, and every message-bearing one with a CRLF inside its

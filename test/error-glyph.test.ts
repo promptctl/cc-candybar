@@ -8,8 +8,8 @@ import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/pr
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
-// implementation. Each message-bearing cause's exact glyph is in the one table
-// both runtimes assert (test/diagnostic-text-cases.test.ts).
+// implementation. Each cause's exact glyph is in the one table both runtimes
+// assert (test/diagnostic-text-cases.test.ts).
 
 const OPEN = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
 const TAIL = "\x1b[0m\n";
@@ -44,29 +44,6 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       expect(glyph.split("\n").length).toBe(2);
       expect(glyph.endsWith("\n")).toBe(true);
     }
-  });
-
-  test("version_mismatch carries client and daemon versions in visible text", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "version_mismatch",
-      clientV: CLIENT_V,
-      daemonV: OTHER_V,
-    });
-    expect(glyph).toContain(
-      `protocol mismatch (client v${CLIENT_V} ≠ daemon v${OTHER_V})`,
-    );
-  });
-
-  test("version_mismatch with daemonV=0 renders as 'unknown' (older daemons)", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "version_mismatch",
-      clientV: CLIENT_V,
-      daemonV: 0,
-    });
-    expect(glyph).toContain(`client v${CLIENT_V} ≠ daemon unknown`);
-    expect(glyph).not.toContain("daemon v0");
   });
 
   // [LAW:one-type-per-behavior] The single-line glyph contract documented in
