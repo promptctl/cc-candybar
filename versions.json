@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-523",
+      "ref": "refs/pull/523/merge",
+      "sha": "fd4ed3f7b544ebd3b94b13f266403a7c0b2a327a",
+      "timestamp": "2026-10-31T17:48:56.719Z",
+      "commits": [
+        {
+          "sha": "fd4ed3f7b544ebd3b94b13f266403a7c0b2a327a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T11:47:57-06:00",
+          "message": "Merge 37f46c8219a335d04e46d7805d3edcca18581162 into d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48\n"
+        },
+        {
+          "sha": "37f46c8219a335d04e46d7805d3edcca18581162",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T11:47:42-06:00",
+          "message": "refactor(daemon): a launch carries its owner, so a closed daemon's work is refused (candybar-testing-0x6u.snf)\n\nLaunch state lived in module globals, and a closed daemon's scope stayed in\nforce only until the next daemon replaced it. A closed daemon's unwinding pass\nthen read the new live scope on its next launch: it ran under the second\ndaemon, landed in its stats, and was ended by its close. Production never\nreaches this, because it builds one daemon per process. A jest worker does on\nevery restart, and the epic moves every restart onto one.\n\nLaunch state is now a value, `createLauncher`, holding the scope, the rate\nlimits, the launches in flight and the lifeline. `createDaemon` builds one and\nits work holds it, so a closed daemon's launches stay refused whichever daemon\nis live. There is no ambient `launch`: every call site names its owner, and\neslint keeps the process's launcher, `createLauncher` and `dlog` to their\nowners. One daemon is still live in a process, now because its paths and its\nlog are read from the process's environment.\n\nA refused launch is metered, so one that did nothing reads apart from one\nnobody tried. That count is the fact the restart test waits on; a count of\nchildren reads the same either way. A line logged after a close has finished\nsays so, because that file can be the next daemon's log.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48",
