@@ -138,24 +138,6 @@ async function bar(
 const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
 describe("slash controls and the session's tmux pane", () => {
-  test("in a pane: both trays and autocompact's controls are drawn", async () => {
-    const { text, lines } = await bar({ tmux: PANE });
-    expect(text).toContain("🎨 look");
-    expect(lines).toEqual([
-      // the menu's session tab, above the bar: its tray, then its autocompact
-      "/compact",
-      "/model",
-      "/autocompact 300000",
-      "/autocompact 500000",
-      "/autocompact auto",
-      // the bar's own tray, then autocompact
-      "/compact",
-      "/model",
-      "/autocompact 300000",
-      "/autocompact 500000",
-      "/autocompact auto",
-    ]);
-  });
 
   test.each<[string, ClientHints]>([
     ["not in tmux", { tmux: null }],

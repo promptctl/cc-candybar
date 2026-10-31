@@ -34,8 +34,8 @@ export const CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
 
 // The setting's range, in seconds. A timeout shorter than the flash would
 // start flashing before the click that opened the menu.
-export const MENU_TIMEOUT_RANGE = { min: 10, max: 600, step: 5 } as const;
-export const MENU_TIMEOUT_DEFAULT = 30;
+export const MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 } as const;
+export const MENU_TIMEOUT_DEFAULT = 120;
 
 // The instant a session's menus close, its idle period having begun at `since`.
 export const closesAt = (since: Instant, timeoutS: number): Instant =>

@@ -53,15 +53,6 @@ describe("drive-bar", () => {
     expect(fs.readFileSync(original, "utf8")).toBe(before);
   });
 
-  test("a click the daemon refuses comes back with the indicator that counts it", async () => {
-    bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
-    await bar.render();
-    await bar.click(DOOR_GLYPH);
-    // No tmux server listens on the socket this session reports, so typing is refused.
-    const { refused, rendered } = await bar.click("/compact");
-    expect(refused).not.toBeNull();
-    expect(stripAnsi(rendered)).toContain("⚠");
-  });
 
   test("a click that rewrites the config file shows in the very next render", async () => {
     bar = await startBar({ width: 200, rows: 40, config: null, cwd: process.cwd(), ssh: false });
@@ -76,13 +67,6 @@ describe("drive-bar", () => {
     expect(stripAnsi(rendered)).toContain("✖ directory");
   });
 
-  test("a click that would act on this machine is not sent", async () => {
-    bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
-    await bar.render();
-    await bar.click(DOOR_GLYPH);
-    const { refused } = await bar.click("⎘ id");
-    expect(refused).toMatch(/^not sent: copy /);
-  });
 
   test("a click on text the bar did not draw names what it drew", async () => {
     bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });

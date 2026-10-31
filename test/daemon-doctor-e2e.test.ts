@@ -497,7 +497,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // The render event says how long a drawn menu has sat idle, of its timeout.
     const menuIdle = events.map((l) => l.match(/ menuIdle=(\S+) /)?.[1]);
     expect(menuIdle[0]).toBe("-");
-    expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/30s$/));
+    expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/120s$/));
     expect(motion).toContain("still");
     const doctorLines = (lines: readonly string[]) =>
       lines.filter(

@@ -141,12 +141,10 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 // a time, its body dropped below the strip. A tab strip is an accordion: every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
-// open trigger. Closing the door returns it to the first tab, as it returns
-// everything inside the door (src/config/disclosure-nest.ts), so the menu
-// always reopens at its top level.
+// open trigger. The key starts closed, and closing the door returns it there, as
+// it returns everything inside the door (src/config/disclosure-nest.ts), so the
+// menu always opens at its top level and a tab's body appears only when clicked.
 const TAB_KEY = `${SETTINGS_NS}tab`;
-// The tab a fresh session opens the menu on.
-const FIRST_TAB: TabName = "session";
 const tabSeg = (tab: TabName): string => `${TAB_KEY}.${tab}`;
 // A tab's own open/close cycle, fired by the tab's click beside the disarms.
 const tabToggle = (tab: TabName): string => `${tabSeg(tab)}.toggle`;
@@ -1053,7 +1051,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   // [LAW:composability] A tab click is its cycle and the disarm of every
   // confirm a tab holds, as one `do` (the door's shape): the tab is the click's
   // face, and switching tabs drops a half-made confirm it took out of view.
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
   for (const { member, label } of TABS) {
     artifacts.actions[tabToggle(member)] = disclosureCycleAction(
       TAB_KEY,
