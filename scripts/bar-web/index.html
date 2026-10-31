@@ -79,6 +79,11 @@
     <button type="button" data-cols="200">200</button>
     <button type="button" id="fit">fit window</button>
   </div>
+  <div class="group"><span class="label">font</span>
+    <button type="button" id="font-smaller" aria-label="Smaller font">A−</button>
+    <span id="font-size"></span>
+    <button type="button" id="font-larger" aria-label="Larger font">A+</button>
+  </div>
   <div class="group"><span class="label">terminal ground</span>
     <button type="button" data-ground="dark" aria-pressed="true">dark</button>
     <button type="button" data-ground="light">light</button>
@@ -137,9 +142,13 @@ function say(text, cls) {
   $("status").replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
 }
 
+const FONT_SIZES = { min: 10, max: 40, step: 2, default: 18 };
+const FONT_SIZE_KEY = "cc-candybar:bar-font-size";
+const storedFontSize = Number(localStorage.getItem(FONT_SIZE_KEY));
+
 const term = new Terminal({
   fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--mono"),
-  fontSize: 14,
+  fontSize: storedFontSize || FONT_SIZES.default,
   convertEol: true,
   disableStdin: true,
   cursorBlink: false,
@@ -267,6 +276,16 @@ function setCols(cols) {
 const press = (selector, chosen) =>
   document.querySelectorAll(selector).forEach((o) => o.setAttribute("aria-pressed", String(o === chosen)));
 $("fit").addEventListener("click", () => { frame.style.width = "100%"; });
+// The frame keeps its width, so a larger font is fewer columns and the bar lays itself out again.
+function setFontSize(size) {
+  term.options.fontSize = Math.min(FONT_SIZES.max, Math.max(FONT_SIZES.min, size));
+  localStorage.setItem(FONT_SIZE_KEY, String(term.options.fontSize));
+  $("font-size").textContent = `${term.options.fontSize}px`;
+  refit();
+}
+$("font-smaller").addEventListener("click", () => setFontSize(term.options.fontSize - FONT_SIZES.step));
+$("font-larger").addEventListener("click", () => setFontSize(term.options.fontSize + FONT_SIZES.step));
+$("font-size").textContent = `${term.options.fontSize}px`;
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
   term.options.theme = GROUNDS[b.dataset.ground];
   frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
