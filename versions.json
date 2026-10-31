@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-518",
+      "ref": "refs/pull/518/merge",
+      "sha": "fbb094bda4fdd3ab4426ee0345d8e29eb8962610",
+      "timestamp": "2026-10-31T10:46:11.698Z",
+      "commits": [
+        {
+          "sha": "fbb094bda4fdd3ab4426ee0345d8e29eb8962610",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T04:45:23-06:00",
+          "message": "Merge a02fb37d319335167b17be574053bb4c172ebdb9 into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+        },
+        {
+          "sha": "a02fb37d319335167b17be574053bb4c172ebdb9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T04:45:01-06:00",
+          "message": "feat(carousel): the standard control names the setting it changes, not its value ()\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-517",
       "ref": "refs/pull/517/merge",
       "sha": "c35b53079994a15ac640819f7e6a4c4541908ad8",
