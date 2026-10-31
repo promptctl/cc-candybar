@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-525",
-      "ref": "refs/pull/525/merge",
-      "sha": "3f2867f134f58a960717b197bb5ce1dd929ce248",
-      "timestamp": "2026-10-31T22:01:06.233Z",
-      "commits": [
-        {
-          "sha": "3f2867f134f58a960717b197bb5ce1dd929ce248",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:00:18Z",
-          "message": "Merge be1f2bdf8fa1f06f9abe2f95c0081335902b3ff4 into f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc\n"
-        },
-        {
-          "sha": "be1f2bdf8fa1f06f9abe2f95c0081335902b3ff4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:00:03-06:00",
-          "message": "test(daemon): a dying process's stderr is read once its pipe closes, and the tier has one spelling (candybar-testing-0x6u.886)\n\nA readiness failure read the tail at the exit, which can land before the\npipe's last bytes, so the process that dies before its log opens could say\nnothing. The tail is now a value that exists once the pipe has closed.\n`pnpm test:process` reads the tier's pattern from its one home, so CI no\nlonger spells it.\n"
-        },
-        {
-          "sha": "ff39a6f4b39ffe63527bf5424e98ebb7cd44e6c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T15:50:50-06:00",
-          "message": "test(daemon): CI runs the tier after the build and the rest before it, and preloads share one merge (candybar-testing-0x6u.886)\n\nA run outside the tier needing no build was checked once by hand. CI now\npartitions the suite at the build, so that holds on every push at no added\ntime. The ledger's NODE_OPTIONS merge was a copy of the stamp's, which that\nfile says there is one of. The pool case's cleanup no longer depends on the\nthird spawn having succeeded.\n"
-        },
-        {
-          "sha": "9bc1828e309683252208b0d5181dc5031c5e656b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T15:36:20-06:00",
-          "message": "test(daemon): a run's daemon starts are pinned at what a full run measures (candybar-testing-0x6u.886)\n"
-        },
-        {
-          "sha": "ab2670ca4f0fa53a3ae6cbb9065f4c7ec90c6ff6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T15:33:55-06:00",
-          "message": "test(daemon): a test of the process is named for it, and everything else needs no build (candybar-testing-0x6u.886)\n"
-        },
-        {
-          "sha": "fea33fa3632457234638300016800be235417531",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T15:29:26-06:00",
-          "message": "test(daemon): every daemon a run starts is recorded and judged at its end (candybar-testing-0x6u.886)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc",
-      "timestamp": "2026-10-31T20:30:48.988Z",
+      "sha": "5906e458d69d135a44baeafed475d436482c7355",
+      "timestamp": "2026-10-31T22:18:16.595Z",
       "commits": [
         {
-          "sha": "f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc",
+          "sha": "5906e458d69d135a44baeafed475d436482c7355",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T14:30:05-06:00",
-          "message": "test(daemon): the in-process daemon tests run in the jest worker (candybar-testing-0x6u.1ur) (#524)\n\n* test(daemon): the in-process daemon tests run in the jest worker (candybar-testing-0x6u.1ur)\n\nTwenty files, and the in-process cases of two mixed ones, move onto the harness\nand start no process. What stays on one is the census's process tier, the real\nclient's three cases, the built bundle's three, and the one drive-bar case that\nruns what `pnpm bar` runs.\n\nThe running bundle's digest is an input, read once at boot, so the update notice\nand daemon-stats give one answer to what a daemon is, and the notice's cases\nneed no build.\n\nA real socket serves in the worker for what opens one itself, so the frame stream\nand the doctor's CLI run unchanged. A bar takes how it gets its daemon. A held\nclock moves the effect, click-error and warning cases off real sleeps, on a daemon\neach owns, and that daemon's clients state their deadlines on it.\n\n* test(daemon): draw-reserve stays on a real process (candybar-testing-0x6u.1ur)\n\nIts verdict changed on CI's runner, where timing is judged: p99 57 ms in\nthe worker against the 40 ms constant, on the first run. The darwin\ncomparison that moved it reads 3-4 ms either way, and says nothing about\ntwo cores running four workers. Process runs miss the same gate by 2-5 ms,\nwhich is brandon-unfiled-3248.tl8u.\n\n* test(daemon): review fixes for the move to the worker (candybar-testing-0x6u.1ur)\n\nThe deadline case goes back to a real process in its own describe: its\nanswer's cold first draw has to fit the draw's reserve in wall time, which\nis the bound draw-reserve just left the worker for.\n\nThe timedOut case now owns the running source it depends on. With nothing\nin flight the answer is written on microtasks, ahead of the overdue\nbackstop, so it passed only while an earlier case left a read going.\n\nA held clock could not fail the dissolve case, so the clock now moves\nbetween its draws. A start refused beside a live daemon hands the env\nback. A stats case ties the bundle's digest to the snapshot. The config-env\nfile holds the update keys as `check` does, rather than arming a daemon.\n\n* test(daemon): the backstop case goes back to a process, and the harness holds the update keys (candybar-testing-0x6u.1ur)\n\nThe running source from the last commit did not make the timedOut case\ndeterministic: CI's reply still beat the backstop, and it failed 2 of 6\nruns here. Whether the backstop wins is decided by the loop's own turns,\nso the case returns to a real process, after the deadline case as on\nmain, with its original config.\n\nAn in-worker daemon now holds the update keys as a booted one does, in\nthe one place that starts it, so the config-env file needs no workaround.\nA later listen error stays loud, and /restart keeps the new bar if the\nold one's stop rejects. Two comments move back beside their cases, and\nthe false \"nothing of the first is left\" comments go."
+          "timestamp": "2026-10-31T16:17:23-06:00",
+          "message": "test(daemon): a real daemon starts only from a named process tier (candybar-testing-0x6u.886) (#525)\n\n* test(daemon): every daemon a run starts is recorded and judged at its end (candybar-testing-0x6u.886)\n\n* test(daemon): a test of the process is named for it, and everything else needs no build (candybar-testing-0x6u.886)\n\n* test(daemon): a run's daemon starts are pinned at what a full run measures (candybar-testing-0x6u.886)\n\n* test(daemon): CI runs the tier after the build and the rest before it, and preloads share one merge (candybar-testing-0x6u.886)\n\nA run outside the tier needing no build was checked once by hand. CI now\npartitions the suite at the build, so that holds on every push at no added\ntime. The ledger's NODE_OPTIONS merge was a copy of the stamp's, which that\nfile says there is one of. The pool case's cleanup no longer depends on the\nthird spawn having succeeded.\n\n* test(daemon): a dying process's stderr is read once its pipe closes, and the tier has one spelling (candybar-testing-0x6u.886)\n\nA readiness failure read the tail at the exit, which can land before the\npipe's last bytes, so the process that dies before its log opens could say\nnothing. The tail is now a value that exists once the pipe has closed.\n`pnpm test:process` reads the tier's pattern from its one home, so CI no\nlonger spells it."
         }
       ]
     },
