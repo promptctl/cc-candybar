@@ -4,15 +4,22 @@
     {
       "version": "pr-521",
       "ref": "refs/pull/521/merge",
-      "sha": "cdc5786668913a11d80f3ae5bcd134661db53ece",
-      "timestamp": "2026-10-31T14:52:25.557Z",
+      "sha": "d060ae526b09afaa3fc7d85d4f16617bd666319f",
+      "timestamp": "2026-10-31T15:00:08.102Z",
       "commits": [
         {
-          "sha": "cdc5786668913a11d80f3ae5bcd134661db53ece",
+          "sha": "d060ae526b09afaa3fc7d85d4f16617bd666319f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T14:51:37Z",
-          "message": "Merge 4d94c2809c18cb6e82797a331ba1eda0c5d3371a into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+          "timestamp": "2026-10-31T14:59:19Z",
+          "message": "Merge bc70e3863c0dda223763f52e2cc38fc11dce9a21 into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+        },
+        {
+          "sha": "bc70e3863c0dda223763f52e2cc38fc11dce9a21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T08:58:51-06:00",
+          "message": "docs(daemon): the connection's comments say what holds of it (candybar-testing-0x6u.spa)\n\nA stream also owes the connection Buffer chunks, a client told TIMEOUT asks again only if it runs on a tick, a subscriber has no backstop to end it after a close, and the pointers to moved code name where it lives now.\n"
         },
         {
           "sha": "4d94c2809c18cb6e82797a331ba1eda0c5d3371a",
