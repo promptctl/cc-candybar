@@ -4,15 +4,22 @@
     {
       "version": "pr-521",
       "ref": "refs/pull/521/merge",
-      "sha": "c430f6455cadbfbeea94e1ffd5c4e7aca5de3ac3",
-      "timestamp": "2026-10-31T14:44:17.931Z",
+      "sha": "cdc5786668913a11d80f3ae5bcd134661db53ece",
+      "timestamp": "2026-10-31T14:52:25.557Z",
       "commits": [
         {
-          "sha": "c430f6455cadbfbeea94e1ffd5c4e7aca5de3ac3",
+          "sha": "cdc5786668913a11d80f3ae5bcd134661db53ece",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T14:43:25Z",
-          "message": "Merge 61d9e983022c6099445ff80a91d661e650c92bc6 into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+          "timestamp": "2026-10-31T14:51:37Z",
+          "message": "Merge 4d94c2809c18cb6e82797a331ba1eda0c5d3371a into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+        },
+        {
+          "sha": "4d94c2809c18cb6e82797a331ba1eda0c5d3371a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T08:51:26-06:00",
+          "message": "fix(daemon): an exit stays with its own reply (candybar-testing-0x6u.spa)\n\nA request exits only once its own response has flushed, so its client sees the diagnostic. Exiting on another responder's flush broke that, and on a subscription exited with nothing flushed. So a beaten reply's exit goes unsent with it, loudly, and the client told TIMEOUT asks again. The comment calling this path unreachable was the wrong part: a busy daemon reads a request the backstop has already answered.\n\nThe memory line saying no timer stays armed after a close now carves out a connection, which the daemon holds no list of.\n"
         },
         {
           "sha": "61d9e983022c6099445ff80a91d661e650c92bc6",
