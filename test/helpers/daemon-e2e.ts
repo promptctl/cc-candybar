@@ -100,7 +100,7 @@ export async function renderRequest(
   request: Record<string, unknown>,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
-  const { log } = endpointOf(target);
+  const { log, now } = endpointOf(target);
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
   );
@@ -115,7 +115,7 @@ export async function renderRequest(
       {
         v: PROTOCOL_VERSION,
         kind: "render",
-        deadline: Date.now() + replyBudgetMs,
+        deadline: now() + replyBudgetMs,
         ...request,
       },
       replyBudgetMs,

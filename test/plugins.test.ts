@@ -29,6 +29,7 @@ import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { startBar, type Bar } from "./helpers/drive-bar";
+import { startBarDaemon } from "./helpers/in-worker-daemon";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
@@ -1202,12 +1203,12 @@ test("a tombstone has no cache field", () => {
 
 // A plugin segment may hold a `state` variable — what the session's own clicks
 // wrote, never a source — so one of its actions can open and close a detail
-// row of the segment's own. Driven through a real daemon: the click's gate is
-// derived from the plugin's cycle action like any config's.
+// row of the segment's own. Driven through a daemon: the click's gate is derived
+// from the plugin's cycle action like any config's.
 describe("a plugin segment's state variable", () => {
   let bar: Bar | undefined;
-  afterEach(() => {
-    bar?.stop();
+  afterEach(async () => {
+    await bar?.stop();
     bar = undefined;
   });
 
@@ -1230,7 +1231,10 @@ describe("a plugin segment's state variable", () => {
       "config.json5",
       `{ plugins: [${JSON.stringify(path.join(dir, "x/plugin.json5"))}], root: { h: ["plugins.x.s"] } }`,
     );
-    bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
+    bar = await startBar(
+      { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
+      startBarDaemon,
+    );
     // The data file is a watched source read after the load, so the first
     // render may still show the empty document.
     const started = bar;
@@ -1278,7 +1282,10 @@ describe("a plugin segment's state variable", () => {
         root: { h: ["u", "plugins.x.s"] },
       }`,
     );
-    bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
+    bar = await startBar(
+      { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
+      startBarDaemon,
+    );
     expect(stripAnsi(await bar.render())).toContain("mine=user");
     const opened = await bar.click("▸");
     expect(opened.refused).toBeNull();
@@ -1309,7 +1316,10 @@ describe("a plugin segment's state variable", () => {
       "config.json5",
       `{ plugins: [${JSON.stringify(path.join(dir, "x/plugin.json5"))}], root: { h: ["plugins.x.s"] } }`,
     );
-    bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
+    bar = await startBar(
+      { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
+      startBarDaemon,
+    );
     expect(stripAnsi(await bar.render())).toContain("n=3");
     const stepped = await bar.click("+");
     expect(stepped.refused).toBeNull();

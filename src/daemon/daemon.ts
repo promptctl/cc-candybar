@@ -72,6 +72,10 @@ import { MenuIdle } from "./menu-idle.js";
 export interface RunningBundle {
   // The entry's own URL, whose checkout the update notice assesses.
   readonly entryUrl: string;
+  // The digest of the source it was built from, `null` for one that carries
+  // none: what the update notice assesses that checkout against, and what
+  // daemon-stats tells one build of a version from another by.
+  readonly digest: string | null;
   // The file the entry was loaded from, as the build watch and the update
   // notice read it: what daemon-stats and the doctor's click name the install
   // by.
@@ -522,6 +526,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const updateWatch = makeUpdateWatch({
     launcher,
     entryUrl: bundle.entryUrl,
+    digest: bundle.digest,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
     // this daemon runs from.
     actsDir: actsDir(stateDir(), bundle.path),
@@ -603,6 +608,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
     clock,
     bundle: bundle.path,
+    sourceDigest: bundle.digest,
     doctorStores,
     stats,
     handlerProbes,

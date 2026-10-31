@@ -20,7 +20,11 @@ import path from "node:path";
 
 import { render, stripAnsi } from "./helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
-import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import {
+  heldClock,
+  startDaemon,
+  type InWorkerDaemon,
+} from "./helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
 import { untilHeard } from "./helpers/reload-signal";
@@ -174,32 +178,6 @@ describe("a daemon render's event names every warning, and the indicator offers 
     expect(all.map(fieldOf("diag"))).toEqual(["0", "1", "1", "1", "1", "1"]);
   });
 
-  test("a warning that starts while nothing about the frame moves is counted by the next frame, and cleared once it stops", async () => {
-    // The palette rule names no theme for two seconds of every four: the
-    // config, the session's state and the width stay the same throughout.
-    const sid = "record-clock";
-    const args = argsOf("clock");
-    const draw = () => render(daemon, sid, projectDir, {}, args);
-    const phase = (): number => (Date.now() / 1000) % 4;
-    const enter = async (from: number): Promise<void> => {
-      const wait = (from - phase() + 4) % 4;
-      await new Promise((resolve) => setTimeout(resolve, wait * 1000 + 150));
-    };
-    // The first draw compiles the config, which can outlast a window.
-    await draw();
-    await enter(2);
-    await draw();
-    await enter(0);
-    await draw();
-    expect(indicatorOf(await draw())).toBe("⚠ 1");
-    await enter(2);
-    await draw();
-    expect(indicatorOf(await draw())).toBeNull();
-    const records = (await renderLines(env, sid, 5)).map(fieldOf("warnRecord"));
-    // The last four: met, counted, stopped, cleared.
-    expect(records.slice(-4)).toEqual(["new", "kept", "new", "kept"]);
-  });
-
   // Two facts about one loop: the load cannot tell whether the candidate
   // applies, and the watch cannot hear an edit made through it. Each shows
   // until the chain can be walked, and the edit that breaks the loop is heard.
@@ -243,6 +221,49 @@ describe("a daemon render's event names every warning, and the indicator offers 
       ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a warning a rule over the clock starts and stops", () => {
+  test("is counted by the next frame, and cleared once it stops, while nothing about the frame moves", async () => {
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+      "cc-candybar-warn-clock",
+    );
+    const projectDir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-render-warnings-e2e-"),
+    );
+    const config = path.join(projectDir, "clock.json5");
+    writeFileSync(config, CONFIGS.clock);
+    // The palette rule names no theme for two seconds of every four: the
+    // config, the session's state and the width stay the same throughout.
+    const clock = heldClock();
+    const daemon = startDaemon(env, { clock });
+    try {
+      const sid = "record-clock";
+      const args = ["cc-candybar", "--config", config];
+      const draw = () => render(daemon, sid, projectDir, {}, args);
+      const phase = (): number => (clock.date().getTime() / 1000) % 4;
+      const enter = (from: number): void =>
+        clock.advance(((from - phase() + 4) % 4) * 1000 + 150);
+      await draw();
+      enter(2);
+      await draw();
+      enter(0);
+      await draw();
+      expect(indicatorOf(await draw())).toBe("⚠ 1");
+      enter(2);
+      await draw();
+      expect(indicatorOf(await draw())).toBeNull();
+      const records = (await renderLines(env, sid, 5)).map(
+        fieldOf("warnRecord"),
+      );
+      // The last four: met, counted, stopped, cleared.
+      expect(records.slice(-4)).toEqual(["new", "kept", "new", "kept"]);
+    } finally {
+      await daemon.stop();
+      rmSync(projectDir, { recursive: true, force: true });
+      removeTmpDirs();
     }
   });
 });

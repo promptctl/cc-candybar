@@ -27,6 +27,7 @@ import {
   startBar,
   type Bar,
   type BarOptions,
+  type StartBarDaemon,
   type Clicked,
   type TerminalSize,
 } from "../../test/helpers/drive-bar";
@@ -97,8 +98,11 @@ export interface ServeOptions extends BarOptions {
   readonly assets: string;
 }
 
-export async function serveBar(opts: ServeOptions): Promise<BarWeb> {
-  let bar: Bar = await startBar(opts);
+export async function serveBar(
+  opts: ServeOptions,
+  startDaemon?: StartBarDaemon,
+): Promise<BarWeb> {
+  let bar: Bar = await startBar(opts, startDaemon);
   // One bar, one reader: requests run one at a time, so a click always
   // follows the render the page last drew.
   let queue: Promise<unknown> = Promise.resolve();
@@ -125,9 +129,9 @@ export async function serveBar(opts: ServeOptions): Promise<BarWeb> {
     // old bar is stopped only once the new one runs, so a failed start leaves
     // the page on a working bar.
     "/restart": async (body) => {
-      const next = await startBar({ ...opts, ...sizeOf(body) });
-      bar.stop();
-      bar = next;
+      const stopping = bar;
+      bar = await startBar({ ...opts, ...sizeOf(body) }, startDaemon);
+      await stopping.stop();
       return view(await bar.render(), null);
     },
   };
@@ -165,7 +169,7 @@ export async function serveBar(opts: ServeOptions): Promise<BarWeb> {
       server.listen(opts.port, "127.0.0.1", resolve);
     });
   } catch (e) {
-    bar.stop();
+    await bar.stop();
     throw e;
   }
   host = `127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -173,7 +177,7 @@ export async function serveBar(opts: ServeOptions): Promise<BarWeb> {
     url: `http://${host}/`,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      bar.stop();
+      await bar.stop();
     },
   };
 }

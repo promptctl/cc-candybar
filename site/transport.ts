@@ -65,6 +65,7 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 const pageDaemon = createDaemon({
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",
+    digest: null,
     path: "/app/dist/index.mjs",
     node: [],
     targets: [],

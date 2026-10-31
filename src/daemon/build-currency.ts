@@ -62,13 +62,13 @@ export function sourceCheckoutOf(bundlePath: string): string | null {
   return fs.existsSync(path.join(root, "src")) ? root : null;
 }
 
-// [LAW:no-silent-failure] The stamp of the code that is RUNNING. A bundle
-// without the digest cannot be compared, and says so: it was built by
-// something other than tsdown.config.ts (or runs untranspiled), and "cannot
-// check" must never read as "current" — the throw lands in assessBuild's
-// `unchecked` arm like every other way the comparison cannot be made.
-export function bakedStamp(): SourceStamp {
-  const digest = bakedDigest();
+// [LAW:no-silent-failure] The stamp of the code that is RUNNING, from the
+// digest its bundle carries. A bundle without the digest cannot be compared,
+// and says so: it was built by something other than tsdown.config.ts (or runs
+// untranspiled), and "cannot check" must never read as "current" — the throw
+// lands in assessBuild's `unchecked` arm like every other way the comparison
+// cannot be made.
+export function bundleStamp(digest: string | null): SourceStamp {
   if (digest === null) {
     throw new Error(
       "this bundle carries no source digest (build via `pnpm build`, which stamps it)",
@@ -79,9 +79,10 @@ export function bakedStamp(): SourceStamp {
 
 // [LAW:one-source-of-truth] The digest this bundle was stamped with, `null`
 // when it carries none (untranspiled under Jest, or built by something other
-// than tsdown.config.ts). The one read of `__SOURCE_DIGEST__`; the stats
-// snapshot reports it so a client can tell one build of a version from
-// another — a source checkout rebuilds without bumping the version.
+// than tsdown.config.ts). The one read of `__SOURCE_DIGEST__`: a daemon's boot
+// hands it over as the running bundle's identity, and the stats snapshot
+// reports that so a client can tell one build of a version from another — a
+// source checkout rebuilds without bumping the version.
 export function bakedDigest(): string | null {
   return typeof __SOURCE_DIGEST__ === "undefined" ? null : __SOURCE_DIGEST__;
 }
@@ -108,7 +109,7 @@ function checkoutVersion(root: string): string {
 // `import.meta.url` hands it over, so the caller has nothing to pre-resolve —
 // a non-file URL is one more way the comparison cannot be made, and it is
 // `unchecked` like the others rather than a guard at the call site. The
-// running stamp arrives as a reader (bakedStamp in production, a literal in
+// running stamp arrives as a reader (bundleStamp in production, a literal in
 // tests) so its own failure folds into the same `unchecked` arm.
 export function assessBuild(
   entryUrl: string,

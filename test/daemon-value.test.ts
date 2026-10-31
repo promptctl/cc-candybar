@@ -64,12 +64,16 @@ describe("the daemon is a value", () => {
     inputs: {
       clock?: DaemonClock;
       checkout?: string;
+      digest?: string;
       session?: SessionStorage;
     } = {},
   ): Daemon => {
     const { session } = inputs;
     const daemon = buildDaemon({
-      bundle: bundleAt(inputs.checkout ?? path.join(root, "checkout")),
+      bundle: bundleAt(
+        inputs.checkout ?? path.join(root, "checkout"),
+        inputs.digest,
+      ),
       ...(inputs.clock && { clock: inputs.clock }),
       ...(session && { storage: () => ({ session }) }),
     });
@@ -251,6 +255,20 @@ describe("the daemon is a value", () => {
     const second = construct();
     const after = await answer(second, renderRequest("value-restart"));
     expect(width(after)).toBeGreaterThan(width(before));
+  });
+
+  test("the bundle it is given is the build its stats name", async () => {
+    const daemon = construct({ digest: "the-given-digest" });
+    await expect(
+      daemon.handle(
+        { v: PROTOCOL_VERSION, kind: "stats" },
+        () => false,
+        daemon.clock.monotonic(),
+      ),
+    ).resolves.toMatchObject({
+      resp: { ok: true, stats: { sourceDigest: "the-given-digest" } },
+    });
+    close(daemon);
   });
 
   test("the clock it is given is the instant the bar is drawn at", async () => {

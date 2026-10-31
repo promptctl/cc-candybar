@@ -33,6 +33,7 @@ import {
   releaseRegistration,
   readRegistryEntry,
 } from "./fork-bomb-breaker";
+import { bakedDigest } from "./build-currency";
 import { dlog } from "./log";
 import { processLauncher } from "../proc/launch";
 import {
@@ -79,6 +80,7 @@ function runningBundle(): RunningBundle {
   const path = fileURLToPath(import.meta.url);
   return {
     entryUrl: import.meta.url,
+    digest: bakedDigest(),
     path,
     node: [process.execPath, ...process.execArgv],
     // Watch the resolved entry point, not the bin shim — a build updates

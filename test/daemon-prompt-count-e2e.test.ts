@@ -1,4 +1,4 @@
-// [LAW:nothing-unseen] brandon-effects-2gka.2rm, measured on a REAL daemon: the
+// [LAW:nothing-unseen] brandon-effects-2gka.2rm, measured on a daemon: the
 // render event — its `render sid=…` log line — carries the session's prompt
 // count and the count of the other user entries, so a count that
 // stops moving can be told from a session with none, and a render whose hook
@@ -8,11 +8,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { hookData, killAndWait, renderRequest } from "./helpers/daemon-e2e";
+import { hookData, renderRequest } from "./helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
 
@@ -28,15 +27,14 @@ const COST = {
 
 describe("a daemon render's event counts the session's prompts", () => {
   let env: NodeJS.ProcessEnv;
-  let sockPath: string;
   let removeTmpDirs: () => void;
   let projectDir: string;
   let config: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-prompts-e2e");
-    ({ sockPath, env, removeTmpDirs } = prepared);
+    ({ env, removeTmpDirs } = prepared);
     projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-prompts-e2e-"),
     );
@@ -94,10 +92,10 @@ describe("a daemon render's event counts the session's prompts", () => {
       config,
       `{ segments: { msgs: { template: '{{ .metrics.messageCount }}' } }, root: { h: ['msgs'] } }`,
     );
-    daemon = await spawnDaemonWithEnv(prepared.env);
+    daemon = startDaemon(prepared.env);
     // The config's entry compiled first: a request that compiles it does so in
     // its arrival turn, which can spend its whole deadline before the fold.
-    await renderRequest(sockPath, {
+    await renderRequest(daemon, {
       hookData: hookData("prompts-e2e-warm", projectDir),
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
@@ -105,7 +103,7 @@ describe("a daemon render's event counts the session's prompts", () => {
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -126,7 +124,7 @@ describe("a daemon render's event counts the session's prompts", () => {
 
   test("one prompt, and two other user entries, on a render that folded the transcript", async () => {
     const sessionId = "prompts-e2e-folded";
-    await renderRequest(sockPath, {
+    await renderRequest(daemon, {
       hookData: { ...hookData(sessionId, projectDir), cost: COST },
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
@@ -136,7 +134,7 @@ describe("a daemon render's event counts the session's prompts", () => {
 
   test("a render with no cost block reads `-` for both", async () => {
     const sessionId = "prompts-e2e-no-cost";
-    await renderRequest(sockPath, {
+    await renderRequest(daemon, {
       hookData: hookData(sessionId, projectDir),
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
