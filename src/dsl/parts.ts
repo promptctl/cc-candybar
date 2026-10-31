@@ -872,8 +872,7 @@ function coloursOf(
 // known before the body evaluates, so the body reads it too; a dropped menu is
 // known only after, so the lead and trail — evaluated last — read the final
 // ground either way. A band is read only where something hangs open under the
-// segment: a palette missing a role the band names throws when it is opened,
-// never from a closed cell.
+// segment.
 function bodyOf(
   ref: ActiveSegmentRef,
   node: CompiledSegmentNode,
@@ -915,8 +914,7 @@ function affixesOf(
 const NO_AFFIXES: Affixes = { lead: [], trail: [], drops: [] };
 
 // Every Style a placement coloured `colours` can wear. A band is read only
-// where one is worn: a palette missing a role the band names throws when it is
-// opened, never from a closed cell.
+// where one is worn.
 function stylesOf(colours: Colours): SegmentStyles {
   const { palette, drawnAt, disclosure } = colours;
   return {

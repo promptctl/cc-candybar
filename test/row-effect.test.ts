@@ -303,8 +303,8 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
 });
 
 // [LAW:verifiable-goals] brandon-menus-sjhy.ju8: a segment's turn depends on
-// where it sits. Adjacent cells of one fill are one segment to the wheel, so
-// the three here stand apart, a different fill between them.
+// where it sits. Near neighbours pace nearly alike, so the three here stand
+// far apart, a different fill between them.
 describe("the wheel paces each segment by where it sits", () => {
   const SEGMENTS = ["AAAA", "BBBB", "CCCC"];
   const WHEELED = parseAndValidate(

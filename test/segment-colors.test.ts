@@ -43,14 +43,14 @@ import {
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
+import type { PaletteRole, RichText, Style, ThemeKey } from "@promptctl/rich-js";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 
 // ─── Test palette ─────────────────────────────────────────────────────────────
 
 // Hand-spelled roles laid over a bundled theme's complete set, as `buildPalette`
 // would re-derive from them and move the colours each case measures on paper.
-const withRoles = (name: string, stated: ReadonlyMap<string, ColorRgba>): Palette =>
+const withRoles = (name: string, stated: ReadonlyMap<PaletteRole, ColorRgba>): Palette =>
   new Palette(
     name,
     true,
@@ -58,7 +58,7 @@ const withRoles = (name: string, stated: ReadonlyMap<string, ColorRgba>): Palett
   );
 
 function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
-  const vars = new Map<string, ColorRgba>([
+  const vars = new Map<PaletteRole, ColorRgba>([
     ["primary", parseRgbHex(primaryHex)],
     ["error", parseRgbHex("ff4444")],
     ["secondary", parseRgbHex("44aaff")],
@@ -239,7 +239,7 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
 describe("roleTextOn: a role's text on a ground is a colour the theme names for the role, never a synthesised one", () => {
   // A role whose text colour and ladder are spelled by hand, so each answer
   // below is one entry, measured on paper against the ground it is asked for.
-  const RED = new Map<string, ColorRgba>([
+  const RED = new Map<PaletteRole, ColorRgba>([
     ["text-error", parseRgbHex("c86464")],
     ["error", parseRgbHex("a03c3c")],
     ["error-lighten-1", parseRgbHex("b45050")],
