@@ -1126,11 +1126,9 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // of the config file a save can write (resetLayers,
 // src/daemon/setting-drafts.ts), keyed by the config field a save writes so
 // the two can never name different settings — and its segments. An inline
-// control is one cell, the ↺ beside it; a picker is its setting's label, then
-// `◀ value ▶` naming the value the bar renders with (the control's
-// `effectiveVar`, whatever rung produced it) whose name opens its list on the
-// shared accordion key, then the ↺; the rows beneath it are segments of their
-// own.
+// control is one cell, the ↺ beside it; a picker is `◀ label ▶`, whose label
+// opens its list on the shared accordion key, then the ↺; the rows beneath it
+// are segments of their own.
 //
 // A pick leaves the list open (brandon-theme-picker-bgw.etd): choosing a theme
 // is trying several, so each try must not cost a reopen; ✕ closes. That holds for a preset pick too,

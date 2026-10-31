@@ -419,7 +419,7 @@ export const GLOBAL_FIELDS = {
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("▦", "door", { previews: ["layout", "presetDelete"] }),
+    control("▦ preset", "door", { previews: ["layout", "presetDelete"] }),
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -428,7 +428,7 @@ export const GLOBAL_FIELDS = {
     "style",
     optionalStringSpec(),
     { from: "styles" },
-    control("◐", "gear", { previews: ["palette"] }),
+    control("◐ style", "gear", { previews: ["palette"] }),
     { themeDefault: true },
   ),
   // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
@@ -437,19 +437,24 @@ export const GLOBAL_FIELDS = {
     "effect",
     effectOrRuleSpec,
     { from: EFFECT_NAMES },
-    control("✨", "look"),
+    control("✨ effect", "look"),
   ),
   // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
-  endcaps: enumSetting(ENDCAPS_SHAPES, "powerline", control("✦", "look"), {
-    optionDomain: "endcaps",
-  }),
+  endcaps: enumSetting(
+    ENDCAPS_SHAPES,
+    "powerline",
+    control("✦ endcaps", "look"),
+    {
+      optionDomain: "endcaps",
+    },
+  ),
   // Which theme role each ROW of the closed bar wears, in order — a named
   // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
   // `accent` by default (brandon-theme-picker-bgw.7g6).
   variation: enumSetting(
     VARIATION_NAMES,
     "accent",
-    control("🎼", "gear", {
+    control("🎼 variation", "gear", {
       previews: ["layout"],
       trials: TRIAL_VARIATION_NAMES,
     }),
@@ -463,7 +468,10 @@ export const GLOBAL_FIELDS = {
   shade: enumSetting(
     SHADE_NAMES,
     "middle",
-    control("🔆", "gear", { previews: ["layout"], trials: TRIAL_SHADE_NAMES }),
+    control("🔆 shade", "gear", {
+      previews: ["layout"],
+      trials: TRIAL_SHADE_NAMES,
+    }),
     {
       optionDomain: "shades",
       themeDefault: true,

@@ -129,23 +129,29 @@ describe("unusedDeclarations", () => {
     ).toEqual(["variable stale", "action unbound"]);
   });
 
-  test("the action a carousel's centre fires is clicked; a literal after a bare carousel is not", () => {
-    const config = (template: string): string => `{
+  test("the action a carousel's label fires is clicked; its label is not an action", () => {
+    const config = (template: string, extra = ""): string => `{
       variables: {
         pick: { kind: "state", key: "pick", default: "a" },
         opened: { kind: "state", key: "opened", default: "closed" },
       },
       actions: {
+        ${extra}
         pick: { set: "pick", from: ["a", "b"] },
         openIt: { set: "opened", cycle: ["closed", "open"] },
       },
       segments: { s: { template: '${template}' } },
       root: { h: ["s"] },
     }`;
-    expect(unusedIn(config('{{ carousel "pick" 0 "openIt" }}'))).toEqual([]);
+    expect(unusedIn(config('{{ carousel "pick" "openIt" "label" }}'))).toEqual([]);
     expect(
-      unusedIn(config('{{ printf "%s%s" (carousel "pick" 0) "openIt" }}')),
-    ).toEqual(["variable opened", "action openIt"]);
+      unusedIn(
+        config(
+          '{{ carousel "pick" "shut" "openIt" }}',
+          'shut: { set: "opened", to: "closed" },',
+        ),
+      ),
+    ).toEqual(["action openIt"]);
   });
 
   test("the members of a clicked `do` are clicked; a `when` on a node is a read", () => {

@@ -101,8 +101,8 @@ function previewRows(
   ];
 }
 
-// [LAW:dataflow-not-control-flow] Each row fits the row it sits on the way the
-// carousel above it does (`ledRowBudget`): whole swatches, in drawing order,
+// [LAW:dataflow-not-control-flow] Each row fits the row it sits on the way a
+// picker does (`ledRowBudget`): whole swatches, in drawing order,
 // while they fit — a narrow terminal shows fewer swatches, never a line the
 // terminal breaks away from its ✕. Swatches in a group touch, like
 // neighbouring bar cells; groups are set apart by one space of whatever the

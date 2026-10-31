@@ -22,7 +22,7 @@ An option from a colour-valued domain shows its name plus a swatch of what picki
 
 The add-segment library shows each segment's description rather than a rendered sample. Rendering a segment needs a placement's scope (settings, drafts, gates), and the library doesn't have one.
 
-A carousel keeps no position of its own: its centre is the applied value. If no variable reads its key back, that's a render error, since the ring could never see its own writes.
+A carousel names what it sets, never the value, because the value belongs to the list its label opens. It keeps no position of its own: its arrows step from the applied value. If no variable reads its key back, that's a render error, since the ring could never see its own writes.
 
 ## Disclosures
 
