@@ -38690,7 +38690,10 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-var COMPUTED_BINDING_RE = /(?<![\w.$])(?:(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+|(?:picker|carousel|swatches)\s+""\s+)(?=[^\s"`)|}])/;
+var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
+var COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
+);
 function bindsComputedAction(template, helpers) {
   for (const { code } of callGraph(template, helpers)) {
     if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
@@ -72643,7 +72646,7 @@ function carouselFuncs(runtime) {
   return {
     carousel: {
       fn: (applyName, openName, label2) => {
-        if (label2 === "") {
+        if (label2.trim() === "") {
           throw new Error(`carousel "${applyName}": label is empty`);
         }
         if (!runtime.compiled.has(openName)) {
