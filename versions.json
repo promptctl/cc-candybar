@@ -4,22 +4,22 @@
     {
       "version": "pr-518",
       "ref": "refs/pull/518/merge",
-      "sha": "fbb094bda4fdd3ab4426ee0345d8e29eb8962610",
-      "timestamp": "2026-10-31T10:46:11.698Z",
+      "sha": "30bfc844d7292ef535b232c4ce7142a6021d0aa1",
+      "timestamp": "2026-10-31T10:47:30.675Z",
       "commits": [
         {
-          "sha": "fbb094bda4fdd3ab4426ee0345d8e29eb8962610",
+          "sha": "30bfc844d7292ef535b232c4ce7142a6021d0aa1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T04:45:23-06:00",
-          "message": "Merge a02fb37d319335167b17be574053bb4c172ebdb9 into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+          "timestamp": "2026-10-31T04:45:45-06:00",
+          "message": "Merge afc7c318c3bbf50dd31c1a69f23861ad6c047135 into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
         },
         {
-          "sha": "a02fb37d319335167b17be574053bb4c172ebdb9",
+          "sha": "afc7c318c3bbf50dd31c1a69f23861ad6c047135",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T04:45:01-06:00",
-          "message": "feat(carousel): the standard control names the setting it changes, not its value ()\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
+          "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
         }
       ]
     },
