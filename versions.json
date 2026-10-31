@@ -4,15 +4,22 @@
     {
       "version": "pr-523",
       "ref": "refs/pull/523/merge",
-      "sha": "93f0d2dc2561dc38cae00124dae3c3f4c96b4230",
-      "timestamp": "2026-10-31T18:04:29.252Z",
+      "sha": "7bb17d1d86a2af1605842efecc8932c32df538c6",
+      "timestamp": "2026-10-31T18:16:30.244Z",
       "commits": [
         {
-          "sha": "93f0d2dc2561dc38cae00124dae3c3f4c96b4230",
+          "sha": "7bb17d1d86a2af1605842efecc8932c32df538c6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:03:46Z",
-          "message": "Merge 42c90cc17e68c5d38b1c2d88055aba7f1cd8dd27 into d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48\n"
+          "timestamp": "2026-10-31T18:15:38Z",
+          "message": "Merge e652dac60dbfa366c8eaed2ca002fc7022c207ae into d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48\n"
+        },
+        {
+          "sha": "e652dac60dbfa366c8eaed2ca002fc7022c207ae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T12:15:27-06:00",
+          "message": "refactor(daemon): a refusal says why in the words of whoever aborted it, and daemon-imported files launch through a launcher they are handed (candybar-testing-0x6u.snf)\n\nFrom the medium review of this branch.\n\nA refusal's text was one literal, so a closed daemon and a caller's abort read\nalike, and a shell source's failure gained a redundant \"aborted: aborted before\nit started\". The text now comes from the signal's own reason: the daemon's close\nalready says \"the daemon closed\", and a caller says what it means.\n\n`src/doctor/handler-probe.ts` and `src/install/index.ts` owned `processLauncher`\nwhile daemon code imports them, so a launch added there and reached from a click\nwould pass lint and escape the close. They now take a launcher, and the owners\nlist holds `src/index.ts` and the doctor's CLI instead.\n\n`subprocessRefused` is a read-only view, and its comment says what it counts,\nwhich includes a caller's abort. The bench and the draw-reserve reader anchor\non where the event starts, so the rule in testing.md has no exception.\n"
         },
         {
           "sha": "42c90cc17e68c5d38b1c2d88055aba7f1cd8dd27",

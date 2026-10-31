@@ -34988,6 +34988,297 @@ var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
 var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text: text2, writeHeapSnapshot, getHeapStatistics };
 
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path4 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped } = walkLinks(at);
+  if (stopped !== null) throw stopped;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next2 = linkTarget(hops[hops.length - 1]);
+      if (next2 === null) return { hops, stopped: null };
+      hops.push(next2);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
+  }
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path4.default.resolve(
+      fs_default.realpathSync(import_node_path4.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
+
+// src/daemon/client.ts
+init_globals();
+
+// src/daemon/client-transport.ts
+init_globals();
+
+// src/daemon/paths.ts
+init_globals();
+init_os();
+var import_node_path5 = __toESM(require_path_browserify(), 1);
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function stateDir(env2 = process_default.env) {
+  const base = xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".local", "state");
+  return import_node_path5.default.join(base, "cc-candybar");
+}
+function cacheDir() {
+  const base = xdgEnv(process_default.env, "XDG_CACHE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".cache");
+  return import_node_path5.default.join(base, "cc-candybar");
+}
+function daemonDir() {
+  return stateDir();
+}
+function socketPath() {
+  return process_default.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+function defaultSocketPath() {
+  const uid = os_default.userInfo().uid;
+  return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+function watchProbeDir() {
+  return import_node_path5.default.join(stateDir(), "watch-probe");
+}
+function logPath(env2 = process_default.env) {
+  return import_node_path5.default.join(stateDir(env2), "daemon.log");
+}
+
+// src/daemon/protocol.ts
+init_globals();
+var import_node_path6 = __toESM(require_path_browserify(), 1);
+
+// src/terminal-hint.ts
+init_globals();
+var TERMINAL_ENV_VARS = [
+  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
+  // version beside it. Inside tmux it is tmux's own `tmux`.
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
+  "TERM",
+  // The iTerm2 profile the session's window was opened with.
+  "ITERM_PROFILE",
+  // Where a terminal that reads a config file (Alacritty) finds it.
+  "XDG_CONFIG_HOME"
+];
+
+// src/client-hint.ts
+init_globals();
+var CLIENT_KINDS = ["native", "node", "frames"];
+
+// src/daemon/protocol.ts
+var PROTOCOL_VERSION = 3;
+var CONNECT_TIMEOUT_MS = 50;
+var TOTAL_BUDGET_MS = 150;
+var CLIENT_HINT_FIELDS = Object.keys({
+  termCols: true,
+  termRows: true,
+  ssh: true,
+  tmux: true,
+  configEnv: true,
+  claudeConfigDir: true,
+  terminalEnv: true,
+  client: true
+});
+function parseClientHints(req) {
+  const termCols = sanitizeTermExtent(req.termCols);
+  const termRows = sanitizeTermExtent(req.termRows);
+  const ssh = sanitizeSsh(req.ssh);
+  const tmux3 = sanitizeTmux(req.tmux);
+  const configEnv = sanitizeAbsolutePath(req.configEnv);
+  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
+  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const client = sanitizeClient(req.client);
+  return {
+    ...termCols !== void 0 && { termCols },
+    ...termRows !== void 0 && { termRows },
+    ...ssh !== void 0 && { ssh },
+    ...tmux3 !== void 0 && { tmux: tmux3 },
+    ...configEnv !== void 0 && { configEnv },
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
+    ...terminalEnv !== void 0 && { terminalEnv },
+    ...client !== void 0 && { client }
+  };
+}
+function refusedHints(req, hints) {
+  return CLIENT_HINT_FIELDS.filter(
+    (k) => req[k] !== void 0 && hints[k] === void 0
+  ).map((hint) => ({ hint, sent: req[hint] }));
+}
+function refusedHintsError(refused) {
+  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+    ", "
+  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
+}
+var REFUSAL_LINES = {
+  unknown: (args) => `Unknown flags: ${args}`,
+  // Only the last `--config` can lack a file, and it wins, so an earlier one
+  // that named a file is not applied either.
+  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
+  positional: (args) => `Unexpected arguments: ${args}`
+};
+function refusedArgsError(refused) {
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
+    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
+  });
+  return lines2.length === 0 ? null : lines2.join("\n");
+}
+function sanitizeTerminalEnv(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const o = v;
+  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
+  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
+}
+function sanitizeAbsolutePath(v) {
+  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
+}
+function sanitizeTmux(v) {
+  if (v === null) return null;
+  if (typeof v !== "object") return void 0;
+  const o = v;
+  const { socket, pane, truecolor } = o;
+  if (typeof socket !== "string" || socket === "") return void 0;
+  if (typeof pane !== "string" || pane === "") return void 0;
+  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
+    return void 0;
+  return { socket, pane, truecolor };
+}
+var MAX_TERM_EXTENT = 1e4;
+function sanitizeTermExtent(v) {
+  if (typeof v !== "number") return void 0;
+  if (!Number.isFinite(v)) return void 0;
+  const n = Math.floor(v);
+  if (n <= 0) return void 0;
+  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
+}
+function sanitizeSsh(v) {
+  return typeof v === "boolean" ? v : void 0;
+}
+function sanitizeClientVersion(v) {
+  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
+}
+var MAX_FRAME_BYTES = 16 * 1024 * 1024;
+function sanitizeClient(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const { kind, bundle, source } = v;
+  const path39 = sanitizeAbsolutePath(bundle);
+  return CLIENT_KINDS.includes(kind) && path39 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path39, source } : void 0;
+}
+
+// src/daemon/client-transport.ts
+function asString(v, fallback) {
+  return typeof v === "string" ? v : fallback;
+}
+function asProtocolVersion(v) {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
+}
+function interpretResponse(kind, resp, project) {
+  const raw = resp;
+  if (raw.ok === true) {
+    const value = project(resp);
+    if (value !== void 0) {
+      return { kind: "ok", value };
+    }
+    return {
+      kind: "permanent",
+      cause: "malformed_response",
+      message: `ok response without payload for "${kind}" request`
+    };
+  }
+  const errorMessage = asString(raw.error, "(no error message)");
+  switch (raw.code) {
+    case "VERSION_MISMATCH":
+      return {
+        kind: "permanent",
+        cause: "version_mismatch",
+        clientV: PROTOCOL_VERSION,
+        // Older daemons may not echo daemonV; non-number values from a
+        // misbehaving stub also fall back to 0 (the renderer maps 0 to
+        // "unknown" in the visible glyph).
+        daemonV: asProtocolVersion(raw.daemonV)
+      };
+    case "TIMEOUT":
+      return { kind: "transient", cause: "timeout", message: errorMessage };
+    case "BAD_REQUEST":
+      return { kind: "permanent", cause: "bad_request", message: errorMessage };
+    case "RENDER_FAILED":
+      return {
+        kind: "permanent",
+        cause: "render_failed",
+        message: errorMessage
+      };
+    case "SWITCHED_OFF":
+      return {
+        kind: "permanent",
+        cause: "switched_off",
+        message: errorMessage
+      };
+    default:
+      return {
+        kind: "permanent",
+        cause: "malformed_response",
+        message: `unknown error code: ${String(raw.code)}`
+      };
+  }
+}
+
+// src/daemon/client.ts
+function projectOutput(resp) {
+  const output = resp.output;
+  return typeof output === "string" ? output : void 0;
+}
+function renderOutcomeOf(resp) {
+  return interpretResponse("render", resp, projectOutput);
+}
+
+// src/daemon/acquire.ts
+init_globals();
+var import_node_path9 = __toESM(require_path_browserify(), 1);
+
 // src/proc/launch.ts
 init_globals();
 
@@ -35116,14 +35407,14 @@ function checkRateLimit(lastStartAt, category) {
 function childEnv(opts) {
   return opts.env ?? process_default.env;
 }
-var refusedAsAborted = () => ({
+var refusedAsAborted = ({ reason }) => ({
   ok: false,
   reason: "aborted",
   stdout: "",
   stderr: "",
   exitCode: null,
   signal: null,
-  error: "aborted before it started"
+  error: reason instanceof Error ? reason.message : String(reason)
 });
 function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
   return {
@@ -35146,7 +35437,8 @@ function admit(state, category, signal) {
   return null;
 }
 function refusalOf(state, category, signal) {
-  if (state.scope.signal.aborted || signal?.aborted) return refusedAsAborted();
+  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
+  if (signal?.aborted) return refusedAsAborted(signal);
   const gate2 = checkRateLimit(state.lastStartAt, category);
   return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
 }
@@ -35605,297 +35897,6 @@ function createLauncher(owner) {
   return launcher;
 }
 var processLauncher = createLauncher({});
-
-// src/utils/atomic-write.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped } = walkLinks(at);
-  if (stopped !== null) throw stopped;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next2 = linkTarget(hops[hops.length - 1]);
-      if (next2 === null) return { hops, stopped: null };
-      hops.push(next2);
-    }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
-    };
-  } catch (e) {
-    return { hops, stopped: e };
-  }
-}
-function linkTarget(file) {
-  try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path4.default.resolve(
-      fs_default.realpathSync(import_node_path4.default.dirname(file)),
-      fs_default.readlinkSync(file)
-    );
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw e;
-  }
-}
-var MAX_LINK_HOPS = 40;
-
-// src/daemon/client.ts
-init_globals();
-
-// src/daemon/client-transport.ts
-init_globals();
-
-// src/daemon/paths.ts
-init_globals();
-init_os();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function stateDir(env2 = process_default.env) {
-  const base = xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".local", "state");
-  return import_node_path5.default.join(base, "cc-candybar");
-}
-function cacheDir() {
-  const base = xdgEnv(process_default.env, "XDG_CACHE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".cache");
-  return import_node_path5.default.join(base, "cc-candybar");
-}
-function daemonDir() {
-  return stateDir();
-}
-function socketPath() {
-  return process_default.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
-}
-function defaultSocketPath() {
-  const uid = os_default.userInfo().uid;
-  return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
-}
-function watchProbeDir() {
-  return import_node_path5.default.join(stateDir(), "watch-probe");
-}
-function logPath(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), "daemon.log");
-}
-
-// src/daemon/protocol.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
-
-// src/terminal-hint.ts
-init_globals();
-var TERMINAL_ENV_VARS = [
-  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
-  // version beside it. Inside tmux it is tmux's own `tmux`.
-  "TERM_PROGRAM",
-  "TERM_PROGRAM_VERSION",
-  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
-  "TERM",
-  // The iTerm2 profile the session's window was opened with.
-  "ITERM_PROFILE",
-  // Where a terminal that reads a config file (Alacritty) finds it.
-  "XDG_CONFIG_HOME"
-];
-
-// src/client-hint.ts
-init_globals();
-var CLIENT_KINDS = ["native", "node", "frames"];
-
-// src/daemon/protocol.ts
-var PROTOCOL_VERSION = 3;
-var CONNECT_TIMEOUT_MS = 50;
-var TOTAL_BUDGET_MS = 150;
-var CLIENT_HINT_FIELDS = Object.keys({
-  termCols: true,
-  termRows: true,
-  ssh: true,
-  tmux: true,
-  configEnv: true,
-  claudeConfigDir: true,
-  terminalEnv: true,
-  client: true
-});
-function parseClientHints(req) {
-  const termCols = sanitizeTermExtent(req.termCols);
-  const termRows = sanitizeTermExtent(req.termRows);
-  const ssh = sanitizeSsh(req.ssh);
-  const tmux3 = sanitizeTmux(req.tmux);
-  const configEnv = sanitizeAbsolutePath(req.configEnv);
-  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
-  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
-  const client = sanitizeClient(req.client);
-  return {
-    ...termCols !== void 0 && { termCols },
-    ...termRows !== void 0 && { termRows },
-    ...ssh !== void 0 && { ssh },
-    ...tmux3 !== void 0 && { tmux: tmux3 },
-    ...configEnv !== void 0 && { configEnv },
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
-    ...terminalEnv !== void 0 && { terminalEnv },
-    ...client !== void 0 && { client }
-  };
-}
-function refusedHints(req, hints) {
-  return CLIENT_HINT_FIELDS.filter(
-    (k) => req[k] !== void 0 && hints[k] === void 0
-  ).map((hint) => ({ hint, sent: req[hint] }));
-}
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
-    ", "
-  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
-}
-var REFUSAL_LINES = {
-  unknown: (args) => `Unknown flags: ${args}`,
-  // Only the last `--config` can lack a file, and it wins, so an earlier one
-  // that named a file is not applied either.
-  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
-  positional: (args) => `Unexpected arguments: ${args}`
-};
-function refusedArgsError(refused) {
-  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
-    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
-  });
-  return lines2.length === 0 ? null : lines2.join("\n");
-}
-function sanitizeTerminalEnv(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const o = v;
-  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
-  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
-}
-function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
-}
-function sanitizeTmux(v) {
-  if (v === null) return null;
-  if (typeof v !== "object") return void 0;
-  const o = v;
-  const { socket, pane, truecolor } = o;
-  if (typeof socket !== "string" || socket === "") return void 0;
-  if (typeof pane !== "string" || pane === "") return void 0;
-  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
-    return void 0;
-  return { socket, pane, truecolor };
-}
-var MAX_TERM_EXTENT = 1e4;
-function sanitizeTermExtent(v) {
-  if (typeof v !== "number") return void 0;
-  if (!Number.isFinite(v)) return void 0;
-  const n = Math.floor(v);
-  if (n <= 0) return void 0;
-  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
-}
-function sanitizeSsh(v) {
-  return typeof v === "boolean" ? v : void 0;
-}
-function sanitizeClientVersion(v) {
-  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
-}
-var MAX_FRAME_BYTES = 16 * 1024 * 1024;
-function sanitizeClient(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const { kind, bundle, source } = v;
-  const path39 = sanitizeAbsolutePath(bundle);
-  return CLIENT_KINDS.includes(kind) && path39 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path39, source } : void 0;
-}
-
-// src/daemon/client-transport.ts
-function asString(v, fallback) {
-  return typeof v === "string" ? v : fallback;
-}
-function asProtocolVersion(v) {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
-}
-function interpretResponse(kind, resp, project) {
-  const raw = resp;
-  if (raw.ok === true) {
-    const value = project(resp);
-    if (value !== void 0) {
-      return { kind: "ok", value };
-    }
-    return {
-      kind: "permanent",
-      cause: "malformed_response",
-      message: `ok response without payload for "${kind}" request`
-    };
-  }
-  const errorMessage = asString(raw.error, "(no error message)");
-  switch (raw.code) {
-    case "VERSION_MISMATCH":
-      return {
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: PROTOCOL_VERSION,
-        // Older daemons may not echo daemonV; non-number values from a
-        // misbehaving stub also fall back to 0 (the renderer maps 0 to
-        // "unknown" in the visible glyph).
-        daemonV: asProtocolVersion(raw.daemonV)
-      };
-    case "TIMEOUT":
-      return { kind: "transient", cause: "timeout", message: errorMessage };
-    case "BAD_REQUEST":
-      return { kind: "permanent", cause: "bad_request", message: errorMessage };
-    case "RENDER_FAILED":
-      return {
-        kind: "permanent",
-        cause: "render_failed",
-        message: errorMessage
-      };
-    case "SWITCHED_OFF":
-      return {
-        kind: "permanent",
-        cause: "switched_off",
-        message: errorMessage
-      };
-    default:
-      return {
-        kind: "permanent",
-        cause: "malformed_response",
-        message: `unknown error code: ${String(raw.code)}`
-      };
-  }
-}
-
-// src/daemon/client.ts
-function projectOutput(resp) {
-  const output = resp.output;
-  return typeof output === "string" ? output : void 0;
-}
-function renderOutcomeOf(resp) {
-  return interpretResponse("render", resp, projectOutput);
-}
-
-// src/daemon/acquire.ts
-init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/limits.ts
 init_globals();
@@ -68770,14 +68771,19 @@ var RuntimeStats = class _RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
-  // Launches refused, closed or rate-limited: public because a closed daemon's
-  // work is still refused, and no request reads a closed daemon.
-  subprocessRefused = /* @__PURE__ */ new Map();
+  // Launches asked for that started nothing: the launcher had closed, the
+  // category's interval had not passed, or the caller had aborted first.
+  subprocessRefusals = /* @__PURE__ */ new Map();
   subprocessCount = /* @__PURE__ */ new Map();
   subprocessHistogram = /* @__PURE__ */ new Map();
   subprocessHistogramRotator = /* @__PURE__ */ new Map();
   rollingTimestamps = [];
   rollingHead = 0;
+  // Readable off the value because a closed daemon's work is still refused, and
+  // no request reads a closed daemon.
+  get subprocessRefused() {
+    return this.subprocessRefusals;
+  }
   // [LAW:one-source-of-truth] The same object that owns the counters also
   // exposes the metering handle. The launch primitive calls these methods;
   // nothing else mutates subprocess state.
@@ -68796,9 +68802,9 @@ var RuntimeStats = class _RuntimeStats {
       this.recordDuration(category, durationMs);
     },
     onRefused: (category) => {
-      this.subprocessRefused.set(
+      this.subprocessRefusals.set(
         category,
-        (this.subprocessRefused.get(category) ?? 0) + 1
+        (this.subprocessRefusals.get(category) ?? 0) + 1
       );
     }
   };
