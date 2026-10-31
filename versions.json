@@ -4,15 +4,22 @@
     {
       "version": "pr-522",
       "ref": "refs/pull/522/merge",
-      "sha": "c1fa33d49eb084d64b959b0343541e06ecf8ad96",
-      "timestamp": "2026-10-31T16:09:04.061Z",
+      "sha": "ed3de54fde1fe0416fd3ef5325c63a61a241f3d5",
+      "timestamp": "2026-10-31T16:18:54.069Z",
       "commits": [
         {
-          "sha": "c1fa33d49eb084d64b959b0343541e06ecf8ad96",
+          "sha": "ed3de54fde1fe0416fd3ef5325c63a61a241f3d5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:08:14Z",
-          "message": "Merge 9758b8ea8146279e1d71091b8efc29f55655cc6b into 82152d4ea6859d018e7af98d2651d77804e31aad\n"
+          "timestamp": "2026-10-31T16:17:59Z",
+          "message": "Merge ed10c0bb534401a59c67857f3ef6d55e2393eb55 into 82152d4ea6859d018e7af98d2651d77804e31aad\n"
+        },
+        {
+          "sha": "ed10c0bb534401a59c67857f3ef6d55e2393eb55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T10:17:35-06:00",
+          "message": "test(daemon): a signal's close is proven on a real process (candybar-testing-0x6u.c3x)\n\nFrom the medium review of #522.\n\nMoving the restart proof into the worker took the only case that held a signal\nto saving a click inside the session file's debounce. A signal is a process's,\nso the proof goes in the shutdown contract, on a real daemon.\n\nA process and a test's daemon build their storage through one function, rather\nthan a harness that respells boot's and a constant threaded through to keep the\ntwo agreeing.\n"
         },
         {
           "sha": "9758b8ea8146279e1d71091b8efc29f55655cc6b",
