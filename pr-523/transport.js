@@ -35122,7 +35122,8 @@ var refusedAsAborted = () => ({
   stdout: "",
   stderr: "",
   exitCode: null,
-  signal: null
+  signal: null,
+  error: "aborted before it started"
 });
 function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
   return {
@@ -35135,8 +35136,8 @@ function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
     error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
   };
 }
-function admit(state, category) {
-  const refusal = refusalOf(state, category);
+function admit(state, category, signal) {
+  const refusal = refusalOf(state, category, signal);
   if (refusal !== null) {
     state.scope.stats?.onRefused(category);
     return refusal;
@@ -35144,8 +35145,8 @@ function admit(state, category) {
   state.lastStartAt.set(category, Date.now());
   return null;
 }
-function refusalOf(state, category) {
-  if (state.scope.signal.aborted) return refusedAsAborted();
+function refusalOf(state, category, signal) {
+  if (state.scope.signal.aborted || signal?.aborted) return refusedAsAborted();
   const gate2 = checkRateLimit(state.lastStartAt, category);
   return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
 }
@@ -35223,8 +35224,7 @@ function signalGroup(pid2, sig) {
 }
 async function launchWaited(state, opts) {
   const { stats } = state.scope;
-  if (opts.signal?.aborted) return refusedAsAborted();
-  const refused = admit(state, opts.category);
+  const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
   const t0 = Date.now();
   stats?.onStart(opts.category);
@@ -35465,9 +35465,8 @@ var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout"
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
   const { stats } = state.scope;
-  if (admit(state, opts.category) !== null) {
-    return { ok: false, error: "the daemon closed" };
-  }
+  const refused = admit(state, opts.category);
+  if (refused !== null) return { ok: false, error: refused.error };
   const t0 = Date.now();
   stats?.onStart(opts.category);
   let child;
@@ -69437,11 +69436,11 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
-function clickLaunch(launcher, opts, what, dlog2) {
+function clickLaunch(launcher, opts, what, log) {
   const result = launcher.launchSync(opts);
   if (result.ok) return;
   if (result.reason === "rate-limited") {
-    dlog2("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
   const said = result.error ?? result.stderr.trim();
@@ -69454,7 +69453,7 @@ function pbcopy(text4, ctx) {
     ctx.launcher,
     { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
     "pbcopy",
-    ctx.dlog
+    ctx.log
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -69487,7 +69486,7 @@ var openVscode = (value, ctx) => clickLaunch(
     category: "click.open"
   },
   'open -a "Visual Studio Code"',
-  ctx.dlog
+  ctx.log
 );
 var toolbarToggle = (value, ctx) => {
   const sessionId2 = requireSessionId(oneArg(value));
@@ -69526,7 +69525,7 @@ var setState = (rawValue, ctx) => {
   refuseDisorderedPicks(ctx, sid, "set-state", validated);
   ctx.navigating.setBatch(sid, validated);
   const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
-  ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
+  ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 var STEP_INT_RE = /^-?\d+$/;
 function stepWithin(current, by, min2, max2) {
@@ -69571,7 +69570,7 @@ var stepState = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
   );
@@ -69686,7 +69685,7 @@ function originHome(origin) {
 function editStore(ctx, sid) {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.dlog
+    logger: ctx.log
   };
 }
 var setConfig = (rawValue, ctx) => {
@@ -69712,7 +69711,7 @@ var setConfig = (rawValue, ctx) => {
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
   );
@@ -69760,7 +69759,7 @@ var stepConfig = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
@@ -69774,7 +69773,7 @@ var save = (value, ctx) => {
   const drafts = settingDrafts(config2, pick2);
   const placements = placementDrafts(config2, pick2);
   if (drafts.length + placements.length === 0) {
-    ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
+    ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
   const gate2 = stateGate(config2);
@@ -69793,7 +69792,7 @@ var save = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `save: ${[
       ...pairs2.map(([k, v]) => `${k}=${v}`),
@@ -69841,7 +69840,7 @@ var savePreset = (value, ctx) => {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
@@ -69871,7 +69870,7 @@ var saveThemeDefault = (value, ctx) => {
     (f) => SETTINGS[f].sessionKey
   ).filter((key) => !drafted.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
@@ -69890,7 +69889,7 @@ var deletePreset2 = (value, ctx) => {
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
 var resetConfig = (value, ctx) => {
   const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
@@ -69910,7 +69909,7 @@ var resetConfig = (value, ctx) => {
   deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
-  ctx.dlog(
+  ctx.log(
     "info",
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
   );
@@ -69968,7 +69967,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
   ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
-  ctx.dlog(
+  ctx.log(
     "info",
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`
   );
@@ -69979,7 +69978,7 @@ var undo = (value, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.undo(sid);
   reloadIfWritten(ctx, sid, step4);
-  ctx.dlog("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
+  ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
 var back = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
@@ -69989,14 +69988,14 @@ var back = (value, ctx) => {
     stateGate(sessionConfig(ctx, sid))
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
-  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
+  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 var rewind = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
-  ctx.dlog(
+  ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
@@ -70007,7 +70006,7 @@ var redo = (value, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.redo(sid);
   reloadIfWritten(ctx, sid, step4);
-  ctx.dlog("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
+  ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
 var applyUpdate = (value, ctx) => {
   requireSessionId(oneArg(value));
@@ -70035,7 +70034,7 @@ function sessionHints(ctx, sid) {
 function writeReport(ctx, sid, facts) {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
@@ -70087,7 +70086,7 @@ function clickedFrom(ctx, { terminal, clicked }) {
       (list2) => withClicked(list2, sighting)
     );
   } catch (e) {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
     );
@@ -70107,7 +70106,7 @@ var doctorProbe = (value, ctx) => {
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
   const { handler } = ctx.arrival;
   ctx.probes.arrive({ nonce, handler });
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`
   );
@@ -70132,7 +70131,7 @@ var doctorFix = (value, ctx) => {
   if (after.kind === "failed") {
     throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
   );
@@ -70166,7 +70165,7 @@ var doctorMark = (value, ctx) => {
   if (marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
   );
@@ -70193,13 +70192,13 @@ var slash = (value, ctx) => {
     action2.slash
   );
   if (result.kind === "refused") {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
     );
     throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
-  ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 function runOf([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -70282,7 +70281,7 @@ var repoConfig = (value, ctx) => {
     throw new Error(`${dir} was not ${answered2}: ${filed.reason}`);
   }
   const { superseded, absent, unchecked } = filed.value;
-  ctx.dlog(
+  ctx.log(
     "info",
     `repo-config: ${dir} ${answered2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
   );
@@ -70312,10 +70311,10 @@ var loadConfig2 = (value, ctx) => {
   }
   if (p2 === "") {
     ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.dlog("info", `load-config: override cleared (session=${sid})`);
+    ctx.log("info", `load-config: override cleared (session=${sid})`);
   } else {
     ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p2);
-    ctx.dlog("info", `load-config: ${p2} (session=${sid})`);
+    ctx.log("info", `load-config: ${p2} (session=${sid})`);
   }
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
@@ -70444,7 +70443,7 @@ function journaled(handler, sessionOf) {
     const closing = (store) => closingView(
       store,
       (sid2) => nestOf(ctx, sid2),
-      (line) => ctx.dlog("info", line)
+      (line) => ctx.log("info", line)
     );
     try {
       handler(value, {
@@ -70510,7 +70509,7 @@ function closeIdleMenus(sid, idle, ctx) {
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
       );
-      c.dlog(
+      c.log(
         "info",
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
       );
@@ -70799,32 +70798,6 @@ init_globals();
 init_globals();
 init_os();
 var import_node_path33 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-function readStartTime(pid2, launch) {
-  const res = launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-
-// src/daemon/update-act.ts
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path33.default.join(stateDir2, "update-act", key);
@@ -70936,7 +70909,7 @@ function makeActReader(dir, read2) {
     }
   };
 }
-function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2 = (pid2) => readStartTime(pid2, launcher.launchSync)) {
+function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
   const actDir = import_node_path33.default.join(dir, String(act));
   fs_default.mkdirSync(dir, { recursive: true });
@@ -70986,6 +70959,30 @@ var CLAIMED_FIRST = {
 function endOverdue(dir, facts) {
   const status = filesOf(import_node_path33.default.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
+}
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+function readStartTime(pid2, launch) {
+  const res = launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
 }
 
 // src/daemon/update-notice.ts
@@ -71149,10 +71146,8 @@ function makeUpdateWatch(opts) {
   } = opts;
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
-  const acts = makeActReader(
-    actsDir2,
-    (pid2) => readStartTime(pid2, launcher.launchSync)
-  );
+  const readStart = (pid2) => readStartTime(pid2, launcher.launchSync);
+  const acts = makeActReader(actsDir2, readStart);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
@@ -71272,7 +71267,8 @@ function makeUpdateWatch(opts) {
         updateIdentity(update),
         { ...facts.command, category: "update.apply" },
         ACT_TIMEOUT_MS,
-        Date.now()
+        Date.now(),
+        readStart
       );
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);
@@ -83467,7 +83463,7 @@ function createDaemon(inputs) {
   if (liveDaemon !== null && !liveDaemon.aborted) {
     throw new Error("a daemon is already live in this process");
   }
-  const { bundle, storage, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2 } = inputs;
+  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2 } = inputs;
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
   let closed = false;
@@ -83487,6 +83483,7 @@ function createDaemon(inputs) {
       frameFeeds.wakeWhere("data", () => true);
     }
   });
+  const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
@@ -83728,7 +83725,7 @@ function createDaemon(inputs) {
   });
   const verbCtx = {
     sessionState,
-    dlog: log,
+    log,
     launcher,
     now: instant,
     applyUpdate: () => updateWatch.act(),
@@ -84207,10 +84204,10 @@ var pageDaemon = createDaemon({
     node: [],
     targets: []
   },
-  storage: {
+  storage: () => ({
     session: EPHEMERAL_SESSION_STORAGE,
     history: EPHEMERAL_HISTORY_STORAGE
-  },
+  }),
   memoryLimitBytes: memoryLimitBytes(process_default.env),
   registryUrl: REGISTRY_URL,
   clock: SYSTEM_CLOCK,

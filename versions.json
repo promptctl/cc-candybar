@@ -4,15 +4,22 @@
     {
       "version": "pr-523",
       "ref": "refs/pull/523/merge",
-      "sha": "fd4ed3f7b544ebd3b94b13f266403a7c0b2a327a",
-      "timestamp": "2026-10-31T17:48:56.719Z",
+      "sha": "93f0d2dc2561dc38cae00124dae3c3f4c96b4230",
+      "timestamp": "2026-10-31T18:04:29.252Z",
       "commits": [
         {
-          "sha": "fd4ed3f7b544ebd3b94b13f266403a7c0b2a327a",
+          "sha": "93f0d2dc2561dc38cae00124dae3c3f4c96b4230",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T11:47:57-06:00",
-          "message": "Merge 37f46c8219a335d04e46d7805d3edcca18581162 into d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48\n"
+          "timestamp": "2026-10-31T18:03:46Z",
+          "message": "Merge 42c90cc17e68c5d38b1c2d88055aba7f1cd8dd27 into d3e0ed53ac0b64e6b7650f1363e7b0215d42ae48\n"
+        },
+        {
+          "sha": "42c90cc17e68c5d38b1c2d88055aba7f1cd8dd27",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T12:03:06-06:00",
+          "message": "refactor(daemon): a daemon's storage logs through it, and one gate answers every refusal (candybar-testing-0x6u.snf)\n\nFrom the high review of this branch.\n\nA write in flight at the close finishes after it, and what it logged had no\nstamp, so \"a line logged after a close says so\" was false for storage. Storage\nis built before the daemon, so it could not hold the daemon's log: `storage` is\nnow a function of that log, and `file-storage.ts` leaves the `dlog` owners.\n\nA launch its own caller had aborted skipped `admit`, so it was unmetered. A job\nreported every refusal as the daemon closing, whatever `admit` had said. A\nrefusal now always carries its reason, and the job passes it through.\n\nThe context field was `dlog` but held the stamped log, which is how the \"daemon\npasses `dlog`\" comments went stale, so it is now `log`. Also: the refused rows\ncount toward the stats column's width, `claimAct` takes its reader rather than\ndefaulting one for tests, and `__lifelineForTest` moves off `Launcher` onto\nwhat `createLauncher` returns.\n"
         },
         {
           "sha": "37f46c8219a335d04e46d7805d3edcca18581162",
