@@ -1,3 +1,9 @@
+## [1.169.2](https://github.com/promptctl/cc-candybar/compare/v1.169.1...v1.169.2) (2026-10-31)
+
+### Bug Fixes
+
+* **site:** the live bar defines Symbol.dispose where Safari has none ([#515](https://github.com/promptctl/cc-candybar/issues/515)) ([0a5c459](https://github.com/promptctl/cc-candybar/commit/0a5c459f404f83438a0772eb02741da617b6a82b))
+
 ## [1.169.1](https://github.com/promptctl/cc-candybar/compare/v1.169.0...v1.169.1) (2026-10-31)
 
 ### Bug Fixes
