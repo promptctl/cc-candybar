@@ -1,3 +1,9 @@
+## [1.169.1](https://github.com/promptctl/cc-candybar/compare/v1.169.0...v1.169.1) (2026-10-31)
+
+### Bug Fixes
+
+* **watchers:** every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl) ([#514](https://github.com/promptctl/cc-candybar/issues/514)) ([0d7e327](https://github.com/promptctl/cc-candybar/commit/0d7e32730906f412f757614cd2ea4aed3dbd3cac))
+
 ## [1.169.0](https://github.com/promptctl/cc-candybar/compare/v1.168.1...v1.169.0) (2026-10-31)
 
 ### Features
