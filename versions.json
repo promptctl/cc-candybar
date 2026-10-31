@@ -4,15 +4,22 @@
     {
       "version": "pr-524",
       "ref": "refs/pull/524/merge",
-      "sha": "191385735e0ddf302dcd19b6f7eae774fe77fed6",
-      "timestamp": "2026-10-31T19:38:11.418Z",
+      "sha": "220b5ebd926ffdba4778b655ad90b28e4414d6e8",
+      "timestamp": "2026-10-31T19:59:17.427Z",
       "commits": [
         {
-          "sha": "191385735e0ddf302dcd19b6f7eae774fe77fed6",
+          "sha": "220b5ebd926ffdba4778b655ad90b28e4414d6e8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:37:27Z",
-          "message": "Merge c29c12bfff6d7cfd57395b524eb9671ac55570f9 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+          "timestamp": "2026-10-31T19:58:34Z",
+          "message": "Merge 78095c24322c36a8bce8598036d194c423197985 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+        },
+        {
+          "sha": "78095c24322c36a8bce8598036d194c423197985",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T13:58:21-06:00",
+          "message": "test(daemon): review fixes for the move to the worker (candybar-testing-0x6u.1ur)\n\nThe deadline case goes back to a real process in its own describe: its\nanswer's cold first draw has to fit the draw's reserve in wall time, which\nis the bound draw-reserve just left the worker for.\n\nThe timedOut case now owns the running source it depends on. With nothing\nin flight the answer is written on microtasks, ahead of the overdue\nbackstop, so it passed only while an earlier case left a read going.\n\nA held clock could not fail the dissolve case, so the clock now moves\nbetween its draws. A start refused beside a live daemon hands the env\nback. A stats case ties the bundle's digest to the snapshot. The config-env\nfile holds the update keys as `check` does, rather than arming a daemon.\n"
         },
         {
           "sha": "c29c12bfff6d7cfd57395b524eb9671ac55570f9",
