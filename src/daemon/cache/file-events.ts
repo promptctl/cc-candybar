@@ -372,8 +372,9 @@ export class FileEventDelivery {
 // whatever state delivery is in: an edit made after the span's start may never
 // have been heard, and only an event the watch reports closes it. With no span
 // open nothing can have gone unheard, so a delivering watch draws none, and
-// neither does an owner never started, whose host (the page's simulated
-// machine) watches nothing an edit could depend on.
+// neither does an owner never started: the page's simulated machine watches
+// nothing an edit could depend on, and a test's daemon in a jest worker proves
+// the watches it reads by a delivered event.
 export interface FileEventsWarning {
   readonly kind: "file-events";
   readonly state: Delivery["kind"];

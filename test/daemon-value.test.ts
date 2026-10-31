@@ -20,23 +20,16 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import type { RenderOrigin } from "../src/config-hint";
 import { LANES } from "../src/config/lanes";
-import {
-  createDaemon,
-  SYSTEM_CLOCK,
-  type Daemon,
-  type DaemonClock,
-} from "../src/daemon/daemon";
-import { memoryLimitBytes } from "../src/daemon/limits";
+import type { Daemon, DaemonClock } from "../src/daemon/daemon";
 import { pidAlive } from "../src/daemon/parent-watchdog";
 import { sessionStatePath, settingsHistoryPath } from "../src/daemon/paths";
 import { PROTOCOL_VERSION, type RenderRequest } from "../src/daemon/protocol";
 import type { SessionStorage } from "../src/daemon/session-state";
-import { FileSessionStorage } from "../src/daemon/session-state-file";
-import { fileHistoryStorage } from "../src/daemon/settings-history";
 import { parseHandlerUrl } from "../src/install/index";
 import { launch } from "../src/proc/launch";
 import { PACKAGE_VERSION } from "../src/version";
 import { hookData, linkUrls, stripAnsi } from "./helpers/daemon-e2e";
+import { buildDaemon, bundleAt } from "./helpers/in-worker-daemon";
 import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
@@ -68,16 +61,6 @@ describe("the daemon is a value", () => {
   let scratchPath: string | undefined;
   let open: Daemon | null = null;
 
-  const bundleIn = (checkout: string) => {
-    const file = path.join(checkout, "dist", "index.mjs");
-    return {
-      entryUrl: `file://${file}`,
-      path: file,
-      node: [process.execPath],
-      targets: [file],
-    };
-  };
-
   const construct = (
     inputs: {
       clock?: DaemonClock;
@@ -85,19 +68,10 @@ describe("the daemon is a value", () => {
       session?: SessionStorage;
     } = {},
   ): Daemon => {
-    const daemon = createDaemon({
-      bundle: bundleIn(inputs.checkout ?? path.join(root, "checkout")),
-      storage: {
-        session:
-          inputs.session ?? new FileSessionStorage(sessionStatePath(), 0),
-        history: fileHistoryStorage(settingsHistoryPath(), () => {}),
-      },
-      memoryLimitBytes: memoryLimitBytes(process.env),
-      registryUrl: "http://127.0.0.1:1",
-      clock: inputs.clock ?? SYSTEM_CLOCK,
-      exit: (code) => {
-        throw new Error(`a daemon under test asked to exit ${code}`);
-      },
+    const daemon = buildDaemon({
+      bundle: bundleAt(inputs.checkout ?? path.join(root, "checkout")),
+      ...(inputs.clock && { clock: inputs.clock }),
+      ...(inputs.session && { storage: { session: inputs.session } }),
     });
     open = daemon;
     return daemon;
@@ -154,7 +128,6 @@ describe("the daemon is a value", () => {
     resources.enable();
     root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-value-"));
     process.env.XDG_STATE_HOME = path.join(root, "state");
-    mkdirSync(path.join(root, "state", "cc-candybar"), { recursive: true });
     // A source checkout: what the band's setup needs of the bundle it runs.
     const checkout = path.join(root, "checkout");
     mkdirSync(path.join(checkout, "dist"), { recursive: true });

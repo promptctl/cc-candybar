@@ -13,15 +13,9 @@ import {
   handleConnection,
   type ConnectionDaemon,
 } from "../src/daemon/connection";
-import {
-  createDaemon,
-  SYSTEM_CLOCK,
-  type Daemon,
-  type DaemonClock,
-} from "../src/daemon/daemon";
+import { SYSTEM_CLOCK, type DaemonClock } from "../src/daemon/daemon";
 import { NOTHING_DELIVERED } from "../src/daemon/draw-bar";
 import type { Subscriber } from "../src/daemon/frame-feed";
-import { memoryLimitBytes } from "../src/daemon/limits";
 import {
   FRAME_HEADER_BYTES,
   PROTOCOL_VERSION,
@@ -33,15 +27,10 @@ import {
 import type { HandledRequest, Reply } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import { sessionIdOf } from "../src/daemon/session-id";
-import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
-import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { RuntimeStats } from "../src/daemon/stats";
-import {
-  TIMEOUT_RETRY_BUDGET,
-  renderBody,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { render, renderBody, stripAnsi } from "./helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "./helpers/daemon-log";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import { memoryConnection } from "./helpers/memory-connection";
 import { until } from "./helpers/until";
 
@@ -458,29 +447,12 @@ describe("a connection to a daemon built in this worker", () => {
   let root: string;
   let projectDir: string;
   let config: string;
-  let built: Daemon | null = null;
+  let started: InWorkerDaemon | null = null;
   const exit = jest.fn();
-  const stateHome = process.env.XDG_STATE_HOME;
 
-  const construct = (clock: DaemonClock = SYSTEM_CLOCK): Daemon => {
-    const file = path.join(root, "dist", "index.mjs");
-    built = createDaemon({
-      bundle: {
-        entryUrl: `file://${file}`,
-        path: file,
-        node: [process.execPath],
-        targets: [],
-      },
-      storage: {
-        session: EPHEMERAL_SESSION_STORAGE,
-        history: EPHEMERAL_HISTORY_STORAGE,
-      },
-      memoryLimitBytes: memoryLimitBytes(process.env),
-      registryUrl: "http://127.0.0.1:1",
-      clock,
-      exit,
-    });
-    return built;
+  const start = (clock: DaemonClock = SYSTEM_CLOCK): InWorkerDaemon => {
+    started = startDaemon({}, { clock, exit });
+    return started;
   };
 
   const renderRequest = (sessionId: string, deadline: number): Request =>
@@ -508,31 +480,24 @@ describe("a connection to a daemon built in this worker", () => {
     return stripAnsi(resp.output);
   };
 
-  // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
-  // cold first render on a loaded runner outlasts it. TIMEOUT is a client's
-  // transient, answered by asking again on its next tick (test/helpers/daemon-e2e.ts);
-  // a test has no next tick, so it asks again here, on a new connection.
+  // The backstop here is the real one, so a render goes through the helper
+  // that asks again on TIMEOUT.
   const rendered = async (
-    daemon: Daemon,
+    daemon: InWorkerDaemon,
     sessionId: string,
-  ): Promise<string> => {
-    for (let attempt = 1; ; attempt++) {
-      const opened = open(daemon);
-      opened.send(renderRequest(sessionId, Date.now() + 2_000));
-      const resp = await answered(opened);
-      const again =
-        "code" in resp &&
-        resp.code === "TIMEOUT" &&
-        attempt < TIMEOUT_RETRY_BUDGET;
-      if (!again) return drawn(resp);
-    }
-  };
+  ): Promise<string> =>
+    stripAnsi(
+      await render(
+        daemon,
+        sessionId,
+        projectDir,
+        { termCols: 200, termRows: 40 },
+        ["cc-candybar", "--config", config],
+      ),
+    );
 
   beforeAll(() => {
     root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-connection-"));
-    // A daemon in a worker holds no socket lease, so another run's global
-    // teardown would sweep the state dir test/setup.ts names, log and all.
-    process.env.XDG_STATE_HOME = path.join(root, "state");
     projectDir = root;
     config = path.join(root, "bar.json5");
     writeFileSync(
@@ -541,36 +506,35 @@ describe("a connection to a daemon built in this worker", () => {
     );
   });
 
-  afterEach(() => {
-    built?.close();
-    built = null;
+  afterEach(async () => {
+    await started?.stop();
+    started = null;
     exit.mockClear();
   });
 
   afterAll(() => {
-    process.env.XDG_STATE_HOME = stateHome;
     rmSync(root, { recursive: true, force: true });
   });
 
   test("a render is answered by the daemon's own handling", async () => {
-    expect(await rendered(construct(), "connection-render")).toContain(
+    expect(await rendered(start(), "connection-render")).toContain(
       "a drawn mark",
     );
   });
 
   test("a subscribe receives the frames the daemon draws", async () => {
-    const daemon = construct();
-    await rendered(daemon, "connection-feed");
+    const running = start();
+    await rendered(running, "connection-feed");
 
-    const feed = open(daemon);
+    const feed = open(running.daemon);
     feed.send({ ...SUBSCRIBE, sessionId: "connection-feed" } as Request);
     expect(drawn(await answered(feed))).toContain("a drawn mark");
-    expect(daemon.stats.inFlight).toBe(0);
+    expect(running.daemon.stats.inFlight).toBe(0);
     feed.client.destroy();
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {
-    const opened = open(construct());
+    const opened = open(start().daemon);
     opened.send({ v: PROTOCOL_VERSION, kind: "shutdown" });
     await until(() => exit.mock.calls.length > 0, "the daemon's exit");
     expect(exit).toHaveBeenCalledWith(0);
@@ -580,11 +544,9 @@ describe("a connection to a daemon built in this worker", () => {
   test("how long a render queued reads from its accept on the daemon's clock", async () => {
     let monotonic = 1_000_000;
     const at = new Date();
-    const daemon = construct({
-      date: () => at,
-      monotonic: () => monotonic,
-    });
-    const opened = open(daemon);
+    const opened = open(
+      start({ date: () => at, monotonic: () => monotonic }).daemon,
+    );
     monotonic += 500;
     opened.send(renderRequest("connection-clock", at.getTime() + 2_000));
 

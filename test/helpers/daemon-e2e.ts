@@ -21,13 +21,12 @@ import {
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
-import { sendDaemonRequest, waitForExit } from "./daemon-wire";
+import { endpointOf, waitForExit, type DaemonTarget } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls, stripAnsi } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
-import { logPath } from "../../src/daemon/paths";
 import { valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
 export { linkUrls, stripAnsi } from "./ansi";
@@ -57,13 +56,6 @@ export const TIMEOUT_RETRY_BUDGET = 5;
 // render event. A case that means to see the pending answer sends a request
 // of its own (sendDaemonRequest).
 const PENDING_RETRY_BUDGET = 20;
-
-// The daemon's log, found from its socket: an isolated daemon keeps its
-// socket in its state directory (prepareIsolatedDaemonEnv), whose log is the
-// one the daemon itself writes (logPath).
-function logOf(sockPath: string): string {
-  return logPath({ XDG_STATE_HOME: path.dirname(path.dirname(sockPath)) });
-}
 
 // A session's render events whose reply its client read, in log order.
 function answeredEvents(log: string, sessionId: string): string[] {
@@ -99,11 +91,11 @@ export function hookData(sessionId: string, cwd: string): ClaudeHookData {
 // spelling of the transient contract: `render` below and
 // test/helpers/drive-bar.ts both send through it.
 export async function renderRequest(
-  sockPath: string,
+  target: DaemonTarget,
   request: Record<string, unknown>,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
-  const log = logOf(sockPath);
+  const { send, log } = endpointOf(target);
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
   );
@@ -113,8 +105,7 @@ export async function renderRequest(
     // to: like a real client, it says when it will hang up, so the daemon's
     // wait for its refreshes ends by that or by its own backstop
     // (src/daemon/request-deadline.ts). A case's own deadline wins.
-    const resp = await sendDaemonRequest(
-      sockPath,
+    const resp = await send(
       {
         v: PROTOCOL_VERSION,
         kind: "render",
@@ -197,26 +188,25 @@ export function renderBody(
 
 // One status-line render, as Claude Code would ask for it.
 export function render(
-  sockPath: string,
+  target: DaemonTarget,
   sessionId: string,
   cwd: string,
   hints: ClientHints = {},
   args: string[] = [],
 ): Promise<string> {
-  return renderRequest(sockPath, renderBody(sessionId, cwd, hints, args));
+  return renderRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
 // A click, decoded the same way `cc-candybar url-handle` decodes it, then sent
 // as the wire request the URL handler app sends. The daemon's answer is
 // returned as it came, refusal included.
 export function sendClick(
-  sockPath: string,
+  target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
   const { verb, value } = parseHandlerUrl(url);
-  return sendDaemonRequest(
-    sockPath,
+  return endpointOf(target).send(
     {
       v: PROTOCOL_VERSION,
       kind: "click",
@@ -237,10 +227,10 @@ export function sendClick(
 // read; a click is a write, so sending it again applies it twice, and a second
 // apply-update is refused as already running. On TIMEOUT the click's outcome
 // is read from the daemon's own click event instead.
-export async function click(sockPath: string, url: string): Promise<void> {
-  const log = logOf(sockPath);
+export async function click(target: DaemonTarget, url: string): Promise<void> {
+  const { log } = endpointOf(target);
   const before = timedOutClicks(log).length;
-  const resp = await sendClick(sockPath, url);
+  const resp = await sendClick(target, url);
   if (resp.ok) return;
   if (resp.code !== "TIMEOUT") {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
@@ -268,7 +258,7 @@ export async function click(sockPath: string, url: string): Promise<void> {
 // encodes the actual contract ("the write becomes visible"), and the budget
 // makes a broken write fail with the last render in hand rather than hanging.
 export async function renderUntil(
-  sockPath: string,
+  target: DaemonTarget,
   sessionId: string,
   projectDir: string,
   accepts: (rendered: string) => boolean,
@@ -277,7 +267,7 @@ export async function renderUntil(
 ): Promise<string> {
   let last = "";
   await until(
-    async () => accepts((last = await render(sockPath, sessionId, projectDir))),
+    async () => accepts((last = await render(target, sessionId, projectDir))),
     () =>
       last
         ? `a render of ${what}; last render was:\n${last}`
