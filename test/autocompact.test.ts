@@ -62,7 +62,7 @@ function runtime(
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null }),
+    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: HINT }));
   const store = new VariableStore();

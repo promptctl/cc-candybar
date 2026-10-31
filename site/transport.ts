@@ -256,7 +256,7 @@ export const transport = {
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size: Size) => {
     forgetWrites();
-    reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
+    reloadConfig({ projectDir: REPO, cwd: REPO, target: { source: "search" } });
     sessionId = crypto.randomUUID();
     startAt(t);
     notify();

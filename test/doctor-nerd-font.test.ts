@@ -3,6 +3,7 @@
 // drawn in, pure; the glyphs it asks about measured through the joiner; and
 // the pure readers the font edge parses with.
 
+import type { RenderOrigin } from "../src/config-hint";
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import {
   checkByName,
@@ -229,7 +230,7 @@ describe("nerdFont probe", () => {
     });
     const ghostty: TerminalFacts = { kind: "bundling", name: "ghostty", version: null };
     expect(probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal: ghostty }, null, broken))).toEqual({ ok: true });
-    expect(checkByName("config")!.probe(f)).toEqual({ ok: true });
+    expect(checkByName("config")!.probe(f).ok).toBe(true);
     // A bar with no private-use glyph needs no mark, so no book.
     expect(probe(facts({ kind: "none" }, null, broken))).toEqual({ ok: true });
   });
@@ -455,7 +456,11 @@ describe("the font edge's readers", () => {
 
 describe("gatherFacts: where the Nerd Font facts come from", () => {
   const HINT = { socket: "/s", pane: "%1", truecolor: null };
-  const ORIGIN = { projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null };
+  const ORIGIN: RenderOrigin = {
+    projectDir: "/tmp/proj",
+    cwd: "/tmp/proj",
+    target: { source: "search" },
+  };
   const COVERED = {
     kind: "ok" as const,
     value: { font: "JetBrainsMonoNF-Regular", from: 'iTerm2 profile "Default"', lacks: [] },

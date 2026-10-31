@@ -504,7 +504,7 @@ describe("a project layer inserting into the user's row", () => {
     const { unused } = loadConfigOnce({
       projectDir: project,
       cwd: project,
-      configFile: null,
+      target: { source: "search" },
     });
     expect(unused.map((u) => `${u.kind} ${u.name}`)).toEqual(["segment spare"]);
   });

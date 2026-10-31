@@ -288,12 +288,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain(
-      '✗ config — variable "v" is never read (+1 more — run `cc-candybar doctor`)',
+      '✗ config — /p/.cc-candybar.json5 (searched): variable "v" is never read (+1 more — run `cc-candybar doctor`)',
     );
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -313,7 +313,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
     expect(rt.clicked.value()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -525,7 +525,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
+        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
       ]);
     });
 

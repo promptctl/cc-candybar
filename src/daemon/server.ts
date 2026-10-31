@@ -50,6 +50,11 @@ import { stableAttachPreload } from "../install/index.js";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import {
+  requestedConfigTarget,
+  type RenderOrigin,
+  type RequestedOrigin,
+} from "../config-hint";
+import {
   PROTOCOL_VERSION,
   encodeFrame,
   encodeJsonFrame,
@@ -113,7 +118,6 @@ import {
   SESSION_CLIENT_HINTS_KEY,
   encodeRenderOrigin,
   sessionRenderOrigin,
-  type RenderOrigin,
 } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
@@ -1718,11 +1722,7 @@ const verbCtx = {
   // doctor click is a verdict on the files as they are now, not on
   // whether the fs watcher has caught up with an edit made a moment ago.
   doctor: productionEdge((origin) => {
-    const at = [
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? undefined,
-    ] as const;
+    const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
     renderCache.reload(...at, { kind: "doctor" });
     const entry = renderCache.getOrCreate(...at);
     return {
@@ -1744,25 +1744,16 @@ const verbCtx = {
   // The config a session's last render resolved from — the same entry the
   // render drew the bar with, so a save compares against the bar the user saw.
   configFor: (origin: RenderOrigin) =>
-    renderCache.getOrCreate(
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? undefined,
-    ).state.config,
+    renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
+      .state.config,
   reloadConfig: (origin: RenderOrigin) =>
-    renderCache.reload(
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? undefined,
-      { kind: "write" },
-    ),
+    renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
+      kind: "write",
+    }),
   // The storage keys of the same entry `configFor` reads the config of.
   sourcesFor: (origin: RenderOrigin) =>
-    renderCache.getOrCreate(
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? undefined,
-    ).state.sources,
+    renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
+      .state.sources,
   links: linkSigner,
   runs,
   lanes: { of: lanesAt, clicked: laneClicked },
@@ -1772,7 +1763,7 @@ const verbCtx = {
         sessionId,
         origin.projectDir,
         origin.cwd,
-        origin.configFile ?? undefined,
+        origin.target.path,
       ),
   },
   diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>
@@ -2062,7 +2053,7 @@ function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? undefined,
+    origin.target.path,
   );
   const latest = frameFeeds.latest(sessionId);
   // [LAW:dataflow-not-control-flow] exception: a click with no request on
@@ -2089,7 +2080,7 @@ type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
   readonly sessionId: SessionId;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
-  readonly requested: RenderOrigin;
+  readonly requested: RequestedOrigin;
   readonly refusedArgs: readonly RefusedArg[];
   readonly [CHECKED]: true;
 };
@@ -2183,7 +2174,7 @@ function checkRenderRequest(
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
-        configFile: configFile ?? hints.configEnv ?? null,
+        target: requestedConfigTarget(configFile, hints.configEnv),
       },
       refusedArgs,
     } as CheckedRenderRequest,
@@ -2282,7 +2273,7 @@ function setUpRender(
   const hold = renderCache.holdSession(
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? undefined,
+    origin.target.path,
     req,
   );
   return setUpDraw(hold, req, hintsError, at, facts);

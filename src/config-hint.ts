@@ -34,17 +34,70 @@ export function detectConfigEnv(
   return explicitConfigPath(cwd, env[CONFIG_ENV]);
 }
 
+// [LAW:types-are-the-program] The config a request names, and what named it:
+// the file a command's arguments name, else the file its environment names,
+// else the search. A search has no path, so no reader can hold a source that
+// disagrees with one.
+export type RequestedTarget =
+  | { readonly source: "search"; readonly path?: undefined }
+  | { readonly source: "argument" | "environment"; readonly path: string };
+
+// What a session's config turned out to be: a request's target, a load-config
+// pick over it, or a path recorded by a build that kept no source.
+export type ConfigTarget =
+  | RequestedTarget
+  | { readonly source: "pick" | "unrecorded"; readonly path: string };
+
+// [LAW:single-enforcer] The one precedence of the two spellings a request
+// carries, for a render and a CLI run alike, so the bar and a CLI cannot
+// disagree about which file a session reads. Each spelling arrives already
+// read: absolute, and absent when empty.
+export function requestedConfigTarget(
+  argument: string | undefined,
+  environment: string | undefined,
+): RequestedTarget {
+  if (argument !== undefined) return { source: "argument", path: argument };
+  if (environment !== undefined) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+
 // The config a CLI run (`check`, `doctor`) judges, for the bar a session
 // started in this shell renders: the file named on the command line — a
 // statusline command's own `--config` — else the override the client would
-// report. [LAW:single-enforcer] Both CLIs compose it HERE, so they cannot
-// disagree about which file a session's bar reads; and an empty argument is
-// no argument, as `--config "$CFG"` with CFG unset is to the bar, because the
-// argument and the variable cross the one `explicitConfigPath` reading.
+// report. An empty argument is no argument, as `--config "$CFG"` with CFG
+// unset is to the bar, because the argument and the variable cross the one
+// `explicitConfigPath` reading.
 export function cliConfigTarget(
   arg: string | undefined,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
-): string | undefined {
-  return explicitConfigPath(cwd, arg) ?? detectConfigEnv(env, cwd);
+): RequestedTarget {
+  return requestedConfigTarget(
+    explicitConfigPath(cwd, arg),
+    detectConfigEnv(env, cwd),
+  );
+}
+
+// [LAW:types-are-the-program] What config resolution takes: where a session
+// runs and what names its config. Recorded for a session, this is what a
+// durable click resolves, so the file it lands in is the one the next reload
+// reads, never a snapshot of the one the last render read.
+export interface RenderOrigin {
+  readonly projectDir: string;
+  readonly cwd: string;
+  readonly target: ConfigTarget;
+}
+
+// The origin a request names, before the session's load-config pick joins it.
+// Only this is ever recorded: a pick is a session fact of its own.
+export interface RequestedOrigin extends RenderOrigin {
+  readonly target: RequestedTarget;
+}
+
+// [LAW:one-source-of-truth] How a chain of config files reads to a person,
+// lowest precedence first, for `check` and the doctor alike.
+export function chainName(paths: readonly string[]): string {
+  return paths.join(" < ") || "bundled default (no config file found)";
 }

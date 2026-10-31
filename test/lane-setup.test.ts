@@ -58,7 +58,7 @@ const session = (
 ): LaneSession => ({
   sessionId: SID,
   hints,
-  origin: { projectDir: "/p", cwd: "/p", configFile: null },
+  origin: { projectDir: "/p", cwd: "/p", target: { source: "search" } },
   transcript: "/u/.claude/projects/-p/session.jsonl",
   answered,
 });

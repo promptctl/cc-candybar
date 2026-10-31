@@ -287,7 +287,7 @@ function clickContext(r: Rig, view: SessionView<SessionSource>, over: Partial<Ve
   r.sessionState.set(
     SID,
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: dir, cwd: dir, configFile: null }),
+    encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }),
   );
   r.sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ claudeConfigDir: "/u/.claude-x" }));
   return {
@@ -487,7 +487,7 @@ describe("a click on a run link", () => {
     const ctx = clickContext(r, view);
     // Another session that has rendered: what its link must prove is the
     // signature.
-    r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, configFile: null }));
+    r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }));
     expect(() => clickUrl(relink(tampered), ctx)).toThrow(BadVerbArgs);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     expect(r.lines).toContainEqual(

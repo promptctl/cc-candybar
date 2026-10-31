@@ -112,7 +112,7 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toContain(
       `✗ tmux truecolor — cannot read ${settingsPath()}: \`env\` is not an object\n`,
     );
-    expect(plan.stdout).toContain("✓ config\n");
+    expect(plan.stdout).toContain("✓ config — bundled default (no config file found)\n");
     expect(plan.stdout).toContain("✓ session data\n");
   });
 
@@ -127,7 +127,7 @@ describe("doctorPlan", () => {
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
     expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
-      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+      stdout: "✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
       code: 0,
     });
@@ -311,7 +311,7 @@ describe("doctorPlan", () => {
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
-      "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
+      "✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
@@ -323,7 +323,7 @@ describe("doctorPlan", () => {
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
     expect((await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
-      `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
+      `✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
     );
   });
 });
@@ -369,14 +369,14 @@ describe("doctorPlan over a real config", () => {
       projectConfig(),
       `{ plugins: ["./p/plugin.json5"], root: { h: ["repo.p.s"] } }`,
     );
-    const load = loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    const load = loadConfigOnce({ projectDir: project, cwd: project, target: { source: "search" } });
     expect(load.error).toBeNull();
     expect(Object.keys(load.config.variables)).toContain("repo.p.status");
     // Long enough for a sweep the load started to have unlinked it.
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fs.existsSync(old)).toBe(true);
     fs.rmSync(storage, { recursive: true });
-    loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    loadConfigOnce({ projectDir: project, cwd: project, target: { source: "search" } });
     expect(fs.existsSync(storage)).toBe(false);
   });
 
@@ -387,13 +387,13 @@ describe("doctorPlan over a real config", () => {
       projectConfig(),
       `{ variables: { v: { kind: "template", template: "{{ if }}" } } }`,
     );
-    const load = loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    const load = loadConfigOnce({ projectDir: project, cwd: project, target: { source: "search" } });
     expect(load.error).toBeNull();
     expect(load.warning).toContain(`Variable "v"`);
   });
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
+    expect((await plan()).stdout).toBe("✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -403,7 +403,7 @@ describe("doctorPlan over a real config", () => {
          segments: { s: { template: "{{ .v }}" } }, root: { h: ["s"] } }`,
     );
     expect(await plan()).toEqual({
-      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+      stdout: `✓ config — ${projectConfig()} (searched)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
       stderr: "",
       code: 0,
     });
@@ -422,7 +422,7 @@ describe("doctorPlan over a real config", () => {
     );
     expect(await plan()).toEqual({
       stdout:
-        `✗ config — ${projectConfig()}:2: duplicate key "v" — the settings menu cannot edit this file until it is fixed\n` +
+        `✗ config — ${user} < ${projectConfig()} (searched): ${projectConfig()}:2: duplicate key "v" — the settings menu cannot edit this file until it is fixed\n` +
         `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
@@ -437,7 +437,7 @@ describe("doctorPlan over a real config", () => {
     const out = await plan();
     expect(out.code).toBe(1);
     expect(out.stdout).toMatch(
-      new RegExp(`^✗ config — Invalid config in .*\\(1 issue\\):\n    .*ghost`),
+      new RegExp(`^✗ config — .* \\(searched\\): Invalid config in .*\\(1 issue\\):\n    .*ghost`),
     );
   });
 
@@ -448,7 +448,7 @@ describe("doctorPlan over a real config", () => {
     );
     const out = await plan();
     expect(out.code).toBe(1);
-    expect(out.stdout).toMatch(/^✗ config — Invalid config/);
+    expect(out.stdout).toMatch(/^✗ config — .* \(searched\): Invalid config/);
     expect(out.stdout).toMatch(/errorAt/);
   });
 
@@ -469,7 +469,7 @@ describe("doctorPlan over a real config", () => {
         )
       )
         .stdout,
-    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
+    ).toBe(`✗ config — ${named} (command argument): helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
   });
 
   // [LAW:single-enforcer] brandon-unfiled-3248.e3r: the argv gate refuses
@@ -506,7 +506,9 @@ describe("doctorPlan over a real config", () => {
       "",
     );
     expect(out.code).toBe(1);
-    expect(out.stdout).toMatch(/^✗ config — helper "h" is never called\n/);
+    expect(out.stdout.split("\n")[0]).toBe(
+      `✗ config — ${hinted} ($CC_CANDYBAR_CONFIG): helper "h" is never called`,
+    );
 
     // With no variable either, the empty name and no name reach the same
     // searched chain: undefined-from-empty is undefined-from-absent.
@@ -536,7 +538,7 @@ describe("doctorPlan over a real config", () => {
     );
     expect(await planOver(drawing("moves", dir))).toEqual({
       stdout:
-        "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n" +
+        "✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n" +
         "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events" +
         ` (statusLine from ${settingsPath()})` +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
@@ -618,7 +620,7 @@ describe("doctorPlan over a real config", () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
     expect((await plan({ CC_CANDYBAR_CONFIG: named })).stdout).toBe(
-      `✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
+      `✗ config — ${named} ($CC_CANDYBAR_CONFIG): helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
     );
   });
 
@@ -632,7 +634,7 @@ describe("doctorPlan over a real config", () => {
       ...gatherFacts(
         REAL,
         { tmux: null, claudeConfigDir: dir },
-        { projectDir: project, cwd: project, configFile: null },
+        { projectDir: project, cwd: project, target: { source: "search" } },
         () => null,
         { kind: "ok", value: HEALTHY_SERVING },
         CARRIED,
@@ -649,7 +651,7 @@ describe("doctorPlan over a real config", () => {
       doctorReportPairs(reports).map((p) => [p.key, p.value]),
     );
     expect(pairs.get(doctorReportKeys("config").reason)).toBe(
-      'action "a" is never clicked (+2 more — run `cc-candybar doctor`)',
+      `${projectConfig()} (searched): action "a" is never clicked (+2 more — run \`cc-candybar doctor\`)`,
     );
   });
 });
