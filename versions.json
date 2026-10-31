@@ -2,53 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-513",
-      "ref": "refs/pull/513/merge",
-      "sha": "2b0ebe0846415c827555eeba3251134e765c3cc5",
-      "timestamp": "2026-10-31T00:49:53.281Z",
-      "commits": [
-        {
-          "sha": "2b0ebe0846415c827555eeba3251134e765c3cc5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T00:49:13Z",
-          "message": "Merge 09b08212ae18abc70781954050f793814bb15306 into bbb46f5827993af9bdecb4eb063b8ddf756f5ef8\n"
-        },
-        {
-          "sha": "09b08212ae18abc70781954050f793814bb15306",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:49:03-06:00",
-          "message": "docs(memory): name the native build as what stages inside a checkout; the parked and moved states of a checkout install read apart (brandon-unfiled-3248.bh7x)\n"
-        },
-        {
-          "sha": "eca49a234ad97f573b50d69f663cd055f522707e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:45:43-06:00",
-          "message": "docs(memory): a checkout is an install only when the statusline names a path inside it; install from a checkout stages a copy the tree never reaches (brandon-unfiled-3248.bh7x)\n"
-        },
-        {
-          "sha": "87943bff1734adfb1f9c43585188e18e9376f3ef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:36:43-06:00",
-          "message": "docs(memory): a source checkout is an install, and nothing past its own tree reaches it (brandon-unfiled-3248.bh7x)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "016061643ad23b49d130b2c30124599d4beab3bb",
-      "timestamp": "2026-10-31T00:14:52.704Z",
+      "sha": "1f26d9a6ce86b1e21391e6076c7dac31adbd74ac",
+      "timestamp": "2026-10-31T00:58:05.780Z",
       "commits": [
         {
-          "sha": "016061643ad23b49d130b2c30124599d4beab3bb",
+          "sha": "1f26d9a6ce86b1e21391e6076c7dac31adbd74ac",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:14:02-06:00",
-          "message": "fix(colour): a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r) (#512)\n\n* fix(colour): a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r)\n\nThe turn rule moves a cell either side of a hue turn to the nearest rung\nof its ladder drawn apart from both neighbours, and that rung can lie\npast its window. The pressed shade keeps apart only from the tones the\nwindows deal, so an open trigger standing at a turn could wear the very\ncolour the moved cell beside it wears. The press cannot learn its\nneighbours: a band's colours never depend on where its trigger stands.\nThe turn side can. Every trigger on the bar opens its lineage at depth\n0, so the colour it wears is one per bar, and the turn rule now takes it\nas a member of the moved cell's taken set, read through `pressedAt` and\ncompared by `drawnColour` identity.\n\nOrder of the search: the cell after the turn, then the one before it,\neach kept off its neighbours and the press; then the same two kept off\ntheir neighbours alone. Trying the cell before the turn against the\npress ahead of the neighbours-only fallback is what holds the authored\nframes: under alt on rose-pine-moon and solarized-*, and under\nstart-secondary on catppuccin-frappe and rose-pine-dawn, the cell after\nthe turn has no rung apart from both neighbours and the press, while\nthe cell before has one. The line memo now keys on the lineage and the\ndial's pressed shade, which the rule reads.\n\nThe pressed shade's rule and its three sets are unchanged. The sweep\nreader's cell-text helpers move into test/helpers/seams.ts, and the\nsweep's press exemption is exported for the new frame test.\n\ntest/trigger-at-turn.test.ts draws an authored row with a `{{ menu }}`\ntrigger at a turn, open, under alt (trigger at cell 5 of the second row)\nand start-secondary (trigger at the line-start keystone), every bundled\ntheme at 256 and ansi. On main it fails at ansi in rose-pine-moon,\nsolarized-dark and solarized-light (alt) and catppuccin-frappe and\nrose-pine-dawn (start-secondary). The policy 4 unit property states the\npress as a member of the taken set; two pinned cases show a window tone\npassed over for the press and the cell before the turn moving.\n\n* test(colour): the trigger frame exempts only a depth-0 press with none to give, and the turn property states the search order (candybar-joiners-e5r4.34r)\n\nHigh review of #512. The frame test read the sweep's press exemption pooled over depths 0-3 by colour, so a bar trigger's press that had a rung to give was exempt wherever a deeper band's no-rung press shared its colour. It now reads the per-depth rule at depth 0, which the sweep's pool is built from.\n\nThe turn property judged a moved cell against its neighbours as they finally stand, while the rule reads each as it stood when the turn was read; it now judges against both, as dealt and as they stand. It also asserts the search order: a moved cell falls back onto the press only where the cell across the turn had no rung apart from its neighbours and the press either. Under the literal order (each cell's neighbours-only fallback before the other cell is tried) this assertion fails in 2,510 lines.\n\nPolicy 4 states the order's consequence for a line-start keystone.\n\n* refactor(colour): one reader of the colour a press is drawn in, and the press is kept off only where a ladder has a rung (candybar-joiners-e5r4.34r)\n\nSecond review pass of #512. The press one depth up and the bar's press that a cell at a hue turn keeps off are now read through one helper. Before, the same drawn colour was spelled out twice.\n\nThe memory line and the pressed shade's doc now say a moved cell keeps off the press wherever its ladder has a rung to give, since the fallback can still leave it on the press. The theme preview's comment says a swatch on either side of a turn can move.\n\nThe frame test drops a counter nothing read. It names a cell by the same visible-text rule as the sweep, which now lives beside cellBefore and cellAfter.\n\n* test(colour): the trigger frame exempts a no-rung press only where the cell it meets wears a tone a window deals (candybar-joiners-e5r4.34r)\n\nSecond review pass of #512. A press with none to give meets one of the colours the design stands beside it, and those are the tones the windows deal. A cell the turn rule moved past its window onto that press is the turn rule's collision, so the frame test now holds that seam.\n\nOn main the frame now fails at ansi in three more themes, all of them cells main moved past their window onto a no-rung press: catppuccin-frappe and catppuccin-macchiato under alt, and solarized-light under start-secondary. The branch passes."
+          "timestamp": "2026-10-30T18:57:12-06:00",
+          "message": "docs(memory): a checkout the statusline names is an install, and nothing past its own tree reaches it (#513)\n\n* docs(memory): a source checkout is an install, and nothing past its own tree reaches it (brandon-unfiled-3248.bh7x)\n\n* docs(memory): a checkout is an install only when the statusline names a path inside it; install from a checkout stages a copy the tree never reaches (brandon-unfiled-3248.bh7x)\n\n* docs(memory): name the native build as what stages inside a checkout; the parked and moved states of a checkout install read apart (brandon-unfiled-3248.bh7x)"
+        },
+        {
+          "sha": "bbb46f5827993af9bdecb4eb063b8ddf756f5ef8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-31T00:26:10Z",
+          "message": "chore(release): set `package.json` to 1.169.0 [skip ci]\n\n## [1.169.0](https://github.com/promptctl/cc-candybar/compare/v1.168.1...v1.169.0) (2026-10-31)\n\n### Features\n\n* **menus:** the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) ([#511](https://github.com/promptctl/cc-candybar/issues/511)) ([7fa9b11](https://github.com/promptctl/cc-candybar/commit/7fa9b112cc7061c7e0e1a63a7955c56987054064))\n\n### Bug Fixes\n\n* **colour:** a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r) ([#512](https://github.com/promptctl/cc-candybar/issues/512)) ([0160616](https://github.com/promptctl/cc-candybar/commit/016061643ad23b49d130b2c30124599d4beab3bb))\n* **colour:** a dial window widens toward its position's count of tones and leaves its ladder's last colour to the pressed button (candybar-joiners-e5r4.cfm) ([#510](https://github.com/promptctl/cc-candybar/issues/510)) ([0ed75d1](https://github.com/promptctl/cc-candybar/commit/0ed75d194e35c845f139e257b73bd2118c63d722))\n"
         }
       ]
     }
