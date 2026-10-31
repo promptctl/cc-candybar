@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-519",
+      "ref": "refs/pull/519/merge",
+      "sha": "2d78409cb37cd48b19d8b9ba03b874b0d9692a5d",
+      "timestamp": "2026-10-31T11:02:42.057Z",
+      "commits": [
+        {
+          "sha": "2d78409cb37cd48b19d8b9ba03b874b0d9692a5d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:01:51-06:00",
+          "message": "Merge 04496a4c33f129f00a9c0f1d32a5ad50c63cffdf into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+        },
+        {
+          "sha": "04496a4c33f129f00a9c0f1d32a5ad50c63cffdf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:01:32-06:00",
+          "message": "fix(doctor): the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb)\n\nThe doctor printed a verdict about a file it never named, so a run under\nan unset argument or under the environment variable could not say which\nconfig it had judged. Both verdicts now name the file or chain, and the\nspelling that won.\n\nThe render origin carries a typed target in place of a bare path, so the\nsource travels in the one record that holds the path and the click never\nhas to infer it. The precedence has one composer, used by the request\ncheckpoint and both CLIs. The record stays flat and additive, because\nbuilds of either age read one unversioned state file.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-518",
       "ref": "refs/pull/518/merge",
       "sha": "30bfc844d7292ef535b232c4ce7142a6021d0aa1",
