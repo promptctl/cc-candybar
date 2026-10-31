@@ -34988,559 +34988,6 @@ var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
 var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text: text2, writeHeapSnapshot, getHeapStatistics };
 
-// src/proc/launch.ts
-init_globals();
-
-// site/shims/child_process.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-var import_events2 = __toESM(require_events(), 1);
-var RESIDENT = "resident";
-var programs = /* @__PURE__ */ new Map();
-var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
-var Stream = class extends import_events2.EventEmitter {
-  encoding = null;
-  setEncoding(encoding) {
-    this.encoding = encoding;
-    return this;
-  }
-  chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
-  }
-  pipe() {
-    return this;
-  }
-  destroy() {
-  }
-  end() {
-  }
-  write() {
-    return true;
-  }
-  resume() {
-    return this;
-  }
-  unref() {
-    return this;
-  }
-};
-var nextPid = 5e3;
-function spawn(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  const child = Object.assign(new import_events2.EventEmitter(), {
-    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 ? void 0 : nextPid++,
-    stdout: new Stream(),
-    stderr: new Stream(),
-    stdin: new Stream(),
-    exitCode: null,
-    signalCode: null,
-    killed: false,
-    kill: () => true,
-    unref: () => {
-    },
-    ref: () => {
-    }
-  });
-  setTimeout(() => {
-    if (program === void 0) {
-      child.emit("error", enoent(cmd));
-      return;
-    }
-    const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
-    if (run3.stdout) child.stdout.chunk(run3.stdout);
-    if (run3.stderr) child.stderr.chunk(run3.stderr);
-    child.exitCode = run3.code;
-    child.stdout.emit("end");
-    child.stderr.emit("end");
-    child.emit("exit", run3.code, null);
-    child.emit("close", run3.code, null);
-  }, 0);
-  return child;
-}
-function spawnSync(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
-}
-
-// site/shims/util.ts
-init_globals();
-var import_parseargs = __toESM(require_parseargs(), 1);
-var types = { isNativeError: (e) => e instanceof Error };
-var inspect = (v) => {
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-};
-
-// src/proc/launch.ts
-function spawnErrorText(err, cwd2) {
-  if (!types.isNativeError(err)) return String(err);
-  const code = err.code;
-  return code === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
-}
-var RATE_LIMITS = {
-  // Click verbs: a misbehaving template emitting many clickable links + a
-  // user rapid-clicking = unbounded helpers. One spawn per second is enough
-  // for any human click cadence.
-  "click.pbcopy": 1e3,
-  "click.open": 1e3,
-  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
-  "doctor.tmux": 1e3,
-  "doctor.font": 1e3,
-  "doctor.process": 1e3,
-  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
-  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
-  // `ps` over this user's processes.
-  // A double-click is refused rather than typing and submitting its command
-  // twice. Daemon-wide, so two sessions typing in one second collide. Only
-  // the typing is limited: a click the pane refused typed
-  // nothing, so clicking again once the dialog is closed goes through.
-  "claude-input.type": 1e3
-};
-var lastStartAt = /* @__PURE__ */ new Map();
-function checkRateLimit(category) {
-  const minIntervalMs = RATE_LIMITS[category];
-  if (minIntervalMs === void 0) return { allowed: true };
-  const last2 = lastStartAt.get(category);
-  if (last2 === void 0) return { allowed: true };
-  const sinceLastMs = Date.now() - last2;
-  if (sinceLastMs >= minIntervalMs) return { allowed: true };
-  return { allowed: false, minIntervalMs, sinceLastMs };
-}
-function recordStart(category) {
-  lastStartAt.set(category, Date.now());
-}
-function childEnv(opts) {
-  return opts.env ?? process_default.env;
-}
-var refusedAsAborted = () => ({
-  ok: false,
-  reason: "aborted",
-  stdout: "",
-  stderr: "",
-  exitCode: null,
-  signal: null
-});
-function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
-  return {
-    ok: false,
-    reason: "rate-limited",
-    stdout: "",
-    stderr: "",
-    exitCode: null,
-    signal: null,
-    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
-  };
-}
-var NO_DAEMON = new AbortController().signal;
-var NO_SCOPE = {
-  stats: null,
-  observeLifeline: () => lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
-  signal: NO_DAEMON
-};
-var scope = NO_SCOPE;
-var inFlight = /* @__PURE__ */ new Set();
-var endInFlight = () => inFlight.forEach((end) => end());
-function refuseSecondDaemon() {
-  if (scope.signal !== NO_DAEMON && !scope.signal.aborted) {
-    throw new Error("a daemon is already live in this process");
-  }
-}
-function setLaunchScope(next2) {
-  scope = { ...NO_SCOPE, ...next2 };
-  scope.signal.addEventListener("abort", endInFlight, { once: true });
-}
-var TIMEOUT_KILL_GRACE_MS = 250;
-var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
-var liveGroups = /* @__PURE__ */ new Set();
-var lifeline = null;
-var fault = null;
-function setFault(next2) {
-  if (next2 === fault) return;
-  fault = next2;
-  scope.observeLifeline(next2);
-}
-function lose(line, reason) {
-  if (lifeline?.process !== line) return;
-  lifeline = null;
-  setFault(reason);
-}
-function lifelineWarnings() {
-  return fault === null ? [] : [
-    {
-      kind: "lifeline",
-      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`
-    }
-  ];
-}
-function spawnLifeline() {
-  scope.stats?.onStart("lifeline");
-  const t0 = Date.now();
-  let line;
-  try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
-      stdio: ["pipe", "ignore", "ignore"],
-      detached: true
-    });
-  } catch (err) {
-    scope.stats?.onEnd("lifeline", Date.now() - t0);
-    setFault(`did not start: ${spawnErrorText(err, void 0)}`);
-    return null;
-  }
-  scope.stats?.onEnd("lifeline", Date.now() - t0);
-  const pipe = line.stdin;
-  line.once("spawn", () => {
-    if (lifeline?.process === line) setFault(null);
-  });
-  line.once("error", (err) => lose(line, `failed: ${err.message}`));
-  line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
-  line.unref();
-  pipe.unref();
-  for (const group of liveGroups) pipe.write(`+ ${group}
-`);
-  return { process: line, pipe };
-}
-function guard(group) {
-  liveGroups.add(group);
-  lifeline ??= spawnLifeline();
-  lifeline?.pipe.write(`+ ${group}
-`);
-}
-function unguard(group) {
-  liveGroups.delete(group);
-  lifeline?.pipe.write(`- ${group}
-`);
-}
-function retireLifeline() {
-  const line = lifeline;
-  lifeline = null;
-  fault = null;
-  line?.pipe.end();
-}
-function signalGroup(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-  } catch (err) {
-    if (err.code !== "ESRCH") throw err;
-  }
-}
-async function launch(opts) {
-  const { stats } = scope;
-  if (opts.signal?.aborted || scope.signal.aborted) return refusedAsAborted();
-  const gate2 = checkRateLimit(opts.category);
-  if (!gate2.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate2.minIntervalMs,
-      gate2.sinceLastMs
-    );
-  }
-  recordStart(opts.category);
-  const t0 = Date.now();
-  stats?.onStart(opts.category);
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(opts.bin, opts.args ?? [], {
-        cwd: opts.cwd,
-        env: childEnv(opts),
-        stdio: ["pipe", "pipe", "pipe"],
-        detached: true
-      });
-    } catch (err) {
-      stats?.onEnd(opts.category, Date.now() - t0);
-      resolve({
-        ok: false,
-        reason: "spawn-error",
-        stdout: "",
-        stderr: "",
-        exitCode: null,
-        signal: null,
-        error: spawnErrorText(err, opts.cwd)
-      });
-      return;
-    }
-    const group = child.pid;
-    if (group !== void 0) guard(group);
-    let stdout2 = "";
-    let stderr2 = "";
-    let settled3 = false;
-    let timer = null;
-    let killTimer = null;
-    let terminated = null;
-    const onAbort = () => terminate("aborted");
-    const unlisten = () => {
-      opts.signal?.removeEventListener("abort", onAbort);
-      inFlight.delete(onAbort);
-    };
-    const finish = (deliver) => {
-      if (settled3) return;
-      settled3 = true;
-      if (timer) clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      unlisten();
-      if (group !== void 0) unguard(group);
-      stats?.onEnd(opts.category, Date.now() - t0);
-      deliver();
-    };
-    const settle3 = (r) => finish(() => resolve(r));
-    const signal = (pid2, sig) => {
-      try {
-        signalGroup(pid2, sig);
-      } catch (err) {
-        settle3({
-          ok: false,
-          reason: "signal-refused",
-          stdout: stdout2,
-          stderr: stderr2,
-          exitCode: null,
-          signal: null,
-          error: err instanceof Error ? err.message : String(err)
-        });
-      }
-    };
-    const terminate = (cause) => {
-      terminated = cause;
-      if (timer) clearTimeout(timer);
-      unlisten();
-      const pid2 = child.pid;
-      if (pid2 !== void 0) {
-        killTimer = setTimeout(
-          () => signal(pid2, "SIGKILL"),
-          TIMEOUT_KILL_GRACE_MS
-        );
-        signal(pid2, "SIGTERM");
-      }
-    };
-    child.stdout?.on("data", (chunk3) => {
-      stdout2 += chunk3.toString("utf8");
-    });
-    child.stderr?.on("data", (chunk3) => {
-      stderr2 += chunk3.toString("utf8");
-    });
-    child.on("error", (err) => {
-      settle3({
-        ok: false,
-        reason: "spawn-error",
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: null,
-        signal: null,
-        error: spawnErrorText(err, opts.cwd)
-      });
-    });
-    child.on("close", (code, signal2) => {
-      if (terminated !== null) {
-        settle3({
-          ok: false,
-          reason: terminated,
-          stdout: stdout2,
-          stderr: stderr2,
-          exitCode: code,
-          signal: signal2
-        });
-        return;
-      }
-      if (code === 0) {
-        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
-        return;
-      }
-      const reason = signal2 ? "signal" : "non-zero";
-      settle3({
-        ok: false,
-        reason,
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: code,
-        signal: signal2
-      });
-    });
-    if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
-    }
-    opts.signal?.addEventListener("abort", onAbort, { once: true });
-    inFlight.add(onAbort);
-    if (opts.stdinInput !== void 0 && child.stdin) {
-      child.stdin.end(opts.stdinInput);
-    } else if (child.stdin) {
-      child.stdin.end();
-    }
-  });
-}
-function launchSync(opts) {
-  if (scope.signal.aborted) return refusedAsAborted();
-  const gate2 = checkRateLimit(opts.category);
-  if (!gate2.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate2.minIntervalMs,
-      gate2.sinceLastMs
-    );
-  }
-  recordStart(opts.category);
-  const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
-  const stdio = ["pipe", "pipe", "pipe"];
-  try {
-    const result = spawnSync(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
-      env: childEnv(opts),
-      input: opts.stdinInput,
-      timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
-      stdio,
-      encoding: "utf8"
-    });
-    scope.stats?.onEnd(opts.category, Date.now() - t0);
-    const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
-    const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
-    if (result.error) {
-      const code = result.error.code;
-      const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
-      return {
-        ok: false,
-        reason: reason2,
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: null,
-        signal: result.signal ?? null,
-        error: spawnErrorText(result.error, opts.cwd)
-      };
-    }
-    if (result.status === 0) {
-      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
-    }
-    const hasTimeout = opts.timeoutMs !== void 0 && opts.timeoutMs > 0;
-    const reason = result.signal ? hasTimeout && result.signal === "SIGTERM" ? "timeout" : "signal" : "non-zero";
-    return {
-      ok: false,
-      reason,
-      stdout: stdout2,
-      stderr: stderr2,
-      exitCode: result.status,
-      signal: result.signal ?? null
-    };
-  } catch (err) {
-    scope.stats?.onEnd(opts.category, Date.now() - t0);
-    return {
-      ok: false,
-      reason: "spawn-error",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null,
-      error: spawnErrorText(err, opts.cwd)
-    };
-  }
-}
-var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
-var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
-function launchJobSync(opts, files) {
-  if (scope.signal.aborted) return { ok: false, error: "the daemon closed" };
-  recordStart(opts.category);
-  const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
-  let child;
-  try {
-    child = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        JOB_SCRIPT,
-        "sh",
-        files.stdout,
-        files.stderr,
-        files.status,
-        opts.bin,
-        ...opts.args ?? []
-      ],
-      {
-        cwd: opts.cwd,
-        env: childEnv(opts),
-        detached: true,
-        stdio: ["pipe", "ignore", "ignore"]
-      }
-    );
-  } catch (err) {
-    scope.stats?.onEnd(opts.category, Date.now() - t0);
-    return { ok: false, error: spawnErrorText(err, opts.cwd) };
-  }
-  scope.stats?.onEnd(opts.category, Date.now() - t0);
-  child.once("error", () => {
-  });
-  const pid2 = child.pid;
-  const gate2 = child.stdin;
-  gate2.on("error", () => {
-  });
-  if (pid2 === void 0) {
-    gate2.destroy();
-    return {
-      ok: false,
-      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
-    };
-  }
-  child.unref();
-  gate2.unref();
-  return {
-    ok: true,
-    pid: pid2,
-    release: () => gate2.end("go\n"),
-    withdraw: () => gate2.end()
-  };
-}
-function readJobEnd(status) {
-  let text4;
-  try {
-    text4 = readFileSync(status, "utf8").trim();
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-  const exit2 = /^exit (\d+)$/.exec(text4);
-  if (exit2) return { kind: "exit", code: Number(exit2[1]) };
-  if (text4 === "timeout") return { kind: "timeout" };
-  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
-}
-function jobGroupAlive(pid2) {
-  try {
-    process_default.kill(-pid2, 0);
-    return true;
-  } catch (err) {
-    const code = err.code;
-    if (code === "ESRCH" || code === "EPERM") return false;
-    throw err;
-  }
-}
-function endJob(pid2, status, end) {
-  const staged = `${status}.${process_default.pid}`;
-  try {
-    writeFileSync(staged, `${formatJobEnd(end)}
-`);
-  } catch (err) {
-    if (err.code === "ENOENT") return false;
-    throw err;
-  }
-  let stands = true;
-  try {
-    linkSync(staged, status);
-  } catch (err) {
-    if (err.code !== "EEXIST") throw err;
-    stands = false;
-  } finally {
-    rmSync(staged, { force: true });
-  }
-  signalGroup(pid2, "SIGTERM");
-  setTimeout(() => signalGroup(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return stands;
-}
-
 // src/utils/atomic-write.ts
 init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
@@ -35832,6 +35279,625 @@ function renderOutcomeOf(resp) {
 init_globals();
 var import_node_path9 = __toESM(require_path_browserify(), 1);
 
+// src/proc/launch.ts
+init_globals();
+
+// site/shims/child_process.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
+var programs = /* @__PURE__ */ new Map();
+var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
+var Stream = class extends import_events2.EventEmitter {
+  encoding = null;
+  setEncoding(encoding) {
+    this.encoding = encoding;
+    return this;
+  }
+  chunk(text4) {
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
+  }
+  pipe() {
+    return this;
+  }
+  destroy() {
+  }
+  end() {
+  }
+  write() {
+    return true;
+  }
+  resume() {
+    return this;
+  }
+  unref() {
+    return this;
+  }
+};
+var nextPid = 5e3;
+function spawn(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  const child = Object.assign(new import_events2.EventEmitter(), {
+    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
+    pid: program === void 0 ? void 0 : nextPid++,
+    stdout: new Stream(),
+    stderr: new Stream(),
+    stdin: new Stream(),
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    kill: () => true,
+    unref: () => {
+    },
+    ref: () => {
+    }
+  });
+  setTimeout(() => {
+    if (program === void 0) {
+      child.emit("error", enoent(cmd));
+      return;
+    }
+    const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
+    if (run3.stdout) child.stdout.chunk(run3.stdout);
+    if (run3.stderr) child.stderr.chunk(run3.stderr);
+    child.exitCode = run3.code;
+    child.stdout.emit("end");
+    child.stderr.emit("end");
+    child.emit("exit", run3.code, null);
+    child.emit("close", run3.code, null);
+  }, 0);
+  return child;
+}
+function spawnSync(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
+  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
+}
+
+// site/shims/util.ts
+init_globals();
+var import_parseargs = __toESM(require_parseargs(), 1);
+var types = { isNativeError: (e) => e instanceof Error };
+var inspect = (v) => {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+};
+
+// src/proc/launch.ts
+function spawnErrorText(err, cwd2) {
+  if (!types.isNativeError(err)) return String(err);
+  const code = err.code;
+  return code === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
+}
+var RATE_LIMITS = {
+  // Click verbs: a misbehaving template emitting many clickable links + a
+  // user rapid-clicking = unbounded helpers. One spawn per second is enough
+  // for any human click cadence.
+  "click.pbcopy": 1e3,
+  "click.open": 1e3,
+  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
+  "doctor.tmux": 1e3,
+  "doctor.font": 1e3,
+  "doctor.process": 1e3,
+  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
+  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
+  // `ps` over this user's processes.
+  // A double-click is refused rather than typing and submitting its command
+  // twice. Daemon-wide, so two sessions typing in one second collide. Only
+  // the typing is limited: a click the pane refused typed
+  // nothing, so clicking again once the dialog is closed goes through.
+  "claude-input.type": 1e3
+};
+function checkRateLimit(lastStartAt, category) {
+  const minIntervalMs = RATE_LIMITS[category];
+  if (minIntervalMs === void 0) return { allowed: true };
+  const last2 = lastStartAt.get(category);
+  if (last2 === void 0) return { allowed: true };
+  const sinceLastMs = Date.now() - last2;
+  if (sinceLastMs >= minIntervalMs) return { allowed: true };
+  return { allowed: false, minIntervalMs, sinceLastMs };
+}
+function childEnv(opts) {
+  return opts.env ?? process_default.env;
+}
+var refusedAsAborted = ({ reason }) => ({
+  ok: false,
+  reason: "aborted",
+  stdout: "",
+  stderr: "",
+  exitCode: null,
+  signal: null,
+  error: reason instanceof Error ? reason.message : String(reason)
+});
+function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
+  return {
+    ok: false,
+    reason: "rate-limited",
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    signal: null,
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
+  };
+}
+function admit(state, category, signal) {
+  const refusal = refusalOf(state, category, signal);
+  if (refusal !== null) {
+    state.scope.stats?.onRefused(category);
+    return refusal;
+  }
+  state.lastStartAt.set(category, Date.now());
+  return null;
+}
+function refusalOf(state, category, signal) {
+  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
+  if (signal?.aborted) return refusedAsAborted(signal);
+  const gate2 = checkRateLimit(state.lastStartAt, category);
+  return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
+}
+var TIMEOUT_KILL_GRACE_MS = 250;
+var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
+function setFault(state, next2) {
+  if (next2 === state.fault) return;
+  state.fault = next2;
+  state.scope.observeLifeline(next2);
+}
+function lose(state, line, reason) {
+  if (state.lifeline?.process !== line) return;
+  state.lifeline = null;
+  setFault(state, reason);
+}
+function lifelineWarnings(state) {
+  return state.fault === null ? [] : [
+    {
+      kind: "lifeline",
+      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`
+    }
+  ];
+}
+function spawnLifeline(state) {
+  const { stats } = state.scope;
+  stats?.onStart("lifeline");
+  const t0 = Date.now();
+  let line;
+  try {
+    line = spawn("awk", [LIFELINE_PROGRAM], {
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true
+    });
+  } catch (err) {
+    stats?.onEnd("lifeline", Date.now() - t0);
+    setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
+    return null;
+  }
+  stats?.onEnd("lifeline", Date.now() - t0);
+  const pipe = line.stdin;
+  line.once("spawn", () => {
+    if (state.lifeline?.process === line) setFault(state, null);
+  });
+  line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  line.unref();
+  pipe.unref();
+  for (const group of state.liveGroups) pipe.write(`+ ${group}
+`);
+  return { process: line, pipe };
+}
+function guard(state, group) {
+  state.liveGroups.add(group);
+  state.lifeline ??= spawnLifeline(state);
+  state.lifeline?.pipe.write(`+ ${group}
+`);
+}
+function unguard(state, group) {
+  state.liveGroups.delete(group);
+  state.lifeline?.pipe.write(`- ${group}
+`);
+}
+function endLifeline(state) {
+  const line = state.lifeline;
+  state.lifeline = null;
+  line?.pipe.end();
+}
+function signalGroup(pid2, sig) {
+  try {
+    process_default.kill(-pid2, sig);
+  } catch (err) {
+    if (err.code !== "ESRCH") throw err;
+  }
+}
+async function launchWaited(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category, opts.signal);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(opts.bin, opts.args ?? [], {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        stdio: ["pipe", "pipe", "pipe"],
+        detached: true
+      });
+    } catch (err) {
+      stats?.onEnd(opts.category, Date.now() - t0);
+      resolve({
+        ok: false,
+        reason: "spawn-error",
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        signal: null,
+        error: spawnErrorText(err, opts.cwd)
+      });
+      return;
+    }
+    const group = child.pid;
+    if (group !== void 0) guard(state, group);
+    let stdout2 = "";
+    let stderr2 = "";
+    let settled3 = false;
+    let timer = null;
+    let killTimer = null;
+    let terminated = null;
+    const onAbort = () => terminate("aborted");
+    const unlisten = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      state.inFlight.delete(onAbort);
+    };
+    const finish = (deliver) => {
+      if (settled3) return;
+      settled3 = true;
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      unlisten();
+      if (group !== void 0) unguard(state, group);
+      stats?.onEnd(opts.category, Date.now() - t0);
+      deliver();
+    };
+    const settle3 = (r) => finish(() => resolve(r));
+    const signal = (pid2, sig) => {
+      try {
+        signalGroup(pid2, sig);
+      } catch (err) {
+        settle3({
+          ok: false,
+          reason: "signal-refused",
+          stdout: stdout2,
+          stderr: stderr2,
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    };
+    const terminate = (cause) => {
+      terminated = cause;
+      if (timer) clearTimeout(timer);
+      unlisten();
+      const pid2 = child.pid;
+      if (pid2 !== void 0) {
+        killTimer = setTimeout(
+          () => signal(pid2, "SIGKILL"),
+          TIMEOUT_KILL_GRACE_MS
+        );
+        signal(pid2, "SIGTERM");
+      }
+    };
+    child.stdout?.on("data", (chunk3) => {
+      stdout2 += chunk3.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk3) => {
+      stderr2 += chunk3.toString("utf8");
+    });
+    child.on("error", (err) => {
+      settle3({
+        ok: false,
+        reason: "spawn-error",
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: null,
+        signal: null,
+        error: spawnErrorText(err, opts.cwd)
+      });
+    });
+    child.on("close", (code, signal2) => {
+      if (terminated !== null) {
+        settle3({
+          ok: false,
+          reason: terminated,
+          stdout: stdout2,
+          stderr: stderr2,
+          exitCode: code,
+          signal: signal2
+        });
+        return;
+      }
+      if (code === 0) {
+        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
+        return;
+      }
+      const reason = signal2 ? "signal" : "non-zero";
+      settle3({
+        ok: false,
+        reason,
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: code,
+        signal: signal2
+      });
+    });
+    if (opts.timeoutMs && opts.timeoutMs > 0) {
+      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
+    }
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    state.inFlight.add(onAbort);
+    if (opts.stdinInput !== void 0 && child.stdin) {
+      child.stdin.end(opts.stdinInput);
+    } else if (child.stdin) {
+      child.stdin.end();
+    }
+  });
+}
+function launchBlocking(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  const stdio = ["pipe", "pipe", "pipe"];
+  try {
+    const result = spawnSync(opts.bin, opts.args ?? [], {
+      cwd: opts.cwd,
+      env: childEnv(opts),
+      input: opts.stdinInput,
+      timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
+      stdio,
+      encoding: "utf8"
+    });
+    stats?.onEnd(opts.category, Date.now() - t0);
+    const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
+    const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
+    if (result.error) {
+      const code = result.error.code;
+      const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
+      return {
+        ok: false,
+        reason: reason2,
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: null,
+        signal: result.signal ?? null,
+        error: spawnErrorText(result.error, opts.cwd)
+      };
+    }
+    if (result.status === 0) {
+      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
+    }
+    const hasTimeout = opts.timeoutMs !== void 0 && opts.timeoutMs > 0;
+    const reason = result.signal ? hasTimeout && result.signal === "SIGTERM" ? "timeout" : "signal" : "non-zero";
+    return {
+      ok: false,
+      reason,
+      stdout: stdout2,
+      stderr: stderr2,
+      exitCode: result.status,
+      signal: result.signal ?? null
+    };
+  } catch (err) {
+    stats?.onEnd(opts.category, Date.now() - t0);
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: spawnErrorText(err, opts.cwd)
+    };
+  }
+}
+function launchOrphan(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  const result = launchDetachedSyncInner(opts);
+  stats?.onEnd(opts.category, Date.now() - t0);
+  return result;
+}
+function launchDetachedSyncInner(opts) {
+  let child;
+  try {
+    child = spawn(opts.bin, opts.args ?? [], {
+      cwd: opts.cwd,
+      env: childEnv(opts),
+      detached: true,
+      stdio: "ignore"
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: spawnErrorText(err, opts.cwd)
+    };
+  }
+  child.once("error", () => {
+  });
+  if (child.pid === void 0) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: `spawn(${opts.bin}): no pid (binary not found or unexecutable)`
+    };
+  }
+  child.unref();
+  return { ok: true, stdout: "", stderr: "", exitCode: null };
+}
+var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
+var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
+function launchJob(state, opts, files) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return { ok: false, error: refused.error };
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  let child;
+  try {
+    child = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        JOB_SCRIPT,
+        "sh",
+        files.stdout,
+        files.stderr,
+        files.status,
+        opts.bin,
+        ...opts.args ?? []
+      ],
+      {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"]
+      }
+    );
+  } catch (err) {
+    stats?.onEnd(opts.category, Date.now() - t0);
+    return { ok: false, error: spawnErrorText(err, opts.cwd) };
+  }
+  stats?.onEnd(opts.category, Date.now() - t0);
+  child.once("error", () => {
+  });
+  const pid2 = child.pid;
+  const gate2 = child.stdin;
+  gate2.on("error", () => {
+  });
+  if (pid2 === void 0) {
+    gate2.destroy();
+    return {
+      ok: false,
+      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
+    };
+  }
+  child.unref();
+  gate2.unref();
+  return {
+    ok: true,
+    pid: pid2,
+    release: () => gate2.end("go\n"),
+    withdraw: () => gate2.end()
+  };
+}
+function readJobEnd(status) {
+  let text4;
+  try {
+    text4 = readFileSync(status, "utf8").trim();
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  const exit2 = /^exit (\d+)$/.exec(text4);
+  if (exit2) return { kind: "exit", code: Number(exit2[1]) };
+  if (text4 === "timeout") return { kind: "timeout" };
+  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
+}
+function jobGroupAlive(pid2) {
+  try {
+    process_default.kill(-pid2, 0);
+    return true;
+  } catch (err) {
+    const code = err.code;
+    if (code === "ESRCH" || code === "EPERM") return false;
+    throw err;
+  }
+}
+function endJob(pid2, status, end) {
+  const staged = `${status}.${process_default.pid}`;
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}
+`);
+  } catch (err) {
+    if (err.code === "ENOENT") return false;
+    throw err;
+  }
+  let stands = true;
+  try {
+    linkSync(staged, status);
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+    stands = false;
+  } finally {
+    rmSync(staged, { force: true });
+  }
+  signalGroup(pid2, "SIGTERM");
+  setTimeout(() => signalGroup(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  return stands;
+}
+function createLauncher(owner) {
+  const launcher = {
+    launch: (opts) => launchWaited(state, opts),
+    launchSync: (opts) => launchBlocking(state, opts),
+    launchDetachedSync: (opts) => launchOrphan(state, opts),
+    launchJobSync: (opts, files) => launchJob(state, opts, files),
+    lifelineWarnings: () => lifelineWarnings(state),
+    __lifelineForTest: () => {
+      const line = state.lifeline;
+      return {
+        pid: line?.process.pid,
+        cut: () => {
+          line?.pipe.end();
+          if (line) lose(state, line.process, "cut by a test");
+        }
+      };
+    }
+  };
+  const state = {
+    scope: {
+      stats: null,
+      // A launcher with nobody to tell says the warning on stderr.
+      observeLifeline: () => launcher.lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
+      signal: new AbortController().signal,
+      ...owner
+    },
+    lastStartAt: /* @__PURE__ */ new Map(),
+    inFlight: /* @__PURE__ */ new Set(),
+    liveGroups: /* @__PURE__ */ new Set(),
+    lifeline: null,
+    fault: null
+  };
+  state.scope.signal.addEventListener(
+    "abort",
+    () => {
+      state.inFlight.forEach((end) => end());
+      endLifeline(state);
+    },
+    { once: true }
+  );
+  return launcher;
+}
+var processLauncher = createLauncher({});
+
 // src/daemon/limits.ts
 init_globals();
 var import_node_path8 = __toESM(require_path_browserify(), 1);
@@ -36068,14 +36134,14 @@ ${outcome.text}`;
 }
 var FOOTPRINT = "/usr/bin/footprint";
 var VMMAP = "/usr/bin/vmmap";
-function platformProbes(platform3, pid2) {
+function platformProbes(launcher, platform3, pid2) {
   if (platform3 === "darwin") {
     return [
       // The whole-process category table: V8's mappings, the MALLOC_* regions
       // with their reclaimable share, and page tables, each with a size.
-      commandProbe(FOOTPRINT, ["-p", String(pid2)]),
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
       // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(VMMAP, ["--summary", String(pid2)])
+      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
     ];
   }
   if (platform3 === "linux") {
@@ -36090,10 +36156,10 @@ function platformProbes(platform3, pid2) {
   }
   return [];
 }
-function chargeProbe(platform3, pid2) {
+function chargeProbe(launcher, platform3, pid2) {
   return platform3 === "darwin" ? footprintCharge(
     pid2,
-    (args) => launch({
+    (args) => launcher.launch({
       bin: FOOTPRINT,
       args,
       timeoutMs: PROBE_TIMEOUT_MS,
@@ -36129,11 +36195,11 @@ function physFootprintOf(text4) {
   const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
   return m === null ? null : Number(m[1]);
 }
-function commandProbe(bin, args) {
+function commandProbe(launcher, bin, args) {
   return {
     name: `${bin} ${args.join(" ")}`,
     read: () => {
-      const result = launchSync({
+      const result = launcher.launchSync({
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
@@ -36220,14 +36286,14 @@ function makeLimits(deps) {
   const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
   let latest = { kind: "unmeasured" };
-  let inFlight2 = null;
+  let inFlight = null;
   let disarmed = false;
   let timer;
   function check() {
-    inFlight2 ??= measure3().finally(() => {
-      inFlight2 = null;
+    inFlight ??= measure3().finally(() => {
+      inFlight = null;
     });
-    return inFlight2;
+    return inFlight;
   }
   async function measure3() {
     if (triggered) return true;
@@ -36335,19 +36401,21 @@ function postMortemsOf(files) {
     )
   }));
 }
-function realLimitsDeps(startedAtMs, shutdown, overrides = {}) {
+function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
   const dir = daemonDir();
   return {
     now: () => Date.now(),
     pid: process_default.pid,
     snapshotDir: dir,
-    log: dlog,
+    log: owner.log,
     memoryBytes: () => {
       const mem = process_default.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
-    memoryCharge: chargeProbe(process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(platformProbes(process_default.platform, process_default.pid)),
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
+    captureMemoryReport: () => memoryReport(
+      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    ),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an
     // identity, so it shares a permission — a post-mortem pair where one half is
     // world-readable and the other is not invites exactly the "is this
@@ -38430,8 +38498,8 @@ init_globals();
 // src/config/loader/plugin-scope.ts
 init_globals();
 var PLUGIN_SCOPES = ["plugins", "repo"];
-function pluginNs({ scope: scope2, name }) {
-  return `${scope2}.${name}`;
+function pluginNs({ scope, name }) {
+  return `${scope}.${name}`;
 }
 function ownedBy(ns) {
   return (name) => name === ns || name.startsWith(`${ns}.`);
@@ -38441,9 +38509,9 @@ function scopeOf(name) {
   return PLUGIN_SCOPES.find((s) => name === s || name.startsWith(`${s}.`));
 }
 function otherScopeHint(name, declared) {
-  const scope2 = scopeOf(name);
-  if (scope2 === void 0 || scope2 === name) return "";
-  const other = PLUGIN_SCOPES.filter((s) => s !== scope2).map((s) => `${s}${name.slice(scope2.length)}`).find(declared);
+  const scope = scopeOf(name);
+  if (scope === void 0 || scope === name) return "";
+  const other = PLUGIN_SCOPES.filter((s) => s !== scope).map((s) => `${s}${name.slice(scope.length)}`).find(declared);
   return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
 }
 
@@ -38717,9 +38785,9 @@ function variableRead(path39, names) {
   const namespace = `${path39}.`;
   return [...names].filter((name) => name.startsWith(namespace));
 }
-function refResolves(ref, scope2) {
-  return variableRead(ref, scope2.names).some(
-    (name) => !ref.startsWith(`${name}.`) || scope2.documents.has(name)
+function refResolves(ref, scope) {
+  return variableRead(ref, scope.names).some(
+    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
   );
 }
 function templateScopeOf(cfg) {
@@ -40094,10 +40162,10 @@ function createAction(actionName, fn, autoAction2 = false, ref) {
   }
   return res;
 }
-function executeAction(actionName, canRunAsDerivation, fn, scope2, args) {
-  const runInfo = _startAction(actionName, canRunAsDerivation, scope2, args);
+function executeAction(actionName, canRunAsDerivation, fn, scope, args) {
+  const runInfo = _startAction(actionName, canRunAsDerivation, scope, args);
   try {
-    return fn.apply(scope2, args);
+    return fn.apply(scope, args);
   } catch (err) {
     runInfo.error_ = err;
     throw err;
@@ -40105,7 +40173,7 @@ function executeAction(actionName, canRunAsDerivation, fn, scope2, args) {
     _endAction(runInfo);
   }
 }
-function _startAction(actionName, canRunAsDerivation, scope2, args) {
+function _startAction(actionName, canRunAsDerivation, scope, args) {
   const notifySpy_ = __MOBX_DEV__ && isSpyEnabled() && !!actionName;
   let startTime_ = 0;
   if (notifySpy_) {
@@ -40114,7 +40182,7 @@ function _startAction(actionName, canRunAsDerivation, scope2, args) {
     spyReportStart({
       type: ACTION,
       name: actionName,
-      object: scope2,
+      object: scope,
       arguments: flattenedArgs
     });
   }
@@ -45505,8 +45573,8 @@ function pushScope(parent, dot) {
     vars: /* @__PURE__ */ new Map()
   };
 }
-function lookupVar(scope2, name) {
-  let cur = scope2;
+function lookupVar(scope, name) {
+  let cur = scope;
   while (cur !== void 0) {
     if (cur.vars.has(name)) return {
       found: true,
@@ -45516,8 +45584,8 @@ function lookupVar(scope2, name) {
   }
   return { found: false };
 }
-function declareVar(scope2, name, value) {
-  scope2.vars.set(name, value);
+function declareVar(scope, name, value) {
+  scope.vars.set(name, value);
 }
 var ARG_TYPES = [
   "string",
@@ -45625,8 +45693,8 @@ var Template = class Template2 {
   defines() {
     return this._defines;
   }
-  evaluate(scope2) {
-    return this._evaluate(scope2);
+  evaluate(scope) {
+    return this._evaluate(scope);
   }
   /**
   * The FuncMap function names this template references — every identifier that
@@ -45769,7 +45837,7 @@ var Engine = class {
   */
   parse(source, inherit) {
     const parsed2 = parse(source, this.delims, inherit);
-    return internalCreateTemplate(parsed2.source, (scope2) => this.evalParsed(parsed2, scope2), parsed2.defines, collectReferencedFunctions(parsed2), collectReferencedCalls(parsed2));
+    return internalCreateTemplate(parsed2.source, (scope) => this.evalParsed(parsed2, scope), parsed2.defines, collectReferencedFunctions(parsed2), collectReferencedCalls(parsed2));
   }
   /**
   * Convenience sugar for `parse(src).evaluate.bind(template)`.
@@ -45779,7 +45847,7 @@ var Engine = class {
   */
   compile(source) {
     const template = this.parse(source);
-    return (scope2) => template.evaluate(scope2);
+    return (scope) => template.evaluate(scope);
   }
   /**
   * Evaluate a parsed template against a scope value, producing T[].
@@ -45787,12 +45855,12 @@ var Engine = class {
   * Accepts only Templates produced by `engine.parse(src)` so the
   * public type surface stays clear of internal AST shapes.
   */
-  evaluate(template, scope2) {
-    return template.evaluate(scope2);
+  evaluate(template, scope) {
+    return template.evaluate(scope);
   }
-  evalParsed(parsed2, scope2) {
+  evalParsed(parsed2, scope) {
     const out = [];
-    const root = rootScope(scope2);
+    const root = rootScope(scope);
     const ctx = {
       out,
       defines: parsed2.defines,
@@ -45801,10 +45869,10 @@ var Engine = class {
     this.evalList(parsed2.root, root, ctx);
     return out;
   }
-  evalList(node, scope2, ctx) {
-    for (const child of node.nodes) this.evalNode(child, scope2, ctx);
+  evalList(node, scope, ctx) {
+    for (const child of node.nodes) this.evalNode(child, scope, ctx);
   }
-  evalNode(node, scope2, ctx) {
+  evalNode(node, scope, ctx) {
     switch (node.type) {
       case "Text":
         ctx.out.push(this.fromString(node.text));
@@ -45812,31 +45880,31 @@ var Engine = class {
       case "Comment":
         return;
       case "Action": {
-        const value = this.evalAction(node, scope2, ctx);
+        const value = this.evalAction(node, scope, ctx);
         if (node.pipe.decls.length === 0) this.emitFromValue(value, ctx);
         return;
       }
       case "List":
-        this.evalList(node, scope2, ctx);
+        this.evalList(node, scope, ctx);
         return;
       case "If":
-        this.evalIf(node, scope2, ctx);
+        this.evalIf(node, scope, ctx);
         return;
       case "Range":
-        this.evalRange(node, scope2, ctx);
+        this.evalRange(node, scope, ctx);
         return;
       case "With":
-        this.evalWith(node, scope2, ctx);
+        this.evalWith(node, scope, ctx);
         return;
       case "Break":
         throw BREAK_SIGNAL;
       case "Continue":
         throw CONTINUE_SIGNAL;
       case "Template":
-        this.evalTemplateInvoke(node, scope2, ctx);
+        this.evalTemplateInvoke(node, scope, ctx);
         return;
       case "Block":
-        this.evalBlock(node, scope2, ctx);
+        this.evalBlock(node, scope, ctx);
         return;
       case "Pipe":
       case "Command":
@@ -45854,28 +45922,28 @@ var Engine = class {
         assertNever(node);
     }
   }
-  evalIf(node, scope2, ctx) {
-    if (isTruthy(this.evalPipe(node.pipe, scope2, ctx))) this.evalList(node.list, scope2, ctx);
-    else if (node.elseList) this.evalList(node.elseList, scope2, ctx);
+  evalIf(node, scope, ctx) {
+    if (isTruthy(this.evalPipe(node.pipe, scope, ctx))) this.evalList(node.list, scope, ctx);
+    else if (node.elseList) this.evalList(node.elseList, scope, ctx);
   }
-  evalWith(node, scope2, ctx) {
-    const value = this.evalPipe(node.pipe, scope2, ctx);
+  evalWith(node, scope, ctx) {
+    const value = this.evalPipe(node.pipe, scope, ctx);
     if (isTruthy(value)) {
-      const child = pushScope(scope2, value);
+      const child = pushScope(scope, value);
       this.evalList(node.list, child, ctx);
-    } else if (node.elseList) this.evalList(node.elseList, scope2, ctx);
+    } else if (node.elseList) this.evalList(node.elseList, scope, ctx);
   }
-  evalRange(node, scope2, ctx) {
-    const value = this.evalPipeWithoutDecls(node.pipe, scope2, ctx);
+  evalRange(node, scope, ctx) {
+    const value = this.evalPipeWithoutDecls(node.pipe, scope, ctx);
     const decls = node.pipe.decls;
     const entries = enumerateForRange(value);
     try {
       if (entries.length === 0) {
-        if (node.elseList) this.evalList(node.elseList, scope2, ctx);
+        if (node.elseList) this.evalList(node.elseList, scope, ctx);
         return;
       }
       for (const [key, item] of entries) {
-        const child = pushScope(scope2, item);
+        const child = pushScope(scope, item);
         if (decls.length === 1) declareVar(child, decls[0]?.idents[0] ?? "$", item);
         else if (decls.length >= 2) {
           const k = decls[0]?.idents[0] ?? "$";
@@ -45895,18 +45963,18 @@ var Engine = class {
       throw e;
     }
   }
-  evalTemplateInvoke(node, scope2, ctx) {
+  evalTemplateInvoke(node, scope, ctx) {
     const entry = lookupDefine(ctx.defines, node.name);
     if (!entry) throw new EvalError(`template ${JSON.stringify(node.name)} is not defined`, node.pos, { source: ctx.source });
-    const child = pushScope(scope2, node.pipe ? this.evalPipe(node.pipe, scope2, ctx) : scope2.dot);
+    const child = pushScope(scope, node.pipe ? this.evalPipe(node.pipe, scope, ctx) : scope.dot);
     this.evalList(entry.list, child, {
       out: ctx.out,
       defines: ctx.defines,
       source: entry.source
     });
   }
-  evalBlock(node, scope2, ctx) {
-    const child = pushScope(scope2, node.pipe ? this.evalPipe(node.pipe, scope2, ctx) : scope2.dot);
+  evalBlock(node, scope, ctx) {
+    const child = pushScope(scope, node.pipe ? this.evalPipe(node.pipe, scope, ctx) : scope.dot);
     const entry = lookupDefine(ctx.defines, node.name) ?? {
       list: node.list,
       source: ctx.source
@@ -45917,23 +45985,23 @@ var Engine = class {
       source: entry.source
     });
   }
-  evalAction(node, scope2, ctx) {
-    return this.evalPipe(node.pipe, scope2, ctx);
+  evalAction(node, scope, ctx) {
+    return this.evalPipe(node.pipe, scope, ctx);
   }
-  evalPipe(pipe, scope2, ctx) {
+  evalPipe(pipe, scope, ctx) {
     if (pipe.cmds.length === 0) throw new EvalError("empty pipeline", pipe.pos, { source: ctx.source });
-    let value = this.evalCommand(pipe.cmds[0], scope2, ctx, NO_PIPE);
+    let value = this.evalCommand(pipe.cmds[0], scope, ctx, NO_PIPE);
     for (let i = 1; i < pipe.cmds.length; i++) {
       const next2 = pipe.cmds[i];
-      value = this.evalCommand(next2, scope2, ctx, {
+      value = this.evalCommand(next2, scope, ctx, {
         kind: "value",
         value
       });
     }
-    if (pipe.decls.length > 0) for (const decl of pipe.decls) declareVar(scope2, decl.idents[0] ?? "$", value);
+    if (pipe.decls.length > 0) for (const decl of pipe.decls) declareVar(scope, decl.idents[0] ?? "$", value);
     return value;
   }
-  evalPipeWithoutDecls(pipe, scope2, ctx) {
+  evalPipeWithoutDecls(pipe, scope, ctx) {
     const stripped = {
       type: "Pipe",
       pos: pipe.pos,
@@ -45941,14 +46009,14 @@ var Engine = class {
       isAssign: false,
       cmds: pipe.cmds
     };
-    return this.evalPipe(stripped, scope2, ctx);
+    return this.evalPipe(stripped, scope, ctx);
   }
-  evalCommand(cmd, scope2, ctx, piped) {
+  evalCommand(cmd, scope, ctx, piped) {
     if (cmd.args.length === 0) throw new EvalError("empty command", cmd.pos, { source: ctx.source });
     const head = cmd.args[0];
     if (head.type !== "Identifier") {
       if (cmd.args.length > 1) throw new EvalError(`cannot apply arguments to a ${head.type} primary; only functions take arguments`, cmd.pos, { source: ctx.source });
-      return this.evalPrimary(head, scope2, ctx);
+      return this.evalPrimary(head, scope, ctx);
     }
     const fn = this.funcs[head.ident];
     if (!fn) throw new FuncNotFoundError(head.ident, head.pos, {
@@ -45957,7 +46025,7 @@ var Engine = class {
     });
     const argNodes = cmd.args.slice(1);
     const lazy2 = isLazy(fn);
-    const args = argNodes.map((n) => lazy2 ? () => this.evalPrimary(n, scope2, ctx) : this.evalPrimary(n, scope2, ctx));
+    const args = argNodes.map((n) => lazy2 ? () => this.evalPrimary(n, scope, ctx) : this.evalPrimary(n, scope, ctx));
     if (piped.kind === "value") {
       const v = piped.value;
       args.push(lazy2 ? () => v : v);
@@ -45978,10 +46046,10 @@ var Engine = class {
       });
     }
   }
-  evalPrimary(node, scope2, ctx) {
+  evalPrimary(node, scope, ctx) {
     switch (node.type) {
       case "Dot":
-        return scope2.dot;
+        return scope.dot;
       case "Nil":
         return null;
       case "Bool":
@@ -45991,9 +46059,9 @@ var Engine = class {
       case "String":
         return node.value;
       case "Field":
-        return this.resolveFieldChain(scope2.dot, node.idents, node.pos, ctx);
+        return this.resolveFieldChain(scope.dot, node.idents, node.pos, ctx);
       case "Variable":
-        return this.resolveVariable(node.idents, scope2, node.pos, ctx);
+        return this.resolveVariable(node.idents, scope, node.pos, ctx);
       case "Identifier": {
         const fn = this.funcs[node.ident];
         if (!fn) throw new FuncNotFoundError(node.ident, node.pos, {
@@ -46003,9 +46071,9 @@ var Engine = class {
         return this.invoke(node.ident, fn, [], node.pos, ctx);
       }
       case "Chain":
-        return this.resolveFieldChain(this.evalPrimary(node.node, scope2, ctx), node.fields, node.pos, ctx);
+        return this.resolveFieldChain(this.evalPrimary(node.node, scope, ctx), node.fields, node.pos, ctx);
       case "Pipe":
-        return this.evalPipe(node, scope2, ctx);
+        return this.evalPipe(node, scope, ctx);
       default:
         throw new EvalError(`cannot evaluate ${node.type} as a value`, node.pos, { source: ctx.source });
     }
@@ -46015,13 +46083,13 @@ var Engine = class {
     if (result !== MISSING) return result;
     if (this.missingKey === "error") throw new MissingFieldError(idents, pos, { source: ctx.source });
   }
-  resolveVariable(idents, scope2, pos, ctx) {
+  resolveVariable(idents, scope, pos, ctx) {
     const head = idents[0] ?? "$";
     if (head === "$") {
       const tail2 = idents.slice(1);
-      return tail2.length === 0 ? scope2.root : this.resolveFieldChain(scope2.root, tail2, pos, ctx);
+      return tail2.length === 0 ? scope.root : this.resolveFieldChain(scope.root, tail2, pos, ctx);
     }
-    const lookup = lookupVar(scope2, head);
+    const lookup = lookupVar(scope, head);
     if (!lookup.found) throw new EvalError(`undefined variable ${head}`, pos, { source: ctx.source });
     const tail = idents.slice(1);
     return tail.length === 0 ? lookup.value : this.resolveFieldChain(lookup.value, tail, pos, ctx);
@@ -49341,8 +49409,8 @@ function makeProxy(store, names, prefix) {
     }
   });
 }
-function placementScope(scope2, settings) {
-  return new Proxy(scope2, {
+function placementScope(scope, settings) {
+  return new Proxy(scope, {
     has: (target, key) => key === "settings" || Reflect.has(target, key),
     get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
   });
@@ -49549,14 +49617,14 @@ function parseDuration(s) {
   }
 }
 var SESSION_ID_VAR_NAME = "session.id";
-function shellReader(command, cwd2, signal) {
+function shellReader(launcher, command, cwd2, signal) {
   return {
     // The directory is part of the origin: a command that asks about "this
     // repo" answers differently per session, so every failure — exit, regex
     // no-match, JSON parse — names where it ran.
     where: `output of "${command}" in ${cwd2}`,
     read: async () => {
-      const r = await launch({
+      const r = await launcher.launch({
         bin: "/bin/sh",
         args: ["-c", command],
         cwd: cwd2,
@@ -49660,8 +49728,8 @@ var PathWatches = class {
     for (const cb of entry.subscribers.keys()) cb();
   }
   report(filePath2, entry) {
-    const fault2 = faultOf(filePath2, entry);
-    for (const onFault of entry.subscribers.values()) onFault(fault2);
+    const fault = faultOf(filePath2, entry);
+    for (const onFault of entry.subscribers.values()) onFault(fault);
   }
   // [LAW:no-silent-failure] Events the watches may have missed: each watch
   // re-derives where its path can change, since a directory may have
@@ -49786,7 +49854,8 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), catchUps = NO_CATCH_UPS, watchers = new WatcherRegistry()) {
+  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), catchUps = NO_CATCH_UPS, watchers = new WatcherRegistry()) {
+    this.launcher = launcher;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
@@ -49797,6 +49866,7 @@ var SourceRegistry = class _SourceRegistry {
     this.watchMgr = new PathWatches(watchers);
     this.cleanups.push(catchUps(() => this.watchMgr.caughtUp()));
   }
+  launcher;
   store;
   defaultEmptyValue;
   parent;
@@ -49893,6 +49963,7 @@ var SourceRegistry = class _SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view() {
     return new _SourceRegistry(
+      this.launcher,
       new VariableStore(this.store),
       this.defaultEmptyValue,
       this.sessionState,
@@ -50000,7 +50071,7 @@ var SourceRegistry = class _SourceRegistry {
   declareShell(name, command, opts) {
     this.declareSource(
       name,
-      shellReader(command, opts.cwd, this.abort.signal),
+      shellReader(this.launcher, command, opts.cwd, this.abort.signal),
       clampShellCache(name, opts.cache),
       opts.parse
     );
@@ -50203,12 +50274,12 @@ var SourceRegistry = class _SourceRegistry {
   // layout implementation, the one a template calling `date` gets.
   declareTime(name, opts) {
     const parsedTpl = this.engine.parse("{{ date .layout now }}");
-    const scope2 = { layout: opts.format };
+    const scope = { layout: opts.format };
     this.declareDerived(
       name,
       "string",
       "projection",
-      () => parsedTpl.evaluate(scope2).map((f) => f.plain).join(""),
+      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
       opts.varDefault
     );
   }
@@ -50287,11 +50358,11 @@ var SourceRegistry = class _SourceRegistry {
   getLastError(name) {
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read2 = this.lastErrors.get(name);
-    const fault2 = this.policyFaults.get(name);
-    if (fault2 === void 0) return read2;
-    return read2 === void 0 ? fault2 : {
+    const fault = this.policyFaults.get(name);
+    if (fault === void 0) return read2;
+    return read2 === void 0 ? fault : {
       timestamp: read2.timestamp,
-      message: `${fault2.message}; ${read2.message}`
+      message: `${fault.message}; ${read2.message}`
     };
   }
   // Every variable whose cache policy cannot fire, with why: each render
@@ -50347,9 +50418,9 @@ var SourceRegistry = class _SourceRegistry {
         const unsub = this.watchMgr.subscribe(
           policy.path,
           () => update("re-read", "change"),
-          (fault2) => this.notePolicy(
+          (fault) => this.notePolicy(
             name,
-            fault2 === null ? ok(void 0) : failed(fault2)
+            fault === null ? ok(void 0) : failed(fault)
           )
         );
         this.cleanups.push(unsub);
@@ -52068,13 +52139,13 @@ function pluginScopeCollisions(ctx, out, inherited) {
     "segments"
   ]) {
     for (const name of Object.keys(out[section] ?? {})) {
-      const scope2 = scopeOf(name);
-      if (scope2 === void 0) continue;
-      if (section !== "variables" && name === scope2) continue;
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
       if (section === "segments" && inherited.has(name)) continue;
       ctx.issues.push({
         path: `${section}.${name}`,
-        message: `"${name}" is in "${scope2}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
         line: findKeyLine(ctx.source, [section, name])
       });
     }
@@ -52082,11 +52153,11 @@ function pluginScopeCollisions(ctx, out, inherited) {
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
-      const scope2 = scopeOf(name);
-      if (scope2 === void 0 || inherited.has(segment)) continue;
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
       ctx.issues.push({
         path: `segments.${segment}.vars.${v}`,
-        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope2}", the namespace plugins own \u2014 rename the var or the segment`,
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`,
         line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
       });
     }
@@ -52723,13 +52794,13 @@ var ColorSpecError = class extends Error {
     this.name = "ColorSpecError";
   }
 };
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope2) {
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
   const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope2);
+  const bgSpec = evalToPlainText(bgTemplate, scope);
   const filled = bgSpec !== NO_FILL;
   const bgColor = !filled ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
   active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope2);
+  const fgSpec = evalToPlainText(fgTemplate, scope);
   const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn(palette, ground, drawnAt);
   const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled ? chosen(bgColor) : void 0;
   return new Style({
@@ -52737,9 +52808,9 @@ function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope2) 
     ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
   });
 }
-function evalToPlainText(template, scope2) {
+function evalToPlainText(template, scope) {
   if (template === void 0) return void 0;
-  return template.evaluate(scope2).map((f) => f.plain).join("");
+  return template.evaluate(scope).map((f) => f.plain).join("");
 }
 function resolveRef(palette, ref, role) {
   try {
@@ -53130,13 +53201,13 @@ var SessionEffects = class {
     const made = /* @__PURE__ */ new Map();
     const own2 = [];
     const { last: last2 } = given2;
-    const inFlight2 = this.passages;
-    const basis = !given2.transitions ? "off" : inFlight2 !== null && last2 !== null ? "compared" : "fresh";
+    const inFlight = this.passages;
+    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
     const before = basis === "compared" ? (id2) => {
       const record2 = last2.placements.get(id2);
       return record2?.kind === "drew" ? {
         drawing: record2.drawing,
-        passage: inFlight2.get(id2) ?? null
+        passage: inFlight.get(id2) ?? null
       } : void 0;
     } : null;
     const reachedIds = /* @__PURE__ */ new Set();
@@ -53683,7 +53754,7 @@ function statusLineOf(sources) {
     return { kind: "unread", reason: sources.reason };
   }
   const lines2 = sources.value.flatMap(
-    ({ scope: scope2, path: path39, settings }) => "statusLine" in settings ? [{ from: { scope: scope2, path: path39 }, line: settings.statusLine }] : []
+    ({ scope, path: path39, settings }) => "statusLine" in settings ? [{ from: { scope, path: path39 }, line: settings.statusLine }] : []
   );
   const top = lines2[0];
   if (top === void 0) {
@@ -58390,8 +58461,8 @@ function presenceOf(segments, rendering) {
       return { kind: "declared" };
     const owner = owners.find(([owns]) => owns(name));
     if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
-    const scope2 = scopeOf(name);
-    return scope2 !== void 0 && scope2 !== name ? { kind: "absent" } : { kind: "missing" };
+    const scope = scopeOf(name);
+    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
   };
 }
 function reportable(presence2) {
@@ -58928,11 +58999,11 @@ function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a
   }
 }
 var SETTINGS_SCOPE_PREFIX = "settings.";
-function withSettingsScope(scope2, settings) {
+function withSettingsScope(scope, settings) {
   return {
-    ...scope2,
+    ...scope,
     names: /* @__PURE__ */ new Set([
-      ...scope2.names,
+      ...scope.names,
       ...Object.keys(settings).map((n) => SETTINGS_SCOPE_PREFIX + n)
     ])
   };
@@ -59029,20 +59100,20 @@ function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
     ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
   }
 }
-function checkVarRefs(ctx, declPath, v, scope2, segCtx) {
+function checkVarRefs(ctx, declPath, v, scope, segCtx) {
   for (const [field, template] of variableTemplates(v)) {
-    checkTemplateRefs(ctx, `${declPath}.${field}`, template, scope2, {
+    checkTemplateRefs(ctx, `${declPath}.${field}`, template, scope, {
       segCtx
     });
   }
 }
-function checkDependsOn(ctx, declPath, v, scope2, segCtx) {
+function checkDependsOn(ctx, declPath, v, scope, segCtx) {
   if (!hasCacheField(v) || !("depends_on" in v.cache)) return;
   for (let i = 0; i < v.cache.depends_on.length; i++) {
     const target = v.cache.depends_on[i];
-    if (scope2.names.has(target)) continue;
+    if (scope.names.has(target)) continue;
     const namespaced = segCtx !== void 0 ? `${segCtx}.${target}` : void 0;
-    const hint = namespaced !== void 0 && scope2.names.has(namespaced) ? ` (segment-local vars are namespaced \u2014 write "${namespaced}")` : "";
+    const hint = namespaced !== void 0 && scope.names.has(namespaced) ? ` (segment-local vars are namespaced \u2014 write "${namespaced}")` : "";
     ctx.issues.push({
       path: `${declPath}.cache.depends_on[${i}]`,
       message: `cache.depends_on references unknown variable "${target}"${hint}`,
@@ -59157,9 +59228,9 @@ function checkActionRefs(ctx, cfg, path39, template, line) {
     });
   }
 }
-function checkTemplateRefs(ctx, declPath, template, scope2, opts) {
-  for (const [ref, via] of templateReads(template, scope2.helpers)) {
-    if (refResolves(ref, scope2)) continue;
+function checkTemplateRefs(ctx, declPath, template, scope, opts) {
+  for (const [ref, via] of templateReads(template, scope.helpers)) {
+    if (refResolves(ref, scope)) continue;
     if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
       const through = via === null ? "" : ` through helper "${via}"`;
       const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
@@ -59180,7 +59251,7 @@ function checkTemplateRefs(ctx, declPath, template, scope2, opts) {
       continue;
     }
     const namespaced = opts?.segCtx !== void 0 ? `${opts.segCtx}.${ref}` : void 0;
-    const hint = namespaced !== void 0 && refResolves(namespaced, scope2) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
+    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     ctx.issues.push({
       path: declPath,
       message: `Template references unknown variable ".${ref}"${hint}`,
@@ -59565,9 +59636,9 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 ]);
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
-function pluginDefinition(definition, scope2) {
+function pluginDefinition(definition, scope) {
   const name = import_node_path18.default.basename(import_node_path18.default.dirname(definition));
-  return PLUGIN_NAME.test(name) ? { path: definition, scope: scope2, name } : { path: definition, scope: scope2, name: void 0 };
+  return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
   return `${ns}.data`;
@@ -59591,9 +59662,9 @@ function reasonOf(err) {
   }
   return err instanceof Error ? err.message : String(err);
 }
-function listedPlugins(refs, from, scope2) {
+function listedPlugins(refs, from, scope) {
   return refs.map(
-    (ref) => pluginDefinition(resolveUserPath(import_node_path18.default.dirname(from), ref), scope2)
+    (ref) => pluginDefinition(resolveUserPath(import_node_path18.default.dirname(from), ref), scope)
   );
 }
 function applyPlugins(definitions, ctx, base, validate) {
@@ -59710,13 +59781,13 @@ function dropsOwning(layer, beneath) {
     (d) => d.name === void 0
   );
   return (name) => {
-    const scope2 = scopeOf(name);
-    if (scope2 === void 0) return [];
+    const scope = scopeOf(name);
+    if (scope === void 0) return [];
     const cause = tombstoned(name);
     if (cause !== void 0)
       return [{ definition: cause.definition, notice: cause.notice }];
     if (rendering.some((owns) => owns(name))) return [];
-    return unnamed.filter((d) => d.scope === scope2).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
+    return unnamed.filter((d) => d.scope === scope).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   };
 }
 function withDroppedPlacements(config2, owning, inserted) {
@@ -60013,7 +60084,7 @@ var SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"];
 function wrongScopeRefs(fragment, id2) {
   const helpers = fragment.helpers ?? {};
   const elsewhere = PLUGIN_SCOPES.filter((s) => s !== id2.scope).map(
-    (scope2) => ({ scope: scope2, ns: pluginNs({ scope: scope2, name: id2.name }) })
+    (scope) => ({ scope, ns: pluginNs({ scope, name: id2.name }) })
   );
   const issues = /* @__PURE__ */ new Map();
   const check = (where, ref, read2) => {
@@ -60262,7 +60333,7 @@ function installedPlugins(repo2) {
   const byNs = /* @__PURE__ */ new Map();
   const unchecked = [];
   const strays = [];
-  for (const { dir: root, scope: scope2 } of roots) {
+  for (const { dir: root, scope } of roots) {
     const listed = listFolders(root);
     if ("error" in listed) {
       unchecked.push(listed);
@@ -60271,16 +60342,16 @@ function installedPlugins(repo2) {
     for (const name of listed.folders) {
       const definition = pluginDefinition(
         import_node_path19.default.join(root, name, DEFINITION_FILE),
-        scope2
+        scope
       );
-      const key = `${scope2}\0${name}`;
+      const key = `${scope}\0${name}`;
       byNs.delete(key);
       byNs.set(key, definition);
     }
     for (const file of listed.files) {
       strays.push({
         path: import_node_path19.default.join(root, file),
-        scope: scope2,
+        scope,
         name: void 0,
         reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path19.default.join(root, "<name>", DEFINITION_FILE)}`
       });
@@ -60725,7 +60796,7 @@ function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_defaul
   );
   const base = plugins2.config;
   const layers = [];
-  for (const { path: path39, scope: scope2 } of chain2) {
+  for (const { path: path39, scope } of chain2) {
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path39,
@@ -60735,7 +60806,7 @@ function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_defaul
         ...ctx,
         // [LAW:one-source-of-truth] A layer's scope is where discovery found
         // it, carried here as data — never read off the file's name.
-        scope: scope2,
+        scope,
         beneath: {
           dropped: [
             ...plugins2.dropped,
@@ -65005,20 +65076,20 @@ function sessionEnv(daemonEnv, facts) {
 init_globals();
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function parseMarkBook(doc) {
-  const fault2 = (reason) => ({
+  const fault = (reason) => ({
     kind: "failed",
     reason
   });
-  if (!isRecord(doc)) return fault2("is not an object");
+  if (!isRecord(doc)) return fault("is not an object");
   for (const [check, sightings] of Object.entries(doc)) {
     if (!isRecord(sightings)) {
-      return fault2(
+      return fault(
         `holds ${JSON.stringify(check)} as something other than its sightings`
       );
     }
     for (const [id2, mark] of Object.entries(sightings)) {
       if (!GLYPH_MARKS.includes(mark)) {
-        return fault2(
+        return fault(
           `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
         );
       }
@@ -65048,10 +65119,10 @@ var DoctorBusy = class extends Error {
 
 // src/doctor/sightings.ts
 init_globals();
-var inScope = (scope2, sightings) => sightings.filter(
-  (s) => scope2.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope2.sessionId
+var inScope = (scope, sightings) => sightings.filter(
+  (s) => scope.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope.sessionId
 );
-var barsOf = (scope2, sightings) => inScope(scope2, sightings).map(
+var barsOf = (scope, sightings) => inScope(scope, sightings).map(
   ({ role, frame, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
     role,
     frame,
@@ -65105,15 +65176,15 @@ function tmuxRun(result, args) {
   const detail = result.error ?? [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
   return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
 }
-function runTmux(hint, category, args, stdinInput) {
+function runTmux(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
-    launchSync(invocation(hint, category, args, stdinInput)),
+    launcher.launchSync(invocation(hint, category, args, stdinInput)),
     args
   );
 }
-async function runTmuxAsync(hint, category, args, stdinInput) {
+async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
-    await launch(invocation(hint, category, args, stdinInput)),
+    await launcher.launch(invocation(hint, category, args, stdinInput)),
     args
   );
 }
@@ -65409,6 +65480,12 @@ function configIdentity(configPath) {
   }
 }
 var GitService = class {
+  // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
+  // close refuses the next read of a pass under way.
+  constructor(launcher) {
+    this.launcher = launcher;
+  }
+  launcher;
   isGitRepo(workingDir) {
     return holdsGit(workingDir);
   }
@@ -65423,7 +65500,7 @@ var GitService = class {
   // counting subclass in test/git-spawn-budget.test.ts is that seam; the
   // daemon's own GitDataProvider already extends this class.
   async execGitAsync(args, options) {
-    return launch({
+    return this.launcher.launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -65854,7 +65931,7 @@ var GitService = class {
   // (this is a network call, not a local git read). Returns the typed
   // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
   async execForgeAsync(bin, args, options) {
-    return launch({
+    return this.launcher.launch({
       bin,
       args: [...args],
       cwd: options.cwd,
@@ -66401,8 +66478,8 @@ function readLanes(inputs) {
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
     if (!needed) return ABSENT2;
-    const fault2 = deps.faults.of(sessionId2, lane);
-    if (fault2 !== void 0) return fault2;
+    const fault = deps.faults.of(sessionId2, lane);
+    if (fault !== void 0) return fault;
     try {
       return value();
     } catch (e) {
@@ -66611,7 +66688,7 @@ function sourcesFactOf(sources) {
 }
 function projectSources(names, read2) {
   const payload = Object.fromEntries(
-    PLUGIN_SCOPES.map((scope2) => [scope2, {}])
+    PLUGIN_SCOPES.map((scope) => [scope, {}])
   );
   for (const name of names) {
     const keys2 = name.split(".");
@@ -67911,8 +67988,8 @@ function run(argv) {
   );
 }
 `;
-function jxa(args) {
-  const run3 = launchSync({
+function jxa(launcher, args) {
+  const run3 = launcher.launchSync({
     bin: "osascript",
     args: ["-l", "JavaScript", "-e", JXA, ...args],
     timeoutMs: 3e3,
@@ -67936,8 +68013,8 @@ function jxa(args) {
 }
 var glyphsOf2 = (points) => points.map((p2) => String.fromCodePoint(parseInt(p2, 16)));
 var pointsArg = (glyphs) => [...glyphs].map(hex).join(",");
-function macCoverage(ref, glyphs) {
-  const answer2 = jxa([
+function macCoverage(launcher, ref, glyphs) {
+  const answer2 = jxa(launcher, [
     "font",
     ref.kind,
     ref.name,
@@ -67995,12 +68072,12 @@ function itermFontInUse(profiles, wanted2, version) {
     }
   };
 }
-function itermFont(version, env2, glyphs) {
+function itermFont(launcher, version, env2, glyphs) {
   if (process_default.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
   const wanted2 = env2.ITERM_PROFILE ?? null;
-  const answer2 = jxa(["iterm", wanted2 ?? "", pointsArg(glyphs)]);
+  const answer2 = jxa(launcher, ["iterm", wanted2 ?? "", pointsArg(glyphs)]);
   if (answer2.kind === "failed") return answer2;
   const profiles = answer2.value.profiles.map((p2) => ({
     ...p2,
@@ -68034,8 +68111,8 @@ function fcMatchCoverage(output, glyphs) {
   return { kind: "ok", value: { font: fonts[0].family, lacks } };
 }
 var fcEscape = (value) => value.replace(/[\\:,=-]/g, "\\$&");
-function fcCoverage(family, glyphs) {
-  const run3 = launchSync({
+function fcCoverage(launcher, family, glyphs) {
+  const run3 = launcher.launchSync({
     bin: "fc-match",
     args: [
       "--sort",
@@ -68053,8 +68130,8 @@ function fcCoverage(family, glyphs) {
   }
   return fcMatchCoverage(run3.stdout, glyphs);
 }
-function coverage(ref, glyphs) {
-  return process_default.platform === "darwin" ? macCoverage(ref, glyphs) : fcCoverage(ref.name, glyphs);
+function coverage(launcher, ref, glyphs) {
+  return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
   const xdg = xdgConfigHome || import_node_path28.default.join(home, ".config");
@@ -68112,7 +68189,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   return { kind: "ok", value: found };
 }
-function alacrittyFont(env2, glyphs) {
+function alacrittyFont(launcher, env2, glyphs) {
   const home = os_default.homedir();
   const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
     (p2) => fs_default.existsSync(p2)
@@ -68121,7 +68198,7 @@ function alacrittyFont(env2, glyphs) {
   if (named3.kind === "failed") return named3;
   const family = named3.value?.family ?? alacrittyDefaultFamily(process_default.platform);
   const from = named3.value?.from ?? (config2 === void 0 ? "Alacritty's default, no config file" : `Alacritty's default, ${config2} sets none`);
-  const drawn = coverage({ kind: "family", name: family }, glyphs);
+  const drawn = coverage(launcher, { kind: "family", name: family }, glyphs);
   if (drawn.kind === "failed") return drawn;
   const { font, lacks } = drawn.value;
   return {
@@ -68135,10 +68212,10 @@ function alacrittyFont(env2, glyphs) {
 }
 var READERS = {
   iterm2: itermFont,
-  alacritty: (_version, env2, glyphs) => alacrittyFont(env2, glyphs)
+  alacritty: (launcher, _version, env2, glyphs) => alacrittyFont(launcher, env2, glyphs)
 };
-function fontInUse(terminal, env2, glyphs) {
-  return READERS[terminal.name](terminal.version, env2, glyphs);
+function fontInUse(launcher, terminal, env2, glyphs) {
+  return READERS[terminal.name](launcher, terminal.version, env2, glyphs);
 }
 
 // src/doctor/post-mortems-read.ts
@@ -68248,8 +68325,8 @@ function descendsFromRemoteLogin(table, pid2) {
   }
   return { kind: "ok", value: false };
 }
-function remoteLogin(pid2) {
-  const run3 = launchSync({
+function remoteLogin(launcher, pid2) {
+  const run3 = launcher.launchSync({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
     timeoutMs: 2e3,
@@ -68291,8 +68368,8 @@ function ownsEntry(entry) {
   const root = DAEMON_ENTRY.exec(real)?.[1];
   return root !== void 0 && fs_default.existsSync(import_node_path29.default.join(root, "bin", "cc-candybar"));
 }
-function daemons() {
-  const run3 = launchSync({
+function daemons(launcher) {
+  const run3 = launcher.launchSync({
     bin: "ps",
     args: [
       "-U",
@@ -68313,8 +68390,8 @@ function daemons() {
   }
   return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
 }
-function probeTmux(hint) {
-  const run3 = runTmux(hint, "doctor.tmux", [
+function probeTmux(launcher, hint) {
+  const run3 = runTmux(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
@@ -68325,16 +68402,16 @@ function probeTmux(hint) {
   if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
   return parseTmuxClient(run3.stdout);
 }
-function productionEdge(loadConfig3) {
+function productionEdge(launcher, loadConfig3) {
   return {
-    probeTmux,
-    remoteLogin,
-    fontInUse,
+    probeTmux: (hint) => probeTmux(launcher, hint),
+    remoteLogin: (pid2) => remoteLogin(launcher, pid2),
+    fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs),
     loadConfig: loadConfig3,
     managedSettingsDir: process_default.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform),
     install: productionInstallEdge,
-    daemons,
-    forge: forgeLogin,
+    daemons: () => daemons(launcher),
+    forge: (cwd2) => forgeLogin(launcher, cwd2),
     transcript: readTranscriptWindow
   };
 }
@@ -68383,10 +68460,10 @@ var FORGE_PROBE = {
     nonZero: "failed"
   }
 };
-function forgeLogin(cwd2) {
+function forgeLogin(launcher, cwd2) {
   if (gitRootOf(cwd2) === void 0) return { kind: "ok", value: null };
   const remotes = remotesOf(
-    launchSync({
+    launcher.launchSync({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd: cwd2,
@@ -68403,7 +68480,7 @@ function forgeLogin(cwd2) {
   const cli = FORGE_CLI[forge];
   const probe2 = FORGE_PROBE[forge];
   const host = probe2.loginHost(remoteHost(url));
-  const run3 = launchSync({
+  const run3 = launcher.launchSync({
     bin: cli,
     args: [...probe2.args(host)],
     cwd: cwd2,
@@ -68694,14 +68771,22 @@ var RuntimeStats = class _RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
+  // Launches asked for that started nothing: the launcher had closed, the
+  // category's interval had not passed, or the caller had aborted first.
+  subprocessRefusals = /* @__PURE__ */ new Map();
   subprocessCount = /* @__PURE__ */ new Map();
   subprocessHistogram = /* @__PURE__ */ new Map();
   subprocessHistogramRotator = /* @__PURE__ */ new Map();
   rollingTimestamps = [];
   rollingHead = 0;
+  // Readable off the value because a closed daemon's work is still refused, and
+  // no request reads a closed daemon.
+  get subprocessRefused() {
+    return this.subprocessRefusals;
+  }
   // [LAW:one-source-of-truth] The same object that owns the counters also
-  // exposes the metering handle. The launch primitive calls these two
-  // methods; nothing else mutates subprocess state.
+  // exposes the metering handle. The launch primitive calls these methods;
+  // nothing else mutates subprocess state.
   launchStats = {
     onStart: (category) => {
       this.subprocessTotal++;
@@ -68715,6 +68800,12 @@ var RuntimeStats = class _RuntimeStats {
     onEnd: (category, durationMs) => {
       this.subprocessInFlight = Math.max(0, this.subprocessInFlight - 1);
       this.recordDuration(category, durationMs);
+    },
+    onRefused: (category) => {
+      this.subprocessRefusals.set(
+        category,
+        (this.subprocessRefusals.get(category) ?? 0) + 1
+      );
     }
   };
   recordRollingNow() {
@@ -68770,6 +68861,7 @@ var RuntimeStats = class _RuntimeStats {
       inFlight: this.subprocessInFlight,
       lastMinute,
       byCategory,
+      refused: Object.fromEntries(this.subprocessRefused),
       p50DurationMs: p50,
       p99DurationMs: p99
     };
@@ -69269,13 +69361,13 @@ function typeSlash(edge, hint, line) {
 }
 var THEN = ";";
 var BUFFER = "cc-candybar-slash";
-function tmux(hint, category, args, stdinInput) {
-  const run3 = runTmux(hint, category, args, stdinInput);
+function tmux(launcher, hint, category, args, stdinInput) {
+  const run3 = runTmux(launcher, hint, category, args, stdinInput);
   if (run3.kind === "failed") throw new Error(run3.reason);
   return run3;
 }
-function read(hint) {
-  const run3 = tmux(hint, "claude-input.read", [
+function read(launcher, hint) {
+  const run3 = tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -69313,8 +69405,9 @@ function pasteLineArgs(pane, buffer, before) {
     "Enter"
   ];
 }
-function type2(hint, line) {
+function type2(launcher, hint, line) {
   const run3 = tmux(
+    launcher,
     hint,
     "claude-input.type",
     pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
@@ -69325,8 +69418,11 @@ function type2(hint, line) {
     reason: `cc-candybar typed a command moments ago \u2014 click again in a second (${run3.reason})`
   };
 }
-function productionClaudeInputEdge() {
-  return { read, type: type2 };
+function productionClaudeInputEdge(launcher) {
+  return {
+    read: (hint) => read(launcher, hint),
+    type: (hint, line) => type2(launcher, hint, line)
+  };
 }
 
 // src/daemon/session-id.ts
@@ -69346,11 +69442,11 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
-function clickLaunch(opts, what, dlog2) {
-  const result = launchSync(opts);
+function clickLaunch(launcher, opts, what, log) {
+  const result = launcher.launchSync(opts);
   if (result.ok) return;
   if (result.reason === "rate-limited") {
-    dlog2("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
   const said = result.error ?? result.stderr.trim();
@@ -69360,9 +69456,10 @@ function clickLaunch(opts, what, dlog2) {
 }
 function pbcopy(text4, ctx) {
   clickLaunch(
+    ctx.launcher,
     { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
     "pbcopy",
-    ctx.dlog
+    ctx.log
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -69388,13 +69485,14 @@ var copyDiagnostic = (value, ctx) => {
   pbcopy(text4, ctx);
 };
 var openVscode = (value, ctx) => clickLaunch(
+  ctx.launcher,
   {
     bin: "/usr/bin/open",
     args: ["-a", "Visual Studio Code", oneArg(value)],
     category: "click.open"
   },
   'open -a "Visual Studio Code"',
-  ctx.dlog
+  ctx.log
 );
 var toolbarToggle = (value, ctx) => {
   const sessionId2 = requireSessionId(oneArg(value));
@@ -69433,7 +69531,7 @@ var setState = (rawValue, ctx) => {
   refuseDisorderedPicks(ctx, sid, "set-state", validated);
   ctx.navigating.setBatch(sid, validated);
   const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
-  ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
+  ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 var STEP_INT_RE = /^-?\d+$/;
 function stepWithin(current, by, min2, max2) {
@@ -69478,7 +69576,7 @@ var stepState = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
   );
@@ -69593,7 +69691,7 @@ function originHome(origin) {
 function editStore(ctx, sid) {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.dlog
+    logger: ctx.log
   };
 }
 var setConfig = (rawValue, ctx) => {
@@ -69619,7 +69717,7 @@ var setConfig = (rawValue, ctx) => {
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
   );
@@ -69667,7 +69765,7 @@ var stepConfig = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
@@ -69681,7 +69779,7 @@ var save = (value, ctx) => {
   const drafts = settingDrafts(config2, pick2);
   const placements = placementDrafts(config2, pick2);
   if (drafts.length + placements.length === 0) {
-    ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
+    ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
   const gate2 = stateGate(config2);
@@ -69700,7 +69798,7 @@ var save = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `save: ${[
       ...pairs2.map(([k, v]) => `${k}=${v}`),
@@ -69748,7 +69846,7 @@ var savePreset = (value, ctx) => {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
@@ -69778,7 +69876,7 @@ var saveThemeDefault = (value, ctx) => {
     (f) => SETTINGS[f].sessionKey
   ).filter((key) => !drafted.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
@@ -69797,7 +69895,7 @@ var deletePreset2 = (value, ctx) => {
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
 var resetConfig = (value, ctx) => {
   const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
@@ -69817,7 +69915,7 @@ var resetConfig = (value, ctx) => {
   deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
-  ctx.dlog(
+  ctx.log(
     "info",
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
   );
@@ -69875,7 +69973,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
   ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
-  ctx.dlog(
+  ctx.log(
     "info",
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`
   );
@@ -69886,7 +69984,7 @@ var undo = (value, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.undo(sid);
   reloadIfWritten(ctx, sid, step4);
-  ctx.dlog("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
+  ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
 var back = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
@@ -69896,14 +69994,14 @@ var back = (value, ctx) => {
     stateGate(sessionConfig(ctx, sid))
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
-  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
+  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 var rewind = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
-  ctx.dlog(
+  ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
@@ -69914,7 +70012,7 @@ var redo = (value, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.redo(sid);
   reloadIfWritten(ctx, sid, step4);
-  ctx.dlog("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
+  ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
 var applyUpdate = (value, ctx) => {
   requireSessionId(oneArg(value));
@@ -69942,13 +70040,13 @@ function sessionHints(ctx, sid) {
 function writeReport(ctx, sid, facts) {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
 }
 function clickFacts(ctx, sid) {
-  const scope2 = {
+  const scope = {
     kind: "clicked",
     sessionId: sid,
     via: ctx.arrival.via
@@ -69964,8 +70062,8 @@ function clickFacts(ctx, sid) {
       { kind: "ok", value: ctx.serving() },
       { kind: "ok", value: said.map((s) => s.rateLimits) },
       { kind: "ok", value: said.map((s) => s.transcript) },
-      scope2,
-      { kind: "ok", value: barsOf(scope2, said) },
+      scope,
+      { kind: "ok", value: barsOf(scope, said) },
       sessionWidth(sid, said),
       readStores(ctx.doctorStores)
     );
@@ -69994,7 +70092,7 @@ function clickedFrom(ctx, { terminal, clicked }) {
       (list2) => withClicked(list2, sighting)
     );
   } catch (e) {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
     );
@@ -70014,7 +70112,7 @@ var doctorProbe = (value, ctx) => {
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
   const { handler } = ctx.arrival;
   ctx.probes.arrive({ nonce, handler });
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`
   );
@@ -70039,7 +70137,7 @@ var doctorFix = (value, ctx) => {
   if (after.kind === "failed") {
     throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
   );
@@ -70073,7 +70171,7 @@ var doctorMark = (value, ctx) => {
   if (marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
   );
@@ -70100,13 +70198,13 @@ var slash = (value, ctx) => {
     action2.slash
   );
   if (result.kind === "refused") {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
     );
     throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
-  ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 function runOf([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -70189,7 +70287,7 @@ var repoConfig = (value, ctx) => {
     throw new Error(`${dir} was not ${answered2}: ${filed.reason}`);
   }
   const { superseded, absent, unchecked } = filed.value;
-  ctx.dlog(
+  ctx.log(
     "info",
     `repo-config: ${dir} ${answered2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
   );
@@ -70219,10 +70317,10 @@ var loadConfig2 = (value, ctx) => {
   }
   if (p2 === "") {
     ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.dlog("info", `load-config: override cleared (session=${sid})`);
+    ctx.log("info", `load-config: override cleared (session=${sid})`);
   } else {
     ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p2);
-    ctx.dlog("info", `load-config: ${p2} (session=${sid})`);
+    ctx.log("info", `load-config: ${p2} (session=${sid})`);
   }
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
@@ -70351,7 +70449,7 @@ function journaled(handler, sessionOf) {
     const closing = (store) => closingView(
       store,
       (sid2) => nestOf(ctx, sid2),
-      (line) => ctx.dlog("info", line)
+      (line) => ctx.log("info", line)
     );
     try {
       handler(value, {
@@ -70417,7 +70515,7 @@ function closeIdleMenus(sid, idle, ctx) {
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
       );
-      c.dlog(
+      c.log(
         "info",
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
       );
@@ -70706,32 +70804,6 @@ init_globals();
 init_globals();
 init_os();
 var import_node_path33 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-function readStartTime(pid2, launch2 = launchSync) {
-  const res = launch2({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-
-// src/daemon/update-act.ts
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path33.default.join(stateDir2, "update-act", key);
@@ -70792,7 +70864,7 @@ function removeAct(dir, act) {
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
 var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
-function isRecordedJob(record2, read2 = readStartTime, boot = bootedAt()) {
+function isRecordedJob(record2, read2, boot = bootedAt()) {
   if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
   const leader = read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
@@ -70806,7 +70878,7 @@ function readRecord(actDir) {
   }
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
-function makeActReader(dir, read2 = readStartTime) {
+function makeActReader(dir, read2) {
   let known = null;
   function factsOf2(act) {
     const actDir = import_node_path33.default.join(dir, String(act));
@@ -70843,12 +70915,12 @@ function makeActReader(dir, read2 = readStartTime) {
     }
   };
 }
-function claimAct(dir, after, identity3, command, timeoutMs, now2, read2 = readStartTime) {
+function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
   const actDir = import_node_path33.default.join(dir, String(act));
   fs_default.mkdirSync(dir, { recursive: true });
   const staging = fs_default.mkdtempSync(import_node_path33.default.join(dir, ".claim-"));
-  const job = launchJobSync(command, filesOf(actDir));
+  const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) {
     fs_default.rmSync(staging, { recursive: true, force: true });
     throw new Error(`apply-update: ${job.error}`);
@@ -70893,6 +70965,30 @@ var CLAIMED_FIRST = {
 function endOverdue(dir, facts) {
   const status = filesOf(import_node_path33.default.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
+}
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+function readStartTime(pid2, launch) {
+  const res = launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
 }
 
 // src/daemon/update-notice.ts
@@ -71044,6 +71140,7 @@ function reserveUpdateKeys() {
 }
 function makeUpdateWatch(opts) {
   const {
+    launcher,
     entryUrl,
     actsDir: actsDir2,
     intervalMs,
@@ -71055,7 +71152,8 @@ function makeUpdateWatch(opts) {
   } = opts;
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
-  const acts = makeActReader(actsDir2);
+  const readStart = (pid2) => readStartTime(pid2, launcher.launchSync);
+  const acts = makeActReader(actsDir2, readStart);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
@@ -71169,12 +71267,14 @@ function makeUpdateWatch(opts) {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
       const claim = claimAct(
+        launcher,
         actsDir2,
         newest === null ? null : newest.act,
         updateIdentity(update),
         { ...facts.command, category: "update.apply" },
         ACT_TIMEOUT_MS,
-        Date.now()
+        Date.now(),
+        readStart
       );
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);
@@ -71196,16 +71296,16 @@ init_globals();
 
 // src/template-engine/layout.ts
 init_globals();
-function evaluateWhen(template, scope2) {
+function evaluateWhen(template, scope) {
   if (template === void 0) return true;
-  const fragments = template.evaluate(scope2);
+  const fragments = template.evaluate(scope);
   return fragments.map((f) => f.plain).join("") !== "false";
 }
 var HIDDEN = { kind: "hidden" };
 var SHOWN = { kind: "shown" };
-function gateOf2(template, scope2) {
+function gateOf2(template, scope) {
   try {
-    return evaluateWhen(template, scope2) ? SHOWN : HIDDEN;
+    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
   } catch (e) {
     const pending2 = readPending(e);
     return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
@@ -71634,8 +71734,8 @@ function parseActionTemplate(parse3, src, name) {
 function readVar(store, name) {
   return store.has(name) ? toString2(store.read(name)) : "";
 }
-function evalTemplate(tpl, scope2) {
-  return tpl.evaluate(scope2).map((f) => f.plain).join("");
+function evalTemplate(tpl, scope) {
+  return tpl.evaluate(scope).map((f) => f.plain).join("");
 }
 function linkFragment(text4, url, active2, base) {
   const rt = new RichText(text4, {
@@ -71851,13 +71951,13 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // mac, so the click runs what the bar showed and nothing a URL made up.
     // Never "active": a run is a one-shot trigger.
     case "run": {
-      const scope2 = buildScope(store);
+      const scope = buildScope(store);
       const evaluated2 = JSON.stringify({
-        run: c.argv.map((item) => evalTemplate(item, scope2)),
+        run: c.argv.map((item) => evalTemplate(item, scope)),
         env: Object.fromEntries(
           c.env.map(([variable, value]) => [
             variable,
-            evalTemplate(value, scope2)
+            evalTemplate(value, scope)
           ])
         )
       });
@@ -73464,21 +73564,21 @@ function drawSegment(node, ctx) {
     throw new Error(`Layout segment "${node.name}" has no matching segment`);
   }
   if (ctx.gate.kind === "hidden") return [];
-  const scope2 = placementScope(ctx.scope, node.settings);
+  const scope = placementScope(ctx.scope, node.settings);
   if (ctx.gate.kind === "failed") {
-    return brokenSegment(node, scope2, ctx, ctx.gate.message);
+    return brokenSegment(node, scope, ctx, ctx.gate.message);
   }
   try {
     const parts = ctx.placement(node);
     const gate2 = within2(ctx.gate, parts.gate());
     if (gate2.kind === "failed") {
-      return brokenSegment(node, scope2, ctx, gate2.message);
+      return brokenSegment(node, scope, ctx, gate2.message);
     }
     if (gate2.kind === "hidden") return [];
     const ownBodyGate = parts.bodyGate();
     const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
     if (bodyGate.kind === "failed") {
-      return brokenSegment(node, scope2, ctx, bodyGate.message);
+      return brokenSegment(node, scope, ctx, bodyGate.message);
     }
     const palette = placementPalette(node.settings.theme, ctx.palette);
     const placement = {
@@ -73504,7 +73604,7 @@ function drawSegment(node, ctx) {
     const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
     const drawn = own2.kind === "drawn" ? drawnRows(own2.segment, layoutOf) : waitingRows(
       node,
-      scope2,
+      scope,
       ctx,
       own2.variable,
       palette,
@@ -73555,7 +73655,7 @@ function drawSegment(node, ctx) {
   } catch (err) {
     return brokenSegment(
       node,
-      scope2,
+      scope,
       ctx,
       err.message ?? String(err)
     );
@@ -73603,15 +73703,15 @@ function drawnRows(segment, layoutOf) {
   };
 }
 var LOADING_GLYPH = "\u2026";
-function waitingRows(node, scope2, ctx, variable, palette, bodyOpen, layoutOf) {
+function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
   ctx.waited(variable);
   const last2 = ctx.lastDrawn(node.id);
   if (last2?.kind === "hidden") return null;
   const styles = ctx.decorations(node, palette);
   const style = bodyOpen ? styles.trigger : styles.closed;
-  const lead = fragmentsToCells(errorAffix(node.lead, node, scope2, ctx), style);
+  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
   const trail = fragmentsToCells(
-    errorAffix(node.trail, node, scope2, ctx),
+    errorAffix(node.trail, node, scope, ctx),
     style
   );
   const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
@@ -73643,7 +73743,7 @@ function waitingRows(node, scope2, ctx, variable, palette, bodyOpen, layoutOf) {
 function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
-function brokenSegment(node, scope2, ctx, message) {
+function brokenSegment(node, scope, ctx, message) {
   ctx.onSegmentError?.(node.id, message);
   const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
@@ -73663,8 +73763,8 @@ function brokenSegment(node, scope2, ctx, message) {
             effect: FOLLOW_BAR,
             ground: groundOf(ctx.palette)
           },
-          lead: errorAffix(node.lead, node, scope2, ctx),
-          trail: errorAffix(node.trail, node, scope2, ctx)
+          lead: errorAffix(node.lead, node, scope, ctx),
+          trail: errorAffix(node.trail, node, scope, ctx)
         }
       ),
       band: "own",
@@ -73672,10 +73772,10 @@ function brokenSegment(node, scope2, ctx, message) {
     }
   ];
 }
-function errorAffix(affix, node, scope2, ctx) {
+function errorAffix(affix, node, scope, ctx) {
   if (affix === void 0) return [];
   try {
-    return ctx.evaluateOnce(node, scope2, ctx.palette, affix).fragments;
+    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
   } catch (err) {
     const pending2 = readPending(err);
     if (pending2 !== void 0) ctx.waited(pending2.variable);
@@ -74131,14 +74231,14 @@ var Placement = class {
   constructor(view, node) {
     const seg2 = view.source.segments[node.name];
     const ref = view.source.activeSegment;
-    const scope2 = placementScope(view.scope, node.settings);
+    const scope = placementScope(view.scope, node.settings);
     const { when: when2, bg, fg, template } = seg2;
     const { lead, trail } = node;
     const opens = node.opens?.open;
     this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
       `${node.id} when`,
       view.readsInstant(when2),
-      () => outsideSegments(ref, () => gateOf2(when2, scope2))
+      () => outsideSegments(ref, () => gateOf2(when2, scope))
     );
     this.open = opens === void 0 ? always(HIDDEN) : view.derive(
       `${node.id} body gate`,
@@ -74158,7 +74258,7 @@ var Placement = class {
           view.registry.drawnAt(),
           bg,
           fg,
-          scope2
+          scope
         );
       }
     );
@@ -74167,7 +74267,7 @@ var Placement = class {
       view.readsInstant(template),
       () => {
         const { colours, bodyOpen } = this.ground.get();
-        return bodyOf(ref, node, colours, template, bodyOpen, scope2);
+        return bodyOf(ref, node, colours, template, bodyOpen, scope);
       }
     );
     this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
@@ -74175,7 +74275,7 @@ var Placement = class {
       view.readsInstant(lead, trail),
       () => {
         const { colours, open: open2 } = this.opened.get();
-        return affixesOf(ref, node, colours, open2, lead, trail, scope2);
+        return affixesOf(ref, node, colours, open2, lead, trail, scope);
       }
     );
   }
@@ -74228,21 +74328,21 @@ function placeOf(node, colours) {
   };
 }
 var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
-function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope2) {
+function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
   const dealt = {
     palette,
     drawnAt,
     ...decorationFor(palette, region, drawnAt)
   };
   return inSegment(ref, placeOf(node, dealt), (active2) => {
-    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope2);
+    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
     return { ...dealt, bg: active2.bg, style };
   });
 }
-function bodyOf(ref, node, colours, template, bodyOpen, scope2) {
+function bodyOf(ref, node, colours, template, bodyOpen, scope) {
   return inSegment(ref, placeOf(node, colours), (active2) => {
     active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
-    const fragments = template.evaluate(scope2);
+    const fragments = template.evaluate(scope);
     return {
       fragments,
       drops: active2.drops,
@@ -74250,12 +74350,12 @@ function bodyOf(ref, node, colours, template, bodyOpen, scope2) {
     };
   });
 }
-function affixesOf(ref, node, colours, open2, lead, trail, scope2) {
+function affixesOf(ref, node, colours, open2, lead, trail, scope) {
   return inSegment(ref, placeOf(node, colours), (active2) => {
     active2.bg = open2 ? bandOf(colours).state : colours.bg;
     return {
-      lead: lead?.evaluate(scope2) ?? [],
-      trail: trail?.evaluate(scope2) ?? [],
+      lead: lead?.evaluate(scope) ?? [],
+      trail: trail?.evaluate(scope) ?? [],
       drops: active2.drops
     };
   });
@@ -74287,7 +74387,7 @@ function evaluated(colours, body, affixes) {
     open: body.open
   };
 }
-function evaluateOnce(ref, node, palette, region, drawnAt, body, scope2) {
+function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
   const colours = coloursOf(
     ref,
     node,
@@ -74296,11 +74396,11 @@ function evaluateOnce(ref, node, palette, region, drawnAt, body, scope2) {
     drawnAt,
     void 0,
     void 0,
-    scope2
+    scope
   );
   return evaluated(
     colours,
-    bodyOf(ref, node, colours, body, false, scope2),
+    bodyOf(ref, node, colours, body, false, scope),
     NO_AFFIXES
   );
 }
@@ -74849,14 +74949,14 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         perSegmentSink,
         onSegmentError,
         placement: (node2) => parts.placement(node2),
-        evaluateOnce: (node2, scope2, palette2, body) => evaluateOnce(
+        evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
           compiled.activeSegment,
           node2,
           palette2,
           region,
           registry.drawnAt(),
           body,
-          scope2
+          scope
         ),
         lookupSegment,
         renderChild: (child, held, step4) => renderNode(child, held, descend(region, step4)),
@@ -74910,12 +75010,12 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       ...rendered.map((row2) => row2.nextChange)
     );
     const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
-    for (const [variable, fault2] of registry.cachePolicyFaults())
+    for (const [variable, fault] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
         variable,
-        error: fault2.message,
-        message: `variable "${variable}" cannot refresh: ${fault2.message}`
+        error: fault.message,
+        message: `variable "${variable}" cannot refresh: ${fault.message}`
       });
     return {
       text: rendered.map((row2) => row2.text).join("\n"),
@@ -75608,7 +75708,8 @@ function drawRender(parts, setup, drawing2) {
     renderWarnings,
     payloadProviders,
     effectSessions,
-    menuIdle
+    menuIdle,
+    launcher
   } = parts;
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const effective = view.source.effective();
@@ -75651,11 +75752,11 @@ function drawRender(parts, setup, drawing2) {
   const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
-    ...lifelineWarnings(),
+    ...launcher.lifelineWarnings(),
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
   ];
-  const scope2 = { config: state.config };
+  const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
     sessionId2,
     drawing2.by,
@@ -75663,7 +75764,7 @@ function drawRender(parts, setup, drawing2) {
     [...updates, ...questions],
     [
       ...standing,
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope2)
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
     ].map((w) => ({
       about: `${w.kind}\0${w.message}`,
       text: w.message,
@@ -75731,7 +75832,7 @@ function drawRender(parts, setup, drawing2) {
   const recorded = renderWarnings.drawn(
     sessionId2,
     drawing2.by,
-    scope2,
+    scope,
     drawnWarnings
   );
   const geometry = {
@@ -75889,7 +75990,7 @@ function laneClicked(parts, sessionId2, before, after) {
 async function drawAnswer(parts, req, at, wait, facts) {
   var _stack = [];
   try {
-    const { clock, frameFeeds } = parts;
+    const { clock, frameFeeds, log } = parts;
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
     arrived2(
       parts,
@@ -75907,7 +76008,7 @@ async function drawAnswer(parts, req, at, wait, facts) {
       wait.endsAt - waitFrom,
       // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
       // it is a bug, said against the session, never one that ends the daemon.
-      (e) => dlog(
+      (e) => log(
         "error",
         `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
       )
@@ -76100,7 +76201,7 @@ function parseRenderArgs(args, cwd2) {
     )
   };
 }
-function checkRenderRequest(req, stats) {
+function checkRenderRequest(req, stats, log) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
   for (const path39 of report2.missingRequired) {
@@ -76132,7 +76233,7 @@ function checkRenderRequest(req, stats) {
     return { ok: false, problems: wireProblems };
   for (const field of report2.unknownTopLevelFields) {
     if (stats.firstSightOfUnknownHookField(field)) {
-      dlog(
+      log(
         "info",
         `schema: unknown field ${JSON.stringify(field)} \u2014 Anthropic may have added it`
       );
@@ -76354,12 +76455,12 @@ async function handleRequest(parts, req, timedOut, accepted) {
   }
   if (req.v !== PROTOCOL_VERSION) {
     if (req.v > PROTOCOL_VERSION) {
-      dlog(
+      parts.log(
         "info",
         `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
       );
     } else {
-      dlog(
+      parts.log(
         "info",
         `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
       );
@@ -76465,7 +76566,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     const queuedMs = Math.round(t0 - accepted);
     const facts = [];
     const order2 = ++stats.requestsTotal;
-    const checked = checkRenderRequest(req, stats);
+    const checked = checkRenderRequest(req, stats, parts.log);
     const sighted = (req2, frame) => renderSightings.see(
       req2.sessionId,
       {
@@ -76537,7 +76638,7 @@ async function replyTo(parts, req, timedOut, accepted) {
       rendered.outcome,
       Math.round(clock.monotonic() - t0)
     );
-    dlog(level, line);
+    parts.log(level, line);
     return {
       resp: rendered.resp,
       exitAfterFlush: null,
@@ -76555,7 +76656,7 @@ async function replyTo(parts, req, timedOut, accepted) {
       outcome,
       Math.round(clock.monotonic() - t0)
     );
-    dlog(level, line);
+    parts.log(level, line);
     return stay(clickReply(outcome));
   }
   if (req.kind === "debug") {
@@ -76736,13 +76837,14 @@ function statusLineClick(parts, value, facts) {
     );
   }
   clickLaunch(
+    parts.launcher,
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
       args: [click2.url],
       category: "click.open"
     },
     `opening ${click2.url}`,
-    dlog
+    parts.log
   );
   return { kind: "ok" };
 }
@@ -76951,8 +77053,8 @@ var GitDataProvider = class {
   watchers;
   ownsWatchers;
   logger;
-  constructor(opts = {}) {
-    this.inner = opts.inner ?? new GitService();
+  constructor(opts) {
+    this.inner = opts.inner;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
@@ -79266,7 +79368,7 @@ var NAME_PERIOD_MS = 3e4;
 var MAX_ENTRIES = 64;
 var TmuxService = class {
   names;
-  constructor(opts = {}) {
+  constructor(opts) {
     const logger = opts.logger ?? quietLogger;
     this.names = new KeyedSource({
       name: "tmux",
@@ -79276,7 +79378,7 @@ var TmuxService = class {
       keyOf: (hint) => `${hint.socket}
 ${hint.pane}`,
       fields: (hint) => `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
-      read: askSessionName,
+      read: (hint) => askSessionName(opts.launcher, hint),
       every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
       maxEntries: MAX_ENTRIES,
       logger,
@@ -79301,8 +79403,8 @@ ${hint.pane}`,
     this.names.close();
   }
 };
-async function askSessionName(hint) {
-  const run3 = await runTmuxAsync(hint, "tmux", [
+async function askSessionName(launcher, hint) {
+  const run3 = await runTmuxAsync(launcher, hint, "tmux", [
     "display-message",
     "-p",
     "-t",
@@ -79834,8 +79936,8 @@ var ManagedStorage = class {
     }
   }
   async read(f) {
-    const fault2 = this.standing(f.storage);
-    if (fault2 !== null) return failed(fault2);
+    const fault = this.standing(f.storage);
+    if (fault !== null) return failed(fault);
     const file = fileOf(f);
     let text4;
     try {
@@ -79888,10 +79990,11 @@ var ManagedStorage = class {
 
 // src/daemon/payload-providers.ts
 function createPayloadProviders(opts) {
-  const { logger, ledger } = opts;
+  const { launcher, logger, ledger } = opts;
   return {
     hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
+      inner: new GitService(launcher),
       watchers: opts.watchers,
       logger,
       ledger
@@ -79900,7 +80003,7 @@ function createPayloadProviders(opts) {
     contextProvider: new ContextProvider({ logger, ledger }),
     metricsProvider: new MetricsProvider({ logger, ledger }),
     activityProvider: new ActivityProvider({ logger, ledger }),
-    tmuxService: new TmuxService({ logger, ledger }),
+    tmuxService: new TmuxService({ launcher, logger, ledger }),
     autoCompact: new AutoCompactProvider(logger, ledger),
     cacheExpiry: new CacheExpiryProvider(logger, ledger),
     managedStorage: new ManagedStorage({
@@ -80274,6 +80377,7 @@ function buildRenderState(load, deps) {
   const warnings = [];
   const store = new VariableStore();
   const registry = new SourceRegistry(
+    deps.launcher,
     store,
     config2.globals.default_empty_value ?? "",
     deps.sessionState,
@@ -80432,10 +80536,10 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
         acquired,
         released
       } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
-      for (const fault2 of faults) {
+      for (const fault of faults) {
         log(
           "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault2}`
+          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
         );
       }
       if (acquired + released > 0) {
@@ -82917,8 +83021,8 @@ function launcherNode(pathVariable, isExecutable, canonical2) {
 var SHELL_BUFFER = "cc-candybar-lane";
 var EXIT_POLL_MS = 100;
 var SHELL_PATIENCE_MS = 2e3;
-function tmux2(hint, args, stdinInput) {
-  const run3 = runTmux(hint, "lane.tmux", args, stdinInput);
+function tmux2(launcher, hint, args, stdinInput) {
+  const run3 = runTmux(launcher, hint, "lane.tmux", args, stdinInput);
   if (run3.kind !== "ok") throw new Error(run3.reason);
   return run3.stdout;
 }
@@ -82927,7 +83031,7 @@ function ran(what, result) {
   const detail = result.error ?? [result.reason, result.stderr.trim(), result.stdout.trim()].filter((s) => s !== "").join(": ");
   throw new Error(`${what} failed (${detail})`);
 }
-function refusalOf(stdout2) {
+function refusalOf2(stdout2) {
   try {
     const said = JSON.parse(stdout2);
     if (typeof said === "object" && said !== null && "ok" in said && said.ok === false && "reason" in said && typeof said.reason === "string") {
@@ -82967,7 +83071,7 @@ var PROCARGS2 = [
   "end = words.index('', argc) if '' in words[argc:] else len(words)",
   "print(json.dumps({'executable': exe, 'argv': words[:argc], 'env': words[argc:end]}))"
 ].join("\n");
-async function imageOf(pid2) {
+async function imageOf(launcher, pid2) {
   if (process_default.platform === "linux") {
     return {
       executable: await fs_default.promises.readlink(`/proc/${pid2}/exe`),
@@ -82977,7 +83081,7 @@ async function imageOf(pid2) {
   }
   const out = ran(
     `reading process ${pid2}'s arguments`,
-    await launch({
+    await launcher.launch({
       bin: "python3",
       args: ["-c", PROCARGS2, String(pid2)],
       timeoutMs: 5e3,
@@ -82986,10 +83090,10 @@ async function imageOf(pid2) {
   );
   return JSON.parse(out);
 }
-async function ps(what, args) {
+async function ps(launcher, what, args) {
   return ran(
     what,
-    await launch({
+    await launcher.launch({
       bin: "ps",
       args,
       timeoutMs: 2e3,
@@ -82997,8 +83101,8 @@ async function ps(what, args) {
     })
   );
 }
-async function paneForeground(hint) {
-  const display = await runTmuxAsync(hint, "lane.tmux", [
+async function paneForeground(launcher, hint) {
+  const display = await runTmuxAsync(launcher, hint, "lane.tmux", [
     "display",
     "-p",
     "-t",
@@ -83007,7 +83111,7 @@ async function paneForeground(hint) {
   ]);
   if (display.kind !== "ok") throw new Error(display.reason);
   const [panePid = "", cwd2 = ""] = display.stdout.trimEnd().split("	");
-  const foreground = (await ps(`asking pane ${hint.pane}'s foreground job`, [
+  const foreground = (await ps(launcher, `asking pane ${hint.pane}'s foreground job`, [
     "-o",
     "tpgid=",
     "-p",
@@ -83015,10 +83119,18 @@ async function paneForeground(hint) {
   ])).trim();
   return { panePid: Number(panePid), cwd: cwd2, foreground: Number(foreground) };
 }
-async function paneClaude(hint) {
-  const { panePid, cwd: cwd2, foreground: pid2 } = await paneForeground(hint);
-  const table = await ps("listing processes", ["-A", "-o", "pid=,ppid=,args="]);
-  const image = await imageOf(pid2);
+async function paneClaude(launcher, hint) {
+  const {
+    panePid,
+    cwd: cwd2,
+    foreground: pid2
+  } = await paneForeground(launcher, hint);
+  const table = await ps(launcher, "listing processes", [
+    "-A",
+    "-o",
+    "pid=,ppid=,args="
+  ]);
+  const image = await imageOf(launcher, pid2);
   const parent = processTable(table).get(pid2)?.ppid;
   if (parent === void 0) {
     throw new Error(`pane ${hint.pane}'s foreground job ${pid2} is gone`);
@@ -83038,18 +83150,18 @@ async function paneClaude(hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(following, closing) {
+function productionLaneEdge(launcher, following, closing) {
   const wait = (ms) => setTimeout2(ms, void 0, { signal: closing });
   return {
-    claudeInput: productionClaudeInputEdge(),
+    claudeInput: productionClaudeInputEdge(launcher),
     barPanes: (hint) => taggedBarPanes(
-      tmux2(hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
+      tmux2(launcher, hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
       hint.pane
     ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
     openBarPane: (hint, argv2, env2) => {
-      const opened = tmux2(hint, [
+      const opened = tmux2(launcher, hint, [
         "split-window",
         "-d",
         "-v",
@@ -83063,7 +83175,7 @@ function productionLaneEdge(following, closing) {
         ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
         ...argv2
       ]).trim();
-      tmux2(hint, [
+      tmux2(launcher, hint, [
         "set-option",
         "-p",
         "-t",
@@ -83073,13 +83185,13 @@ function productionLaneEdge(following, closing) {
       ]);
       return opened;
     },
-    closePane: (hint, pane) => void tmux2(hint, ["kill-pane", "-t", pane]),
+    closePane: (hint, pane) => void tmux2(launcher, hint, ["kill-pane", "-t", pane]),
     // [LAW:single-enforcer] The session's process environment: the
     // session's facts, never those of whichever shell spawned this detached
     // daemon.
     claude: async (args, session) => void ran(
       `claude ${args.join(" ")}`,
-      await launch({
+      await launcher.launch({
         bin: "claude",
         args: [...args],
         env: sessionEnv(process_default.env, session),
@@ -83089,7 +83201,7 @@ function productionLaneEdge(following, closing) {
     ),
     fileExists: (file) => fs_default.existsSync(file),
     presence,
-    paneClaude,
+    paneClaude: (hint) => paneClaude(launcher, hint),
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
@@ -83100,7 +83212,7 @@ function productionLaneEdge(following, closing) {
     paneDir: async (hint, shell) => {
       const until2 = Date.now() + SHELL_PATIENCE_MS;
       for (; ; ) {
-        const pane = await paneForeground(hint);
+        const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
           if (pane.cwd === "") {
             throw new Error(`tmux read no directory for pane ${hint.pane}`);
@@ -83138,13 +83250,13 @@ function productionLaneEdge(following, closing) {
     },
     // In a child: the reader holds the whole binary (~200 MB) in memory.
     moduleGraph: async (node, reader, executable) => {
-      const result = await launch({
+      const result = await launcher.launch({
         bin: node,
         args: [reader, executable],
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused = !result.ok && result.reason === "non-zero" ? refusalOf(result.stdout) : null;
+      const refused = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
       if (refused !== null) return { ok: false, reason: refused };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
@@ -83171,7 +83283,12 @@ function productionLaneEdge(following, closing) {
     },
     // Typed as a slash command is, but with no ctrl+s first: in a shell that
     // stops the terminal's output.
-    typeShellLine: (hint, line) => void tmux2(hint, pasteLineArgs(hint.pane, SHELL_BUFFER, []), line)
+    typeShellLine: (hint, line) => void tmux2(
+      launcher,
+      hint,
+      pasteLineArgs(hint.pane, SHELL_BUFFER, []),
+      line
+    )
   };
 }
 
@@ -83201,8 +83318,8 @@ var RenderWarningRecords = class {
   // The session's warnings as `by` draws them in `scope`: its own record, and
   // every other renderer's drawn from the same config, each warning once
   // across renderers (a warning two renderers met is one fact).
-  ofSession(sessionId2, by, scope2) {
-    const generation = generationOf(scope2.config);
+  ofSession(sessionId2, by, scope) {
+    const generation = generationOf(scope.config);
     const listed = [];
     for (const renderer of RENDERERS2) {
       const held = this.records.get(keyOf(sessionId2, renderer));
@@ -83218,12 +83335,12 @@ var RenderWarningRecords = class {
   }
   // Records what a frame warned. Says whether that changed what the
   // renderer's next frame shows.
-  drawn(sessionId2, by, scope2, warnings) {
+  drawn(sessionId2, by, scope, warnings) {
     const held = this.of(sessionId2, by);
     const key = keyOf(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
-      generation: generationOf(scope2.config),
+      generation: generationOf(scope.config),
       warnings
     });
     for (const oldest of this.records.keys()) {
@@ -83347,39 +83464,65 @@ var SYSTEM_CLOCK = {
   date: () => /* @__PURE__ */ new Date(),
   monotonic: () => performance.now()
 };
+var liveDaemon = null;
 function createDaemon(inputs) {
-  refuseSecondDaemon();
-  const { bundle, storage, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2 } = inputs;
+  if (liveDaemon !== null && !liveDaemon.aborted) {
+    throw new Error("a daemon is already live in this process");
+  }
+  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2 } = inputs;
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
+  let closed = false;
+  const log = (level, msg) => dlog(level, closed ? `after close: ${msg}` : msg);
   const stats = new RuntimeStats();
+  const launcher = createLauncher({
+    stats: stats.launchStats,
+    signal: closing.signal,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it is said in daemon.log, and every feed redraws, so its warning
+    // comes and goes on frames too.
+    observeLifeline: (fault) => {
+      log(
+        fault === null ? "info" : "warn",
+        fault === null ? "launch lifeline running again" : `launch lifeline ${fault}; the next launch starts another`
+      );
+      frameFeeds.wakeWhere("data", () => true);
+    }
+  });
+  const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
-    dlog,
+    log,
     storage.history
   );
   const limits = makeLimits(
-    realLimitsDeps(stats.startedAt.getTime(), exit2, {
-      limitBytes: memoryLimitBytes2
-    })
+    realLimitsDeps(
+      stats.startedAt.getTime(),
+      exit2,
+      { launcher, log },
+      {
+        limitBytes: memoryLimitBytes2
+      }
+    )
   );
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
   const doctorStores = fileStores(stateDir());
   const watcherRegistry = new WatcherRegistry({
     counters: stats,
-    logger: dlog
+    logger: log
   });
-  const refreshLedger = new RefreshLedger(dlog);
+  const refreshLedger = new RefreshLedger(log);
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
-    logger: dlog
+    logger: log
   });
   const payloadProviders = createPayloadProviders({
+    launcher,
     watchers: watcherRegistry,
     fileEvents,
-    logger: dlog,
+    logger: log,
     ledger: refreshLedger
   });
   const {
@@ -83394,7 +83537,7 @@ function createDaemon(inputs) {
   const menuIdle = new MenuIdle({
     now: instant,
     close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
-    failed: (sessionId2, error) => dlog(
+    failed: (sessionId2, error) => log(
       "error",
       `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
     )
@@ -83402,13 +83545,14 @@ function createDaemon(inputs) {
   const linkSigner2 = linkSignerFromKeyFile();
   const runs = new Runs({
     supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
-    launch,
+    launch: launcher.launch,
     state: sessionState,
-    log: dlog,
+    log,
     now: instant
   });
   const laneSetups = new LaneSetups({
     edge: productionLaneEdge(
+      launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal
     ),
@@ -83421,14 +83565,14 @@ function createDaemon(inputs) {
       preload: stableAttachPreload(bundle.path)
     },
     state: sessionState,
-    log: dlog,
+    log,
     now: instant,
     defer: (run3) => void setImmediate(run3)
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
-      run: (socket, args, stdin) => runTmuxAsync({ socket }, "tmux-status", args, stdin),
-      runSync: (socket, args, stdin) => runTmux({ socket }, "tmux-status", args, stdin)
+      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
+      runSync: (socket, args, stdin) => runTmux(launcher, { socket }, "tmux-status", args, stdin)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
     sessionInPane: (socket, pane) => frameFeeds.newestWhere(
@@ -83440,7 +83584,7 @@ function createDaemon(inputs) {
       "url-handle"
     ].join(" "),
     owner: socketPath(),
-    log: dlog
+    log
   });
   const frameFeeds = new FrameFeeds({
     render: (sessionId2, fps, at) => renderFrame(parts, sessionId2, fps, at),
@@ -83464,16 +83608,16 @@ function createDaemon(inputs) {
     periods: FEED_PERIODS,
     now: () => clock.monotonic(),
     instant,
-    log: dlog
+    log
   });
   const paneVisibility = new PaneVisibility({
-    listPanes: (socket) => runTmuxAsync({ socket }, "frames.visibility", [
+    listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
       "list-panes",
       "-a",
       "-F",
       LIST_PANES_FORMAT
     ]),
-    listClients: (socket) => runTmuxAsync({ socket }, "frames.visibility", [
+    listClients: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
       "list-clients",
       "-F",
       LIST_CLIENTS_FORMAT
@@ -83487,7 +83631,7 @@ function createDaemon(inputs) {
       (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
     ),
     intervalMs: 1e3,
-    log: dlog
+    log
   });
   function tmuxServersOf({
     hints: { tmux: tmux3 }
@@ -83497,9 +83641,10 @@ function createDaemon(inputs) {
   const renderWarnings = new RenderWarningRecords();
   const renderCache = new RenderCache(
     {
+      launcher,
       sessionState,
       watchers: watcherRegistry,
-      log: dlog,
+      log,
       storage: managedStorage,
       signer: linkSigner2,
       ledger: refreshLedger,
@@ -83529,7 +83674,7 @@ function createDaemon(inputs) {
         // ran, and whether a save was picked up cleanly, kept rendering
         // last-known-good behind an error, or resolved to a different file.
         onReload: (entry, sessions, cause, settled3) => {
-          dlog("info", configLoadedLine(entry, cause, settled3));
+          log("info", configLoadedLine(entry, cause, settled3));
           for (const sessionId2 of sessions)
             frameFeeds.wake(sessionId2, "reload");
         },
@@ -83569,9 +83714,10 @@ function createDaemon(inputs) {
     // it. A success samples again at once; after a failure the next tick does.
     held: () => updateWatch.running(),
     exit: () => exit2(0),
-    log: dlog
+    log
   });
   const updateWatch = makeUpdateWatch({
+    launcher,
     entryUrl: bundle.entryUrl,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
     // this daemon runs from.
@@ -83581,11 +83727,12 @@ function createDaemon(inputs) {
     registryUrl,
     fetchImpl: fetch,
     onApplied: () => binaryWatch.checkNow(),
-    log: dlog
+    log
   });
   const verbCtx = {
     sessionState,
-    dlog,
+    log,
+    launcher,
     now: instant,
     applyUpdate: () => updateWatch.act(),
     // The load the session's bar is drawn from: its cache entry's load
@@ -83593,7 +83740,7 @@ function createDaemon(inputs) {
     // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
     // doctor click is a verdict on the files as they are now, not on
     // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: productionEdge((origin) => {
+    doctor: productionEdge(launcher, (origin) => {
       const at = [origin.projectDir, origin.cwd, origin.target.path];
       renderCache.reload(...at, { kind: "doctor" });
       const entry = renderCache.getOrCreate(...at);
@@ -83610,7 +83757,7 @@ function createDaemon(inputs) {
     clients: renderSightings,
     bundle: bundle.path,
     serving: () => limits.serving(),
-    claudeInput: productionClaudeInputEdge(),
+    claudeInput: productionClaudeInputEdge(launcher),
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -83638,6 +83785,8 @@ function createDaemon(inputs) {
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
   const parts = {
+    launcher,
+    log,
     clock,
     bundle: bundle.path,
     doctorStores,
@@ -83662,22 +83811,11 @@ function createDaemon(inputs) {
     limits,
     verbCtx
   };
-  setLaunchScope({
-    stats: stats.launchStats,
-    signal: closing.signal,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it is said in daemon.log, and every feed redraws, so its warning
-    // comes and goes on frames too.
-    observeLifeline: (fault2) => {
-      dlog(
-        fault2 === null ? "info" : "warn",
-        fault2 === null ? "launch lifeline running again" : `launch lifeline ${fault2}; the next launch starts another`
-      );
-      frameFeeds.wakeWhere("data", () => true);
-    }
-  });
+  liveDaemon = closing.signal;
   return {
     stats,
+    launcher,
+    log,
     memoryLimitBytes: memoryLimitBytes2,
     clock,
     exit: exit2,
@@ -83714,8 +83852,9 @@ function createDaemon(inputs) {
         // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
         // comes before the abort that ends the daemon's launches.
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
-        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, and
-        // what is in flight is terminated, whichever owner's work it was.
+        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+        // is in flight is terminated, whichever owner's work it was, and the
+        // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
@@ -83732,16 +83871,16 @@ function createDaemon(inputs) {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => sessionState.close()],
-        ["lifeline retire", () => retireLifeline()]
+        ["sessionState close", () => sessionState.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
           run3();
         } catch (e) {
-          dlog("warn", `${step4} failed: ${e.message}`);
+          log("warn", `${step4} failed: ${e.message}`);
         }
       }
+      closed = true;
     }
   };
 }
@@ -84071,10 +84210,10 @@ var pageDaemon = createDaemon({
     node: [],
     targets: []
   },
-  storage: {
+  storage: () => ({
     session: EPHEMERAL_SESSION_STORAGE,
     history: EPHEMERAL_HISTORY_STORAGE
-  },
+  }),
   memoryLimitBytes: memoryLimitBytes(process_default.env),
   registryUrl: REGISTRY_URL,
   clock: SYSTEM_CLOCK,
