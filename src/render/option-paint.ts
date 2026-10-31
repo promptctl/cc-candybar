@@ -96,10 +96,9 @@ const named = (label: string, text: Style | undefined, palette: Palette) =>
   );
 
 /**
- * The paint of the value a control shows as its own text — a `{{ carousel }}`
- * centre that opens the list rather than applying itself: the name in the
+ * The paint of a control's own label — a `{{ carousel }}`'s: the text in the
  * segment's own colours, as the arrows beside it are, and, when the domain is
- * colour-valued, the swatch beside it.
+ * colour-valued, the swatch of `option` beside it.
  */
 export function valuePaint(
   render: RenderPalettes,

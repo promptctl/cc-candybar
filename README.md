@@ -110,7 +110,6 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `gitPr` | `⇆ #N` linked to the pull request, or `⚠ PR` when the forge lookup failed | when a PR or a lookup error is known |
 | `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page (also inside the settings menu) | always |
 | `commands` | type `/compact`, `/model` or `/clear` into this session; `/clear` asks for a second click (also inside the settings menu) | inside tmux (not placed by default) |
-| `themeSwitcher` | `◀ <theme> ▶` — the theme the bar is wearing; ◀/▶ switch this session to the previous/next theme | always (not placed by default) |
 | `session` | `§` this session's cost and tokens, plus budget status | always |
 | `today` | `☉` today's cost and tokens across sessions, plus budget status | always |
 | `block` | `◱` the 5-hour rate-limit window's utilization | while that window is active |

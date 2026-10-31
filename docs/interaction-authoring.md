@@ -62,8 +62,8 @@ One rule, applied once per interactive element:
 - **Pick a value from an option domain** (theme, style, endcaps) → `{{ menu "applyAction" "▸" "▾" }}`
   in a segment template. One call = a clickable trigger whose text you write +
   drop-below picker + all backing state, synthesized. When trying the options
-  one after another is the point, `{{ carousel "applyAction" }}` is the same
-  pick as a ring whose every click applies (see its section below).
+  one after another is the point, `{{ carousel "applyAction" "openAction" "label" }}`
+  is the same pick as `◀ label ▶`, whose arrows apply (see its section below).
 - **Collapse/reveal arbitrary layout** (a details drawer, a links panel) →
   `{ kind: "group", … }` in `root`.
 - **A single click effect** (copy, open, cycle, step) → `{{ action "name" … }}`
@@ -357,7 +357,7 @@ Each click is one undo step. Neither click writes a file that would not load:
 copying a preset that holds a `kind: "group"` (group names are config-wide),
 or deleting one an action still targets, is refused with the loader's own
 message and changes nothing. The settings menu puts save in its `📐 layout`
-tab as `+ preset` and delete under the preset carousel; this is the same pair
+tab as `+ preset` and delete under the preset control; this is the same pair
 on a bar of your own:
 
 ```json5 check:pass
@@ -386,7 +386,7 @@ then secondary), `"mono"` (every row in primary), or `"alt"` (secondary and
 accent, also turning along the row every three cells, each row starting on
 its own). Cells side by side still differ by shade. It resolves like `endcaps` — the session's pick
 over the config value over the default — and the `⚙` beside the settings
-menu's theme picker carries a `🎼` carousel over it. `variations` is a registered domain and
+menu's theme picker carries a `◀ 🎼 variation ▶` control over it. `variations` is a registered domain and
 `{{ .variation.effective }}` its projection, so a control of your own is the
 same two lines as any other picker:
 
@@ -410,7 +410,7 @@ same two lines as any other picker:
 
 A name outside the table is a load error that lists the ones there are,
 the trial tunings of the accent variation among them, which the settings menu
-offers under the gear's `🧪 trials` rather than on the `🎼` carousel:
+offers under the gear's `🧪 trials` rather than on the `🎼` control:
 
 ```json5 check:fail
 {
@@ -434,7 +434,7 @@ below the deepest window, `"muted"`: a row's cells alternate the role's muted
 form and the role itself, under the role's own text colour, as Textual's
 labels wear it. Under a window, cells side by side step up and down it a
 shade at a time. It resolves like `variation`, and the
-`⚙` beside the settings menu's theme picker carries a `🔆` carousel over it. `shades` is a
+`⚙` beside the settings menu's theme picker carries a `◀ 🔆 shade ▶` control over it. `shades` is a
 registered domain and `{{ .shade.effective }}` its projection:
 
 ```json5 check:pass
@@ -458,7 +458,7 @@ registered domain and `{{ .shade.effective }}` its projection:
 A name outside the dial is a load error that lists its positions: the
 windows lowest first, then the trial jumps (`wide`, `widest`, `pair`,
 `pair-wide`), which the settings menu offers under the gear's `🧪 trials`
-rather than on the `🔆` carousel:
+rather than on the `🔆` control:
 
 ```json5 check:fail
 {
@@ -1424,8 +1424,8 @@ colour, and its body drops below the strip. Closing the menu folds it back to
 picked in this session and not yet saved, and the theme's `⚙` is open:
 
 ```
-✖ ◁ 🎨 theme ▀▀▀ ↺   ⚙ •   ▦ ◀ default ▶   ✎ arrange   💾 save 2 ↶ ⟲
-✕ ◐ ◀ dim ▀▀▀ ▶ ↺   🎼 ◀ accent ▶   🔆 ◀ middle ▶   ⤓ default for tokyo-night ▀▀▀
+✖ ◁ 🎨 theme ▀▀▀ ↺   ⚙ •   ◀ ▦ preset ▶   ✎ arrange   💾 save 2 ↶ ⟲
+✕ ◀ ◐ style ▀▀▀ ▶ ↺   ◀ 🎼 variation ▶   ◀ 🔆 shade ▶   ⤓ default for tokyo-night ▀▀▀
   ▾ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
 ✕ ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
   …
@@ -1461,7 +1461,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
 - **The first line** holds what you most often open this menu for, one click
   from the door: the theme picker and its `⚙` (style, variation, shade, and
   `⤓ default for <theme>` while the look differs from the theme's default),
-  the preset switcher, and `✎ arrange`. Under the preset carousel,
+  the preset switcher, and `✎ arrange`. Under the preset control,
   `🚮 delete <name>` removes the preset you are in when you made it (see
   "Save as preset" above).
 - **`🎨 look`** holds effect, endcaps, fade in/out and the animation speed; **`📐 layout`** holds
@@ -1476,7 +1476,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   or closed, so what differs from the default is findable without opening
   each one. The
   controls are generated from the `globals` declarations: a field with a list
-  of values gets a `◀ value ▶` picker, a boolean a `☑`/`☐` toggle, a bounded number a
+  of values gets a `◀ label ▶` picker, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
   `menuGlyph` are free text and are set in the config file only, as is
@@ -1522,8 +1522,8 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   session started in that directory would load; `cc-candybar doctor <file>`
   checks the file a statusline command names with `--config`.
 
-Preset, style, variation, shade and endcaps are each `◀ value ▶`: `◀` and `▶`
-apply the previous and next value, and clicking the value opens the list of
+Preset, style, variation, shade and endcaps are each `◀ label ▶`: `◀` and `▶`
+apply the previous and next value, and clicking the label opens the list of
 every choice under the row, on the page holding the current one, paged to the
 width. A style in that list is its name beside its swatch. The theme is the
 theme picker: closed, it reads `🎨 theme ▀▀▀` — its label and the swatch of the
@@ -1696,74 +1696,60 @@ menu:
 }
 ```
 
-## `{{ carousel "applyAction" }}` — the ring picker
+## `{{ carousel "applyAction" "openAction" "label" }}` — the closed face of a choice
 
 The same pick as a `{{ menu }}`'s grid — one option-domain action, the same
-domain, the same gated click — laid out as a ring centred on the value the
-action's key holds now:
+domain, the same gated click — drawn as one control that says what it sets:
 
 ```text
-dracula flexoki ◀ gruvbox ▶ monokai nord
+◀ theme ▶
 ```
 
-Every cell applies the option it points at: `▶` writes the option after the
-centre, `◀` the one before it (both wrap round the ends), and a neighbour's name
-writes that neighbour. There is no highlight to move and confirm — a rotation
-IS a pick, so the bar recolours on every click and the ring re-centres on what
-you picked. Neighbours are shown in symmetric pairs, dimmed, as many as the row
-has room for; a narrow terminal shows `◀ gruvbox ▶` alone. Options are coloured
-by the one rule a picker uses (a colour-valued domain writes each name in its
-own palette's colour, on the background every option shares).
-
-A second argument caps how many neighbours each side may show:
-`{{ carousel "applyAction" 0 }}` is the bare stepper `◀ gruvbox ▶` at any
-width — the shape a cell on the bar wants, since the neighbours are what make
-the ring wide. Width still decides within the cap (`2` shows at most two a
-side, fewer when they do not fit), and a cap that is not a whole number ≥ 0 is
-a render error, `carousel "applyAction": neighbours must be a whole number ≥
-0…`. The bundled `themeSwitcher` segment is exactly this over
-`{ set: "theme", from: "themes" }`; name it in a row to place it. Its clicks
-write the session's `theme`, the key the settings menu's `🎨 theme` control
-writes unsaved, so the two always show the same theme:
+All three arguments are required strings. `▶` applies the option after the
+value the action's key holds now and `◀` the one before it, wrapping round the
+ends, so the bar changes on every click. The label is the third argument and
+never the value; clicking it fires `openAction`, which is how the control
+expands the list of every option. Where the domain is colour-valued, the swatch
+of the value in force sits beside the label: `◀ style ▀▀▀ ▶`.
 
 ```json5 check:pass
 {
   globals: { palette: "nord" },
-  actions: { stepMyTheme: { set: "theme", from: "themes" } },
-  segments: { myThemeStepper: { template: '{{ carousel "stepMyTheme" 0 }}' } },
-  root: { rows: { identity: { h: ["model"] }, status: { h: ["myThemeStepper"] } } },
+  variables: {
+    themeList: { kind: "state", key: "themeList", default: "closed" },
+  },
+  actions: {
+    applyTheme: { set: "theme", from: "themes" },
+    openThemes: { set: "themeList", cycle: ["closed", "open"] },
+  },
+  segments: {
+    myTheme: { template: '{{ carousel "applyTheme" "openThemes" "theme" }}' },
+  },
+  root: { rows: { identity: { h: ["model"] }, status: { h: ["myTheme"] } } },
 }
 ```
 
 ```render
  🍫   polled  ✱ Opus 4.8 󰶼 
- ◀ nord ▀▀▀ ▶ 
+ ◀ theme ▀▀▀ ▶ 
 ```
 
-The name between the arrows carries its swatch, as every option of a
-colour-valued domain does in any picker.
+Its clicks write the session's `theme`, the key the settings menu's `🎨 theme`
+control writes unsaved, so the two always agree. An `openAction` that is not a
+declared action is a render error, `carousel "applyAction": open must name a
+declared action…`, and so is one that writes a value the template binds (an
+option, an int cursor, a segment to insert), since the label binds none:
+`carousel "applyAction": open "x" writes a value the template binds…`.
 
-A third argument names a declared action the centre fires instead of applying
-itself — `{{ carousel "applyAction" 0 "openList" }}` keeps the arrows stepping
-and makes the name a different click, while the name shown is still the
-carousel's own current value. That is how the settings menu draws `◀ value ▶`
-with the value opening the list of every choice. A name that is not a declared
-action is a render error, `carousel "applyAction": centre must name a declared
-action…`, and so is one that writes a value the template binds (an option, an
-int cursor, a segment to insert), since the centre binds none:
-`carousel "applyAction": centre "x" writes a value the template binds…`.
-
-A carousel owns no state of its own — its centre is the action's current value —
-so the call is the whole declaration. It is a picker, not a disclosure: put it
-in the body of a `kind: "group"` (or anywhere else a row belongs) when it should
-open and close.
+A carousel owns no state of its own — it steps from the action's current value —
+so the call is the whole declaration.
 
 `{{ themePreview }}` is its companion: two rows sampling the palette the bar is
 drawn in right now — first each tint a closed cell can wear, then the colour an
 open disclosure's trigger wears beside its plane, and the `warning`/`error`
 alerts — each drawn by the same function the bar draws that cell with, so it
-cannot show a colour the bar under that theme would not. Under a carousel whose
-every click applies, that is the theme (or style) at the centre of the ring.
+cannot show a colour the bar under that theme would not. Under a carousel, that
+is the theme (or style) its arrows last applied.
 Named an option action, `{{ themePreview "applyAction" }}` samples instead the
 palette the action's domain draws the option its key holds in — what the
 settings menu's theme picker demos. Over `themes` that is the theme as it
@@ -1824,9 +1810,10 @@ segment sits.
 {
   actions: {
     applyTheme: { set: "theme", from: "themes" },
+    openThemes: { set: "themesShown", cycle: ["closed", "open"] },
   },
   segments: {
-    themeRing: { template: '{{ carousel "applyTheme" }}' },
+    themeRing: { template: '{{ carousel "applyTheme" "openThemes" "theme" }}' },
     themeSample: { template: "{{ themePreview }}" },
   },
   root: { v: [
@@ -1836,20 +1823,19 @@ segment sits.
 }
 ```
 
-The apply action must hold a value to centre on: a `{ set, from }` action
+The apply action must hold a value to step from: a `{ set, from }` action
 whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `style`,
 `preset`, `endcaps`, `variation`, `shade`, `autoWrap`, `padding` —
 needs no `state` variable: it reads back through its `.effective` projection
 (`theme.effective`), which wins over a `state` variable on the same key, so the
-centre is the value the bar is rendering with even before the session picks
+arrows step from the value the bar is rendering with even before the session picks
 one, and it agrees with the settings menu's control for that key. For any other
 key, without the `state` variable the carousel could never see what its last
 click wrote, so it is a render error naming the variable to declare,
 `carousel references action "choose", whose key "pick" no variable reads
 back…`. An `insertSegmentFrom` action inserts a segment and holds nothing, so a
 carousel over one is a render error naming the action. A current value outside
-the domain rotates from the domain's first option, and no option reads as
-current.
+the domain counts as the domain's first option.
 
 ## `styles`: named theme adaptations (the third option domain)
 

@@ -768,23 +768,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template: COMMAND_TRAY.template,
       when: COMMAND_TRAY.when,
     },
-    // Declared-but-opt-in: a theme stepper that lives ON the bar — one click
-    // per theme, with no menu to open (brandon-theme-picker-bgw.exj).
-    // Kept out of the bundled rows because every setting lives behind the
-    // door by default; place it by naming it in a row.
-    //
-    // [LAW:one-type-per-behavior] Not a second theme picker: it is the
-    // settings menu's own `{{ carousel }}` asked for zero neighbours, over a
-    // plain `{ set: "theme", from: "themes" }` — the session key the menu's
-    // theme control writes unsaved, read back through `theme.effective` (the
-    // theme the bar wears), so the two can never disagree about the current
-    // theme. Nothing here a user config could not author itself.
-    themeSwitcher: {
-      group: "session-tools",
-      description:
-        "`◀ <theme> ▶`: the theme the bar is wearing; ◀ and ▶ switch this session to the previous or next theme, wrapping at the ends.",
-      template: '{{ carousel "stepTheme" 0 }}',
-    },
     session: {
       group: "cost-limits",
       description:
@@ -1106,10 +1089,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     ...COMMAND_TRAY.actions,
     // The `directory` cell's click: the full path its abbreviation hides.
     copyDir: { copy: "{{ .current_dir }}" },
-    // The `themeSwitcher` segment's click: each arrow writes the theme it
-    // points at into this session. Gated by the themes domain it names, the
-    // same allow-list the settings menu's theme control derives.
-    stepTheme: { set: "theme", from: "themes" },
     // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
     gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
     ...AUTOCOMPACT.actions,

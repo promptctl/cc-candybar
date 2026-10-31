@@ -4,14 +4,13 @@
 //   1. rotation: ◀ writes the option before the centre and ▶ the one after it,
 //      wrapping at both ends, and each write is the option the ring lands on —
 //      a rotation APPLIES, it never moves a highlight ahead of the value;
-//   2. the centre is the value the key holds, so after a click the ring is
-//      centred on what the click wrote;
-//   3. neighbours are shown only while the row has room for them;
-//   4. in the settings menu every option control is `◀ value ▶` — the bare
-//      carousel — whose name opens a plain list of every option
-//      (brandon-menu-ia-q30.jl1); the theme and style lists carry the preview
-//      beneath them;
-//   5. every colour in the preview is a colour the bar draws under that theme
+//   2. the ring is centred on the value the key holds, so after a click the
+//      arrows step from what the click wrote;
+//   3. in the settings menu every option control is `◀ label ▶` — the bare
+//      carousel — whose label names the setting and opens a plain list of
+//      every option (brandon-menu-ia-q30.jl1); the theme and style lists
+//      carry the preview beneath them;
+//   4. every colour in the preview is a colour the bar draws under that theme
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
@@ -39,11 +38,7 @@ import { parseHandlerUrl } from "../src/install/index";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { links, stripAnsi } from "./helpers/ansi";
-import {
-  CAROUSEL_NEXT,
-  CAROUSEL_PREV,
-  neighbourLevels,
-} from "../src/render/carousel";
+import { CAROUSEL_NEXT, CAROUSEL_PREV } from "../src/render/carousel";
 import { decorEntryColour, windowAt } from "../src/themes/decor";
 import { DEFAULT_DECOR } from "./helpers/decor";
 import { renderStripCells } from "../src/render/strip";
@@ -194,8 +189,11 @@ const writesOf = (url: string): string[][] =>
 
 const CAROUSEL_ONLY = `{
   variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
-  actions: { choose: { set: 'pick', from: ['a', 'b', 'c', 'd', 'e'] } },
-  segments: { ring: { template: '{{ carousel "choose" }}' } },
+  actions: {
+    choose: { set: 'pick', from: ['a', 'b', 'c', 'd', 'e'] },
+    list: { set: 'listing', to: 'yes' },
+  },
+  segments: { ring: { template: '{{ carousel "choose" "list" "the pick" }}' } },
   root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
 }`;
 
@@ -222,32 +220,6 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("a centre that writes nothing names a value its ring lacks, which sits just before the first option", () => {
-    const rt = rig(`{
-      variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
-      actions: { choose: { set: 'pick', from: ['a', 'b', 'c', 'd', 'e'] }, list: { copy: 'list' } },
-      segments: { ring: { template: '{{ carousel "choose" 0 "list" }}' } },
-      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
-    }`);
-    rt.sessionState.set(SID, "pick", "x");
-    const rendered = rt.render();
-    expect(stripAnsi(rendered)).toContain(`${CAROUSEL_PREV} x ${CAROUSEL_NEXT}`);
-    expect(arrows(rendered)).toEqual({ prev: [["pick", "e"]], next: [["pick", "a"]] });
-    rt.dispose();
-  });
-
-  test("a colour-valued carousel holding a name its domain lacks draws the name alone, never asking a palette for it", () => {
-    const rt = rig(`{
-      variables: { st: { kind: 'state', key: 'st' } },
-      actions: { choose: { set: 'st', from: 'styles' }, list: { copy: 'list' } },
-      segments: { ring: { template: '{{ carousel "choose" 0 "list" }}' } },
-      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
-    }`);
-    rt.sessionState.set(SID, "st", "gone");
-    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} gone ${CAROUSEL_NEXT}`);
-    rt.dispose();
-  });
-
   test("a rotation lands the ring on the option it wrote, both ways round", () => {
     const rt = rig(CAROUSEL_ONLY);
     rt.render();
@@ -267,37 +239,57 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("every name in the ring applies itself, and only the centre reads as current", () => {
+  test("the label says what is set whatever the value, and only the arrows write", () => {
     const rt = rig(CAROUSEL_ONLY);
-    rt.sessionState.set(SID, "pick", "c");
-    const rendered = rt.render();
-    const names = links(rendered).filter(
-      (l) =>
-        ![CAROUSEL_PREV, CAROUSEL_NEXT].includes(stripAnsi(l.text)) &&
-        effectsOf(l.url).some((e) => e.args[1] === "pick"),
-    );
-    expect(names.map((l) => [stripAnsi(l.text), writesOf(l.url)])).toEqual([
-      ["a", [["pick", "a"]]],
-      ["b", [["pick", "b"]]],
-      ["c", [["pick", "c"]]],
-      ["d", [["pick", "d"]]],
-      ["e", [["pick", "e"]]],
-    ]);
-    expect(stripAnsi(rendered)).toContain(`a b ${CAROUSEL_PREV} c ${CAROUSEL_NEXT} d e`);
+    for (const held of ["a", "c", "x"]) {
+      rt.sessionState.set(SID, "pick", held);
+      const rendered = rt.render();
+      expect([held, stripAnsi(rendered)]).toEqual([
+        held,
+        expect.stringContaining(`${CAROUSEL_PREV} the pick ${CAROUSEL_NEXT}`),
+      ]);
+      expect(links(rendered).filter((l) => writesOf(l.url).some(([k]) => k === "pick")).map((l) => stripAnsi(l.text)))
+        .toEqual([CAROUSEL_PREV, CAROUSEL_NEXT]);
+    }
     rt.dispose();
   });
 
-  test("a value outside the domain rotates from the first option, and nothing reads as current", () => {
+  test("a click on the label fires the open action and steps nothing", () => {
+    const rt = rig(CAROUSEL_ONLY);
+    rt.sessionState.set(SID, "pick", "c");
+    rt.render();
+    rt.clickText("the pick");
+    expect(rt.sessionState.get(SID, "listing")).toBe("yes");
+    expect(rt.sessionState.get(SID, "pick")).toBe("c");
+    rt.dispose();
+  });
+
+  test("a colour-valued domain keeps the swatch of the value in force beside the label", () => {
+    const rt = rig(`{
+      variables: { th: { kind: 'state', key: 'th', default: 'nord' } },
+      actions: { choose: { set: 'th', from: 'themes' }, list: { set: 'listing', to: 'yes' } },
+      segments: { ring: { template: '{{ carousel "choose" "list" "look" }}' } },
+      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
+    }`);
+    const swatch = () => {
+      rt.render();
+      return rt.sink.get("ring")!.flatMap((cell) =>
+        cell.spans
+          .filter((span) => cell.plain.slice(span.start, span.end).includes("▀"))
+          .map((span) => resolvedStyle(span.style)),
+      );
+    };
+    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} look ▀▀▀ ${CAROUSEL_NEXT}`);
+    const nord = swatch();
+    rt.sessionState.set(SID, "th", "dracula");
+    expect(swatch()).not.toEqual(nord);
+    rt.dispose();
+  });
+
+  test("a value outside the domain counts as the first option", () => {
     const rt = rig(CAROUSEL_ONLY);
     rt.sessionState.set(SID, "pick", "x");
     rt.render();
-    const ring = rt.sink.get("ring")!;
-    const bold = ring.flatMap((cell) =>
-      cell.spans
-        .filter((span) => resolvedStyle(span.style).bold)
-        .map((span) => cell.plain.slice(span.start, span.end)),
-    );
-    expect(bold).toEqual([]);
     rt.clickText(CAROUSEL_NEXT);
     expect(rt.sessionState.get(SID, "pick")).toBe("b");
     rt.dispose();
@@ -305,8 +297,8 @@ describe("the carousel rotates by applying", () => {
 
   test("a key no variable reads back is a loud error naming the variable to declare", () => {
     const rt = rig(`{
-      actions: { choose: { set: 'unread', from: ['a', 'b'] } },
-      segments: { ring: { template: '{{ carousel "choose" }}' } },
+      actions: { choose: { set: 'unread', from: ['a', 'b'] }, list: { copy: 'x' } },
+      segments: { ring: { template: '{{ carousel "choose" "list" "l" }}' } },
       root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
     }`);
     expect(stripAnsi(rt.render())).toContain(
@@ -319,7 +311,7 @@ describe("the carousel rotates by applying", () => {
     expect(() =>
       parseAndValidate(
         "<user>",
-        `{ segments: { ring: { template: '{{ carousel "noSuchApply" }}' } },
+        `{ segments: { ring: { template: '{{ carousel "noSuchApply" "noSuchApply" "l" }}' } },
            root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } } }`,
         ALLOWED,
         DEFAULT_DSL_CONFIG,
@@ -342,8 +334,8 @@ describe("the carousel rotates by applying", () => {
   test("a carousel over the wrong kind of action names the carousel, not the picker", () => {
     const rt = rig(`{
       variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
-      actions: { choose: { set: 'pick', cycle: ['a', 'b'] } },
-      segments: { ring: { template: '{{ carousel "choose" }}' } },
+      actions: { choose: { set: 'pick', cycle: ['a', 'b'] }, list: { copy: 'x' } },
+      segments: { ring: { template: '{{ carousel "choose" "list" "l" }}' } },
       root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
     }`);
     expect(stripAnsi(rt.render())).toContain(
@@ -352,31 +344,14 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("neighbours come in symmetric pairs, only while they fit, never repeating an option", () => {
-    const names = ["aa", "bb", "cc", "dd", "ee", "ff", "gg"];
-    // The drawn width of the option d steps from the centre.
-    const ring = (d: number) => names[((d % 7) + 7) % 7]!.length;
-    // ◀ aa ▶ = 6 cols; each level adds two names and two spaces = 6.
-    expect(neighbourLevels(ring, 7, 6, 6, Infinity)).toBe(0);
-    expect(neighbourLevels(ring, 7, 6, 11, Infinity)).toBe(0);
-    expect(neighbourLevels(ring, 7, 6, 12, Infinity)).toBe(1);
-    expect(neighbourLevels(ring, 7, 6, 1000, Infinity)).toBe(3);
-    // Two options: the one neighbour is both ◀ and ▶, so the ring shows none.
-    expect(neighbourLevels(ring, 2, 6, 1000, Infinity)).toBe(0);
-    // The author's cap bounds the levels; width still decides within it.
-    expect(neighbourLevels(ring, 7, 6, 1000, 0)).toBe(0);
-    expect(neighbourLevels(ring, 7, 6, 1000, 2)).toBe(2);
-    expect(neighbourLevels(ring, 7, 6, 12, 2)).toBe(1);
-  });
 });
 
-// The ring's line: one value between the arrows — the padding stepper's
-// "◀ padding 0 ▶" carries two.
-const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
+// The preset control's line, under which its list opens.
+const PRESET_CONTROL = `${CAROUSEL_PREV} ▦ preset ${CAROUSEL_NEXT}`;
 
 // The door, then the tab the control is in (none on the door's first line),
 // then — for a setting behind the theme picker's gear — the gear, then its
-// list: the click on the name between its arrows (on the theme picker, its
+// list: the click on the label between its arrows (on the theme picker, its
 // label). Where a control is comes from the menu's map, as the menu lays it.
 const PICKERS = sharedMenuStateKey("candybar.pickers");
 const GEAR_PICKERS = sharedMenuStateKey("candybar.gearPickers");
@@ -404,10 +379,10 @@ function bodyRows(rt: ReturnType<typeof rig>, control: string): RichText[][] {
 }
 
 // brandon-menu-ia-q30.jl1: "a regular menu, no carousel". A control is
-// `label ◀ value ▶`; the name opens a plain list of every option below it.
+// `◀ label ▶`; the label opens a plain list of every option below it.
 // The theme's control is the theme picker (brandon-theme-swatch-8v9r):
 // `🎨 theme ▀▀▀ ⚙`, whose label opens a row of swatches over a two-row demo.
-describe("the settings menu's look controls are pickers whose name opens a list", () => {
+describe("the settings menu's look controls are pickers whose label opens a list", () => {
   const THEMES = listResolvablePaletteNames();
   // The links of the swatch row: every link writing the theme whose text is
   // a swatch, with the theme it writes.
@@ -657,9 +632,7 @@ describe("the variation control", () => {
   test("▶ applies the next variation in this session and the bar's closed cells recolour", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     openPicker(rt, "variation");
-    expect(stripAnsi(rt.render())).toMatch(
-      new RegExp(`${CAROUSEL_PREV} accent ${CAROUSEL_NEXT}`),
-    );
+    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🎼 variation ${CAROUSEL_NEXT}`);
     // Row 1 (directory) and row 2 (model) under the default.
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("variation", CAROUSEL_NEXT).url);
@@ -668,9 +641,6 @@ describe("the variation control", () => {
     ]);
     rt.click(rt.linkOn("variation", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "variation")).toBe("duo");
-    expect(stripAnsi(rt.render())).toMatch(
-      new RegExp(`${CAROUSEL_PREV} duo ${CAROUSEL_NEXT}`),
-    );
     const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
     expect(after[1]).not.toEqual(before[1]);
@@ -684,9 +654,7 @@ describe("the shade control", () => {
   test("▶ turns the dial one position in this session and the bar's closed cells recolour", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     openPicker(rt, "shade");
-    expect(stripAnsi(rt.render())).toMatch(
-      new RegExp(`${CAROUSEL_PREV} middle ${CAROUSEL_NEXT}`),
-    );
+    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🔆 shade ${CAROUSEL_NEXT}`);
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
@@ -694,9 +662,6 @@ describe("the shade control", () => {
     ]);
     rt.click(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "shade")).toBe("brighter");
-    expect(stripAnsi(rt.render())).toMatch(
-      new RegExp(`${CAROUSEL_PREV} brighter ${CAROUSEL_NEXT}`),
-    );
     const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
     expect(after[1]).not.toEqual(before[1]);
@@ -724,11 +689,11 @@ describe("colour depth is set in the config file, not the menu", () => {
 });
 
 // The preview's rows, as the labels each draws: the lines after the list of
-// presets (the body's first row, under the control's ◀ name ▶), up to the
+// presets (the body's first row, under the control's ◀ label ▶), up to the
 // preset actions or the menu's tab strip below the body.
 function previewLabels(rendered: string): string[][] {
   const lines = stripAnsi(rendered).split("\n");
-  const ring = lines.findIndex((l) => RING.test(l));
+  const ring = lines.findIndex((l) => l.includes(PRESET_CONTROL));
   const rows: string[][] = [];
   for (const line of lines.slice(ring + 2)) {
     // The preview's rows end where the ring's body goes on to the preset
@@ -1043,123 +1008,6 @@ describe("the preview is the bar's own colours", () => {
     openPicker(rt, "endcaps");
     expect(rt.sink.has("candybar.list.endcaps.0")).toBe(true);
     expect(rt.sink.has("candybar.list.endcaps.1")).toBe(false);
-    rt.dispose();
-  });
-});
-
-// [LAW:verifiable-goals] brandon-theme-picker-bgw.exj — the bundled
-// `themeSwitcher` segment: `◀ <theme> ▶` on the bar itself, so the whole bar
-// stays visible while stepping through themes. Read by segment name off the
-// per-segment sink and serialized through the strip serializer the bar uses,
-// never by position in the bar (every row leads with the settings door).
-describe("the bundled themeSwitcher segment steps the session theme on the bar", () => {
-  // Every theme name the bar shows carries its swatch (brandon-theme-swatch-8v9r).
-  const SWATCH = "▀▀▀";
-  const THEMES = listResolvablePaletteNames();
-  // The theme `k` steps from the first, wrapping both ways — the ring's own
-  // arithmetic, so no test depends on where nord happens to sit in the list.
-  const themeAt = (k: number): string =>
-    THEMES[((k % THEMES.length) + THEMES.length) % THEMES.length]!;
-  const NORD = THEMES.indexOf("nord");
-  // Placed on the status row, so it stays on the bar while the settings menu
-  // opens inline over the door's (identity) row.
-  const PLACED = `{ globals: { palette: 'nord' },
-    root: { rows: { status: { h: ['model', 'themeSwitcher'] } } } }`;
-
-  const bytesOf = (rt: ReturnType<typeof rig>, segment: string): string =>
-    renderStripCells(rt.sink.get(segment)!, opts(200, 0, "powerline"));
-  const linkAt = (bytes: string, glyph: string) =>
-    links(bytes).find((l) => stripAnsi(l.text) === glyph)!;
-  const switcher = (rt: ReturnType<typeof rig>) => {
-    const bytes = bytesOf(rt, "themeSwitcher");
-    return {
-      text: rt.sink.get("themeSwitcher")!.map((cell) => cell.plain).join(""),
-      prev: writesOf(linkAt(bytes, CAROUSEL_PREV).url),
-      next: writesOf(linkAt(bytes, CAROUSEL_NEXT).url),
-    };
-  };
-
-  test("with no session pick it shows the theme the bar wears, not the domain's first", () => {
-    const rt = rig(PLACED);
-    rt.render();
-    // nord is not the first theme, so a ring centred on no value would show
-    // THEMES[0] instead.
-    expect(THEMES[0]).not.toBe("nord");
-    expect(switcher(rt)).toEqual({
-      text: `${CAROUSEL_PREV} nord ${SWATCH} ${CAROUSEL_NEXT}`,
-      prev: [["theme", themeAt(NORD - 1)]],
-      next: [["theme", themeAt(NORD + 1)]],
-    });
-    rt.dispose();
-  });
-
-  test("◀ writes the previous theme and ▶ the next, wrapping at the first and last", () => {
-    const rt = rig(PLACED);
-    for (const i of [0, 1, THEMES.length - 1]) {
-      rt.sessionState.set(SID, "theme", THEMES[i]!);
-      rt.render();
-      expect(switcher(rt)).toEqual({
-        text: `${CAROUSEL_PREV} ${THEMES[i]} ${SWATCH} ${CAROUSEL_NEXT}`,
-        prev: [["theme", themeAt(i - 1)]],
-        next: [["theme", themeAt(i + 1)]],
-      });
-    }
-    rt.dispose();
-  });
-
-  test("a click applies through the real gate and re-centres, opening nothing", () => {
-    const rt = rig(PLACED);
-    const rows = stripAnsi(rt.render()).split("\n").length;
-    rt.click(linkAt(bytesOf(rt, "themeSwitcher"), CAROUSEL_NEXT).url);
-    expect(rt.sessionState.get(SID, "theme")).toBe(themeAt(NORD + 1));
-    expect(switcher(rt).text).toBe(
-      `${CAROUSEL_PREV} ${themeAt(NORD + 1)} ${SWATCH} ${CAROUSEL_NEXT}`,
-    );
-    // Nothing opened: the bar has exactly as many rows as before the click.
-    expect(stripAnsi(rt.render()).split("\n").length).toBe(rows);
-    rt.dispose();
-  });
-
-  test("a theme picked through the settings menu is the theme the segment shows", () => {
-    const rt = rig(PLACED);
-    openPicker(rt, "theme");
-    // ▶ leads the theme picker's swatch row.
-    rt.click(linkAt(bytesOf(rt, "candybar.list.theme.0"), CAROUSEL_NEXT).url);
-    const picked = rt.sessionState.get(SID, "theme")!;
-    expect(picked).toBe(themeAt(NORD + 1));
-    expect(switcher(rt).text).toBe(
-      `${CAROUSEL_PREV} ${picked} ${SWATCH} ${CAROUSEL_NEXT}`,
-    );
-    rt.dispose();
-  });
-
-  test("the bundled segment is the carousel asked for no neighbours, over a plain session set", () => {
-    expect(DEFAULT_DSL_CONFIG.segments.themeSwitcher!.template).toBe(
-      '{{ carousel "stepTheme" 0 }}',
-    );
-    expect(DEFAULT_DSL_CONFIG.actions.stepTheme).toEqual({
-      set: "theme",
-      from: "themes",
-    });
-  });
-
-  test.each([
-    ["-1", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got -1"],
-    // Refused, never truncated to 1.
-    ["1.5", "neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got 1.5"],
-    // Not dropped: the slot after the cap is the centre, and a number is no
-    // fragment to put there.
-    ["0 2", "centre must name a declared action, got 2"],
-    // Nor is anything past the centre.
-    ['0 (action "choose" "x") 3', "takes at most 2 optional arguments (neighbours, centre), got 3"],
-  ])("neighbours %s is a loud render error", (args, message) => {
-    const rt = rig(`{
-      variables: { pick: { kind: 'state', key: 'pick', default: 'a' } },
-      actions: { choose: { set: 'pick', from: ['a', 'b', 'c'] } },
-      segments: { ring: { template: '{{ carousel "choose" ${args} }}' } },
-      root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
-    }`);
-    expect(stripAnsi(rt.render()).replace(/\s+/g, " ")).toContain(message);
     rt.dispose();
   });
 });

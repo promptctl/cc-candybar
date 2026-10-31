@@ -676,7 +676,7 @@ export function compileDslConfig(
       ...actionFuncs(actionRuntime),
       ...swatchFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
-      ...carouselFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime),
       ...themePreviewFuncs(actionRuntime, activeSegment),
       ...layoutPreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
