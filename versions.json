@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-517",
+      "ref": "refs/pull/517/merge",
+      "sha": "c35b53079994a15ac640819f7e6a4c4541908ad8",
+      "timestamp": "2026-10-31T05:55:38.322Z",
+      "commits": [
+        {
+          "sha": "c35b53079994a15ac640819f7e6a4c4541908ad8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:54:51Z",
+          "message": "Merge 0fb29b56d6075b2bbfcc56e67a63538f53219b76 into 8da9964e91dd7db20d259a81a05cf0f2328ee0c2\n"
+        },
+        {
+          "sha": "0fb29b56d6075b2bbfcc56e67a63538f53219b76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:54:39-06:00",
+          "message": "feat(site): the live bar's font size is a slider\n"
+        },
+        {
+          "sha": "1b4479f5276864815f65006e8cbcf49ec2d79219",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:50:37-06:00",
+          "message": "feat(site): the live bar's font size is a control, and starts larger\n"
+        },
+        {
+          "sha": "f7f6cbdf1f7063ae075aba3d7f56be52c4567f3f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T23:43:59-06:00",
+          "message": "feat(site): site:dev serves the live bar and reloads it on every rebuild\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "8da9964e91dd7db20d259a81a05cf0f2328ee0c2",
@@ -20,35 +56,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-10-31T05:28:34Z",
           "message": "chore(release): set `package.json` to 1.169.2 [skip ci]\n\n## [1.169.2](https://github.com/promptctl/cc-candybar/compare/v1.169.1...v1.169.2) (2026-10-31)\n\n### Bug Fixes\n\n* **site:** the live bar defines Symbol.dispose where Safari has none ([#515](https://github.com/promptctl/cc-candybar/issues/515)) ([0a5c459](https://github.com/promptctl/cc-candybar/commit/0a5c459f404f83438a0772eb02741da617b6a82b))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-517",
-      "ref": "refs/pull/517/merge",
-      "sha": "28cc874e0227072420f15929df211bf6db15f120",
-      "timestamp": "2026-10-31T05:51:41.510Z",
-      "commits": [
-        {
-          "sha": "28cc874e0227072420f15929df211bf6db15f120",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:50:47Z",
-          "message": "Merge 1b4479f5276864815f65006e8cbcf49ec2d79219 into 1eb0b0c4631cd6287997adbaddb0d7db1f9452a0\n"
-        },
-        {
-          "sha": "1b4479f5276864815f65006e8cbcf49ec2d79219",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:50:37-06:00",
-          "message": "feat(site): the live bar's font size is a control, and starts larger\n"
-        },
-        {
-          "sha": "f7f6cbdf1f7063ae075aba3d7f56be52c4567f3f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:43:59-06:00",
-          "message": "feat(site): site:dev serves the live bar and reloads it on every rebuild\n"
         }
       ]
     }
