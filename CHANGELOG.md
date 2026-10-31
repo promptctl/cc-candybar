@@ -1,3 +1,9 @@
+## [1.170.1](https://github.com/promptctl/cc-candybar/compare/v1.170.0...v1.170.1) (2026-10-31)
+
+### Bug Fixes
+
+* **doctor:** the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb) ([#519](https://github.com/promptctl/cc-candybar/issues/519)) ([3405285](https://github.com/promptctl/cc-candybar/commit/3405285f6ee15d063c84e720f6659f9babe4bc6a))
+
 ## [1.170.0](https://github.com/promptctl/cc-candybar/compare/v1.169.2...v1.170.0) (2026-10-31)
 
 ### Features
