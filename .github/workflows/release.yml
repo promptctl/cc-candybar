@@ -42,7 +42,7 @@ jobs:
 
       # [LAW:verifiable-goals] Before the build, so a test outside the process
       # tier that comes to need one fails here. The two steps are the whole suite:
-      # one run ignores exactly what the other's filter matches.
+      # one run ignores exactly what the other selects.
       - name: Test outside the process tier
         run: pnpm test:worker
 
@@ -50,7 +50,7 @@ jobs:
         run: pnpm run build
 
       - name: Test the process tier
-        run: pnpm test '\.process\.test\.ts$'
+        run: pnpm test:process
 
       - name: Protocol-version guard
         run: pnpm run check:protocol

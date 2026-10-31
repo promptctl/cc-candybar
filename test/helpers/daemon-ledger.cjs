@@ -1,7 +1,7 @@
 // [LAW:nothing-unseen] Preloaded on every jest worker and every child of one
 // (test/global-setup.ts), so a process entering the `daemon` subcommand records
-// itself by any route: the spawn helper, a client that found no daemon, or a
-// test's own spawn. Off that path this is one argv read.
+// itself whatever brought it there: the spawn helper, a client that found no
+// daemon, or a test's own spawn. Off that path this is one argv read.
 //
 // [LAW:no-silent-failure] Nothing here guards the write, so a daemon that cannot
 // be recorded dies at boot and serves nothing. The ledger is opened without

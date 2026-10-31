@@ -85,7 +85,7 @@ async function withBuiltDaemon<T>(
 describe("a daemon spawned from the built bundle", () => {
   // [LAW:no-silent-failure] The feature checks its own test's precondition: a
   // bundle not built from the current `src/` carries another digest, and every
-  // verdict below would be about that build. CI builds before `pnpm test`.
+  // verdict below would be about that build. CI builds before this tier.
   beforeAll(() => {
     if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(REPO_DIGEST)) {
       throw new Error(

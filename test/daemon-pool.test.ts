@@ -186,3 +186,16 @@ describe("the pool holds a spawn to its ceiling", () => {
     }
   });
 });
+
+describe("a spawned process's stderr", () => {
+  // The shell exits first and its background job writes after it, so a tail
+  // taken at the exit misses what the process said.
+  test("the tail holds what arrives after the exit", async () => {
+    const proc = await spawnTestDaemon(
+      process.env,
+      createDaemonPool(tmpPoolDir(), 1),
+      { bin: "/bin/sh", args: ["-c", "(sleep 0.2; echo why >&2) & exit 1"] },
+    );
+    await expect(proc.stderrTail).resolves.toContain("why");
+  });
+});

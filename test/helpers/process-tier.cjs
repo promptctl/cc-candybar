@@ -3,7 +3,7 @@
 // start. This file holds what that rule is made of, and judges one run's starts.
 // The rule is about a process entering the `daemon` subcommand, so it is read
 // from what such a process recorded (daemon-ledger.cjs), whichever route brought
-// it there. CommonJS because the preload and jest.worker.config.js load it
+// it there. CommonJS because the preload and the jest configs load it
 // untransformed.
 
 // A string, because jest's testPathIgnorePatterns takes strings and fails on a

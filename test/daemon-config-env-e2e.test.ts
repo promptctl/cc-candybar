@@ -18,6 +18,7 @@ import {
 import { renderLines } from "./helpers/daemon-log";
 import {
   click,
+  configFlag,
   hookData,
   render as renderBar,
   renderRequest,
@@ -32,9 +33,6 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
-
-// The argv a client sends: binary path first, as parseRenderArgs expects.
-const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
 
 // What a person reads of a session's bar: the bar, then every message its
 // indicator offers, each read in the viewer.

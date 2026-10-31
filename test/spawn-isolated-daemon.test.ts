@@ -82,7 +82,9 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     ).toContain("the process exited (signal SIGKILL)");
   });
 
-  test("every combination quotes the daemon's own log, named by path", () => {
+  // A daemon logs nothing until it binds, so a process that died before that
+  // said why only on stderr.
+  test("every combination quotes the daemon's log, named by path, and its stderr", () => {
     const phases = ["booting", "bound"] as const;
     const exits = [null, { code: 1, signal: null }] as const;
     for (const phase of phases) {
@@ -90,15 +92,8 @@ describe("readinessFailure — what the socket did, what our process did", () =>
         const m = message({ phase, exit });
         expect(m).toContain(logPath(env));
         expect(m).toContain(LOG_LINE);
+        expect(m).toContain(`stderr:\n${STDERR_LINE}`);
       }
     }
-  });
-
-  // A daemon logs nothing until it binds, so a process that died before that
-  // said why only on stderr.
-  test("every combination quotes the process's own stderr", () => {
-    expect(message({ phase: "booting", exit: { code: 1, signal: null } })).toContain(
-      `stderr:\n${STDERR_LINE}`,
-    );
   });
 });

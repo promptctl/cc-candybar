@@ -49,7 +49,8 @@ export interface TestDaemonProcess {
   killTree(signal?: NodeJS.Signals): void;
   // [LAW:no-silent-failure] What a process that died before its first log line
   // said: a daemon logs nothing until it binds, so the log has no word of it.
-  stderrTail(): string;
+  // Settles once the pipe has closed, so what a dying process said is all in it.
+  stderrTail: Promise<string>;
   // Idempotent, safe to call multiple times or not at all — the slot also
   // self-releases on the wrapper's `exit` event, so a test whose cleanup
   // forgets this (or crashes before reaching it) can't wedge the pool.
@@ -86,6 +87,13 @@ export async function spawnTestDaemon(
   let stderr = "";
   child.stderr?.on("data", (chunk: Buffer) => {
     stderr = (stderr + chunk.toString()).slice(-STDERR_TAIL_BYTES);
+  });
+  // [LAW:no-ambient-temporal-coupling] 'exit' can land before the pipe's last
+  // bytes are read, and a process that dies before its log opens says why only
+  // there. 'close' is the state that means they have arrived, and it comes on a
+  // failed spawn too.
+  const stderrTail = new Promise<string>((resolve) => {
+    child.once("close", () => resolve(stderr));
   });
 
   let released = false;
@@ -125,5 +133,5 @@ export async function spawnTestDaemon(
     }
   };
 
-  return { child, killTree, stderrTail: () => stderr, release: releaseOnce };
+  return { child, killTree, stderrTail, release: releaseOnce };
 }

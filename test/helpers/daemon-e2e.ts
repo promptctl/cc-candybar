@@ -37,6 +37,9 @@ import { valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
 export { linkUrls, stripAnsi } from "./ansi";
 
+// The argv a client sends: binary path first, as parseRenderArgs expects.
+export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
+
 const REPLY_BUDGET_MS = 5000;
 
 // [LAW:no-ambient-temporal-coupling] `TIMEOUT` (request-deadline.ts's REQUEST_TIMEOUT_MS

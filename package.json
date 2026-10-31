@@ -21,6 +21,7 @@
     "lint:fix": "eslint src/ --fix",
     "test": "jest",
     "test:worker": "jest --config jest.worker.config.js",
+    "test:process": "jest --config jest.process.config.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "audit:colour": "jest --config audits/jest.config.js",

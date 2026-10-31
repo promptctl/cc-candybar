@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  configFlag,
   hookData,
   killAndWait,
   render,
@@ -16,9 +17,6 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
-
-// The argv a client sends: binary path first, as parseRenderArgs expects.
-const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
 
 // The wire of a real client: its own process, env and cwd, over a socket. A
 // client run with `spawnSync` would block a daemon in this worker, so these
