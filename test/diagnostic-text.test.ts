@@ -1,9 +1,8 @@
-// [LAW:one-source-of-truth] Tests for the shared sanitize-and-truncate
-// primitive used by BOTH src/render/error-glyph.ts (permanent client glyph)
-// AND src/render/diagnostics.ts diagnosticSpan (every message the
-// diagnostics viewer shows). This file pins the predicate's ranges; what the
-// pass does to a string is the fixture both runtimes assert
-// (test/diagnostic-text-cases.test.ts).
+// [LAW:one-source-of-truth] Tests for the control-character predicate behind
+// the sanitize-and-truncate primitive used by BOTH src/render/error-glyph.ts
+// (permanent client glyph) AND src/render/diagnostics.ts diagnosticSpan (every
+// message the diagnostics viewer shows). What the pass does to a string is the
+// fixture both runtimes assert (test/diagnostic-text-cases.test.ts).
 
 import { isControlChar } from "../src/render/diagnostic-text";
 

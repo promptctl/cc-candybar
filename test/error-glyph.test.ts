@@ -2,15 +2,14 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { formatPermanentGlyph, MAX_MESSAGE_LEN } from "../src/render/error-glyph";
-import { sanitizeAndTruncate } from "../src/render/diagnostic-text";
+import { formatPermanentGlyph } from "../src/render/error-glyph";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
-// implementation. The Rust mirror (rust-client/src/error_glyph.rs) carries an
-// equivalent unit test that pins byte-identical output for the same causes.
+// implementation. Each message-bearing cause's exact glyph is in the one table
+// both runtimes assert (test/diagnostic-text-cases.test.ts).
 
 const OPEN = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
 const TAIL = "\x1b[0m\n";
@@ -68,49 +67,6 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     });
     expect(glyph).toContain(`client v${CLIENT_V} ≠ daemon unknown`);
     expect(glyph).not.toContain("daemon v0");
-  });
-
-  test("bad_request message is included verbatim when short", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "bad_request",
-      message: "unknown kind",
-    });
-    expect(glyph).toContain("daemon rejected request: unknown kind");
-  });
-
-  test("render_failed message is included verbatim when short", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "render_failed",
-      message: "segments threw",
-    });
-    expect(glyph).toContain("render failed: segments threw");
-  });
-
-  test("malformed_response message is included verbatim when short", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "malformed_response",
-      message: "stats response to render/click",
-    });
-    expect(glyph).toContain(
-      "malformed daemon response: stats response to render/click",
-    );
-  });
-
-  // The fixture proves what the clip does to a string; this proves each
-  // message path goes through it.
-  test.each([
-    ["bad_request", "daemon rejected request"],
-    ["render_failed", "render failed"],
-    ["switched_off", "switched off"],
-    ["malformed_response", "malformed daemon response"],
-  ] as const)("a long %s message is clipped to the budget", (cause, label) => {
-    const message = "x".repeat(MAX_MESSAGE_LEN + 1);
-    expect(formatPermanentGlyph({ kind: "permanent", cause, message })).toBe(
-      `${OPEN}${PREFIX}${label}: ${sanitizeAndTruncate(message, MAX_MESSAGE_LEN)}${TAIL}`,
-    );
   });
 
   // [LAW:one-type-per-behavior] The single-line glyph contract documented in

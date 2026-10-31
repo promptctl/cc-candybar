@@ -32,7 +32,7 @@ const PREFIX = "⚠ cc-candybar: ";
 // Long messages from the daemon (parse errors, internal exception strings)
 // can be arbitrarily long. The glyph must fit on a single statusline row, so
 // truncate to a budget that leaves room for the prefix at typical widths.
-export const MAX_MESSAGE_LEN = 60;
+const MAX_MESSAGE_LEN = 60;
 
 export function formatPermanentGlyph(outcome: PermanentOutcome): string {
   return `${OPEN}${PREFIX}${describe(outcome)}${ANSI_RESET}\n`;

@@ -1,16 +1,24 @@
-// [LAW:one-source-of-truth] The diagnostic text pass's behaviour, from the one
-// table both runtimes assert (test/fixtures/diagnostic-text-cases.json): the
-// native client's `sanitize` and `truncate` (rust-client/src/error_glyph.rs)
-// read the same file, so a collapse, neutralize or clip rule changed in one
+// [LAW:one-source-of-truth] [LAW:one-type-per-behavior] The diagnostic text
+// pass's behaviour, from the one table both runtimes assert
+// (test/fixtures/diagnostic-text-cases.json): the native client's `sanitize`,
+// `truncate` and `format_permanent_glyph` (rust-client/src/error_glyph.rs) read
+// the same file, so a collapse, neutralize, clip or label rule changed in one
 // runtime fails the other's test. check-protocol pins what a literal can state
-// (the range tables, the fold, the budget); what the pass does to a string is
-// behaviour, so it lives here.
+// (the range tables, the fold, that the budgets agree); what the pass does to a
+// string is behaviour, so it lives here.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { PermanentOutcome } from "../src/daemon/client-transport";
 import { sanitizeAndTruncate, sanitizeText } from "../src/render/diagnostic-text";
+import { formatPermanentGlyph } from "../src/render/error-glyph";
 
 interface Cases {
+  readonly glyph: readonly {
+    readonly cause: Extract<PermanentOutcome, { message: string }>["cause"];
+    readonly message: string;
+    readonly output: string;
+  }[];
   readonly sanitize: readonly { readonly input: string; readonly output: string }[];
   readonly clip: readonly {
     readonly input: string;
@@ -29,6 +37,13 @@ const CASES = JSON.parse(
 // U+009B and U+202E raw.)
 const escaped = (s: string): string =>
   s.replace(/[^\x20-\x7e]/gu, (ch) => `\\u${ch.codePointAt(0)!.toString(16).padStart(4, "0")}`);
+
+test.each(CASES.glyph.map((c) => [c.cause, c] as const))(
+  "formatPermanentGlyph %s",
+  (cause, { message, output }) => {
+    expect(formatPermanentGlyph({ kind: "permanent", cause, message })).toBe(output);
+  },
+);
 
 test.each(CASES.sanitize.map((c) => [escaped(c.input), c] as const))(
   'sanitizeText "%s"',

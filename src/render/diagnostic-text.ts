@@ -85,9 +85,10 @@ export function sanitizeAndTruncate(text: string, maxLen: number): string {
   // both one visible code point — equal contributions to length.
   const sanitized = sanitizeText(text);
 
-  // Truncate-with-ellipsis. The /.$/u regex matches a full code point
-  // (unicode flag), not a UTF-16 unit — important for emoji and other
-  // astral-plane chars in user-supplied paths.
+  // [LAW:one-type-per-behavior] Truncate-with-ellipsis. The /.$/u regex matches
+  // a full code point (unicode flag), not a UTF-16 unit — important for emoji
+  // and other astral-plane chars in user-supplied paths, and the unit the Rust
+  // clip counts, so the runtimes agree outside ASCII.
   let out = "";
   let count = 0;
   for (const ch of sanitized) {

@@ -121,8 +121,10 @@ fn sanitize(s: &str) -> String {
     sanitized
 }
 
-// Sanitize, then clip to `budget` visible code points, replacing the last
-// one with an ellipsis when over budget so visible length stays at budget.
+// [LAW:one-type-per-behavior] Sanitize, then clip to `budget` visible code
+// points, the unit the TS clip counts, so the runtimes agree outside ASCII.
+// The last one becomes an ellipsis when over budget, so visible length stays
+// at budget.
 fn truncate(s: &str, budget: usize) -> String {
     let mut out = String::new();
     for (count, ch) in sanitize(s).chars().enumerate() {
@@ -173,15 +175,6 @@ mod tests {
         assert!(g.contains(&format!("client v{CLIENT_V} ≠ daemon unknown")));
     }
 
-    #[test]
-    fn bad_request_short_message() {
-        let g = format_permanent_glyph(&PermanentCause::BadRequest("nope".into()));
-        assert_eq!(
-            g,
-            format!("{OPEN}⚠ cc-candybar: daemon rejected request: nope{TAIL}")
-        );
-    }
-
     // [LAW:one-type-per-behavior] ESC + C0 sanitization paired with the TS
     // mirror. A crafted error message containing `\x1b[0m` would otherwise
     // prematurely terminate the glyph's styled envelope; the entire C0
@@ -217,8 +210,9 @@ mod tests {
 
     // [LAW:one-source-of-truth] [LAW:one-type-per-behavior] The pass's
     // behaviour, from the one table test/diagnostic-text-cases.test.ts asserts
-    // against the TS sanitizeText and sanitizeAndTruncate, so a collapse,
-    // neutralize or clip rule changed in one runtime fails the other's test.
+    // against the TS sanitizeText, sanitizeAndTruncate and formatPermanentGlyph,
+    // so a collapse, neutralize, clip or label rule changed in one runtime fails
+    // the other's test.
     const CASES: &str = include_str!("../../test/fixtures/diagnostic-text-cases.json");
 
     fn cases(key: &str) -> Vec<serde_json::Value> {
@@ -260,22 +254,19 @@ mod tests {
         }
     }
 
-    // The fixture proves what the clip does to a string; this proves each
-    // message path goes through it.
     #[test]
-    fn long_messages_are_clipped_to_the_budget() {
-        let long = || "x".repeat(MAX_MESSAGE_LEN + 1);
-        let clipped = truncate(&long(), MAX_MESSAGE_LEN);
-        for (cause, label) in [
-            (PermanentCause::BadRequest(long()), "daemon rejected request"),
-            (PermanentCause::RenderFailed(long()), "render failed"),
-            (PermanentCause::SwitchedOff(long()), "switched off"),
-            (PermanentCause::MalformedResponse(long()), "malformed daemon response"),
-        ] {
-            assert_eq!(
-                format_permanent_glyph(&cause),
-                format!("{OPEN}⚠ cc-candybar: {label}: {clipped}{TAIL}")
-            );
+    fn glyph_cases() {
+        for case in cases("glyph") {
+            let message = case["message"].as_str().expect("message is a string").to_string();
+            let output = case["output"].as_str().expect("output is a string");
+            let cause = match case["cause"].as_str().expect("cause is a string") {
+                "bad_request" => PermanentCause::BadRequest(message),
+                "render_failed" => PermanentCause::RenderFailed(message),
+                "switched_off" => PermanentCause::SwitchedOff(message),
+                "malformed_response" => PermanentCause::MalformedResponse(message),
+                other => panic!("no message-bearing cause {other}"),
+            };
+            assert_eq!(format_permanent_glyph(&cause), output);
         }
     }
 
