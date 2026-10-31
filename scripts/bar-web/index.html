@@ -80,9 +80,8 @@
     <button type="button" id="fit">fit window</button>
   </div>
   <div class="group"><span class="label">font</span>
-    <button type="button" id="font-smaller" aria-label="Smaller font">A−</button>
+    <input type="range" id="font-slider" aria-label="Font size" style="accent-color: currentColor; width: 120px">
     <span id="font-size"></span>
-    <button type="button" id="font-larger" aria-label="Larger font">A+</button>
   </div>
   <div class="group"><span class="label">terminal ground</span>
     <button type="button" data-ground="dark" aria-pressed="true">dark</button>
@@ -142,7 +141,7 @@ function say(text, cls) {
   $("status").replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
 }
 
-const FONT_SIZES = { min: 10, max: 40, step: 2, default: 18 };
+const FONT_SIZES = { min: 10, max: 32, default: 16 };
 const FONT_SIZE_KEY = "cc-candybar:bar-font-size";
 const storedFontSize = Number(localStorage.getItem(FONT_SIZE_KEY));
 
@@ -277,15 +276,15 @@ const press = (selector, chosen) =>
   document.querySelectorAll(selector).forEach((o) => o.setAttribute("aria-pressed", String(o === chosen)));
 $("fit").addEventListener("click", () => { frame.style.width = "100%"; });
 // The frame keeps its width, so a larger font is fewer columns and the bar lays itself out again.
-function setFontSize(size) {
-  term.options.fontSize = Math.min(FONT_SIZES.max, Math.max(FONT_SIZES.min, size));
-  localStorage.setItem(FONT_SIZE_KEY, String(term.options.fontSize));
-  $("font-size").textContent = `${term.options.fontSize}px`;
-  refit();
-}
-$("font-smaller").addEventListener("click", () => setFontSize(term.options.fontSize - FONT_SIZES.step));
-$("font-larger").addEventListener("click", () => setFontSize(term.options.fontSize + FONT_SIZES.step));
+const fontSlider = $("font-slider");
+Object.assign(fontSlider, { min: FONT_SIZES.min, max: FONT_SIZES.max, value: term.options.fontSize });
 $("font-size").textContent = `${term.options.fontSize}px`;
+fontSlider.addEventListener("input", () => {
+  term.options.fontSize = fontSlider.valueAsNumber;
+  localStorage.setItem(FONT_SIZE_KEY, fontSlider.value);
+  $("font-size").textContent = `${fontSlider.value}px`;
+  refit();
+});
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
   term.options.theme = GROUNDS[b.dataset.ground];
   frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
