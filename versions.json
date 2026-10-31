@@ -4,15 +4,22 @@
     {
       "version": "pr-520",
       "ref": "refs/pull/520/merge",
-      "sha": "dfb82b0f8820caf8c858c5c76b024d4693eb41d5",
-      "timestamp": "2026-10-31T13:24:58.822Z",
+      "sha": "d4a477f25421b4bc576da2e19074ba4951dbfc1a",
+      "timestamp": "2026-10-31T13:39:34.456Z",
       "commits": [
         {
-          "sha": "dfb82b0f8820caf8c858c5c76b024d4693eb41d5",
+          "sha": "d4a477f25421b4bc576da2e19074ba4951dbfc1a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:24:06Z",
-          "message": "Merge 7b28d0d2f24ff6a6dcf88d30b16d74d79fc6921b into 196c9029832167dd5178243f96554cec4c614836\n"
+          "timestamp": "2026-10-31T13:38:39Z",
+          "message": "Merge 3986ba92ef230100b93fd53e4b6347f593f2396e into 196c9029832167dd5178243f96554cec4c614836\n"
+        },
+        {
+          "sha": "3986ba92ef230100b93fd53e4b6347f593f2396e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T07:38:29-06:00",
+          "message": "fix(daemon): a read the launch scope ended is a failed read, and a second daemon is refused before it builds (candybar-testing-0x6u.3c7)\n\nA launch the scope aborted reached the shell source as its own abort, whose reason is undefined until the source closes, so the run threw undefined, the registry took it for its own abort, and no failure was recorded.\n\nThe one-daemon check moves to the first line of createDaemon, so a refused build has built nothing, and the scope is still installed last. Every way into a closed daemon now refuses, arm and reloadConfig included.\n\nA boot refusal logs its stack: the catch now covers the whole of boot. The shell keeps no in-flight count beside daemon.stats.\n"
         },
         {
           "sha": "7b28d0d2f24ff6a6dcf88d30b16d74d79fc6921b",

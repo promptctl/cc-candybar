@@ -35148,10 +35148,12 @@ var NO_SCOPE = {
 var scope = NO_SCOPE;
 var inFlight = /* @__PURE__ */ new Set();
 var endInFlight = () => inFlight.forEach((end) => end());
-function setLaunchScope(next2) {
+function refuseSecondDaemon() {
   if (scope.signal !== NO_DAEMON && !scope.signal.aborted) {
-    throw new Error("a daemon's launch scope replaced while it is live");
+    throw new Error("a daemon is already live in this process");
   }
+}
+function setLaunchScope(next2) {
   scope = { ...NO_SCOPE, ...next2 };
   scope.signal.addEventListener("abort", endInFlight, { once: true });
 }
@@ -49560,7 +49562,8 @@ function shellReader(command, cwd2, signal) {
         category: "user-shell",
         signal
       });
-      if (!r.ok && r.reason === "aborted") throw signal.reason;
+      if (!r.ok && r.reason === "aborted" && signal.aborted)
+        throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why2 = r.exitCode === null ? [r.reason, r.error].filter((s) => s !== void 0).join(": ") : `exited with code ${r.exitCode}`;
       return failed(`shell "${command}" ${why2} in ${cwd2}`);
@@ -83344,6 +83347,7 @@ var SYSTEM_CLOCK = {
   monotonic: () => performance.now()
 };
 function createDaemon(inputs) {
+  refuseSecondDaemon();
   const { bundle, storage, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2 } = inputs;
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
@@ -83674,7 +83678,7 @@ function createDaemon(inputs) {
   return {
     stats,
     memoryLimitBytes: memoryLimitBytes2,
-    // [LAW:single-enforcer] A closed daemon serves nothing, and these three are
+    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click runs in the turn it enters, so one that got in has
     // landed before any close; a subscribe its request reached as the daemon
     // closed is refused here and opens no feed.
@@ -83690,8 +83694,12 @@ function createDaemon(inputs) {
       closing.signal.throwIfAborted();
       return frameFeeds.subscribe(sessionId2, subscriber);
     },
-    reloadConfig: verbCtx.reloadConfig,
+    reloadConfig: (origin) => {
+      closing.signal.throwIfAborted();
+      verbCtx.reloadConfig(origin);
+    },
     arm() {
+      closing.signal.throwIfAborted();
       fileEvents.start(watchProbeDir());
       binaryWatch.arm();
       updateWatch.arm();
