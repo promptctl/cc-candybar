@@ -24,7 +24,7 @@ import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-m
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { SWATCH_GLYPH } from "../src/render/swatch";
-import { DECOR_HUES, SHADES, paletteRole, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
+import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { ERROR_REDS, doorClose } from "./helpers/door-close";
 import { POWERLINE } from "./helpers/powerline";
@@ -187,8 +187,8 @@ describe("a lower depth draws each of those colours rounded once", () => {
             // Every shade of each role the palette names `hex` as, rounded once.
             const shadesOf = (hex: string): Set<string> =>
               new Set(
-                DECOR_HUES.filter((hue) => ROLE_SHADES.some((shade) => paletteRole(palette, shadeRole(hue, shade)).hex === hex)).flatMap(
-                  (hue) => ROLE_SHADES.map((shade) => roundedOnce(paletteRole(palette, shadeRole(hue, shade)))),
+                DECOR_HUES.filter((hue) => ROLE_SHADES.some((shade) => palette.get(shadeRole(hue, shade)).hex === hex)).flatMap(
+                  (hue) => ROLE_SHADES.map((shade) => roundedOnce(palette.get(shadeRole(hue, shade)))),
                 ),
               );
             full.forEach(({ ch, at, bg }, i) => {
@@ -236,7 +236,7 @@ describe("the settings door and its frame-rate cell take two places of the first
       VIEWS[0]!.show(bar);
       for (const shade of SHADE_NAMES) {
         for (const hue of DECOR_HUES) {
-          const named = SHADES[shade].tones.map((tone) => paletteRole(palette, shadeRole(hue, tone)).hex);
+          const named = SHADES[shade].tones.map((tone) => palette.get(shadeRole(hue, tone)).hex);
           expect([shade, hue, new Set(named).size]).toEqual([shade, hue, named.length]);
         }
         bar.pick("shade", shade);

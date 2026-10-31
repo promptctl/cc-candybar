@@ -16,19 +16,19 @@
 
 import { ColorSpec, RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
-import { DECOR_HUES, paletteRole } from "../themes/decor.js";
+import { DECOR_HUES } from "../themes/decor.js";
 
 export const SWATCH_GLYPH = "▀";
 
 /** The cells of `palette`'s swatch, in DECOR_HUES order. */
 export function swatch(palette: Palette): RichText {
-  const ground = ColorSpec.fromRgba(paletteRole(palette, "background"));
+  const ground = ColorSpec.fromRgba(palette.get("background"));
   const drawn = RichText.fromFragments(
     DECOR_HUES.map(
       (role) =>
         new RichText(SWATCH_GLYPH, {
           style: new Style({
-            color: ColorSpec.fromRgba(paletteRole(palette, role)),
+            color: ColorSpec.fromRgba(palette.get(role)),
             bgcolor: ground,
           }),
         }),

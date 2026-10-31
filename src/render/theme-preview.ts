@@ -34,7 +34,6 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import {
   bandFor,
   decorEntryColour,
-  paletteRole,
   textOn,
   vocabularyOf,
   type Decor,
@@ -94,8 +93,8 @@ function previewRows(
     [
       [chosen("▾ open", band.state), chosen("menu", band.plane)],
       [
-        chosen("warn", paletteRole(palette, "warning")),
-        chosen("error", paletteRole(palette, "error")),
+        chosen("warn", palette.get("warning")),
+        chosen("error", palette.get("error")),
       ],
     ],
   ];

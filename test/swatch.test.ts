@@ -19,7 +19,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { DECOR_HUES, paletteRole } from "../src/themes/decor";
+import { DECOR_HUES } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { swatch, SWATCH_GLYPH } from "../src/render/swatch";
 import { links, stripAnsi } from "./helpers/ansi";
@@ -85,8 +85,8 @@ const swatchColours = (cells: readonly RichText[]) =>
 const ofTheme = (name: string) => {
   const palette = getThemePalette(name)!;
   return DECOR_HUES.map((role) => [
-    paletteRole(palette, role).hex,
-    paletteRole(palette, "background").hex,
+    palette.get(role).hex,
+    palette.get("background").hex,
   ]);
 };
 

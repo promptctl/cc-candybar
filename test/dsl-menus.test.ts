@@ -63,7 +63,6 @@ import {
   decorationFor,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
-  paletteRole,
   SHADES,
   VARIATIONS,
   textOn,
@@ -137,8 +136,8 @@ function expectSwatched(
   expect(runs.name.color?.value?.hex).toBe(text);
   expect(swatchColours(runs.swatch)).toEqual(
     DECOR_HUES.map((role) => [
-      paletteRole(applied, role).hex,
-      paletteRole(applied, "background").hex,
+      applied.get(role).hex,
+      applied.get("background").hex,
     ]),
   );
 }
@@ -1543,8 +1542,8 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect(none).not.toEqual(dim);
     expect(none).toEqual(
       DECOR_HUES.map((role) => [
-        paletteRole(palette, role).hex,
-        paletteRole(palette, "background").hex,
+        palette.get(role).hex,
+        palette.get("background").hex,
       ]),
     );
   });

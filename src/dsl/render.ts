@@ -123,7 +123,6 @@ import {
   barRoot,
   bandRoot,
   descend,
-  paletteRole,
   textOn,
   SHADES,
   VARIATIONS,
@@ -1455,7 +1454,7 @@ export function drawDsl(
   // daemon's timer closes the menus (src/config/menu-timeout.ts), across the
   // whole idle period, lit in the theme's `warning` — something is about to
   // happen — under the text chosen for it.
-  const flashFill = paletteRole(palette, "warning");
+  const flashFill = palette.get("warning");
   const flash: MenuFlash =
     selection.idleSince === undefined
       ? null

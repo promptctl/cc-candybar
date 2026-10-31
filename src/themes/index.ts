@@ -68,7 +68,6 @@ export {
   inBin,
   inHalves,
   decorEntryFor,
-  paletteRole,
   decorFor,
 } from "./decor.js";
 export type {

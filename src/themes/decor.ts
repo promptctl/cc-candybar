@@ -118,7 +118,7 @@ const poleText: DecorText = (palette, _hue, background, drawnAt) =>
  * labels are, and reads on both.
  */
 const roleText: DecorText = (palette, hue, background, drawnAt) =>
-  legibleOn(palette, paletteRole(palette, `text-${hue}`), background, drawnAt);
+  legibleOn(palette, palette.get(`text-${hue}`), background, drawnAt);
 
 /**
  * One position of the shade dial: the shades a row's cells wear, in the order
@@ -397,12 +397,6 @@ const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
   : never = true;
 void _decorHuesAreNonSemantic;
 
-/**
- * The theme's two poles: text is chosen from them (`textOn`), so it inverts
- * on its own between light and dark themes, with no branch.
- */
-export type ThemePole = "foreground" | "background";
-
 /** One closed bar cell's decoration: its row's hue, at its own shade. */
 export interface DecorEntry {
   readonly hue: DecorHue;
@@ -575,7 +569,7 @@ const WINDOWS = memoPerPalette<Tones>();
 const drawnIn =
   (palette: Palette, hue: DecorHue, drawnAt: ColorDepth) =>
   (tone: RoleShade): string =>
-    drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;
+    drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex;
 
 /**
  * [LAW:single-enforcer] The one widening, for a window and for a pressed
@@ -1147,31 +1141,6 @@ const KEYSTONE_AT: Record<
  */
 export const PLANE_ROLE = "surface";
 
-/** A palette entry decoration reads: a pole, an alert, a role at a shade, a role's text, or the plane. */
-export type DecorRole =
-  | ThemePole
-  | SemanticRole
-  | ShadeRole
-  | `text-${DecorHue}`
-  | typeof PLANE_ROLE;
-
-/**
- * [LAW:parse-dont-validate] The one unit that turns a palette role NAME into a
- * proven `ColorRgba`. Every shipped theme carries every role this module names
- * (test/decor.test.ts checks the whole registry), so an absence is registry
- * drift or a hand-built palette missing a role — a loud failure naming both,
- * never a fallback colour. [LAW:no-silent-failure]
- */
-export function paletteRole(palette: Palette, role: DecorRole): ColorRgba {
-  const colour = palette.get(role);
-  if (colour === undefined) {
-    throw new Error(
-      `palette "${palette.name}" has no "${role}" role; decoration needs it`,
-    );
-  }
-  return colour;
-}
-
 /**
  * The colour of one vocabulary entry in `palette`: the palette's own entry for
  * the role at that shade, byte for byte. [LAW:one-source-of-truth] The one
@@ -1181,7 +1150,7 @@ export function paletteRole(palette: Palette, role: DecorRole): ColorRgba {
 export const decorEntryColour = (
   palette: Palette,
   entry: DecorEntry,
-): ColorRgba => paletteRole(palette, shadeRole(entry.hue, entry.shade));
+): ColorRgba => palette.get(shadeRole(entry.hue, entry.shade));
 
 /** A node's decorative background: the colour of the entry its address selects. */
 export const decorFor = (
@@ -1234,7 +1203,7 @@ export function textOn(
   return POLE_TEXT(palette, `${background.hex}|${drawnAt}`, () => {
     const side = contrastFor(background);
     const pole = (["background", "foreground"] as const)
-      .map((role) => paletteRole(palette, role))
+      .map((role) => palette.get(role))
       .reduce((best, pole) =>
         contrastRatio(side, pole) < contrastRatio(side, best) ? pole : best,
       );
@@ -1437,11 +1406,10 @@ export function bandFor(
   drawnAt: ColorDepth,
 ): Band {
   return {
-    state: paletteRole(
-      palette,
+    state: palette.get(
       shadeRole(hueOf(disclosure), pressedAt(palette, disclosure, drawnAt)),
     ),
-    plane: paletteRole(palette, PLANE_ROLE),
+    plane: palette.get(PLANE_ROLE),
     items: bandEntries(palette, disclosure, drawnAt).map((entry) =>
       decorEntryColour(palette, entry),
     ),

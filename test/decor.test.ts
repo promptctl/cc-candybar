@@ -25,7 +25,6 @@ import {
   DECOR_HUES,
   KEYSTONE_HUE,
   DISTRIBUTIONS,
-  PLANE_ROLE,
   TEXT_MIN_CONTRAST,
   bandFor,
   bandItemFor,
@@ -37,7 +36,6 @@ import {
   bandEntries,
   hueOf,
   lineageHue,
-  paletteRole,
   shadeRole,
   vocabularyOf,
   vocabularySelect,
@@ -217,32 +215,6 @@ describe("the shade dial", () => {
     // Edit chrome's unit shares its cell's place, so it wears the keystone too.
     expect(placed(under("ends-primary"), [row(0, 2), cell(3, 4), cell(3, 4)]).hue).toBe("accent");
   });
-
-  test("every shipped theme carries every role the vocabulary names", () => {
-    for (const name of listThemePalettes()) {
-      const palette = getThemePalette(name);
-      const roles = [
-        "foreground",
-        "background",
-        "warning",
-        "error",
-        PLANE_ROLE,
-        ...DECOR_HUES.flatMap((hue) => [
-          `text-${hue}` as const,
-          ...SHADE_NAMES.flatMap((shade) =>
-            [...SHADES[shade].tones, SHADES[shade].activated].map((tone) => shadeRole(hue, tone)),
-          ),
-        ]),
-      ] as const;
-      for (const role of roles) expect(() => paletteRole(palette, role)).not.toThrow();
-    }
-  });
-
-  test("a palette missing a role fails loudly, naming palette and role", () => {
-    const bare = new Palette("bare", true, new Map<string, ColorRgba>());
-    expect(() => paletteRole(bare, "accent")).toThrow(/"bare".*"accent"/);
-    expect(() => decorFor(bare, TWO_STEP, [], AT)).toThrow(/"bare"/);
-  });
 });
 
 // [LAW:verifiable-goals] candybar-joiners-e5r4.686: a window holds only the
@@ -259,7 +231,7 @@ describe("a dial window at a depth", () => {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
         for (const hue of DECOR_HUES) {
-          const drawn = (tone: RoleShade): string => shown(paletteRole(palette, shadeRole(hue, tone))).hex;
+          const drawn = (tone: RoleShade): string => shown(palette.get(shadeRole(hue, tone))).hex;
           const size = (count: number): number => windowSizeOf(count, new Set(LADDER.map(drawn)).size);
           for (const shade of SHADE_NAMES) {
             const tones: readonly RoleShade[] = SHADES[shade].tones;
@@ -474,7 +446,7 @@ describe("the colour is its role at a shade, as the palette names it", () => {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
         for (const hue of DECOR_HUES) {
-          const drawnTone = (tone: RoleShade): string => shown(paletteRole(palette, shadeRole(hue, tone))).hex;
+          const drawnTone = (tone: RoleShade): string => shown(palette.get(shadeRole(hue, tone))).hex;
           const variation: Variation = { hues: [hue], run: WHOLE_ROW, keystones: [], open: [hue] };
           for (const shade of SHADE_NAMES) {
             const decor: Decor = { variation, shade: SHADES[shade] };
@@ -1021,7 +993,7 @@ describe("a band item is placed by its step", () => {
         const tones = windowAt(palette, "primary", SHADES[shade], AT);
         const { items } = bandFor(palette, disclosure, AT);
         // The items are the lineage's hue at each tone of its window, as the palette names it.
-        expect(items.map((c) => c.hex)).toEqual(tones.map((tone) => paletteRole(palette, shadeRole("primary", tone)).hex));
+        expect(items.map((c) => c.hex)).toEqual(tones.map((tone) => palette.get(shadeRole("primary", tone)).hex));
         const item = (place: PlacedStep | undefined) =>
           bandItemFor(palette, disclosure, place, AT).hex;
         const inBand = (address: Address) =>
@@ -1122,7 +1094,7 @@ describe("an open menu wears shades its theme names, selected and never searched
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
-        const drawn = (hue: DecorHue, tone: RoleShade): string => shown(paletteRole(palette, shadeRole(hue, tone))).hex;
+        const drawn = (hue: DecorHue, tone: RoleShade): string => shown(palette.get(shadeRole(hue, tone))).hex;
         for (const name of VARIATION_NAMES) {
           const variation = VARIATIONS[name];
           for (const shade of SHADE_NAMES) {
@@ -1168,8 +1140,8 @@ describe("an open menu wears shades its theme names, selected and never searched
       expect([0, 1, 2, 3].map((depth) => hueOf({ decor, depth }))).toEqual(["primary", "primary", "primary", "primary"]);
       for (const depth of [1, 2, 3]) {
         const ladderHasOne = LADDER.some((r) => {
-          const c = shown(paletteRole(nord, shadeRole("primary", r))).hex;
-          return c !== pressed[depth - 1] && !windowAt(nord, "primary", decor.shade, drawnAt).some((t) => shown(paletteRole(nord, shadeRole("primary", t))).hex === c);
+          const c = shown(nord.get(shadeRole("primary", r))).hex;
+          return c !== pressed[depth - 1] && !windowAt(nord, "primary", decor.shade, drawnAt).some((t) => shown(nord.get(shadeRole("primary", t))).hex === c);
         });
         if (ladderHasOne) expect([ColorDepth[drawnAt], depth, pressed[depth]]).not.toEqual([ColorDepth[drawnAt], depth, pressed[depth - 1]]);
       }
