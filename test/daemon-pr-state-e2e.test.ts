@@ -76,7 +76,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
   });
 
   afterAll(async () => {
-    await daemon.stop();
+    await daemon?.stop();
     fs.rmSync(dir, { recursive: true, force: true });
     removeTmpDirs();
   });

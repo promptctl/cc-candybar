@@ -14,7 +14,6 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { setImmediate } from "node:timers";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
@@ -26,6 +25,7 @@ import {
   type Request,
   type Response,
 } from "../src/daemon/protocol";
+import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import { sweepJestTmp } from "./global-teardown";
 import {
   click,
@@ -41,7 +41,7 @@ import { renderLines } from "./helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
-import { until } from "./helpers/until";
+import { throughout, until } from "./helpers/until";
 
 jest.setTimeout(30_000);
 
@@ -52,9 +52,6 @@ const CONFIG = `{
   },
   root: { h: ["pad"] },
 }`;
-
-// A render of this waits on a source no client outlasts.
-const WAITING_CONFIG = `{ variables: { doc: { kind: 'shell', command: 'sleep 60', cache: { never: true } } }, segments: { mark: { template: '{{ .doc }}' } }, root: { h: ['mark'] } }`;
 
 describe("a daemon in this worker", () => {
   let env: NodeJS.ProcessEnv;
@@ -142,31 +139,6 @@ describe("a daemon in this worker", () => {
     expect(asked).toBeGreaterThan(1);
   });
 
-  // A socket's peer that vanishes ends the daemon's side at once. The daemon's
-  // own answer ends the connection a little later whatever happened, so what
-  // shows the hang-up is that it needed no answer: a memory stream's close has
-  // landed a macrotask on.
-  test("a client that gives up hangs up the daemon's end", async () => {
-    writeFileSync(userConfig, WAITING_CONFIG);
-    daemon = startDaemon(env);
-    const { stats } = daemon.daemon;
-
-    await expect(
-      daemon.send(
-        {
-          v: PROTOCOL_VERSION,
-          kind: "render",
-          ...renderBody("in-worker-gave-up", projectDir),
-          deadline: Date.now() + 5_000,
-        },
-        20,
-      ),
-    ).rejects.toThrow("TIMEOUT");
-
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(stats.inFlight).toBe(0);
-  });
-
   test("a start over the same env sees what the stopped daemon left", async () => {
     const sid = "in-worker-restart";
     daemon = startDaemon(env);
@@ -212,7 +184,9 @@ describe("a daemon in this worker", () => {
     await until(() => stats.inFlight === 0, "the subscribe leaving in-flight");
 
     // Open and silent: its backstop is armed, and only its stream's close takes
-    // it out of in-flight.
+    // it out of in-flight. A cold render above may have timed out on its own, so
+    // the count is read from here.
+    const timedOut = stats.requestsTimedOut;
     daemon.connect();
     expect(stats.inFlight).toBe(1);
 
@@ -221,7 +195,11 @@ describe("a daemon in this worker", () => {
 
     await until(() => closed, "the subscriber hearing the daemon go");
     expect(stats.inFlight).toBe(0);
-    expect(stats.requestsTimedOut).toBe(0);
+    await throughout(
+      () => stats.requestsTimedOut === timedOut,
+      "the stopped connection's backstop staying quiet",
+      REQUEST_TIMEOUT_MS * 2,
+    );
     expect(process.env.XDG_STATE_HOME).toBe(stateHome);
   });
 });

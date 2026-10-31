@@ -48,7 +48,10 @@ import { PROTOCOL_VERSION } from "./protocol";
 import { mb, memoryLimitBytes } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
-import { FileSessionStorage } from "./session-state-file";
+import {
+  FileSessionStorage,
+  SESSION_SAVE_DEBOUNCE_MS,
+} from "./session-state-file";
 import { fileHistoryStorage } from "./settings-history";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
@@ -173,7 +176,11 @@ function boot(): void {
   const daemon = createDaemon({
     bundle: runningBundle(),
     storage: {
-      session: new FileSessionStorage(sessionStatePath(), 500, dlog),
+      session: new FileSessionStorage(
+        sessionStatePath(),
+        SESSION_SAVE_DEBOUNCE_MS,
+        dlog,
+      ),
       history: fileHistoryStorage(settingsHistoryPath(), dlog),
     },
     memoryLimitBytes: memoryLimit,

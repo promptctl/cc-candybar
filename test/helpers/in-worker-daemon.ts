@@ -26,7 +26,10 @@ import {
   stateDir,
 } from "../../src/daemon/paths";
 import { sendOne, type Request } from "../../src/daemon/protocol";
-import { FileSessionStorage } from "../../src/daemon/session-state-file";
+import {
+  FileSessionStorage,
+  SESSION_SAVE_DEBOUNCE_MS,
+} from "../../src/daemon/session-state-file";
 import { fileHistoryStorage } from "../../src/daemon/settings-history";
 import type { DaemonEndpoint } from "./daemon-wire";
 import { memoryConnection } from "./memory-connection";
@@ -69,7 +72,11 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
     },
     ...overrides,
     storage: {
-      session: new FileSessionStorage(sessionStatePath(), 0, dlog),
+      session: new FileSessionStorage(
+        sessionStatePath(),
+        SESSION_SAVE_DEBOUNCE_MS,
+        dlog,
+      ),
       history: fileHistoryStorage(settingsHistoryPath(), dlog),
       ...overrides.storage,
     },
@@ -83,16 +90,24 @@ export interface InWorkerDaemon extends DaemonEndpoint {
   stop(): Promise<void>;
 }
 
+// What a spawned daemon is given is its whole environment, so a key `env` leaves
+// out is unset here too.
+function placeEnv(env: NodeJS.ProcessEnv): void {
+  const placed = { ...env };
+  for (const key of Object.keys(process.env)) delete process.env[key];
+  Object.assign(process.env, placed);
+}
+
 // A daemon serving this worker, placed by `env`: a daemon's paths are read from
 // the environment when it writes, so the env a spawned daemon would be given is
 // this file's own until `stop`. One test file's `process.env` is its own, and a
 // process holds one live daemon, so a second start before a stop is refused.
 export function startDaemon(
-  env: NodeJS.ProcessEnv = {},
+  env: NodeJS.ProcessEnv,
   overrides: DaemonOverrides = {},
 ): InWorkerDaemon {
   const before = { ...process.env };
-  Object.assign(process.env, env);
+  placeEnv(env);
   const daemon = buildDaemon(overrides);
   const open = new Set<Duplex>();
 
@@ -112,19 +127,20 @@ export function startDaemon(
       sendOne(connect(), req as unknown as Request, Date.now() + budgetMs),
     // [LAW:single-enforcer] A close leaves a connection open because a process's
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
-    // go, and a request's backstop goes with its stream. The log is awaited
-    // before the env goes back, because it reads its path when it writes.
+    // go, and a request's backstop goes with its stream. What is logged by now
+    // is awaited before the env goes back, because the log reads its path when
+    // it writes.
     // [LAW:escape-local-minima] exception: a closed daemon's work can still be
-    // unwinding, and a launch of its would run under the next daemon built here.
-    // No fact says that work has settled, so this waits for none; polling a
-    // count of children would read zero between one pass's launches. The fix is
-    // a launch that carries its owner: candybar-testing-0x6u.snf.
+    // unwinding: a launch of its would run under the next daemon built here, and
+    // a line of its lands in whichever log the env names by then. No fact says
+    // that work has settled, so this waits for none; polling a count of children
+    // would read zero between one pass's launches. The fix is a launch that
+    // carries its owner: candybar-testing-0x6u.snf.
     stop: async () => {
       daemon.close();
       for (const end of open) end.destroy();
       await drained();
-      for (const key of Object.keys(process.env)) delete process.env[key];
-      Object.assign(process.env, before);
+      placeEnv(before);
     },
   };
 }

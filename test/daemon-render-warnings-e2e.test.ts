@@ -68,7 +68,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
   });
 
   afterAll(async () => {
-    await daemon.stop();
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });

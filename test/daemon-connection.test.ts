@@ -21,6 +21,7 @@ import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
+  sendOne,
   type Request,
   type Response,
 } from "../src/daemon/protocol";
@@ -71,9 +72,7 @@ interface Opened {
   ended(): boolean;
 }
 
-const open = (daemon: ConnectionDaemon): Opened => {
-  const { daemonEnd, client } = memoryConnection();
-  handleConnection(daemon, daemonEnd);
+const openedOn = (client: Opened["client"]): Opened => {
   const received: Response[] = [];
   let over = false;
   client.on(
@@ -92,6 +91,12 @@ const open = (daemon: ConnectionDaemon): Opened => {
     send: (req) => client.write(encodeFrame(req)),
     ended: () => over,
   };
+};
+
+const open = (daemon: ConnectionDaemon): Opened => {
+  const { daemonEnd, client } = memoryConnection();
+  handleConnection(daemon, daemonEnd);
+  return openedOn(client);
 };
 
 // A request the stand-in holds until the test answers it.
@@ -138,6 +143,22 @@ describe("a connection over a stream", () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  // A socket's peer that vanishes ends the daemon's side at once. Held, the
+  // request has no answer and its backstop is far off, so only the hang-up can
+  // take it out of in-flight.
+  test("a client that gives up hangs up the daemon's end", async () => {
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const gaveUp = sendOne(open(daemon).client, STATS, Date.now() + 20);
+    await settled();
+    expect(daemon.stats.inFlight).toBe(1);
+
+    jest.advanceTimersByTime(20);
+    await expect(gaveUp).rejects.toThrow("TIMEOUT");
+    await settled();
+    expect(daemon.stats.inFlight).toBe(0);
   });
 
   test("a request is answered, the connection ends, and delivered runs once the client holds it", async () => {
@@ -451,7 +472,7 @@ describe("a connection to a daemon built in this worker", () => {
   const exit = jest.fn();
 
   const start = (clock: DaemonClock = SYSTEM_CLOCK): InWorkerDaemon => {
-    started = startDaemon({}, { clock, exit });
+    started = startDaemon(process.env, { clock, exit });
     return started;
   };
 
@@ -480,8 +501,9 @@ describe("a connection to a daemon built in this worker", () => {
     return stripAnsi(resp.output);
   };
 
-  // The backstop here is the real one, so a render goes through the helper
-  // that asks again on TIMEOUT.
+  // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
+  // cold first render on a loaded runner outlasts it, so a render goes through
+  // the helper that asks again on TIMEOUT.
   const rendered = async (
     daemon: InWorkerDaemon,
     sessionId: string,
@@ -526,7 +548,7 @@ describe("a connection to a daemon built in this worker", () => {
     const running = start();
     await rendered(running, "connection-feed");
 
-    const feed = open(running.daemon);
+    const feed = openedOn(running.connect());
     feed.send({ ...SUBSCRIBE, sessionId: "connection-feed" } as Request);
     expect(drawn(await answered(feed))).toContain("a drawn mark");
     expect(running.daemon.stats.inFlight).toBe(0);
@@ -534,7 +556,7 @@ describe("a connection to a daemon built in this worker", () => {
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {
-    const opened = open(start().daemon);
+    const opened = openedOn(start().connect());
     opened.send({ v: PROTOCOL_VERSION, kind: "shutdown" });
     await until(() => exit.mock.calls.length > 0, "the daemon's exit");
     expect(exit).toHaveBeenCalledWith(0);
@@ -544,8 +566,8 @@ describe("a connection to a daemon built in this worker", () => {
   test("how long a render queued reads from its accept on the daemon's clock", async () => {
     let monotonic = 1_000_000;
     const at = new Date();
-    const opened = open(
-      start({ date: () => at, monotonic: () => monotonic }).daemon,
+    const opened = openedOn(
+      start({ date: () => at, monotonic: () => monotonic }).connect(),
     );
     monotonic += 500;
     opened.send(renderRequest("connection-clock", at.getTime() + 2_000));

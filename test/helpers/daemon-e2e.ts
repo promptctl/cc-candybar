@@ -21,7 +21,12 @@ import {
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
-import { endpointOf, waitForExit, type DaemonTarget } from "./daemon-wire";
+import {
+  endpointOf,
+  sendDaemonRequest,
+  waitForExit,
+  type DaemonTarget,
+} from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls, stripAnsi } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
@@ -45,7 +50,7 @@ const REPLY_BUDGET_MS = 5000;
 // "next tick" to lean on, so it retries inline, bounded, matching the
 // documented transient contract rather than treating an expected-occasionally
 // condition as a hard failure.
-export const TIMEOUT_RETRY_BUDGET = 5;
+const TIMEOUT_RETRY_BUDGET = 5;
 
 // [LAW:no-ambient-temporal-coupling] The same contract for an answer drawn at
 // its deadline: a request is answered by its client's deadline, and a source
@@ -95,7 +100,7 @@ export async function renderRequest(
   request: Record<string, unknown>,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
-  const { send, log } = endpointOf(target);
+  const { log } = endpointOf(target);
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
   );
@@ -105,7 +110,8 @@ export async function renderRequest(
     // to: like a real client, it says when it will hang up, so the daemon's
     // wait for its refreshes ends by that or by its own backstop
     // (src/daemon/request-deadline.ts). A case's own deadline wins.
-    const resp = await send(
+    const resp = await sendDaemonRequest(
+      target,
       {
         v: PROTOCOL_VERSION,
         kind: "render",
@@ -206,7 +212,8 @@ export function sendClick(
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
   const { verb, value } = parseHandlerUrl(url);
-  return endpointOf(target).send(
+  return sendDaemonRequest(
+    target,
     {
       v: PROTOCOL_VERSION,
       kind: "click",
