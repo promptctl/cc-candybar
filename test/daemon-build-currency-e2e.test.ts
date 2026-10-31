@@ -52,6 +52,7 @@ import { answerRepo } from "./helpers/repo-approval";
 const REPO_ROOT = process.cwd();
 const REPO_BUNDLE = path.join(REPO_ROOT, "dist", "index.mjs");
 const REPO_SRC = path.join(REPO_ROOT, "src");
+const REPO_DIGEST = sourceDigest(REPO_SRC);
 const HOUR_S = 60 * 60;
 const V = PACKAGE_VERSION.replace(/\./g, "\\.");
 const SOURCE_ROW = new RegExp(
@@ -178,7 +179,7 @@ async function withDaemon<T>(
   answerRepo(scratch.projectDir, "approved", env);
   const daemon = startArmedDaemon(
     { ...env, ...envOverride },
-    bundleAt(scratch.root, sourceDigest(REPO_SRC)),
+    bundleAt(scratch.root, REPO_DIGEST),
   );
   try {
     return await body(daemon);
@@ -376,8 +377,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     // bundle not built from the current `src/` carries another digest, and every
     // verdict below would be about that build. CI builds before `pnpm test`.
     beforeAll(() => {
-      const digest = sourceDigest(REPO_SRC);
-      if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(digest)) {
+      if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(REPO_DIGEST)) {
         throw new Error(
           "dist/index.mjs was not built from the current src/ — this test spawns the built bundle; run `pnpm build` first",
         );

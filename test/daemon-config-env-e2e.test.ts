@@ -26,12 +26,9 @@ import {
 } from "./helpers/daemon-e2e";
 import type { DaemonTarget } from "./helpers/daemon-wire";
 import { readDiagnostics } from "./helpers/diagnostics-viewer";
-import {
-  bundleAt,
-  startArmedDaemon,
-  type InWorkerDaemon,
-} from "./helpers/in-worker-daemon";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import type { ClientHints } from "../src/daemon/protocol";
+import { reserveUpdateKeys } from "../src/daemon/update-notice";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -62,6 +59,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   let removeTmpDirs: () => void;
   let projectDir: string;
   let daemon: InWorkerDaemon;
+  let releaseUpdateKeys: () => void;
   // The shape every shipped template failed with (brandon-plugin-templates-irq):
   // a top-level key the loader does not know.
   let rejected: string;
@@ -86,13 +84,15 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       override,
       `{ segments: { a: { template: 'OVERRIDE-WINS' } }, root: { h: ['a'] } }`,
     );
-    // Armed, because the durable click below writes the update notice's field,
-    // whose gate the update watch registers when it arms.
-    daemon = startArmedDaemon(prepared.env, bundleAt(projectDir));
+    // The durable click below writes the update notice's field, whose keys only
+    // an armed daemon holds, so this file holds them as `check` does.
+    releaseUpdateKeys = reserveUpdateKeys();
+    daemon = startDaemon(prepared.env);
   });
 
   afterAll(async () => {
     await daemon?.stop();
+    releaseUpdateKeys?.();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });

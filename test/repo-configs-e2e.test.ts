@@ -116,7 +116,7 @@ describe("a repository's config waits for the user's one answer", () => {
   });
 
   afterEach(async () => {
-    await daemon.stop();
+    await daemon?.stop();
     isolated.removeTmpDirs();
     fs.rmSync(project, { recursive: true, force: true });
   });

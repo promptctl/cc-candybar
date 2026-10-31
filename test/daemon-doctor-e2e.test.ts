@@ -11,6 +11,7 @@ import {
   mkdtempSync,
   mkdirSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -348,6 +349,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
   } finally {
     await daemon.stop();
     removeTmpDirs();
+    rmSync(repo, { recursive: true, force: true });
   }
 });
 

@@ -138,8 +138,12 @@ describe("a daemon render's event names the effect it wore", () => {
         args: ["cc-candybar", "--config", leaving],
         cwd: projectDir,
       });
+    // The clock moves between draws, so only a dissolve clocked from the leave
+    // itself reads zero.
     await renderAs("here");
+    clock.advance(50);
     await renderAs("here");
+    clock.advance(50);
     await renderAs("gone");
 
     const leaves = (await renderLines(env, sessionId, 3)).map(

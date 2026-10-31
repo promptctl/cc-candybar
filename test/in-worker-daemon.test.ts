@@ -144,6 +144,15 @@ describe("a daemon in this worker", () => {
     expect(event).toContain(" deadline=stated:60ms ");
   });
 
+  test("a start refused beside a live daemon leaves it the env it reads", () => {
+    daemon = startDaemon(env);
+    const placed = { ...process.env };
+    expect(() =>
+      startDaemon({ ...env, XDG_STATE_HOME: path.join(projectDir, "other") }),
+    ).toThrow("a daemon is already live in this process");
+    expect({ ...process.env }).toEqual(placed);
+  });
+
   test("a TIMEOUT is the helper's to ask again", async () => {
     daemon = startDaemon(env);
     const { send, log, now } = daemon;

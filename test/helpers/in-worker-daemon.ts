@@ -146,7 +146,14 @@ export function startDaemon(
 ): InWorkerDaemon {
   const before = { ...process.env };
   placeEnv(env);
-  const daemon = buildDaemon(overrides);
+  let daemon: Daemon;
+  try {
+    daemon = buildDaemon(overrides);
+  } catch (e) {
+    // A daemon already live here reads its paths from this env.
+    placeEnv(before);
+    throw e;
+  }
   const open = new Set<Duplex>();
   const servers: net.Server[] = [];
 
