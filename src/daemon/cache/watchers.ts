@@ -486,9 +486,9 @@ export class WatcherRegistry {
   // wires it). It is the one trigger for a replacement no event reaches a
   // handle for (a strict ancestor renamed away and another tree put at its
   // path: inotify reports a directory's own removal or self-move, never its
-  // parent's) and the one retry of a directory the OS refused or whose handle
-  // errored. A directory staying as it is costs one stat, or one refused
-  // open, and tells nothing.
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing.
   judge(): void {
     for (const dir of this.dirs.values()) this.judged(dir, "period");
   }

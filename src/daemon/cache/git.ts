@@ -492,12 +492,8 @@ export class GitDataProvider {
     };
   }
 
-  // A watch's window, whatever it says, asks for a pass.
-  private heard(root: string): void {
-    this.changed(root);
-  }
-
-  // A watch fire: the repo changed since any read in flight began.
+  // A watch's window, whatever it says: the repo changed since any read in
+  // flight began.
   changed(root: string): void {
     const state = this.repos.get(root);
     if (!state) return;
@@ -557,7 +553,7 @@ export class GitDataProvider {
     // holds (`follow`), and the period rebinds once the path names a
     // directory again. The build holds nothing, and a slot the OS refused is
     // the registry's period to retry.
-    const followed = this.watchers.follow(held, spec, () => this.heard(root));
+    const followed = this.watchers.follow(held, spec, () => this.changed(root));
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
     // against this line, as the config cache's bind line.
