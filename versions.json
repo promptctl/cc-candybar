@@ -4,15 +4,22 @@
     {
       "version": "pr-525",
       "ref": "refs/pull/525/merge",
-      "sha": "b6fd5e2844cec1fbf29963bc25a20b3265c4d104",
-      "timestamp": "2026-10-31T21:51:49.022Z",
+      "sha": "3f2867f134f58a960717b197bb5ce1dd929ce248",
+      "timestamp": "2026-10-31T22:01:06.233Z",
       "commits": [
         {
-          "sha": "b6fd5e2844cec1fbf29963bc25a20b3265c4d104",
+          "sha": "3f2867f134f58a960717b197bb5ce1dd929ce248",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:51:02Z",
-          "message": "Merge ff39a6f4b39ffe63527bf5424e98ebb7cd44e6c9 into f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc\n"
+          "timestamp": "2026-10-31T22:00:18Z",
+          "message": "Merge be1f2bdf8fa1f06f9abe2f95c0081335902b3ff4 into f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc\n"
+        },
+        {
+          "sha": "be1f2bdf8fa1f06f9abe2f95c0081335902b3ff4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:00:03-06:00",
+          "message": "test(daemon): a dying process's stderr is read once its pipe closes, and the tier has one spelling (candybar-testing-0x6u.886)\n\nA readiness failure read the tail at the exit, which can land before the\npipe's last bytes, so the process that dies before its log opens could say\nnothing. The tail is now a value that exists once the pipe has closed.\n`pnpm test:process` reads the tier's pattern from its one home, so CI no\nlonger spells it.\n"
         },
         {
           "sha": "ff39a6f4b39ffe63527bf5424e98ebb7cd44e6c9",
