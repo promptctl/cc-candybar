@@ -105,7 +105,6 @@ import { settingControlDomain } from "./loader/globals.js";
 import {
   settingControl,
   type Affordance,
-  type ControlDomain,
 } from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
 import {

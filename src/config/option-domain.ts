@@ -88,7 +88,7 @@ export interface ResolvedDomain {
 // a member shows as itself.
 export type OptionLabel = (option: string) => string;
 
-// [LAW:types-are-the-program] The other thing a domain may know about itself:
+// [LAW:types-are-the-program] Another thing a domain may know about itself:
 // that its members are a CATALOGUE — each with a group it belongs to and a line
 // saying what it is — so a picker can lay it out as a library (grouped pages,
 // one described row per member) instead of a grid of bare names. `library`'s
