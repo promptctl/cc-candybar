@@ -172,7 +172,7 @@ function boot(): void {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     bundle: runningBundle(),
-    storage: fileStorage(),
+    storage: fileStorage,
     memoryLimitBytes: memoryLimit,
     registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: SYSTEM_CLOCK,

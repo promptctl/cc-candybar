@@ -385,6 +385,24 @@ describe("formatStats", () => {
     expect(out).toContain("accounted     32.0MB / 128.0MB");
   });
 
+  test("a refused row sits in the column the rows above it use", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const out = formatStats({
+      ...snap,
+      subprocesses: {
+        ...snap.subprocesses,
+        byCategory: { git: 1 },
+        p50DurationMs: {},
+        p99DurationMs: {},
+        refused: { "click.pbcopy": 3 },
+      },
+    });
+
+    const width = "click.pbcopy refused".length;
+    expect(out).toContain(`  ${"git".padEnd(width)} 1\n`);
+    expect(out).toContain(`  ${"click.pbcopy refused".padEnd(width)} 3\n`);
+  });
+
   test("hit rate is n/a when no observations", () => {
     const out = formatStats({
       pid: 1,

@@ -572,7 +572,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
         if (!(err instanceof ConfigError)) throw err;
       }
     },
-    dlog: (_level, message) => log.push(message),
+    log: (_level, message) => log.push(message),
   };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);

@@ -972,7 +972,7 @@ describe("edit mode's save and cancel", () => {
     const logs: string[] = [];
     VERBS.get("rewind")!("s1", {
       ...rt.ctx,
-      dlog: (_level, message) => logs.push(message),
+      log: (_level, message) => logs.push(message),
     });
     expect(logs.join("\n")).toMatch(
       /rewind: put back .* as edit mode found it \(session=s1\)/,

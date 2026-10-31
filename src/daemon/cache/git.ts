@@ -38,7 +38,7 @@ import {
 import type { Holds, Release } from "../../utils/holds";
 
 // Logger callable for cache refresh / eviction events.
-// Daemon passes `dlog` so these land in daemon.log at the right level for
+// Daemon passes its log so these land in daemon.log at the right level for
 // ops/debugging; a test constructing the provider alone takes the default
 // debug-routed logger, which touches no daemon log file.
 // [LAW:no-defensive-null-guards] Default is non-null; injection replaces
@@ -334,7 +334,7 @@ export class GitDataProvider {
     maxRepos?: number;
     inner: GitService;
     watchers?: WatcherRegistry;
-    // [LAW:single-enforcer] One injection point. Daemon passes `dlog`;
+    // [LAW:single-enforcer] One injection point. Daemon passes its log;
     // non-daemon consumers leave the default (debug-routed, quiet
     // unless CC_CANDYBAR_DEBUG is set).
     logger?: GitProviderLogger;

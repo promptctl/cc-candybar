@@ -17,9 +17,14 @@ import os from "node:os";
 import path from "node:path";
 
 import { PROTOCOL_VERSION, type Request } from "../src/daemon/protocol";
+import type { DaemonLogger } from "../src/utils/logger";
 import { answeredEvents, renderBody } from "./helpers/daemon-e2e";
 import { loggedLines, logLines, renderEventsOf } from "./helpers/daemon-log";
-import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import {
+  startDaemon,
+  type DaemonOverrides,
+  type InWorkerDaemon,
+} from "./helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { until } from "./helpers/until";
 
@@ -48,8 +53,8 @@ describe("a daemon built while a closed one's work unwinds", () => {
   let bin: string;
   let up: InWorkerDaemon[];
 
-  const start = (): InWorkerDaemon => {
-    const daemon = startDaemon(env);
+  const start = (overrides?: DaemonOverrides): InWorkerDaemon => {
+    const daemon = startDaemon(env, overrides);
     up.push(daemon);
     return daemon;
   };
@@ -170,5 +175,33 @@ esac
     expect(late[0]).toContain(sid);
     expect(renderEventsOf(logLines(env), sid)).toEqual([]);
     expect(answeredEvents(second.log, sid)).toEqual([]);
+  });
+
+  // A debounced write already awaiting its file when the close runs finishes
+  // after it, and storage is built before the daemon is.
+  test("what its storage logs after the close says whose it is", async () => {
+    let storageLog: DaemonLogger = () => {
+      throw new Error("the daemon handed its storage no log");
+    };
+    const first = start({
+      storage: (log) => {
+        storageLog = log;
+        return {};
+      },
+    });
+
+    first.daemon.close();
+    start();
+    storageLog("warn", "a write that outlived its daemon");
+
+    await loggedLines(
+      env,
+      (lines) =>
+        lines.filter((l) =>
+          l.includes("after close: a write that outlived its daemon"),
+        ),
+      (picked) => picked.length === 1,
+      "the storage line of a daemon that closed under it",
+    );
   });
 });

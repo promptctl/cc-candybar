@@ -186,7 +186,7 @@ function buildRuntime(
     doctorStores: { ...emptyStores(), clicked },
     clients,
     serving: () => serving,
-    dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
+    log: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);

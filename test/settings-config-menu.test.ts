@@ -138,7 +138,7 @@ function rig(
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
-    dlog: (_level, msg) => logs.push(msg),
+    log: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {
       reloads.push({

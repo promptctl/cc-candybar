@@ -444,7 +444,7 @@ describe("configure mode's drafts are saved into the placement", () => {
     const logged: string[] = [];
     VERBS.get(VERB_SAVE)!(SID, {
       ...rt.ctx,
-      dlog: (_level, message) => logged.push(message),
+      log: (_level, message) => logged.push(message),
     });
     // The save's one event names every placement value it wrote.
     expect(logged).toHaveLength(1);
@@ -715,7 +715,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     VERBS.get(effect!.verb)!(effect!.value, {
       ...rt.ctx,
-      dlog: (_level, message) => logged.push(message),
+      log: (_level, message) => logged.push(message),
     });
     expect(rt.sessionState.get(SID, inB)).toBeNull();
     expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);

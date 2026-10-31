@@ -230,7 +230,7 @@ function runtime(tmux: TmuxHint | null) {
   const logged: string[] = [];
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    dlog: (_level: string, msg: string) => logged.push(msg),
+    log: (_level: string, msg: string) => logged.push(msg),
     claudeInput: productionClaudeInputEdge(createLauncher({})),
   };
   const urls = linkUrls(raw).filter((u) =>

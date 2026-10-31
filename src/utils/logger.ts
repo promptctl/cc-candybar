@@ -38,5 +38,5 @@ export function changeLogger(
 
 // What every component logs through when its caller injects no sink: silent
 // unless CC_CANDYBAR_DEBUG is set, and never daemon.log — only the daemon
-// passes `dlog`.
+// passes its log.
 export const quietLogger: DaemonLogger = (_level, message) => debug(message);

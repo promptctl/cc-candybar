@@ -97,6 +97,12 @@ export const SYSTEM_CLOCK: DaemonClock = {
   monotonic: () => performance.now(),
 };
 
+// Where the session's picks and its settings history persist.
+export interface DaemonStorage {
+  readonly session: SessionStorage;
+  readonly history: HistoryStorage;
+}
+
 // What a daemon takes from the process that runs it. Paths are not among them:
 // the log, the repository answers and the post-mortems read src/daemon/paths.ts
 // when they write, so a path passed here would be honoured by half the daemon
@@ -104,12 +110,10 @@ export const SYSTEM_CLOCK: DaemonClock = {
 // [LAW:one-source-of-truth] The environment is the one source.
 export interface DaemonInputs {
   readonly bundle: RunningBundle;
-  // Where the session's picks and its settings history persist: their files,
-  // for a daemon that won the socket, which makes it their sole writer.
-  readonly storage: {
-    readonly session: SessionStorage;
-    readonly history: HistoryStorage;
-  };
+  // Their files, for a daemon that won the socket, which makes it their sole
+  // writer. Built over the daemon's log: a write in flight at the close finishes
+  // after it, and what it logs says so like any other line of the daemon's work.
+  readonly storage: (log: DaemonLogger) => DaemonStorage;
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
   readonly clock: DaemonClock;
@@ -170,8 +174,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   if (liveDaemon !== null && !liveDaemon.aborted) {
     throw new Error("a daemon is already live in this process");
   }
-  const { bundle, storage, memoryLimitBytes, registryUrl, clock, exit } =
-    inputs;
+  const { bundle, memoryLimitBytes, registryUrl, clock, exit } = inputs;
   const instant = (): Instant => instantOf(clock.date());
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
@@ -210,6 +213,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
+  const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
@@ -531,7 +535,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
 
   const verbCtx = {
     sessionState,
-    dlog: log,
+    log,
     launcher,
     now: instant,
     applyUpdate: () => updateWatch.act(),

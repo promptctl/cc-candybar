@@ -47,11 +47,7 @@ const OWNED_IMPORTS = {
   // The process's lines, and the daemon's log built over them.
   dlog: {
     group: ["**/log", "**/log.js"],
-    owners: [
-      "src/daemon/daemon.ts",
-      "src/daemon/file-storage.ts",
-      "src/daemon/server.ts",
-    ],
+    owners: ["src/daemon/daemon.ts", "src/daemon/server.ts"],
     message: "Daemon work logs through its daemon's log.",
   },
 };

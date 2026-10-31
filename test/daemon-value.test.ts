@@ -67,10 +67,11 @@ describe("the daemon is a value", () => {
       session?: SessionStorage;
     } = {},
   ): Daemon => {
+    const { session } = inputs;
     const daemon = buildDaemon({
       bundle: bundleAt(inputs.checkout ?? path.join(root, "checkout")),
       ...(inputs.clock && { clock: inputs.clock }),
-      ...(inputs.session && { storage: { session: inputs.session } }),
+      ...(session && { storage: () => ({ session }) }),
     });
     open = daemon;
     return daemon;

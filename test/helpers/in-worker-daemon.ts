@@ -15,6 +15,7 @@ import {
   SYSTEM_CLOCK,
   type Daemon,
   type DaemonInputs,
+  type DaemonStorage,
   type RunningBundle,
 } from "../../src/daemon/daemon";
 import { memoryLimitBytes } from "../../src/daemon/limits";
@@ -22,11 +23,12 @@ import { fileStorage } from "../../src/daemon/file-storage";
 import { drained } from "../../src/daemon/log";
 import { logPath, stateDir } from "../../src/daemon/paths";
 import { sendOne, type Request } from "../../src/daemon/protocol";
+import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import { memoryConnection } from "./memory-connection";
 
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
-  readonly storage?: Partial<DaemonInputs["storage"]>;
+  readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
@@ -62,7 +64,10 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
       throw new Error(`a daemon under test asked to exit ${code}`);
     },
     ...overrides,
-    storage: { ...fileStorage(), ...overrides.storage },
+    storage: (log) => ({
+      ...fileStorage(log),
+      ...overrides.storage?.(log),
+    }),
   });
 }
 

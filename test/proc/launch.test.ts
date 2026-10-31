@@ -9,6 +9,7 @@ import {
   type LaunchCategory,
   type LaunchScope,
   type Launcher,
+  type TestableLauncher,
 } from "../../src/proc/launch";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
@@ -73,7 +74,7 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 // The launcher a case launches through. `ending` closes it, so no case leaves
 // a lifeline behind it.
-let launcher: Launcher;
+let launcher: TestableLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
   launcher = createLauncher({ signal: ending.signal, ...scope });
@@ -592,7 +593,7 @@ describe("a launcher's scope", () => {
         stderr: path.join(scratch, "job.err"),
         status: path.join(scratch, "job.status"),
       }),
-    ).toEqual({ ok: false, error: "the daemon closed" });
+    ).toEqual({ ok: false, error: "aborted before it started" });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(fs.existsSync(marker)).toBe(false);
@@ -713,6 +714,38 @@ describe("a launcher's scope", () => {
 
     expect(refused.slice(1)).toEqual(Array(4).fill("user-shell"));
     expect(starts.filter((c) => c === "user-shell")).toEqual([]);
+  });
+
+  it("a launch its own caller aborted first is refused at the same gate, and metered", async () => {
+    const { handle, refused, starts } = makeSpyHandle();
+    scoped({ stats: handle });
+    const marker = path.join(scratch, "caller-aborted");
+
+    expect(
+      await launch({ ...touching(marker), signal: AbortSignal.abort() }),
+    ).toMatchObject({ ok: false, reason: "aborted" });
+
+    expect(refused).toEqual(["user-shell"]);
+    expect(starts).toEqual([]);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it("a refused job says what refused it", () => {
+    scoped({});
+    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const files = {
+      stdout: path.join(scratch, "limited.out"),
+      stderr: path.join(scratch, "limited.err"),
+      status: path.join(scratch, "limited.status"),
+    };
+    const first = launchJobSync(once, files);
+    if (!first.ok) throw new Error(first.error);
+    first.withdraw();
+
+    expect(launchJobSync(once, files)).toEqual({
+      ok: false,
+      error: expect.stringContaining("rate-limited: click.open"),
+    });
   });
 
   it("a retired lifeline records no fault, and nothing starts another while the scope refuses", async () => {

@@ -273,20 +273,25 @@ export type LaunchResult =
       error?: string;
     };
 
-const refusedAsAborted = (): LaunchResult => ({
+// A launch that started nothing. It always says why, so a form with no
+// `LaunchResult` to return still carries the reason rather than guessing one.
+type Refusal = Extract<LaunchResult, { ok: false }> & { error: string };
+
+const refusedAsAborted = (): Refusal => ({
   ok: false,
   reason: "aborted",
   stdout: "",
   stderr: "",
   exitCode: null,
   signal: null,
+  error: "aborted before it started",
 });
 
 function rateLimitedResult(
   category: LaunchCategory,
   minIntervalMs: number,
   sinceLastMs: number,
-): LaunchResult {
+): Refusal {
   return {
     ok: false,
     reason: "rate-limited",
@@ -342,15 +347,16 @@ interface LaunchState {
   fault: string | null;
 }
 
-// The one gate each launch form crosses: closed, or inside its category's
-// interval, it answers the refusal and no child starts. Admitted, the attempt
-// is on record. [LAW:nothing-unseen] A refusal is metered, so a launch that did
-// nothing reads apart from one nobody tried.
+// The one gate each launch form crosses: closed, aborted by its caller, or
+// inside its category's interval, it answers the refusal and no child starts.
+// Admitted, the attempt is on record. [LAW:nothing-unseen] A refusal is metered,
+// so a launch that did nothing reads apart from one nobody tried.
 function admit(
   state: LaunchState,
   category: LaunchCategory,
-): LaunchResult | null {
-  const refusal = refusalOf(state, category);
+  signal?: AbortSignal,
+): Refusal | null {
+  const refusal = refusalOf(state, category, signal);
   if (refusal !== null) {
     state.scope.stats?.onRefused(category);
     return refusal;
@@ -362,8 +368,9 @@ function admit(
 function refusalOf(
   state: LaunchState,
   category: LaunchCategory,
-): LaunchResult | null {
-  if (state.scope.signal.aborted) return refusedAsAborted();
+  signal: AbortSignal | undefined,
+): Refusal | null {
+  if (state.scope.signal.aborted || signal?.aborted) return refusedAsAborted();
   const gate = checkRateLimit(state.lastStartAt, category);
   return gate.allowed
     ? null
@@ -510,8 +517,7 @@ async function launchWaited(
   opts: AsyncLaunchOpts,
 ): Promise<LaunchResult> {
   const { stats } = state.scope;
-  if (opts.signal?.aborted) return refusedAsAborted();
-  const refused = admit(state, opts.category);
+  const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
   const t0 = Date.now();
   stats?.onStart(opts.category);
@@ -891,9 +897,8 @@ function launchJob(
   files: JobFiles,
 ): JobLaunch {
   const { stats } = state.scope;
-  if (admit(state, opts.category) !== null) {
-    return { ok: false, error: "the daemon closed" };
-  }
+  const refused = admit(state, opts.category);
+  if (refused !== null) return { ok: false, error: refused.error };
   const t0 = Date.now();
   stats?.onStart(opts.category);
   let child: ChildProcess;
@@ -1017,6 +1022,11 @@ export interface Launcher {
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
   lifelineWarnings(): LifelineWarning[];
+}
+
+// What `createLauncher` returns, and not what a launcher is handed around as, so
+// nothing holding a `Launcher` can reach this.
+export interface TestableLauncher extends Launcher {
   // Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
   // death gives it — and names its pid. A cut lifeline is lost at once, so the
   // test's next launch starts another rather than writing to a closed pipe.
@@ -1025,8 +1035,8 @@ export interface Launcher {
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
-export function createLauncher(owner: Partial<LaunchScope>): Launcher {
-  const launcher: Launcher = {
+export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
+  const launcher: TestableLauncher = {
     launch: (opts) => launchWaited(state, opts),
     launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
@@ -1075,4 +1085,4 @@ export function createLauncher(owner: Partial<LaunchScope>): Launcher {
 // daemon's shell before it has a daemon. Nothing closes it. Daemon work never
 // reaches for this: it holds its daemon's, which is what the close refuses
 // (eslint.config.mjs).
-export const processLauncher = createLauncher({});
+export const processLauncher: Launcher = createLauncher({});

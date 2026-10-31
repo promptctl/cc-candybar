@@ -296,7 +296,7 @@ describe("configure mode picks a placement's theme", () => {
     const logged: string[] = [];
     VERBS.get(VERB_SAVE)!(SID, {
       ...rt.ctx,
-      dlog: (_level, message) => logged.push(message),
+      log: (_level, message) => logged.push(message),
     });
     // The save's one event names the theme it wrote.
     expect(logged).toHaveLength(1);

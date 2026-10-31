@@ -282,7 +282,7 @@ function buildRuntime(src: string) {
   const ctx: VerbContext = {
     ...testVerbContext(sessionState),
     configFor: () => config,
-    dlog: (_level, line) => logged.push(line),
+    log: (_level, line) => logged.push(line),
   };
   const clickWriting = (key: string, value: string): void => {
     const url = linkUrls(draw(instantOf(new Date())).text).find((u) =>

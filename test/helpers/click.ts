@@ -69,7 +69,7 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    dlog: () => {},
+    log: () => {},
     launcher: processLauncher,
     now: () => instantOf(new Date()),
     applyUpdate: () => {

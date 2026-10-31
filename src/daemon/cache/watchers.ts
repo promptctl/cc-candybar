@@ -10,7 +10,7 @@ import {
 } from "../../utils/watch-target";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
-// injects `dlog` (writes to daemon.log at the requested level); other
+// injects its log (writes to daemon.log at the requested level); other
 // consumers (var-system tests, demo) take the default which routes
 // through `debug` — present-but-quiet unless CC_CANDYBAR_DEBUG is set.
 // [LAW:no-defensive-null-guards] Default is always non-null; injection
@@ -339,7 +339,7 @@ export class WatcherRegistry {
     opts: {
       counters?: WatcherCounters;
       // [LAW:single-enforcer] One injection point per consumer. The daemon
-      // passes `dlog` so watcher-failure events land in daemon.log; non-
+      // passes its log so watcher-failure events land in daemon.log; non-
       // daemon consumers keep the default debug-routed logger and never
       // touch daemon log files.
       logger?: WatcherLogger;

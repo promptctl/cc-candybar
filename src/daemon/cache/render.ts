@@ -182,7 +182,7 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // view's own payload passes SOURCES_NOTHING.
   source: SourceOf<S>;
   // Where the cache's events go — every load, every teardown. Only the
-  // daemon passes `dlog`; a caller passing none logs quietly, like the
+  // daemon passes its log; a caller passing none logs quietly, like the
   // providers and the usage store.
   log?: DaemonLogger;
 }

@@ -264,11 +264,17 @@ export function formatStats(s: StatsSnapshot): string {
   // Snapshot already includes only executed categories (stats.ts:
   // snapshotSubprocesses keeps byCategory and the histograms symmetric).
   const activeCats = Object.entries(s.subprocesses.byCategory);
+  const refusedRows = Object.entries(s.subprocesses.refused).map(
+    ([cat, n]) => [`${cat} refused`, n] as const,
+  );
   // [LAW:dataflow-not-control-flow] Column width is a function of the data,
   // not a hardcoded constant that drifts when new categories are added. The
   // padEnd(13) baseline matches the "  pid           " etc. columns above so
   // short categories still line up; longer ones expand the column.
-  const colWidth = activeCats.reduce((w, [cat]) => Math.max(w, cat.length), 13);
+  const colWidth = [...activeCats, ...refusedRows].reduce(
+    (w, [label]) => Math.max(w, label.length),
+    13,
+  );
   for (const [cat, n] of activeCats) {
     const p50 = s.subprocesses.p50DurationMs[cat];
     const p99 = s.subprocesses.p99DurationMs[cat];
@@ -278,8 +284,8 @@ export function formatStats(s: StatsSnapshot): string {
         : "";
     lines.push(`  ${cat.padEnd(colWidth)} ${n}${timing}`);
   }
-  for (const [cat, n] of Object.entries(s.subprocesses.refused)) {
-    lines.push(`  ${`${cat} refused`.padEnd(colWidth)} ${n}`);
+  for (const [label, n] of refusedRows) {
+    lines.push(`  ${label.padEnd(colWidth)} ${n}`);
   }
   if (s.nextRestartReason) {
     lines.push(``);

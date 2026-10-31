@@ -367,9 +367,8 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // honestly unchecked — a notice asked for before arm() renders nothing.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
-  const acts = makeActReader(actsDir, (pid) =>
-    readStartTime(pid, launcher.launchSync),
-  );
+  const readStart = (pid: number) => readStartTime(pid, launcher.launchSync);
+  const acts = makeActReader(actsDir, readStart);
   // [LAW:one-source-of-truth] The act as last read, for the notice's render
   // and for noticing an end; null until the first read. Every decision — a
   // second click, a restart's hold — reads the record afresh instead, since a
@@ -530,6 +529,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         { ...facts.command, category: "update.apply" },
         ACT_TIMEOUT_MS,
         Date.now(),
+        readStart,
       );
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);

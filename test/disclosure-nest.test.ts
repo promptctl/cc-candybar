@@ -71,7 +71,7 @@ function buildRuntime(src: string) {
   const ctx: VerbContext = {
     ...testVerbContext(sessionState),
     configFor: () => config,
-    dlog: (_level, line) => logged.push(line),
+    log: (_level, line) => logged.push(line),
   };
   // One click is one verb call, as the daemon runs it.
   const click = (url: string): void => {

@@ -55,8 +55,9 @@ export type StartTimeRead =
   | { kind: "start"; token: string }
   | { kind: "unavailable"; detail: string };
 
-// The subprocess boundary, injected so the parse/branch logic is exercised by
-// input enumeration with a fake launcher while the real path runs the real `ps`.
+// `launch` is the subprocess boundary, injected so the parse/branch logic is
+// exercised by input enumeration with a fake launcher while the real path runs
+// the real `ps`.
 // [LAW:effects-at-boundaries][LAW:single-enforcer] The sole effect (spawning
 // `ps`) goes through the one subprocess enforcer, `launchSync`. The ONLY sound
 // signal `ps` gives is a printed start-time row (a live pid we could read);

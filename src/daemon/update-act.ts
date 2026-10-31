@@ -29,7 +29,7 @@ import {
 } from "../proc/launch";
 import { readTailSync } from "../utils/transcript-fs";
 import type { Launcher } from "../proc/launch";
-import { readStartTime, type StartTimeRead } from "./process-fingerprint";
+import type { StartTimeRead } from "./process-fingerprint";
 
 export function actsDir(stateDir: string, entryPath: string): string {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
@@ -289,8 +289,7 @@ export function claimAct(
   command: LaunchOpts,
   timeoutMs: number,
   now: number,
-  read: (pid: number) => StartTimeRead = (pid) =>
-    readStartTime(pid, launcher.launchSync),
+  read: (pid: number) => StartTimeRead,
 ): Claim {
   const act = (after ?? 0) + 1;
   const actDir = path.join(dir, String(act));
