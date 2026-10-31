@@ -135,10 +135,10 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
       );
 
       // A cold restart, through the close a real one takes. SessionState is
-      // disk-backed on purpose (server.ts binds FileSessionStorage and the
-      // daemon's close flushes it), so a click is not lost when the RSS backstop
-      // recycles the daemon mid-session — the session halves come back exactly
-      // as theme/endcaps/style do, and the bystander is still untouched.
+      // disk-backed on purpose (the daemon's close flushes FileSessionStorage),
+      // so a click is not lost when the RSS backstop recycles the daemon
+      // mid-session — the session halves come back exactly as
+      // theme/endcaps/style do, and the bystander is still untouched.
       const clickerWide = stripAnsi(await render(daemon, CLICKER, projectDir));
       await daemon.stop();
       daemon = startDaemon(env);

@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
+import { dlog, logLines } from "../src/daemon/log";
 import { logPath } from "../src/daemon/paths";
 import {
   encodeFrame,
@@ -39,13 +40,14 @@ import {
 } from "./helpers/daemon-e2e";
 import { renderLines } from "./helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
-import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
+import { JEST_TMP_PREFIX, jestTmpDir, jestTmpOwner } from "./helpers/jest-tmp";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { throughout, until } from "./helpers/until";
 
 jest.setTimeout(30_000);
 
 const CONFIG = `{
+  globals: { experimentalStatusline: true },
   actions: { wide: { set: "padding", to: "4" } },
   segments: {
     pad: { template: '{{ action "wide" "[wide]" }}', bg: "surface", fg: "foreground" },
@@ -152,7 +154,7 @@ describe("a daemon in this worker", () => {
     );
   });
 
-  test("a stop ends a subscriber's stream and a request's backstop, and gives the env back", async () => {
+  test("a stop ends a subscriber's stream and a request's backstop, lands the log, and gives the env back", async () => {
     const sid = "in-worker-stop";
     const stateHome = process.env.XDG_STATE_HOME;
     daemon = startDaemon(env);
@@ -180,8 +182,13 @@ describe("a daemon in this worker", () => {
       lane: "statusline",
     };
     subscriber.write(encodeFrame(subscribe));
+    // A refusal is a frame too, and it closes the stream, so what shows a
+    // subscriber is a frame it drew on a stream still open.
+    await until(() => frames.length > 0, "the subscriber's first frame");
+    expect(frames[0]).toMatchObject({ ok: true });
+    expect(closed).toBe(false);
     const { stats } = daemon.daemon;
-    await until(() => stats.inFlight === 0, "the subscribe leaving in-flight");
+    expect(stats.inFlight).toBe(0);
 
     // Open and silent: its backstop is armed, and only its stream's close takes
     // it out of in-flight. A cold render above may have timed out on its own, so
@@ -190,8 +197,14 @@ describe("a daemon in this worker", () => {
     daemon.connect();
     expect(stats.inFlight).toBe(1);
 
+    // Logged with the env placed, so it belongs in this daemon's log, and the
+    // log reads its path when it writes.
+    const last = "the last line before the stop";
+    dlog("info", last);
+    const { log } = daemon;
     await daemon.stop();
     daemon = null;
+    expect(logLines(log).join("\n")).toContain(last);
 
     await until(() => closed, "the subscriber hearing the daemon go");
     expect(stats.inFlight).toBe(0);
@@ -229,6 +242,7 @@ describe("the sweep over jest's directories", () => {
   test("a directory's name says the worker that made it, or says none", () => {
     expect(jestTmpOwner(`${JEST_TMP_PREFIX}state-4242-a-uuid`)).toBe(4242);
     expect(jestTmpOwner(`${JEST_TMP_PREFIX}daemon-pool`)).toBeNull();
+    expect(jestTmpOwner(path.basename(jestTmpDir("state")))).toBe(process.pid);
   });
 
   test("keeps another live process's directory and removes the rest", () => {

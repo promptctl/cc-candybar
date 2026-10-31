@@ -3,7 +3,7 @@
 // leftover jest daemon-pool cruft on a clean run — "a leftover
 // cc-candybar-jest-* socket dir after a clean run is a test failure, not
 // silent debris" (brandon-daemon-lifecycle-gad.1). Never touches a directory
-// a live process still holds, so it's safe to run even while another
+// a live worker still owns, so it's safe to run even while another
 // concurrent worktree's suite is mid-run against the SAME shared pool dir —
 // the two-worktrees-don't-multiply-the-peak guarantee depends on the pool dir
 // itself surviving between runs; only provably-dead entries are removed.
@@ -42,7 +42,7 @@ export function sweepJestTmp(root: string, sweeper: number): void {
   for (const name of entries) {
     if (!name.startsWith(JEST_TMP_PREFIX)) continue;
     const dir = path.join(root, name);
-    if (dir === DEFAULT_POOL_DIR) continue; // the shared pool persists — swept above, never removed
+    if (dir === DEFAULT_POOL_DIR) continue; // the shared pool persists — swept by `sweepStale`, never removed
     if (inUse(name, sweeper)) continue;
     try {
       fs.rmSync(dir, { recursive: true, force: true });
