@@ -349,7 +349,8 @@ function setBarOnly(on) {
   document.body.classList.toggle("bar-only", on);
   localStorage.setItem(BAR_ONLY_KEY, String(on));
 }
-setBarOnly(localStorage.getItem(BAR_ONLY_KEY) === "true");
+// `?bar-only` is the address of the bar alone, for whatever hosts it: a pane, a floating window.
+setBarOnly(new URLSearchParams(location.search).has("bar-only") || localStorage.getItem(BAR_ONLY_KEY) === "true");
 $("bar-only").addEventListener("click", () => setBarOnly(true));
 $("exit-bar-only").addEventListener("click", () => setBarOnly(false));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") setBarOnly(false); });
