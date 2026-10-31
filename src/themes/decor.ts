@@ -1145,7 +1145,9 @@ export const PLANE_ROLE = "surface";
  * The colour of one vocabulary entry in `palette`: the palette's own entry for
  * the role at that shade, byte for byte. [LAW:one-source-of-truth] The one
  * place an entry becomes a colour — `decorFor` renders a closed cell through
- * it and `bandFor` a menu's items.
+ * it and `bandFor` a menu's items. [LAW:types-are-the-program] Every role this
+ * module names is a `PaletteRole`, which `Palette.get` answers with a colour on
+ * every palette, so a name outside them stops compiling.
  */
 export const decorEntryColour = (
   palette: Palette,

@@ -67,8 +67,6 @@ function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
     ["text", parseRgbHex("eeeeee")],
     // The two poles `textOn` chooses an unauthored foreground between.
     ["foreground", parseRgbHex("eeeeee")],
-    // transposePalette derives the dark flag from "background" (required for
-    // any non-identity key); real registry palettes always carry it.
     ["background", parseRgbHex("12121a")],
   ]);
   return withRoles(name, vars);

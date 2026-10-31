@@ -10,11 +10,9 @@
 
 import { ColorDepth, Style } from "@promptctl/rich-js";
 import {
-  ColorRgba,
   contrastRatio,
   getThemePalette,
   listThemePalettes,
-  Palette,
 } from "@promptctl/rich-js";
 import { floorOf } from "../src/config/globals-fields";
 import type { ActiveSegment } from "../src/render/active-segment";
