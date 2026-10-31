@@ -29,12 +29,16 @@ import {
 } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls, stripAnsi } from "./ansi";
+import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
 import { valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
 export { linkUrls, stripAnsi } from "./ansi";
+
+// The argv a client sends: binary path first, as parseRenderArgs expects.
+export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
 
 const REPLY_BUDGET_MS = 5000;
 
@@ -301,7 +305,12 @@ export function runRealClient(
     run = spawnSync(
       process.execPath,
       [path.join(process.cwd(), "dist", "index.mjs"), ...args],
-      { ...options, encoding: "utf8", timeout: 10_000 },
+      {
+        ...options,
+        env: { ...options.env, [ROUTE_ENV]: "client" },
+        encoding: "utf8",
+        timeout: 10_000,
+      },
     );
     if (run.status !== 0 || stripAnsi(run.stdout).trim() !== "") break;
     // [LAW:no-silent-failure] A retry that absorbs a blank is named, so a

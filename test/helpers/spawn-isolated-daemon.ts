@@ -1,7 +1,7 @@
 // [LAW:single-enforcer] The ONE place that spins up a real, request-serving
 // `cc-candybar daemon` subprocess against an isolated XDG_STATE_HOME/
 // XDG_CACHE_HOME/XDG_CONFIG_HOME + short socket path — extracted from
-// daemon-shutdown.test.ts (candybar-config-engine-71o.5) so every test that
+// daemon-shutdown.process.test.ts (candybar-config-engine-71o.5) so every test that
 // needs a real daemon over a real socket (not spawnTestDaemon's bare
 // process-lifecycle probe) shares one spawn+readiness+cleanup
 // implementation instead of re-deriving the short-socket-path /
@@ -161,13 +161,13 @@ export async function spawnDaemonWithEnv(
     );
   }
   const daemon = await spawnTestDaemon(env, daemonPool, entry);
-  const { child, killTree, release } = daemon;
+  const { child, killTree, stderrTail, release } = daemon;
 
   const readiness = await awaitReadiness(child, sockPath);
   if (readiness.phase !== "serving") {
     killTree();
     release();
-    throw new Error(readinessFailure(readiness, sockPath, env));
+    throw new Error(readinessFailure(readiness, sockPath, env, await stderrTail));
   }
 
   return {
@@ -222,7 +222,7 @@ const READINESS_POLL_MS = 25;
 // own child has reached its EADDRINUSE decision at all (measured), so an
 // exit-based check would catch that case only when the scheduler happened to
 // cooperate. A coin-flip detector for a race is worse than a documented one —
-// see the accepted-incumbent case in test/spawn-isolated-daemon.test.ts.
+// see the accepted-incumbent case in test/spawn-isolated-daemon.process.test.ts.
 type BootPhase = "booting" | "bound" | "serving";
 type FailedPhase = Exclude<BootPhase, "serving">;
 
@@ -296,10 +296,11 @@ export function readinessFailure(
   readiness: ReadinessFailure,
   sockPath: string,
   env: NodeJS.ProcessEnv,
+  stderr: string,
 ): string {
   return (
     `daemon never became ready: ${socketDid(readiness.phase, sockPath)}; ` +
-    `${processDid(readiness.exit)}\n${daemonLogTail(env)}`
+    `${processDid(readiness.exit)}\n${daemonLogTail(env)}\nstderr:\n${stderr}`
   );
 }
 
@@ -321,14 +322,14 @@ function processDid(exit: ExitResult | null): string {
   }
   const how =
     exit.signal !== null ? `signal ${exit.signal}` : `code ${exit.code}`;
-  return `the process exited (${how}), and said why in the log below`;
+  return `the process exited (${how}), and said why below`;
 }
 
 // [LAW:no-silent-failure] A daemon that never answered wrote its own reason
 // down — `refusing to boot`, `EADDRINUSE … exiting`, `parent watchdog` — in
-// the log this env points it at (its stdio is drained into nothing). A
-// readiness failure that quotes that log names its cause, where the phase above
-// only names which half of the boot it died in.
+// the log this env points it at, or on stderr if it died before it had a log. A
+// readiness failure that quotes both names its cause, where the phase above only
+// names which half of the boot it died in.
 function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
   const file = logPath(env);
   let text: string;

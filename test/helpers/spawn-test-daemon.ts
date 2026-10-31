@@ -8,8 +8,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
 import { daemonPool, type DaemonPool } from "./daemon-pool";
+import { ROUTE_ENV } from "./process-tier.cjs";
 
 const REPO_ROOT = process.cwd();
+
+// Enough of the end of a child's stderr to hold why it died.
+const STDERR_TAIL_BYTES = 4096;
 
 // What process runs the daemon: a binary and the argument vector before the
 // `daemon` subcommand. The default runs the TypeScript source under tsx; a
@@ -43,6 +47,10 @@ export interface TestDaemonProcess {
   // Best-effort — never throws (matches the try/catch every kill in this
   // suite's cleanup paths already wraps its process.kill in).
   killTree(signal?: NodeJS.Signals): void;
+  // [LAW:no-silent-failure] What a process that died before its first log line
+  // said: a daemon logs nothing until it binds, so the log has no word of it.
+  // Settles once the pipe has closed, so what a dying process said is all in it.
+  stderrTail: Promise<string>;
   // Idempotent, safe to call multiple times or not at all — the slot also
   // self-releases on the wrapper's `exit` event, so a test whose cleanup
   // forgets this (or crashes before reaching it) can't wedge the pool.
@@ -62,7 +70,7 @@ export async function spawnTestDaemon(
   try {
     child = spawn(entry.bin, [...entry.args, "daemon"], {
       cwd: REPO_ROOT,
-      env,
+      env: { ...env, [ROUTE_ENV]: "helper" },
       stdio: ["ignore", "pipe", "pipe"],
       // New session + process group (pgid = child.pid), inherited by the
       // worker `tsx` forks — the ONLY thing that makes a group-wide signal
@@ -76,7 +84,17 @@ export async function spawnTestDaemon(
   }
   // Drain stdio so the child's pipes don't fill and stall.
   child.stdout?.on("data", () => {});
-  child.stderr?.on("data", () => {});
+  let stderr = "";
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr = (stderr + chunk.toString()).slice(-STDERR_TAIL_BYTES);
+  });
+  // [LAW:no-ambient-temporal-coupling] 'exit' can land before the pipe's last
+  // bytes are read, and a process that dies before its log opens says why only
+  // there. 'close' is the state that means they have arrived, and it comes on a
+  // failed spawn too.
+  const stderrTail = new Promise<string>((resolve) => {
+    child.once("close", () => resolve(stderr));
+  });
 
   let released = false;
   const releaseOnce = (): void => {
@@ -115,5 +133,5 @@ export async function spawnTestDaemon(
     }
   };
 
-  return { child, killTree, release: releaseOnce };
+  return { child, killTree, stderrTail, release: releaseOnce };
 }

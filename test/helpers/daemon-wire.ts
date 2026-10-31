@@ -2,7 +2,7 @@
 // request to a daemon socket and awaits its response, and the ONE place
 // that resolves a child process's actual exit — both were duplicated
 // verbatim (byte-for-byte, modulo a timeout constant) across
-// daemon-shutdown.test.ts and daemon-config-persistence-e2e.test.ts before
+// daemon-shutdown.process.test.ts and daemon-config-persistence-e2e.test.ts before
 // this extraction (candybar-config-engine-71o.5 review). A protocol or
 // socket-lifecycle change now has one call site to update, not N drifting
 // copies.

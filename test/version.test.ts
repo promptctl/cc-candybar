@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { withPreload } from "../scripts/version-stamp.cjs";
+
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
 const pkg = JSON.parse(
@@ -49,4 +51,11 @@ describe("PACKAGE_VERSION", () => {
       expect(r.stdout).toBe(`cc-candybar ${pkg.version}\n`);
     },
   );
+});
+
+test("a preload keeps what NODE_OPTIONS already held", () => {
+  expect(withPreload("--trace-warnings", "/a b/p.cjs")).toBe(
+    "--trace-warnings --import=file:///a%20b/p.cjs",
+  );
+  expect(withPreload(undefined, "/p.cjs")).toBe("--import=file:///p.cjs");
 });
