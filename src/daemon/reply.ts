@@ -2,7 +2,6 @@
 
 import process from "node:process";
 import { inspect } from "node:util";
-import { dlog } from "./log";
 import type { DaemonParts } from "./daemon-parts.js";
 import {
   answerRequest,
@@ -151,12 +150,12 @@ export async function handleRequest(
     //     the diagnostic and refusing to kick. Shutting down here was the
     //     load-bearing half of the 452-corpse spiral (kz8.5).
     if (req.v > PROTOCOL_VERSION) {
-      dlog(
+      parts.log(
         "info",
         `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — exiting after the response flushes`,
       );
     } else {
-      dlog(
+      parts.log(
         "info",
         `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
       );
@@ -298,7 +297,7 @@ export async function replyTo(
     // [LAW:one-source-of-truth] The count of render requests received is that
     // order.
     const order = ++stats.requestsTotal;
-    const checked = checkRenderRequest(req, stats);
+    const checked = checkRenderRequest(req, stats, parts.log);
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one
     // write, here rather than in drawRender. It is written as the request
@@ -395,7 +394,7 @@ export async function replyTo(
       rendered.outcome,
       Math.round(clock.monotonic() - t0),
     );
-    dlog(level, line);
+    parts.log(level, line);
     return {
       resp: rendered.resp,
       exitAfterFlush: null,
@@ -421,7 +420,7 @@ export async function replyTo(
       outcome,
       Math.round(clock.monotonic() - t0),
     );
-    dlog(level, line);
+    parts.log(level, line);
     return stay(clickReply(outcome));
   }
 
@@ -705,13 +704,14 @@ function statusLineClick(
     );
   }
   clickLaunch(
+    parts.launcher,
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
       args: [click.url],
       category: "click.open",
     },
     `opening ${click.url}`,
-    dlog,
+    parts.log,
   );
   return { kind: "ok" };
 }

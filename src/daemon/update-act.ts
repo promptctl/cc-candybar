@@ -22,14 +22,14 @@ import path from "node:path";
 import {
   endJob,
   jobGroupAlive,
-  launchJobSync,
   readJobEnd,
   type JobEnd,
   type JobFiles,
   type LaunchOpts,
+  type Launcher,
 } from "../proc/launch";
 import { readTailSync } from "../utils/transcript-fs";
-import { readStartTime, type StartTimeRead } from "./process-fingerprint";
+import type { StartTimeRead } from "./process-fingerprint";
 
 export function actsDir(stateDir: string, entryPath: string): string {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
@@ -172,7 +172,7 @@ const bootedAt = (): number => Date.now() - os.uptime() * 1000;
 // story.
 export function isRecordedJob(
   record: ActRecord,
-  read: (pid: number) => StartTimeRead = readStartTime,
+  read: (pid: number) => StartTimeRead,
   boot: number = bootedAt(),
 ): boolean {
   if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
@@ -219,7 +219,7 @@ const sameJob = (a: ActRecord, b: ActRecord): boolean =>
 // the group is gone.
 export function makeActReader(
   dir: string,
-  read: (pid: number) => StartTimeRead = readStartTime,
+  read: (pid: number) => StartTimeRead,
 ): ActReader {
   let known: Known | null = null;
 
@@ -282,20 +282,21 @@ export type Claim =
 // acts again before releasing: a claimer stalled mid-claim can land on a
 // number already pruned while a later act runs, and it withdraws.
 export function claimAct(
+  launcher: Launcher,
   dir: string,
   after: number | null,
   identity: string,
   command: LaunchOpts,
   timeoutMs: number,
   now: number,
-  read: (pid: number) => StartTimeRead = readStartTime,
+  read: (pid: number) => StartTimeRead,
 ): Claim {
   const act = (after ?? 0) + 1;
   const actDir = path.join(dir, String(act));
   fs.mkdirSync(dir, { recursive: true });
   const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
   // The job writes where the act will be, once released.
-  const job = launchJobSync(command, filesOf(actDir));
+  const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw new Error(`apply-update: ${job.error}`);

@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -54,6 +55,7 @@ function rig() {
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
     {
+      launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       sessionState: new SessionState(),

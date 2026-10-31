@@ -14,6 +14,7 @@
 //   - A control writes a draft: only that placement renders it, `💾 save`
 //     counts it, and saving writes it INTO the placement in the config file.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { configurePlacement } from "./helpers/configure";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -110,7 +111,7 @@ function buildRuntime(
   const config = parseAndValidate("<test>", src, ALLOWED);
   durable.seedOrigin(sessionState, SID);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (): string =>
     renderDsl(
@@ -443,7 +444,7 @@ describe("configure mode's drafts are saved into the placement", () => {
     const logged: string[] = [];
     VERBS.get(VERB_SAVE)!(SID, {
       ...rt.ctx,
-      dlog: (_level, message) => logged.push(message),
+      log: (_level, message) => logged.push(message),
     });
     // The save's one event names every placement value it wrote.
     expect(logged).toHaveLength(1);
@@ -714,7 +715,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     VERBS.get(effect!.verb)!(effect!.value, {
       ...rt.ctx,
-      dlog: (_level, message) => logged.push(message),
+      log: (_level, message) => logged.push(message),
     });
     expect(rt.sessionState.get(SID, inB)).toBeNull();
     expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);

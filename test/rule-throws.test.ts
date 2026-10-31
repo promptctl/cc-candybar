@@ -8,6 +8,7 @@
 // registerDslConfig + renderDsl, the style resolved as src/daemon/draw-bar.ts
 // resolves it and the theme and effect from the config's own globals.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { stripAnsi } from "./helpers/ansi";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -54,7 +55,7 @@ const src = (slot: string, rule: string): string => `{
 function runtime(source: string) {
   const config = parseAndValidate("<rule-throws>", source, ALLOWED);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): string =>

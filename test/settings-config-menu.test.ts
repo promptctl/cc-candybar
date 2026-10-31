@@ -16,6 +16,7 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -123,7 +124,7 @@ function rig(
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
@@ -137,7 +138,7 @@ function rig(
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
-    dlog: (_level, msg) => logs.push(msg),
+    log: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {
       reloads.push({

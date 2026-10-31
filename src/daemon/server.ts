@@ -34,6 +34,7 @@ import {
   readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { dlog } from "./log";
+import { processLauncher } from "../proc/launch";
 import {
   createDaemon,
   SYSTEM_CLOCK,
@@ -142,7 +143,9 @@ function boot(): void {
   // must be read first: it is both this check's identity and the lease's
   // fingerprint later, so it is read exactly once and threaded through both
   // (see realBreakerDeps' doc comment).
-  myStartTime = readOwnStartTime(process.pid);
+  myStartTime = readOwnStartTime(process.pid, (pid) =>
+    readStartTime(pid, processLauncher.launchSync),
+  );
   const admission = admitDaemon(realBreakerDeps(myStartTime));
   if (!admission.decision.allow) {
     dlog(
@@ -169,7 +172,7 @@ function boot(): void {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     bundle: runningBundle(),
-    storage: fileStorage(),
+    storage: fileStorage,
     memoryLimitBytes: memoryLimit,
     registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: SYSTEM_CLOCK,
@@ -255,7 +258,11 @@ function handleAddressInUse(
   const decision = arbitrateSocket(
     readLease(leasePathFor(sockPath)),
     (pid, startTime) =>
-      sameLiveProcess(pid, startTime, { readStartTime, pidAlive }),
+      sameLiveProcess(pid, startTime, {
+        readStartTime: (candidate) =>
+          readStartTime(candidate, daemon.launcher.launchSync),
+        pidAlive,
+      }),
   );
   if (decision.kind === "attach-and-exit") {
     dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);

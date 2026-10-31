@@ -25,7 +25,7 @@ import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
-import { launchSync, type LaunchResult } from "../proc/launch.js";
+import type { LaunchResult, Launcher } from "../proc/launch.js";
 import {
   FORGE_CLI,
   REMOTES_ARGS,
@@ -330,8 +330,8 @@ export function descendsFromRemoteLogin(
   return { kind: "ok", value: false };
 }
 
-function remoteLogin(pid: number): Asked<boolean> {
-  const run = launchSync({
+function remoteLogin(launcher: Launcher, pid: number): Asked<boolean> {
+  const run = launcher.launchSync({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
     timeoutMs: 2000,
@@ -400,8 +400,8 @@ export function ownsEntry(entry: string): boolean {
   );
 }
 
-function daemons(): Asked<readonly DaemonProcess[]> {
-  const run = launchSync({
+function daemons(launcher: Launcher): Asked<readonly DaemonProcess[]> {
+  const run = launcher.launchSync({
     bin: "ps",
     args: [
       "-U",
@@ -423,8 +423,11 @@ function daemons(): Asked<readonly DaemonProcess[]> {
   return { kind: "ok", value: daemonProcesses(run.stdout, ownsEntry) };
 }
 
-function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
-  const run = runTmux(hint, "doctor.tmux", [
+function probeTmux(
+  launcher: Launcher,
+  hint: TmuxHint,
+): Asked<TmuxClient | null> {
+  const run = runTmux(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
@@ -437,19 +440,21 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
 }
 
 export function productionEdge(
+  launcher: Launcher,
   loadConfig: DoctorEdge["loadConfig"],
 ): DoctorEdge {
   return {
-    probeTmux,
-    remoteLogin,
-    fontInUse,
+    probeTmux: (hint) => probeTmux(launcher, hint),
+    remoteLogin: (pid) => remoteLogin(launcher, pid),
+    fontInUse: (terminal, env, glyphs) =>
+      fontInUse(launcher, terminal, env, glyphs),
     loadConfig,
     managedSettingsDir:
       process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
       claudeManagedSettingsDir(process.platform),
     install: productionInstallEdge,
-    daemons,
-    forge: forgeLogin,
+    daemons: () => daemons(launcher),
+    forge: (cwd) => forgeLogin(launcher, cwd),
     transcript: readTranscriptWindow,
   };
 }
@@ -547,10 +552,13 @@ const FORGE_PROBE: Readonly<
 // remotesOf, forgeRemoteUrl, detectForge), then its CLI asked about the
 // remote's host. Under the daemon's environment for a click — the one the
 // bar's lookup runs with — and the shell's for `cc-candybar doctor`.
-export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
+export function forgeLogin(
+  launcher: Launcher,
+  cwd: string,
+): Asked<ForgeLogin | null> {
   if (gitRootOf(cwd) === undefined) return { kind: "ok", value: null };
   const remotes = remotesOf(
-    launchSync({
+    launcher.launchSync({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd,
@@ -568,7 +576,7 @@ export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
   const probe = FORGE_PROBE[forge];
   // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
   const host = probe.loginHost(remoteHost(url)!);
-  const run = launchSync({
+  const run = launcher.launchSync({
     bin: cli,
     args: [...probe.args(host)],
     cwd,

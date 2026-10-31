@@ -15,6 +15,7 @@ import {
   SYSTEM_CLOCK,
   type Daemon,
   type DaemonInputs,
+  type DaemonStorage,
   type RunningBundle,
 } from "../../src/daemon/daemon";
 import { memoryLimitBytes } from "../../src/daemon/limits";
@@ -22,11 +23,12 @@ import { fileStorage } from "../../src/daemon/file-storage";
 import { drained } from "../../src/daemon/log";
 import { logPath, stateDir } from "../../src/daemon/paths";
 import { sendOne, type Request } from "../../src/daemon/protocol";
+import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import { memoryConnection } from "./memory-connection";
 
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
-  readonly storage?: Partial<DaemonInputs["storage"]>;
+  readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
@@ -62,7 +64,10 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
       throw new Error(`a daemon under test asked to exit ${code}`);
     },
     ...overrides,
-    storage: { ...fileStorage(), ...overrides.storage },
+    storage: (log) => ({
+      ...fileStorage(log),
+      ...overrides.storage?.(log),
+    }),
   });
 }
 
@@ -112,13 +117,9 @@ export function startDaemon(
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
     // go, and a request's backstop goes with its stream. What is logged by now
     // is awaited before the env goes back, because the log reads its path when
-    // it writes.
-    // [LAW:escape-local-minima] exception: a closed daemon's work can still be
-    // unwinding: a launch of its would run under the next daemon built here, and
-    // a line of its lands in whichever log the env names by then. No fact says
-    // that work has settled, so this waits for none; polling a count of children
-    // would read zero between one pass's launches. The fix is a launch that
-    // carries its owner: candybar-testing-0x6u.snf.
+    // it writes. Nothing says a closed daemon's work has settled, so this waits
+    // for none of it: its launches are refused, by its own launcher, and a line
+    // of its says it came after the close, whichever log the env names by then.
     stop: async () => {
       daemon.close();
       for (const end of open) end.destroy();

@@ -77,7 +77,7 @@ describe("the draw's reserve", () => {
     for (let i = 0; i < SAMPLES; i++) await ask(`${tag}-${i}`);
     // A session's first draw alone: an ask the helper repeated, because the
     // first drew pending, draws warm.
-    const drawn = new RegExp(`render sid=(${tag}-\\d+) .* drew=(\\d+)ms `);
+    const drawn = new RegExp(`\\] render sid=(${tag}-\\d+) .* drew=(\\d+)ms `);
     const drew = (lines: readonly string[]): number[] => {
       const first = new Map<string, number>();
       for (const line of lines) {

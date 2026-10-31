@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import {
   makeLimits,
   type LimitsDeps,
@@ -646,10 +647,16 @@ describe("post-mortems", () => {
     const prev = process.env.XDG_STATE_HOME;
     try {
       process.env.XDG_STATE_HOME = path.join(root, "absent");
-      expect(realLimitsDeps(0, () => {}).listArtifacts()).toEqual([]);
+      expect(realLimitsDeps(0, () => {}, {
+        launcher: processLauncher,
+        log: () => {},
+      }).listArtifacts()).toEqual([]);
       fs.writeFileSync(path.join(root, "file"), "");
       process.env.XDG_STATE_HOME = path.join(root, "file");
-      expect(() => realLimitsDeps(0, () => {}).listArtifacts()).toThrow(/ENOTDIR/);
+      expect(() => realLimitsDeps(0, () => {}, {
+        launcher: processLauncher,
+        log: () => {},
+      }).listArtifacts()).toThrow(/ENOTDIR/);
     } finally {
       if (prev === undefined) delete process.env.XDG_STATE_HOME;
       else process.env.XDG_STATE_HOME = prev;

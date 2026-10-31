@@ -71,6 +71,7 @@ import { fixedSource, type ViewSource } from "../../dsl/view-source.js";
 import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
+import type { Launcher } from "../../proc/launch";
 import { SourceRegistry, type CatchUps } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateReader, SessionStateRW } from "../session-state.js";
@@ -159,6 +160,8 @@ export const MAX_ENTRIES = 256;
 // the session source (src/daemon/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
+  // Who its sources' programs belong to (StateDeps).
+  launcher: Launcher;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // The owner of every plugin's managed storage, whose folders a state's
@@ -179,7 +182,7 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // view's own payload passes SOURCES_NOTHING.
   source: SourceOf<S>;
   // Where the cache's events go — every load, every teardown. Only the
-  // daemon passes `dlog`; a caller passing none logs quietly, like the
+  // daemon passes its log; a caller passing none logs quietly, like the
   // providers and the usage store.
   log?: DaemonLogger;
 }
@@ -201,6 +204,8 @@ export const UNOWNED_STORAGE: PluginStorage = {
 
 // What building one config's state needs.
 export interface StateDeps {
+  // Who a source's program belongs to.
+  readonly launcher: Launcher;
   readonly sessionState: SessionStateRW;
   readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
@@ -896,6 +901,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // its own `default`. The loader validates it as a string; the registry
   // default ("") matches the historical behavior when omitted.
   const registry = new SourceRegistry(
+    deps.launcher,
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,

@@ -505,7 +505,7 @@ export class SessionUsageStore {
       sweepIntervalMs?: number;
       rescan?: Every;
       // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
-      // daemon passes `dlog`; every other consumer keeps the debug-routed
+      // daemon passes its log; every other consumer keeps the debug-routed
       // default and never writes daemon.log.
       logger?: DaemonLogger;
       ledger?: RefreshLedger;

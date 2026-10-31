@@ -3,6 +3,7 @@
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -392,7 +393,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
-  const loaded = loadFromDisk(dir, dir, good, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+  const loaded = loadFromDisk(dir, dir, good, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
     sessionState: new SessionState(),
   });
   try {
@@ -440,7 +441,7 @@ describe("a plugin's own variables", () => {
     const { rendered, warnings } = clean(await checkConfig(p, dir));
     expect(rendered).toContain("no data here");
     expect(warnings).toEqual([]);
-    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([
         { path: path.join(dir, "hello/plugin.json5"), scope: "plugins", name: "hello" },
@@ -465,7 +466,7 @@ describe("a plugin's own variables", () => {
     const { rendered, warnings } = clean(await checkConfig(p, dir));
     expect(warnings).toEqual([]);
     expect(rendered).toContain("hello, world 7 ran open=no");
-    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       const vars = loaded.state!.config.variables;
       expect(Object.keys(vars).filter((v) => v.startsWith("plugins.hello."))).toEqual([
@@ -502,7 +503,7 @@ describe("a plugin's own variables", () => {
       p,
       `{ plugins: ["./hello/plugin.json5", "./d/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
         " plugins loaded=2 sources=0 pluginVariables=4 dropped=1 ",
@@ -513,7 +514,7 @@ describe("a plugin's own variables", () => {
   });
 
   test("none declared counts zero", () => {
-    const loaded = loadFromDisk(dir, dir, config(), { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, config(), { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(" pluginVariables=0 ");
     } finally {
@@ -613,7 +614,7 @@ describe("an installed plugin", () => {
       path.join(dir, "main"),
       path.join(dir, "main/.claude/worktrees/w"),
       placing("plugins.lit.ticket"),
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() },
+      { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() },
     );
     try {
       expect(loaded.error).toBeNull();
@@ -649,7 +650,7 @@ describe("an installed plugin", () => {
       logger: () => {},
     });
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+      { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -710,7 +711,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const load = (): string => {
-      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState: new SessionState(),
       });
       loaded.state?.registry.dispose();
@@ -1007,7 +1008,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([
         { path: path.join(dir, "deploy/plugin.json5"), scope: "plugins", name: "deploy" },
@@ -1025,7 +1026,7 @@ describe("an installed plugin", () => {
       logger: () => {},
     });
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+      { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -1080,7 +1081,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "{{ if }}" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([]);
     } finally {
@@ -1128,7 +1129,7 @@ describe("an installed plugin", () => {
   test("a drop is reached by its definition, not by its notice", () => {
     const def = install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const p = placing("plugins.lit.s");
-    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);
       expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([def]);
@@ -1377,6 +1378,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
     expect(rendered).toContain("repo-ticket");
     expect(rendered.indexOf("user-phase")).toBeLessThan(rendered.indexOf("repo-ticket"));
     const loaded = loadFromDisk(repo, repo, undefined, {
+      launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       sessionState: new SessionState(),

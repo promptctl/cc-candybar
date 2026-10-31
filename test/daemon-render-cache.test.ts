@@ -5,6 +5,7 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   chmodSync,
@@ -103,6 +104,7 @@ function makeCache(
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     {
+      launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       sessionState,
@@ -1381,6 +1383,7 @@ describe("RenderCache idle sweep", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState: new SessionState(),
@@ -1431,6 +1434,7 @@ describe("RenderCache idle sweep", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState: new SessionState(),
@@ -1485,6 +1489,7 @@ describe("RenderCache idle sweep", () => {
     const logs: string[] = [];
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState,
@@ -1587,6 +1592,7 @@ describe("RenderCache frames and pins", () => {
     const logs: string[] = [];
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState: new SessionState(),
@@ -1733,6 +1739,7 @@ describe("RenderCache frames and pins", () => {
     let opens = 0;
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState: new SessionState(),
@@ -1799,6 +1806,7 @@ describe("RenderCache frames and pins", () => {
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState: new SessionState(),
@@ -1835,6 +1843,7 @@ describe("RenderCache frames and pins", () => {
     let opens = 0;
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         sessionState: new SessionState(),

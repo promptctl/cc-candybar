@@ -5,6 +5,7 @@
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,7 +28,7 @@ import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
 import { linkUrls } from "./helpers/ansi";
-import { __resetRateLimitsForTest } from "../src/proc/launch";
+import { createLauncher } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
@@ -161,7 +162,6 @@ let savedPath: string | undefined;
 let HINT: TmuxHint;
 
 beforeEach(() => {
-  __resetRateLimitsForTest();
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slash-"));
   HINT = { socket: path.join(dir, "tmux.sock"), pane: "%7", truecolor: null };
   // One line per argument, a line of `@@` after each invocation; a `display`
@@ -224,14 +224,14 @@ function runtime(tmux: TmuxHint | null) {
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const raw = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS);
   const logged: string[] = [];
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    dlog: (_level: string, msg: string) => logged.push(msg),
-    claudeInput: productionClaudeInputEdge(),
+    log: (_level: string, msg: string) => logged.push(msg),
+    claudeInput: productionClaudeInputEdge(createLauncher({})),
   };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
@@ -358,11 +358,11 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    claudeInput: productionClaudeInputEdge(),
+    claudeInput: productionClaudeInputEdge(createLauncher({})),
   };
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {

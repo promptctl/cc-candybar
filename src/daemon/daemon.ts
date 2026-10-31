@@ -19,12 +19,8 @@ import {
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
-import {
-  launch,
-  refuseSecondDaemon,
-  retireLifeline,
-  setLaunchScope,
-} from "../proc/launch";
+import { createLauncher, type Launcher } from "../proc/launch";
+import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
 import { makeUpdateWatch } from "./update-notice";
 import { makeBinaryWatch } from "./binary-watch";
@@ -101,6 +97,12 @@ export const SYSTEM_CLOCK: DaemonClock = {
   monotonic: () => performance.now(),
 };
 
+// Where the session's picks and its settings history persist.
+export interface DaemonStorage {
+  readonly session: SessionStorage;
+  readonly history: HistoryStorage;
+}
+
 // What a daemon takes from the process that runs it. Paths are not among them:
 // the log, the repository answers and the post-mortems read src/daemon/paths.ts
 // when they write, so a path passed here would be honoured by half the daemon
@@ -108,12 +110,10 @@ export const SYSTEM_CLOCK: DaemonClock = {
 // [LAW:one-source-of-truth] The environment is the one source.
 export interface DaemonInputs {
   readonly bundle: RunningBundle;
-  // Where the session's picks and its settings history persist: their files,
-  // for a daemon that won the socket, which makes it their sole writer.
-  readonly storage: {
-    readonly session: SessionStorage;
-    readonly history: HistoryStorage;
-  };
+  // Their files, for a daemon that won the socket, which makes it their sole
+  // writer. Built over the daemon's log: a write in flight at the close finishes
+  // after it, and what it logs says so like any other line of the daemon's work.
+  readonly storage: (log: DaemonLogger) => DaemonStorage;
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
   readonly clock: DaemonClock;
@@ -127,6 +127,10 @@ export interface DaemonInputs {
 // is server.ts's, over this; `exit` is only the funnel it handed in.
 export interface Daemon {
   readonly stats: RuntimeStats;
+  // What this daemon's work launches through: its close refuses them all.
+  readonly launcher: Launcher;
+  // What this daemon's work logs through.
+  readonly log: DaemonLogger;
   readonly memoryLimitBytes: number;
   readonly clock: DaemonClock;
   // [LAW:one-source-of-truth] The funnel this daemon was built with, which a
@@ -160,33 +164,73 @@ export interface Daemon {
   close(): void;
 }
 
-// One Daemon per process at a time: launches and the log are the process's.
+// [LAW:no-shared-mutable-globals] One daemon is live in a process at a time,
+// because its paths and its log are read from the process's environment. What
+// says so is the live daemon's closing signal, written only by `createDaemon`.
+let liveDaemon: AbortSignal | null = null;
+
 export function createDaemon(inputs: DaemonInputs): Daemon {
   // Before anything is built: a refused build hands back nothing to close.
-  refuseSecondDaemon();
-  const { bundle, storage, memoryLimitBytes, registryUrl, clock, exit } =
-    inputs;
+  if (liveDaemon !== null && !liveDaemon.aborted) {
+    throw new Error("a daemon is already live in this process");
+  }
+  const { bundle, memoryLimitBytes, registryUrl, clock, exit } = inputs;
   const instant = (): Instant => instantOf(clock.date());
-  // [LAW:single-enforcer] What ends the daemon's work: every launch through the
-  // launch scope, and the lane edge's waits.
+  // [LAW:single-enforcer] What ends the daemon's work: every launch through its
+  // launcher, and the lane edge's waits.
   const closing = new AbortController();
+  // Whether the close has finished: what is logged after it is work that
+  // outlived its daemon. A process exits with its close, so this is a daemon
+  // closed in a process that goes on, and the next daemon's log can be the file
+  // the line lands in: it says whose it is rather than reading as an event of
+  // that daemon's.
+  let closed = false;
+  // [LAW:one-source-of-truth] What this daemon's work logs through.
+  const log: DaemonLogger = (level, msg) =>
+    dlog(level, closed ? `after close: ${msg}` : msg);
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats();
+  // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
+  // this daemon's launcher meters them into daemon-stats and ends them with it.
+  // Its work holds this one, so a closed daemon's launches are refused here,
+  // whichever daemon is live by then.
+  const launcher = createLauncher({
+    stats: stats.launchStats,
+    signal: closing.signal,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it is said in daemon.log, and every feed redraws, so its warning
+    // comes and goes on frames too.
+    observeLifeline: (fault) => {
+      log(
+        fault === null ? "info" : "warn",
+        fault === null
+          ? "launch lifeline running again"
+          : `launch lifeline ${fault}; the next launch starts another`,
+      );
+      frameFeeds.wakeWhere("data", () => true);
+    },
+  });
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
+  const storage = inputs.storage(log);
   const sessionState = new SessionState(storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
-    dlog,
+    log,
     storage.history,
   );
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
   const limits = makeLimits(
-    realLimitsDeps(stats.startedAt.getTime(), exit, {
-      limitBytes: memoryLimitBytes,
-    }),
+    realLimitsDeps(
+      stats.startedAt.getTime(),
+      exit,
+      { launcher, log },
+      {
+        limitBytes: memoryLimitBytes,
+      },
+    ),
   );
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -194,13 +238,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // directory: its click files them, and daemon-stats answers what they hold
   // to `cc-candybar doctor`.
   const doctorStores = fileStores(stateDir());
-  // [LAW:single-enforcer] The daemon injects `dlog` into both registries so
+  // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
   // default debug-routed loggers and never write to daemon log files.
   const watcherRegistry = new WatcherRegistry({
     counters: stats,
-    logger: dlog,
+    logger: log,
   });
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
   // render in this daemon, built by the one constructor every renderer uses
@@ -208,17 +252,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // serve the augmented payload that flows through every render.
   // [LAW:single-enforcer] The daemon's one record of every source's refreshes:
   // the providers', and each config's user sources (the render cache's).
-  const refreshLedger = new RefreshLedger(dlog);
+  const refreshLedger = new RefreshLedger(log);
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
-    logger: dlog,
+    logger: log,
   });
   const payloadProviders = createPayloadProviders({
+    launcher,
     watchers: watcherRegistry,
     fileEvents,
-    logger: dlog,
+    logger: log,
     ledger: refreshLedger,
   });
   const {
@@ -239,7 +284,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     now: instant,
     close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
     failed: (sessionId, error) =>
-      dlog(
+      log(
         "error",
         `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
       ),
@@ -252,9 +297,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const runs = new Runs({
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
-    launch,
+    launch: launcher.launch,
     state: sessionState,
-    log: dlog,
+    log,
     now: instant,
   });
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
@@ -262,6 +307,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // clicks moved, and each request's arrival for the setups owed to it.
   const laneSetups = new LaneSetups({
     edge: productionLaneEdge(
+      launcher,
       (sessionId) => frameFeeds.following(sessionId),
       closing.signal,
     ),
@@ -274,7 +320,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       preload: stableAttachPreload(bundle.path),
     },
     state: sessionState,
-    log: dlog,
+    log,
     now: instant,
     defer: (run) => void setImmediate(run),
   });
@@ -283,9 +329,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
     edge: {
       run: (socket, args, stdin) =>
-        runTmuxAsync({ socket }, "tmux-status", args, stdin),
+        runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
       runSync: (socket, args, stdin) =>
-        runTmux({ socket }, "tmux-status", args, stdin),
+        runTmux(launcher, { socket }, "tmux-status", args, stdin),
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
     sessionInPane: (socket, pane) =>
@@ -302,7 +348,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       "url-handle",
     ].join(" "),
     owner: socketPath(),
-    log: dlog,
+    log,
   });
   // Each subscribed session's frames, drawn from its latest render request
   // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
@@ -330,7 +376,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     periods: FEED_PERIODS,
     now: () => clock.monotonic(),
     instant,
-    log: dlog,
+    log,
   });
   // Which watched sessions' panes are on a screen, asked of their tmux servers
   // once a second while some feed exists: a session nobody can see is drawn at
@@ -338,14 +384,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // at once.
   const paneVisibility: PaneVisibility = new PaneVisibility({
     listPanes: (socket) =>
-      runTmuxAsync({ socket }, "frames.visibility", [
+      runTmuxAsync(launcher, { socket }, "frames.visibility", [
         "list-panes",
         "-a",
         "-F",
         LIST_PANES_FORMAT,
       ]),
     listClients: (socket) =>
-      runTmuxAsync({ socket }, "frames.visibility", [
+      runTmuxAsync(launcher, { socket }, "frames.visibility", [
         "list-clients",
         "-F",
         LIST_CLIENTS_FORMAT,
@@ -360,7 +406,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         tmuxServersOf(req).some((socket) => sockets.has(socket)),
       ),
     intervalMs: 1000,
-    log: dlog,
+    log,
   });
   // [LAW:one-source-of-truth] The tmux server a session's bar is on, as the
   // servers it is on: none outside tmux or from a client too old to say.
@@ -374,9 +420,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const renderWarnings = new RenderWarningRecords();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
+      launcher,
       sessionState,
       watchers: watcherRegistry,
-      log: dlog,
+      log,
       storage: managedStorage,
       signer: linkSigner,
       ledger: refreshLedger,
@@ -409,7 +456,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // ran, and whether a save was picked up cleanly, kept rendering
         // last-known-good behind an error, or resolved to a different file.
         onReload: (entry, sessions, cause, settled) => {
-          dlog("info", configLoadedLine(entry, cause, settled));
+          log("info", configLoadedLine(entry, cause, settled));
           // A reload changes the bar of every session drawn from the entry,
           // even one that failed and kept the old config: its indicator says so.
           for (const sessionId of sessions)
@@ -463,7 +510,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // it. A success samples again at once; after a failure the next tick does.
     held: () => updateWatch.running(),
     exit: () => exit(0),
-    log: dlog,
+    log,
   });
 
   // [LAW:single-enforcer] The daemon is the process that observes the bundle
@@ -473,6 +520,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
   // its own, folded between the error and warning channels.
   const updateWatch = makeUpdateWatch({
+    launcher,
     entryUrl: bundle.entryUrl,
     // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
     // this daemon runs from.
@@ -482,12 +530,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     registryUrl,
     fetchImpl: fetch,
     onApplied: () => binaryWatch.checkNow(),
-    log: dlog,
+    log,
   });
 
   const verbCtx = {
     sessionState,
-    dlog,
+    log,
+    launcher,
     now: instant,
     applyUpdate: () => updateWatch.act(),
     // The load the session's bar is drawn from: its cache entry's load
@@ -495,7 +544,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
     // doctor click is a verdict on the files as they are now, not on
     // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: productionEdge((origin) => {
+    doctor: productionEdge(launcher, (origin) => {
       const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
       renderCache.reload(...at, { kind: "doctor" });
       const entry = renderCache.getOrCreate(...at);
@@ -512,7 +561,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clients: renderSightings,
     bundle: bundle.path,
     serving: () => limits.serving(),
-    claudeInput: productionClaudeInputEdge(),
+    claudeInput: productionClaudeInputEdge(launcher),
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -550,6 +599,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   };
 
   const parts: DaemonParts = {
+    launcher,
+    log,
     clock,
     bundle: bundle.path,
     doctorStores,
@@ -575,29 +626,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     verbCtx,
   };
 
-  // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
-  // the scope meters them into daemon-stats and ends them with this daemon.
-  // [LAW:no-ambient-temporal-coupling] The last step of building, so a build that
-  // throws leaves no live scope behind it, and the scope reads a whole daemon.
-  setLaunchScope({
-    stats: stats.launchStats,
-    signal: closing.signal,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it is said in daemon.log, and every feed redraws, so its warning
-    // comes and goes on frames too.
-    observeLifeline: (fault) => {
-      dlog(
-        fault === null ? "info" : "warn",
-        fault === null
-          ? "launch lifeline running again"
-          : `launch lifeline ${fault}; the next launch starts another`,
-      );
-      frameFeeds.wakeWhere("data", () => true);
-    },
-  });
+  // [LAW:no-ambient-temporal-coupling] The last step of building, so a build
+  // that throws leaves no live daemon behind it.
+  liveDaemon = closing.signal;
 
   return {
     stats,
+    launcher,
+    log,
     memoryLimitBytes,
     clock,
     exit,
@@ -637,8 +673,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
         // comes before the abort that ends the daemon's launches.
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
-        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, and
-        // what is in flight is terminated, whichever owner's work it was.
+        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+        // is in flight is terminated, whichever owner's work it was, and the
+        // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
@@ -656,15 +693,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         ["sessionState close", () => sessionState.close()],
-        ["lifeline retire", () => retireLifeline()],
       ];
       for (const [step, run] of teardown) {
         try {
           run();
         } catch (e) {
-          dlog("warn", `${step} failed: ${(e as Error).message}`);
+          log("warn", `${step} failed: ${(e as Error).message}`);
         }
       }
+      closed = true;
     },
   };
 }

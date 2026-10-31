@@ -5,6 +5,7 @@
 // cases that matter are layout cases: which spellings of `.git` count, which
 // ancestor wins, and where the ascent must stop.
 
+import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
 import {
   mkdirSync,
@@ -30,7 +31,7 @@ function initRepo(dir: string): void {
 }
 
 describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
-  const git = new GitService();
+  const git = new GitService(processLauncher);
   let root: string;
 
   beforeAll(() => {

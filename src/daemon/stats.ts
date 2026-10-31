@@ -160,6 +160,7 @@ export interface StatsSnapshot {
     inFlight: number;
     lastMinute: number;
     byCategory: Record<string, number>;
+    refused: Record<string, number>;
     p50DurationMs: Record<string, number>;
     p99DurationMs: Record<string, number>;
   };
@@ -210,6 +211,9 @@ export class RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
+  // Launches asked for that started nothing: the launcher had closed, the
+  // category's interval had not passed, or the caller had aborted first.
+  private readonly subprocessRefusals = new Map<LaunchCategory, number>();
   private readonly subprocessCount = new Map<LaunchCategory, number>();
   private readonly subprocessHistogram = new Map<LaunchCategory, number[]>();
   private readonly subprocessHistogramRotator = new Map<
@@ -219,9 +223,15 @@ export class RuntimeStats {
   private readonly rollingTimestamps: number[] = [];
   private rollingHead = 0;
 
+  // Readable off the value because a closed daemon's work is still refused, and
+  // no request reads a closed daemon.
+  get subprocessRefused(): ReadonlyMap<LaunchCategory, number> {
+    return this.subprocessRefusals;
+  }
+
   // [LAW:one-source-of-truth] The same object that owns the counters also
-  // exposes the metering handle. The launch primitive calls these two
-  // methods; nothing else mutates subprocess state.
+  // exposes the metering handle. The launch primitive calls these methods;
+  // nothing else mutates subprocess state.
   readonly launchStats: LaunchStatsHandle = {
     onStart: (category) => {
       this.subprocessTotal++;
@@ -235,6 +245,12 @@ export class RuntimeStats {
     onEnd: (category, durationMs) => {
       this.subprocessInFlight = Math.max(0, this.subprocessInFlight - 1);
       this.recordDuration(category, durationMs);
+    },
+    onRefused: (category) => {
+      this.subprocessRefusals.set(
+        category,
+        (this.subprocessRefusals.get(category) ?? 0) + 1,
+      );
     },
   };
 
@@ -303,6 +319,7 @@ export class RuntimeStats {
       inFlight: this.subprocessInFlight,
       lastMinute,
       byCategory,
+      refused: Object.fromEntries(this.subprocessRefused),
       p50DurationMs: p50,
       p99DurationMs: p99,
     };

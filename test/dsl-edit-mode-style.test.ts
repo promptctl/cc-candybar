@@ -16,6 +16,7 @@
 // parallel rig and no hand-built joiner — a test that restated the chain would
 // pass while the daemon diverged, which is the whole failure this ticket closes.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -65,7 +66,7 @@ function buildRuntime(source: string) {
   const config = parseAndValidate("<edit-look>", source, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   // [LAW:single-enforcer] The real gate is the one this session's config
   // derives — the sole authority on what a click may write. Recording the

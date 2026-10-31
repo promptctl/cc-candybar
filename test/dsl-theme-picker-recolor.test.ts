@@ -19,6 +19,7 @@
 // happens to lead the row, and silently starts measuring a different segment
 // the day a cell is added ahead of it.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import type { RichText } from "@promptctl/rich-js";
@@ -87,7 +88,7 @@ function buildRuntime() {
   const config = parseAndValidate("<recolor>", SRC, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
 

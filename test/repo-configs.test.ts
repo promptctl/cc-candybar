@@ -4,6 +4,7 @@
 // durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { processLauncher } from "../src/proc/launch";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -144,6 +145,7 @@ describe("the gate over a project's plugins", () => {
   test("a plugin folder awaits the directory's answer, and loads once approved", () => {
     write(".cc-candybar/plugins/deploy/plugin.json5", PLUGIN);
     const deps = {
+      launcher: processLauncher,
       sessionState: new SessionState(),
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),

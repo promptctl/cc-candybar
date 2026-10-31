@@ -3,6 +3,7 @@
 // cmt-b97df8ef), each clicking the links the bar renders through the verbs the
 // daemon runs, then reopening the parent to find the child closed.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -52,7 +53,7 @@ function buildRuntime(src: string) {
   const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string => {
@@ -70,7 +71,7 @@ function buildRuntime(src: string) {
   const ctx: VerbContext = {
     ...testVerbContext(sessionState),
     configFor: () => config,
-    dlog: (_level, line) => logged.push(line),
+    log: (_level, line) => logged.push(line),
   };
   // One click is one verb call, as the daemon runs it.
   const click = (url: string): void => {

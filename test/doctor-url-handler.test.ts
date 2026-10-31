@@ -426,7 +426,7 @@ describe("the daemon's side of the round trip", () => {
       arrival,
       probes,
       clients,
-      dlog: (_level, message) => logs.push(message),
+      log: (_level, message) => logs.push(message),
       doctorStores: emptyStores(),
       doctor: {
         install: HEALTHY_INSTALL_EDGE,

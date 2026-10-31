@@ -63,10 +63,10 @@ const TIMEOUT_RETRY_BUDGET = 5;
 const PENDING_RETRY_BUDGET = 20;
 
 // A session's render events whose reply its client read, in log order.
-function answeredEvents(log: string, sessionId: string): string[] {
+export function answeredEvents(log: string, sessionId: string): string[] {
   return logLines(log).filter(
     (l) =>
-      l.includes(` render sid=${valueOf(sessionId)} `) &&
+      l.includes(`] render sid=${valueOf(sessionId)} `) &&
       l.includes(" timedOut=N "),
   );
 }

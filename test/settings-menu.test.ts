@@ -19,6 +19,7 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -114,7 +115,7 @@ function buildRuntime(
   const config = parseAndValidate("<user>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
@@ -837,6 +838,7 @@ describe("the menu is chrome-exempt", () => {
     const compiled = registerDslConfig(
       config,
       new SourceRegistry(
+        processLauncher,
         new VariableStore(),
         "",
         new SessionState(),

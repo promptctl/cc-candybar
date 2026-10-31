@@ -5,18 +5,12 @@ import os from "node:os";
 import path from "node:path";
 
 import {
-  launch,
-  launchDetachedSync,
-  launchJobSync,
-  launchSync,
-  lifelineWarnings,
-  refuseSecondDaemon,
-  retireLifeline,
-  setLaunchScope,
-  __lifelineForTest,
-  __resetRateLimitsForTest,
+  createLauncher,
+  type LaunchCategory,
+  type LaunchScope,
+  type Launcher,
+  type TestableLauncher,
 } from "../../src/proc/launch";
-import type { LaunchCategory } from "../../src/proc/launch";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 
@@ -24,16 +18,20 @@ function makeSpyHandle(): {
   handle: LaunchStatsHandle;
   starts: LaunchCategory[];
   ends: Array<{ category: LaunchCategory; durationMs: number }>;
+  refused: LaunchCategory[];
 } {
   const starts: LaunchCategory[] = [];
   const ends: Array<{ category: LaunchCategory; durationMs: number }> = [];
+  const refused: LaunchCategory[] = [];
   return {
     handle: {
       onStart: (c) => starts.push(c),
       onEnd: (c, d) => ends.push({ category: c, durationMs: d }),
+      onRefused: (c) => refused.push(c),
     },
     starts,
     ends,
+    refused,
   };
 }
 
@@ -74,9 +72,29 @@ function ignoringChild(marker: string): { bin: string; args: string[] } {
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-launch-"));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
+// The launcher a case launches through. `ending` closes it, so no case leaves
+// a lifeline behind it.
+let launcher: TestableLauncher;
+let ending: AbortController;
+const scoped = (scope: Partial<LaunchScope>): void => {
+  launcher = createLauncher({ signal: ending.signal, ...scope });
+};
+const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
+const launchSync: Launcher["launchSync"] = (opts) => launcher.launchSync(opts);
+const launchDetachedSync: Launcher["launchDetachedSync"] = (opts) =>
+  launcher.launchDetachedSync(opts);
+const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>
+  launcher.launchJobSync(opts, files);
+const lifelineWarnings = () => launcher.lifelineWarnings();
+const lifeline = () => launcher.__lifelineForTest();
+
+beforeEach(() => {
+  ending = new AbortController();
+  scoped({});
+});
+
 afterEach(() => {
-  setLaunchScope({});
-  __resetRateLimitsForTest();
+  ending.abort();
 });
 
 describe("launch (async)", () => {
@@ -252,7 +270,7 @@ describe("launch (async)", () => {
     const controller = new AbortController();
     controller.abort();
     const { handle, starts } = makeSpyHandle();
-    setLaunchScope({ stats: handle });
+    scoped({ stats: handle });
     const r = await launch({
       bin: "/bin/sh",
       args: ["-c", "echo ran"],
@@ -291,10 +309,12 @@ describe("launch (async)", () => {
   });
 
   it("calls onStart/onEnd exactly once per launch with the category tag", async () => {
-    // The process's first launch also starts its lifeline, a spawn of its own.
-    await launch({ bin: "/bin/echo", args: ["up"], category: "git" });
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchScope({ stats: handle });
+    scoped({ stats: handle });
+    // A launcher's first launch also starts its lifeline, a spawn of its own.
+    await launch({ bin: "/bin/echo", args: ["up"], category: "git" });
+    starts.length = 0;
+    ends.length = 0;
     await launch({ bin: "/bin/echo", args: ["x"], category: "git" });
     expect(starts).toEqual(["git"]);
     expect(ends).toHaveLength(1);
@@ -322,7 +342,7 @@ describe("launchSync", () => {
 
   it("meters via the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchScope({ stats: handle });
+    scoped({ stats: handle });
     launchSync({ bin: "/bin/echo", args: ["m"], category: "user-shell" });
     expect(starts).toEqual(["user-shell"]);
     expect(ends).toHaveLength(1);
@@ -356,7 +376,7 @@ describe("launchDetachedSync", () => {
 
   it("meters detached launches through the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchScope({ stats: handle });
+    scoped({ stats: handle });
     launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "true"],
@@ -443,7 +463,7 @@ describe("launch — per-category rate-limit", () => {
 
   it("rate-limited rejection does NOT record stats (no spawn happened)", () => {
     const { handle, starts, ends } = makeSpyHandle();
-    setLaunchScope({ stats: handle });
+    scoped({ stats: handle });
     launchSync({ bin: "/bin/echo", args: ["x"], category: "click.pbcopy" });
     launchSync({ bin: "/bin/echo", args: ["y"], category: "click.pbcopy" });
     // Only the first spawn went through onStart/onEnd. The second is data,
@@ -491,13 +511,13 @@ describe("the lifeline", () => {
   let heard: Array<string | null>;
   beforeEach(() => {
     heard = [];
-    setLaunchScope({ observeLifeline: (fault) => heard.push(fault) });
+    scoped({ observeLifeline: (fault) => heard.push(fault) });
   });
 
   it("ends every group in flight when the launcher's pipe closes", async () => {
     const pending = launch(grandchild("30.861"));
     await until(() => running("30.861"), "the launched sleep");
-    __lifelineForTest().cut();
+    lifeline().cut();
     const r = await pending;
     expect(r).toMatchObject({ ok: false, reason: "signal", stdout: "" });
     await until(() => !running("30.861"), "the grandchild sleep ending");
@@ -505,7 +525,7 @@ describe("the lifeline", () => {
 
   it("a lost lifeline stands as a warning, and the next launch replaces it holding every group in flight", async () => {
     const first = launch(grandchild("30.862"));
-    const { pid: lostPid } = __lifelineForTest();
+    const { pid: lostPid } = lifeline();
     process.kill(lostPid!, "SIGKILL");
     await until(
       () => heard.includes("exited SIGKILL"),
@@ -519,7 +539,7 @@ describe("the lifeline", () => {
       },
     ]);
     const second = launch(grandchild("30.863"));
-    const replacement = __lifelineForTest();
+    const replacement = lifeline();
     expect(replacement.pid).not.toBe(lostPid);
     await until(
       () => running("30.862") && running("30.863"),
@@ -542,7 +562,7 @@ describe("the lifeline", () => {
 
 // [LAW:single-enforcer] Every spawn crosses this module, so what a closed
 // daemon left running is ended here, whichever owner's work it was.
-describe("the launch scope", () => {
+describe("a launcher's scope", () => {
   const touching = (file: string) => ({
     bin: "/usr/bin/touch",
     args: [file],
@@ -551,8 +571,8 @@ describe("the launch scope", () => {
 
   it("refuses every kind of launch once its signal has aborted, spawning nothing", async () => {
     const closing = new AbortController();
-    setLaunchScope({ signal: closing.signal });
-    closing.abort();
+    scoped({ signal: closing.signal });
+    closing.abort(new Error("the daemon closed"));
     const marker = path.join(scratch, "scope-refused");
 
     expect(await launch(touching(marker))).toMatchObject({
@@ -581,7 +601,7 @@ describe("the launch scope", () => {
 
   it("terminates a launch in flight that has no signal of its own", async () => {
     const closing = new AbortController();
-    setLaunchScope({ signal: closing.signal });
+    scoped({ signal: closing.signal });
     const marker = path.join(scratch, "scope-started");
     const pending = launch({
       bin: "/bin/sh",
@@ -599,7 +619,7 @@ describe("the launch scope", () => {
   // launches in flight share one listener on it, however many there are.
   it("ends every launch in flight through one listener on its signal", async () => {
     const closing = new AbortController();
-    setLaunchScope({ signal: closing.signal });
+    scoped({ signal: closing.signal });
     const pending = Array.from({ length: 12 }, () =>
       launch({ bin: "/bin/sleep", args: ["30"], category: "user-shell" }),
     );
@@ -614,7 +634,7 @@ describe("the launch scope", () => {
   it("a launch that outlasts its daemon's close reports to that daemon, not the next", async () => {
     const closing = new AbortController();
     const closed = makeSpyHandle();
-    setLaunchScope({ stats: closed.handle, signal: closing.signal });
+    scoped({ stats: closed.handle, signal: closing.signal });
     const pending = launch({
       bin: "/bin/sleep",
       args: ["30"],
@@ -624,64 +644,128 @@ describe("the launch scope", () => {
     closing.abort();
     const next = new AbortController();
     const successor = makeSpyHandle();
-    setLaunchScope({ stats: successor.handle, signal: next.signal });
+    scoped({ stats: successor.handle, signal: next.signal });
     await pending;
 
-    expect(closed.ends.map((end) => end.category)).toEqual(["user-shell"]);
+    expect(closed.ends.map((end) => end.category)).toEqual([
+      "lifeline",
+      "user-shell",
+    ]);
     expect(successor.ends).toEqual([]);
     next.abort();
   });
 
-  it("the next daemon's scope lets launches through again", async () => {
+  it("a closed launcher stays closed while another launches", async () => {
     const closing = new AbortController();
-    setLaunchScope({ signal: closing.signal });
+    const closed = makeSpyHandle();
+    const first = createLauncher({
+      stats: closed.handle,
+      signal: closing.signal,
+    });
     closing.abort();
-    const next = new AbortController();
-    setLaunchScope({ signal: next.signal });
+    const next = makeSpyHandle();
+    scoped({ stats: next.handle });
+    const echo = { bin: "/bin/echo", category: "user-shell" } as const;
+
+    expect(await launch(echo)).toMatchObject({ ok: true });
+    expect(await first.launch(echo)).toMatchObject({
+      ok: false,
+      reason: "aborted",
+    });
+
+    expect(closed.refused).toEqual(["user-shell"]);
+    expect(closed.starts).toEqual([]);
+    expect(next.refused).toEqual([]);
+  });
+
+  it("a launcher's rate limits are its own", () => {
+    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    expect(launcher.launchSync(once)).toMatchObject({ ok: true });
+    expect(launcher.launchSync(once)).toMatchObject({
+      ok: false,
+      reason: "rate-limited",
+    });
+    const next = createLauncher({ signal: ending.signal });
+    expect(next.launchSync(once)).toMatchObject({ ok: true });
+  });
+
+  // [LAW:nothing-unseen] A launch that did nothing reads apart from one nobody
+  // tried: each form says so to the owner's stats, and a started child is not
+  // among them.
+  it("every form meters its refusal, closed or rate-limited", async () => {
+    const closing = new AbortController();
+    const { handle, refused, starts } = makeSpyHandle();
+    scoped({ stats: handle, signal: closing.signal });
+    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    expect(launchSync(once)).toMatchObject({ ok: true });
+    expect(launchSync(once)).toMatchObject({ reason: "rate-limited" });
+    expect(refused).toEqual(["click.open"]);
+
+    closing.abort();
+    const marker = path.join(scratch, "metered");
+    await launch(touching(marker));
+    launchSync(touching(marker));
+    launchDetachedSync(touching(marker));
+    launchJobSync(touching(marker), {
+      stdout: path.join(scratch, "metered.out"),
+      stderr: path.join(scratch, "metered.err"),
+      status: path.join(scratch, "metered.status"),
+    });
+
+    expect(refused.slice(1)).toEqual(Array(4).fill("user-shell"));
+    expect(starts.filter((c) => c === "user-shell")).toEqual([]);
+  });
+
+  it("a launch its own caller aborted first is refused at the same gate, and metered", async () => {
+    const { handle, refused, starts } = makeSpyHandle();
+    scoped({ stats: handle });
+    const marker = path.join(scratch, "caller-aborted");
+
     expect(
-      await launch({ bin: "/bin/echo", args: ["hi"], category: "user-shell" }),
-    ).toMatchObject({ ok: true });
-    next.abort();
+      await launch({
+        ...touching(marker),
+        signal: AbortSignal.abort(new Error("superseded")),
+      }),
+    ).toMatchObject({ ok: false, reason: "aborted", error: "superseded" });
+
+    expect(refused).toEqual(["user-shell"]);
+    expect(starts).toEqual([]);
+    expect(fs.existsSync(marker)).toBe(false);
   });
 
-  it("refuses a second daemon until the first has closed", () => {
-    refuseSecondDaemon();
-    const closing = new AbortController();
-    setLaunchScope({ signal: closing.signal });
-    expect(() => refuseSecondDaemon()).toThrow(/already live/);
-    closing.abort();
-    refuseSecondDaemon();
-  });
+  it("a refused job says what refused it", () => {
+    scoped({});
+    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const files = {
+      stdout: path.join(scratch, "limited.out"),
+      stderr: path.join(scratch, "limited.err"),
+      status: path.join(scratch, "limited.status"),
+    };
+    const first = launchJobSync(once, files);
+    if (!first.ok) throw new Error(first.error);
+    first.withdraw();
 
-  it("a retired lifeline takes its fault with it, so the next daemon warns of none", async () => {
-    const closing = new AbortController();
-    setLaunchScope({ signal: closing.signal });
-    await launch({ bin: "/bin/echo", category: "user-shell" });
-    __lifelineForTest().cut();
-    expect(lifelineWarnings()).not.toEqual([]);
-
-    closing.abort();
-    retireLifeline();
-
-    expect(lifelineWarnings()).toEqual([]);
+    expect(launchJobSync(once, files)).toEqual({
+      ok: false,
+      error: expect.stringContaining("rate-limited: click.open"),
+    });
   });
 
   it("a retired lifeline records no fault, and nothing starts another while the scope refuses", async () => {
     const heard: Array<string | null> = [];
     const closing = new AbortController();
-    setLaunchScope({
+    scoped({
       signal: closing.signal,
       observeLifeline: (fault) => heard.push(fault),
     });
     await launch({ bin: "/bin/echo", category: "user-shell" });
-    const { pid } = __lifelineForTest();
+    const { pid } = lifeline();
     expect(pid).toBeDefined();
 
     closing.abort();
-    retireLifeline();
     await launch({ bin: "/bin/echo", category: "user-shell" });
 
-    expect(__lifelineForTest().pid).toBeUndefined();
+    expect(lifeline().pid).toBeUndefined();
     await until(() => spawnSync("kill", ["-0", String(pid)]).status !== 0, "the lifeline exiting");
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });

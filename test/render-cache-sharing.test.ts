@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -63,7 +64,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -120,7 +121,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
 // so a caller can watch whether anything still holds it.
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   renderDsl(
     config,

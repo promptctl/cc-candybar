@@ -28,6 +28,7 @@
 //      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -183,7 +184,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   // The daemon publishes the session's history depth into every render's
@@ -821,7 +822,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
@@ -971,7 +972,7 @@ describe("edit mode's save and cancel", () => {
     const logs: string[] = [];
     VERBS.get("rewind")!("s1", {
       ...rt.ctx,
-      dlog: (_level, message) => logs.push(message),
+      log: (_level, message) => logs.push(message),
     });
     expect(logs.join("\n")).toMatch(
       /rewind: put back .* as edit mode found it \(session=s1\)/,

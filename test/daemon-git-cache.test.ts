@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -144,7 +145,7 @@ function makeCache(
     throwOn?: string;
   } = {},
 ) {
-  const inner = new StubGitService();
+  const inner = new StubGitService(processLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
@@ -1393,7 +1394,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 // never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
   function counted(opts: { maxRepos?: number; periodMs?: number } = {}) {
-    const inner = new StubGitService();
+    const inner = new StubGitService(processLauncher);
     const counters = {
       watchersOpened: 0,
       watchersClosed: 0,

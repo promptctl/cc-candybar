@@ -1,7 +1,11 @@
 // [LAW:single-enforcer] Every subprocess in the Node runtime goes through one
 // boundary. The primitive owns the import of `node:child_process`; every other
-// module imports `launch`/`launchSync` from here. The ESLint config (and the
+// module launches through a `Launcher` from here. The ESLint config (and the
 // kz8.2 DoD grep) enforces this.
+//
+// [LAW:no-shared-mutable-globals] A launch carries its owner: everything a
+// launch reads or leaves behind is held by the `Launcher` it went through, so a
+// closed owner's work is refused by that owner however many others are running.
 //
 // [LAW:one-type-per-behavior] `exec`/`execFile`/`spawn` and their sync twins
 // are seven names for one act. `LaunchOpts` is the single shape; sync vs async
@@ -150,7 +154,7 @@ export const LAUNCH_CATEGORIES = [
   "lane.tmux",
   "lane.claude",
   "lane.process",
-  // The launcher's lifeline (below): one per process that launches, and one
+  // The launcher's lifeline (below): one per launcher that launches, and one
   // more each time a lost one is replaced. Metered for its spawn alone, so
   // every replacement counts in daemon-stats.
   "lifeline",
@@ -191,17 +195,11 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   "claude-input.type": 1000,
 };
 
-// [LAW:one-source-of-truth] Last-attempt timestamp per category — the data
-// the rate-limit decision reads. Recorded for every attempted spawn (success
-// or spawn-error); rate-limit rejections do NOT update this, because no
-// spawn was attempted. Module-scope state is acceptable here because
-// `launch.ts` is itself the single enforcer; nothing else mutates this.
-const lastStartAt = new Map<LaunchCategory, number>();
-
 // [LAW:dataflow-not-control-flow] The rate-limit decision is a pure function
 // of (category, now, last-start, policy). Same code path every call; the
 // result type carries which branch fired.
 function checkRateLimit(
+  lastStartAt: ReadonlyMap<LaunchCategory, number>,
   category: LaunchCategory,
 ):
   | { allowed: true }
@@ -213,16 +211,6 @@ function checkRateLimit(
   const sinceLastMs = Date.now() - last;
   if (sinceLastMs >= minIntervalMs) return { allowed: true };
   return { allowed: false, minIntervalMs, sinceLastMs };
-}
-
-function recordStart(category: LaunchCategory): void {
-  lastStartAt.set(category, Date.now());
-}
-
-// Exposed for tests only — resets the rate-limit tracker so each test starts
-// from a clean state.
-export function __resetRateLimitsForTest(): void {
-  lastStartAt.clear();
 }
 
 // [LAW:one-source-of-truth] The environment a child inherits is THIS module's
@@ -285,20 +273,26 @@ export type LaunchResult =
       error?: string;
     };
 
-const refusedAsAborted = (): LaunchResult => ({
+// A launch that started nothing. It always says why, so a form with no
+// `LaunchResult` to return still carries the reason rather than guessing one.
+type Refusal = Extract<LaunchResult, { ok: false }> & { error: string };
+
+// [LAW:one-source-of-truth] Whoever aborted a signal said why when they did.
+const refusedAsAborted = ({ reason }: AbortSignal): Refusal => ({
   ok: false,
   reason: "aborted",
   stdout: "",
   stderr: "",
   exitCode: null,
   signal: null,
+  error: reason instanceof Error ? reason.message : String(reason),
 });
 
 function rateLimitedResult(
   category: LaunchCategory,
   minIntervalMs: number,
   sinceLastMs: number,
-): LaunchResult {
+): Refusal {
   return {
     ok: false,
     reason: "rate-limited",
@@ -310,50 +304,79 @@ function rateLimitedResult(
   };
 }
 
-// What a process's launches belong to while a daemon runs in it.
+// Who a launcher's launches belong to.
 export interface LaunchScope {
-  // Meters every launch into the daemon's stats. Null pays no metering cost.
+  // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
   // Hears each change in why the lifeline is down (`fault`, below). The daemon
   // logs it and redraws its feeds, so its warning comes and goes on pushed
   // frames too.
   readonly observeLifeline: (fault: string | null) => void;
   // [LAW:single-enforcer] The one checkpoint for "nothing launches after the
-  // daemon closed": every spawn crosses this module, so a launch in flight is
-  // terminated and a later one refused, whichever owner's work it was.
+  // owner closed": every spawn crosses this module, so a launch in flight is
+  // terminated and a later one refused, whichever part of the owner's work it
+  // was. An aborted scope stays closed: nothing replaces it.
   readonly signal: AbortSignal;
 }
 
-const NO_DAEMON = new AbortController().signal;
-// Any other process (the CLI, bar-pane, a test) says the warning on stderr.
-const NO_SCOPE: LaunchScope = {
-  stats: null,
-  observeLifeline: () =>
-    lifelineWarnings().forEach((w) => process.emitWarning(w.message)),
-  signal: NO_DAEMON,
-};
-let scope: LaunchScope = NO_SCOPE;
-
-// What ends each launch in flight, on the scope's abort.
-// [LAW:no-silent-failure] One listener, on a signal as long-lived as its daemon:
-// `AbortSignal.any` over it grows the heap launch by launch on Node 20 and 24,
-// and a listener per launch warns of a leak past ten in flight on 20 and 22.
-const inFlight = new Set<() => void>();
-const endInFlight = (): void => inFlight.forEach((end) => end());
-
-// [LAW:no-shared-mutable-globals] One daemon is live in a process: launches
-// carry no owner, so a second would run them under the first's signal.
-export function refuseSecondDaemon(): void {
-  if (scope.signal !== NO_DAEMON && !scope.signal.aborted) {
-    throw new Error("a daemon is already live in this process");
-  }
+// [LAW:one-source-of-truth] Everything one owner's launches read and leave
+// behind. A launcher is this and the functions over it, so no two owners can
+// see each other's limits, children or lifeline.
+interface LaunchState {
+  readonly scope: LaunchScope;
+  // Last-attempt timestamp per category: the data the rate-limit decision
+  // reads. Recorded for every attempted spawn (success or spawn-error);
+  // rate-limit rejections do NOT update this, because no spawn was attempted.
+  readonly lastStartAt: Map<LaunchCategory, number>;
+  // What ends each launch in flight, on the scope's abort.
+  // [LAW:no-silent-failure] One listener, on a signal as long-lived as its
+  // owner: `AbortSignal.any` over it grows the heap launch by launch on Node 20
+  // and 24, and a listener per launch warns of a leak past ten in flight on 20
+  // and 22.
+  readonly inFlight: Set<() => void>;
+  // [LAW:one-source-of-truth] The groups this launcher has in flight. The
+  // lifeline mirrors the set, and a new lifeline is given the whole set, so a
+  // lost one costs only the moments until the next launch replaces it.
+  readonly liveGroups: Set<number>;
+  // The lifeline's process and the write end of its pipe, which only this
+  // process holds.
+  lifeline: Lifeline | null;
+  // [LAW:one-source-of-truth] Why the groups in flight are not guarded now:
+  // what ended the last lifeline, or kept one from starting. Null while a
+  // lifeline runs, or before one is needed. Its observer hears each change, and
+  // the daemon shows it as a standing warning.
+  fault: string | null;
 }
 
-// A scope stays in force once its signal has aborted, so the work a closed
-// daemon left running is refused until the next daemon takes its place.
-export function setLaunchScope(next: Partial<LaunchScope>): void {
-  scope = { ...NO_SCOPE, ...next };
-  scope.signal.addEventListener("abort", endInFlight, { once: true });
+// The one gate each launch form crosses: closed, aborted by its caller, or
+// inside its category's interval, it answers the refusal and no child starts.
+// Admitted, the attempt is on record. [LAW:nothing-unseen] A refusal is metered,
+// so a launch that did nothing reads apart from one nobody tried.
+function admit(
+  state: LaunchState,
+  category: LaunchCategory,
+  signal?: AbortSignal,
+): Refusal | null {
+  const refusal = refusalOf(state, category, signal);
+  if (refusal !== null) {
+    state.scope.stats?.onRefused(category);
+    return refusal;
+  }
+  state.lastStartAt.set(category, Date.now());
+  return null;
+}
+
+function refusalOf(
+  state: LaunchState,
+  category: LaunchCategory,
+  signal: AbortSignal | undefined,
+): Refusal | null {
+  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
+  if (signal?.aborted) return refusedAsAborted(signal);
+  const gate = checkRateLimit(state.lastStartAt, category);
+  return gate.allowed
+    ? null
+    : rateLimitedResult(category, gate.minIntervalMs, gate.sinceLastMs);
 }
 
 // [LAW:types-are-the-program] Grace between SIGTERM and SIGKILL on the timeout
@@ -385,35 +408,23 @@ const LIFELINE_PROGRAM =
   `if (groups != "") system("kill -TERM" groups " 2>/dev/null; ` +
   `sleep ${TIMEOUT_KILL_GRACE_MS / 1000}; kill -KILL" groups " 2>/dev/null") }`;
 
-// [LAW:one-source-of-truth] The groups this process has in flight. The
-// lifeline mirrors the set, and a new lifeline is given the whole set, so a
-// lost one costs only the moments until the next launch replaces it.
-const liveGroups = new Set<number>();
-
 // The lifeline's process and the write end of its pipe, which only this
 // process holds.
 interface Lifeline {
   readonly process: ChildProcess;
   readonly pipe: Socket;
 }
-let lifeline: Lifeline | null = null;
 
-// [LAW:one-source-of-truth] Why the groups this process has in flight are not
-// guarded now: what ended its last lifeline, or kept one from starting. Null
-// while a lifeline runs, or before one is needed. Its observer hears each
-// change, and the daemon shows it as a standing warning.
-let fault: string | null = null;
-
-function setFault(next: string | null): void {
-  if (next === fault) return;
-  fault = next;
-  scope.observeLifeline(next);
+function setFault(state: LaunchState, next: string | null): void {
+  if (next === state.fault) return;
+  state.fault = next;
+  state.scope.observeLifeline(next);
 }
 
-function lose(line: ChildProcess, reason: string): void {
-  if (lifeline?.process !== line) return;
-  lifeline = null;
-  setFault(reason);
+function lose(state: LaunchState, line: ChildProcess, reason: string): void {
+  if (state.lifeline?.process !== line) return;
+  state.lifeline = null;
+  setFault(state, reason);
 }
 
 export interface LifelineWarning {
@@ -421,13 +432,13 @@ export interface LifelineWarning {
   readonly message: string;
 }
 
-export function lifelineWarnings(): LifelineWarning[] {
-  return fault === null
+function lifelineWarnings(state: LaunchState): LifelineWarning[] {
+  return state.fault === null
     ? []
     : [
         {
           kind: "lifeline",
-          message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`,
+          message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`,
         },
       ];
 }
@@ -436,8 +447,9 @@ export function lifelineWarnings(): LifelineWarning[] {
 // is unref'd with its pipe, so it never holds a process open. `awk` is found
 // on the launcher's PATH, as every launched program is: where a machine keeps
 // it is the machine's fact (NixOS has no /usr/bin/awk).
-function spawnLifeline(): Lifeline | null {
-  scope.stats?.onStart("lifeline");
+function spawnLifeline(state: LaunchState): Lifeline | null {
+  const { stats } = state.scope;
+  stats?.onStart("lifeline");
   const t0 = Date.now();
   let line: ChildProcess;
   try {
@@ -446,61 +458,45 @@ function spawnLifeline(): Lifeline | null {
       detached: true,
     });
   } catch (err) {
-    scope.stats?.onEnd("lifeline", Date.now() - t0);
-    setFault(`did not start: ${spawnErrorText(err, undefined)}`);
+    stats?.onEnd("lifeline", Date.now() - t0);
+    setFault(state, `did not start: ${spawnErrorText(err, undefined)}`);
     return null;
   }
-  scope.stats?.onEnd("lifeline", Date.now() - t0);
+  stats?.onEnd("lifeline", Date.now() - t0);
   // stdio[0] is "pipe", so Node hands back a socket.
   const pipe = line.stdin as Socket;
   line.once("spawn", () => {
-    if (lifeline?.process === line) setFault(null);
+    if (state.lifeline?.process === line) setFault(state, null);
   });
-  line.once("error", (err) => lose(line, `failed: ${err.message}`));
-  line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
+  line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
   line.unref();
   pipe.unref();
-  for (const group of liveGroups) pipe.write(`+ ${group}\n`);
+  for (const group of state.liveGroups) pipe.write(`+ ${group}\n`);
   return { process: line, pipe };
 }
 
 // A new lifeline is handed the whole set, this group included; the line after
 // it is then a repeat the lifeline's set absorbs.
-function guard(group: number): void {
-  liveGroups.add(group);
-  lifeline ??= spawnLifeline();
-  lifeline?.pipe.write(`+ ${group}\n`);
+function guard(state: LaunchState, group: number): void {
+  state.liveGroups.add(group);
+  state.lifeline ??= spawnLifeline(state);
+  state.lifeline?.pipe.write(`+ ${group}\n`);
 }
 
-function unguard(group: number): void {
-  liveGroups.delete(group);
-  lifeline?.pipe.write(`- ${group}\n`);
+function unguard(state: LaunchState, group: number): void {
+  state.liveGroups.delete(group);
+  state.lifeline?.pipe.write(`- ${group}\n`);
 }
 
-// A closed daemon's lifeline goes with it: the EOF a dying launcher gives it,
-// on purpose, so no fault is recorded, and one it had goes too, or the next
-// daemon would warn of a lifeline it never held. Nothing launches after the
-// abort that precedes this, so nothing starts another.
-export function retireLifeline(): void {
-  const line = lifeline;
-  lifeline = null;
-  fault = null;
+// A closed owner's lifeline goes with it: the EOF a dying launcher gives it, on
+// purpose, so no fault is recorded. Nothing launches after the abort that runs
+// this, so nothing starts another.
+function endLifeline(state: LaunchState): void {
+  const line = state.lifeline;
+  state.lifeline = null;
   line?.pipe.end();
-}
-
-// Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
-// death gives it — and names its pid. A cut lifeline is lost at once, so the
-// test's next launch starts another rather than writing to a closed pipe.
-export function __lifelineForTest(): { pid: number | undefined; cut(): void } {
-  const line = lifeline;
-  return {
-    pid: line?.process.pid,
-    cut: () => {
-      line?.pipe.end();
-      if (line) lose(line.process, "cut by a test");
-    },
-  };
 }
 
 // A termination the launcher itself initiated — carried as data because the
@@ -518,20 +514,13 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
   }
 }
 
-export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
-  // The scope it starts under, which it reports to however late it ends: a
-  // launch can outlast its daemon's close.
-  const { stats } = scope;
-  if (opts.signal?.aborted || scope.signal.aborted) return refusedAsAborted();
-  const gate = checkRateLimit(opts.category);
-  if (!gate.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate.minIntervalMs,
-      gate.sinceLastMs,
-    );
-  }
-  recordStart(opts.category);
+async function launchWaited(
+  state: LaunchState,
+  opts: AsyncLaunchOpts,
+): Promise<LaunchResult> {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category, opts.signal);
+  if (refused !== null) return refused;
   const t0 = Date.now();
   stats?.onStart(opts.category);
 
@@ -560,7 +549,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     // A child whose spawn failed asynchronously (ENOENT) has no pid, and no
     // group to guard: its `error` event settles it.
     const group = child.pid;
-    if (group !== undefined) guard(group);
+    if (group !== undefined) guard(state, group);
 
     let stdout = "";
     let stderr = "";
@@ -577,7 +566,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     const onAbort = () => terminate("aborted");
     const unlisten = () => {
       opts.signal?.removeEventListener("abort", onAbort);
-      inFlight.delete(onAbort);
+      state.inFlight.delete(onAbort);
     };
 
     const finish = (deliver: () => void) => {
@@ -586,7 +575,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       unlisten();
-      if (group !== undefined) unguard(group);
+      if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
@@ -691,7 +680,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
-    inFlight.add(onAbort);
+    state.inFlight.add(onAbort);
 
     if (opts.stdinInput !== undefined && child.stdin) {
       child.stdin.end(opts.stdinInput);
@@ -703,19 +692,12 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
 
 // Sync variant. For callers that genuinely cannot be async — the spawn
 // outcome must be settled before the function returns.
-export function launchSync(opts: LaunchOpts): LaunchResult {
-  if (scope.signal.aborted) return refusedAsAborted();
-  const gate = checkRateLimit(opts.category);
-  if (!gate.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate.minIntervalMs,
-      gate.sinceLastMs,
-    );
-  }
-  recordStart(opts.category);
+function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
   const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
+  stats?.onStart(opts.category);
 
   const stdio: StdioOptions = ["pipe", "pipe", "pipe"];
   try {
@@ -729,7 +711,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       encoding: "utf8",
     });
 
-    scope.stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, Date.now() - t0);
 
     const stdout = typeof result.stdout === "string" ? result.stdout : "";
     const stderr = typeof result.stderr === "string" ? result.stderr : "";
@@ -775,7 +757,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       signal: result.signal ?? null,
     };
   } catch (err) {
-    scope.stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, Date.now() - t0);
     return {
       ok: false,
       reason: "spawn-error",
@@ -794,21 +776,14 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
 // the typed spawn outcome synchronously (so a failed spawn surfaces as
 // `ok: false` rather than a discarded Promise reporting success), and meters
 // through the stats handle so orphan spawns still show up in daemon-stats.
-export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
-  if (scope.signal.aborted) return refusedAsAborted();
-  const gate = checkRateLimit(opts.category);
-  if (!gate.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate.minIntervalMs,
-      gate.sinceLastMs,
-    );
-  }
-  recordStart(opts.category);
+function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
   const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
+  stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(opts);
-  scope.stats?.onEnd(opts.category, Date.now() - t0);
+  stats?.onEnd(opts.category, Date.now() - t0);
   return result;
 }
 
@@ -918,11 +893,16 @@ export type JobLaunch =
 // [LAW:single-enforcer] The one launch with the job's lifetime. Detached, so
 // it leads its own group, which nothing aimed at the launcher reaches; never
 // guarded by the lifeline; unref'd, so it never holds the launcher open.
-export function launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch {
-  if (scope.signal.aborted) return { ok: false, error: "the daemon closed" };
-  recordStart(opts.category);
+function launchJob(
+  state: LaunchState,
+  opts: LaunchOpts,
+  files: JobFiles,
+): JobLaunch {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return { ok: false, error: refused.error };
   const t0 = Date.now();
-  scope.stats?.onStart(opts.category);
+  stats?.onStart(opts.category);
   let child: ChildProcess;
   try {
     child = spawn(
@@ -945,10 +925,10 @@ export function launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch {
       },
     );
   } catch (err) {
-    scope.stats?.onEnd(opts.category, Date.now() - t0);
+    stats?.onEnd(opts.category, Date.now() - t0);
     return { ok: false, error: spawnErrorText(err, opts.cwd) };
   }
-  scope.stats?.onEnd(opts.category, Date.now() - t0);
+  stats?.onEnd(opts.category, Date.now() - t0);
   // An async spawn failure has no pid; its `error` needs a listener or Node
   // crashes the launcher, and the missing pid already says it failed.
   child.once("error", () => {});
@@ -1033,3 +1013,78 @@ export function endJob(pid: number, status: string, end: JobEnd): boolean {
   setTimeout(() => signalGroup(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
   return stands;
 }
+
+// [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
+// (the header), and all of them cross the owner's gate and report to its stats.
+export interface Launcher {
+  launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
+  // For callers that genuinely cannot be async: the spawn outcome must be
+  // settled before the function returns.
+  launchSync(opts: LaunchOpts): LaunchResult;
+  launchDetachedSync(opts: LaunchOpts): LaunchResult;
+  launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
+  lifelineWarnings(): LifelineWarning[];
+}
+
+// What `createLauncher` returns, and not what a launcher is handed around as, so
+// nothing holding a `Launcher` can reach this.
+export interface TestableLauncher extends Launcher {
+  // Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
+  // death gives it — and names its pid. A cut lifeline is lost at once, so the
+  // test's next launch starts another rather than writing to a closed pipe.
+  __lifelineForTest(): { pid: number | undefined; cut(): void };
+}
+
+// [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
+// and refuses what comes after, for good, whichever other launchers run.
+export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
+  const launcher: TestableLauncher = {
+    launch: (opts) => launchWaited(state, opts),
+    launchSync: (opts) => launchBlocking(state, opts),
+    launchDetachedSync: (opts) => launchOrphan(state, opts),
+    launchJobSync: (opts, files) => launchJob(state, opts, files),
+    lifelineWarnings: () => lifelineWarnings(state),
+    __lifelineForTest: () => {
+      const line = state.lifeline;
+      return {
+        pid: line?.process.pid,
+        cut: () => {
+          line?.pipe.end();
+          if (line) lose(state, line.process, "cut by a test");
+        },
+      };
+    },
+  };
+  const state: LaunchState = {
+    scope: {
+      stats: null,
+      // A launcher with nobody to tell says the warning on stderr.
+      observeLifeline: () =>
+        launcher
+          .lifelineWarnings()
+          .forEach((w) => process.emitWarning(w.message)),
+      signal: new AbortController().signal,
+      ...owner,
+    },
+    lastStartAt: new Map(),
+    inFlight: new Set(),
+    liveGroups: new Set(),
+    lifeline: null,
+    fault: null,
+  };
+  state.scope.signal.addEventListener(
+    "abort",
+    () => {
+      state.inFlight.forEach((end) => end());
+      endLifeline(state);
+    },
+    { once: true },
+  );
+  return launcher;
+}
+
+// What a process with no daemon launches through: the CLI, bar-pane, and a
+// daemon's shell before it has a daemon. Nothing closes it. Daemon work never
+// reaches for this: it holds its daemon's, which is what the close refuses
+// (eslint.config.mjs).
+export const processLauncher: Launcher = createLauncher({});

@@ -18,7 +18,7 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import { launchSync, type LaunchOpts } from "../../proc/launch";
+import type { LaunchOpts, Launcher } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
@@ -183,7 +183,9 @@ export interface DaemonContext {
   readonly sessionState: SessionStateRW;
   // [LAW:effects-at-boundaries] The daemon's clock.
   readonly now: () => Instant;
-  readonly dlog: (level: "info" | "warn" | "error", msg: string) => void;
+  readonly log: (level: "info" | "warn" | "error", msg: string) => void;
+  // Who a click's programs belong to.
+  readonly launcher: Launcher;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
@@ -325,14 +327,15 @@ function oneArg(value: string): string {
 // one outcome among many — the click is acknowledged and the rejection is
 // logged. Other failures are genuine errors that surface as RENDER_FAILED.
 export function clickLaunch(
+  launcher: Launcher,
   opts: LaunchOpts,
   what: string,
-  dlog: DaemonContext["dlog"],
+  log: DaemonContext["log"],
 ): void {
-  const result = launchSync(opts);
+  const result = launcher.launchSync(opts);
   if (result.ok) return;
   if (result.reason === "rate-limited") {
-    dlog("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
   // What the launch itself said of its failure: the spawn's error, or what
@@ -347,9 +350,10 @@ export function clickLaunch(
 // segment) and the diagnostic verbs (already hold a plain message) funnel here.
 function pbcopy(text: string, ctx: VerbContext): void {
   clickLaunch(
+    ctx.launcher,
     { bin: "/usr/bin/pbcopy", stdinInput: text, category: "click.pbcopy" },
     "pbcopy",
-    ctx.dlog,
+    ctx.log,
   );
 }
 
@@ -385,13 +389,14 @@ const copyDiagnostic: VerbHandler = (value, ctx) => {
 
 const openVscode: VerbHandler = (value, ctx) =>
   clickLaunch(
+    ctx.launcher,
     {
       bin: "/usr/bin/open",
       args: ["-a", "Visual Studio Code", oneArg(value)],
       category: "click.open",
     },
     'open -a "Visual Studio Code"',
-    ctx.dlog,
+    ctx.log,
   );
 
 // [LAW:one-source-of-truth] SessionState is the canonical store for
@@ -493,7 +498,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // and the seam guarantees the writes ship as one transaction.
   ctx.navigating.setBatch(sid, validated);
   const summary = validated.map((p) => `${p.key}=${p.value}`).join(" ");
-  ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
+  ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 
 // [LAW:single-enforcer] One integer-shape boundary, mirroring the range
@@ -574,7 +579,7 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
   );
@@ -809,7 +814,7 @@ function originHome(origin: RenderOrigin): ConfigHome {
 function editStore(ctx: ClickContext, sid: string): EditStore {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.dlog,
+    logger: ctx.log,
   };
 }
 
@@ -844,7 +849,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} → ${home.path} (session=${sid})`,
   );
@@ -901,7 +906,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${home.path} (session=${sid})`,
   );
@@ -932,7 +937,7 @@ const save: VerbHandler = (value, ctx) => {
   // click on a bar drawn before the first save released its picks — so it is
   // a recorded no-op, never a failure the bar reports.
   if (drafts.length + placements.length === 0) {
-    ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
+    ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
   const gate = stateGate(config);
@@ -951,7 +956,7 @@ const save: VerbHandler = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `save: ${[
       ...pairs.map(([k, v]) => `${k}=${v}`),
@@ -1017,7 +1022,7 @@ const savePreset: VerbHandler = (value, ctx) => {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${home.path} (session=${sid})`,
   );
@@ -1058,7 +1063,7 @@ const saveThemeDefault: VerbHandler = (value, ctx) => {
     (f) => SETTINGS[f].sessionKey,
   ).filter((key) => !drafted.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${home.path} (session=${sid})`,
   );
@@ -1081,7 +1086,7 @@ const deletePreset: VerbHandler = (value, ctx) => {
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
 };
 
 // [LAW:one-source-of-truth] `reset`: return each key to its bundled default
@@ -1114,7 +1119,7 @@ const resetConfig: VerbHandler = (value, ctx) => {
   deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
-  ctx.dlog(
+  ctx.log(
     "info",
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${home.path} (session=${sid})`,
   );
@@ -1208,7 +1213,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
-  ctx.dlog(
+  ctx.log(
     "info",
     `apply-layout-op: ${key} ${result.value} → ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
   );
@@ -1228,7 +1233,7 @@ const undo: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
   reloadIfWritten(ctx, sid, step);
-  ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
+  ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
 // [LAW:single-enforcer] Back restores through the click's settings view, never
@@ -1241,7 +1246,7 @@ const back: VerbHandler = (value, ctx) => {
     stateGate(sessionConfig(ctx, sid)),
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
-  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
+  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
 // [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
@@ -1256,7 +1261,7 @@ const rewind: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
-  ctx.dlog(
+  ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
   );
@@ -1269,7 +1274,7 @@ const redo: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
   reloadIfWritten(ctx, sid, step);
-  ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
+  ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
 // [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
@@ -1320,7 +1325,7 @@ function sessionHints(
 function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`,
   );
@@ -1394,7 +1399,7 @@ function clickedFrom(
       withClicked(list, sighting),
     );
   } catch (e) {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`,
     );
@@ -1420,7 +1425,7 @@ const doctorProbe: VerbHandler = (value, ctx) => {
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
   const { handler } = ctx.arrival;
   ctx.probes.arrive({ nonce, handler });
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`,
   );
@@ -1450,7 +1455,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (after.kind === "failed") {
     throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-fix: ${check.name} → ${describeFix(verdict.fix)} (session=${sid})`,
   );
@@ -1494,7 +1499,7 @@ const doctorMark: VerbHandler = (value, ctx) => {
   if (marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
@@ -1528,7 +1533,7 @@ const slash: VerbHandler = (value, ctx) => {
     action.slash,
   );
   if (result.kind === "refused") {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `slash: ${line} refused — ${result.reason} (session=${sid})`,
     );
@@ -1536,7 +1541,7 @@ const slash: VerbHandler = (value, ctx) => {
     // store refusal, so BAD_REQUEST; a tmux failure throws from the edge.
     throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
-  ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 
 // ─── Run (a `run` action) ───────────────────────────────────────────────────
@@ -1647,7 +1652,7 @@ const repoConfig: VerbHandler = (value, ctx) => {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
   const { superseded, absent, unchecked } = filed.value;
-  ctx.dlog(
+  ctx.log(
     "info",
     `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`,
   );
@@ -1699,10 +1704,10 @@ const loadConfig: VerbHandler = (value, ctx) => {
   }
   if (p === "") {
     ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.dlog("info", `load-config: override cleared (session=${sid})`);
+    ctx.log("info", `load-config: override cleared (session=${sid})`);
   } else {
     ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p);
-    ctx.dlog("info", `load-config: ${p} (session=${sid})`);
+    ctx.log("info", `load-config: ${p} (session=${sid})`);
   }
 };
 
@@ -1911,7 +1916,7 @@ function journaled<C extends DaemonContext>(
       closingView(
         store,
         (sid) => nestOf(ctx, sid),
-        (line) => ctx.dlog("info", line),
+        (line) => ctx.log("info", line),
       );
     try {
       handler(value, {
@@ -2007,7 +2012,7 @@ export function closeIdleMenus(
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
       );
-      c.dlog(
+      c.log(
         "info",
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
           `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,

@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  GitService,
+  type GitService,
   gitInfoFailures,
   type GitInfo,
   type GitInfoOptions,
@@ -38,7 +38,7 @@ import {
 import type { Holds, Release } from "../../utils/holds";
 
 // Logger callable for cache refresh / eviction events.
-// Daemon passes `dlog` so these land in daemon.log at the right level for
+// Daemon passes its log so these land in daemon.log at the right level for
 // ops/debugging; a test constructing the provider alone takes the default
 // debug-routed logger, which touches no daemon log file.
 // [LAW:no-defensive-null-guards] Default is non-null; injection replaces
@@ -329,20 +329,18 @@ export class GitDataProvider {
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
 
-  constructor(
-    opts: {
-      periodMs?: number;
-      maxRepos?: number;
-      inner?: GitService;
-      watchers?: WatcherRegistry;
-      // [LAW:single-enforcer] One injection point. Daemon passes `dlog`;
-      // non-daemon consumers leave the default (debug-routed, quiet
-      // unless CC_CANDYBAR_DEBUG is set).
-      logger?: GitProviderLogger;
-      ledger?: RefreshLedger;
-    } = {},
-  ) {
-    this.inner = opts.inner ?? new GitService();
+  constructor(opts: {
+    periodMs?: number;
+    maxRepos?: number;
+    inner: GitService;
+    watchers?: WatcherRegistry;
+    // [LAW:single-enforcer] One injection point. Daemon passes its log;
+    // non-daemon consumers leave the default (debug-routed, quiet
+    // unless CC_CANDYBAR_DEBUG is set).
+    logger?: GitProviderLogger;
+    ledger?: RefreshLedger;
+  }) {
+    this.inner = opts.inner;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;

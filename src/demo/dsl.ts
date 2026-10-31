@@ -48,6 +48,7 @@ import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import { FileEventDelivery } from "../daemon/cache/file-events.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
+import { processLauncher } from "../proc/launch.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
@@ -104,6 +105,7 @@ const warn = (message: string): void => log("warn", message);
 
 const watchers = new WatcherRegistry({ logger: log });
 const providers = createPayloadProviders({
+  launcher: processLauncher,
   watchers,
   // Never started: the demo holds no folder and watches nothing.
   fileEvents: new FileEventDelivery({ watchers, logger: log }),
@@ -137,6 +139,7 @@ function loadState(): DslRenderState {
     cwd,
     chain,
     {
+      launcher: processLauncher,
       sessionState,
       storage: UNOWNED_STORAGE,
       signer: linkSignerFromKeyFile(),

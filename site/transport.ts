@@ -69,10 +69,10 @@ const pageDaemon = createDaemon({
     node: [],
     targets: [],
   },
-  storage: {
+  storage: () => ({
     session: EPHEMERAL_SESSION_STORAGE,
     history: EPHEMERAL_HISTORY_STORAGE,
-  },
+  }),
   memoryLimitBytes: memoryLimitBytes(process.env),
   registryUrl: REGISTRY_URL,
   clock: SYSTEM_CLOCK,

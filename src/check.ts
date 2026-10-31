@@ -49,6 +49,7 @@ import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
+import { processLauncher } from "./proc/launch";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import {
@@ -530,6 +531,7 @@ export async function prepareConfig(
 
   const store = new VariableStore();
   const registry = new SourceRegistry(
+    processLauncher,
     store,
     config.globals.default_empty_value ?? "",
     new SessionState(),

@@ -9,6 +9,7 @@
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -80,7 +81,7 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const config = parseAndValidate("<session-globals>", src(padding), ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // draw-bar.ts does — the session's clicked value over the config default over

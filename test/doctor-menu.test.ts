@@ -5,6 +5,7 @@
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way draw-bar.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import type { ServingDaemon } from "../src/daemon/limits";
@@ -143,7 +144,7 @@ function buildRuntime(
   const clients = new RenderSightings();
   clients.see("s1", renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const render = (): string =>
     stripAnsi(
@@ -185,7 +186,7 @@ function buildRuntime(
     doctorStores: { ...emptyStores(), clicked },
     clients,
     serving: () => serving,
-    dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
+    log: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);

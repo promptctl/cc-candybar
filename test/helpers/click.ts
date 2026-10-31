@@ -3,6 +3,7 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { processLauncher } from "../../src/proc/launch";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
@@ -68,7 +69,8 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    dlog: () => {},
+    log: () => {},
+    launcher: processLauncher,
     now: () => instantOf(new Date()),
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");

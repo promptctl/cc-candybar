@@ -26,7 +26,6 @@ import { sessionStatePath, settingsHistoryPath } from "../src/daemon/paths";
 import { PROTOCOL_VERSION, type RenderRequest } from "../src/daemon/protocol";
 import type { SessionStorage } from "../src/daemon/session-state";
 import { parseHandlerUrl } from "../src/install/index";
-import { launch } from "../src/proc/launch";
 import { PACKAGE_VERSION } from "../src/version";
 import { hookData, linkUrls, stripAnsi } from "./helpers/daemon-e2e";
 import { buildDaemon, bundleAt } from "./helpers/in-worker-daemon";
@@ -68,10 +67,11 @@ describe("the daemon is a value", () => {
       session?: SessionStorage;
     } = {},
   ): Daemon => {
+    const { session } = inputs;
     const daemon = buildDaemon({
       bundle: bundleAt(inputs.checkout ?? path.join(root, "checkout")),
       ...(inputs.clock && { clock: inputs.clock }),
-      ...(inputs.session && { storage: { session: inputs.session } }),
+      ...(session && { storage: () => ({ session }) }),
     });
     open = daemon;
     return daemon;
@@ -347,9 +347,9 @@ describe("the daemon is a value", () => {
       .map(([, type]) => type);
     expect(leftover).toEqual([]);
     expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
-    // Late work that would start a child finds the launch scope aborted.
+    // Late work that would start a child finds its launcher closed.
     expect(
-      await launch({ bin: "/bin/echo", category: "user-shell" }),
+      await daemon.launcher.launch({ bin: "/bin/echo", category: "user-shell" }),
     ).toMatchObject({ ok: false, reason: "aborted" });
   });
 });

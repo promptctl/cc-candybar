@@ -2,12 +2,11 @@
 
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
-import { dlog } from "./log";
 import {
   fileEventsWarnings,
   type FileEventsWarning,
 } from "./cache/file-events";
-import { lifelineWarnings, type LifelineWarning } from "../proc/launch";
+import type { LifelineWarning } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import { UPDATE_DISMISSED_KEY } from "./update-notice";
 import { type RenderOrigin } from "../config-hint";
@@ -436,6 +435,7 @@ export function drawRender(
     payloadProviders,
     effectSessions,
     menuIdle,
+    launcher,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -519,7 +519,7 @@ export function drawRender(
     entry.watch === null ? null : watchFault("config watch", entry.watch);
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
-    ...lifelineWarnings(),
+    ...launcher.lifelineWarnings(),
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -933,7 +933,7 @@ async function drawAnswer(
   wait: RequestWait,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
-  const { clock, frameFeeds } = parts;
+  const { clock, frameFeeds, log } = parts;
   using setup = setUpRender(parts, req, at, facts);
   arrived(
     parts,
@@ -959,7 +959,7 @@ async function drawAnswer(
     // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
     // it is a bug, said against the session, never one that ends the daemon.
     (e) =>
-      dlog(
+      log(
         "error",
         `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
       ),

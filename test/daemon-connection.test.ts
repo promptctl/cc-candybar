@@ -122,6 +122,7 @@ describe("a connection over a stream", () => {
     over: Partial<ConnectionDaemon> = {},
   ): ConnectionDaemon & { stats: RuntimeStats } => ({
     stats: new RuntimeStats(),
+    log: () => {},
     clock: SYSTEM_CLOCK,
     handle: async () => replyWith(),
     subscribe: (_sessionId, subscriber) => {

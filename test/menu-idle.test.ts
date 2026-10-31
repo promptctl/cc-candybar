@@ -3,6 +3,7 @@
 // each session's idle clock, the close it makes — a click's own journaled
 // write — and the flash on the rendered bar.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -247,7 +248,7 @@ function buildRuntime(src: string) {
   const config = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp/proj",
@@ -281,7 +282,7 @@ function buildRuntime(src: string) {
   const ctx: VerbContext = {
     ...testVerbContext(sessionState),
     configFor: () => config,
-    dlog: (_level, line) => logged.push(line),
+    log: (_level, line) => logged.push(line),
   };
   const clickWriting = (key: string, value: string): void => {
     const url = linkUrls(draw(instantOf(new Date())).text).find((u) =>

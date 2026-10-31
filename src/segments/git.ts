@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { launch, type LaunchResult } from "../proc/launch";
+import type { LaunchResult, Launcher } from "../proc/launch";
 import { ABSENT, failed, ok, orElse, type Outcome } from "../utils/outcome";
 import type { Current } from "../utils/reading";
 import { debug } from "../utils/logger";
@@ -864,6 +864,10 @@ function configIdentity(configPath: string): ConfigIdentity | null {
 }
 
 export class GitService {
+  // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
+  // close refuses the next read of a pass under way.
+  constructor(private readonly launcher: Launcher) {}
+
   private isGitRepo(workingDir: string): boolean {
     return holdsGit(workingDir);
   }
@@ -882,7 +886,7 @@ export class GitService {
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
-    return launch({
+    return this.launcher.launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -1416,7 +1420,7 @@ export class GitService {
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
-    return launch({
+    return this.launcher.launch({
       bin,
       args: [...args],
       cwd: options.cwd,

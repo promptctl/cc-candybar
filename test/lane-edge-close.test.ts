@@ -3,10 +3,11 @@
 // no signal is sent from a daemon that is gone.
 
 import { productionLaneEdge } from "../src/daemon/lane-edge";
+import { processLauncher } from "../src/proc/launch";
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
-    productionLaneEdge(() => new Set(), closing.signal);
+    productionLaneEdge(processLauncher, () => new Set(), closing.signal);
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();

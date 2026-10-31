@@ -7,7 +7,6 @@
 
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
-import { dlog } from "./log";
 import type { Daemon } from "./daemon.js";
 import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import { LANE_FRAMES } from "./lane-frames";
@@ -25,7 +24,7 @@ import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
 // What a connection reads of its daemon.
 export type ConnectionDaemon = Pick<
   Daemon,
-  "stats" | "clock" | "handle" | "subscribe" | "exit"
+  "stats" | "clock" | "handle" | "subscribe" | "exit" | "log"
 >;
 
 export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
@@ -70,7 +69,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       // client asks again on its next tick. Say so, because a daemon told to
       // exit is staying up. [LAW:no-silent-failure]
       if (exitAfterFlush !== null) {
-        dlog(
+        daemon.log(
           "warn",
           "exit-after-flush dropped: an earlier responder settled this socket",
         );
@@ -92,7 +91,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     } catch (e) {
       // [LAW:no-silent-failure] The response is lost (socket already torn
       // down), but the exit wish must not be.
-      dlog("warn", `response write failed: ${(e as Error).message}`);
+      daemon.log("warn", `response write failed: ${(e as Error).message}`);
       settle?.();
     }
   };
@@ -135,12 +134,12 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
             : stream(r.sessionId, r.lane),
         )
         .catch((err: unknown) => {
-          dlog("error", `handler threw: ${inspect(err)}`);
+          daemon.log("error", `handler threw: ${inspect(err)}`);
           respond(renderFailed(err), null, NOTHING_DELIVERED);
         });
     },
     (err) => {
-      dlog("warn", `frame parse failed: ${err.message}`);
+      daemon.log("warn", `frame parse failed: ${err.message}`);
       respond(
         {
           ok: false,
@@ -190,7 +189,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
 
   sock.on("data", reader);
   sock.on("error", (err) => {
-    dlog("warn", `socket error: ${err.message}`);
+    daemon.log("warn", `socket error: ${err.message}`);
   });
   sock.on("close", () => {
     clearTimeout(timer);

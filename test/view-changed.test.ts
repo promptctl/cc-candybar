@@ -4,6 +4,7 @@
 // that differs from the one stored; a re-read that finds what is stored moves
 // nothing, so a still source under a fast period wakes no feed.
 
+import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -75,6 +76,7 @@ function setUp() {
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
     {
+      launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       sessionState: new SessionState(),

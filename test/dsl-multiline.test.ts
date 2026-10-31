@@ -11,6 +11,7 @@
 // Internal refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -33,7 +34,7 @@ const OPTS = {
 function buildRuntime(source: string) {
   const config = parseAndValidate("<test>", source, ALLOWED_PALETTES);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   return { config, compiled, store, registry };
 }

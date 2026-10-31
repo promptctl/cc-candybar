@@ -58,7 +58,7 @@ None of these run inside the render request lifecycle. They fire asynchronously 
 
 ### Metering
 
-Every `launch()` call increments `stats.launchStats` (wired by `setLaunchScope` in `src/daemon/daemon.ts`). Surfaced via:
+Every `launch()` call increments `stats.launchStats` (handed to `createLauncher` in `src/daemon/daemon.ts`). Surfaced via:
 
 ```
 cc-candybar daemon-stats

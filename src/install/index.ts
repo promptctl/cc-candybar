@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createRequire } from "node:module";
-import { launchSync } from "../proc/launch";
+import type { Launcher } from "../proc/launch";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
@@ -315,7 +315,7 @@ function infoPlistPatch(): Array<{ key: string; xml: string }> {
 // Callers establish the macOS precondition ([LAW:single-enforcer] — the
 // subcommand entry checks before any side effect; runInstall reaches here
 // only through its darwin dispatch).
-function installUrlHandlerFrom(stagedDist: string): void {
+function installUrlHandlerFrom(stagedDist: string, launcher: Launcher): void {
   const bundle = appBundlePath();
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
@@ -325,7 +325,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   }
 
   process.stdout.write(`Building ${bundle}\n`);
-  const osa = launchSync({
+  const osa = launcher.launchSync({
     bin: "/usr/bin/osacompile",
     args: ["-o", bundle, "-e", appleScriptSource(process.execPath, stagedDist)],
     category: "install.osacompile",
@@ -340,7 +340,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   for (const { key } of infoPlistPatch()) {
     // plutil errors if the key already exists; pre-delete so the operation is
     // idempotent. Ignore failures (key may not exist on a fresh build).
-    launchSync({
+    launcher.launchSync({
       bin: "/usr/bin/plutil",
       args: ["-remove", key, plistPath],
       category: "install.plutil",
@@ -348,7 +348,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   }
 
   for (const { key, xml } of infoPlistPatch()) {
-    const r = launchSync({
+    const r = launcher.launchSync({
       bin: "/usr/bin/plutil",
       args: ["-insert", key, "-xml", xml, plistPath],
       category: "install.plutil",
@@ -360,7 +360,7 @@ function installUrlHandlerFrom(stagedDist: string): void {
   }
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
-  const lsr = launchSync({
+  const lsr = launcher.launchSync({
     bin: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
     args: ["-f", bundle],
     category: "install.lsregister",
@@ -376,12 +376,12 @@ function installUrlHandlerFrom(stagedDist: string): void {
   );
 }
 
-export function runInstallUrlHandler(bundle: string): void {
+export function runInstallUrlHandler(bundle: string, launcher: Launcher): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
   const staged = runStageRuntime(bundle);
-  installUrlHandlerFrom(staged.distPath);
+  installUrlHandlerFrom(staged.distPath, launcher);
 }
 
 interface ParsedUrl {
@@ -510,6 +510,7 @@ function installSuccessMessage(): string {
 export async function runInstall(
   rendererArgs: readonly string[],
   bundle: string,
+  launcher: Launcher,
 ): Promise<void> {
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");
@@ -520,7 +521,7 @@ export async function runInstall(
   const staged = runStageRuntime(bundle);
 
   if (process.platform === "darwin") {
-    installUrlHandlerFrom(staged.distPath);
+    installUrlHandlerFrom(staged.distPath, launcher);
   } else {
     process.stdout.write(
       "Skipping URL handler (cmd-click verbs are macOS-only).\n",

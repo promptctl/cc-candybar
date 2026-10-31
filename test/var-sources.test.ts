@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
@@ -19,7 +20,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
-import { setLaunchScope } from "../src/proc/launch";
+import { createLauncher } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
@@ -55,8 +56,11 @@ afterEach(() => {
   for (const registry of live) registry.dispose();
   live.clear();
 });
-function registryOver(...args: ConstructorParameters<typeof SourceRegistry>): SourceRegistry {
-  const registry = new SourceRegistry(...args);
+type AfterLauncher<T> = T extends [unknown, ...infer Rest] ? Rest : never;
+function registryOver(
+  ...args: AfterLauncher<ConstructorParameters<typeof SourceRegistry>>
+): SourceRegistry {
+  const registry = new SourceRegistry(processLauncher, ...args);
   live.add(registry);
   return registry;
 }
@@ -509,20 +513,19 @@ describe("SourceRegistry — shell: basic", () => {
     expect(err!.timestamp).toBeGreaterThanOrEqual(before);
   });
 
-  it("a read the launch scope ended is a failed read, not the registry's abort", async () => {
+  it("a read its launcher refused is a failed read, not the registry's abort", async () => {
     const closing = new AbortController();
-    closing.abort();
-    setLaunchScope({ signal: closing.signal });
-    try {
-      const { registry } = make();
-      registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-      await ran(registry);
-      expect(registry.getLastError("val")!.message).toBe(
-        `shell "echo x" aborted in ${process.cwd()}`,
-      );
-    } finally {
-      setLaunchScope({});
-    }
+    closing.abort(new Error("the daemon closed"));
+    const registry = new SourceRegistry(
+      createLauncher({ signal: closing.signal }),
+      new VariableStore(),
+    );
+    live.add(registry);
+    registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    await ran(registry);
+    expect(registry.getLastError("val")!.message).toBe(
+      `shell "echo x" aborted: the daemon closed in ${process.cwd()}`,
+    );
   });
 
   it("runs the command in its declared cwd, and every failure names that cwd", async () => {

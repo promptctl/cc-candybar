@@ -12,6 +12,7 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
@@ -322,6 +323,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -377,7 +379,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -518,7 +520,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const config = parseAndValidate("<looks-expr>", src, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -749,6 +751,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
