@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-524",
+      "ref": "refs/pull/524/merge",
+      "sha": "f0fdd39971e041df3505e0555d61b8acc4a337af",
+      "timestamp": "2026-10-31T19:29:07.042Z",
+      "commits": [
+        {
+          "sha": "f0fdd39971e041df3505e0555d61b8acc4a337af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T13:28:19-06:00",
+          "message": "Merge 9b3372614fb30ce3d1fd88018cdd1ad1a6c18f60 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+        },
+        {
+          "sha": "9b3372614fb30ce3d1fd88018cdd1ad1a6c18f60",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T13:27:52-06:00",
+          "message": "test(daemon): the in-process daemon tests run in the jest worker (candybar-testing-0x6u.1ur)\n\nTwenty files, and the in-process cases of two mixed ones, move onto the harness\nand start no process. What stays on one is the census's process tier, the real\nclient's three cases, the built bundle's three, and the one drive-bar case that\nruns what `pnpm bar` runs.\n\nThe running bundle's digest is an input, read once at boot, so the update notice\nand daemon-stats give one answer to what a daemon is, and the notice's cases\nneed no build.\n\nA real socket serves in the worker for what opens one itself, so the frame stream\nand the doctor's CLI run unchanged. A bar takes how it gets its daemon. A held\nclock moves the effect, click-error and warning cases off real sleeps, on a daemon\neach owns, and that daemon's clients state their deadlines on it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e12259f251ecab0872cb94d03b6f9f536d80c2a9",
