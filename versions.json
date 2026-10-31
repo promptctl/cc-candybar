@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-514",
+      "ref": "refs/pull/514/merge",
+      "sha": "ffff2325e95f831a6f30c532bbe8e7f3499f3b88",
+      "timestamp": "2026-10-31T01:50:04.403Z",
+      "commits": [
+        {
+          "sha": "ffff2325e95f831a6f30c532bbe8e7f3499f3b88",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T19:49:12-06:00",
+          "message": "Merge b1f031418a9f07970b9f609c51985ce405c58074 into 1f26d9a6ce86b1e21391e6076c7dac31adbd74ac\n"
+        },
+        {
+          "sha": "b1f031418a9f07970b9f609c51985ce405c58074",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T19:48:59-06:00",
+          "message": "fix(watchers): every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl)\n\nA directory watch binds an inode. A strict ancestor of a watched directory\nrenamed away and another tree put at its path reports nothing to the handle:\ninotify reports a directory's own removal or self-move, never its parent's,\nso the handle stays listening, bound to a folder no longer at its path, and\nthe config cache, which has no period, never re-derives its key. Edits at the\npath go unheard and no fault shows.\n\nThe registry's one rule that a directory watch names the folder at its path\nnow runs over every directory watch on the file-event delivery owner's\nperiod, which the daemon already keeps time by: a deaf directory is opened\nagain and one whose path holds another folder is reopened in place, telling\nevery slot on it an unknown window, through which the config cache, the git\nprovider, watch_file sources and the plugin storage owner recover as they\nalready do.\n\nThe period is the one owned bound on retrying a deaf directory, so a kept\nfollow retries nothing. The deaf-only retry a kept follow ran, its\nfailed-window gate, and the window threaded to it through the config cache,\nthe git repo state and watch_file sources are removed.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1f26d9a6ce86b1e21391e6076c7dac31adbd74ac",
