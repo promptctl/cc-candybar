@@ -11,7 +11,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 
 `--ssh` makes the host segment show. The drawings were taken on 2026-10-03, from this branch on top of `main` at `dff9dbb`, which is why the git cell reads `docs/ui-elements-inventory`.
 
-**Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The carousel itself is unchanged where it remains: the opt-in `themeSwitcher` segment and an author's own `{{ carousel }}`.
+**Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The `{{ carousel }}` is now `◀ label ▶` everywhere: the label names the setting and opens the list, and the opt-in `themeSwitcher` segment is gone. Mentions below of neighbours, caps or that segment show the earlier design.
 
 **And since then (brandon-theme-swatch-8v9r, 2026-10-15):** the theme picker of the proposal is built. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background. The theme control is `🎨 theme ▀▀▀` with a `⚙` beside it; its label opens `◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →` (previous, random, next, then pages of swatches with the one in force bracketed) over a two-row demo, and the gear opens the style, variation and shade controls. Configure mode's placement theme is the same picker. A list opens on the page holding the current value.
 
@@ -27,7 +27,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Menu](#menu) | A trigger that drops a picker below the row | Edit mode's `✚` | `{{ menu "apply" "▸" "▾" }}` |
 | [Picker grid](#picker-grid) | Choose one option from a list | Inside every menu | `{{ picker }}` (never authored directly) |
 | [Library pages](#library-pages) | A picker over a catalogue: one group per page, one row per item | Edit mode's `✚` | A domain that declares groups |
-| [Carousel](#carousel) | Step through options, current one centred | Settings rings, configure mode, `themeSwitcher` | `{{ carousel "apply" [cap] }}` |
+| [Carousel](#carousel) | Step through options under a named label | Settings controls, configure mode | `{{ carousel "apply" "open" "label" }}` |
 | [Theme and layout previews](#theme-and-layout-previews) | Show what a pick will look like | Under the theme, style, preset, variation rings | `{{ themePreview }}`, `{{ layoutPreview }}` |
 | [Confirm step](#confirm-step) | Two clicks for a destructive act | `⟲ reset all`, `/clear` | `confirmStep` |
 | [Setting control](#setting-control) | The control a setting gets, chosen by its domain | Settings menu, configure mode | `settingControl` |
@@ -43,7 +43,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 These are the existing pieces each part of the proposal touches. They are facts about today, not recommendations.
 
 - **General picker, state 1 (`[Preset]`, the field's name).** Nothing names its field today. A ring row shows a glyph and the current value (`▦ default ▸`, `🎨 tokyo-night ▸`), and the tabs are glyph-labelled. Configure mode is the one place controls carry words (`warning at %`, `theme`).
-- **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel) capped at zero neighbours, which already exists: `{{ carousel "apply" 0 }}`, drawn by the opt-in `themeSwitcher` segment as `◀ tokyo-night ▶`. Each arrow applies the previous or next value. Clicking the centre name applies the current value again; it does not open anything.
+- **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel): `{{ carousel "apply" "open" "label" }}`, drawn as `◀ preset ▶`. Each arrow applies the previous or next value. Clicking the label fires `open`.
 - **State 3 (the list below, with `X`).** This is a [menu](#menu) body: a picker grid dropped below the row, led by `✕`, with `←`/`→` paging when it does not fit. Picking applies the value; whether the list stays open is the `closeOnPick` option (default: stays open).
 - **"The colour changes to show a menu is attached."** That is already the rule for every trigger: an open trigger wears its band's state colour, and the body below sits on a plane of the same hue ([disclosure](#disclosure-and-the--close)).
 - **Theme swatches.** `{{ themePreview }}` draws swatches of the current theme as one row of sample cells. It is the only swatch-like element today. There is no per-theme swatch next to a name.
@@ -274,12 +274,11 @@ Short domains fit whole at either width: style, endcaps, variation and colour de
 | Region | Click |
 |---|---|
 | `◀` / `▶` | applies the previous / next option |
-| A neighbour's name | applies that option |
-| The current name | applies the current option again |
+| The label | fires `open`, which shows the list of options |
 
-- **Use cases:** every option-valued setting in the settings menu; a placement's `theme` in configure mode; the opt-in `themeSwitcher` segment (`◀ tokyo-night ▶`, capped at zero neighbours).
-- **Width:** the ring is 51 cells at 80 columns and 175 at 200 for the theme domain. It takes whatever width the row allows.
-- **Authored as:** `{{ carousel "apply" }}` or `{{ carousel "apply" 0 }}` over a `{ set, from }` action. `src/render/carousel.ts` (`renderCarousel`, `neighbourLevels`). Options are coloured as in the [picker grid](#picker-grid).
+- **Use cases:** every option-valued setting in the settings menu; a placement's `theme` in configure mode.
+- **Width:** the arrows and the label, whatever the domain holds.
+- **Authored as:** `{{ carousel "apply" "open" "label" }}` over a `{ set, from }` action. `src/render/carousel.ts`. A colour-valued domain adds a swatch of the applied value beside the label.
 
 ### Theme and layout previews
 
@@ -635,7 +634,6 @@ At 80 columns the expanded form moves to its own row. Which facts each form show
 
 | Segment | Looks | Click |
 |---|---|---|
-| `themeSwitcher` | `◀ tokyo-night ▶` | each arrow applies the previous / next theme (session `theme`) |
 | `toolbar` | `⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config` | as in the `⚡ session` tab |
 | `commands` | `/compact /model /clear` | as in the `⚡ session` tab |
 | `gitPr` | `⇆ #N`, or `⚠ PR` when the lookup failed | `⇆ #N` is a web link to the pull request |
@@ -724,7 +722,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 
 Found while drawing the above. Each is for Brandon to decide; none is changed here.
 
-1. **A two-value carousel hides its other value.** Neighbours come in symmetric pairs, so a domain of two shows none: the charset ring is `◀ unicode ▶`, and `ascii` appears nowhere until it is picked (`neighbourLevels` in `src/render/carousel.ts`).
+1. **A value outside a carousel's domain counts as its first member.** The settings menu splits shade and variation between the setting's own control and its `🧪` trial control, so whichever control's domain lacks the value steps from its first member, and `▶` skips that member. A stale value in a colour-valued domain shows the first member's swatch.
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
 3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.

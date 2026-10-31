@@ -10,12 +10,12 @@
 //
 // [LAW:types-are-the-program] A segment that moved into a plugin exists only
 // once that plugin is installed, so its row names the source that installs it.
-// One that left with no successor cc-candybar can name (another program's own
-// plugin draws it now) has nowhere to point, so its row carries no `to`.
+// One that left with no successor segment has nowhere to point, so its row
+// carries no `to`, and says why instead.
 type Renamed =
   | { readonly kind: "built-in"; readonly to: string }
   | { readonly kind: "plugin"; readonly to: string; readonly source: string }
-  | { readonly kind: "removed" };
+  | { readonly kind: "removed"; readonly why: string };
 
 export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
   string,
@@ -38,9 +38,20 @@ export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
       source: "promptctl/links-issue-tracker",
     },
   ],
-  // The context ceiling left the bundled bar: the program that owns the
-  // ceiling draws it through a plugin it ships and installs itself.
-  ["ceiling", { kind: "removed" }],
+  [
+    "ceiling",
+    {
+      kind: "removed",
+      why: "the program it showed draws it through a cc-candybar plugin of its own now — delete this reference, or place that plugin's segment",
+    },
+  ],
+  [
+    "themeSwitcher",
+    {
+      kind: "removed",
+      why: 'the settings menu\'s 🎨 theme control steps themes — delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`',
+    },
+  ],
 ]);
 
 export function renamedHint(name: string): string {
@@ -52,6 +63,6 @@ export function renamedHint(name: string): string {
     case "plugin":
       return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs — update this reference)`;
     case "removed":
-      return ` (the built-in segment "${name}" was removed: the program it showed draws it through a cc-candybar plugin of its own now — delete this reference, or place that plugin's segment)`;
+      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
   }
 }

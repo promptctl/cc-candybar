@@ -597,9 +597,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
             "one other resolvable theme to exercise a theme-switching click",
         );
       }
-      // The open theme picker names the current theme beside its swatch, and
-      // the style control behind its gear as `◐ ◀ name ▀▀▀ ▶`, so the name is
-      // read off the visible text, as the current value.
+      // The open theme picker names the current theme beside its swatch, so
+      // the name is read off the visible text, as the current value.
       const names = (out: string, shown: string): boolean =>
         stripAnsi(out).includes(shown);
       const before = render();
@@ -632,7 +631,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ctx,
       );
       const afterStyle = render();
-      expect(names(afterStyle, `◐ ◀ ${targetStyle} ▀▀▀ ▶`)).toBe(true);
+      // The style control names the setting, so its value shows in where its
+      // ▶ steps to: the option after the style in force.
+      const styles = Object.keys(parsed.styles);
+      const after = styles[(styles.indexOf(targetStyle) + 1) % styles.length];
+      expect(names(afterStyle, "◀ ◐ style ▀▀▀ ▶")).toBe(true);
+      expect(
+        linkUrls(afterStyle).some((u) =>
+          effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === after),
+        ),
+      ).toBe(true);
       expect(afterStyle).not.toBe(afterTheme);
     } finally {
       registry.dispose();

@@ -243,7 +243,7 @@ describe("84s — action refs through helpers", () => {
 
   test("a picker or carousel in a helper names its unknown option action", () => {
     const message = issuesOf(`{
-      helpers: { ring: '{{ carousel "nope" }}' },
+      helpers: { ring: '{{ carousel "nope" "nope" "l" }}' },
       segments: { s: { template: '{{ template "ring" . }}' } },
       root: "s",
     }`);

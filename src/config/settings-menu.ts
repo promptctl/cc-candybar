@@ -477,6 +477,7 @@ const menuControl = (
   name: SettingName,
   id: string,
   place: Place,
+  label: string,
   domain: ControlDomain,
   laidAfter: Pick<MenuControl, "help" | "submenus">,
 ): MenuControl => {
@@ -486,8 +487,9 @@ const menuControl = (
     name,
     id,
     place,
+    label,
     control: settingControl(
-      { label: row.label, domain },
+      { label, domain },
       row.sessionKey,
       row.effectiveVar,
       controlApply(id),
@@ -504,6 +506,7 @@ const CONTROLS: readonly MenuControl[] = (
     name,
     name,
     PLACE[name],
+    SETTINGS[name].label,
     offeredHere(
       name,
       settingControlDomain(SETTINGS[name].configKey),
@@ -527,6 +530,9 @@ const TRIAL_CONTROLS: readonly MenuControl[] = (
       name,
       `${name}.trials`,
       "trials",
+      // Beside the setting's own control and over the same key, so only the
+      // label says this one ranges the trial values.
+      `🧪 ${name}`,
       { from: SETTINGS[name].trials },
       { help: [], submenus: [] },
     ),
@@ -1126,11 +1132,9 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // of the config file a save can write (resetLayers,
 // src/daemon/setting-drafts.ts), keyed by the config field a save writes so
 // the two can never name different settings — and its segments. An inline
-// control is one cell, the ↺ beside it; a picker is its setting's label, then
-// `◀ value ▶` naming the value the bar renders with (the control's
-// `effectiveVar`, whatever rung produced it) whose name opens its list on the
-// shared accordion key, then the ↺; the rows beneath it are segments of their
-// own.
+// control is one cell, the ↺ beside it; a picker is `◀ label ▶`, whose label
+// opens its list on the shared accordion key, then the ↺; the rows beneath it
+// are segments of their own.
 //
 // A pick leaves the list open (brandon-theme-picker-bgw.etd): choosing a theme
 // is trying several, so each try must not cost a reopen; ✕ closes. That holds for a preset pick too,

@@ -9,7 +9,7 @@ The menu opens above the bar and leaves the bar as it was: "Opening the candy me
 The menu is two lines, then the body of the open tab. The first line holds the theme picker and its `⚙`, the preset control, `✎ arrange` and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✖  ◁  🎨 theme ▀▀▀  ⚙  ▦ ◀ default ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
+✖  ◁  🎨 theme ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
 host  directory  gitaculous             ← the bar, less the door
@@ -80,7 +80,7 @@ look
 🎨 ◀ tokyo-night ▶  ◐ ◀ none ▶  ✦ ◀ powerline ▶  🎼 ◀ accent ▶
 ```
 
-Each selector is one widget with two click regions. The arrows select the previous or next value, as the `themeSwitcher` segment does today. The value opens a menu. Each selector keeps its setting's label: Brandon's pickers proposal (`design-docs/PROPOSAL-ui-pickers.md`, 09-29) names every field, which supersedes "we won't actually see that in the menu" (09-28).
+Each selector is one widget with two click regions. The arrows select the previous or next value. The label opens a menu. Each selector keeps its setting's label: Brandon's pickers proposal (`design-docs/PROPOSAL-ui-pickers.md`, 09-29) names every field, which supersedes "we won't actually see that in the menu" (09-28).
 
 The menu a name opens is "a regular menu, no carousel": the full row of choices, paged to the width, with the preview rows under it. Every choice sits on the same menu background: "Only the foreground should be in the themes colors, it looks like shit when the backgrounds are drawn differently, very messy." That reverses what brandon-picker-31z shipped, where each theme option is drawn on its own theme's background.
 
@@ -88,8 +88,8 @@ The theme selector became the proposal's theme picker (brandon-theme-swatch-8v9r
 
 ```
 look
-🎨 theme ▀▀▀  ⚙  ✨ ◀ none ▶  ✦ ◀ powerline ▶  ☐ fade in/out
-⚙ open:  ◐ ◀ none ▀▀▀ ▶  🎼 ◀ accent ▶  🔆 ◀ middle ▶
+🎨 theme ▀▀▀  ⚙  ◀ ✨ effect ▶  ◀ ✦ endcaps ▶  ☐ fade in/out
+⚙ open:  ◀ ◐ style ▀▀▀ ▶  ◀ 🎼 variation ▶  ◀ 🔆 shade ▶
 ```
 
 ## Renames

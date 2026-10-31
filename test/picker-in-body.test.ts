@@ -1,5 +1,5 @@
-// brandon-menu-ia-q30.jl1: the two template arguments the `◀ value ▶` picker
-// is built from — a carousel whose centre fires an action of the author's, and a
+// brandon-menu-ia-q30.jl1: the two template arguments the `◀ label ▶` picker
+// is built from — a carousel whose label fires an action of the author's, and a
 // picker that is a row of a disclosure body and so draws no ✕ of its own.
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -57,49 +57,55 @@ function renderOf(
   });
 }
 
-describe("{{ carousel }} with a centre action", () => {
-  test("the arrows still step; the centre shows the option and fires the named action", () => {
-    const out = renderOf('{{ carousel "pick" 0 "hello" }}');
-    expect(stripAnsi(out)).toMatch(/◀ mid ▶/);
+describe("{{ carousel }} names what it sets", () => {
+  test("the arrows step; the label fires the named action and writes nothing of its own", () => {
+    const out = renderOf('{{ carousel "pick" "hello" "zoom" }}');
+    expect(stripAnsi(out)).toContain("◀ zoom ▶");
     const writes = (text: string) =>
       effectsOf(links(out).find((l) => stripAnsi(l.text) === text)!.url);
     expect(writes("◀")[0]!.args.slice(1)).toEqual(["zoom", "low"]);
     expect(writes("▶")[0]!.args.slice(1)).toEqual(["zoom", "high"]);
-    // The centre fires the named action, never a write of `zoom`.
-    expect(writes("mid").some((e) => e.args[1] === "zoom")).toBe(false);
+    expect(writes("zoom").some((e) => e.args[1] === "zoom")).toBe(false);
   });
 
-  test("a centre naming no declared action is refused: at load when spelled, at render when computed", () => {
-    expect(() => renderOf('{{ carousel "pick" 0 "nope" }}')).toThrow(
+  test("an open action naming nothing declared is refused: at load when spelled, at render when computed", () => {
+    expect(() => renderOf('{{ carousel "pick" "nope" "zoom" }}')).toThrow(
       /template references unknown action "nope" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/,
     );
     expect(
-      stripAnsi(renderOf('{{ carousel "pick" 0 (printf "no%s" "pe") }}')),
-    ).toMatch(/centre must name a declared action/);
+      stripAnsi(renderOf('{{ carousel "pick" (printf "no%s" "pe") "zoom" }}')),
+    ).toMatch(/open must name a declared action/);
   });
 
-  test("a centre that writes a bound value is refused: the centre binds none", () => {
-    for (const centre of ["pick", "page"]) {
+  test("a computed open leaves a spelled label a label, never an action name", () => {
+    expect(
+      stripAnsi(renderOf('{{ $o := "hello" }}{{ carousel "pick" $o "zoom" }}')),
+    ).toContain("zoom");
+  });
+
+  test("a computed label that comes up empty is refused: a control needs a name", () => {
+    expect(
+      stripAnsi(renderOf('{{ carousel "pick" "hello" (printf "") }}')),
+    ).toMatch(/label is empty/);
+  });
+
+  test("an open action that writes a bound value is refused: the label binds none", () => {
+    for (const open of ["pick", "page"]) {
       expect(
-        stripAnsi(renderOf(`{{ carousel "pick" 0 "${centre}" }}`)),
+        stripAnsi(renderOf(`{{ carousel "pick" "${open}" "zoom" }}`)),
       ).toMatch(/writes a value the template binds/);
     }
   });
 
-  test("an unset key centres on the first option, still clickable", () => {
-    // An empty key holds the first member, the one ▶ steps from.
-    const out = renderOf('{{ carousel "pick" 0 "hello" }}', "");
-    expect(stripAnsi(out)).toMatch(/◀ low ▶/);
-    expect(links(out).some((l) => stripAnsi(l.text) === "low")).toBe(true);
+  test("an unset key steps from the first option", () => {
+    const out = renderOf('{{ carousel "pick" "hello" "zoom" }}', "");
+    const next = links(out).find((l) => stripAnsi(l.text) === "▶")!;
+    expect(effectsOf(next.url)[0]!.args.slice(1)).toEqual(["zoom", "mid"]);
   });
 
-  test("a value the ring lacks is named at the centre, never another option", () => {
-    // The centre opens the list and writes nothing, so it says what the key
-    // holds: a settings control whose ring is part of its setting's domain
-    // still names a value in force from the rest.
-    const out = renderOf('{{ carousel "pick" 0 "hello" }}', "elsewhere");
-    expect(stripAnsi(out)).toMatch(/◀ elsewhere ▶/);
-    expect(links(out).some((l) => stripAnsi(l.text) === "elsewhere")).toBe(true);
+  test("a label computed at render is drawn like a spelled one", () => {
+    const out = renderOf('{{ carousel "pick" "hello" (printf "%s!" "zoom") }}');
+    expect(stripAnsi(out)).toContain("◀ zoom! ▶");
   });
 });
 

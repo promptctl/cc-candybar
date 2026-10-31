@@ -392,12 +392,12 @@ describe("the config menu, reached from a user config whose root is one row", ()
       (showGear(r), plain(r.render())),
       (showThemePicker(r), plain(r.render())),
     ].join("\n");
-    // One labelled control each, showing the value the bar actually rendered.
-    expect(out).toContain("▦ ◀ default ▶"); // preset
+    // One labelled control each, named for what it sets.
+    expect(out).toContain("◀ ▦ preset ▶"); // preset
     expect(out).toContain("🎨 theme ▀▀▀"); // theme, closed: its swatch
     expect(out).toContain("tokyo-night ▀▀▀"); // theme, open: its name too
-    expect(out).toContain("◐ ◀ none ▀▀▀ ▶"); // style, behind the gear, with its swatch
-    expect(out).toContain("✦ ◀ powerline ▶"); // style
+    expect(out).toContain("◀ ◐ style ▀▀▀ ▶"); // style, behind the gear, with its swatch
+    expect(out).toContain("◀ ✦ endcaps ▶"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
     expect(out).toContain("☑ update notice"); // updateNotice
@@ -410,7 +410,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
   // preset. Move padding and wrap from the layout menu to config."
   test("theme and arrange sit beside preset on the first line; wrap and padding are in ⚙ config", () => {
     const firstLine = plain(r.render()).split("\n")[0]!;
-    for (const cell of ["🎨 theme ▀▀▀", "⚙", "▦ ◀ default ▶", "✎ arrange"]) {
+    for (const cell of ["🎨 theme ▀▀▀", "⚙", "◀ ▦ preset ▶", "✎ arrange"]) {
       expect(firstLine).toContain(cell);
     }
     const tab = (name: string): string => (showTab(r, name), plain(r.render()));
@@ -581,7 +581,7 @@ describe("save under a preset that pins the setting", () => {
       )!,
     );
     const capsule = plain(r.render());
-    expect(capsule).toContain("✦ ◀ capsule ▶");
+    expect(capsule).toContain("◀ ✦ endcaps ▶");
     expect(capsule).not.toContain(PLAIN_SEAM);
     const pickPlain = writesTo(r.render(), "endcaps").find((u) =>
       effectsOf(u).some((e) => e.args[1] === "endcaps" && e.args[2] === "plain"),
@@ -607,7 +607,6 @@ describe("save under a preset that pins the setting", () => {
       };
       expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(parsed.globals).not.toHaveProperty("endcaps");
-      expect(after).toContain("✦ ◀ plain ▶");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
       expect(r.logs).toContainEqual(
@@ -643,7 +642,6 @@ describe("save under a preset that pins the setting", () => {
       expect(parsed.globals).toEqual({ preset: "narrow" });
       expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(r.sessionState.get(SID, "preset")).toBeNull();
-      expect(after).toContain("✦ ◀ plain ▶");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
     } finally {
@@ -836,7 +834,7 @@ describe("reset returns settings to the bundled default", () => {
     // Nothing is left for a reset to change, so `⟲` is gone.
     expect(labelled("⟲")).toBeUndefined();
     showGear(r);
-    expect(plain(r.render())).toContain("◐ ◀ none ▀▀▀ ▶");
+    expect(plain(r.render())).toContain("◀ ◐ style ▀▀▀ ▶");
     expect(plain(r.render())).not.toContain("💾");
     showTab(r, "config");
     expect(plain(r.render())).toContain("padding 1");
@@ -1136,9 +1134,8 @@ describe("save as preset", () => {
       "dracula",
       2,
     ]);
-    // The ring is on the new preset, and the one draft left is the switch.
+    // The one draft left is the switch.
     const out = plain(r.render());
-    expect(out).toContain("◀ custom-1 ▶");
     expect(out).toContain("💾 save 1");
     expect(r.logs).toContainEqual(
       `save-preset: custom-1 from=narrow palette=dracula style=dim → ${durable.configPath} (session=${SID})`,
@@ -1601,7 +1598,7 @@ describe("the renderer menu", () => {
   const rendererLine = (rendered: string): string | undefined =>
     plain(rendered)
       .split("\n")
-      .find((l) => l.includes("renderer ◀"));
+      .find((l) => l.includes("◀ renderer ▶"));
   const openList = (r: ReturnType<typeof rig>): void => {
     const url = urlsOf(r.render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === RENDERER_APPLY),
@@ -1610,10 +1607,10 @@ describe("the renderer menu", () => {
     r.click(url);
   };
 
-  test("inside tmux, ⚙ config holds `renderer ◀ claude ▶`, and its closed list takes no row", () => {
+  test("inside tmux, ⚙ config holds `◀ renderer ▶`, and its closed list takes no row", () => {
     const r = openConfig("%7");
     try {
-      expect(rendererLine(r.render())).toContain("renderer ◀ claude ▶");
+      expect(rendererLine(r.render())).toBeDefined();
       expect(plain(r.render())).not.toContain("Claude Code's status line");
     } finally {
       r.dispose();
@@ -1649,7 +1646,6 @@ describe("the renderer menu", () => {
       expect(arrow).toBeDefined();
       r.click(arrow!.url);
       expect(r.sessionState.get(SID, "renderer")).toBe("tmux");
-      expect(rendererLine(r.render())).toContain("renderer ◀ tmux ▶");
       expect(plain(r.render())).toContain("💾 save 1");
     } finally {
       r.dispose();
@@ -1665,7 +1661,7 @@ describe("the renderer menu", () => {
     const inside = openConfig("%7", source);
     const outside = openConfig("", source);
     try {
-      expect(rendererLine(inside.render())).toContain("renderer ◀ tmux ▶");
+      expect(rendererLine(inside.render())).toBeDefined();
       expect(rendererLine(outside.render())).toBeUndefined();
       expect(plain(outside.render())).not.toContain("the tmux status line");
       // The tab's drift mark counts the renderer only where it is drawn.

@@ -31,6 +31,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { links, stripAnsi } from "./helpers/ansi";
+import { effectsOf } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
@@ -110,7 +111,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
     log: () => {},
   });
   try {
-    return drawn(view);
+    return drawnBytes(view);
   } finally {
     view.dispose();
   }
@@ -141,13 +142,18 @@ const exposeGc = (): (() => void) => {
   return vm.runInNewContext("gc") as () => void;
 };
 
+// Where a frame's carousel's ▶ steps to. Over its two options that is the one
+// the key does not hold, so it shows which variable the ring read back.
+const nextOf = (bytes: string): string | undefined =>
+  effectsOf(links(bytes).find((l) => stripAnsi(l.text) === "▶")!.url)[0]!.args[2];
+
 // One action over session key `k`, and a carousel centred on what reads it
 // back; `reader` names the state variable over `k`, `value` its default.
 const carouselConfig = (reader: string, value: string): string =>
   JSON.stringify({
     variables: { [reader]: { kind: "state", key: "k", default: value } },
-    actions: { pick: { set: "k", from: ["alpha", "beta"] } },
-    segments: { ring: { template: '{{ carousel "pick" 0 }}' } },
+    actions: { pick: { set: "k", from: ["alpha", "beta"] }, list: { copy: "x" } },
+    segments: { ring: { template: '{{ carousel "pick" "list" "k" }}' } },
     root: { h: ["ring"] },
   });
 
@@ -171,7 +177,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const made = lines.filter((l) => l.startsWith("render-cache entry "));
     expect(made).toHaveLength(3);
     expect(made[2]).toMatch(/ entries=3 compiles=1 accounted=\d+\/\d+MB$/);
-    for (const s of states) expect(render(s)).toContain("alpha");
+    for (const s of states) expect(nextOf(render(s))).toBe("beta");
   });
 
   // An edit to a config many directories render from reloads every one of
@@ -195,7 +201,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
     expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
-    for (const s of states) expect(render(s)).toContain("beta");
+    for (const s of states) expect(nextOf(render(s))).toBe("alpha");
   });
 
   // [LAW:types-are-the-program] The one per-entry fact a compile reads is
@@ -210,8 +216,8 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const b = cache.getOrCreate(dir, dir, two).state;
     expect(a.compiled).not.toBe(b.compiled);
     expect(cache.stats.compiles).toBe(2);
-    expect(render(a)).toContain("alpha");
-    expect(render(b)).toContain("beta");
+    expect(nextOf(render(a))).toBe("beta");
+    expect(nextOf(render(b))).toBe("alpha");
   });
 });
 
@@ -267,7 +273,7 @@ describe("the cache is bounded by bytes", () => {
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const state = cache.getOrCreate(dir, dir, cfg).state;
     expect(cache.stats.size).toBe(1);
-    expect(render(state)).toContain("alpha");
+    expect(nextOf(render(state))).toBe("beta");
   });
 
   // [LAW:single-enforcer] The budget is held after every change to what the
@@ -290,7 +296,7 @@ describe("the cache is bounded by bytes", () => {
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(cache.stats.budgetBytes);
     expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
-    expect(render(cache.getOrCreate(b, b, cfgB).state)).toContain("beta");
+    expect(nextOf(render(cache.getOrCreate(b, b, cfgB).state))).toBe("alpha");
   });
 
   test("a compile leaves with the last state carrying it, held or not", () => {
@@ -307,7 +313,7 @@ describe("the cache is bounded by bytes", () => {
       cache.getOrCreate(dir, dir, three);
       // `two`'s state is retired but a render draws with it: its compile stays.
       expect(cache.stats).toMatchObject({ size: 1, compiles: 2, retired: 1 });
-      expect(render(held.state)).toContain("beta");
+      expect(nextOf(render(held.state))).toBe("alpha");
     }
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1, retired: 0 });
   });
@@ -443,10 +449,10 @@ const MENU_WALK = [
   "🍫",
   "🎨 theme",
   "⚙",
-  "none ▀▀▀",
-  "accent",
-  "muted",
-  "default",
+  "◐ style ▀▀▀",
+  "🎼 variation",
+  "🔆 shade",
+  "▦ preset",
   "🎨 look",
   "📐 layout",
   "⚙ config",

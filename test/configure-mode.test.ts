@@ -273,7 +273,7 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(text).toContain("plain");
     // …and vcs2's controls, one per setting, hang below it — its own values.
     expect(text).toContain("☐ detail");
-    expect(text).toContain("form ◀ long ▶");
+    expect(text).toContain("◀ form ▶");
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text.match(/☐ detail|☑ detail/g)).toHaveLength(1);
 
@@ -284,8 +284,11 @@ describe("configure mode: one placement's settings at a time", () => {
     );
     rt.click(other!);
     const again = stripAnsi(rt.render());
-    expect(again).toContain("form ◀ short ▶");
-    expect(again).not.toContain("form ◀ long ▶");
+    expect(again).toContain("◀ form ▶");
+    // Its arrows step this placement's own value, not the one it replaced.
+    expect(
+      rt.urlWriting(rt.render(), draftKey("vcs", "form"), "long"),
+    ).toBeDefined();
     expect(again.match(/☐ detail|☑ detail/g)).toHaveLength(1);
   });
 
@@ -300,7 +303,7 @@ describe("configure mode: one placement's settings at a time", () => {
     const text = stripAnsi(rt.render());
     expect(text).toContain("D-short-3");
     expect(text).toContain("☑ detail");
-    expect(text).toContain("form ◀ short ▶");
+    expect(text).toContain("◀ form ▶");
     expect(text).toMatch(/◀ depth 3 ▶/);
     // The bare placement of the same segment is untouched.
     expect(text).toContain("d-short-2");
@@ -356,7 +359,7 @@ describe("configure mode: one placement's settings at a time", () => {
     );
     expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     const after = stripAnsi(rt.render());
-    expect(after).not.toContain("form ◀");
+    expect(after).not.toContain("◀ form ▶");
     expect(after).toContain(CONFIGURE_GLYPH);
   });
 
@@ -396,7 +399,7 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
     // Arranging again starts with nothing configured.
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    expect(stripAnsi(rt.render())).not.toContain("form ◀");
+    expect(stripAnsi(rt.render())).not.toContain("◀ form ▶");
   });
 
   test("a pick the declaration does not admit reads as no pick", () => {
@@ -670,7 +673,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const rt = buildRuntime(src);
     expect(stripAnsi(rt.render())).not.toContain("d-long-2");
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    expect(stripAnsi(rt.render())).toContain("form ◀ long ▶");
+    expect(stripAnsi(rt.render())).toContain("◀ form ▶");
   });
 
   test("a preset whose name leads with a digit renders its stepper", () => {
@@ -693,7 +696,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
     expect(stripAnsi(rt.render())).not.toContain("form:");
     configurePlacement(rt.sessionState, SID, "b", "vcs2");
-    expect(stripAnsi(rt.render())).toContain("form ◀ long ▶");
+    expect(stripAnsi(rt.render())).toContain("◀ form ▶");
   });
 
   test("a removal from a row two presets share ends both presets' drafts, and says so", () => {

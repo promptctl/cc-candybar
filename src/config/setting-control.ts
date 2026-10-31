@@ -68,8 +68,8 @@ export interface ControlDecl {
 
 // [LAW:types-are-the-program] What the generator hands back, discriminated by
 // whether the control opens anything: an `inline` control is one cell of its
-// row; a `picker` opens a list of its options — `◀ name ▶`, whose arrows step
-// and whose name opens a plain list of every option (brandon-menu-ia-q30.jl1),
+// row; a `picker` opens a list of its options — `◀ label ▶`, whose arrows step
+// and whose label opens a plain list of every option (brandon-menu-ia-q30.jl1),
 // or the theme picker, whose label and swatch open a row of swatches over a
 // demo of the selected theme — and carries that list: the disclosure it opens
 // on and the template of each of its rows. The caller hangs the list on the
@@ -180,7 +180,7 @@ export function settingControl(
   }
   if ("from" in domain) {
     return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ "${label}" }} {{ carousel "${n.apply}" 0 "${n.open}" }}`,
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label}" }}`,
       rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`],
     }));
   }
@@ -240,7 +240,7 @@ interface PickerFace {
 // control opens, and the page cursor of that list. The list is a disclosure
 // body on `listKey`, so the body's ✕ is its close and no row draws one of its
 // own. Opening it shows the page holding the option in force. What the
-// control and its rows SHOW is the face — `◀ name ▶` over a plain list of
+// control and its rows SHOW is the face — `◀ label ▶` over a plain list of
 // every option, "a regular menu, no carousel", or the theme picker — and only
 // the face differs.
 // [LAW:one-source-of-truth] The toggle and the page cursor are named as a

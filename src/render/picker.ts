@@ -69,8 +69,8 @@ export function cellWidth(text: string): number {
 // past it by both — the maximally-packed middle pages once overflowed and the
 // terminal ate the trailing →. Reserved HERE, at the row-fitting seam, rather
 // than by shrinking the width every template reads; stripChromeCols measures
-// the per-shape geometry. The picker and the carousel both fit a row by this
-// one budget.
+// the per-shape geometry. Every row-laying picker fits a row by this one
+// budget.
 export function rowBudget(runtime: ActionRuntime): number {
   const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
   return Math.max(1, width - chromeCols - 2 * padding);

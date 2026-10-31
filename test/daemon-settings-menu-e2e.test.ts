@@ -128,7 +128,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         const pick = urlWriting(await bar(), "preset", preset);
         await click(daemon, pick);
         const after = await bar();
-        expect(stripAnsi(after)).toContain(`▦ ◀ ${preset} ▶`);
+        expect(stripAnsi(after)).toContain("◀ ▦ preset ▶");
         // Still open: the list draws the other preset as an option, by name —
         // the ◀/▶ beside the control write a preset too, but read as arrows.
         const other = preset === "compact" ? "default" : "compact";

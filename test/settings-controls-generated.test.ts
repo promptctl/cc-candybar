@@ -239,13 +239,13 @@ describe("a global the menu has never seen gets its control from the generator",
     expect(gate.validate("zoom", "max").ok).toBe(false);
     const out = render();
     const [trigger, list] = stripAnsi(out).split("\n");
-    // No neighbours beside the arrows: the list is where the members are.
-    expect(trigger).toContain("◀ mid ▶");
+    // The control names the setting; the list is where the members are.
+    expect(trigger).toContain("◀ 🧪 ▶");
     expect(trigger).not.toMatch(/low|high/);
     expect(list).toMatch(/low mid high/);
     // The list draws no ✕ of its own: the body it is a row of closes it.
     expect(list).not.toContain("✕");
-    // The name is the list's toggle: open here, so its click closes it.
+    // The label is the list's toggle: open here, so its click closes it.
     expect(
       linkUrls(out).some((u) =>
         effectsOf(u).some(
