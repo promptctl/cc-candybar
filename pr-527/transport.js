@@ -51125,10 +51125,9 @@ var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 // src/config/globals-fields.ts
 var control = (label2, place, {
   previews = [],
-  trials = [],
   shown = "true"
-} = {}) => ({ label: label2, place, previews, trials, shown });
-var enumValues = (members, optionDomain, library) => ({
+} = {}) => ({ label: label2, place, previews, shown });
+var enumValues = (members, optionDomain, facets = {}) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members },
   parse: (raw) => members.includes(raw) ? raw : null,
@@ -51136,10 +51135,11 @@ var enumValues = (members, optionDomain, library) => ({
     optionDomain: {
       name: optionDomain,
       members,
-      ...library !== void 0 && { library }
+      ...facets
     }
   }
 });
+var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
 var boolValues = {
   spec: optionalBooleanSpec(),
   domain: "bool",
@@ -51153,7 +51153,10 @@ var intValues = (range) => ({
 function enumSetting(members, floor2, shown, extra = {}) {
   return {
     kind: "session",
-    ...enumValues(members, extra.optionDomain, extra.library),
+    ...enumValues(members, extra.optionDomain, {
+      library: extra.library,
+      labelOf: extra.labelOf
+    }),
     floor: floor2,
     control: shown,
     themeDefault: extra.themeDefault ?? false
@@ -51324,10 +51327,13 @@ var GLOBAL_FIELDS = {
     VARIATION_NAMES,
     "accent",
     control("\u{1F3BC} variation", "gear", {
-      previews: ["layout"],
-      trials: TRIAL_VARIATION_NAMES
+      previews: ["layout"]
     }),
-    { optionDomain: "variations", themeDefault: true }
+    {
+      optionDomain: "variations",
+      labelOf: markTrials(TRIAL_VARIATION_NAMES),
+      themeDefault: true
+    }
   ),
   // Which of its role's shades each CELL of the closed bar wears — a named
   // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
@@ -51338,11 +51344,11 @@ var GLOBAL_FIELDS = {
     SHADE_NAMES,
     "middle",
     control("\u{1F506} shade", "gear", {
-      previews: ["layout"],
-      trials: TRIAL_SHADE_NAMES
+      previews: ["layout"]
     }),
     {
       optionDomain: "shades",
+      labelOf: markTrials(TRIAL_SHADE_NAMES),
       themeDefault: true
     }
   ),
@@ -52032,8 +52038,8 @@ var PLACEMENT_THEMES = "placementThemes";
 registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
   paletteOf: (option, render3) => placementPalette(option, render3.palette)
 });
-for (const { name, members, library } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library });
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
 }
 function perConfigDomainsFor(config2) {
   return /* @__PURE__ */ new Map([
@@ -52071,7 +52077,8 @@ function resolveOptionDomain(from, perConfigDomains) {
     return {
       members: entry.resolve(),
       paletteOf: entry.paletteOf,
-      library: entry.library
+      library: entry.library,
+      labelOf: entry.labelOf
     };
   }
   throw new Error(unknownOptionDomain(from, perConfigDomains));
@@ -52279,13 +52286,13 @@ function settingControl(decl, key, readVar2, name, listKey) {
     };
   }
   if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain, (n) => ({
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
       template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
       rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
     }));
   }
   if ("themes" in domain) {
-    return optionPicker(key, name, listKey, { from: domain.themes }, (n) => ({
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
       template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
       rows: [
         `{{ swatches "${n.apply}" "${n.page}" }}`,
@@ -52309,7 +52316,7 @@ function settingControl(decl, key, readVar2, name, listKey) {
     variables: {}
   };
 }
-function optionPicker(key, name, listKey, source, face) {
+function optionPicker(key, name, listKey, from, face) {
   const ref = { variable: listKey, key: listKey, member: name };
   const toggle = menuActionName(listKey, name);
   const open2 = `${name}.open`;
@@ -52320,7 +52327,7 @@ function optionPicker(key, name, listKey, source, face) {
     kind: "picker",
     template,
     actions: {
-      [name]: { set: key, ...source },
+      [name]: { set: key, from },
       [toggle]: disclosureCycleAction(listKey, name),
       [page2]: { set: page2, int: true },
       [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
@@ -52385,7 +52392,7 @@ function settingControlDomain(field) {
   return rangedDomain(GLOBAL_FIELDS[field]);
 }
 function rangedDomain(row2) {
-  return "optionDomain" in row2 && row2.optionDomain?.library !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
+  return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
 }
 function fragmentRejection(description, message) {
   return {
@@ -54975,18 +54982,6 @@ var TRAIL = Object.fromEntries(
   laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
 );
 var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-var markTrials = (name, domain, trials) => {
-  if (trials.length === 0) return domain;
-  if (typeof domain !== "object" || !("from" in domain)) {
-    throw new Error(
-      `setting "${name}" names trials, but its control does not range a list of members to mark them in`
-    );
-  }
-  return {
-    ...domain,
-    labels: Object.fromEntries(trials.map((t2) => [t2, `\u{1F9EA} ${t2}`]))
-  };
-};
 var menuControl = (name) => {
   const row2 = SETTINGS[name];
   const place = PLACE[name];
@@ -54997,11 +54992,7 @@ var menuControl = (name) => {
     control: settingControl(
       {
         label: row2.label,
-        domain: markTrials(
-          name,
-          settingControlDomain(row2.configKey),
-          row2.trials
-        )
+        domain: settingControlDomain(row2.configKey)
       },
       row2.sessionKey,
       row2.effectiveVar,
@@ -57960,12 +57951,10 @@ var TO_FIELDS_PERSIST = {
   to: setLiteralSpec("persist")
 };
 var FROM_FIELDS_SET = {
-  from: fromSpec("set"),
-  labels: labelsSpec()
+  from: fromSpec("set")
 };
 var FROM_FIELDS_PERSIST = {
-  from: fromSpec("persist"),
-  labels: labelsSpec()
+  from: fromSpec("persist")
 };
 var BOUNDED_FIELDS = {
   min: requireIntSpec(),
@@ -58114,28 +58103,6 @@ function setLiteralSpec(discriminator) {
       `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
       (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
     ) ?? void 0
-  };
-}
-function labelsSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      additionalProperties: { type: "string", minLength: 1 }
-    },
-    parse: (ctx, path39, field, raw) => {
-      const labels = raw[field];
-      if (labels === void 0) return void 0;
-      if (typeof labels !== "object" || labels === null || Array.isArray(labels) || Object.values(labels).some((l) => typeof l !== "string" || l === "")) {
-        issue2(
-          ctx,
-          `${path39}.${field}`,
-          `${field} must map option values to non-empty display text`
-        );
-        return void 0;
-      }
-      return labels;
-    }
   };
 }
 function fromSpec(discriminator) {
@@ -59372,18 +59339,6 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
         line: findKeyLine(ctx.source, ["actions", name, field])
       });
       continue;
-    }
-    if ("from" in a && a.labels !== void 0) {
-      const { members } = resolveOptionDomain(a.from, optionDomains);
-      for (const value of Object.keys(a.labels)) {
-        if (!members.includes(value)) {
-          ctx.issues.push({
-            path: `actions.${name}.labels`,
-            message: `actions.${name} labels: "${value}" is not a member of its from domain`,
-            line: findKeyLine(ctx.source, ["actions", name, "labels"])
-          });
-        }
-      }
     }
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
@@ -71524,7 +71479,6 @@ function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
   }
   return out;
 }
-var optionLabel = (labels) => (option) => labels?.[option] ?? option;
 function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
   if ("set" in action2) {
     const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
@@ -71543,8 +71497,8 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         key: action2.set,
         stateVar,
         options: [...domain.members],
-        labelOf: optionLabel(action2.labels),
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library
       };
     }
@@ -71582,8 +71536,8 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         key: action2.persist,
         stateVar,
         options: [...domain.members],
-        labelOf: optionLabel(action2.labels),
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library
       };
     }
@@ -71625,8 +71579,8 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         anchor: action2.anchor,
         relation: action2.relation,
         options: [...domain.members],
-        labelOf: optionLabel(void 0),
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library
       };
     }
@@ -72422,7 +72376,8 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
     groups: apply.library.groups,
     entries: apply.options.map(apply.library.entry)
   };
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, apply.labelOf(option))) : [];
+  const labelOf = apply.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, labelOf(option))) : [];
   const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
     gridFaces.map((face) => face.cellLength),
     available,
@@ -72506,12 +72461,10 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
       );
     }
     const nameWidth = Math.max(
-      ...section.indices.map(
-        (i) => cellWidth2(apply.labelOf(apply.options[i]))
-      )
+      ...section.indices.map((i) => cellWidth2(labelOf(apply.options[i])))
     );
     for (const i of section.indices) {
-      const name = apply.labelOf(apply.options[i]);
+      const name = labelOf(apply.options[i]);
       const authored = catalogue.entries[i].description;
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
