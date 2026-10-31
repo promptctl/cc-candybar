@@ -487,6 +487,7 @@ const menuControl = (
     name,
     id,
     place,
+    label,
     control: settingControl(
       { label, domain },
       row.sessionKey,

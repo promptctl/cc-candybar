@@ -104,7 +104,9 @@ export function renderCarousel(
         // Drawn as the arrows are, in the segment's own colours (Brandon: "The
         // name loses its styling"), beside the swatch of the value in force
         // when the domain is colour-valued.
-        labelPaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
+        labelPaint(
+          renderLook(runtime, "{{ carousel }}"),
+          apply.paletteOf,
           ring(0),
           label,
         ),
@@ -140,7 +142,7 @@ export function carouselFuncs(runtime: ActionRuntime): FuncMap {
           );
         }
         // The label fires with nothing bound, so an action that writes a bound
-        // value would write the label's text instead.
+        // value would write the option the ring sits on instead.
         if (bindsTemplateValue(runtime.compiled.get(openName)!)) {
           throw new Error(
             `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none — name an action that writes a fixed value, a cycle, or a do of them`,

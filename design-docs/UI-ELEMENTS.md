@@ -27,7 +27,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Menu](#menu) | A trigger that drops a picker below the row | Edit mode's `✚` | `{{ menu "apply" "▸" "▾" }}` |
 | [Picker grid](#picker-grid) | Choose one option from a list | Inside every menu | `{{ picker }}` (never authored directly) |
 | [Library pages](#library-pages) | A picker over a catalogue: one group per page, one row per item | Edit mode's `✚` | A domain that declares groups |
-| [Carousel](#carousel) | Step through options, current one centred | Settings controls, configure mode | `{{ carousel "apply" "open" "label" }}` |
+| [Carousel](#carousel) | Step through options under a named label | Settings controls, configure mode | `{{ carousel "apply" "open" "label" }}` |
 | [Theme and layout previews](#theme-and-layout-previews) | Show what a pick will look like | Under the theme, style, preset, variation rings | `{{ themePreview }}`, `{{ layoutPreview }}` |
 | [Confirm step](#confirm-step) | Two clicks for a destructive act | `⟲ reset all`, `/clear` | `confirmStep` |
 | [Setting control](#setting-control) | The control a setting gets, chosen by its domain | Settings menu, configure mode | `settingControl` |
@@ -274,12 +274,11 @@ Short domains fit whole at either width: style, endcaps, variation and colour de
 | Region | Click |
 |---|---|
 | `◀` / `▶` | applies the previous / next option |
-| A neighbour's name | applies that option |
-| The current name | applies the current option again |
+| The label | fires `open`, which shows the list of options |
 
 - **Use cases:** every option-valued setting in the settings menu; a placement's `theme` in configure mode.
-- **Width:** the ring is 51 cells at 80 columns and 175 at 200 for the theme domain. It takes whatever width the row allows.
-- **Authored as:** `{{ carousel "apply" }}` or `{{ carousel "apply" 0 }}` over a `{ set, from }` action. `src/render/carousel.ts` (`renderCarousel`, `neighbourLevels`). Options are coloured as in the [picker grid](#picker-grid).
+- **Width:** the arrows and the label, whatever the domain holds.
+- **Authored as:** `{{ carousel "apply" "open" "label" }}` over a `{ set, from }` action. `src/render/carousel.ts`. A colour-valued domain adds a swatch of the applied value beside the label.
 
 ### Theme and layout previews
 
@@ -723,7 +722,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 
 Found while drawing the above. Each is for Brandon to decide; none is changed here.
 
-1. **A two-value carousel hides its other value.** Neighbours come in symmetric pairs, so a domain of two shows none: the charset ring is `◀ unicode ▶`, and `ascii` appears nowhere until it is picked (`neighbourLevels` in `src/render/carousel.ts`).
+1. **A value outside a carousel's domain counts as its first member.** The settings menu splits a setting's domain between its own control and its `🧪` trial control, so a closed control can show the first member's swatch for a value in force elsewhere, and its arrows step from that member.
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
 3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.

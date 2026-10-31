@@ -103,9 +103,12 @@ const named = (label: string, text: Style | undefined, palette: Palette) =>
 export function labelPaint(
   render: RenderPalettes,
   paletteOf: OptionPalette | undefined,
-): (option: string, label: string) => RichText {
-  if (paletteOf === undefined) return (_option, label) => cell(label);
-  return (option, label) => named(label, undefined, paletteOf(option, render));
+  option: string,
+  label: string,
+): RichText {
+  return paletteOf === undefined
+    ? cell(label)
+    : named(label, undefined, paletteOf(option, render));
 }
 
 /**

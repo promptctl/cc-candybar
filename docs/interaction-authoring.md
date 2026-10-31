@@ -1736,9 +1736,10 @@ of the value in force sits beside the label: `◀ style ▀▀▀ ▶`.
 ```
 
 Its clicks write the session's `theme`, the key the settings menu's `🎨 theme`
-control writes unsaved, so the two always agree. An `openAction` that is not a
-declared action is a render error, `carousel "applyAction": open must name a
-declared action…`, and so is one that writes a value the template binds (an
+control writes unsaved, so the two always agree. A spelled `openAction` that is
+not a declared action fails the load, as any unknown action does; a computed
+one is a render error, `carousel "applyAction": open must name a declared
+action…`, and so is an action that writes a value the template binds (an
 option, an int cursor, a segment to insert), since the label binds none:
 `carousel "applyAction": open "x" writes a value the template binds…`.
 
