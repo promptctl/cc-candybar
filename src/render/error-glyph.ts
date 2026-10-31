@@ -8,7 +8,8 @@
 // runtimes show the same diagnostic so the user's experience does not depend
 // on which client is on the hot path. The mirrored constants are diffed by
 // scripts/check-protocol.mjs; the sanitize/collapse/truncate behavior is
-// pinned by paired fixture tests on both sides.
+// pinned by the one case table both suites assert,
+// test/fixtures/diagnostic-text-cases.json.
 //
 // [LAW:one-source-of-truth] Both shared primitives live in leaf modules under
 // ./: the style constants in ./diagnostic-style (shared with the daemon's
