@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-514",
-      "ref": "refs/pull/514/merge",
-      "sha": "a6efdd8801ef389d321b263fccba2558c0ec4266",
-      "timestamp": "2026-10-31T02:21:43.454Z",
-      "commits": [
-        {
-          "sha": "a6efdd8801ef389d321b263fccba2558c0ec4266",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T02:20:49Z",
-          "message": "Merge 9904b32b2f00ec821a1164ac9e902484286c39bb into 1f26d9a6ce86b1e21391e6076c7dac31adbd74ac\n"
-        },
-        {
-          "sha": "9904b32b2f00ec821a1164ac9e902484286c39bb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T20:20:33-06:00",
-          "message": "test(render-cache): the parent-rename test proves the judgment closed a handle before any window lands (brandon-unfiled-3248.erwl)\n\nOn macOS the watch follows the path and would hear the write by itself, so the entry reading the new tree proved nothing about the judgment there. The synchronous close is the reopen, on both platforms.\n"
-        },
-        {
-          "sha": "6862a95fda50f02959ed821d33e33b84bef8bc1c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T20:10:19-06:00",
-          "message": "fix(watchers): a reload that keeps its watch is what retries nothing, and the git watch asks for its pass directly (brandon-unfiled-3248.erwl)\n\nThe memory sentence and the judgment's comment claimed the period was the only retry of a deaf directory; an acquire judges the directories it names too. The git provider's heard wrapper had no job left once the failed window went.\n"
-        },
-        {
-          "sha": "b1f031418a9f07970b9f609c51985ce405c58074",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T19:48:59-06:00",
-          "message": "fix(watchers): every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl)\n\nA directory watch binds an inode. A strict ancestor of a watched directory\nrenamed away and another tree put at its path reports nothing to the handle:\ninotify reports a directory's own removal or self-move, never its parent's,\nso the handle stays listening, bound to a folder no longer at its path, and\nthe config cache, which has no period, never re-derives its key. Edits at the\npath go unheard and no fault shows.\n\nThe registry's one rule that a directory watch names the folder at its path\nnow runs over every directory watch on the file-event delivery owner's\nperiod, which the daemon already keeps time by: a deaf directory is opened\nagain and one whose path holds another folder is reopened in place, telling\nevery slot on it an unknown window, through which the config cache, the git\nprovider, watch_file sources and the plugin storage owner recover as they\nalready do.\n\nThe period is the one owned bound on retrying a deaf directory, so a kept\nfollow retries nothing. The deaf-only retry a kept follow ran, its\nfailed-window gate, and the window threaded to it through the config cache,\nthe git repo state and watch_file sources are removed.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1f26d9a6ce86b1e21391e6076c7dac31adbd74ac",
-      "timestamp": "2026-10-31T00:58:05.780Z",
+      "sha": "0d7e32730906f412f757614cd2ea4aed3dbd3cac",
+      "timestamp": "2026-10-31T02:30:27.392Z",
       "commits": [
         {
-          "sha": "1f26d9a6ce86b1e21391e6076c7dac31adbd74ac",
+          "sha": "0d7e32730906f412f757614cd2ea4aed3dbd3cac",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:57:12-06:00",
-          "message": "docs(memory): a checkout the statusline names is an install, and nothing past its own tree reaches it (#513)\n\n* docs(memory): a source checkout is an install, and nothing past its own tree reaches it (brandon-unfiled-3248.bh7x)\n\n* docs(memory): a checkout is an install only when the statusline names a path inside it; install from a checkout stages a copy the tree never reaches (brandon-unfiled-3248.bh7x)\n\n* docs(memory): name the native build as what stages inside a checkout; the parked and moved states of a checkout install read apart (brandon-unfiled-3248.bh7x)"
-        },
-        {
-          "sha": "bbb46f5827993af9bdecb4eb063b8ddf756f5ef8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-31T00:26:10Z",
-          "message": "chore(release): set `package.json` to 1.169.0 [skip ci]\n\n## [1.169.0](https://github.com/promptctl/cc-candybar/compare/v1.168.1...v1.169.0) (2026-10-31)\n\n### Features\n\n* **menus:** the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) ([#511](https://github.com/promptctl/cc-candybar/issues/511)) ([7fa9b11](https://github.com/promptctl/cc-candybar/commit/7fa9b112cc7061c7e0e1a63a7955c56987054064))\n\n### Bug Fixes\n\n* **colour:** a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r) ([#512](https://github.com/promptctl/cc-candybar/issues/512)) ([0160616](https://github.com/promptctl/cc-candybar/commit/016061643ad23b49d130b2c30124599d4beab3bb))\n* **colour:** a dial window widens toward its position's count of tones and leaves its ladder's last colour to the pressed button (candybar-joiners-e5r4.cfm) ([#510](https://github.com/promptctl/cc-candybar/issues/510)) ([0ed75d1](https://github.com/promptctl/cc-candybar/commit/0ed75d194e35c845f139e257b73bd2118c63d722))\n"
+          "timestamp": "2026-10-30T20:29:35-06:00",
+          "message": "fix(watchers): every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl) (#514)\n\n* fix(watchers): every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl)\n\nA directory watch binds an inode. A strict ancestor of a watched directory\nrenamed away and another tree put at its path reports nothing to the handle:\ninotify reports a directory's own removal or self-move, never its parent's,\nso the handle stays listening, bound to a folder no longer at its path, and\nthe config cache, which has no period, never re-derives its key. Edits at the\npath go unheard and no fault shows.\n\nThe registry's one rule that a directory watch names the folder at its path\nnow runs over every directory watch on the file-event delivery owner's\nperiod, which the daemon already keeps time by: a deaf directory is opened\nagain and one whose path holds another folder is reopened in place, telling\nevery slot on it an unknown window, through which the config cache, the git\nprovider, watch_file sources and the plugin storage owner recover as they\nalready do.\n\nThe period is the one owned bound on retrying a deaf directory, so a kept\nfollow retries nothing. The deaf-only retry a kept follow ran, its\nfailed-window gate, and the window threaded to it through the config cache,\nthe git repo state and watch_file sources are removed.\n\n* fix(watchers): a reload that keeps its watch is what retries nothing, and the git watch asks for its pass directly (brandon-unfiled-3248.erwl)\n\nThe memory sentence and the judgment's comment claimed the period was the only retry of a deaf directory; an acquire judges the directories it names too. The git provider's heard wrapper had no job left once the failed window went.\n\n* test(render-cache): the parent-rename test proves the judgment closed a handle before any window lands (brandon-unfiled-3248.erwl)\n\nOn macOS the watch follows the path and would hear the write by itself, so the entry reading the new tree proved nothing about the judgment there. The synchronous close is the reopen, on both platforms."
         }
       ]
     }
