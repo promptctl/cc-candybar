@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-526",
+      "ref": "refs/pull/526/merge",
+      "sha": "888df5b895432f4406ed5178aa8a06e98cf720e1",
+      "timestamp": "2026-10-31T22:33:20.557Z",
+      "commits": [
+        {
+          "sha": "888df5b895432f4406ed5178aa8a06e98cf720e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:32:23-06:00",
+          "message": "Merge 3ad57049e6e9cf4f83c1fb9545600f6cab44971c into 5906e458d69d135a44baeafed475d436482c7355\n"
+        },
+        {
+          "sha": "3ad57049e6e9cf4f83c1fb9545600f6cab44971c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:32:08-06:00",
+          "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-518",
       "ref": "refs/pull/518/merge",
       "sha": "9d8d52b225d35cf15f629c1f2d98f1f6fff66466",
