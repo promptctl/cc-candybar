@@ -278,9 +278,8 @@ export type ActionSite = "action" | "options";
 // `menu` binds ONLY its apply action (`{{ menu "applyTheme" (dict …) }}`) —
 // its page cursor is synthesized from identity, and the dict's option-name
 // literals must never be misread as action refs — and a `carousel` binds its
-// apply action and, when it names one, the action its centre fires
-// (`{{ carousel "applyTheme" 0 "openThemes" }}`: the neighbour cap between
-// them is a number, so the centre action is the call's second string literal).
+// (apply, open) pair the same way (`{{ carousel "applyTheme" "openThemes"
+// "theme" }}`): its label comes last so a computed one cannot shift them.
 // A `swatches` row binds (apply, page) as a picker does; a `swatch` binds only
 // its apply action — the literal after it names an option, not an action —
 // and a `themePreview` binds the apply action it is named, when it is.

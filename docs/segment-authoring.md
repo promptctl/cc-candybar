@@ -725,8 +725,8 @@ reads either as `.settings.theme` / `.settings.effect` like any other setting.
 A setting is also changeable from the bar. In edit mode every placement
 carries a `🔧` after its name (every placement has `theme` and `effect`); clicking it
 configures that one placement: the `+`/`-` chrome goes away and one control
-per setting hangs below the cell, one row each (a toggle for `"bool"`, a cycle for a word
-list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` a `◀ ▶` carousel
+per setting hangs below the cell, one row each (a toggle for `"bool"`, a `◀ label ▶` control over a list for a word
+list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` the theme picker,
 whose every option is drawn in the palette it would put on the placement),
 bounded by the declaration. A change shows at once and is unsaved until `💾 save`, which
 writes it into that placement in the config file — a bare `"modelTag"`

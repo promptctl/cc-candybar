@@ -134,7 +134,7 @@ export type ValuedInputs = {
 };
 
 // The `.effective` inputs a render reads back — the resolved globals, as the
-// payload fields a settings label or a carousel centre reads.
+// payload fields a settings label or a carousel reads.
 // [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
 // and the demo's payload all spread THIS, so a caller cannot render a label
 // blank by forgetting a field the daemon's payload carries.

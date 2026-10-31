@@ -9,7 +9,7 @@ The menu opens above the bar and leaves the bar as it was: "Opening the candy me
 The menu is two lines, then the body of the open tab. The first line holds the theme picker and its `⚙`, the preset control, `✎ arrange` and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✖  ◁  🎨 theme ▀▀▀  ⚙  ▦ ◀ default ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
+✖  ◁  🎨 theme ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
 host  directory  gitaculous             ← the bar, less the door
@@ -88,8 +88,8 @@ The theme selector became the proposal's theme picker (brandon-theme-swatch-8v9r
 
 ```
 look
-🎨 theme ▀▀▀  ⚙  ✨ ◀ none ▶  ✦ ◀ powerline ▶  ☐ fade in/out
-⚙ open:  ◐ ◀ none ▀▀▀ ▶  🎼 ◀ accent ▶  🔆 ◀ middle ▶
+🎨 theme ▀▀▀  ⚙  ◀ ✨ effect ▶  ◀ ✦ endcaps ▶  ☐ fade in/out
+⚙ open:  ◀ ◐ style ▀▀▀ ▶  ◀ 🎼 variation ▶  ◀ 🔆 shade ▶
 ```
 
 ## Renames
