@@ -112,7 +112,7 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toContain(
       `✗ tmux truecolor — cannot read ${settingsPath()}: \`env\` is not an object\n`,
     );
-    expect(plan.stdout).toContain("✓ config — bundled default (no config file found)\n");
+    expect(plan.stdout).toContain("✓ config — bundled default (no config file loaded)\n");
     expect(plan.stdout).toContain("✓ session data\n");
   });
 
@@ -127,7 +127,7 @@ describe("doctorPlan", () => {
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
     expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
-      stdout: "✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+      stdout: "✓ config — bundled default (no config file loaded)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
       code: 0,
     });
@@ -311,7 +311,7 @@ describe("doctorPlan", () => {
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
-      "✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
+      "✓ config — bundled default (no config file loaded)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
@@ -323,7 +323,7 @@ describe("doctorPlan", () => {
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
     expect((await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
-      `✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
+      `✓ config — bundled default (no config file loaded)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
     );
   });
 });
@@ -393,7 +393,7 @@ describe("doctorPlan over a real config", () => {
   });
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
+    expect((await plan()).stdout).toBe("✓ config — bundled default (no config file loaded)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -538,7 +538,7 @@ describe("doctorPlan over a real config", () => {
     );
     expect(await planOver(drawing("moves", dir))).toEqual({
       stdout:
-        "✓ config — bundled default (no config file found)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n" +
+        "✓ config — bundled default (no config file loaded)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n" +
         "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events" +
         ` (statusLine from ${settingsPath()})` +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +

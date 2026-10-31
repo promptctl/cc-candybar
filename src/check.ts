@@ -876,7 +876,10 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
         stdout: "",
         stderr:
           warningLines(o.warnings) +
-          `✗ ${o.layers.map((l) => l.path).join(" < ") || "<default>"}\n${o.message}\n`,
+          `✗ ${chainName(
+            o.layers.map((l) => l.path),
+            "<default>",
+          )}\n${o.message}\n`,
         code: EXIT_FATAL,
       };
     case "unreadable":

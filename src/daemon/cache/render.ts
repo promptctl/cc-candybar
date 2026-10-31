@@ -494,8 +494,8 @@ export function configDisposeLine(
 // every render request. The wire boundary in server.ts validates the
 // underlying hookData and returns BAD_REQUEST when either is absent, so by
 // the time a cache entry is built they are real non-empty paths. `configFile`
-// is the client's explicit path (server.ts composes a load-config pick,
-// `--config`, and the `configEnv` hint; absolute) — present when
+// is the explicit path a session's render origin names (a load-config pick,
+// `--config`, or the `configEnv` hint; absolute) — present when
 // overriding the standard precedence chain, undefined otherwise.
 export interface CacheEntry {
   projectDir: string;

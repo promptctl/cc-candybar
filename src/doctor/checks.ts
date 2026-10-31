@@ -784,7 +784,7 @@ const NAMED_BY: Readonly<
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
   pick: "load-config pick",
-  unrecorded: "source not recorded",
+  unknown: "source unknown",
 };
 
 // [LAW:no-silent-failure] Which config a verdict is about. A named file reads
@@ -827,8 +827,7 @@ function configProblems(config: ConfigFacts): readonly string[] {
 // no advisory (a duplicate key, a `.json`/`.json5` collision, a location the
 // search could not check, a variable that failed to declare), and everything
 // the files declare is used. A threshold whose knobs do not ascend is a load error, so it is the first of
-// those. Either verdict names the file or chain it judged and what named it,
-// as `check` does.
+// those. Either verdict names the file or chain it judged and what named it.
 const config: Check = {
   name: "config",
   label: "config",

@@ -157,7 +157,7 @@ test("the doctor's config row says what named the session's file", async () => {
       squeezed(`✓ config — ${named} ($CC_CANDYBAR_CONFIG)`),
     );
     expect(await row("source-search", {}, [])).toContain(
-      squeezed("✓ config — bundled default (no config file found)"),
+      squeezed("✓ config — bundled default (no config file loaded)"),
     );
 
     await click(

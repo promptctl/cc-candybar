@@ -496,7 +496,7 @@ Charset and colour depth are rings; update notice is a toggle.
 
 ```
  ✕  🩺 doctor
-    ✓ config
+    ✓ config — ~/.config/cc-candybar/config.json5 (searched)
     ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
@@ -504,12 +504,12 @@ At 80 columns the row moves under an empty row and is still 113 cells wide:
 
 ```
  ✕  🩺 doctor
-    ✓ config
+    ✓ config — ~/.config/cc-candybar/config.json5 (searched)
 
  ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
-A passing check reads `✓ <label>`. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. A failing check that shows glyphs to look at (`Nerd Font`) adds them after its reason, then `[✓ shapes]` and `[✗ boxes]` (`doctor-mark`). The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor`, `effect refresh` and `Nerd Font`.
+A passing check reads `✓ <label>`, then ` — <note>` when it has one: `config` names the file or chain it judged and what named it, and a failed `config` row opens with the same words. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. A failing check that shows glyphs to look at (`Nerd Font`) adds them after its reason, then `[✓ shapes]` and `[✗ boxes]` (`doctor-mark`). The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor`, `effect refresh` and `Nerd Font`.
 
 ## Edit mode
 

@@ -675,27 +675,20 @@ export function encodeRenderOrigin({
   });
 }
 
-// [LAW:parse-dont-validate] What a record's two fields say together, or null
-// for a pair no build writes. No `source` is an older build's record: its
-// path is true and what named it is unknown, so a path says so rather than
-// guessing, and no path is a search whichever build wrote it.
+// [LAW:parse-dont-validate] What a record's two fields say together. The path
+// is what a session reads and keeps its meaning across builds, so no path is a
+// search whichever build wrote it. The source only labels the path: one this
+// build cannot read, because an older build kept none or a newer build has a
+// source of its own, leaves the path standing with its source unknown. A
+// refusal here would fail every durable click over a label.
 function recordedTarget(
   source: unknown,
   configFile: string | null,
-): ConfigTarget | null {
-  switch (source) {
-    case undefined:
-      return configFile === null
-        ? { source: "search" }
-        : { source: "unrecorded", path: configFile };
-    case "search":
-      return configFile === null ? { source } : null;
-    case "argument":
-    case "environment":
-      return configFile === null ? null : { source, path: configFile };
-    default:
-      return null;
-  }
+): ConfigTarget {
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment"
+    ? { source, path: configFile }
+    : { source: "unknown", path: configFile };
 }
 
 // [LAW:parse-dont-validate] The one boundary that lifts the stored string
@@ -722,11 +715,7 @@ export function parseRenderOrigin(raw: string): RenderOrigin {
   ) {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  const target = recordedTarget(source, configFile);
-  if (target === null) {
-    throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
-  }
-  return { projectDir, cwd, target };
+  return { projectDir, cwd, target: recordedTarget(source, configFile) };
 }
 
 // [LAW:no-silent-failure] A session that has never rendered has no origin

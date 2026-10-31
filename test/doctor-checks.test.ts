@@ -329,7 +329,7 @@ describe("config probe", () => {
   test("a search that found nothing reads as check reads it", () => {
     expect(config({ ...LOADED, layers: [] })).toEqual({
       ok: true,
-      note: "bundled default (no config file found)",
+      note: "bundled default (no config file loaded)",
     });
   });
 
@@ -337,7 +337,7 @@ describe("config probe", () => {
     ["argument", "/x.json5 (command argument)"],
     ["environment", "/x.json5 ($CC_CANDYBAR_CONFIG)"],
     ["pick", "/x.json5 (load-config pick)"],
-    ["unrecorded", "/x.json5 (source not recorded)"],
+    ["unknown", "/x.json5 (source unknown)"],
   ] as const)("a file named by %s reads %s", (source, judged) => {
     const named = { ...LOADED, target: { source, path: "/x.json5" } };
     expect(config(named)).toEqual({ ok: true, note: judged });

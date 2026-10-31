@@ -46,20 +46,34 @@ describe("the render origin record", () => {
   test("an older record with a file says its source is unknown", () => {
     expect(parseRenderOrigin(record({ configFile: "/x.json5" }))).toEqual({
       ...AT,
-      target: { source: "unrecorded", path: "/x.json5" },
+      target: { source: "unknown", path: "/x.json5" },
     });
   });
 
   test.each([
-    ["a persisted pick", { configFile: "/x.json5", source: "pick" }],
-    ["a persisted unrecorded", { configFile: "/x.json5", source: "unrecorded" }],
-    ["a search with a file", { configFile: "/x.json5", source: "search" }],
-    ["an argument with no file", { configFile: null, source: "argument" }],
-    ["an environment with no file", { configFile: null, source: "environment" }],
-    ["a source of no kind", { configFile: null, source: 3 }],
-    ["no configFile at all", { source: "search" }],
-  ])("%s is refused", (_name, fields) => {
-    expect(() => parseRenderOrigin(record(fields))).toThrow(BadVerbArgs);
+    ["a newer build's source", "workspace"],
+    ["a pick", "pick"],
+    ["a search", "search"],
+    ["no kind of source", 3],
+  ])("%s beside a file leaves the file with its source unknown", (_name, source) => {
+    expect(parseRenderOrigin(record({ configFile: "/x.json5", source }))).toEqual({
+      ...AT,
+      target: { source: "unknown", path: "/x.json5" },
+    });
+  });
+
+  test.each([["a newer build's source", "workspace"], ["an argument", "argument"]])(
+    "%s with no file is a search",
+    (_name, source) => {
+      expect(parseRenderOrigin(record({ configFile: null, source }))).toEqual({
+        ...AT,
+        target: { source: "search" },
+      });
+    },
+  );
+
+  test("a record with no configFile is refused", () => {
+    expect(() => parseRenderOrigin(record({ source: "search" }))).toThrow(BadVerbArgs);
   });
 });
 
