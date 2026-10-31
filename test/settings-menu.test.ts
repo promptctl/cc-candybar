@@ -133,7 +133,7 @@ function buildRuntime(
     encodeRenderOrigin({
       projectDir: "/tmp/proj",
       cwd: "/tmp/proj",
-      configFile: null,
+      target: { source: "search" },
     }),
   );
   const ctx: VerbContext = {

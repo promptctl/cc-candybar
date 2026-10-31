@@ -40,7 +40,7 @@ import type { SessionFacts } from "./session-env.js";
 import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import type { ClientHints } from "./protocol.js";
-import type { RenderOrigin } from "./verbs/index.js";
+import type { RenderOrigin } from "../config-hint.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import {
   tmuxPaneOf,

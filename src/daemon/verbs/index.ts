@@ -147,10 +147,16 @@ import {
   truecolorEnvFields,
   doctorReportPairs,
   linkFields,
+  configFields,
   nerdFontFields,
   terminalFeatureFields,
   installFields,
 } from "../../doctor/report";
+import type {
+  ConfigTarget,
+  RenderOrigin,
+  RequestedOrigin,
+} from "../../config-hint";
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
@@ -635,16 +641,6 @@ function stepFrom(
 // cwd either, which describes whichever shell spawned it.
 export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
 
-// [LAW:types-are-the-program] Exactly the three inputs resolveDslConfig
-// takes. Recorded, `configFile` is the explicit path the REQUEST named
-// (`--config` over the `configEnv` hint) or null; the session's load-config
-// pick is a session fact, joined over it by `sessionRenderOrigin`.
-export interface RenderOrigin {
-  readonly projectDir: string;
-  readonly cwd: string;
-  readonly configFile: string | null;
-}
-
 // [LAW:one-source-of-truth] The one place a load-config pick outranks the
 // path the request named: what the render draws from (server.ts) and what a
 // durable click resolves (sessionOrigin) both come through here, so a click
@@ -657,21 +653,48 @@ export function sessionRenderOrigin(
   state: SessionStateReader,
   sid: string,
 ): RenderOrigin {
-  return {
-    ...requested,
-    configFile:
-      state.get(sid, SESSION_CONFIG_OVERRIDE_KEY) ?? requested.configFile,
-  };
+  const pick = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
+  return pick === null
+    ? requested
+    : { ...requested, target: { source: "pick", path: pick } };
 }
 
-export function encodeRenderOrigin(origin: RenderOrigin): string {
-  return JSON.stringify(origin);
+// The record is flat and additive, and `configFile` keeps its meaning, because
+// session state sits at one unversioned path that builds of either age read:
+// an older build finds the field it requires and ignores `source`.
+export function encodeRenderOrigin({
+  projectDir,
+  cwd,
+  target,
+}: RequestedOrigin): string {
+  return JSON.stringify({
+    projectDir,
+    cwd,
+    configFile: target.path ?? null,
+    source: target.source,
+  });
+}
+
+// [LAW:parse-dont-validate] What a record's two fields say together. The path
+// is what a session reads and keeps its meaning across builds, so no path is a
+// search whichever build wrote it. The source only labels the path: one this
+// build cannot read, because an older build kept none or a newer build has a
+// source of its own, leaves the path standing with its source unknown. A
+// refusal here would fail every durable click over a label.
+function recordedTarget(
+  source: unknown,
+  configFile: string | null,
+): ConfigTarget {
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment"
+    ? { source, path: configFile }
+    : { source: "unknown", path: configFile };
 }
 
 // [LAW:parse-dont-validate] The one boundary that lifts the stored string
 // back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
 // guessed path.
-function parseRenderOrigin(raw: string): RenderOrigin {
+export function parseRenderOrigin(raw: string): RenderOrigin {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -681,7 +704,10 @@ function parseRenderOrigin(raw: string): RenderOrigin {
   if (parsed === null || typeof parsed !== "object") {
     throw new BadVerbArgs(`render origin is not an object: ${raw}`);
   }
-  const { projectDir, cwd, configFile } = parsed as Record<string, unknown>;
+  const { projectDir, cwd, configFile, source } = parsed as Record<
+    string,
+    unknown
+  >;
   if (
     typeof projectDir !== "string" ||
     typeof cwd !== "string" ||
@@ -689,7 +715,7 @@ function parseRenderOrigin(raw: string): RenderOrigin {
   ) {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  return { projectDir, cwd, configFile };
+  return { projectDir, cwd, target: recordedTarget(source, configFile) };
 }
 
 // [LAW:no-silent-failure] A session that has never rendered has no origin
@@ -774,7 +800,7 @@ function originHome(origin: RenderOrigin): ConfigHome {
     repoConfigs().read(),
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? undefined,
+    origin.target.path,
   );
 }
 
@@ -1294,7 +1320,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`,
   );
 }
 

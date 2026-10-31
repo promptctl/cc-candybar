@@ -43,7 +43,7 @@ import {
   type ConfigLayer,
   homeLayer,
 } from "./config/dsl-loader.js";
-import { cliConfigTarget } from "./config-hint.js";
+import { chainName, cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
 import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
@@ -315,7 +315,7 @@ export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
 // process or stubbing process.exit.
 //
 // `layers` are the files checked, lowest first; none means the bundled
-// default was checked (no config file found — the daemon renders the same
+// default was checked (no config file loaded — the daemon renders the same
 // default in that state).
 export type CheckOutcome =
   | {
@@ -859,9 +859,7 @@ function warningLines(warnings: readonly string[]): string {
 export function checkPlan(o: CheckOutcome, render = false): CliPlan {
   switch (o.kind) {
     case "clean": {
-      const where =
-        o.layers.map((l) => l.path).join(" < ") ||
-        "bundled default (no config file found)";
+      const where = chainName(o.layers.map((l) => l.path));
       const count =
         o.warnings.length > 0
           ? ` (${o.warnings.length} warning${o.warnings.length === 1 ? "" : "s"})`
@@ -878,7 +876,10 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
         stdout: "",
         stderr:
           warningLines(o.warnings) +
-          `✗ ${o.layers.map((l) => l.path).join(" < ") || "<default>"}\n${o.message}\n`,
+          `✗ ${chainName(
+            o.layers.map((l) => l.path),
+            "<default>",
+          )}\n${o.message}\n`,
         code: EXIT_FATAL,
       };
     case "unreadable":
@@ -951,7 +952,7 @@ export async function checkCommandPlan(
         // the same argument, already absolute — `checkConfig`'s own
         // resolution, the seam for its direct callers, passes it through.
         await checkConfig(
-          cliConfigTarget(parsed.target, process.env, cwd),
+          cliConfigTarget(parsed.target, process.env, cwd).path,
           cwd,
         ),
         parsed.render,

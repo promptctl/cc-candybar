@@ -29,7 +29,11 @@ import { effectsOf } from "./helpers/click";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
-import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
+import {
+  VERB_DOCTOR_PROBE,
+  VERB_DOCTOR_RUN,
+  VERB_LOAD_CONFIG,
+} from "../src/click/wire";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { tryClickViaDaemon } from "../src/daemon/client";
@@ -95,7 +99,7 @@ test("the doctor's config row reports the session's own config load", async () =
 
     // The project layer's unused helper, read over the user's file.
     expect(flat(await render(sockPath, SID, projectDir))).toContain(
-      `✗ config — helper "idle" is never called`,
+      `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
     );
 
     // Fixing it turns the row over on the very next run: the click reloads
@@ -104,6 +108,65 @@ test("the doctor's config row reports the session's own config load", async () =
     writeFileSync(projectConfig, `{}`);
     await click(sockPath, run!);
     expect(flat(await render(sockPath, SID, projectDir))).toContain("✓ config");
+  } finally {
+    if (daemon) await killAndWait(daemon);
+    removeTmpDirs();
+  }
+});
+
+// What named the file reaches the click from the request that named it, so
+// the row and `cc-candybar doctor` agree on it, and it is the spelling a person
+// would have to change: `--config` wins even where the variable names one file.
+test("the doctor's config row says what named the session's file", async () => {
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const named = path.join(projectDir, "named.json5");
+  const picked = path.join(projectDir, "picked.json5");
+  writeFileSync(named, "{}");
+  writeFileSync(picked, "{}");
+  // Wrapping may fall inside a path, so spaces are no part of what is read.
+  const squeezed = (s: string): string => stripAnsi(s).replace(/\s+/g, "");
+
+  let daemon: RunningDaemon | undefined;
+  try {
+    daemon = await spawnDaemonWithEnv(env);
+    const row = async (
+      sid: string,
+      hints: ClientHints,
+      args: string[],
+    ): Promise<string> => {
+      const draw = () => render(sockPath, sid, projectDir, hints, args);
+      await click(sockPath, urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN));
+      await click(sockPath, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+      const run = linkUrls(await draw()).find((u) =>
+        effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
+      );
+      await click(sockPath, run!);
+      return squeezed(await draw());
+    };
+    const flag = ["cc-candybar", "--config", named];
+
+    expect(await row("source-argument", { configEnv: named }, flag)).toContain(
+      squeezed(`✓ config — ${named} (command argument)`),
+    );
+    expect(await row("source-env", { configEnv: named }, [])).toContain(
+      squeezed(`✓ config — ${named} ($CC_CANDYBAR_CONFIG)`),
+    );
+    expect(await row("source-search", {}, [])).toContain(
+      squeezed("✓ config — bundled default (no config file loaded)"),
+    );
+
+    await click(
+      sockPath,
+      `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`,
+    );
+    expect(await row("source-pick", { configEnv: named }, flag)).toContain(
+      squeezed(`✓ config — ${picked} (load-config pick)`),
+    );
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();

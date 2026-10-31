@@ -33,7 +33,7 @@ const CONFIG_EXTENSIONS = ["json5", "json"] as const;
  * file in the resolution chain triggers hot-reload.
  *
  * `configFile` is the highest-precedence entry — the explicit path
- * server.ts composed for the session (load-config pick > `--config` >
+ * a session's render origin names (load-config pick > `--config` >
  * `configEnv` hint, absolute). When present, it is the
  * sole candidate and the rest of the precedence chain is bypassed. This
  * module reads no environment of its own: the daemon is detached and
@@ -162,7 +162,7 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
 /**
  * The search, over the locations of `dslConfigCandidatePaths`:
  *   1. `configFile` — the session's explicit path (load-config pick >
- *      `--config` > `configEnv` hint, composed absolute in server.ts); the
+ *      `--config` > `configEnv` hint, absolute, from its render origin); the
  *      sole candidate when present
  *   2. `<projectDir>/.cc-candybar.json5`, then `.json`
  *   3. `<cwd>/.cc-candybar.json5`, then `.json`

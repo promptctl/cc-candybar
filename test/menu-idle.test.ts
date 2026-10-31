@@ -264,7 +264,7 @@ function buildRuntime(src: string) {
     encodeRenderOrigin({
       projectDir: "/tmp/proj",
       cwd: "/tmp/proj",
-      configFile: null,
+      target: { source: "search" },
     }),
   );
   const logged: string[] = [];

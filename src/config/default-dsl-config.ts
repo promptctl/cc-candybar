@@ -1695,7 +1695,7 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // [LAW:single-enforcer] Run the authored literal through the SAME parse
 // pipeline every user config goes through (JSON5 stage + group synthesis and
 // the parse-time checks) instead of hand-duplicating that logic here. Without
-// this, the zero-config daemon path (loadConfig: no config file found ⇒
+// this, the zero-config daemon path (loadConfig: no config file loaded ⇒
 // raw={}, merged directly against this constant — see src/config/dsl-loader.ts
 // and src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
 // synthesis that only ever ran over TEXT a user typed, never over this TS

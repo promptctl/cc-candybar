@@ -64,7 +64,7 @@ function buildRuntime(src: string) {
   sessionState.set(
     SID,
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null }),
+    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
   );
   const logged: string[] = [];
   const ctx: VerbContext = {

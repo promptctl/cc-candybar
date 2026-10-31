@@ -46,7 +46,7 @@ export function recordRender(
     encodeRenderOrigin({
       projectDir: "/tmp/proj",
       cwd: "/tmp/proj",
-      configFile: null,
+      target: { source: "search" },
     }),
   );
 }

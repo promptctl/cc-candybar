@@ -52,7 +52,6 @@ import {
   sessionWidth,
   type ConfigLoad,
   type InstallEdge,
-  type ConfigOrigin,
   type DoctorEdge,
 } from "./edge.js";
 import {
@@ -60,7 +59,7 @@ import {
   productionHandlerProbeEdge,
   type HandlerProbeEdge,
 } from "./handler-probe.js";
-import { cliConfigTarget } from "../config-hint.js";
+import { cliConfigTarget, type RenderOrigin } from "../config-hint.js";
 import {
   fallbackState,
   loadFromDisk,
@@ -99,7 +98,7 @@ function reportLine({ check, verdict }: CheckReport): string {
 // `loadFromDisk`, run once: it has no cache entry to read, so it builds the
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
-export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
+export function loadConfigOnce(origin: RenderOrigin): ConfigLoad {
   const deps = {
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
@@ -108,7 +107,7 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   const loaded = loadFromDisk(
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? undefined,
+    origin.target.path,
     deps,
   );
   const state =
@@ -248,7 +247,7 @@ export async function doctorPlan(
           cwd,
         ),
         cwd,
-        configFile: cliConfigTarget(configFile, env, cwd) ?? null,
+        target: cliConfigTarget(configFile, env, cwd),
       },
       // No session: the bar a session started here opens on.
       () => null,
