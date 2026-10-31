@@ -1,8 +1,9 @@
 // A daemon's connection: one request answered, or one session's frames pushed,
 // over a stream. The socket is what a daemon's process hands it, and nothing
 // here needs one, so a test runs a connection's behaviour in a jest worker.
-// What it does need of a stream is a socket's one duty to a writer: a peer that
-// vanished destroys it, because a flush that never settles strands the exit.
+// It needs two things of a stream that a socket gives by nature: Buffer chunks,
+// and being destroyed when its peer vanishes, because a flush that never settles
+// strands the exit.
 
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
@@ -54,8 +55,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // so the exit wish can never be stranded on a dead socket, and a live
   // peer always has the frame in the kernel buffer before process.exit
   // (unix-socket data survives writer exit). No fixed sleep stands between
-  // respond and exit; the SIGKILL backstop inside shutdown() is the
-  // unrelated last-resort safety.
+  // respond and exit; the SIGKILL backstop inside server.ts's shutdown() is
+  // the unrelated last-resort safety.
   const respond = (
     resp: Response,
     exitAfterFlush: number | null,
@@ -65,8 +66,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       // First responder owns the flush. An exit is sequenced on its own
       // reply's flush (reply.ts), so a reply that will never be sent takes its
       // exit with it: a busy daemon reads a request the backstop has already
-      // answered, and that client, told TIMEOUT, asks again. Say so, because a
-      // daemon told to exit is staying up. [LAW:no-silent-failure]
+      // answered. That client heard TIMEOUT, not an exit, and a statusline
+      // client asks again on its next tick. Say so, because a daemon told to
+      // exit is staying up. [LAW:no-silent-failure]
       if (exitAfterFlush !== null) {
         dlog(
           "warn",
