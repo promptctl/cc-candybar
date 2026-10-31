@@ -50,9 +50,9 @@ export type ConfigTarget =
   | { readonly source: "pick" | "unknown"; readonly path: string };
 
 // [LAW:single-enforcer] The one precedence of the two spellings a request
-// carries, for a render and a CLI run alike, so the bar and a CLI cannot
-// disagree about which file a session reads. Each spelling arrives already
-// read: absolute, and absent when empty.
+// carries, for a render and a CLI run alike, so the bar and a CLI cannot rank
+// them differently. Each spelling arrives already read: absolute, and absent
+// when empty.
 export function requestedConfigTarget(
   argument: string | undefined,
   environment: string | undefined,

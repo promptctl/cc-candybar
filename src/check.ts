@@ -315,7 +315,7 @@ export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
 // process or stubbing process.exit.
 //
 // `layers` are the files checked, lowest first; none means the bundled
-// default was checked (no config file found — the daemon renders the same
+// default was checked (no config file loaded — the daemon renders the same
 // default in that state).
 export type CheckOutcome =
   | {

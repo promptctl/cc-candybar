@@ -496,7 +496,7 @@ Charset and colour depth are rings; update notice is a toggle.
 
 ```
  ✕  🩺 doctor
-    ✓ config — ~/.config/cc-candybar/config.json5 (searched)
+    ✓ config — /Users/me/.config/cc-candybar/config.json5 (searched)
     ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
@@ -504,7 +504,7 @@ At 80 columns the row moves under an empty row and is still 113 cells wide:
 
 ```
  ✕  🩺 doctor
-    ✓ config — ~/.config/cc-candybar/config.json5 (searched)
+    ✓ config — /Users/me/.config/cc-candybar/config.json5 (searched)
 
  ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
