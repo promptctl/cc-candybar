@@ -4,15 +4,22 @@
     {
       "version": "pr-524",
       "ref": "refs/pull/524/merge",
-      "sha": "f0fdd39971e041df3505e0555d61b8acc4a337af",
-      "timestamp": "2026-10-31T19:29:07.042Z",
+      "sha": "191385735e0ddf302dcd19b6f7eae774fe77fed6",
+      "timestamp": "2026-10-31T19:38:11.418Z",
       "commits": [
         {
-          "sha": "f0fdd39971e041df3505e0555d61b8acc4a337af",
+          "sha": "191385735e0ddf302dcd19b6f7eae774fe77fed6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:28:19-06:00",
-          "message": "Merge 9b3372614fb30ce3d1fd88018cdd1ad1a6c18f60 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+          "timestamp": "2026-10-31T19:37:27Z",
+          "message": "Merge c29c12bfff6d7cfd57395b524eb9671ac55570f9 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+        },
+        {
+          "sha": "c29c12bfff6d7cfd57395b524eb9671ac55570f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T13:37:17-06:00",
+          "message": "test(daemon): draw-reserve stays on a real process (candybar-testing-0x6u.1ur)\n\nIts verdict changed on CI's runner, where timing is judged: p99 57 ms in\nthe worker against the 40 ms constant, on the first run. The darwin\ncomparison that moved it reads 3-4 ms either way, and says nothing about\ntwo cores running four workers. Process runs miss the same gate by 2-5 ms,\nwhich is brandon-unfiled-3248.tl8u.\n"
         },
         {
           "sha": "9b3372614fb30ce3d1fd88018cdd1ad1a6c18f60",
