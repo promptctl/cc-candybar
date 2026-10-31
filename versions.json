@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-525",
+      "ref": "refs/pull/525/merge",
+      "sha": "120f82a41544b898805d04a0f597d5f6e9ff7515",
+      "timestamp": "2026-10-31T21:38:22.329Z",
+      "commits": [
+        {
+          "sha": "120f82a41544b898805d04a0f597d5f6e9ff7515",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T15:37:26-06:00",
+          "message": "Merge 9bc1828e309683252208b0d5181dc5031c5e656b into f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc\n"
+        },
+        {
+          "sha": "9bc1828e309683252208b0d5181dc5031c5e656b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T15:36:20-06:00",
+          "message": "test(daemon): a run's daemon starts are pinned at what a full run measures (candybar-testing-0x6u.886)\n"
+        },
+        {
+          "sha": "ab2670ca4f0fa53a3ae6cbb9065f4c7ec90c6ff6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T15:33:55-06:00",
+          "message": "test(daemon): a test of the process is named for it, and everything else needs no build (candybar-testing-0x6u.886)\n"
+        },
+        {
+          "sha": "fea33fa3632457234638300016800be235417531",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T15:29:26-06:00",
+          "message": "test(daemon): every daemon a run starts is recorded and judged at its end (candybar-testing-0x6u.886)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc",
