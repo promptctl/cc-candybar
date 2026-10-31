@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-518",
+      "ref": "refs/pull/518/merge",
+      "sha": "9d8d52b225d35cf15f629c1f2d98f1f6fff66466",
+      "timestamp": "2026-10-31T22:29:05.320Z",
+      "commits": [
+        {
+          "sha": "9d8d52b225d35cf15f629c1f2d98f1f6fff66466",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:28:21Z",
+          "message": "Merge bb7818ebdc305a8c93b40ca091e9950b958971d8 into 5906e458d69d135a44baeafed475d436482c7355\n"
+        },
+        {
+          "sha": "bb7818ebdc305a8c93b40ca091e9950b958971d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T05:00:24-06:00",
+          "message": "fix(carousel): names are the leading literals, trial controls say trials, and a removed themeSwitcher points somewhere (brandon-menus-sjhy.vxr)\n"
+        },
+        {
+          "sha": "99ba52642e2e8710a4e74c1f89e091d95bc99f9d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T04:45:01-06:00",
+          "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5906e458d69d135a44baeafed475d436482c7355",
@@ -13,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T16:17:23-06:00",
           "message": "test(daemon): a real daemon starts only from a named process tier (candybar-testing-0x6u.886) (#525)\n\n* test(daemon): every daemon a run starts is recorded and judged at its end (candybar-testing-0x6u.886)\n\n* test(daemon): a test of the process is named for it, and everything else needs no build (candybar-testing-0x6u.886)\n\n* test(daemon): a run's daemon starts are pinned at what a full run measures (candybar-testing-0x6u.886)\n\n* test(daemon): CI runs the tier after the build and the rest before it, and preloads share one merge (candybar-testing-0x6u.886)\n\nA run outside the tier needing no build was checked once by hand. CI now\npartitions the suite at the build, so that holds on every push at no added\ntime. The ledger's NODE_OPTIONS merge was a copy of the stamp's, which that\nfile says there is one of. The pool case's cleanup no longer depends on the\nthird spawn having succeeded.\n\n* test(daemon): a dying process's stderr is read once its pipe closes, and the tier has one spelling (candybar-testing-0x6u.886)\n\nA readiness failure read the tail at the exit, which can land before the\npipe's last bytes, so the process that dies before its log opens could say\nnothing. The tail is now a value that exists once the pipe has closed.\n`pnpm test:process` reads the tier's pattern from its one home, so CI no\nlonger spells it."
-        }
-      ]
-    },
-    {
-      "version": "pr-518",
-      "ref": "refs/pull/518/merge",
-      "sha": "30bfc844d7292ef535b232c4ce7142a6021d0aa1",
-      "timestamp": "2026-10-31T10:47:30.675Z",
-      "commits": [
-        {
-          "sha": "30bfc844d7292ef535b232c4ce7142a6021d0aa1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T04:45:45-06:00",
-          "message": "Merge afc7c318c3bbf50dd31c1a69f23861ad6c047135 into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
-        },
-        {
-          "sha": "afc7c318c3bbf50dd31c1a69f23861ad6c047135",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T04:45:01-06:00",
-          "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
         }
       ]
     },

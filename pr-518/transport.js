@@ -2436,20 +2436,20 @@ var require_path_browserify = __commonJS({
   "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports, module) {
     "use strict";
     init_globals();
-    function assertPath(path41) {
-      if (typeof path41 !== "string") {
-        throw new TypeError("Path must be a string. Received " + JSON.stringify(path41));
+    function assertPath(path39) {
+      if (typeof path39 !== "string") {
+        throw new TypeError("Path must be a string. Received " + JSON.stringify(path39));
       }
     }
-    function normalizeStringPosix(path41, allowAboveRoot) {
+    function normalizeStringPosix(path39, allowAboveRoot) {
       var res = "";
       var lastSegmentLength = 0;
       var lastSlash = -1;
       var dots = 0;
       var code;
-      for (var i = 0; i <= path41.length; ++i) {
-        if (i < path41.length)
-          code = path41.charCodeAt(i);
+      for (var i = 0; i <= path39.length; ++i) {
+        if (i < path39.length)
+          code = path39.charCodeAt(i);
         else if (code === 47)
           break;
         else
@@ -2489,9 +2489,9 @@ var require_path_browserify = __commonJS({
             }
           } else {
             if (res.length > 0)
-              res += "/" + path41.slice(lastSlash + 1, i);
+              res += "/" + path39.slice(lastSlash + 1, i);
             else
-              res = path41.slice(lastSlash + 1, i);
+              res = path39.slice(lastSlash + 1, i);
             lastSegmentLength = i - lastSlash - 1;
           }
           lastSlash = i;
@@ -2522,20 +2522,20 @@ var require_path_browserify = __commonJS({
         var resolvedAbsolute = false;
         var cwd2;
         for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-          var path41;
+          var path39;
           if (i >= 0)
-            path41 = arguments[i];
+            path39 = arguments[i];
           else {
             if (cwd2 === void 0)
               cwd2 = process_default.cwd();
-            path41 = cwd2;
+            path39 = cwd2;
           }
-          assertPath(path41);
-          if (path41.length === 0) {
+          assertPath(path39);
+          if (path39.length === 0) {
             continue;
           }
-          resolvedPath = path41 + "/" + resolvedPath;
-          resolvedAbsolute = path41.charCodeAt(0) === 47;
+          resolvedPath = path39 + "/" + resolvedPath;
+          resolvedAbsolute = path39.charCodeAt(0) === 47;
         }
         resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
         if (resolvedAbsolute) {
@@ -2549,20 +2549,20 @@ var require_path_browserify = __commonJS({
           return ".";
         }
       },
-      normalize: function normalize(path41) {
-        assertPath(path41);
-        if (path41.length === 0) return ".";
-        var isAbsolute3 = path41.charCodeAt(0) === 47;
-        var trailingSeparator = path41.charCodeAt(path41.length - 1) === 47;
-        path41 = normalizeStringPosix(path41, !isAbsolute3);
-        if (path41.length === 0 && !isAbsolute3) path41 = ".";
-        if (path41.length > 0 && trailingSeparator) path41 += "/";
-        if (isAbsolute3) return "/" + path41;
-        return path41;
+      normalize: function normalize(path39) {
+        assertPath(path39);
+        if (path39.length === 0) return ".";
+        var isAbsolute3 = path39.charCodeAt(0) === 47;
+        var trailingSeparator = path39.charCodeAt(path39.length - 1) === 47;
+        path39 = normalizeStringPosix(path39, !isAbsolute3);
+        if (path39.length === 0 && !isAbsolute3) path39 = ".";
+        if (path39.length > 0 && trailingSeparator) path39 += "/";
+        if (isAbsolute3) return "/" + path39;
+        return path39;
       },
-      isAbsolute: function isAbsolute3(path41) {
-        assertPath(path41);
-        return path41.length > 0 && path41.charCodeAt(0) === 47;
+      isAbsolute: function isAbsolute3(path39) {
+        assertPath(path39);
+        return path39.length > 0 && path39.charCodeAt(0) === 47;
       },
       join: function join4() {
         if (arguments.length === 0)
@@ -2648,18 +2648,18 @@ var require_path_browserify = __commonJS({
           return to.slice(toStart);
         }
       },
-      _makeLong: function _makeLong(path41) {
-        return path41;
+      _makeLong: function _makeLong(path39) {
+        return path39;
       },
-      dirname: function dirname2(path41) {
-        assertPath(path41);
-        if (path41.length === 0) return ".";
-        var code = path41.charCodeAt(0);
+      dirname: function dirname2(path39) {
+        assertPath(path39);
+        if (path39.length === 0) return ".";
+        var code = path39.charCodeAt(0);
         var hasRoot = code === 47;
         var end = -1;
         var matchedSlash = true;
-        for (var i = path41.length - 1; i >= 1; --i) {
-          code = path41.charCodeAt(i);
+        for (var i = path39.length - 1; i >= 1; --i) {
+          code = path39.charCodeAt(i);
           if (code === 47) {
             if (!matchedSlash) {
               end = i;
@@ -2671,21 +2671,21 @@ var require_path_browserify = __commonJS({
         }
         if (end === -1) return hasRoot ? "/" : ".";
         if (hasRoot && end === 1) return "//";
-        return path41.slice(0, end);
+        return path39.slice(0, end);
       },
-      basename: function basename(path41, ext) {
+      basename: function basename(path39, ext) {
         if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
-        assertPath(path41);
+        assertPath(path39);
         var start = 0;
         var end = -1;
         var matchedSlash = true;
         var i;
-        if (ext !== void 0 && ext.length > 0 && ext.length <= path41.length) {
-          if (ext.length === path41.length && ext === path41) return "";
+        if (ext !== void 0 && ext.length > 0 && ext.length <= path39.length) {
+          if (ext.length === path39.length && ext === path39) return "";
           var extIdx = ext.length - 1;
           var firstNonSlashEnd = -1;
-          for (i = path41.length - 1; i >= 0; --i) {
-            var code = path41.charCodeAt(i);
+          for (i = path39.length - 1; i >= 0; --i) {
+            var code = path39.charCodeAt(i);
             if (code === 47) {
               if (!matchedSlash) {
                 start = i + 1;
@@ -2709,11 +2709,11 @@ var require_path_browserify = __commonJS({
             }
           }
           if (start === end) end = firstNonSlashEnd;
-          else if (end === -1) end = path41.length;
-          return path41.slice(start, end);
+          else if (end === -1) end = path39.length;
+          return path39.slice(start, end);
         } else {
-          for (i = path41.length - 1; i >= 0; --i) {
-            if (path41.charCodeAt(i) === 47) {
+          for (i = path39.length - 1; i >= 0; --i) {
+            if (path39.charCodeAt(i) === 47) {
               if (!matchedSlash) {
                 start = i + 1;
                 break;
@@ -2724,18 +2724,18 @@ var require_path_browserify = __commonJS({
             }
           }
           if (end === -1) return "";
-          return path41.slice(start, end);
+          return path39.slice(start, end);
         }
       },
-      extname: function extname(path41) {
-        assertPath(path41);
+      extname: function extname(path39) {
+        assertPath(path39);
         var startDot = -1;
         var startPart = 0;
         var end = -1;
         var matchedSlash = true;
         var preDotState = 0;
-        for (var i = path41.length - 1; i >= 0; --i) {
-          var code = path41.charCodeAt(i);
+        for (var i = path39.length - 1; i >= 0; --i) {
+          var code = path39.charCodeAt(i);
           if (code === 47) {
             if (!matchedSlash) {
               startPart = i + 1;
@@ -2761,7 +2761,7 @@ var require_path_browserify = __commonJS({
         preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
           return "";
         }
-        return path41.slice(startDot, end);
+        return path39.slice(startDot, end);
       },
       format: function format(pathObject) {
         if (pathObject === null || typeof pathObject !== "object") {
@@ -2769,11 +2769,11 @@ var require_path_browserify = __commonJS({
         }
         return _format("/", pathObject);
       },
-      parse: function parse3(path41) {
-        assertPath(path41);
+      parse: function parse3(path39) {
+        assertPath(path39);
         var ret = { root: "", dir: "", base: "", ext: "", name: "" };
-        if (path41.length === 0) return ret;
-        var code = path41.charCodeAt(0);
+        if (path39.length === 0) return ret;
+        var code = path39.charCodeAt(0);
         var isAbsolute3 = code === 47;
         var start;
         if (isAbsolute3) {
@@ -2786,10 +2786,10 @@ var require_path_browserify = __commonJS({
         var startPart = 0;
         var end = -1;
         var matchedSlash = true;
-        var i = path41.length - 1;
+        var i = path39.length - 1;
         var preDotState = 0;
         for (; i >= start; --i) {
-          code = path41.charCodeAt(i);
+          code = path39.charCodeAt(i);
           if (code === 47) {
             if (!matchedSlash) {
               startPart = i + 1;
@@ -2812,20 +2812,20 @@ var require_path_browserify = __commonJS({
         preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
         preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
           if (end !== -1) {
-            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path41.slice(1, end);
-            else ret.base = ret.name = path41.slice(startPart, end);
+            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path39.slice(1, end);
+            else ret.base = ret.name = path39.slice(startPart, end);
           }
         } else {
           if (startPart === 0 && isAbsolute3) {
-            ret.name = path41.slice(1, startDot);
-            ret.base = path41.slice(1, end);
+            ret.name = path39.slice(1, startDot);
+            ret.base = path39.slice(1, end);
           } else {
-            ret.name = path41.slice(startPart, startDot);
-            ret.base = path41.slice(startPart, end);
+            ret.name = path39.slice(startPart, startDot);
+            ret.base = path39.slice(startPart, end);
           }
-          ret.ext = path41.slice(startDot, end);
+          ret.ext = path39.slice(startDot, end);
         }
-        if (startPart > 0) ret.dir = path41.slice(0, startPart - 1);
+        if (startPart > 0) ret.dir = path39.slice(0, startPart - 1);
         else if (isAbsolute3) ret.dir = "/";
         return ret;
       },
@@ -3268,13 +3268,13 @@ function __disposeResources(env2) {
   }
   return next2();
 }
-function __rewriteRelativeImportExtension(path41, preserveJsx) {
-  if (typeof path41 === "string" && /^\.\.?\//.test(path41)) {
-    return path41.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
+function __rewriteRelativeImportExtension(path39, preserveJsx) {
+  if (typeof path39 === "string" && /^\.\.?\//.test(path39)) {
+    return path39.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
       return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : d + ext + "." + cm.toLowerCase() + "js";
     });
   }
-  return path41;
+  return path39;
 }
 var extendStatics, __assign, __createBinding, __setModuleDefault, ownKeys, _SuppressedError, tslib_es6_default;
 var init_tslib_es6 = __esm({
@@ -3610,11 +3610,11 @@ var require_path2 = __commonJS({
     exports.pathRelative = path_1.posix ? path_1.posix.relative : path_1.relative;
     exports.pathDirname = path_1.posix ? path_1.posix.dirname : path_1.dirname;
     exports.pathNormalize = path_1.posix ? path_1.posix.normalize : path_1.normalize;
-    var basename = (path41, separator) => {
-      if (path41[path41.length - 1] === separator)
-        path41 = path41.slice(0, -1);
-      const lastSlashIndex = path41.lastIndexOf(separator);
-      return lastSlashIndex === -1 ? path41 : path41.slice(lastSlashIndex + 1);
+    var basename = (path39, separator) => {
+      if (path39[path39.length - 1] === separator)
+        path39 = path39.slice(0, -1);
+      const lastSlashIndex = path39.lastIndexOf(separator);
+      return lastSlashIndex === -1 ? path39 : path39.slice(lastSlashIndex + 1);
     };
     exports.basename = basename;
   }
@@ -5083,9 +5083,9 @@ var require_json = __commonJS({
     var flattenJSON = (nestedJSON) => {
       const flatJSON = {};
       function flatten(pathPrefix, node) {
-        for (const path41 in node) {
-          const contentOrNode = node[path41];
-          const joinedPath = (0, fs_node_utils_1.pathJoin)(pathPrefix, path41);
+        for (const path39 in node) {
+          const contentOrNode = node[path39];
+          const joinedPath = (0, fs_node_utils_1.pathJoin)(pathPrefix, path39);
           if (typeof contentOrNode === "string" || contentOrNode instanceof buffer_1.Buffer) {
             flatJSON[joinedPath] = contentOrNode;
           } else if (typeof contentOrNode === "object" && contentOrNode !== null && !(contentOrNode instanceof buffer_1.Buffer) && Object.keys(contentOrNode).length > 0) {
@@ -5816,8 +5816,8 @@ var require_util = __commonJS({
       return fullPathSansSlash.split(fs_node_utils_1.pathSep);
     };
     exports.filenameToSteps = filenameToSteps;
-    function isFd(path41) {
-      return path41 >>> 0 === path41;
+    function isFd(path39) {
+      return path39 >>> 0 === path39;
     }
     function validateFd(fd) {
       if (typeof fd !== "number")
@@ -5838,19 +5838,19 @@ var require_util = __commonJS({
         return (0, buffer_1.bufferFrom)(String(data), encoding);
     }
     var NO_NULL_BYTES = "must be a string, Uint8Array, or URL without null bytes";
-    var checkNullByte = (path41, name, received) => {
-      if (path41.indexOf("\0") === -1)
+    var checkNullByte = (path39, name, received) => {
+      if (path39.indexOf("\0") === -1)
         return;
       throw (0, argErrors_1.invalidArgValue)(name, received, NO_NULL_BYTES);
     };
-    function nullCheck(path41, name = "path") {
-      if (path41 instanceof Uint8Array) {
-        for (let i = 0; i < path41.length; i++)
-          if (!path41[i])
-            throw (0, argErrors_1.invalidArgValue)(name, path41, NO_NULL_BYTES);
+    function nullCheck(path39, name = "path") {
+      if (path39 instanceof Uint8Array) {
+        for (let i = 0; i < path39.length; i++)
+          if (!path39[i])
+            throw (0, argErrors_1.invalidArgValue)(name, path39, NO_NULL_BYTES);
         return true;
       }
-      const str = "" + path41;
+      const str = "" + path39;
       checkNullByte(str, name, str);
       return true;
     }
@@ -5871,16 +5871,16 @@ var require_util = __commonJS({
       const filepath = decodeURIComponent(pathname);
       return exports.isWin ? filepath.replace(/^\/([a-zA-Z]:)/, "$1") : filepath;
     };
-    function pathToFilename(path41, name = "path") {
-      const received = path41;
-      if (path41 instanceof Uint8Array)
-        path41 = (0, buffer_1.bufferFrom)(path41);
-      if (typeof path41 !== "string" && !buffer_1.Buffer.isBuffer(path41)) {
-        if (!isURL(path41))
-          throw (0, argErrors_1.invalidArgType)(name, "of type string or an instance of Buffer or URL", path41);
-        path41 = getPathFromURL(path41);
+    function pathToFilename(path39, name = "path") {
+      const received = path39;
+      if (path39 instanceof Uint8Array)
+        path39 = (0, buffer_1.bufferFrom)(path39);
+      if (typeof path39 !== "string" && !buffer_1.Buffer.isBuffer(path39)) {
+        if (!isURL(path39))
+          throw (0, argErrors_1.invalidArgType)(name, "of type string or an instance of Buffer or URL", path39);
+        path39 = getPathFromURL(path39);
       }
-      const pathString = String(path41);
+      const pathString = String(path39);
       checkNullByte(pathString, name, received instanceof Uint8Array ? received : pathString);
       return pathString;
     }
@@ -5896,11 +5896,11 @@ var require_SystemError = __commonJS({
     exports.SystemError = void 0;
     var SystemError = class extends Error {
       constructor(code, prefix, info) {
-        const path41 = info.path;
+        const path39 = info.path;
         const dest = info.dest;
         let message = prefix + ": " + info.syscall + " returned " + info.code + " (" + info.message + ")";
-        if (path41 !== void 0)
-          message += " " + path41;
+        if (path39 !== void 0)
+          message += " " + path39;
         if (dest !== void 0)
           message += " => " + dest;
         super(message);
@@ -5908,8 +5908,8 @@ var require_SystemError = __commonJS({
         this.info = info;
         this.errno = info.errno;
         this.syscall = info.syscall;
-        if (path41 !== void 0)
-          this.path = path41;
+        if (path39 !== void 0)
+          this.path = path39;
         if (dest !== void 0)
           this.dest = dest;
       }
@@ -5960,38 +5960,38 @@ var require_errors = __commonJS({
       EOVERFLOW: [-75, "value too large for defined data type"],
       ENOTSUP: [-95, "operation not supported on socket"]
     };
-    var formatMessage = (code, uv, syscall2, path41, dest) => {
+    var formatMessage = (code, uv, syscall2, path39, dest) => {
       let message = code + ": " + (uv ? uv[1] : "unknown error") + ", " + syscall2;
-      if (path41)
-        message += " '" + path41 + "'";
+      if (path39)
+        message += " '" + path39 + "'";
       if (dest)
         message += " -> '" + dest + "'";
       return message;
     };
-    var createError = (code, syscall2 = "", path41 = "", dest = "", Constructor = Error) => {
+    var createError = (code, syscall2 = "", path39 = "", dest = "", Constructor = Error) => {
       const uv = UV[code];
-      const error = new Constructor(formatMessage(code, uv, syscall2, path41, dest));
+      const error = new Constructor(formatMessage(code, uv, syscall2, path39, dest));
       if (uv)
         error.errno = uv[0];
       error.code = code;
       error.syscall = syscall2;
-      if (path41)
-        error.path = path41;
+      if (path39)
+        error.path = path39;
       if (dest)
         error.dest = dest;
       return error;
     };
     exports.createError = createError;
-    var createStatError = (code, syscall2 = "", path41 = "", dest = "") => {
+    var createStatError = (code, syscall2 = "", path39 = "", dest = "") => {
       const uv = UV[code];
       return {
         errno: uv ? uv[0] : void 0,
         code,
         syscall: syscall2,
-        path: path41,
+        path: path39,
         dest,
-        message: formatMessage(code, uv, syscall2, path41, dest),
-        toError: () => (0, exports.createError)(code, syscall2, path41, dest)
+        message: formatMessage(code, uv, syscall2, path39, dest),
+        toError: () => (0, exports.createError)(code, syscall2, path39, dest)
       };
     };
     exports.createStatError = createStatError;
@@ -6007,10 +6007,10 @@ var require_errors = __commonJS({
       return error;
     };
     exports.createWatchError = createWatchError;
-    var createEisdirError = (syscall2, path41) => new SystemError_1.SystemError("ERR_FS_EISDIR", "Path is a directory", {
+    var createEisdirError = (syscall2, path39) => new SystemError_1.SystemError("ERR_FS_EISDIR", "Path is a directory", {
       code: "EISDIR",
       message: "is a directory",
-      path: path41,
+      path: path39,
       syscall: syscall2,
       errno: -UV.EISDIR[0]
     });
@@ -6062,13 +6062,13 @@ var require_Superblock = __commonJS({
     var FsEvent_1 = require_FsEvent();
     var { O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_TRUNC, O_DIRECTORY, O_NOFOLLOW } = fs_node_utils_1.constants;
     var MAX_SYMLINK_HOPS = 40;
-    var endsWithSep = (path41, win32) => {
-      let i = path41.length - 1;
+    var endsWithSep = (path39, win32) => {
+      let i = path39.length - 1;
       if (i < 1)
         return false;
-      let code = path41.charCodeAt(i);
+      let code = path39.charCodeAt(i);
       if (code === 46)
-        code = path41.charCodeAt(--i);
+        code = path39.charCodeAt(--i);
       return code === 47 || win32 && code === 92;
     };
     var Superblock = class _Superblock {
@@ -6567,7 +6567,7 @@ var require_Superblock = __commonJS({
           throw (0, errors_1.createError)("EBADF", funcName);
         return file;
       }
-      _toJSON(link = this.root, json2 = {}, path41, asBuffer) {
+      _toJSON(link = this.root, json2 = {}, path39, asBuffer) {
         let isEmpty = true;
         let children2 = link.children;
         if (link.getNode().isFile()) {
@@ -6586,16 +6586,16 @@ var require_Superblock = __commonJS({
           const node = child.getNode();
           if (node.isFile()) {
             let filename = child.getPath();
-            if (path41)
-              filename = (0, fs_node_utils_2.pathRelative)(path41, filename);
+            if (path39)
+              filename = (0, fs_node_utils_2.pathRelative)(path39, filename);
             json2[filename] = asBuffer ? node.getBuffer() : node.getString();
           } else if (node.isDirectory()) {
-            this._toJSON(child, json2, path41, asBuffer);
+            this._toJSON(child, json2, path39, asBuffer);
           }
         }
         let dirPath = link.getPath();
-        if (path41)
-          dirPath = (0, fs_node_utils_2.pathRelative)(path41, dirPath);
+        if (path39)
+          dirPath = (0, fs_node_utils_2.pathRelative)(path39, dirPath);
         if (dirPath && isEmpty) {
           json2[dirPath] = null;
         }
@@ -6606,8 +6606,8 @@ var require_Superblock = __commonJS({
         if (paths) {
           if (!Array.isArray(paths))
             paths = [paths];
-          for (const path41 of paths) {
-            const filename = (0, util_1.pathToFilename)(path41);
+          for (const path39 of paths) {
+            const filename = (0, util_1.pathToFilename)(path39);
             const link = this.getResolvedLink(filename);
             if (!link)
               continue;
@@ -6706,8 +6706,8 @@ var require_Superblock = __commonJS({
         return file;
       }
       // O_CREAT with a trailing separator: Linux looks the parent up first and only then fails with EISDIR.
-      throwCreatDir(path41, filename, budget) {
-        const dir = this.walk((0, path_1.dirname)(path41), true, true, true, "open", budget);
+      throwCreatDir(path39, filename, budget) {
+        const dir = this.walk((0, path_1.dirname)(path39), true, true, true, "open", budget);
         if (!dir.ok)
           throw (0, errors_1.createError)(dir.err.code, "open", filename);
         const node = dir.value.getNode();
@@ -6729,11 +6729,11 @@ var require_Superblock = __commonJS({
           this.throwCreatDir(filename, filename, budget);
         const excl = (flagsNum & (O_CREAT | O_EXCL)) === (O_CREAT | O_EXCL);
         const follow = trailingSlash || resolveSymlinks && !(flagsNum & O_NOFOLLOW) && !excl;
-        let path41 = filename;
+        let path39 = filename;
         let link = null;
         for (; ; ) {
           const hops = budget.hops;
-          const result = this.walk(path41, false, true, true, "open", budget);
+          const result = this.walk(path39, false, true, true, "open", budget);
           if (!result.ok) {
             const code = result.err.code;
             if (code !== "ENOENT" || !(flagsNum & O_CREAT))
@@ -6748,10 +6748,10 @@ var require_Superblock = __commonJS({
             break;
           if (++budget.hops > MAX_SYMLINK_HOPS)
             throw (0, errors_1.createError)("ELOOP", "open", filename);
-          path41 = (0, path_1.isAbsolute)(node.symlink) ? node.symlink : (0, fs_node_utils_2.pathJoin)((0, path_1.dirname)(link.getPath()), node.symlink);
-          if (endsWithSep(path41, win32)) {
+          path39 = (0, path_1.isAbsolute)(node.symlink) ? node.symlink : (0, fs_node_utils_2.pathJoin)((0, path_1.dirname)(link.getPath()), node.symlink);
+          if (endsWithSep(path39, win32)) {
             if (flagsNum & O_CREAT)
-              this.throwCreatDir(path41, filename, budget);
+              this.throwCreatDir(path39, filename, budget);
             trailingSlash = true;
           }
         }
@@ -6765,7 +6765,7 @@ var require_Superblock = __commonJS({
             throw (0, errors_1.createError)("EISDIR", "open", filename);
           return this.openLink(link, flagsNum, false, filename);
         }
-        const dir = this.walk((0, path_1.dirname)(path41), true, true, true, "open", budget);
+        const dir = this.walk((0, path_1.dirname)(path39), true, true, true, "open", budget);
         if (!dir.ok)
           throw (0, errors_1.createError)(dir.err.code, "open", filename);
         const dirLink = dir.value;
@@ -6775,7 +6775,7 @@ var require_Superblock = __commonJS({
         if (!dirNode.canExecute() || !dirNode.canWrite())
           throw (0, errors_1.createError)("EACCES", "open", filename);
         modeNum ?? (modeNum = 438);
-        const steps2 = (0, util_1.filenameToSteps)(path41);
+        const steps2 = (0, util_1.filenameToSteps)(path39);
         link = this.createLink(dirLink, steps2[steps2.length - 1], false, modeNum);
         this.emit(new FsEvent_1.FsEvent(0, link.steps, link.getNode(), link));
         return this.openLink(link, flagsNum, false, filename);
@@ -6823,9 +6823,9 @@ var require_CoreWatcher = __commonJS({
     exports.CoreWatchEvent = CoreWatchEvent;
     var CoreWatcher = class {
       /** @throws ENOENT-style error when the watch target does not exist. */
-      constructor(core, path41, opts = {}) {
+      constructor(core, path39, opts = {}) {
         this.changes = new fanout_1.FanOut();
-        this.link = opts.follow ?? true ? core.getResolvedLinkOrThrow(path41, "watch") : core.getLinkOrThrow(path41, "watch");
+        this.link = opts.follow ?? true ? core.getResolvedLinkOrThrow(path39, "watch") : core.getLinkOrThrow(path39, "watch");
         this.node = this.link.getNode();
         this.recursive = !!opts.recursive;
         this.unsub = core.changes.listen((event) => this.onEvent(event));
@@ -6963,34 +6963,34 @@ var require_Stats = __commonJS({
     var { S_IFMT, S_IFDIR, S_IFREG, S_IFBLK, S_IFCHR, S_IFLNK, S_IFIFO, S_IFSOCK } = fs_node_utils_1.constants;
     var Stats2 = class _Stats {
       static build(node, bigint = false) {
-        const stats2 = new _Stats();
+        const stats = new _Stats();
         const { uid, gid, atime, mtime, ctime, btime } = node;
         const getStatNumber = !bigint ? (number) => number : (number) => BigInt(number);
-        stats2.uid = getStatNumber(uid);
-        stats2.gid = getStatNumber(gid);
-        stats2.rdev = getStatNumber(node.rdev);
-        stats2.blksize = getStatNumber(4096);
-        stats2.ino = getStatNumber(node.ino);
-        stats2.size = getStatNumber(node.getSize());
-        stats2.blocks = getStatNumber(1);
-        stats2.atime = new Date(atime.getTime());
-        stats2.mtime = new Date(mtime.getTime());
-        stats2.ctime = new Date(ctime.getTime());
-        stats2.birthtime = new Date(btime.getTime());
-        stats2.atimeMs = getStatNumber(atime.getTime());
-        stats2.mtimeMs = getStatNumber(mtime.getTime());
-        stats2.ctimeMs = getStatNumber(ctime.getTime());
-        stats2.birthtimeMs = getStatNumber(btime.getTime());
+        stats.uid = getStatNumber(uid);
+        stats.gid = getStatNumber(gid);
+        stats.rdev = getStatNumber(node.rdev);
+        stats.blksize = getStatNumber(4096);
+        stats.ino = getStatNumber(node.ino);
+        stats.size = getStatNumber(node.getSize());
+        stats.blocks = getStatNumber(1);
+        stats.atime = new Date(atime.getTime());
+        stats.mtime = new Date(mtime.getTime());
+        stats.ctime = new Date(ctime.getTime());
+        stats.birthtime = new Date(btime.getTime());
+        stats.atimeMs = getStatNumber(atime.getTime());
+        stats.mtimeMs = getStatNumber(mtime.getTime());
+        stats.ctimeMs = getStatNumber(ctime.getTime());
+        stats.birthtimeMs = getStatNumber(btime.getTime());
         if (bigint) {
-          stats2.atimeNs = BigInt(atime.getTime()) * BigInt(1e6);
-          stats2.mtimeNs = BigInt(mtime.getTime()) * BigInt(1e6);
-          stats2.ctimeNs = BigInt(ctime.getTime()) * BigInt(1e6);
-          stats2.birthtimeNs = BigInt(btime.getTime()) * BigInt(1e6);
+          stats.atimeNs = BigInt(atime.getTime()) * BigInt(1e6);
+          stats.mtimeNs = BigInt(mtime.getTime()) * BigInt(1e6);
+          stats.ctimeNs = BigInt(ctime.getTime()) * BigInt(1e6);
+          stats.birthtimeNs = BigInt(btime.getTime()) * BigInt(1e6);
         }
-        stats2.dev = getStatNumber(0);
-        stats2.mode = getStatNumber(node.mode);
-        stats2.nlink = getStatNumber(node.nlink);
-        return stats2;
+        stats.dev = getStatNumber(0);
+        stats.mode = getStatNumber(node.mode);
+        stats.nlink = getStatNumber(node.nlink);
+        return stats;
       }
       _checkModeProperty(property) {
         return (Number(this.mode) & S_IFMT) === property;
@@ -7728,13 +7728,13 @@ var require_glob = __commonJS({
       child(indexes, symlinks = /* @__PURE__ */ new Set(), realpaths = this.realpaths) {
         return new _Pattern(this.parts, this.globStrings, indexes, symlinks, realpaths);
       }
-      test(index, path41) {
+      test(index, path39) {
         const part = this.parts[index];
         if (part === GLOBSTAR)
           return true;
         if (typeof part === "string")
-          return part === path41;
-        return part !== void 0 && part.test(path41);
+          return part === path39;
+        return part !== void 0 && part.test(path39);
       }
       cacheKey(index) {
         const globStrings = this.globStrings;
@@ -7769,74 +7769,74 @@ var require_glob = __commonJS({
         this.readdirs = /* @__PURE__ */ new Map();
         this.seenKeys = /* @__PURE__ */ new Map();
       }
-      statSync(path41) {
-        const cached = this.stats.get(path41);
+      statSync(path39) {
+        const cached = this.stats.get(path39);
         if (cached !== void 0)
           return cached;
         let value = null;
         try {
-          value = direntOf(basename(path41), dirname2(path41), this.fs.lstatSync(path41).mode);
+          value = direntOf(basename(path39), dirname2(path39), this.fs.lstatSync(path39).mode);
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.stats.set(path41, value);
+        this.stats.set(path39, value);
         return value;
       }
-      followStatSync(path41) {
-        const cached = this.followStats.get(path41);
+      followStatSync(path39) {
+        const cached = this.followStats.get(path39);
         if (cached !== void 0)
           return cached;
         let value = null;
         try {
-          value = direntOf(basename(path41), dirname2(path41), this.fs.statSync(path41).mode);
+          value = direntOf(basename(path39), dirname2(path39), this.fs.statSync(path39).mode);
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.followStats.set(path41, value);
+        this.followStats.set(path39, value);
         return value;
       }
-      realpathSync(path41) {
-        const cached = this.realpaths.get(path41);
+      realpathSync(path39) {
+        const cached = this.realpaths.get(path39);
         if (cached !== void 0)
           return cached;
         let value = null;
         try {
-          value = String(this.fs.realpathSync(path41));
+          value = String(this.fs.realpathSync(path39));
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.realpaths.set(path41, value);
+        this.realpaths.set(path39, value);
         return value;
       }
-      readdirSync(path41) {
-        const cached = this.readdirs.get(path41);
+      readdirSync(path39) {
+        const cached = this.readdirs.get(path39);
         if (cached !== void 0)
           return cached;
         let value = [];
         try {
-          value = this.fs.readdirSync(path41, { withFileTypes: true });
+          value = this.fs.readdirSync(path39, { withFileTypes: true });
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.readdirs.set(path41, value);
+        this.readdirs.set(path39, value);
         return value;
       }
-      addToStatCache(path41, value) {
-        this.stats.set(path41, value);
+      addToStatCache(path39, value) {
+        this.stats.set(path39, value);
       }
-      add(path41, pattern2) {
-        let keys2 = this.seenKeys.get(path41);
+      add(path39, pattern2) {
+        let keys2 = this.seenKeys.get(path39);
         if (!keys2) {
           keys2 = /* @__PURE__ */ new Set();
-          this.seenKeys.set(path41, keys2);
+          this.seenKeys.set(path39, keys2);
         }
         const originalSize = keys2.size;
         for (const index of pattern2.indexes)
           keys2.add(pattern2.cacheKey(index));
         return keys2.size !== originalSize + pattern2.indexes.size;
       }
-      seen(path41, pattern2, index) {
-        return !!this.seenKeys.get(path41)?.has(pattern2.cacheKey(index));
+      seen(path39, pattern2, index) {
+        return !!this.seenKeys.get(path39)?.has(pattern2.cacheKey(index));
       }
     };
     var depthOf = (root, fullpath) => {
@@ -7900,76 +7900,76 @@ var require_glob = __commonJS({
           const item = queue.pop();
           for (let i = 0; i < item.patterns.length; i++)
             yield* this.walkPattern(item.path, item.patterns[i]);
-          this.subpatterns.forEach((patterns, path41) => queue.push({ path: path41, patterns }));
+          this.subpatterns.forEach((patterns, path39) => queue.push({ path: path39, patterns }));
           this.subpatterns.clear();
         }
       }
-      result(path41) {
+      result(path39) {
         if (!this.withFileTypes)
-          return path41;
-        const full = isAbsolute3(path41) ? path41 : join4(this.root, path41);
+          return path39;
+        const full = isAbsolute3(path39) ? path39 : join4(this.root, path39);
         const stat3 = this.cache.statSync(full);
         return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
       }
-      isDirectory(path41, stat3, pattern2) {
+      isDirectory(path39, stat3, pattern2) {
         if (stat3?.isDirectory())
           return true;
         if (!stat3?.isSymbolicLink())
           return false;
         if (this.followSymlinks)
-          return !!this.cache.followStatSync(path41)?.isDirectory();
+          return !!this.cache.followStatSync(path39)?.isDirectory();
         return pattern2.hasSeenSymlinks;
       }
-      nextRealpaths(path41, isDirectory, pattern2) {
+      nextRealpaths(path39, isDirectory, pattern2) {
         if (!this.followSymlinks || !isDirectory)
           return pattern2.realpaths;
-        const real = this.cache.realpathSync(path41);
+        const real = this.cache.realpathSync(path39);
         if (real === null)
           return pattern2.realpaths;
         const realpaths = new Set(pattern2.realpaths);
         realpaths.add(real);
         return realpaths;
       }
-      isCyclic(path41, isDirectory, pattern2) {
+      isCyclic(path39, isDirectory, pattern2) {
         if (!this.followSymlinks || !isDirectory)
           return false;
-        const real = this.cache.realpathSync(path41);
+        const real = this.cache.realpathSync(path39);
         return real !== null && pattern2.realpaths.has(real);
       }
-      addSubpattern(path41, pattern2) {
-        if (this.isExcluded(path41))
+      addSubpattern(path39, pattern2) {
+        if (this.isExcluded(path39))
           return;
-        const fullpath = resolve(this.root, path41);
+        const fullpath = resolve(this.root, path39);
         if (this.isExcluded(fullpath + "/") && this.cache.statSync(fullpath)?.isDirectory())
           return;
         const exclude = this.exclude;
         if (exclude) {
           if (this.withFileTypes) {
-            const stat3 = this.cache.statSync(path41);
+            const stat3 = this.cache.statSync(path39);
             if (stat3 !== null && exclude(stat3))
               return;
-          } else if (exclude(path41))
+          } else if (exclude(path39))
             return;
         }
-        const existing = this.subpatterns.get(path41);
+        const existing = this.subpatterns.get(path39);
         if (existing)
           existing.push(pattern2);
         else
-          this.subpatterns.set(path41, [pattern2]);
+          this.subpatterns.set(path39, [pattern2]);
       }
-      accept(path41) {
-        if (this.results.has(path41))
+      accept(path39) {
+        if (this.results.has(path39))
           return false;
-        if (this.isExcluded(resolve(this.root, path41)))
+        if (this.isExcluded(resolve(this.root, path39)))
           return false;
-        this.results.add(path41);
+        this.results.add(path39);
         return true;
       }
-      *walkPattern(path41, pattern2) {
-        if (this.cache.add(path41, pattern2))
+      *walkPattern(path39, pattern2) {
+        if (this.cache.add(path39, pattern2))
           return;
         const cache2 = this.cache;
-        const fullpath = resolve(this.root, path41);
+        const fullpath = resolve(this.root, path39);
         const stat3 = cache2.statSync(fullpath);
         const last2 = pattern2.last;
         const isDirectory = this.isDirectory(fullpath, stat3, pattern2);
@@ -7992,14 +7992,14 @@ var require_glob = __commonJS({
         if (isLast && typeof pattern2.at(-1) === "string") {
           const p2 = pattern2.at(-1);
           const leaf = cache2.statSync(join4(fullpath, p2));
-          const match = join4(path41, p2);
+          const match = join4(path39, p2);
           if (leaf && (p2 || isDirectory) && this.accept(match))
             yield this.result(match);
           if (pattern2.indexes.size === 1 && pattern2.indexes.has(last2))
             return;
-        } else if (isLast && pattern2.at(-1) === GLOBSTAR && (path41 !== "." || pattern2.at(0) === "." || !last2 && stat3)) {
-          if (this.accept(path41))
-            yield this.result(path41);
+        } else if (isLast && pattern2.at(-1) === GLOBSTAR && (path39 !== "." || pattern2.at(0) === "." || !last2 && stat3)) {
+          if (this.accept(path39))
+            yield this.result(path39);
         }
         if (!isDirectory || this.isCyclic(fullpath, isDirectory, pattern2))
           return;
@@ -8019,7 +8019,7 @@ var require_glob = __commonJS({
         for (let i = 0; i < children2.length; i++) {
           const entry = children2[i];
           const name = entry.name;
-          const entryPath = join4(path41, name);
+          const entryPath = join4(path39, name);
           const entryFullpath = join4(fullpath, name);
           cache2.addToStatCache(entryFullpath, entry);
           const entryIsDirectory = entry.isDirectory() || this.followSymlinks && entry.isSymbolicLink() && !!cache2.followStatSync(entryFullpath)?.isDirectory();
@@ -8055,19 +8055,19 @@ var require_glob = __commonJS({
               if (!this.followSymlinks && entry.isSymbolicLink())
                 nSymlinks.add(index);
               if (next2 === ".." && entryIsDirectory) {
-                const parent = join4(path41, "..");
+                const parent = join4(path39, "..");
                 if (nextIndex < last2) {
-                  if (!this.subpatterns.has(path41) && !cache2.seen(path41, pattern2, nextIndex + 1))
-                    this.subpatterns.set(path41, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
+                  if (!this.subpatterns.has(path39) && !cache2.seen(path39, pattern2, nextIndex + 1))
+                    this.subpatterns.set(path39, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
                   if (!this.subpatterns.has(parent) && !cache2.seen(parent, pattern2, nextIndex + 1))
                     this.subpatterns.set(parent, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
                 } else {
-                  if (!cache2.seen(path41, pattern2, nextIndex)) {
-                    cache2.add(path41, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
-                    if (this.accept(path41))
-                      yield this.result(path41);
+                  if (!cache2.seen(path39, pattern2, nextIndex)) {
+                    cache2.add(path39, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
+                    if (this.accept(path39))
+                      yield this.result(path39);
                   }
-                  if (!cache2.seen(path41, pattern2, nextIndex) || !cache2.seen(parent, pattern2, nextIndex)) {
+                  if (!cache2.seen(path39, pattern2, nextIndex) || !cache2.seen(parent, pattern2, nextIndex)) {
                     cache2.add(parent, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
                     if (this.accept(parent))
                       yield this.result(parent);
@@ -14252,7 +14252,7 @@ var require_cp = __commonJS({
       ERR_FS_CP_UNKNOWN: "Cannot copy an unknown file type",
       ERR_FS_EISDIR: "Path is a directory"
     };
-    var cpSystemError = (code, message, path41, errno, uv) => new fs_core_1.SystemError(code, PREFIX2[code], { code: uv, message, path: path41, syscall: "cp", errno });
+    var cpSystemError = (code, message, path39, errno, uv) => new fs_core_1.SystemError(code, PREFIX2[code], { code: uv, message, path: path39, syscall: "cp", errno });
     var cpCodeError = (code, message) => (0, argErrors_1.withNativeCode)(new Error(message), code);
     var invalidFilterReturn = (value) => (0, argErrors_1.withCode)(new TypeError('Expected boolean to be returned from the "filter" function but got an instance of Promise.'), "ERR_INVALID_RETURN_VALUE");
     var asCopyfileError = (error, src, dest) => error && typeof error.code === "string" && typeof error.syscall === "string" ? (0, fs_core_1.createError)(error.code, "copyfile", src, dest) : error;
@@ -14348,8 +14348,8 @@ var require_cp = __commonJS({
       }
     };
     exports.copyFileCore = copyFileCore;
-    var toParts = (path41) => {
-      const raw = pathResolve(path41).split("/");
+    var toParts = (path39) => {
+      const raw = pathResolve(path39).split("/");
       const parts = [];
       for (let i = 0; i < raw.length; i++)
         if (raw[i])
@@ -14368,8 +14368,8 @@ var require_cp = __commonJS({
       return true;
     };
     var areIdentical = (srcStat, destStat) => srcStat.ino === destStat.ino && srcStat.dev === destStat.dev;
-    var statOf = (vol2, path41, dereference) => dereference ? vol2.statSync(path41) : vol2.lstatSync(path41);
-    var statOrNull = (vol2, path41, dereference) => dereference ? vol2.statSync(path41, { throwIfNoEntry: false }) : vol2.lstatSync(path41, { throwIfNoEntry: false });
+    var statOf = (vol2, path39, dereference) => dereference ? vol2.statSync(path39) : vol2.lstatSync(path39);
+    var statOrNull = (vol2, path39, dereference) => dereference ? vol2.statSync(path39, { throwIfNoEntry: false }) : vol2.lstatSync(path39, { throwIfNoEntry: false });
     var readEntries = (vol2, dir) => {
       try {
         return vol2.readdirSync(dir);
@@ -14378,9 +14378,9 @@ var require_cp = __commonJS({
         throw code ? (0, fs_core_1.createError)(code, "opendir", dir) : error;
       }
     };
-    var isDirectory = (vol2, path41) => {
-      const stats2 = vol2.statSync(path41, { throwIfNoEntry: false });
-      return !!stats2 && stats2.isDirectory();
+    var isDirectory = (vol2, path39) => {
+      const stats = vol2.statSync(path39, { throwIfNoEntry: false });
+      return !!stats && stats.isDirectory();
     };
     var setDestMode = (vol2, dest, srcMode) => {
       vol2.chmodSync(dest, Number(srcMode));
@@ -14562,14 +14562,14 @@ var require_cp = __commonJS({
       vol2.symlinkSync(resolvedSrc, dest);
     };
     var cpAsync = async (vol2, src, dest, options) => {
-      const stats2 = await checkPaths(vol2, src, dest, options);
-      if (!stats2)
+      const stats = await checkPaths(vol2, src, dest, options);
+      if (!stats)
         return;
-      checkParentPaths(vol2, src, stats2.srcStat, dest, options.recursive);
+      checkParentPaths(vol2, src, stats.srcStat, dest, options.recursive);
       const destParent = (0, fs_node_utils_1.pathDirname)(dest);
       if (!vol2.existsSync(destParent))
         vol2.mkdirSync(destParent, { recursive: true });
-      await getStatsForCopy(vol2, stats2.destStat, src, dest, options);
+      await getStatsForCopy(vol2, stats.destStat, src, dest, options);
     };
     exports.cpAsync = cpAsync;
     var checkPaths = async (vol2, src, dest, options) => {
@@ -14706,9 +14706,9 @@ var require_FsPromises = __commonJS({
       return error;
     };
     var FSWatchAsyncIterator = class {
-      constructor(fs3, path41, options = {}) {
+      constructor(fs3, path39, options = {}) {
         this.fs = fs3;
-        this.path = path41;
+        this.path = path39;
         this.options = options;
         this.eventQueue = [];
         this.resolveQueue = [];
@@ -14854,11 +14854,11 @@ var require_FsPromises = __commonJS({
         this.readFile = (id2, options) => {
           return (0, util_1.promisify)(this.fs, "readFile")(id2 instanceof this.FileHandle ? id2.fd : id2, options);
         };
-        this.appendFile = (path41, data, options) => {
-          return (0, util_1.promisify)(this.fs, "appendFile")(path41 instanceof this.FileHandle ? path41.fd : path41, data, options);
+        this.appendFile = (path39, data, options) => {
+          return (0, util_1.promisify)(this.fs, "appendFile")(path39 instanceof this.FileHandle ? path39.fd : path39, data, options);
         };
-        this.open = (path41, flags = "r", mode) => {
-          return (0, util_1.promisify)(this.fs, "open", (fd) => new this.FileHandle(this.fs, fd))(path41, flags, mode);
+        this.open = (path39, flags = "r", mode) => {
+          return (0, util_1.promisify)(this.fs, "open", (fd) => new this.FileHandle(this.fs, fd))(path39, flags, mode);
         };
         this.writeFile = (id2, data, options) => {
           const dataPromise = (0, util_1.isReadableStream)(data) ? (0, util_1.streamToBuffer)(data) : Promise.resolve(data);
@@ -15298,56 +15298,56 @@ var require_sync = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.fromSnapshotSync = exports.toSnapshotSync = void 0;
     var shared_1 = require_shared();
-    var toSnapshotSync = ({ fs: fs3, path: path41 = "/", separator = "/" }) => {
-      const stats2 = fs3.lstatSync(path41);
-      if (stats2.isDirectory()) {
-        const list2 = fs3.readdirSync(path41);
+    var toSnapshotSync = ({ fs: fs3, path: path39 = "/", separator = "/" }) => {
+      const stats = fs3.lstatSync(path39);
+      if (stats.isDirectory()) {
+        const list2 = fs3.readdirSync(path39);
         const entries = {};
-        const dir = path41.endsWith(separator) ? path41 : path41 + separator;
+        const dir = path39.endsWith(separator) ? path39 : path39 + separator;
         for (const child of list2) {
           const childSnapshot = (0, exports.toSnapshotSync)({ fs: fs3, path: `${dir}${child}`, separator });
           if (childSnapshot)
             entries["" + child] = childSnapshot;
         }
         return [0, {}, entries];
-      } else if (stats2.isFile()) {
-        const buf = fs3.readFileSync(path41);
+      } else if (stats.isFile()) {
+        const buf = fs3.readFileSync(path39);
         const uint8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return [1, {}, uint8];
-      } else if (stats2.isSymbolicLink()) {
+      } else if (stats.isSymbolicLink()) {
         return [
           2,
           {
-            target: fs3.readlinkSync(path41).toString()
+            target: fs3.readlinkSync(path39).toString()
           }
         ];
       }
       return null;
     };
     exports.toSnapshotSync = toSnapshotSync;
-    var fromSnapshotSync = (snapshot, { fs: fs3, path: path41 = "/", separator = "/" }) => {
+    var fromSnapshotSync = (snapshot, { fs: fs3, path: path39 = "/", separator = "/" }) => {
       if (!snapshot)
         return;
       switch (snapshot[0]) {
         case 0: {
-          if (!path41.endsWith(separator))
-            path41 = path41 + separator;
+          if (!path39.endsWith(separator))
+            path39 = path39 + separator;
           const [, , entries] = snapshot;
-          fs3.mkdirSync(path41, { recursive: true });
+          fs3.mkdirSync(path39, { recursive: true });
           for (const [name, child] of Object.entries(entries)) {
             (0, shared_1.validateEntryName)(name);
-            (0, exports.fromSnapshotSync)(child, { fs: fs3, path: `${path41}${name}`, separator });
+            (0, exports.fromSnapshotSync)(child, { fs: fs3, path: `${path39}${name}`, separator });
           }
           break;
         }
         case 1: {
           const [, , data] = snapshot;
-          fs3.writeFileSync(path41, data);
+          fs3.writeFileSync(path39, data);
           break;
         }
         case 2: {
           const [, { target }] = snapshot;
-          fs3.symlinkSync(target, path41);
+          fs3.symlinkSync(target, path39);
           break;
         }
       }
@@ -17108,9 +17108,9 @@ var require_CborDecoder = __commonJS({
           this.skipAny();
         return this;
       }
-      find(path41) {
-        for (let i = 0; i < path41.length; i++) {
-          const segment = path41[i];
+      find(path39) {
+        for (let i = 0; i < path39.length; i++) {
+          const segment = path39[i];
           if (typeof segment === "string")
             this.findKey(segment);
           else
@@ -17131,56 +17131,56 @@ var require_async = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.fromSnapshot = exports.toSnapshot = void 0;
     var shared_1 = require_shared();
-    var toSnapshot = async ({ fs: fs3, path: path41 = "/", separator = "/" }) => {
-      const stats2 = await fs3.lstat(path41);
-      if (stats2.isDirectory()) {
-        const list2 = await fs3.readdir(path41);
+    var toSnapshot = async ({ fs: fs3, path: path39 = "/", separator = "/" }) => {
+      const stats = await fs3.lstat(path39);
+      if (stats.isDirectory()) {
+        const list2 = await fs3.readdir(path39);
         const entries = {};
-        const dir = path41.endsWith(separator) ? path41 : path41 + separator;
+        const dir = path39.endsWith(separator) ? path39 : path39 + separator;
         const snapshots = await Promise.all(list2.map((child) => (0, exports.toSnapshot)({ fs: fs3, path: `${dir}${child}`, separator })));
         for (let i = 0; i < list2.length; i++) {
           if (snapshots[i])
             entries["" + list2[i]] = snapshots[i];
         }
         return [0, {}, entries];
-      } else if (stats2.isFile()) {
-        const buf = await fs3.readFile(path41);
+      } else if (stats.isFile()) {
+        const buf = await fs3.readFile(path39);
         const uint8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return [1, {}, uint8];
-      } else if (stats2.isSymbolicLink()) {
+      } else if (stats.isSymbolicLink()) {
         return [
           2,
           {
-            target: await fs3.readlink(path41, { encoding: "utf8" })
+            target: await fs3.readlink(path39, { encoding: "utf8" })
           }
         ];
       }
       return null;
     };
     exports.toSnapshot = toSnapshot;
-    var fromSnapshot = async (snapshot, { fs: fs3, path: path41 = "/", separator = "/" }) => {
+    var fromSnapshot = async (snapshot, { fs: fs3, path: path39 = "/", separator = "/" }) => {
       if (!snapshot)
         return;
       switch (snapshot[0]) {
         case 0: {
-          if (!path41.endsWith(separator))
-            path41 = path41 + separator;
+          if (!path39.endsWith(separator))
+            path39 = path39 + separator;
           const [, , entries] = snapshot;
-          await fs3.mkdir(path41, { recursive: true });
+          await fs3.mkdir(path39, { recursive: true });
           for (const [name, child] of Object.entries(entries)) {
             (0, shared_1.validateEntryName)(name);
-            await (0, exports.fromSnapshot)(child, { fs: fs3, path: `${path41}${name}`, separator });
+            await (0, exports.fromSnapshot)(child, { fs: fs3, path: `${path39}${name}`, separator });
           }
           break;
         }
         case 1: {
           const [, , data] = snapshot;
-          await fs3.writeFile(path41, data);
+          await fs3.writeFile(path39, data);
           break;
         }
         case 2: {
           const [, { target }] = snapshot;
-          await fs3.symlink(target, path41);
+          await fs3.symlink(target, path39);
           break;
         }
       }
@@ -18485,7 +18485,7 @@ var require_Dir = __commonJS({
        *
        * @param path The path the directory was opened with, kept verbatim as `dir.path`.
        */
-      constructor(handle, path41, options) {
+      constructor(handle, path39, options) {
         this.levels = [];
         this.closed = false;
         this.operationQueue = null;
@@ -18496,9 +18496,9 @@ var require_Dir = __commonJS({
         const opts = { bufferSize: 32, ...given2 };
         (0, validators_1.validateUint32)(opts.bufferSize, "options.bufferSize", true);
         this.options = opts;
-        this._path = path41;
-        const parentPath = typeof path41 === "string" ? path41 : path41.toString();
-        this.levels.push({ entries: handle.children[Symbol.iterator](), path: path41, parentPath });
+        this._path = path39;
+        const parentPath = typeof path39 === "string" ? path39 : path39.toString();
+        this.levels.push({ entries: handle.children[Symbol.iterator](), path: path39, parentPath });
       }
       readBase() {
         const levels = this.levels;
@@ -18525,10 +18525,10 @@ var require_Dir = __commonJS({
       }
       // TODO: Node opens the joined path, failing ENOENT on a `hex` or non-ASCII `latin1` name, we follow the link.
       descend(parent, name, link) {
-        const path41 = (0, fs_node_utils_1.pathJoin)(parent, name);
+        const path39 = (0, fs_node_utils_1.pathJoin)(parent, name);
         if (!link.getNode().canRead())
-          throw (0, util_1.createError)("EACCES", "opendir", path41);
-        this.levels.push({ entries: link.children[Symbol.iterator](), path: path41, parentPath: path41 });
+          throw (0, util_1.createError)("EACCES", "opendir", path39);
+        this.levels.push({ entries: link.children[Symbol.iterator](), path: path39, parentPath: path39 });
       }
       readPromise() {
         return new Promise((resolve, reject2) => {
@@ -18703,8 +18703,8 @@ var require_volume = __commonJS({
     var cp_1 = require_cp();
     var { O_SYMLINK, F_OK, R_OK, W_OK, X_OK } = fs_node_utils_1.constants;
     var kMinPoolSpace = 128;
-    function pathToSteps(path41) {
-      return (0, fs_core_1.filenameToSteps)((0, util_2.pathToFilename)(path41));
+    function pathToSteps(path39) {
+      return (0, fs_core_1.filenameToSteps)((0, util_2.pathToFilename)(path39));
     }
     function dataToStr(data, encoding = fs_node_utils_1.ENCODING_UTF8) {
       if (buffer_1.Buffer.isBuffer(data))
@@ -18746,13 +18746,13 @@ var require_volume = __commonJS({
       constructor(_core = new fs_core_1.Superblock()) {
         this._core = _core;
         this.promisesApi = new FsPromises_1.FsPromises(this, FileHandle_1.FileHandle);
-        this.openSync = (path41, flags, mode = 438) => {
+        this.openSync = (path39, flags, mode = 438) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const fileName2 = (0, util_2.pathToFilename)(path41);
+          const fileName2 = (0, util_2.pathToFilename)(path39);
           const flagsNum = (0, util_2.flagsToNumber)(flags);
           return this._core.open(fileName2, flagsNum, modeNum, !(flagsNum & O_SYMLINK));
         };
-        this.open = (path41, flags, a, b) => {
+        this.open = (path39, flags, a, b) => {
           let mode = a;
           let callback = b;
           if (typeof a === "function") {
@@ -18761,7 +18761,7 @@ var require_volume = __commonJS({
           }
           mode = mode || 438;
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const fileName2 = (0, util_2.pathToFilename)(path41);
+          const fileName2 = (0, util_2.pathToFilename)(path39);
           const flagsNum = (0, util_2.flagsToNumber)(flags);
           this.wrapAsync(this._core.open, [fileName2, flagsNum, modeNum, !(flagsNum & O_SYMLINK)], callback);
         };
@@ -18918,23 +18918,23 @@ var require_volume = __commonJS({
           const newPathFilename = (0, util_2.pathToFilename)(newPath);
           this.wrapAsync(this._core.link, [existingPathFilename, newPathFilename], callback);
         };
-        this.unlinkSync = (path41) => {
-          const filename = (0, util_2.pathToFilename)(path41);
+        this.unlinkSync = (path39) => {
+          const filename = (0, util_2.pathToFilename)(path39);
           this._core.unlink(filename);
         };
-        this.unlink = (path41, callback) => {
-          const filename = (0, util_2.pathToFilename)(path41);
+        this.unlink = (path39, callback) => {
+          const filename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._core.unlink, [filename], callback);
         };
-        this.symlinkSync = (target, path41, type3) => {
+        this.symlinkSync = (target, path39, type3) => {
           const targetFilename = (0, util_2.pathToFilename)(target);
-          const pathFilename = (0, util_2.pathToFilename)(path41);
+          const pathFilename = (0, util_2.pathToFilename)(path39);
           this._core.symlink(targetFilename, pathFilename);
         };
-        this.symlink = (target, path41, a, b) => {
+        this.symlink = (target, path39, a, b) => {
           const callback = (0, util_2.validateCallback)(typeof a === "function" ? a : b);
           const targetFilename = (0, util_2.pathToFilename)(target);
-          const pathFilename = (0, util_2.pathToFilename)(path41);
+          const pathFilename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._core.symlink, [targetFilename, pathFilename], callback);
         };
         this._lstat = (filename, bigint = false, throwIfNoEntry = false) => {
@@ -18949,9 +18949,9 @@ var require_volume = __commonJS({
           }
           return Stats_1.default.build(link.getNode(), bigint);
         };
-        this.lstatSync = (path41, options) => {
+        this.lstatSync = (path39, options) => {
           const { throwIfNoEntry = true, bigint = false } = (0, options_1.getStatOptions)(options);
-          return this._lstat((0, util_2.pathToFilename)(path41), bigint, throwIfNoEntry);
+          return this._lstat((0, util_2.pathToFilename)(path39), bigint, throwIfNoEntry);
         };
         this.renameSync = (oldPath, newPath) => {
           const oldPathFilename = (0, util_2.pathToFilename)(oldPath);
@@ -18963,15 +18963,15 @@ var require_volume = __commonJS({
           const newPathFilename = (0, util_2.pathToFilename)(newPath);
           this.wrapAsync(this._core.rename, [oldPathFilename, newPathFilename], callback);
         };
-        this.existsSync = (path41) => {
+        this.existsSync = (path39) => {
           try {
-            return this._exists((0, util_2.pathToFilename)(path41)).ok;
+            return this._exists((0, util_2.pathToFilename)(path39)).ok;
           } catch (err) {
             return false;
           }
         };
-        this.exists = (path41, callback) => {
-          const filename = (0, util_2.pathToFilename)(path41);
+        this.exists = (path39, callback) => {
+          const filename = (0, util_2.pathToFilename)(path39);
           if (typeof callback !== "function")
             throw Error(fs_node_utils_2.ERRSTR.CB);
           Promise.resolve().then(() => {
@@ -18982,19 +18982,19 @@ var require_volume = __commonJS({
             }
           });
         };
-        this.accessSync = (path41, mode = F_OK) => {
-          const filename = (0, util_2.pathToFilename)(path41);
+        this.accessSync = (path39, mode = F_OK) => {
+          const filename = (0, util_2.pathToFilename)(path39);
           mode = mode | 0;
           this._access(filename, mode);
         };
-        this.access = (path41, a, b) => {
+        this.access = (path39, a, b) => {
           let mode = F_OK;
           let callback;
           if (typeof a !== "function")
             [mode, callback] = [a | 0, (0, util_2.validateCallback)(b)];
           else
             callback = a;
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._access, [filename, mode], callback);
         };
         this.appendFileSync = (id2, data, options) => {
@@ -19053,14 +19053,14 @@ var require_volume = __commonJS({
             return dirent.name;
           });
         };
-        this.readdirSync = (path41, options) => {
+        this.readdirSync = (path39, options) => {
           const opts = (0, options_1.getReaddirOptions)(options);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           return this._readdir(filename, opts);
         };
-        this.readdir = (path41, a, b) => {
+        this.readdir = (path39, a, b) => {
           const [options, callback] = (0, options_1.getReaddirOptsAndCb)(a, b);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._readdir, [filename, options], callback);
         };
         this._readlink = (filename, encoding) => {
@@ -19070,14 +19070,14 @@ var require_volume = __commonJS({
             throw (0, util_2.createError)("EINVAL", "readlink", filename);
           return (0, fs_node_utils_1.strToEncoding)(node.symlink, encoding);
         };
-        this.readlinkSync = (path41, options) => {
+        this.readlinkSync = (path39, options) => {
           const opts = (0, options_1.getDefaultOpts)(options);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           return this._readlink(filename, opts.encoding);
         };
-        this.readlink = (path41, a, b) => {
+        this.readlink = (path39, a, b) => {
           const [opts, callback] = (0, options_1.getDefaultOptsAndCb)(a, b);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._readlink, [filename, opts.encoding], callback);
         };
         this._fsync = (fd) => {
@@ -19109,8 +19109,8 @@ var require_volume = __commonJS({
           const callback = (0, util_2.validateCallback)(typeof a === "number" ? b : a);
           this.wrapAsync(this._ftruncate, [fd, len2], callback);
         };
-        this._truncate = (path41, len2) => {
-          const fd = this.openSync(path41, "r+");
+        this._truncate = (path39, len2) => {
+          const fd = this.openSync(path39, "r+");
           try {
             this.ftruncateSync(fd, len2);
           } finally {
@@ -19141,31 +19141,31 @@ var require_volume = __commonJS({
         this._utimes = (filename, atime, mtime, followSymlinks = true) => {
           this._core.utimes(filename, atime, mtime, followSymlinks);
         };
-        this.utimesSync = (path41, atime, mtime) => {
-          this._utimes((0, util_2.pathToFilename)(path41), toUnixTimestamp(atime), toUnixTimestamp(mtime), true);
+        this.utimesSync = (path39, atime, mtime) => {
+          this._utimes((0, util_2.pathToFilename)(path39), toUnixTimestamp(atime), toUnixTimestamp(mtime), true);
         };
-        this.utimes = (path41, atime, mtime, callback) => {
-          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path41), toUnixTimestamp(atime), toUnixTimestamp(mtime), true], callback);
+        this.utimes = (path39, atime, mtime, callback) => {
+          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path39), toUnixTimestamp(atime), toUnixTimestamp(mtime), true], callback);
         };
-        this.lutimesSync = (path41, atime, mtime) => {
-          this._utimes((0, util_2.pathToFilename)(path41), toUnixTimestamp(atime), toUnixTimestamp(mtime), false);
+        this.lutimesSync = (path39, atime, mtime) => {
+          this._utimes((0, util_2.pathToFilename)(path39), toUnixTimestamp(atime), toUnixTimestamp(mtime), false);
         };
-        this.lutimes = (path41, atime, mtime, callback) => {
-          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path41), toUnixTimestamp(atime), toUnixTimestamp(mtime), false], callback);
+        this.lutimes = (path39, atime, mtime, callback) => {
+          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path39), toUnixTimestamp(atime), toUnixTimestamp(mtime), false], callback);
         };
-        this.mkdirSync = (path41, options) => {
+        this.mkdirSync = (path39, options) => {
           const opts = (0, options_1.getMkdirOptions)(options);
           const modeNum = (0, util_2.modeToNumber)(opts.mode, 511);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           if (opts.recursive)
             return this._core.mkdirp(filename, modeNum);
           this._core.mkdir(filename, modeNum);
         };
-        this.mkdir = (path41, a, b) => {
+        this.mkdir = (path39, a, b) => {
           const opts = (0, options_1.getMkdirOptions)(a);
           const callback = (0, util_2.validateCallback)(typeof a === "function" ? a : b);
           const modeNum = (0, util_2.modeToNumber)(opts.mode, 511);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           if (opts.recursive)
             this.wrapAsync(this._core.mkdirp, [filename, modeNum], callback);
           else
@@ -19205,21 +19205,21 @@ var require_volume = __commonJS({
             return;
           this.wrapAsync(this._mkdtemp, [prefix, encoding], callback);
         };
-        this.rmdirSync = (path41, options) => {
+        this.rmdirSync = (path39, options) => {
           const opts = (0, options_1.getRmdirOptions)(options);
-          this._core.rmdir((0, util_2.pathToFilename)(path41), opts.recursive);
+          this._core.rmdir((0, util_2.pathToFilename)(path39), opts.recursive);
         };
-        this.rmdir = (path41, a, b) => {
+        this.rmdir = (path39, a, b) => {
           const opts = (0, options_1.getRmdirOptions)(a);
           const callback = (0, util_2.validateCallback)(typeof a === "function" ? a : b);
-          this.wrapAsync(this._core.rmdir, [(0, util_2.pathToFilename)(path41), opts.recursive], callback);
+          this.wrapAsync(this._core.rmdir, [(0, util_2.pathToFilename)(path39), opts.recursive], callback);
         };
-        this.rmSync = (path41, options) => {
-          this._core.rm((0, util_2.pathToFilename)(path41), options?.force, options?.recursive);
+        this.rmSync = (path39, options) => {
+          this._core.rm((0, util_2.pathToFilename)(path39), options?.force, options?.recursive);
         };
-        this.rm = (path41, a, b) => {
+        this.rm = (path39, a, b) => {
           const [opts, callback] = (0, options_1.getRmOptsAndCb)(a, b);
-          this.wrapAsync(this._core.rm, [(0, util_2.pathToFilename)(path41), opts?.force, opts?.recursive], callback);
+          this.wrapAsync(this._core.rm, [(0, util_2.pathToFilename)(path39), opts?.force, opts?.recursive], callback);
         };
         this._fchmod = (fd, modeNum) => {
           this._core.fchmod(fd, modeNum);
@@ -19237,27 +19237,27 @@ var require_volume = __commonJS({
             this._core.lchmod(filename, modeNum);
           }
         };
-        this.chmodSync = (path41, mode) => {
+        this.chmodSync = (path39, mode) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this._chmod(filename, modeNum, true);
         };
-        this.chmod = (path41, mode, callback) => {
+        this.chmod = (path39, mode, callback) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._chmod, [filename, modeNum], callback);
         };
         this._lchmod = (filename, modeNum) => {
           this._core.lchmod(filename, modeNum);
         };
-        this.lchmodSync = (path41, mode) => {
+        this.lchmodSync = (path39, mode) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this._lchmod(filename, modeNum);
         };
-        this.lchmod = (path41, mode, callback) => {
+        this.lchmod = (path39, mode, callback) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path41);
+          const filename = (0, util_2.pathToFilename)(path39);
           this.wrapAsync(this._lchmod, [filename, modeNum], callback);
         };
         this._fchown = (fd, uid, gid) => {
@@ -19276,28 +19276,28 @@ var require_volume = __commonJS({
         this._chown = (filename, uid, gid) => {
           this._core.chown(filename, uid, gid);
         };
-        this.chownSync = (path41, uid, gid) => {
+        this.chownSync = (path39, uid, gid) => {
           validateUid(uid);
           validateGid(gid);
-          this._chown((0, util_2.pathToFilename)(path41), uid, gid);
+          this._chown((0, util_2.pathToFilename)(path39), uid, gid);
         };
-        this.chown = (path41, uid, gid, callback) => {
+        this.chown = (path39, uid, gid, callback) => {
           validateUid(uid);
           validateGid(gid);
-          this.wrapAsync(this._chown, [(0, util_2.pathToFilename)(path41), uid, gid], callback);
+          this.wrapAsync(this._chown, [(0, util_2.pathToFilename)(path39), uid, gid], callback);
         };
         this._lchown = (filename, uid, gid) => {
           this._core.lchown(filename, uid, gid);
         };
-        this.lchownSync = (path41, uid, gid) => {
+        this.lchownSync = (path39, uid, gid) => {
           validateUid(uid);
           validateGid(gid);
-          this._lchown((0, util_2.pathToFilename)(path41), uid, gid);
+          this._lchown((0, util_2.pathToFilename)(path39), uid, gid);
         };
-        this.lchown = (path41, uid, gid, callback) => {
+        this.lchown = (path39, uid, gid, callback) => {
           validateUid(uid);
           validateGid(gid);
-          this.wrapAsync(this._lchown, [(0, util_2.pathToFilename)(path41), uid, gid], callback);
+          this.wrapAsync(this._lchown, [(0, util_2.pathToFilename)(path39), uid, gid], callback);
         };
         this.statWatchers = {};
         this.cpSync = (src, dest, options) => {
@@ -19319,8 +19319,8 @@ var require_volume = __commonJS({
           const destFilename = (0, util_2.pathToFilename)(dest);
           (0, cp_1.cpAsync)(this, srcFilename, destFilename, opts_).then(() => callback(null, void 0), (error) => callback(error));
         };
-        this.openAsBlob = async (path41, options) => {
-          const filename = (0, util_2.pathToFilename)(path41);
+        this.openAsBlob = async (path39, options) => {
+          const filename = (0, util_2.pathToFilename)(path39);
           let link;
           try {
             link = this._core.getResolvedLinkOrThrow(filename, "open");
@@ -19350,7 +19350,7 @@ var require_volume = __commonJS({
           }).then((results) => cb(null, results), cb);
         };
         this.globSync = (pattern2, options) => (0, glob_1.globSync)(this, pattern2, options);
-        this._opendir = (filename, options, path41, errorPath) => {
+        this._opendir = (filename, options, path39, errorPath) => {
           const result = this._core.getResolvedLinkResult(filename, "opendir");
           if (!result.ok)
             throw (0, util_2.createError)(result.err.code, "opendir", errorPath);
@@ -19360,17 +19360,17 @@ var require_volume = __commonJS({
             throw (0, util_2.createError)("ENOTDIR", "opendir", errorPath);
           if (!node.canRead())
             throw (0, util_2.createError)("EACCES", "opendir", errorPath);
-          return new Dir_1.Dir(link, path41, options);
+          return new Dir_1.Dir(link, path39, options);
         };
-        this.opendirSync = (path41, options) => {
-          const filename = (0, util_2.pathToFilename)(path41);
+        this.opendirSync = (path39, options) => {
+          const filename = (0, util_2.pathToFilename)(path39);
           const opts = (0, options_1.getOpendirOptions)(options);
-          return this._opendir(filename, opts, path41 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path41) : filename, "");
+          return this._opendir(filename, opts, path39 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path39) : filename, "");
         };
-        this.opendir = (path41, a, b) => {
+        this.opendir = (path39, a, b) => {
           const [options, callback] = (0, options_1.getOpendirOptsAndCb)(a, b);
-          const filename = (0, util_2.pathToFilename)(path41);
-          const dirPath = path41 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path41) : filename;
+          const filename = (0, util_2.pathToFilename)(path39);
+          const dirPath = path39 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path39) : filename;
           this.wrapAsync(this._opendir, [filename, options, dirPath, filename], callback);
         };
         const self2 = this;
@@ -19400,12 +19400,12 @@ var require_volume = __commonJS({
           const realLink = this._core.getResolvedLinkOrThrow(filename, "realpath");
           return (0, fs_node_utils_1.strToEncoding)(realLink.getPath() || "/", encoding);
         };
-        const realpathImpl = (path41, a, b) => {
+        const realpathImpl = (path39, a, b) => {
           const [opts, callback] = (0, options_1.getRealpathOptsAndCb)(a, b);
-          const pathFilename = (0, util_2.pathToFilename)(path41);
+          const pathFilename = (0, util_2.pathToFilename)(path39);
           self2.wrapAsync(_realpath, [pathFilename, opts.encoding], callback);
         };
-        const realpathSyncImpl = (path41, options) => _realpath((0, util_2.pathToFilename)(path41), (0, options_1.getRealpathOptions)(options).encoding);
+        const realpathSyncImpl = (path39, options) => _realpath((0, util_2.pathToFilename)(path39), (0, options_1.getRealpathOptions)(options).encoding);
         this.realpath = realpathImpl;
         this.realpath.native = realpathImpl;
         this.realpathSync = realpathSyncImpl;
@@ -19480,9 +19480,9 @@ var require_volume = __commonJS({
         }
         return bytesWritten;
       }
-      lstat(path41, a, b) {
+      lstat(path39, a, b) {
         const [{ throwIfNoEntry = true, bigint = false }, callback] = (0, options_1.getStatOptsAndCb)(a, b);
-        this.wrapAsync(this._lstat, [(0, util_2.pathToFilename)(path41), bigint, throwIfNoEntry], callback);
+        this.wrapAsync(this._lstat, [(0, util_2.pathToFilename)(path39), bigint, throwIfNoEntry], callback);
       }
       _stat(filename, bigint = false, throwIfNoEntry = true) {
         const result = this._core.getResolvedLinkResult(filename, "stat");
@@ -19503,18 +19503,18 @@ var require_volume = __commonJS({
           throw result.err.toError();
         }
       }
-      statSync(path41, options) {
+      statSync(path39, options) {
         const { bigint = true, throwIfNoEntry = true } = (0, options_1.getStatOptions)(options);
-        const result = this._stat((0, util_2.pathToFilename)(path41), bigint, throwIfNoEntry);
+        const result = this._stat((0, util_2.pathToFilename)(path39), bigint, throwIfNoEntry);
         if (result.ok) {
           return result.value;
         } else {
           throw result.err.toError();
         }
       }
-      stat(path41, a, b) {
+      stat(path39, a, b) {
         const [{ bigint = false, throwIfNoEntry = true }, callback] = (0, options_1.getStatOptsAndCb)(a, b);
-        this.wrapAsync(this._statOrThrow, [(0, util_2.pathToFilename)(path41), bigint, throwIfNoEntry], callback);
+        this.wrapAsync(this._statOrThrow, [(0, util_2.pathToFilename)(path39), bigint, throwIfNoEntry], callback);
       }
       fstatBase(fd, bigint = false) {
         const file = this._core.getFileByFd(fd);
@@ -19549,8 +19549,8 @@ var require_volume = __commonJS({
           throw (0, util_2.createError)("EACCES", "access", filename);
         }
       }
-      watchFile(path41, a, b) {
-        const filename = (0, util_2.pathToFilename)(path41);
+      watchFile(path39, a, b) {
+        const filename = (0, util_2.pathToFilename)(path39);
         let options = a;
         let listener = b;
         if (typeof options === "function") {
@@ -19585,8 +19585,8 @@ var require_volume = __commonJS({
         watcher.addListener("change", listener);
         return watcher;
       }
-      unwatchFile(path41, listener) {
-        const filename = (0, util_2.pathToFilename)(path41);
+      unwatchFile(path39, listener) {
+        const filename = (0, util_2.pathToFilename)(path39);
         const watcher = this.statWatchers[filename];
         if (!watcher)
           return;
@@ -19600,14 +19600,14 @@ var require_volume = __commonJS({
           delete this.statWatchers[filename];
         }
       }
-      createReadStream(path41, options) {
-        return new this.ReadStream(path41, options);
+      createReadStream(path39, options) {
+        return new this.ReadStream(path39, options);
       }
-      createWriteStream(path41, options) {
-        return new this.WriteStream(path41, options);
+      createWriteStream(path39, options) {
+        return new this.WriteStream(path39, options);
       }
-      watch(path41, options, listener) {
-        const filename = (0, util_2.pathToFilename)(path41);
+      watch(path39, options, listener) {
+        const filename = (0, util_2.pathToFilename)(path39);
         let givenOptions = options;
         if (typeof options === "function") {
           listener = options;
@@ -19644,38 +19644,38 @@ var require_volume = __commonJS({
         this._core.getResolvedLinkOrThrow(filename, "statfs");
         return StatFs_1.default.build(this._core, bigint);
       }
-      statfsSync(path41, options) {
+      statfsSync(path39, options) {
         const { bigint = false } = (0, options_1.getStatfsOptions)(options);
-        return this._statfs((0, util_2.pathToFilename)(path41), bigint);
+        return this._statfs((0, util_2.pathToFilename)(path39), bigint);
       }
-      statfs(path41, a, b) {
+      statfs(path39, a, b) {
         const [{ bigint = false }, callback] = (0, options_1.getStatfsOptsAndCb)(a, b);
-        this.wrapAsync(this._statfs, [(0, util_2.pathToFilename)(path41), bigint], callback);
+        this.wrapAsync(this._statfs, [(0, util_2.pathToFilename)(path39), bigint], callback);
       }
       // ---------------------------------------------------------------- Tree View
       toTree(opts = { separator: path_1.sep }) {
         return (0, fs_print_1.toTreeSync)(this, opts);
       }
       // ---------------------------------------------------------------- Snapshots
-      toSnapshot(path41 = "/") {
-        return fsSnapshot.toSnapshotSync({ fs: this, path: path41 });
+      toSnapshot(path39 = "/") {
+        return fsSnapshot.toSnapshotSync({ fs: this, path: path39 });
       }
-      fromSnapshot(snapshot, path41 = "/") {
-        return fsSnapshot.fromSnapshotSync(snapshot, { fs: this, path: path41 });
+      fromSnapshot(snapshot, path39 = "/") {
+        return fsSnapshot.fromSnapshotSync(snapshot, { fs: this, path: path39 });
       }
-      toBinarySnapshot(path41 = "/") {
-        return fsSnapshot.toBinarySnapshotSync({ fs: this, path: path41 });
+      toBinarySnapshot(path39 = "/") {
+        return fsSnapshot.toBinarySnapshotSync({ fs: this, path: path39 });
       }
-      fromBinarySnapshot(binary, path41 = "/") {
-        return fsSnapshot.fromBinarySnapshotSync(binary, { fs: this, path: path41 });
+      fromBinarySnapshot(binary, path39 = "/") {
+        return fsSnapshot.fromBinarySnapshotSync(binary, { fs: this, path: path39 });
       }
-      toJsonSnapshot(path41 = "/") {
-        const uint8 = fsSnapshot.toJsonSnapshotSync({ fs: this, path: path41 });
+      toJsonSnapshot(path39 = "/") {
+        const uint8 = fsSnapshot.toJsonSnapshotSync({ fs: this, path: path39 });
         return buffer_1.Buffer.from(uint8).toString("utf8");
       }
-      fromJsonSnapshot(json2, path41 = "/") {
+      fromJsonSnapshot(json2, path39 = "/") {
         const uint8 = new Uint8Array(buffer_1.Buffer.from(json2, "utf8"));
-        return fsSnapshot.fromJsonSnapshotSync(uint8, { fs: this, path: path41 });
+        return fsSnapshot.fromJsonSnapshotSync(uint8, { fs: this, path: path39 });
       }
     };
     exports.Volume = Volume;
@@ -19685,34 +19685,34 @@ var require_volume = __commonJS({
       self2.emit("stop");
     }
     function buildZeroStats(bigint) {
-      const stats2 = new Stats_1.default();
+      const stats = new Stats_1.default();
       const zero = bigint ? BigInt(0) : 0;
       const epoch = /* @__PURE__ */ new Date(0);
-      stats2.uid = zero;
-      stats2.gid = zero;
-      stats2.rdev = zero;
-      stats2.blksize = zero;
-      stats2.ino = zero;
-      stats2.size = zero;
-      stats2.blocks = zero;
-      stats2.atime = epoch;
-      stats2.mtime = epoch;
-      stats2.ctime = epoch;
-      stats2.birthtime = epoch;
-      stats2.atimeMs = zero;
-      stats2.mtimeMs = zero;
-      stats2.ctimeMs = zero;
-      stats2.birthtimeMs = zero;
+      stats.uid = zero;
+      stats.gid = zero;
+      stats.rdev = zero;
+      stats.blksize = zero;
+      stats.ino = zero;
+      stats.size = zero;
+      stats.blocks = zero;
+      stats.atime = epoch;
+      stats.mtime = epoch;
+      stats.ctime = epoch;
+      stats.birthtime = epoch;
+      stats.atimeMs = zero;
+      stats.mtimeMs = zero;
+      stats.ctimeMs = zero;
+      stats.birthtimeMs = zero;
       if (bigint) {
-        stats2.atimeNs = zero;
-        stats2.mtimeNs = zero;
-        stats2.ctimeNs = zero;
-        stats2.birthtimeNs = zero;
+        stats.atimeNs = zero;
+        stats.mtimeNs = zero;
+        stats.ctimeNs = zero;
+        stats.birthtimeNs = zero;
       }
-      stats2.dev = zero;
-      stats2.mode = zero;
-      stats2.nlink = zero;
-      return stats2;
+      stats.dev = zero;
+      stats.mode = zero;
+      stats.nlink = zero;
+      return stats;
     }
     var StatWatcher = class extends events_1.EventEmitter {
       constructor(vol2) {
@@ -19723,17 +19723,17 @@ var require_volume = __commonJS({
         this.onInterval = () => {
           if (this.stopped)
             return;
-          const stats2 = this.statSafe();
-          if (stats2) {
+          const stats = this.statSafe();
+          if (stats) {
             if (!this.fileExists) {
               this.fileExists = true;
               const prev = this.prev;
-              this.prev = stats2;
-              this.emit("change", stats2, prev);
-            } else if (this.hasChanged(stats2)) {
+              this.prev = stats;
+              this.emit("change", stats, prev);
+            } else if (this.hasChanged(stats)) {
               const prev = this.prev;
-              this.prev = stats2;
-              this.emit("change", stats2, prev);
+              this.prev = stats;
+              this.emit("change", stats, prev);
             }
           } else if (this.fileExists) {
             this.fileExists = false;
@@ -19747,9 +19747,9 @@ var require_volume = __commonJS({
         clearTimeout(this.timeoutRef);
         this.timeoutRef = this.setTimeout(this.onInterval, this.interval);
       }
-      hasChanged(stats2) {
+      hasChanged(stats) {
         const prev = this.prev;
-        return stats2.mtimeMs !== prev.mtimeMs || stats2.ctimeMs !== prev.ctimeMs || stats2.size !== prev.size || stats2.ino !== prev.ino || stats2.mode !== prev.mode || stats2.uid !== prev.uid || stats2.gid !== prev.gid || stats2.nlink !== prev.nlink;
+        return stats.mtimeMs !== prev.mtimeMs || stats.ctimeMs !== prev.ctimeMs || stats.size !== prev.size || stats.ino !== prev.ino || stats.mode !== prev.mode || stats.uid !== prev.uid || stats.gid !== prev.gid || stats.nlink !== prev.nlink;
       }
       statSafe() {
         try {
@@ -19758,14 +19758,14 @@ var require_volume = __commonJS({
           return null;
         }
       }
-      start(path41, persistent = true, interval = 5007, bigint = false) {
-        this.filename = (0, util_2.pathToFilename)(path41);
+      start(path39, persistent = true, interval = 5007, bigint = false) {
+        this.filename = (0, util_2.pathToFilename)(path39);
         this.setTimeout = persistent ? setTimeout.bind(typeof globalThis !== "undefined" ? globalThis : globalThis) : setTimeoutUnref_1.default;
         this.interval = interval;
         this.bigint = bigint;
-        const stats2 = this.statSafe();
-        if (stats2) {
-          this.prev = stats2;
+        const stats = this.statSafe();
+        if (stats) {
+          this.prev = stats;
           this.fileExists = true;
         } else {
           this.prev = buildZeroStats(bigint);
@@ -19812,15 +19812,15 @@ var require_volume = __commonJS({
     }
     (0, util_1.inherits)(FsReadStream, stream_1.Readable);
     exports.ReadStream = FsReadStream;
-    function FsReadStream(vol2, path41, options) {
+    function FsReadStream(vol2, path39, options) {
       if (!(this instanceof FsReadStream))
-        return new FsReadStream(vol2, path41, options);
+        return new FsReadStream(vol2, path39, options);
       this._vol = vol2;
       options = Object.assign({}, (0, options_1.getOptions)(options, {}));
       if (options.highWaterMark === void 0)
         options.highWaterMark = 64 * 1024;
       stream_1.Readable.call(this, options);
-      this.path = (0, util_2.pathToFilename)(path41);
+      this.path = (0, util_2.pathToFilename)(path39);
       this._fileHandle = options.fd && typeof options.fd !== "number" ? options.fd : null;
       this.fd = options.fd === void 0 ? null : typeof options.fd !== "number" ? options.fd.fd : options.fd;
       this.flags = options.flags === void 0 ? "r" : options.flags;
@@ -19945,13 +19945,13 @@ var require_volume = __commonJS({
     }
     (0, util_1.inherits)(FsWriteStream, stream_1.Writable);
     exports.WriteStream = FsWriteStream;
-    function FsWriteStream(vol2, path41, options) {
+    function FsWriteStream(vol2, path39, options) {
       if (!(this instanceof FsWriteStream))
-        return new FsWriteStream(vol2, path41, options);
+        return new FsWriteStream(vol2, path39, options);
       this._vol = vol2;
       options = Object.assign({}, (0, options_1.getOptions)(options, {}));
       stream_1.Writable.call(this, options);
-      this.path = (0, util_2.pathToFilename)(path41);
+      this.path = (0, util_2.pathToFilename)(path39);
       this._fileHandle = options.fd && typeof options.fd !== "number" ? options.fd : null;
       this.fd = options.fd === void 0 ? null : typeof options.fd !== "number" ? options.fd.fd : options.fd;
       this.flags = options.flags === void 0 ? "w" : options.flags;
@@ -20128,8 +20128,8 @@ var require_volume = __commonJS({
         this._timer = void 0;
         return this;
       }
-      start(path41, persistent = true, recursive = false, encoding = fs_node_utils_1.ENCODING_UTF8, ignore) {
-        this._filename = (0, util_2.pathToFilename)(path41);
+      start(path39, persistent = true, recursive = false, encoding = fs_node_utils_1.ENCODING_UTF8, ignore) {
+        this._filename = (0, util_2.pathToFilename)(path39);
         this._steps = (0, fs_core_1.filenameToSteps)(this._filename);
         this._filenameEncoded = (0, fs_node_utils_1.strToEncoding)(this._filename);
         this._recursive = recursive;
@@ -32546,21 +32546,21 @@ function spanFreeLines(segments, covered) {
     segment.text.split("\n").forEach((part, at) => {
       if (at > 0)
         lines2.push([]);
-      const runs2 = lines2.at(-1);
-      runs2.push({ end: (runs2.at(-1)?.end ?? 0) + cellLen(part), free: !covered[piece] });
+      const runs = lines2.at(-1);
+      runs.push({ end: (runs.at(-1)?.end ?? 0) + cellLen(part), free: !covered[piece] });
     });
   });
-  return lines2.map((runs2) => (cell3) => {
+  return lines2.map((runs) => (cell3) => {
     let lo = 0;
-    let hi = runs2.length;
+    let hi = runs.length;
     while (lo < hi) {
       const mid = lo + hi >> 1;
-      if (runs2[mid].end <= cell3)
+      if (runs[mid].end <= cell3)
         lo = mid + 1;
       else
         hi = mid;
     }
-    return runs2[lo].free;
+    return runs[lo].free;
   });
 }
 function* padded(drawn, free, left, right, style) {
@@ -32647,13 +32647,13 @@ var pickGlyph = (cell3, part, index, at) => {
   return glyphs[Math.floor(parseInt(fnv1a(`${part}:${index}:${at}`), 16) / 2 ** 32 * glyphs.length)];
 };
 var cellWidth = (cell3) => cellLen(glyphsOf(cell3)[0] ?? "");
-function parsePaint(raw, absent, refuse3) {
+function parsePaint(raw, absent, refuse4) {
   if (raw === "ground")
-    return refuse3("mixes ground, whose colour is unknown");
+    return refuse4("mixes ground, whose colour is unknown");
   const p2 = typeof raw === "object" && raw !== null ? raw : {};
   if ((p2.edge === "left" || p2.edge === "right") && (p2.part === "bg" || p2.part === "fg")) {
     if (p2.edge === absent)
-      refuse3(`names the ${absent} neighbour, which this part is drawn without`);
+      refuse4(`names the ${absent} neighbour, which this part is drawn without`);
     return Object.freeze({ edge: p2.edge, part: p2.part });
   }
   if (typeof p2.role === "string")
@@ -32661,33 +32661,33 @@ function parsePaint(raw, absent, refuse3) {
   if (Array.isArray(p2.mix) && p2.mix.length === 3) {
     const [from, to, t2] = p2.mix;
     if (typeof t2 !== "number" || !(t2 >= 0 && t2 <= 1))
-      refuse3(`mixes at ${String(t2)}, outside 0..1`);
-    return Object.freeze({ mix: Object.freeze([parsePaint(from, absent, refuse3), parsePaint(to, absent, refuse3), t2]) });
+      refuse4(`mixes at ${String(t2)}, outside 0..1`);
+    return Object.freeze({ mix: Object.freeze([parsePaint(from, absent, refuse4), parsePaint(to, absent, refuse4), t2]) });
   }
-  return refuse3(`has a colour that is not a Paint: ${JSON.stringify(raw)}`);
+  return refuse4(`has a colour that is not a Paint: ${JSON.stringify(raw)}`);
 }
-var parseColor = (raw, absent, refuse3) => raw === "ground" ? raw : parsePaint(raw, absent, refuse3);
+var parseColor = (raw, absent, refuse4) => raw === "ground" ? raw : parsePaint(raw, absent, refuse4);
 var ABSENT = { seam: void 0, lead: "left", tail: "right" };
 var AUTHORED_IN = { seam: "seam", lead: "caps", tail: "caps" };
-function parseCell(cell3, form, part, refuse3) {
+function parseCell(cell3, form, part, refuse4) {
   const glyph = cell3.glyph;
   const oneOf = typeof glyph === "object" && glyph !== null ? glyph.oneOf : void 0;
   if (typeof glyph !== "string" && !(Array.isArray(oneOf) && oneOf.every((g) => typeof g === "string"))) {
-    refuse3(`has a glyph that is neither a string nor a oneOf of strings: ${JSON.stringify(glyph)}`);
+    refuse4(`has a glyph that is neither a string nor a oneOf of strings: ${JSON.stringify(glyph)}`);
   }
   if (cell3.fg === "ground" && cell3.bg === "ground")
-    refuse3("has ground on both sides");
+    refuse4("has ground on both sides");
   const glyphs = glyphsOf(cell3);
   if (glyphs.length === 0)
-    refuse3("has an empty oneOf");
+    refuse4("has an empty oneOf");
   if (glyphs.some((glyph2) => cellLen(glyph2) !== cellWidth(cell3)))
-    refuse3("has oneOf members of different widths");
+    refuse4("has oneOf members of different widths");
   if (form === "ascii" && !glyphs.every(isAscii))
-    refuse3("is not ASCII");
+    refuse4("is not ASCII");
   return Object.freeze({
     glyph: typeof cell3.glyph === "string" ? cell3.glyph : Object.freeze({ oneOf: Object.freeze([...glyphs]) }),
-    fg: parseColor(cell3.fg, ABSENT[part], refuse3),
-    bg: parseColor(cell3.bg, ABSENT[part], refuse3)
+    fg: parseColor(cell3.fg, ABSENT[part], refuse4),
+    bg: parseColor(cell3.bg, ABSENT[part], refuse4)
   });
 }
 function parseCells(raw, form, part, parseOne) {
@@ -32699,20 +32699,20 @@ function parseCells(raw, form, part, parseOne) {
   if (!Array.isArray(cells))
     throw new Error(`${where}: ${form} ${part} is not a list of cells`);
   return Object.freeze(cells.map((cell3, i) => {
-    const refuse3 = (why2) => {
+    const refuse4 = (why2) => {
       throw new Error(`${where}: ${form} ${part}[${i}] ${why2}`);
     };
-    return typeof cell3 === "object" && cell3 !== null ? parseOne(cell3, refuse3) : refuse3("is not a cell");
+    return typeof cell3 === "object" && cell3 !== null ? parseOne(cell3, refuse4) : refuse4("is not a cell");
   }));
 }
-var asCell = (form, part) => (cell3, refuse3) => parseCell(cell3, form, part, refuse3);
-var asSeamCell = (form, part) => (cell3, refuse3) => {
+var asCell = (form, part) => (cell3, refuse4) => parseCell(cell3, form, part, refuse4);
+var asSeamCell = (form, part) => (cell3, refuse4) => {
   if (!("cap" in cell3))
-    return parseCell(cell3, form, part, refuse3);
+    return parseCell(cell3, form, part, refuse4);
   const { cap } = cell3;
   if (Object.keys(cell3).length !== 1)
-    refuse3("names a cap and draws cells of its own; a cell is one or the other");
-  return cap === "lead" || cap === "tail" ? Object.freeze({ cap }) : refuse3(`names a cap that is neither lead nor tail: ${JSON.stringify(cap)}`);
+    refuse4("names a cap and draws cells of its own; a cell is one or the other");
+  return cap === "lead" || cap === "tail" ? Object.freeze({ cap }) : refuse4(`names a cap that is neither lead nor tail: ${JSON.stringify(cap)}`);
 };
 function parseSeam(raw) {
   const parseForm = (form) => Object.freeze({ seam: parseCells(raw, form, "seam", asSeamCell(form, "seam")) });
@@ -33128,15 +33128,15 @@ var AnsiDecoder = class {
           break;
       }
     }
-    const runs2 = [];
+    const runs = [];
     for (const [char, style] of cells) {
-      const last2 = runs2.at(-1);
+      const last2 = runs.at(-1);
       if (last2?.[1].equals(style))
         last2[0] += char;
       else
-        runs2.push([char, style]);
+        runs.push([char, style]);
     }
-    return RichText.assemble(runs2);
+    return RichText.assemble(runs);
   }
 };
 
@@ -33204,26 +33204,26 @@ var Recolored = class {
   /** `segment`'s cells drawn in the looks the effect painted them. */
   *_repainted(segment, look, glyphs, moved, depth) {
     const { style: base, wire, slots, pair, attributes } = look;
-    const runs2 = [];
+    const runs = [];
     for (const [k, { glyph }] of glyphs.entries()) {
       const now2 = moved[k];
       const colors = onScreen(now2, pair.reverse);
-      const last2 = runs2[runs2.length - 1];
+      const last2 = runs[runs.length - 1];
       const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
       if (last2 !== void 0 && writesAlike(last2.drawn, writes) && sameAttributes(last2.attributes, now2.attributes)) {
         last2.text += glyph;
         last2.cells += cellLen(glyph);
         last2.colors = colors;
       } else {
-        runs2.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes });
+        runs.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes });
       }
     }
-    if (runs2.every((run3) => writesAlike(run3.drawn, wire) && sameAttributes(run3.attributes, attributes))) {
+    if (runs.every((run3) => writesAlike(run3.drawn, wire) && sameAttributes(run3.attributes, attributes))) {
       yield segment;
       return;
     }
     let offset = 0;
-    for (const run3 of runs2) {
+    for (const run3 of runs) {
       const placed = base.shiftedBy(offset);
       const shifted = sameAttributes(run3.attributes, attributes) ? placed : placed.withAttributes(cellAttributes(run3.attributes));
       const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
@@ -34918,24 +34918,20 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.170.0";
+var PACKAGE_VERSION = "1.170.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
   const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
   return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
 }
-function bakedStamp() {
-  const digest2 = bakedDigest();
+function bundleStamp(digest2) {
   if (digest2 === null) {
     throw new Error(
       "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
     );
   }
   return { version: PACKAGE_VERSION, digest: digest2 };
-}
-function bakedDigest() {
-  return true ? null : void 0;
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
@@ -34987,536 +34983,6 @@ var text2 = refuse("stream/consumers.text");
 var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
 var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text: text2, writeHeapSnapshot, getHeapStatistics };
-
-// src/proc/launch.ts
-init_globals();
-
-// site/shims/child_process.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-var import_events2 = __toESM(require_events(), 1);
-var RESIDENT = "resident";
-var programs = /* @__PURE__ */ new Map();
-var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
-var Stream = class extends import_events2.EventEmitter {
-  encoding = null;
-  setEncoding(encoding) {
-    this.encoding = encoding;
-    return this;
-  }
-  chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
-  }
-  pipe() {
-    return this;
-  }
-  destroy() {
-  }
-  end() {
-  }
-  write() {
-    return true;
-  }
-  resume() {
-    return this;
-  }
-  unref() {
-    return this;
-  }
-};
-var nextPid = 5e3;
-function spawn(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  const child = Object.assign(new import_events2.EventEmitter(), {
-    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 ? void 0 : nextPid++,
-    stdout: new Stream(),
-    stderr: new Stream(),
-    stdin: new Stream(),
-    exitCode: null,
-    signalCode: null,
-    killed: false,
-    kill: () => true,
-    unref: () => {
-    },
-    ref: () => {
-    }
-  });
-  setTimeout(() => {
-    if (program === void 0) {
-      child.emit("error", enoent(cmd));
-      return;
-    }
-    const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
-    if (run3.stdout) child.stdout.chunk(run3.stdout);
-    if (run3.stderr) child.stderr.chunk(run3.stderr);
-    child.exitCode = run3.code;
-    child.stdout.emit("end");
-    child.stderr.emit("end");
-    child.emit("exit", run3.code, null);
-    child.emit("close", run3.code, null);
-  }, 0);
-  return child;
-}
-function spawnSync(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
-}
-
-// site/shims/util.ts
-init_globals();
-var import_parseargs = __toESM(require_parseargs(), 1);
-var types = { isNativeError: (e) => e instanceof Error };
-var inspect = (v) => {
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-};
-
-// src/proc/launch.ts
-function spawnErrorText(err, cwd2) {
-  if (!types.isNativeError(err)) return String(err);
-  const code = err.code;
-  return code === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
-}
-var RATE_LIMITS = {
-  // Click verbs: a misbehaving template emitting many clickable links + a
-  // user rapid-clicking = unbounded helpers. One spawn per second is enough
-  // for any human click cadence.
-  "click.pbcopy": 1e3,
-  "click.open": 1e3,
-  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
-  "doctor.tmux": 1e3,
-  "doctor.font": 1e3,
-  "doctor.process": 1e3,
-  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
-  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
-  // `ps` over this user's processes.
-  // A double-click is refused rather than typing and submitting its command
-  // twice. Daemon-wide, so two sessions typing in one second collide. Only
-  // the typing is limited: a click the pane refused typed
-  // nothing, so clicking again once the dialog is closed goes through.
-  "claude-input.type": 1e3
-};
-var lastStartAt = /* @__PURE__ */ new Map();
-function checkRateLimit(category) {
-  const minIntervalMs = RATE_LIMITS[category];
-  if (minIntervalMs === void 0) return { allowed: true };
-  const last2 = lastStartAt.get(category);
-  if (last2 === void 0) return { allowed: true };
-  const sinceLastMs = Date.now() - last2;
-  if (sinceLastMs >= minIntervalMs) return { allowed: true };
-  return { allowed: false, minIntervalMs, sinceLastMs };
-}
-function recordStart(category) {
-  lastStartAt.set(category, Date.now());
-}
-function childEnv(opts) {
-  return opts.env ?? process_default.env;
-}
-function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
-  return {
-    ok: false,
-    reason: "rate-limited",
-    stdout: "",
-    stderr: "",
-    exitCode: null,
-    signal: null,
-    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
-  };
-}
-var statsHandle = null;
-function setLaunchStats(handle) {
-  statsHandle = handle;
-}
-var TIMEOUT_KILL_GRACE_MS = 250;
-var lifelineObserver = () => lifelineWarnings().forEach((w) => process_default.emitWarning(w.message));
-function setLifelineObserver(observe) {
-  lifelineObserver = observe;
-}
-var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
-var liveGroups = /* @__PURE__ */ new Set();
-var lifeline = null;
-var fault = null;
-function setFault(next2) {
-  if (next2 === fault) return;
-  fault = next2;
-  lifelineObserver(next2);
-}
-function lose(line, reason) {
-  if (lifeline?.process !== line) return;
-  lifeline = null;
-  setFault(reason);
-}
-function lifelineWarnings() {
-  return fault === null ? [] : [
-    {
-      kind: "lifeline",
-      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`
-    }
-  ];
-}
-function spawnLifeline() {
-  statsHandle?.onStart("lifeline");
-  const t0 = Date.now();
-  let line;
-  try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
-      stdio: ["pipe", "ignore", "ignore"],
-      detached: true
-    });
-  } catch (err) {
-    statsHandle?.onEnd("lifeline", Date.now() - t0);
-    setFault(`did not start: ${spawnErrorText(err, void 0)}`);
-    return null;
-  }
-  statsHandle?.onEnd("lifeline", Date.now() - t0);
-  const pipe = line.stdin;
-  line.once("spawn", () => {
-    if (lifeline?.process === line) setFault(null);
-  });
-  line.once("error", (err) => lose(line, `failed: ${err.message}`));
-  line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
-  line.unref();
-  pipe.unref();
-  for (const group of liveGroups) pipe.write(`+ ${group}
-`);
-  return { process: line, pipe };
-}
-function guard(group) {
-  liveGroups.add(group);
-  lifeline ??= spawnLifeline();
-  lifeline?.pipe.write(`+ ${group}
-`);
-}
-function unguard(group) {
-  liveGroups.delete(group);
-  lifeline?.pipe.write(`- ${group}
-`);
-}
-function signalGroup(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-  } catch (err) {
-    if (err.code !== "ESRCH") throw err;
-  }
-}
-async function launch(opts) {
-  if (opts.signal?.aborted) {
-    return {
-      ok: false,
-      reason: "aborted",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null
-    };
-  }
-  const gate2 = checkRateLimit(opts.category);
-  if (!gate2.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate2.minIntervalMs,
-      gate2.sinceLastMs
-    );
-  }
-  recordStart(opts.category);
-  const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(opts.bin, opts.args ?? [], {
-        cwd: opts.cwd,
-        env: childEnv(opts),
-        stdio: ["pipe", "pipe", "pipe"],
-        detached: true
-      });
-    } catch (err) {
-      statsHandle?.onEnd(opts.category, Date.now() - t0);
-      resolve({
-        ok: false,
-        reason: "spawn-error",
-        stdout: "",
-        stderr: "",
-        exitCode: null,
-        signal: null,
-        error: spawnErrorText(err, opts.cwd)
-      });
-      return;
-    }
-    const group = child.pid;
-    if (group !== void 0) guard(group);
-    let stdout2 = "";
-    let stderr2 = "";
-    let settled3 = false;
-    let timer = null;
-    let killTimer = null;
-    let terminated = null;
-    const onAbort = () => terminate("aborted");
-    const finish = (deliver) => {
-      if (settled3) return;
-      settled3 = true;
-      if (timer) clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      opts.signal?.removeEventListener("abort", onAbort);
-      if (group !== void 0) unguard(group);
-      statsHandle?.onEnd(opts.category, Date.now() - t0);
-      deliver();
-    };
-    const settle3 = (r) => finish(() => resolve(r));
-    const signal = (pid2, sig) => {
-      try {
-        signalGroup(pid2, sig);
-      } catch (err) {
-        settle3({
-          ok: false,
-          reason: "signal-refused",
-          stdout: stdout2,
-          stderr: stderr2,
-          exitCode: null,
-          signal: null,
-          error: err instanceof Error ? err.message : String(err)
-        });
-      }
-    };
-    const terminate = (cause) => {
-      terminated = cause;
-      if (timer) clearTimeout(timer);
-      opts.signal?.removeEventListener("abort", onAbort);
-      const pid2 = child.pid;
-      if (pid2 !== void 0) {
-        killTimer = setTimeout(
-          () => signal(pid2, "SIGKILL"),
-          TIMEOUT_KILL_GRACE_MS
-        );
-        signal(pid2, "SIGTERM");
-      }
-    };
-    child.stdout?.on("data", (chunk3) => {
-      stdout2 += chunk3.toString("utf8");
-    });
-    child.stderr?.on("data", (chunk3) => {
-      stderr2 += chunk3.toString("utf8");
-    });
-    child.on("error", (err) => {
-      settle3({
-        ok: false,
-        reason: "spawn-error",
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: null,
-        signal: null,
-        error: spawnErrorText(err, opts.cwd)
-      });
-    });
-    child.on("close", (code, signal2) => {
-      if (terminated !== null) {
-        settle3({
-          ok: false,
-          reason: terminated,
-          stdout: stdout2,
-          stderr: stderr2,
-          exitCode: code,
-          signal: signal2
-        });
-        return;
-      }
-      if (code === 0) {
-        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
-        return;
-      }
-      const reason = signal2 ? "signal" : "non-zero";
-      settle3({
-        ok: false,
-        reason,
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: code,
-        signal: signal2
-      });
-    });
-    if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
-    }
-    opts.signal?.addEventListener("abort", onAbort, { once: true });
-    if (opts.stdinInput !== void 0 && child.stdin) {
-      child.stdin.end(opts.stdinInput);
-    } else if (child.stdin) {
-      child.stdin.end();
-    }
-  });
-}
-function launchSync(opts) {
-  const gate2 = checkRateLimit(opts.category);
-  if (!gate2.allowed) {
-    return rateLimitedResult(
-      opts.category,
-      gate2.minIntervalMs,
-      gate2.sinceLastMs
-    );
-  }
-  recordStart(opts.category);
-  const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
-  const stdio = ["pipe", "pipe", "pipe"];
-  try {
-    const result = spawnSync(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
-      env: childEnv(opts),
-      input: opts.stdinInput,
-      timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
-      stdio,
-      encoding: "utf8"
-    });
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
-    const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
-    const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
-    if (result.error) {
-      const code = result.error.code;
-      const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
-      return {
-        ok: false,
-        reason: reason2,
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: null,
-        signal: result.signal ?? null,
-        error: spawnErrorText(result.error, opts.cwd)
-      };
-    }
-    if (result.status === 0) {
-      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
-    }
-    const hasTimeout = opts.timeoutMs !== void 0 && opts.timeoutMs > 0;
-    const reason = result.signal ? hasTimeout && result.signal === "SIGTERM" ? "timeout" : "signal" : "non-zero";
-    return {
-      ok: false,
-      reason,
-      stdout: stdout2,
-      stderr: stderr2,
-      exitCode: result.status,
-      signal: result.signal ?? null
-    };
-  } catch (err) {
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
-    return {
-      ok: false,
-      reason: "spawn-error",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null,
-      error: spawnErrorText(err, opts.cwd)
-    };
-  }
-}
-var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
-var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
-function launchJobSync(opts, files) {
-  recordStart(opts.category);
-  const t0 = Date.now();
-  statsHandle?.onStart(opts.category);
-  let child;
-  try {
-    child = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        JOB_SCRIPT,
-        "sh",
-        files.stdout,
-        files.stderr,
-        files.status,
-        opts.bin,
-        ...opts.args ?? []
-      ],
-      {
-        cwd: opts.cwd,
-        env: childEnv(opts),
-        detached: true,
-        stdio: ["pipe", "ignore", "ignore"]
-      }
-    );
-  } catch (err) {
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
-    return { ok: false, error: spawnErrorText(err, opts.cwd) };
-  }
-  statsHandle?.onEnd(opts.category, Date.now() - t0);
-  child.once("error", () => {
-  });
-  const pid2 = child.pid;
-  const gate2 = child.stdin;
-  gate2.on("error", () => {
-  });
-  if (pid2 === void 0) {
-    gate2.destroy();
-    return {
-      ok: false,
-      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
-    };
-  }
-  child.unref();
-  gate2.unref();
-  return {
-    ok: true,
-    pid: pid2,
-    release: () => gate2.end("go\n"),
-    withdraw: () => gate2.end()
-  };
-}
-function readJobEnd(status) {
-  let text4;
-  try {
-    text4 = readFileSync(status, "utf8").trim();
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-  const exit2 = /^exit (\d+)$/.exec(text4);
-  if (exit2) return { kind: "exit", code: Number(exit2[1]) };
-  if (text4 === "timeout") return { kind: "timeout" };
-  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
-}
-function jobGroupAlive(pid2) {
-  try {
-    process_default.kill(-pid2, 0);
-    return true;
-  } catch (err) {
-    const code = err.code;
-    if (code === "ESRCH" || code === "EPERM") return false;
-    throw err;
-  }
-}
-function endJob(pid2, status, end) {
-  const staged = `${status}.${process_default.pid}`;
-  try {
-    writeFileSync(staged, `${formatJobEnd(end)}
-`);
-  } catch (err) {
-    if (err.code === "ENOENT") return false;
-    throw err;
-  }
-  let stands = true;
-  try {
-    linkSync(staged, status);
-  } catch (err) {
-    if (err.code !== "EEXIST") throw err;
-    stands = false;
-  } finally {
-    rmSync(staged, { force: true });
-  }
-  signalGroup(pid2, "SIGTERM");
-  setTimeout(() => signalGroup(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return stands;
-}
 
 // src/utils/atomic-write.ts
 init_globals();
@@ -35609,11 +35075,8 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath() {
-  return leasePathFor(socketPath());
+function watchProbeDir() {
+  return import_node_path5.default.join(stateDir(), "watch-probe");
 }
 function logPath(env2 = process_default.env) {
   return import_node_path5.default.join(stateDir(env2), "daemon.log");
@@ -35738,8 +35201,8 @@ var MAX_FRAME_BYTES = 16 * 1024 * 1024;
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
   const { kind, bundle, source } = v;
-  const path41 = sanitizeAbsolutePath(bundle);
-  return CLIENT_KINDS.includes(kind) && path41 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path41, source } : void 0;
+  const path39 = sanitizeAbsolutePath(bundle);
+  return CLIENT_KINDS.includes(kind) && path39 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path39, source } : void 0;
 }
 
 // src/daemon/client-transport.ts
@@ -35812,6 +35275,625 @@ function renderOutcomeOf(resp) {
 init_globals();
 var import_node_path9 = __toESM(require_path_browserify(), 1);
 
+// src/proc/launch.ts
+init_globals();
+
+// site/shims/child_process.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
+var programs = /* @__PURE__ */ new Map();
+var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
+var Stream = class extends import_events2.EventEmitter {
+  encoding = null;
+  setEncoding(encoding) {
+    this.encoding = encoding;
+    return this;
+  }
+  chunk(text4) {
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
+  }
+  pipe() {
+    return this;
+  }
+  destroy() {
+  }
+  end() {
+  }
+  write() {
+    return true;
+  }
+  resume() {
+    return this;
+  }
+  unref() {
+    return this;
+  }
+};
+var nextPid = 5e3;
+function spawn(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  const child = Object.assign(new import_events2.EventEmitter(), {
+    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
+    pid: program === void 0 ? void 0 : nextPid++,
+    stdout: new Stream(),
+    stderr: new Stream(),
+    stdin: new Stream(),
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    kill: () => true,
+    unref: () => {
+    },
+    ref: () => {
+    }
+  });
+  setTimeout(() => {
+    if (program === void 0) {
+      child.emit("error", enoent(cmd));
+      return;
+    }
+    const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
+    if (run3.stdout) child.stdout.chunk(run3.stdout);
+    if (run3.stderr) child.stderr.chunk(run3.stderr);
+    child.exitCode = run3.code;
+    child.stdout.emit("end");
+    child.stderr.emit("end");
+    child.emit("exit", run3.code, null);
+    child.emit("close", run3.code, null);
+  }, 0);
+  return child;
+}
+function spawnSync(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
+  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
+}
+
+// site/shims/util.ts
+init_globals();
+var import_parseargs = __toESM(require_parseargs(), 1);
+var types = { isNativeError: (e) => e instanceof Error };
+var inspect = (v) => {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+};
+
+// src/proc/launch.ts
+function spawnErrorText(err, cwd2) {
+  if (!types.isNativeError(err)) return String(err);
+  const code = err.code;
+  return code === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
+}
+var RATE_LIMITS = {
+  // Click verbs: a misbehaving template emitting many clickable links + a
+  // user rapid-clicking = unbounded helpers. One spawn per second is enough
+  // for any human click cadence.
+  "click.pbcopy": 1e3,
+  "click.open": 1e3,
+  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
+  "doctor.tmux": 1e3,
+  "doctor.font": 1e3,
+  "doctor.process": 1e3,
+  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
+  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
+  // `ps` over this user's processes.
+  // A double-click is refused rather than typing and submitting its command
+  // twice. Daemon-wide, so two sessions typing in one second collide. Only
+  // the typing is limited: a click the pane refused typed
+  // nothing, so clicking again once the dialog is closed goes through.
+  "claude-input.type": 1e3
+};
+function checkRateLimit(lastStartAt, category) {
+  const minIntervalMs = RATE_LIMITS[category];
+  if (minIntervalMs === void 0) return { allowed: true };
+  const last2 = lastStartAt.get(category);
+  if (last2 === void 0) return { allowed: true };
+  const sinceLastMs = Date.now() - last2;
+  if (sinceLastMs >= minIntervalMs) return { allowed: true };
+  return { allowed: false, minIntervalMs, sinceLastMs };
+}
+function childEnv(opts) {
+  return opts.env ?? process_default.env;
+}
+var refusedAsAborted = ({ reason }) => ({
+  ok: false,
+  reason: "aborted",
+  stdout: "",
+  stderr: "",
+  exitCode: null,
+  signal: null,
+  error: reason instanceof Error ? reason.message : String(reason)
+});
+function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
+  return {
+    ok: false,
+    reason: "rate-limited",
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    signal: null,
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
+  };
+}
+function admit(state, category, signal) {
+  const refusal = refusalOf(state, category, signal);
+  if (refusal !== null) {
+    state.scope.stats?.onRefused(category);
+    return refusal;
+  }
+  state.lastStartAt.set(category, Date.now());
+  return null;
+}
+function refusalOf(state, category, signal) {
+  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
+  if (signal?.aborted) return refusedAsAborted(signal);
+  const gate2 = checkRateLimit(state.lastStartAt, category);
+  return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
+}
+var TIMEOUT_KILL_GRACE_MS = 250;
+var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
+function setFault(state, next2) {
+  if (next2 === state.fault) return;
+  state.fault = next2;
+  state.scope.observeLifeline(next2);
+}
+function lose(state, line, reason) {
+  if (state.lifeline?.process !== line) return;
+  state.lifeline = null;
+  setFault(state, reason);
+}
+function lifelineWarnings(state) {
+  return state.fault === null ? [] : [
+    {
+      kind: "lifeline",
+      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`
+    }
+  ];
+}
+function spawnLifeline(state) {
+  const { stats } = state.scope;
+  stats?.onStart("lifeline");
+  const t0 = Date.now();
+  let line;
+  try {
+    line = spawn("awk", [LIFELINE_PROGRAM], {
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true
+    });
+  } catch (err) {
+    stats?.onEnd("lifeline", Date.now() - t0);
+    setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
+    return null;
+  }
+  stats?.onEnd("lifeline", Date.now() - t0);
+  const pipe = line.stdin;
+  line.once("spawn", () => {
+    if (state.lifeline?.process === line) setFault(state, null);
+  });
+  line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  line.unref();
+  pipe.unref();
+  for (const group of state.liveGroups) pipe.write(`+ ${group}
+`);
+  return { process: line, pipe };
+}
+function guard(state, group) {
+  state.liveGroups.add(group);
+  state.lifeline ??= spawnLifeline(state);
+  state.lifeline?.pipe.write(`+ ${group}
+`);
+}
+function unguard(state, group) {
+  state.liveGroups.delete(group);
+  state.lifeline?.pipe.write(`- ${group}
+`);
+}
+function endLifeline(state) {
+  const line = state.lifeline;
+  state.lifeline = null;
+  line?.pipe.end();
+}
+function signalGroup(pid2, sig) {
+  try {
+    process_default.kill(-pid2, sig);
+  } catch (err) {
+    if (err.code !== "ESRCH") throw err;
+  }
+}
+async function launchWaited(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category, opts.signal);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(opts.bin, opts.args ?? [], {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        stdio: ["pipe", "pipe", "pipe"],
+        detached: true
+      });
+    } catch (err) {
+      stats?.onEnd(opts.category, Date.now() - t0);
+      resolve({
+        ok: false,
+        reason: "spawn-error",
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        signal: null,
+        error: spawnErrorText(err, opts.cwd)
+      });
+      return;
+    }
+    const group = child.pid;
+    if (group !== void 0) guard(state, group);
+    let stdout2 = "";
+    let stderr2 = "";
+    let settled3 = false;
+    let timer = null;
+    let killTimer = null;
+    let terminated = null;
+    const onAbort = () => terminate("aborted");
+    const unlisten = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      state.inFlight.delete(onAbort);
+    };
+    const finish = (deliver) => {
+      if (settled3) return;
+      settled3 = true;
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      unlisten();
+      if (group !== void 0) unguard(state, group);
+      stats?.onEnd(opts.category, Date.now() - t0);
+      deliver();
+    };
+    const settle3 = (r) => finish(() => resolve(r));
+    const signal = (pid2, sig) => {
+      try {
+        signalGroup(pid2, sig);
+      } catch (err) {
+        settle3({
+          ok: false,
+          reason: "signal-refused",
+          stdout: stdout2,
+          stderr: stderr2,
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    };
+    const terminate = (cause) => {
+      terminated = cause;
+      if (timer) clearTimeout(timer);
+      unlisten();
+      const pid2 = child.pid;
+      if (pid2 !== void 0) {
+        killTimer = setTimeout(
+          () => signal(pid2, "SIGKILL"),
+          TIMEOUT_KILL_GRACE_MS
+        );
+        signal(pid2, "SIGTERM");
+      }
+    };
+    child.stdout?.on("data", (chunk3) => {
+      stdout2 += chunk3.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk3) => {
+      stderr2 += chunk3.toString("utf8");
+    });
+    child.on("error", (err) => {
+      settle3({
+        ok: false,
+        reason: "spawn-error",
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: null,
+        signal: null,
+        error: spawnErrorText(err, opts.cwd)
+      });
+    });
+    child.on("close", (code, signal2) => {
+      if (terminated !== null) {
+        settle3({
+          ok: false,
+          reason: terminated,
+          stdout: stdout2,
+          stderr: stderr2,
+          exitCode: code,
+          signal: signal2
+        });
+        return;
+      }
+      if (code === 0) {
+        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
+        return;
+      }
+      const reason = signal2 ? "signal" : "non-zero";
+      settle3({
+        ok: false,
+        reason,
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: code,
+        signal: signal2
+      });
+    });
+    if (opts.timeoutMs && opts.timeoutMs > 0) {
+      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
+    }
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    state.inFlight.add(onAbort);
+    if (opts.stdinInput !== void 0 && child.stdin) {
+      child.stdin.end(opts.stdinInput);
+    } else if (child.stdin) {
+      child.stdin.end();
+    }
+  });
+}
+function launchBlocking(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  const stdio = ["pipe", "pipe", "pipe"];
+  try {
+    const result = spawnSync(opts.bin, opts.args ?? [], {
+      cwd: opts.cwd,
+      env: childEnv(opts),
+      input: opts.stdinInput,
+      timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
+      stdio,
+      encoding: "utf8"
+    });
+    stats?.onEnd(opts.category, Date.now() - t0);
+    const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
+    const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
+    if (result.error) {
+      const code = result.error.code;
+      const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
+      return {
+        ok: false,
+        reason: reason2,
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: null,
+        signal: result.signal ?? null,
+        error: spawnErrorText(result.error, opts.cwd)
+      };
+    }
+    if (result.status === 0) {
+      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
+    }
+    const hasTimeout = opts.timeoutMs !== void 0 && opts.timeoutMs > 0;
+    const reason = result.signal ? hasTimeout && result.signal === "SIGTERM" ? "timeout" : "signal" : "non-zero";
+    return {
+      ok: false,
+      reason,
+      stdout: stdout2,
+      stderr: stderr2,
+      exitCode: result.status,
+      signal: result.signal ?? null
+    };
+  } catch (err) {
+    stats?.onEnd(opts.category, Date.now() - t0);
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: spawnErrorText(err, opts.cwd)
+    };
+  }
+}
+function launchOrphan(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  const result = launchDetachedSyncInner(opts);
+  stats?.onEnd(opts.category, Date.now() - t0);
+  return result;
+}
+function launchDetachedSyncInner(opts) {
+  let child;
+  try {
+    child = spawn(opts.bin, opts.args ?? [], {
+      cwd: opts.cwd,
+      env: childEnv(opts),
+      detached: true,
+      stdio: "ignore"
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: spawnErrorText(err, opts.cwd)
+    };
+  }
+  child.once("error", () => {
+  });
+  if (child.pid === void 0) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: `spawn(${opts.bin}): no pid (binary not found or unexecutable)`
+    };
+  }
+  child.unref();
+  return { ok: true, stdout: "", stderr: "", exitCode: null };
+}
+var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
+var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
+function launchJob(state, opts, files) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return { ok: false, error: refused.error };
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  let child;
+  try {
+    child = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        JOB_SCRIPT,
+        "sh",
+        files.stdout,
+        files.stderr,
+        files.status,
+        opts.bin,
+        ...opts.args ?? []
+      ],
+      {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"]
+      }
+    );
+  } catch (err) {
+    stats?.onEnd(opts.category, Date.now() - t0);
+    return { ok: false, error: spawnErrorText(err, opts.cwd) };
+  }
+  stats?.onEnd(opts.category, Date.now() - t0);
+  child.once("error", () => {
+  });
+  const pid2 = child.pid;
+  const gate2 = child.stdin;
+  gate2.on("error", () => {
+  });
+  if (pid2 === void 0) {
+    gate2.destroy();
+    return {
+      ok: false,
+      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
+    };
+  }
+  child.unref();
+  gate2.unref();
+  return {
+    ok: true,
+    pid: pid2,
+    release: () => gate2.end("go\n"),
+    withdraw: () => gate2.end()
+  };
+}
+function readJobEnd(status) {
+  let text4;
+  try {
+    text4 = readFileSync(status, "utf8").trim();
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  const exit2 = /^exit (\d+)$/.exec(text4);
+  if (exit2) return { kind: "exit", code: Number(exit2[1]) };
+  if (text4 === "timeout") return { kind: "timeout" };
+  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
+}
+function jobGroupAlive(pid2) {
+  try {
+    process_default.kill(-pid2, 0);
+    return true;
+  } catch (err) {
+    const code = err.code;
+    if (code === "ESRCH" || code === "EPERM") return false;
+    throw err;
+  }
+}
+function endJob(pid2, status, end) {
+  const staged = `${status}.${process_default.pid}`;
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}
+`);
+  } catch (err) {
+    if (err.code === "ENOENT") return false;
+    throw err;
+  }
+  let stands = true;
+  try {
+    linkSync(staged, status);
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+    stands = false;
+  } finally {
+    rmSync(staged, { force: true });
+  }
+  signalGroup(pid2, "SIGTERM");
+  setTimeout(() => signalGroup(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  return stands;
+}
+function createLauncher(owner) {
+  const launcher = {
+    launch: (opts) => launchWaited(state, opts),
+    launchSync: (opts) => launchBlocking(state, opts),
+    launchDetachedSync: (opts) => launchOrphan(state, opts),
+    launchJobSync: (opts, files) => launchJob(state, opts, files),
+    lifelineWarnings: () => lifelineWarnings(state),
+    __lifelineForTest: () => {
+      const line = state.lifeline;
+      return {
+        pid: line?.process.pid,
+        cut: () => {
+          line?.pipe.end();
+          if (line) lose(state, line.process, "cut by a test");
+        }
+      };
+    }
+  };
+  const state = {
+    scope: {
+      stats: null,
+      // A launcher with nobody to tell says the warning on stderr.
+      observeLifeline: () => launcher.lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
+      signal: new AbortController().signal,
+      ...owner
+    },
+    lastStartAt: /* @__PURE__ */ new Map(),
+    inFlight: /* @__PURE__ */ new Set(),
+    liveGroups: /* @__PURE__ */ new Set(),
+    lifeline: null,
+    fault: null
+  };
+  state.scope.signal.addEventListener(
+    "abort",
+    () => {
+      state.inFlight.forEach((end) => end());
+      endLifeline(state);
+    },
+    { once: true }
+  );
+  return launcher;
+}
+var processLauncher = createLauncher({});
+
 // src/daemon/limits.ts
 init_globals();
 var import_node_path8 = __toESM(require_path_browserify(), 1);
@@ -35846,7 +35928,7 @@ async function sinkAt(filePath2) {
     )
   );
   const opened = await new Promise(
-    (resolve, reject2) => fs_default.fstat(fd, (err, stats2) => err === null ? resolve(stats2) : reject2(err))
+    (resolve, reject2) => fs_default.fstat(fd, (err, stats) => err === null ? resolve(stats) : reject2(err))
   );
   sink = { path: filePath2, fd, id: idOf2(opened) };
   return { held: sink, size: opened.size };
@@ -36048,14 +36130,14 @@ ${outcome.text}`;
 }
 var FOOTPRINT = "/usr/bin/footprint";
 var VMMAP = "/usr/bin/vmmap";
-function platformProbes(platform3, pid2) {
+function platformProbes(launcher, platform3, pid2) {
   if (platform3 === "darwin") {
     return [
       // The whole-process category table: V8's mappings, the MALLOC_* regions
       // with their reclaimable share, and page tables, each with a size.
-      commandProbe(FOOTPRINT, ["-p", String(pid2)]),
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
       // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(VMMAP, ["--summary", String(pid2)])
+      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
     ];
   }
   if (platform3 === "linux") {
@@ -36070,10 +36152,10 @@ function platformProbes(platform3, pid2) {
   }
   return [];
 }
-function chargeProbe(platform3, pid2) {
+function chargeProbe(launcher, platform3, pid2) {
   return platform3 === "darwin" ? footprintCharge(
     pid2,
-    (args) => launch({
+    (args) => launcher.launch({
       bin: FOOTPRINT,
       args,
       timeoutMs: PROBE_TIMEOUT_MS,
@@ -36109,11 +36191,11 @@ function physFootprintOf(text4) {
   const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
   return m === null ? null : Number(m[1]);
 }
-function commandProbe(bin, args) {
+function commandProbe(launcher, bin, args) {
   return {
     name: `${bin} ${args.join(" ")}`,
     read: () => {
-      const result = launchSync({
+      const result = launcher.launchSync({
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
@@ -36129,12 +36211,12 @@ function commandProbe(bin, args) {
     }
   };
 }
-function fileProbe(path41) {
+function fileProbe(path39) {
   return {
-    name: path41,
+    name: path39,
     read: () => {
       try {
-        const text4 = fs_default.readFileSync(path41, "utf8");
+        const text4 = fs_default.readFileSync(path39, "utf8");
         return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
       } catch (e) {
         return { kind: "unavailable", reason: e.message };
@@ -36201,6 +36283,8 @@ function makeLimits(deps) {
   let triggered = false;
   let latest = { kind: "unmeasured" };
   let inFlight = null;
+  let disarmed = false;
+  let timer;
   function check() {
     inFlight ??= measure3().finally(() => {
       inFlight = null;
@@ -36214,7 +36298,7 @@ function makeLimits(deps) {
     const reading = { kind: "measured", charge, rss, heapTotal };
     latest = reading;
     deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (charge.bytes <= limit) return false;
+    if (disarmed || charge.bytes <= limit) return false;
     triggered = true;
     deps.log(
       "warn",
@@ -36260,27 +36344,23 @@ function makeLimits(deps) {
     return { pid: deps.pid, memory: latest, limit, postMortems };
   }
   function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
-    let timer;
-    let armed = true;
     const tick = async () => {
       try {
         if (await check()) return;
       } catch (e) {
         deps.log("warn", `memory check failed: ${e.message}`);
       }
-      if (!armed) return;
+      if (disarmed) return;
       timer = setTimeout(() => void tick(), intervalMs);
       timer.unref();
     };
     void tick();
-    return {
-      disarm: () => {
-        armed = false;
-        clearTimeout(timer);
-      }
-    };
   }
-  return { check, describeNextRestart, serving, arm: arm2 };
+  function disarm() {
+    disarmed = true;
+    clearTimeout(timer);
+  }
+  return { check, describeNextRestart, serving, arm: arm2, disarm };
 }
 function chargeWords(charge) {
   return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
@@ -36317,19 +36397,21 @@ function postMortemsOf(files) {
     )
   }));
 }
-function realLimitsDeps(startedAtMs, shutdown2, overrides = {}) {
+function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
   const dir = daemonDir();
   return {
     now: () => Date.now(),
     pid: process_default.pid,
     snapshotDir: dir,
-    log: dlog,
+    log: owner.log,
     memoryBytes: () => {
       const mem = process_default.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
-    memoryCharge: chargeProbe(process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(platformProbes(process_default.platform, process_default.pid)),
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
+    captureMemoryReport: () => memoryReport(
+      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    ),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an
     // identity, so it shares a permission — a post-mortem pair where one half is
     // world-readable and the other is not invites exactly the "is this
@@ -36350,7 +36432,7 @@ function realLimitsDeps(startedAtMs, shutdown2, overrides = {}) {
       return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path8.default.join(dir, f));
     },
     removeFile: (file) => fs_default.unlinkSync(file),
-    shutdown: shutdown2,
+    shutdown,
     startedAtMs,
     ...overrides
   };
@@ -36602,9 +36684,9 @@ function parseDocument(text4) {
 function entryOf(node, key) {
   return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
 }
-function nodeAt(root, path41) {
+function nodeAt(root, path39) {
   let node = root;
-  for (const key of path41) {
+  for (const key of path39) {
     node = node === void 0 ? void 0 : entryOf(node, key)?.value;
   }
   return node;
@@ -36678,8 +36760,8 @@ function eolOf(text4) {
 function reindent(valueText, indent2, eol) {
   return valueText.split("\n").join(`${eol}${indent2}`);
 }
-function entryText(path41, valueText, dialect) {
-  const [head, ...rest2] = path41;
+function entryText(path39, valueText, dialect) {
+  const [head, ...rest2] = path39;
   const inner = rest2.length === 0 ? valueText : `{
   ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
 }`;
@@ -36772,35 +36854,35 @@ function appendMember(text4, container, memberText, dialect) {
   const tail = commaEnd === -1 ? "" : ",";
   return splice(text4, at, at, `${sep2}${memberText}${tail}`);
 }
-function setValue(text4, path41, valueText, dialect) {
-  if (path41.length === 0) {
+function setValue(text4, path39, valueText, dialect) {
+  if (path39.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
   if (/^\s*$/.test(text4)) {
     const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path41, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+    return `{${eol}  ${reindent(entryText(path39, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
   }
-  return setBelow(text4, parseDocument(text4), path41, valueText, dialect);
+  return setBelow(text4, parseDocument(text4), path39, valueText, dialect);
 }
-function setBelow(text4, start, path41, valueText, dialect) {
+function setBelow(text4, start, path39, valueText, dialect) {
   let node = start;
-  for (let i = 0; i < path41.length; i++) {
+  for (let i = 0; i < path39.length; i++) {
     if (node.kind !== "object") {
       throw new Json5EditError(
-        `cannot set ${path41.join(".")}: ${path41.slice(0, i).join(".") || "the document"} is not an object`,
+        `cannot set ${path39.join(".")}: ${path39.slice(0, i).join(".") || "the document"} is not an object`,
         node.span.start
       );
     }
-    const entry = entryOf(node, path41[i]);
+    const entry = entryOf(node, path39[i]);
     if (entry === void 0) {
       return appendMember(
         text4,
         node,
-        entryText(path41.slice(i), valueText, dialect),
+        entryText(path39.slice(i), valueText, dialect),
         dialect
       );
     }
-    if (i === path41.length - 1) {
+    if (i === path39.length - 1) {
       const indent2 = indentOfLine(text4, entry.keySpan.start);
       return splice(
         text4,
@@ -36813,14 +36895,14 @@ function setBelow(text4, start, path41, valueText, dialect) {
   }
   throw new Json5EditError("unreachable: path exhausted", 0);
 }
-function deleteValue(text4, path41, keep2 = 0) {
-  if (path41.length === 0) {
+function deleteValue(text4, path39, keep2 = 0) {
+  if (path39.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
   if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path41.slice(0, -1);
+  const parentPath = path39.slice(0, -1);
   const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf(parent, path41[path41.length - 1]);
+  const entry = parent === void 0 ? void 0 : entryOf(parent, path39[path39.length - 1]);
   if (entry === void 0 || parent?.kind !== "object") return text4;
   const pruned = removeMember(text4, entry.span);
   return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
@@ -37042,10 +37124,10 @@ var windows = [];
 function giveBack(window2) {
   if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
 }
-async function readAppended(path41, prior, until2) {
+async function readAppended(path39, prior, until2) {
   return gate.run(async () => {
     const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path41, prior, until2, window2);
+    const read2 = await readWholeLines(path39, prior, until2, window2);
     if (read2.kind !== "ok") {
       giveBack(window2);
       return read2;
@@ -37071,10 +37153,10 @@ function decodeLines(read2, decode) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-async function readWholeLines(path41, prior, until2, window2) {
+async function readWholeLines(path39, prior, until2, window2) {
   let fh = null;
   try {
-    fh = await open(path41, "r");
+    fh = await open(path39, "r");
     const st = await fh.stat();
     const { size, ino } = st;
     const stamp2 = stampOf(st);
@@ -37123,7 +37205,7 @@ async function readWholeLines(path41, prior, until2, window2) {
   } catch (e) {
     if (e.code === "ENOENT") return ABSENT2;
     return failed(
-      `readAppended ${path41}: ${e instanceof Error ? e.message : String(e)}`
+      `readAppended ${path39}: ${e instanceof Error ? e.message : String(e)}`
     );
   } finally {
     await fh?.close().catch((e) => {
@@ -37147,11 +37229,11 @@ async function readInto(fh, buf, position) {
   }
   return buf.subarray(0, off);
 }
-async function readTail(path41, maxBytes) {
+async function readTail(path39, maxBytes) {
   return gate.run(async () => {
     let fh = null;
     try {
-      fh = await open(path41, "r");
+      fh = await open(path39, "r");
       const { size } = await fh.stat();
       const start = Math.max(0, size - maxBytes);
       return ok({
@@ -37161,7 +37243,7 @@ async function readTail(path41, maxBytes) {
     } catch (e) {
       if (e.code === "ENOENT") return ABSENT2;
       return failed(
-        `readTail ${path41}: ${e instanceof Error ? e.message : String(e)}`
+        `readTail ${path39}: ${e instanceof Error ? e.message : String(e)}`
       );
     } finally {
       await fh?.close().catch((e) => {
@@ -37172,10 +37254,10 @@ async function readTail(path41, maxBytes) {
     }
   });
 }
-function readTailSync(path41, maxBytes) {
+function readTailSync(path39, maxBytes) {
   let fd;
   try {
-    fd = openSync(path41, constants.O_RDONLY | constants.O_NONBLOCK);
+    fd = openSync(path39, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (e) {
     const { code } = e;
     if (code === "ENOENT" || code === "ENOTDIR") return ABSENT2;
@@ -37466,11 +37548,6 @@ function recordOf(raw) {
   const { text: text4, at, answered: answered2 } = value;
   return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
 }
-
-// src/utils/instant.ts
-init_globals();
-var instantOf = (date2) => date2.getTime() / 1e3;
-var dateOf = (at) => new Date(at * 1e3);
 
 // src/daemon/verbs/state-validators.ts
 init_globals();
@@ -38177,7 +38254,7 @@ function parseSessionInt(raw, range) {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/config/synthesis-inputs.ts
 init_globals();
@@ -38265,16 +38342,16 @@ function* walkNodes(node) {
   yield node;
   for (const child of childrenOf(node)) yield* walkNodes(child);
 }
-var childPath = (path41, i) => `${path41}.children[${i}]`;
-var bodyPath = (path41) => `${path41}.opens.body`;
-function* walkNodePaths(node, path41) {
-  yield [node, path41];
+var childPath = (path39, i) => `${path39}.children[${i}]`;
+var bodyPath = (path39) => `${path39}.opens.body`;
+function* walkNodePaths(node, path39) {
+  yield [node, path39];
   if (node.kind === "container") {
     for (const [i, child] of node.children.entries()) {
-      yield* walkNodePaths(child, childPath(path41, i));
+      yield* walkNodePaths(child, childPath(path39, i));
     }
   } else if (node.opens !== void 0) {
-    yield* walkNodePaths(node.opens.body, bodyPath(path41));
+    yield* walkNodePaths(node.opens.body, bodyPath(path39));
   }
 }
 function childrenOf(node) {
@@ -38586,23 +38663,17 @@ var NAME_ARGS = {
 function* actionBindings(code) {
   let cursor = 0;
   let pending2 = 0;
-  let depth = 0;
   let site = "action";
   for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
     const between = code.slice(cursor, s.index);
     const kw = BINDING_KEYWORD_RE.exec(between);
     if (kw !== null) {
       pending2 = NAME_ARGS[kw[1]];
-      depth = 0;
       site = kw[1] === "action" ? "action" : "options";
-    } else {
-      for (const ch of between) {
-        if (ch === "(") depth++;
-        if (ch === ")") depth--;
-        if (depth < 0 || ch === "|" && depth === 0) pending2 = 0;
-      }
+    } else if (between.trim() !== "") {
+      pending2 = 0;
     }
-    if (pending2 > 0 && depth === 0) {
+    if (pending2 > 0) {
       yield { name: s[0].slice(1, -1), site, index: s.index };
       pending2--;
     }
@@ -38619,7 +38690,7 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-var COMPUTED_BINDING_RE = /(?<![\w.$])(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+(?=[^\s"`)|}])/;
+var COMPUTED_BINDING_RE = /(?<![\w.$])(?:(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+|(?:picker|carousel|swatches)\s+""\s+)(?=[^\s"`)|}])/;
 function bindsComputedAction(template, helpers) {
   for (const { code } of callGraph(template, helpers)) {
     if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
@@ -38695,13 +38766,13 @@ function* declarationsAt(config2) {
 function* declaredVariables(config2) {
   for (const [name, decl] of declarationsAt(config2)) yield [name, decl];
 }
-function variableRead(path41, names) {
-  const parts = path41.split(".");
+function variableRead(path39, names) {
+  const parts = path39.split(".");
   for (let n = parts.length; n > 0; n--) {
     const name = parts.slice(0, n).join(".");
     if (names.has(name)) return [name];
   }
-  const namespace = `${path41}.`;
+  const namespace = `${path39}.`;
   return [...names].filter((name) => name.startsWith(namespace));
 }
 function refResolves(ref, scope) {
@@ -43875,9 +43946,9 @@ var MissingFieldError = class extends EvalError {
   name = "MissingFieldError";
   kind = "MissingFieldError";
   path;
-  constructor(path41, pos, ctx = {}) {
-    super(`field "${path41.join(".")}" not found on receiver`, pos, ctx);
-    this.path = path41;
+  constructor(path39, pos, ctx = {}) {
+    super(`field "${path39.join(".")}" not found on receiver`, pos, ctx);
+    this.path = path39;
   }
 };
 var FailError = class extends EvalError {
@@ -48837,8 +48908,8 @@ function shortenModelName(formatted) {
   const version = minor ? `${major}.${minor}` : major;
   return `${initial2}${version}`;
 }
-function abbreviatePath(path41) {
-  const segments = path41.split("/");
+function abbreviatePath(path39) {
+  const segments = path39.split("/");
   const lastIndex = segments.length - 1;
   return segments.map((seg2, i) => {
     if (i === lastIndex) return seg2;
@@ -49138,6 +49209,11 @@ function formatterFuncs() {
     }
   };
 }
+
+// src/utils/instant.ts
+init_globals();
+var instantOf = (date2) => date2.getTime() / 1e3;
+var dateOf = (at) => new Date(at * 1e3);
 
 // src/template-engine/engine.ts
 var drawing = null;
@@ -49531,21 +49607,22 @@ function parseDuration(s) {
   }
 }
 var SESSION_ID_VAR_NAME = "session.id";
-function shellReader(command, cwd2, signal) {
+function shellReader(launcher, command, cwd2, signal) {
   return {
     // The directory is part of the origin: a command that asks about "this
     // repo" answers differently per session, so every failure — exit, regex
     // no-match, JSON parse — names where it ran.
     where: `output of "${command}" in ${cwd2}`,
     read: async () => {
-      const r = await launch({
+      const r = await launcher.launch({
         bin: "/bin/sh",
         args: ["-c", command],
         cwd: cwd2,
         category: "user-shell",
         signal
       });
-      if (!r.ok && r.reason === "aborted") throw signal.reason;
+      if (!r.ok && r.reason === "aborted" && signal.aborted)
+        throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why2 = r.exitCode === null ? [r.reason, r.error].filter((s) => s !== void 0).join(": ") : `exited with code ${r.exitCode}`;
       return failed(`shell "${command}" ${why2} in ${cwd2}`);
@@ -49641,8 +49718,8 @@ var PathWatches = class {
     for (const cb of entry.subscribers.keys()) cb();
   }
   report(filePath2, entry) {
-    const fault2 = faultOf(filePath2, entry);
-    for (const onFault of entry.subscribers.values()) onFault(fault2);
+    const fault = faultOf(filePath2, entry);
+    for (const onFault of entry.subscribers.values()) onFault(fault);
   }
   // [LAW:no-silent-failure] Events the watches may have missed: each watch
   // re-derives where its path can change, since a directory may have
@@ -49715,9 +49792,9 @@ var UNBOUND = {
     );
   }
 };
-function resolvePath(obj, path41) {
+function resolvePath(obj, path39) {
   let cur = obj;
-  for (const part of path41.split(".")) {
+  for (const part of path39.split(".")) {
     if (cur === PENDING) return PENDING;
     if (cur == null || typeof cur !== "object") return void 0;
     cur = cur[part];
@@ -49767,17 +49844,19 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState2, parent = null, ledger = new RefreshLedger(), catchUps = NO_CATCH_UPS, watchers = new WatcherRegistry()) {
+  constructor(launcher, store, defaultEmptyValue = "", sessionState, parent = null, ledger = new RefreshLedger(), catchUps = NO_CATCH_UPS, watchers = new WatcherRegistry()) {
+    this.launcher = launcher;
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
     this.ledger = ledger;
     this.catchUps = catchUps;
     this.watchers = watchers;
-    this.sessionState = sessionState2;
+    this.sessionState = sessionState;
     this.watchMgr = new PathWatches(watchers);
     this.cleanups.push(catchUps(() => this.watchMgr.caughtUp()));
   }
+  launcher;
   store;
   defaultEmptyValue;
   parent;
@@ -49874,6 +49953,7 @@ var SourceRegistry = class _SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view() {
     return new _SourceRegistry(
+      this.launcher,
       new VariableStore(this.store),
       this.defaultEmptyValue,
       this.sessionState,
@@ -49924,18 +50004,18 @@ var SourceRegistry = class _SourceRegistry {
   // value: it is not answered yet, never its default, which answers a payload
   // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
   // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
-  declareInput(name, path41, type3, varDefault, derivation) {
+  declareInput(name, path39, type3, varDefault, derivation) {
     this.store.defineDerived(
       name,
       type3,
       derivation,
-      () => this.inputAt(name, path41, type3, varDefault)
+      () => this.inputAt(name, path39, type3, varDefault)
     );
   }
   // [LAW:single-enforcer] The one reading of an input: its path's value cast
   // to its type, else the fallback chain with the failure recorded.
-  inputAt(name, path41, type3, varDefault) {
-    const raw = this.inputs.get().read(path41);
+  inputAt(name, path39, type3, varDefault) {
+    const raw = this.inputs.get().read(path39);
     if (raw === PENDING) {
       this.lastErrors.delete(name);
       throw new PendingValueError(
@@ -49948,7 +50028,7 @@ var SourceRegistry = class _SourceRegistry {
         name,
         type3,
         varDefault,
-        `input path "${path41}" not found in payload`
+        `input path "${path39}" not found in payload`
       );
     }
     try {
@@ -49981,7 +50061,7 @@ var SourceRegistry = class _SourceRegistry {
   declareShell(name, command, opts) {
     this.declareSource(
       name,
-      shellReader(command, opts.cwd, this.abort.signal),
+      shellReader(this.launcher, command, opts.cwd, this.abort.signal),
       clampShellCache(name, opts.cache),
       opts.parse
     );
@@ -50235,12 +50315,12 @@ var SourceRegistry = class _SourceRegistry {
         `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
       );
     }
-    const sessionState2 = this.sessionState;
+    const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(void 0);
     this.store.defineComputed(name, "string", (read2) => {
       const sessionId2 = read2(SESSION_ID_VAR_NAME);
       if (typeof sessionId2 !== "string" || !sessionId2) return fallback;
-      const value = sessionState2.get(sessionId2, opts.key);
+      const value = sessionState.get(sessionId2, opts.key);
       return value !== null ? value : fallback;
     });
   }
@@ -50268,11 +50348,11 @@ var SourceRegistry = class _SourceRegistry {
   getLastError(name) {
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read2 = this.lastErrors.get(name);
-    const fault2 = this.policyFaults.get(name);
-    if (fault2 === void 0) return read2;
-    return read2 === void 0 ? fault2 : {
+    const fault = this.policyFaults.get(name);
+    if (fault === void 0) return read2;
+    return read2 === void 0 ? fault : {
       timestamp: read2.timestamp,
-      message: `${fault2.message}; ${read2.message}`
+      message: `${fault.message}; ${read2.message}`
     };
   }
   // Every variable whose cache policy cannot fire, with why: each render
@@ -50328,9 +50408,9 @@ var SourceRegistry = class _SourceRegistry {
         const unsub = this.watchMgr.subscribe(
           policy.path,
           () => update("re-read", "change"),
-          (fault2) => this.notePolicy(
+          (fault) => this.notePolicy(
             name,
-            fault2 === null ? ok(void 0) : failed(fault2)
+            fault === null ? ok(void 0) : failed(fault)
           )
         );
         this.cleanups.push(unsub);
@@ -50491,6 +50571,9 @@ function perLane(value) {
   );
 }
 var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
+function parseLane(raw) {
+  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
+}
 
 // src/config/setting-projections.ts
 init_globals();
@@ -50623,66 +50706,66 @@ function formatIssues(file, issues) {
 }
 
 // src/config/loader/validate-core.ts
-function requireString(ctx, path41, raw, field) {
+function requireString(ctx, path39, raw, field) {
   const v = raw[field];
   if (typeof v !== "string") {
     ctx.issues.push({
-      path: `${path41}.${field}`,
-      message: `${path41}.${field} must be a string, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path41.split("."), field])
+      path: `${path39}.${field}`,
+      message: `${path39}.${field} must be a string, got ${describeType2(v)}`,
+      line: findKeyLine(ctx.source, [...path39.split("."), field])
     });
     return null;
   }
   return v;
 }
-function optionalTypedDefault(ctx, path41, raw, type3) {
+function optionalTypedDefault(ctx, path39, raw, type3) {
   const v = raw.default;
   if (v === void 0) return void 0;
   const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
   if (!ok3) {
     ctx.issues.push({
-      path: `${path41}.default`,
+      path: `${path39}.default`,
       message: `default must be a ${type3}, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path41.split("."), "default"])
+      line: findKeyLine(ctx.source, [...path39.split("."), "default"])
     });
     return void 0;
   }
   return v;
 }
-function optionalStringField(ctx, path41, raw, field) {
+function optionalStringField(ctx, path39, raw, field) {
   const v = raw[field];
   if (v === void 0) return void 0;
   if (typeof v !== "string") {
     ctx.issues.push({
-      path: `${path41}.${field}`,
-      message: `${path41}.${field} must be a string, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path41.split("."), field])
+      path: `${path39}.${field}`,
+      message: `${path39}.${field} must be a string, got ${describeType2(v)}`,
+      line: findKeyLine(ctx.source, [...path39.split("."), field])
     });
     return void 0;
   }
   return v;
 }
-function validatePaletteName(ctx, path41, raw) {
-  const v = optionalStringField(ctx, path41, raw, "palette");
+function validatePaletteName(ctx, path39, raw) {
+  const v = optionalStringField(ctx, path39, raw, "palette");
   if (v === void 0) return void 0;
   if (!ctx.allowedPalettes.has(v)) {
     ctx.issues.push({
-      path: `${path41}.palette`,
+      path: `${path39}.palette`,
       message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-      line: findKeyLine(ctx.source, [...path41.split("."), "palette"])
+      line: findKeyLine(ctx.source, [...path39.split("."), "palette"])
     });
     return void 0;
   }
   return v;
 }
-function optionalEnum(ctx, path41, raw, field, allowed) {
+function optionalEnum(ctx, path39, raw, field, allowed) {
   const v = raw[field];
   if (v === void 0) return void 0;
   if (typeof v !== "string" || !allowed.includes(v)) {
     ctx.issues.push({
-      path: `${path41}.${field}`,
-      message: `${path41}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue2(v)}`,
-      line: findKeyLine(ctx.source, [...path41.split("."), field])
+      path: `${path39}.${field}`,
+      message: `${path39}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue2(v)}`,
+      line: findKeyLine(ctx.source, [...path39.split("."), field])
     });
     return void 0;
   }
@@ -50701,71 +50784,71 @@ function describeValue2(v) {
   if (v === void 0) return "undefined";
   return String(v);
 }
-function record(ctx, schema, path41, raw) {
+function record(ctx, schema, path39, raw) {
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path41,
-      message: `${path41} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      path: path39,
+      message: `${path39} must be an object, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
   rejectUnknownKeys(
     ctx,
-    path41,
+    path39,
     raw,
     schema.noun,
     new Set(Object.keys(schema.fields)),
-    refuseRemoved(ctx, schema.removed ?? {}, path41, raw)
+    refuseRemoved(ctx, schema.removed ?? {}, path39, raw)
   );
-  return fields(ctx, schema.fields, path41, raw);
+  return fields(ctx, schema.fields, path39, raw);
 }
-function refuseRemoved(ctx, removed, path41, raw) {
+function refuseRemoved(ctx, removed, path39, raw) {
   const present = Object.entries(removed).filter(
     ([key]) => raw[key] !== void 0
   );
   for (const [key, pointer] of present) {
-    reject(ctx, `${path41}.${key}`, `${path41}.${key} was removed: ${pointer}`);
+    reject(ctx, `${path39}.${key}`, `${path39}.${key} was removed: ${pointer}`);
   }
-  return new Set(present.map(([key]) => `${path41}.${key}`));
+  return new Set(present.map(([key]) => `${path39}.${key}`));
 }
-function fields(ctx, fieldMap, path41, raw) {
+function fields(ctx, fieldMap, path39, raw) {
   const specs = fieldMap;
   const out = {};
   let ok3 = true;
   for (const [field, spec] of Object.entries(specs)) {
-    const value = spec.parse(ctx, path41, field, raw);
+    const value = spec.parse(ctx, path39, field, raw);
     if (value !== void 0) out[field] = value;
     else if (spec.required) ok3 = false;
   }
   return ok3 ? out : null;
 }
 var EMPTY_PATHS = /* @__PURE__ */ new Set();
-function rejectUnknownKeys(ctx, path41, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
+function rejectUnknownKeys(ctx, path39, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
   for (const key of Object.keys(raw)) {
-    if (!allowed.has(key) && !spokenFor.has(`${path41}.${key}`)) {
+    if (!allowed.has(key) && !spokenFor.has(`${path39}.${key}`)) {
       ctx.issues.push({
-        path: `${path41}.${key}`,
+        path: `${path39}.${key}`,
         message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path41.split("."), key])
+        line: findKeyLine(ctx.source, [...path39.split("."), key])
       });
     }
   }
 }
-function reject(ctx, path41, message) {
+function reject(ctx, path39, message) {
   ctx.issues.push({
-    path: path41,
+    path: path39,
     message,
-    line: findKeyLine(ctx.source, path41.split("."))
+    line: findKeyLine(ctx.source, path39.split("."))
   });
   return null;
 }
-function oneOfPresent(ctx, schema, path41, raw) {
+function oneOfPresent(ctx, schema, path39, raw) {
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `${schema.noun} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
@@ -50775,45 +50858,45 @@ function oneOfPresent(ctx, schema, path41, raw) {
   const unknown = Object.keys(raw).filter((k) => !(k in arms));
   for (const k of unknown) {
     ctx.issues.push({
-      path: `${path41}.${k}`,
+      path: `${path39}.${k}`,
       message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path41.split("."), k])
+      line: findKeyLine(ctx.source, [...path39.split("."), k])
     });
   }
   if (present.length === 0) {
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
   if (present.length > 1) {
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
   const key = present[0];
-  return arms[key].parse(ctx, `${path41}.${key}`, raw[key]);
+  return arms[key].parse(ctx, `${path39}.${key}`, raw[key]);
 }
-function taggedUnion(ctx, schema, path41, raw) {
+function taggedUnion(ctx, schema, path39, raw) {
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path41,
-      message: `${path41} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      path: path39,
+      message: `${path39} must be an object, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
   const tagValue = raw[schema.tag];
   if (typeof tagValue !== "string") {
     ctx.issues.push({
-      path: `${path41}.${schema.tag}`,
-      message: `${path41}.${schema.tag} must be a string, got ${describeType2(tagValue)}`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      path: `${path39}.${schema.tag}`,
+      message: `${path39}.${schema.tag} must be a string, got ${describeType2(tagValue)}`,
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
@@ -50821,19 +50904,19 @@ function taggedUnion(ctx, schema, path41, raw) {
   if (!Object.hasOwn(arms, tagValue)) {
     const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
     ctx.issues.push({
-      path: `${path41}.${schema.tag}`,
+      path: `${path39}.${schema.tag}`,
       message,
-      line: findKeyLine(ctx.source, [...path41.split("."), schema.tag])
+      line: findKeyLine(ctx.source, [...path39.split("."), schema.tag])
     });
     return null;
   }
   const arm2 = arms[tagValue];
   const before = ctx.issues.length;
-  const parsed2 = arm2.parse(ctx, path41, raw);
+  const parsed2 = arm2.parse(ctx, path39, raw);
   const spokenFor = new Set(ctx.issues.slice(before).map((i) => i.path));
   rejectUnknownKeys(
     ctx,
-    path41,
+    path39,
     raw,
     `${tagValue} ${schema.memberNoun} key`,
     arm2.keys,
@@ -50851,13 +50934,13 @@ function lazy(thunk) {
   return (...args) => thunk()(...args);
 }
 function refine(inner, ...checks) {
-  return (ctx, path41, raw) => {
-    const value = inner(ctx, path41, raw);
+  return (ctx, path39, raw) => {
+    const value = inner(ctx, path39, raw);
     if (value === null) return null;
     for (const check of checks) {
       if (check.ok(value)) continue;
       const { field, message } = check.issue(value);
-      const at = field === "" ? path41 : `${path41}.${field}`;
+      const at = field === "" ? path39 : `${path39}.${field}`;
       ctx.issues.push({
         path: at,
         message,
@@ -50872,19 +50955,19 @@ function optionalStringSpec() {
   return {
     required: false,
     json: { type: "string" },
-    parse: (ctx, path41, field, raw) => optionalStringField(ctx, path41, raw, field)
+    parse: (ctx, path39, field, raw) => optionalStringField(ctx, path39, raw, field)
   };
 }
 function optionalBooleanSpec() {
   return {
     required: false,
     json: { type: "boolean" },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v !== "boolean") {
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `${field} must be a boolean, got ${describeType2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
@@ -50899,12 +50982,12 @@ function optionalIntSpec(bounds) {
   return {
     required: false,
     json: { type: "integer", minimum: min2, maximum: max2 },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v !== "number" || !Number.isInteger(v) || v < min2 || v > max2) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `${field} must be an integer between ${min2} and ${max2}, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
@@ -50919,14 +51002,14 @@ function optionalNumberSpec(bounds = {}) {
   return {
     required: false,
     json: { type: "number", ...min2 !== void 0 && { minimum: min2 } },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       const bad = typeof v !== "number" || !Number.isFinite(v) || min2 !== void 0 && v < min2;
       if (bad) {
         const shape = min2 !== void 0 ? `a finite number >= ${min2}` : "a finite number";
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `${field} must be ${shape}, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
@@ -50943,14 +51026,14 @@ function paletteSpec() {
     // from installed palettes, not a closed compile-time enum), so the schema
     // checks only `type: string` — the same shape/meaning split the loader keeps.
     json: { type: "string" },
-    parse: (ctx, path41, _field, raw) => validatePaletteName(ctx, path41, raw)
+    parse: (ctx, path39, _field, raw) => validatePaletteName(ctx, path39, raw)
   };
 }
 function requireStringSpec() {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path41, field, raw) => requireString(ctx, path41, raw, field) ?? void 0
+    parse: (ctx, path39, field, raw) => requireString(ctx, path39, raw, field) ?? void 0
   };
 }
 function absolutePathProblem(where, value) {
@@ -50974,7 +51057,7 @@ function optionalEnumSpec(allowed) {
     // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
     // membership against it, `json` lists it as the schema `enum`.
     json: { enum: [...allowed] },
-    parse: (ctx, path41, field, raw) => optionalEnum(ctx, path41, raw, field, allowed)
+    parse: (ctx, path39, field, raw) => optionalEnum(ctx, path39, raw, field, allowed)
   };
 }
 function objectJson(fieldMap, opts = { closed: true }) {
@@ -51108,16 +51191,16 @@ var text3 = (spec) => ({
 var colorCompatibilitySpec = {
   required: false,
   json: { enum: [...COLOR_COMPATIBILITIES] },
-  parse: (ctx, path41, field, raw) => {
+  parse: (ctx, path39, field, raw) => {
     if (raw[field] === "auto") {
       ctx.issues.push({
-        path: `${path41}.${field}`,
-        message: `${path41}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path41.split("."), field])
+        path: `${path39}.${field}`,
+        message: `${path39}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path39.split("."), field])
       });
       return void 0;
     }
-    return optionalEnum(ctx, path41, raw, field, COLOR_COMPATIBILITIES);
+    return optionalEnum(ctx, path39, raw, field, COLOR_COMPATIBILITIES);
   }
 };
 var paletteOrRuleSpec = {
@@ -51125,9 +51208,9 @@ var paletteOrRuleSpec = {
   // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
   // are resolved at load from installed palettes, and a rule is a string too.
   json: { type: "string" },
-  parse: (ctx, path41, field, raw) => {
-    const v = optionalStringField(ctx, path41, raw, field);
-    return isExpression(v) ? v : validatePaletteName(ctx, path41, raw);
+  parse: (ctx, path39, field, raw) => {
+    const v = optionalStringField(ctx, path39, raw, field);
+    return isExpression(v) ? v : validatePaletteName(ctx, path39, raw);
   }
 };
 var effectOrRuleSpec = {
@@ -51135,9 +51218,9 @@ var effectOrRuleSpec = {
   json: {
     anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
   },
-  parse: (ctx, path41, field, raw) => {
+  parse: (ctx, path39, field, raw) => {
     const v = raw[field];
-    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path41, raw, field, EFFECT_NAMES);
+    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path39, raw, field, EFFECT_NAMES);
   }
 };
 var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
@@ -51152,14 +51235,14 @@ var menuGlyphSpec = {
     pattern: MENU_GLYPH.source,
     not: { pattern: CLOSE_GLYPH.source }
   },
-  parse: (ctx, path41, field, raw) => {
-    const v = optionalStringField(ctx, path41, raw, field);
+  parse: (ctx, path39, field, raw) => {
+    const v = optionalStringField(ctx, path39, raw, field);
     if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
       return v;
     ctx.issues.push({
-      path: `${path41}.${field}`,
-      message: `${path41}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
-      line: findKeyLine(ctx.source, [...path41.split("."), field])
+      path: `${path39}.${field}`,
+      message: `${path39}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
+      line: findKeyLine(ctx.source, [...path39.split("."), field])
     });
     return void 0;
   }
@@ -51562,8 +51645,8 @@ var DRAW_PROJECTIONS = {
   drawing: "who the draw is for",
   diagnostics: "the errors and warnings the draw owes its reader"
 };
-function drawProjectionAt(path41) {
-  const root = path41.split(".", 1)[0];
+function drawProjectionAt(path39) {
+  const root = path39.split(".", 1)[0];
   return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
 }
 var SLOT_PATHS = Object.fromEntries(
@@ -51572,8 +51655,8 @@ var SLOT_PATHS = Object.fromEntries(
     CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
   ])
 );
-function slotAt(path41) {
-  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path41);
+function slotAt(path39) {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path39);
 }
 
 // src/config/synthesis-inputs.ts
@@ -52311,12 +52394,12 @@ function fragmentRejection(description, message) {
     // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
     // the key at the same moment the validator does.
     json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       if (raw[field] !== void 0) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
-          message: message(`${path41}.${field}`),
-          line: findKeyLine(ctx.source, [...path41.split("."), field])
+          path: `${path39}.${field}`,
+          message: message(`${path39}.${field}`),
+          line: findKeyLine(ctx.source, [...path39.split("."), field])
         });
       }
       return void 0;
@@ -52339,17 +52422,17 @@ function nameOnlySpec(spec, subject, why2) {
   return {
     ...spec,
     json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && isExpression(v)) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
-          message: `${path41}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path41.split("."), field])
+          path: `${path39}.${field}`,
+          message: `${path39}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path39.split("."), field])
         });
         return void 0;
       }
-      return spec.parse(ctx, path41, field, raw);
+      return spec.parse(ctx, path39, field, raw);
     }
   };
 }
@@ -52436,32 +52519,32 @@ function validateThemeDefaults(ctx, raw) {
   }
   const out = {};
   for (const [theme24, value] of Object.entries(raw)) {
-    const path41 = `themeDefaults.${theme24}`;
+    const path39 = `themeDefaults.${theme24}`;
     if (!ctx.allowedPalettes.has(theme24)) {
       ctx.issues.push({
-        path: path41,
-        message: `${path41}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        path: path39,
+        message: `${path39}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
         line: findKeyLine(ctx.source, ["themeDefaults", theme24])
       });
       continue;
     }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path41, value);
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path39, value);
     if (parsed2 !== null) out[theme24] = parsed2;
   }
   return out;
 }
-function validateGlobals(ctx, path41, raw) {
+function validateGlobals(ctx, path39, raw) {
   if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path41, raw) ?? {};
+  return record(ctx, GLOBALS_SCHEMA, path39, raw) ?? {};
 }
-function validatePresetGlobals(ctx, path41, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path41, raw) ?? {};
+function validatePresetGlobals(ctx, path39, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path39, raw) ?? {};
 }
 function presetGlobalsJson() {
   return recordJson(PRESET_GLOBALS_SCHEMA);
 }
-function validateEditGlobals(ctx, path41, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path41, raw) ?? {};
+function validateEditGlobals(ctx, path39, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path39, raw) ?? {};
 }
 var GLOBALS_FIELD_NAMES = new Set(
   Object.keys(GLOBALS_FIELDS)
@@ -52814,8 +52897,8 @@ Configuration:
   A change applies to this session at once.
   Where each setting is in the menu: the globals field that sets it in a
   config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path41, names }) => [
-  `    ${path41}`,
+${settingsByPlace().flatMap(({ path: path39, names }) => [
+  `    ${path39}`,
   ...names.map(
     (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
   )
@@ -52920,6 +53003,36 @@ var TMUX_ENV = {
   truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
+
+// src/config-hint.ts
+init_globals();
+
+// src/utils/user-path.ts
+init_globals();
+init_os();
+var import_node_path15 = __toESM(require_path_browserify(), 1);
+function expandHome(p2) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? os_default.homedir() + p2.slice(1) : p2;
+}
+function resolveUserPath(base, p2) {
+  return import_node_path15.default.resolve(base, expandHome(p2));
+}
+function explicitConfigPath(base, p2) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2) : void 0;
+}
+
+// src/config-hint.ts
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function requestedConfigTarget(argument, environment) {
+  if (argument !== void 0) return { source: "argument", path: argument };
+  if (environment !== void 0) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+function chainName(paths, none = "bundled default (no config file loaded)") {
+  return paths.join(" < ") || none;
+}
 
 // src/render/strip.ts
 init_globals();
@@ -53639,7 +53752,7 @@ function statusLineOf(sources) {
     return { kind: "unread", reason: sources.reason };
   }
   const lines2 = sources.value.flatMap(
-    ({ scope, path: path41, settings }) => "statusLine" in settings ? [{ from: { scope, path: path41 }, line: settings.statusLine }] : []
+    ({ scope, path: path39, settings }) => "statusLine" in settings ? [{ from: { scope, path: path39 }, line: settings.statusLine }] : []
   );
   const top = lines2[0];
   if (top === void 0) {
@@ -53675,12 +53788,12 @@ var UNWRITTEN_SCOPES = [
 var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
 var ENV_FIX_FILE = {
   managed: () => null,
-  "project-local": (path41) => ({ scope: "project-local", path: path41 }),
+  "project-local": (path39) => ({ scope: "project-local", path: path39 }),
   project: (_, at) => ({
     scope: "project-local",
     path: projectLocalSettingsFile(at.projectDir)
   }),
-  user: (path41) => ({ scope: "user", path: path41 })
+  user: (path39) => ({ scope: "user", path: path39 })
 };
 var GLYPH_MARKS = ["drawn", "boxes"];
 var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
@@ -53784,27 +53897,44 @@ var UNUSED = {
   helper: "is never called",
   segment: "is in no preset"
 };
+var NAMED_BY = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  pick: "load-config pick",
+  unknown: "source unknown"
+};
+function judgedConfig({ target, layers }) {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
+}
+function configProblems(config2) {
+  switch (config2.kind) {
+    case "failed": {
+      const problems = [
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
+        ...config2.warnings
+      ];
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config2.warnings,
+        ...config2.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
+        )
+      ];
+  }
+}
 var config = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config: config2 }) => {
-    switch (config2.kind) {
-      case "failed": {
-        const [reason = "the config failed to load", ...more] = [
-          ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
-          ...config2.warnings
-        ];
-        return { ok: false, reason, more };
-      }
-      case "loaded":
-        return problemsVerdict([
-          ...config2.warnings,
-          ...config2.unused.map(
-            ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
-          )
-        ]);
-    }
+    const judged = judgedConfig(config2);
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";
@@ -54320,21 +54450,21 @@ var segmentData = {
   ])
 };
 function transcriptProblems({
-  path: path41,
+  path: path39,
   answered: answered2,
   read: read2
 }) {
   switch (read2.kind) {
     case "absent":
       return answered2 ? [
-        `the transcript ${path41} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
+        `the transcript ${path39} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
       ] : [];
     case "failed":
-      return [`the transcript ${path41} cannot be read: ${read2.reason}`];
+      return [`the transcript ${path39} cannot be read: ${read2.reason}`];
     case "ok": {
       const { lines: lines2, unparsed, whole } = read2.value;
       return unparsed === 0 ? [] : [
-        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path41} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
+        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path39} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
       ];
     }
   }
@@ -54394,6 +54524,9 @@ function doctorReportKeys(checkName) {
     fixable: `${base}fixable`,
     sighting: `${base}sighting`
   };
+}
+function configFields({ target }) {
+  return `configTarget=${target.source}`;
 }
 function linkFields(terminal, clicked) {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
@@ -54854,7 +54987,7 @@ var offeredHere = (name, domain, trials) => {
   }
   return domain;
 };
-var menuControl = (name, id2, place, domain, laidAfter) => {
+var menuControl = (name, id2, place, label2, domain, laidAfter) => {
   const row2 = SETTINGS[name];
   return {
     ...row2,
@@ -54862,7 +54995,7 @@ var menuControl = (name, id2, place, domain, laidAfter) => {
     id: id2,
     place,
     control: settingControl(
-      { label: row2.label, domain },
+      { label: label2, domain },
       row2.sessionKey,
       row2.effectiveVar,
       controlApply(id2),
@@ -54877,6 +55010,7 @@ var CONTROLS = Object.keys(SETTINGS).map(
     name,
     name,
     PLACE[name],
+    SETTINGS[name].label,
     offeredHere(
       name,
       settingControlDomain(SETTINGS[name].configKey),
@@ -54893,6 +55027,9 @@ var TRIAL_CONTROLS = Object.keys(SETTINGS).filter((name) => SETTINGS[name].trial
     name,
     `${name}.trials`,
     "trials",
+    // Beside the setting's own control and over the same key, so only the
+    // label says this one ranges the trial values.
+    `\u{1F9EA} ${name}`,
     { from: SETTINGS[name].trials },
     { help: [], submenus: [] }
   )
@@ -55551,7 +55688,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path15.default.join(import_node_path15.default.basename(import_node_path15.default.dirname(file)), import_node_path15.default.basename(file));
+  return import_node_path16.default.join(import_node_path16.default.basename(import_node_path16.default.dirname(file)), import_node_path16.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -55883,22 +56020,22 @@ init_globals();
 
 // src/config/loader/cache.ts
 init_globals();
-function requireCache(ctx, path41, raw, kind) {
+function requireCache(ctx, path39, raw, kind) {
   if (raw.cache === void 0) {
     ctx.issues.push({
-      path: `${path41}.cache`,
+      path: `${path39}.cache`,
       message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
-      line: findKeyLine(ctx.source, path41.split("."))
+      line: findKeyLine(ctx.source, path39.split("."))
     });
     return null;
   }
-  return validateCache(ctx, `${path41}.cache`, raw.cache);
+  return validateCache(ctx, `${path39}.cache`, raw.cache);
 }
 function requireCacheSpec(kind) {
   return {
     required: true,
     json: cacheJson(),
-    parse: (ctx, path41, _field, raw) => requireCache(ctx, path41, raw, kind) ?? void 0
+    parse: (ctx, path39, _field, raw) => requireCache(ctx, path39, raw, kind) ?? void 0
   };
 }
 var CACHE_SCHEMA = {
@@ -55906,53 +56043,53 @@ var CACHE_SCHEMA = {
   arms: {
     ttl: {
       json: { type: "string" },
-      parse: (ctx, path41, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
+      parse: (ctx, path39, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
         ctx,
-        path41,
+        path39,
         `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue2(value)}`
       )
     },
     watch_file: {
       json: { type: "string", pattern: "^/" },
-      parse: (ctx, path41, value) => {
+      parse: (ctx, path39, value) => {
         if (typeof value !== "string")
           return reject(
             ctx,
-            path41,
+            path39,
             `cache.watch_file must be a path string, got ${describeValue2(value)}`
           );
         const problem = absolutePathProblem("cache.watch_file", value);
-        return problem === null ? { watch_file: value } : reject(ctx, path41, problem);
+        return problem === null ? { watch_file: value } : reject(ctx, path39, problem);
       }
     },
     depends_on: {
       json: { type: "array", items: { type: "string" } },
-      parse: (ctx, path41, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
+      parse: (ctx, path39, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
         ctx,
-        path41,
+        path39,
         `cache.depends_on must be an array of variable-name strings, got ${describeValue2(value)}`
       )
     },
     key: {
       json: { type: "string" },
-      parse: (ctx, path41, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
+      parse: (ctx, path39, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
         ctx,
-        path41,
+        path39,
         `cache.key must be a non-empty template string, got ${describeValue2(value)}`
       )
     },
     never: {
       json: { const: true },
-      parse: (ctx, path41, value) => value === true ? { never: true } : reject(
+      parse: (ctx, path39, value) => value === true ? { never: true } : reject(
         ctx,
-        path41,
+        path39,
         `cache.never must be the literal boolean true, got ${describeValue2(value)}`
       )
     }
   }
 };
-function validateCache(ctx, path41, raw) {
-  return oneOfPresent(ctx, CACHE_SCHEMA, path41, raw);
+function validateCache(ctx, path39, raw) {
+  return oneOfPresent(ctx, CACHE_SCHEMA, path39, raw);
 }
 function cacheJson() {
   return oneOfPresentJson(CACHE_SCHEMA);
@@ -56089,13 +56226,13 @@ function literalValueSpec() {
   return {
     required: true,
     json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path41, _field, raw) => {
+    parse: (ctx, path39, _field, raw) => {
       const value = raw.value;
       if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
         ctx.issues.push({
-          path: `${path41}.value`,
+          path: `${path39}.value`,
           message: `literal value must be string|number|boolean, got ${describeType2(value)}`,
-          line: findKeyLine(ctx.source, path41.split("."))
+          line: findKeyLine(ctx.source, path39.split("."))
         });
         return void 0;
       }
@@ -56107,10 +56244,10 @@ function typedDefaultSpec() {
   return {
     required: false,
     json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path41, _field, raw) => {
+    parse: (ctx, path39, _field, raw) => {
       const t2 = raw.type;
       const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
-      return optionalTypedDefault(ctx, path41, raw, expected);
+      return optionalTypedDefault(ctx, path39, raw, expected);
     }
   };
 }
@@ -56119,31 +56256,31 @@ var PARSE_SCHEMA = {
   arms: {
     text: {
       json: { const: true },
-      parse: (ctx, path41, value) => value === true ? { text: true } : reject(
+      parse: (ctx, path39, value) => value === true ? { text: true } : reject(
         ctx,
-        path41,
+        path39,
         `parse.text must be the literal boolean true, got ${describeValue2(value)}`
       )
     },
     regex: {
       json: { type: "string" },
-      parse: (ctx, path41, value) => typeof value === "string" ? capturingPattern(ctx, path41, value) : reject(
+      parse: (ctx, path39, value) => typeof value === "string" ? capturingPattern(ctx, path39, value) : reject(
         ctx,
-        path41,
+        path39,
         `parse.regex must be a pattern string, got ${describeValue2(value)}`
       )
     },
     json: {
       json: { const: true },
-      parse: (ctx, path41, value) => value === true ? { json: true } : reject(
+      parse: (ctx, path39, value) => value === true ? { json: true } : reject(
         ctx,
-        path41,
+        path39,
         `parse.json must be the literal boolean true, got ${describeValue2(value)}`
       )
     }
   }
 };
-function capturingPattern(ctx, path41, pattern2) {
+function capturingPattern(ctx, path39, pattern2) {
   let groups;
   try {
     new RegExp(pattern2);
@@ -56151,13 +56288,13 @@ function capturingPattern(ctx, path41, pattern2) {
   } catch (e) {
     return reject(
       ctx,
-      path41,
+      path39,
       `parse.regex is not a valid regular expression: ${e.message}`
     );
   }
   return groups >= 1 ? { regex: pattern2 } : reject(
     ctx,
-    path41,
+    path39,
     `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`
   );
 }
@@ -56165,15 +56302,15 @@ function parseSpec() {
   return {
     required: false,
     json: oneOfPresentJson(PARSE_SCHEMA),
-    parse: (ctx, path41, _field, raw) => {
+    parse: (ctx, path39, _field, raw) => {
       if (raw.regex !== void 0) {
         ctx.issues.push({
-          path: `${path41}.regex`,
-          message: `${path41}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
-          line: findKeyLine(ctx.source, [...path41.split("."), "regex"])
+          path: `${path39}.regex`,
+          message: `${path39}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
+          line: findKeyLine(ctx.source, [...path39.split("."), "regex"])
         });
       }
-      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path41}.parse`, raw.parse) ?? void 0;
+      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path39}.parse`, raw.parse) ?? void 0;
     }
   };
 }
@@ -56184,15 +56321,15 @@ function sourceDefaultSpec() {
       type: ["string", "number", "boolean", "array", "object"],
       description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
     },
-    parse: (ctx, path41, _field, raw) => isPlainObject3(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path41, raw.default) : optionalStringField(ctx, path41, raw, "default")
+    parse: (ctx, path39, _field, raw) => isPlainObject3(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path39, raw.default) : optionalStringField(ctx, path39, raw, "default")
   };
 }
-function jsonDefault(ctx, path41, value) {
+function jsonDefault(ctx, path39, value) {
   if (value === void 0) return void 0;
   return isSourceDefault(value) ? value : reject(
     ctx,
-    `${path41}.default`,
-    `${path41}.default must be a JSON value (a json-parsed source's document), got ${describeValue2(value)}`
+    `${path39}.default`,
+    `${path39}.default must be a JSON value (a json-parsed source's document), got ${describeValue2(value)}`
   ) ?? void 0;
 }
 function isSourceDefault(value) {
@@ -56223,13 +56360,13 @@ function inputPathSpec() {
   const text4 = requireStringSpec();
   return {
     ...text4,
-    parse: (ctx, path41, field, raw) => {
-      const value = text4.parse(ctx, path41, field, raw);
+    parse: (ctx, path39, field, raw) => {
+      const value = text4.parse(ctx, path39, field, raw);
       const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
       return instead === void 0 ? value : reject(
         ctx,
-        `${path41}.${field}`,
-        `${path41}.${field} "${value}" is no longer in the payload: ${instead}`
+        `${path39}.${field}`,
+        `${path39}.${field} "${value}" is no longer in the payload: ${instead}`
       ) ?? void 0;
     }
   };
@@ -56282,9 +56419,9 @@ var VARIABLE_TAG = "kind";
 function arm(kind, fieldMap, removed = {}) {
   return {
     ...armFacets(VARIABLE_TAG, kind, fieldMap),
-    parse: (ctx, path41, raw) => {
-      refuseRemoved(ctx, removed, path41, raw);
-      const body = fields(ctx, fieldMap, path41, raw);
+    parse: (ctx, path39, raw) => {
+      refuseRemoved(ctx, removed, path39, raw);
+      const body = fields(ctx, fieldMap, path39, raw);
       return body === null ? null : { kind, ...body };
     }
   };
@@ -56343,9 +56480,20 @@ var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
       source: "promptctl/links-issue-tracker"
     }
   ],
-  // The context ceiling left the bundled bar: the program that owns the
-  // ceiling draws it through a plugin it ships and installs itself.
-  ["ceiling", { kind: "removed" }]
+  [
+    "ceiling",
+    {
+      kind: "removed",
+      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
+    }
+  ],
+  [
+    "themeSwitcher",
+    {
+      kind: "removed",
+      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
+    }
+  ]
 ]);
 function renamedHint(name) {
   const renamed = RENAMED_SEGMENTS.get(name);
@@ -56356,7 +56504,7 @@ function renamedHint(name) {
     case "plugin":
       return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
     case "removed":
-      return ` (the built-in segment "${name}" was removed: the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment)`;
+      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
   }
 }
 
@@ -56400,29 +56548,29 @@ var SETTING_DECL_JSON = {
 };
 var DECL_KEYS = ["label", "domain", "default"];
 var RANGE_KEYS = ["min", "max", "step", "atLeast"];
-function issue(ctx, path41, message) {
+function issue(ctx, path39, message) {
   ctx.issues.push({
-    path: path41,
+    path: path39,
     message,
-    line: findKeyLine(ctx.source, path41.split("."))
+    line: findKeyLine(ctx.source, path39.split("."))
   });
   return void 0;
 }
-function parseDomain(ctx, path41, raw) {
+function parseDomain(ctx, path39, raw) {
   if (raw === "bool") return "bool";
   if (Array.isArray(raw)) {
     const words2 = raw.filter((m) => typeof m === "string");
     if (raw.length === 0 || words2.length !== raw.length) {
       return issue(
         ctx,
-        path41,
+        path39,
         `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
       );
     }
     if (new Set(words2).size !== words2.length) {
       return issue(
         ctx,
-        path41,
+        path39,
         `a list domain names each word once, got ${JSON.stringify(raw)}`
       );
     }
@@ -56432,7 +56580,7 @@ function parseDomain(ctx, path41, raw) {
     if (unwritable2.length > 0) {
       return issue(
         ctx,
-        path41,
+        path39,
         `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
       );
     }
@@ -56451,29 +56599,29 @@ function parseDomain(ctx, path41, raw) {
     }
     return issue(
       ctx,
-      path41,
+      path39,
       `a range domain is { min, max, step?, atLeast? } with integers min \u2264 max, a whole step \u2265 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`
     );
   }
   return issue(
     ctx,
-    path41,
+    path39,
     `domain must be "bool", a list of words, or { min, max }, got ${describeValue2(raw)}`
   );
 }
-function parseSettingDecl(ctx, path41, raw) {
+function parseSettingDecl(ctx, path39, raw) {
   if (!isPlainObject3(raw)) {
     return issue(
       ctx,
-      path41,
-      `${path41} must be { label, domain, default }, got ${describeType2(raw)}`
+      path39,
+      `${path39} must be { label, domain, default }, got ${describeType2(raw)}`
     );
   }
   for (const key of Object.keys(raw)) {
     if (!DECL_KEYS.includes(key)) {
       issue(
         ctx,
-        `${path41}.${key}`,
+        `${path39}.${key}`,
         `Unknown setting key "${key}". Expected one of: ${DECL_KEYS.join(", ")}`
       );
     }
@@ -56483,17 +56631,17 @@ function parseSettingDecl(ctx, path41, raw) {
   if (!labelOk) {
     issue(
       ctx,
-      `${path41}.label`,
+      `${path39}.label`,
       `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue2(label2)}`
     );
   }
-  const domain = parseDomain(ctx, `${path41}.domain`, raw.domain);
+  const domain = parseDomain(ctx, `${path39}.domain`, raw.domain);
   if (!labelOk || domain === void 0) return void 0;
   const decl = { label: label2, domain, default: raw.default };
   if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
     return issue(
       ctx,
-      `${path41}.default`,
+      `${path39}.default`,
       `default must be ${describeSettingDomain(decl)}, got ${describeValue2(raw.default)}`
     );
   }
@@ -56520,10 +56668,10 @@ function settingsDeclSpec() {
       },
       additionalProperties: SETTING_DECL_JSON
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      const at = `${path41}.${field}`;
+      const at = `${path39}.${field}`;
       if (!isPlainObject3(v)) {
         return issue(
           ctx,
@@ -56567,14 +56715,14 @@ function placementIdSpec() {
       minLength: 1,
       pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
         return v;
       return issue(
         ctx,
-        `${path41}.${field}`,
+        `${path39}.${field}`,
         `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue2(v)}`
       );
     }
@@ -56588,10 +56736,10 @@ function placementSettingsSpec() {
       propertyNames: SETTING_NAME_JSON,
       additionalProperties: SETTING_VALUE_JSON
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      const at = `${path41}.${field}`;
+      const at = `${path39}.${field}`;
       if (!isPlainObject3(v)) {
         return issue(
           ctx,
@@ -56646,11 +56794,11 @@ function ownTemplateSpec() {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path41, field, raw) => raw[field] === void 0 ? reject(
+    parse: (ctx, path39, field, raw) => raw[field] === void 0 ? reject(
       ctx,
-      `${path41}.${field}`,
-      `${path41} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path41.slice("segments.".length))}`
-    ) ?? void 0 : requireString(ctx, path41, raw, field) ?? void 0
+      `${path39}.${field}`,
+      `${path39} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path39.slice("segments.".length))}`
+    ) ?? void 0 : requireString(ctx, path39, raw, field) ?? void 0
   };
 }
 function widthSpec() {
@@ -56663,16 +56811,16 @@ function widthSpec() {
         { type: "integer", minimum: 1 }
       ]
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (v === "auto") return "auto";
       if (v === "fill") return "fill";
       if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
       ctx.issues.push({
-        path: `${path41}.${field}`,
+        path: `${path39}.${field}`,
         message: `width must be "auto", "fill", or a positive integer, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path41.split("."), field])
+        line: findKeyLine(ctx.source, [...path39.split("."), field])
       });
       return void 0;
     }
@@ -56684,10 +56832,10 @@ function varsSpec() {
     // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
     // VariableDecl map the top-level `variables` block emits — one source.
     json: variablesMapJson(),
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      return validateVariables(ctx, `${path41}.${field}`, v);
+      return validateVariables(ctx, `${path39}.${field}`, v);
     }
   };
 }
@@ -56742,11 +56890,11 @@ function segmentNameSpec() {
     // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
     required: true,
     json: { type: "string" },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && v.length > 0) return v;
       ctx.issues.push({
-        path: `${path41}.${field}`,
+        path: `${path39}.${field}`,
         message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue2(v)}`,
         line: findKeyLine(ctx.source, ["root"])
       });
@@ -56761,13 +56909,13 @@ function directionSpec() {
     // `cellsSegmentsSpec`.
     required: true,
     json: { enum: [...DIRECTIONS] },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && DIRECTIONS.includes(v)) {
         return v;
       }
       ctx.issues.push({
-        path: `${path41}.${field}`,
+        path: `${path39}.${field}`,
         message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
         line: findKeyLine(ctx.source, ["root"])
       });
@@ -56785,17 +56933,17 @@ function childrenSpec(node) {
     // self-reference. The runtime recursion and the schema recursion break the
     // same cycle, declared in one place.
     json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (!Array.isArray(v)) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `a container must have a "children" array of layout nodes, got ${describeType2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
         return [];
       }
-      return v.map((child, i) => node(ctx, `${path41}.${field}[${i}]`, child));
+      return v.map((child, i) => node(ctx, `${path39}.${field}[${i}]`, child));
     }
   };
 }
@@ -56824,13 +56972,13 @@ function segArmSpec() {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && v.length > 0) return v;
       ctx.issues.push({
-        path: `${path41}.${field}`,
+        path: `${path39}.${field}`,
         message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path41.split("."), field])
+        line: findKeyLine(ctx.source, [...path39.split("."), field])
       });
       return "";
     }
@@ -56861,11 +57009,11 @@ var V_ARM_SCHEMA = {
     distribution: distributionSpec()
   }
 };
-var validateRoot = (ctx, path41, raw) => {
+var validateRoot = (ctx, path39, raw) => {
   if (typeof raw === "string") {
     if (raw.length === 0) {
       ctx.issues.push({
-        path: path41,
+        path: path39,
         message: `a bare-string layout node must be a non-empty segment name`,
         line: findKeyLine(ctx.source, ["root"])
       });
@@ -56875,21 +57023,21 @@ var validateRoot = (ctx, path41, raw) => {
   }
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType2(raw)}`,
       line: findKeyLine(ctx.source, ["root"])
     });
     return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "container") {
-    return record(ctx, CONTAINER_SCHEMA, path41, raw) ?? EMPTY_VERTICAL_NODE;
+    return record(ctx, CONTAINER_SCHEMA, path39, raw) ?? EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "segment") {
-    return record(ctx, SEGMENT_NODE_SCHEMA, path41, raw) ?? EMPTY_VERTICAL_NODE;
+    return record(ctx, SEGMENT_NODE_SCHEMA, path39, raw) ?? EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "cells") {
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
   Old: { kind: "cells", segments: ["seg1", "seg2"] }
   New: { h: ["seg1", "seg2"] }`,
@@ -56898,7 +57046,7 @@ var validateRoot = (ctx, path41, raw) => {
     return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "group") {
-    const group = record(ctx, GROUP_SCHEMA, path41, raw);
+    const group = record(ctx, GROUP_SCHEMA, path39, raw);
     if (group === null) return EMPTY_VERTICAL_NODE;
     ctx.groups.push({
       name: group.name,
@@ -56909,7 +57057,7 @@ var validateRoot = (ctx, path41, raw) => {
       ...group.bg !== void 0 && { bg: group.bg },
       ...group.fg !== void 0 && { fg: group.fg },
       ...group.when !== void 0 && { when: group.when },
-      path: path41
+      path: path39
     });
     return lowerGroup(group);
   }
@@ -56920,14 +57068,14 @@ var validateRoot = (ctx, path41, raw) => {
   if (armCount > 1) {
     const present = ["seg", "h", "v"].filter((k) => k in raw);
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
       line: findKeyLine(ctx.source, ["root"])
     });
     return EMPTY_VERTICAL_NODE;
   }
   if (hasSeg) {
-    const arm2 = record(ctx, SEG_ARM_SCHEMA, path41, raw);
+    const arm2 = record(ctx, SEG_ARM_SCHEMA, path39, raw);
     if (arm2 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "segment",
@@ -56938,7 +57086,7 @@ var validateRoot = (ctx, path41, raw) => {
     };
   }
   if (hasH) {
-    const arm2 = record(ctx, H_ARM_SCHEMA, path41, raw);
+    const arm2 = record(ctx, H_ARM_SCHEMA, path39, raw);
     if (arm2 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "container",
@@ -56949,7 +57097,7 @@ var validateRoot = (ctx, path41, raw) => {
     };
   }
   if (hasV) {
-    const arm2 = record(ctx, V_ARM_SCHEMA, path41, raw);
+    const arm2 = record(ctx, V_ARM_SCHEMA, path39, raw);
     if (arm2 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "container",
@@ -56960,7 +57108,7 @@ var validateRoot = (ctx, path41, raw) => {
     };
   }
   ctx.issues.push({
-    path: `${path41}.kind`,
+    path: `${path39}.kind`,
     message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
     line: findKeyLine(ctx.source, ["root"])
   });
@@ -56974,13 +57122,13 @@ function rowsSpec() {
       propertyNames: { pattern: ROW_NAME_RE.source },
       additionalProperties: { $ref: LAYOUT_NODE_REF }
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (!isPlainObject3(v)) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `"rows" must be an object of row name \u2192 layout node, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [...path41.split("."), field])
+          line: findKeyLine(ctx.source, [...path39.split("."), field])
         });
         return {};
       }
@@ -56988,13 +57136,13 @@ function rowsSpec() {
       for (const [name, node] of Object.entries(v)) {
         if (!ROW_NAME_RE.test(name)) {
           ctx.issues.push({
-            path: `${path41}.${field}.${name}`,
+            path: `${path39}.${field}.${name}`,
             message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
-            line: findKeyLine(ctx.source, [...path41.split("."), field, name])
+            line: findKeyLine(ctx.source, [...path39.split("."), field, name])
           });
           continue;
         }
-        rows[name] = validateRoot(ctx, `${path41}.${field}.${name}`, node);
+        rows[name] = validateRoot(ctx, `${path39}.${field}.${name}`, node);
       }
       return rows;
     }
@@ -57008,11 +57156,11 @@ var ROWS_SCHEMA = {
     distribution: distributionSpec()
   }
 };
-function validateRootFragment(ctx, path41, raw) {
+function validateRootFragment(ctx, path39, raw) {
   if (isPlainObject3(raw) && "rows" in raw) {
-    return record(ctx, ROWS_SCHEMA, path41, raw) ?? { rows: {} };
+    return record(ctx, ROWS_SCHEMA, path39, raw) ?? { rows: {} };
   }
-  return validateRoot(ctx, path41, raw);
+  return validateRoot(ctx, path39, raw);
 }
 var INSERT_SCHEMA = {
   noun: "insert key",
@@ -57033,25 +57181,25 @@ function validateInsert(ctx, raw, file) {
     return [];
   }
   return raw.flatMap((entry, i) => {
-    const path41 = `insert.${i}`;
-    const arm2 = record(ctx, INSERT_SCHEMA, path41, entry);
+    const path39 = `insert.${i}`;
+    const arm2 = record(ctx, INSERT_SCHEMA, path39, entry);
     if (arm2 === null) return [];
     const sides = ["before", "after"].filter(
       (side) => arm2[side] !== void 0
     );
     if (sides.length !== 1) {
       ctx.issues.push({
-        path: path41,
+        path: path39,
         message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, path41.split("."))
+        line: findKeyLine(ctx.source, path39.split("."))
       });
       return [];
     }
     if (isReservedName(arm2.seg)) {
       ctx.issues.push({
-        path: `${path41}.seg`,
+        path: `${path39}.seg`,
         message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
-        line: findKeyLine(ctx.source, [...path41.split("."), "seg"])
+        line: findKeyLine(ctx.source, [...path39.split("."), "seg"])
       });
       return [];
     }
@@ -57059,9 +57207,9 @@ function validateInsert(ctx, raw, file) {
     const anchor = arm2[relation];
     if (isReservedName(anchor)) {
       ctx.issues.push({
-        path: `${path41}.${relation}`,
+        path: `${path39}.${relation}`,
         message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
-        line: findKeyLine(ctx.source, [...path41.split("."), relation])
+        line: findKeyLine(ctx.source, [...path39.split("."), relation])
       });
       return [];
     }
@@ -57071,7 +57219,7 @@ function validateInsert(ctx, raw, file) {
         ...arm2.id !== void 0 && { id: arm2.id },
         anchor,
         relation,
-        by: { file, entry: path41 }
+        by: { file, entry: path39 }
       }
     ];
   });
@@ -57080,11 +57228,11 @@ function groupNameSpec() {
   return {
     required: true,
     json: { type: "string", pattern: ROW_NAME_RE.source },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
@@ -57098,12 +57246,12 @@ function groupKeySpec() {
   return {
     required: false,
     json: { type: "string", minLength: 1 },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v !== "string" || v === "" || v.includes("/")) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
+          path: `${path39}.${field}`,
           message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
@@ -57117,14 +57265,14 @@ function groupLabelSpec() {
   return {
     required: true,
     json: { type: "string", pattern: "^[^\\n\\r]*$" },
-    parse: (ctx, path41, field, raw) => {
-      const s = requireString(ctx, path41, raw, field);
+    parse: (ctx, path39, field, raw) => {
+      const s = requireString(ctx, path39, raw, field);
       if (s === null) return void 0;
       if (/[\n\r]/.test(s)) {
         ctx.issues.push({
-          path: `${path41}.${field}`,
-          message: `${path41}.${field}: group label must not contain newlines`,
-          line: findKeyLine(ctx.source, [...path41.split("."), field])
+          path: `${path39}.${field}`,
+          message: `${path39}.${field}: group label must not contain newlines`,
+          line: findKeyLine(ctx.source, [...path39.split("."), field])
         });
         return void 0;
       }
@@ -57166,9 +57314,9 @@ function lowerGroup(g) {
     g.when
   );
 }
-function groupIssue(ctx, path41, message) {
+function groupIssue(ctx, path39, message) {
   ctx.issues.push({
-    path: path41,
+    path: path39,
     message,
     line: findKeyLine(ctx.source, ["root"])
   });
@@ -57327,8 +57475,8 @@ function segmentReferencesMenu(template) {
     return false;
   }
 }
-function menuIssue(ctx, path41, message) {
-  ctx.issues.push({ path: path41, message, line: findKeyLine(ctx.source, ["root"]) });
+function menuIssue(ctx, path39, message) {
+  ctx.issues.push({ path: path39, message, line: findKeyLine(ctx.source, ["root"]) });
 }
 function checkMenuDecls(ctx, out) {
   reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
@@ -57397,10 +57545,10 @@ function synthesizePlacementMenus(config2, issues) {
   const callsOf = /* @__PURE__ */ new Map();
   const reported = /* @__PURE__ */ new Set();
   const issue3 = (segName, message) => {
-    const path41 = `segments.${segName}`;
-    if (reported.has(`${path41}\0${message}`)) return;
-    reported.add(`${path41}\0${message}`);
-    issues.push({ path: path41, message });
+    const path39 = `segments.${segName}`;
+    if (reported.has(`${path39}\0${message}`)) return;
+    reported.add(`${path39}\0${message}`);
+    issues.push({ path: path39, message });
   };
   for (const preset of presetNames(config2.presets)) {
     const ownerBySynthKey = /* @__PURE__ */ new Map();
@@ -57464,7 +57612,7 @@ function synthesizePlacementMenus(config2, issues) {
 
 // src/config/loader/actions.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
   if (!isPlainObject3(raw)) {
@@ -57482,27 +57630,27 @@ function validateActions(ctx, raw, home) {
   }
   return out;
 }
-function issue2(ctx, path41, message) {
+function issue2(ctx, path39, message) {
   ctx.issues.push({
-    path: path41,
+    path: path39,
     message,
-    line: findKeyLine(ctx.source, path41.split("."))
+    line: findKeyLine(ctx.source, path39.split("."))
   });
 }
-function validateActionDecl(ctx, path41, raw, home) {
+function validateActionDecl(ctx, path39, raw, home) {
   if (!isPlainObject3(raw)) {
     issue2(
       ctx,
-      path41,
-      `${path41} must be an action object, got ${describeType2(raw)}`
+      path39,
+      `${path39} must be an action object, got ${describeType2(raw)}`
     );
     return null;
   }
   if ("persistWhen" in raw) {
     issue2(
       ctx,
-      path41,
-      `${path41}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
+      path39,
+      `${path39}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
     );
     return null;
   }
@@ -57510,19 +57658,19 @@ function validateActionDecl(ctx, path41, raw, home) {
   if (present.length !== 1) {
     issue2(
       ctx,
-      path41,
+      path39,
       `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
     );
     return null;
   }
-  return actionArms(home)[present[0]](ctx, path41, raw);
+  return actionArms(home)[present[0]](ctx, path39, raw);
 }
 function actionHomeOf(filePath2) {
-  return import_node_path16.default.isAbsolute(filePath2) ? { dir: import_node_path16.default.dirname(filePath2) } : { text: filePath2 };
+  return import_node_path17.default.isAbsolute(filePath2) ? { dir: import_node_path17.default.dirname(filePath2) } : { text: filePath2 };
 }
 var actionArms = (home) => ({
-  set: (ctx, path41, raw) => valueSourceAction(ctx, path41, raw, "set", SET_ARMS),
-  persist: (ctx, path41, raw) => valueSourceAction(ctx, path41, raw, "persist", PERSIST_ARMS),
+  set: (ctx, path39, raw) => valueSourceAction(ctx, path39, raw, "set", SET_ARMS),
+  persist: (ctx, path39, raw) => valueSourceAction(ctx, path39, raw, "persist", PERSIST_ARMS),
   copy: templateArm("copy"),
   open: templateArm("open"),
   reset: resetArm,
@@ -57539,31 +57687,31 @@ var actionArms = (home) => ({
   do: doArm
 });
 function templateArm(key) {
-  return (ctx, path41, raw) => {
+  return (ctx, path39, raw) => {
     for (const k of Object.keys(raw)) {
       if (k !== key)
         issue2(
           ctx,
-          `${path41}.${k}`,
+          `${path39}.${k}`,
           `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
         );
     }
-    const tmpl = requireString(ctx, path41, raw, key);
+    const tmpl = requireString(ctx, path39, raw, key);
     return tmpl === null ? null : { [key]: tmpl };
   };
 }
-function resetArm(ctx, path41, raw) {
+function resetArm(ctx, path39, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "reset")
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on a reset action. Expected only: reset`
       );
   }
   const key = slashFreeString(
     ctx,
-    path41,
+    path39,
     "reset",
     raw,
     `reset key must be non-empty (the config globals field to clear)`,
@@ -57579,19 +57727,19 @@ var MARKER_SUBJECT = {
   save: "it saves the session's unsaved settings"
 };
 function markerArm(key) {
-  return (ctx, path41, raw) => {
+  return (ctx, path39, raw) => {
     for (const k of Object.keys(raw)) {
       if (k !== key)
         issue2(
           ctx,
-          `${path41}.${k}`,
+          `${path39}.${k}`,
           `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
         );
     }
     if (raw[key] !== true) {
       issue2(
         ctx,
-        `${path41}.${key}`,
+        `${path39}.${key}`,
         `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue2(raw[key])}`
       );
       return null;
@@ -57599,42 +57747,42 @@ function markerArm(key) {
     return { [key]: true };
   };
 }
-function presetArm(ctx, path41, raw) {
+function presetArm(ctx, path39, raw) {
   const verb = raw.preset;
   const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
   for (const k of Object.keys(raw)) {
     if (!allowed.includes(k))
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
       );
   }
   if (verb !== "save" && verb !== "delete") {
     issue2(
       ctx,
-      `${path41}.preset`,
+      `${path39}.preset`,
       `preset must be "save" or "delete", got ${describeValue2(verb)}`
     );
     return null;
   }
   if (verb === "save") return { preset: "save" };
-  const name = requireString(ctx, path41, raw, "name");
+  const name = requireString(ctx, path39, raw, "name");
   return name === null ? null : { preset: "delete", name };
 }
-function themeDefaultArm(ctx, path41, raw) {
+function themeDefaultArm(ctx, path39, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "themeDefault")
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
       );
   }
   if (raw.themeDefault !== "save") {
     issue2(
       ctx,
-      `${path41}.themeDefault`,
+      `${path39}.themeDefault`,
       `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue2(raw.themeDefault)}`
     );
     return null;
@@ -57646,7 +57794,7 @@ var DOCTOR_KEYS = {
   fix: ["doctor", "check"],
   mark: ["doctor", "check", "mark"]
 };
-function doctorArm(ctx, path41, raw) {
+function doctorArm(ctx, path39, raw) {
   const verb = raw.doctor;
   const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
   const allowed = known ? DOCTOR_KEYS[verb] : [...new Set(Object.values(DOCTOR_KEYS).flat())];
@@ -57654,14 +57802,14 @@ function doctorArm(ctx, path41, raw) {
     if (!allowed.includes(k))
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`
       );
   }
   if (!known) {
     issue2(
       ctx,
-      `${path41}.doctor`,
+      `${path39}.doctor`,
       `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue2(verb)}`
     );
     return null;
@@ -57672,7 +57820,7 @@ function doctorArm(ctx, path41, raw) {
   if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
     issue2(
       ctx,
-      `${path41}.check`,
+      `${path39}.check`,
       `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue2(check)}`
     );
     return null;
@@ -57682,25 +57830,25 @@ function doctorArm(ctx, path41, raw) {
   if (!GLYPH_MARKS.includes(mark)) {
     issue2(
       ctx,
-      `${path41}.mark`,
+      `${path39}.mark`,
       `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue2(mark)}`
     );
     return null;
   }
   return { doctor: "mark", check, mark };
 }
-function slashArm(ctx, path41, raw) {
+function slashArm(ctx, path39, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "slash")
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on a slash action. Expected only: slash`
       );
   }
   const parsed2 = parseSlashLine(raw.slash);
   if (parsed2.kind === "refused") {
-    issue2(ctx, `${path41}.slash`, parsed2.reason);
+    issue2(ctx, `${path39}.slash`, parsed2.reason);
     return null;
   }
   return { slash: parsed2.line };
@@ -57708,12 +57856,12 @@ function slashArm(ctx, path41, raw) {
 var RUN_KEYS = ["run", "env", "refreshes"];
 var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function runArm(home) {
-  return (ctx, path41, raw) => {
+  return (ctx, path39, raw) => {
     for (const k of Object.keys(raw)) {
       if (!RUN_KEYS.includes(k))
         issue2(
           ctx,
-          `${path41}.${k}`,
+          `${path39}.${k}`,
           `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
         );
     }
@@ -57722,7 +57870,7 @@ function runArm(home) {
     if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
       issue2(
         ctx,
-        `${path41}.run`,
+        `${path39}.run`,
         `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue2(run3)}`
       );
     }
@@ -57732,7 +57880,7 @@ function runArm(home) {
     )) {
       issue2(
         ctx,
-        `${path41}.env`,
+        `${path39}.env`,
         `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue2(env2)}`
       );
     }
@@ -57740,14 +57888,14 @@ function runArm(home) {
     if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
       issue2(
         ctx,
-        `${path41}.refreshes`,
+        `${path39}.refreshes`,
         `refreshes must list the names of the sources the program writes, got ${describeValue2(refreshes)}`
       );
     }
     if (!("dir" in home)) {
       issue2(
         ctx,
-        `${path41}.run`,
+        `${path39}.run`,
         `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
       );
     }
@@ -57774,12 +57922,12 @@ var RUN_ARM_JSON = {
   required: ["run"],
   additionalProperties: false
 };
-function doArm(ctx, path41, raw) {
+function doArm(ctx, path39, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "do")
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on a do action. Expected only: do`
       );
   }
@@ -57787,17 +57935,17 @@ function doArm(ctx, path41, raw) {
   if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
     issue2(
       ctx,
-      `${path41}.do`,
+      `${path39}.do`,
       `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue2(members)}`
     );
     return null;
   }
   return { do: members };
 }
-function slashFreeString(ctx, path41, field, raw, emptyMessage, slashMessage) {
-  const v = requireString(ctx, path41, raw, field);
+function slashFreeString(ctx, path39, field, raw, emptyMessage, slashMessage) {
+  const v = requireString(ctx, path39, raw, field);
   if (v === null) return null;
-  const at = `${path41}.${field}`;
+  const at = `${path39}.${field}`;
   if (v === "") {
     issue2(ctx, at, emptyMessage);
     return null;
@@ -57812,11 +57960,11 @@ var DISCRIMINATOR_NOUN = {
   set: "the SessionState key to write",
   persist: "the config globals field to write"
 };
-function validateDiscriminatorKey(ctx, path41, raw, discriminator) {
+function validateDiscriminatorKey(ctx, path39, raw, discriminator) {
   const noun = DISCRIMINATOR_NOUN[discriminator];
   const value = slashFreeString(
     ctx,
-    path41,
+    path39,
     discriminator,
     raw,
     `${discriminator} key must be non-empty (${noun})`,
@@ -57882,7 +58030,7 @@ function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
   const fullKeys = Object.keys(fieldMap);
   const detect = detectKeys ?? fullKeys;
   const keys2 = [discriminator];
-  const inner = (ctx, path41, raw) => fields(ctx, fieldMap, path41, raw);
+  const inner = (ctx, path39, raw) => fields(ctx, fieldMap, path39, raw);
   const source = objectJson(fieldMap);
   return {
     detect,
@@ -57950,13 +58098,13 @@ function VALUE_SOURCE_MESSAGE(discriminator) {
   const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
   return `a ${discriminator} action declares exactly one value source: ${list2}`;
 }
-function valueSourceAction(ctx, path41, raw, discriminator, arms) {
-  const keys2 = validateDiscriminatorKey(ctx, path41, raw, discriminator);
+function valueSourceAction(ctx, path39, raw, discriminator, arms) {
+  const keys2 = validateDiscriminatorKey(ctx, path39, raw, discriminator);
   const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
   if (present.length !== 1) {
     issue2(
       ctx,
-      path41,
+      path39,
       `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
     );
     return null;
@@ -57966,11 +58114,11 @@ function valueSourceAction(ctx, path41, raw, discriminator, arms) {
     if (!arm2.allowed.includes(k))
       issue2(
         ctx,
-        `${path41}.${k}`,
+        `${path39}.${k}`,
         `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
       );
   }
-  const payload = arm2.parse(ctx, path41, raw);
+  const payload = arm2.parse(ctx, path39, raw);
   return keys2 === null || payload === null ? null : { ...keys2, ...payload };
 }
 function setLiteralSpec(discriminator) {
@@ -57978,9 +58126,9 @@ function setLiteralSpec(discriminator) {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path41, field, raw) => slashFreeString(
+    parse: (ctx, path39, field, raw) => slashFreeString(
       ctx,
-      path41,
+      path39,
       field,
       raw,
       `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
@@ -58003,9 +58151,9 @@ function fromSpec(discriminator) {
         }
       ]
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const from = raw[field];
-      const at = `${path41}.${field}`;
+      const at = `${path39}.${field}`;
       if (typeof from === "string") {
         if (from === "") {
           issue2(ctx, at, `${field} must be a non-empty domain name`);
@@ -58069,9 +58217,9 @@ function cycleSpec(discriminator) {
       minItems: 2,
       uniqueItems: true
     },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
-      const at = `${path41}.${field}`;
+      const at = `${path39}.${field}`;
       if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
         issue2(
           ctx,
@@ -58123,11 +58271,11 @@ function intMarkerSpec() {
   return {
     required: true,
     json: { const: true },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       if (raw[field] !== true) {
         issue2(
           ctx,
-          `${path41}.${field}`,
+          `${path39}.${field}`,
           `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue2(raw[field])}`
         );
         return void 0;
@@ -58140,10 +58288,10 @@ function layoutNameSpec(field) {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path41, f, raw) => {
-      const v = requireString(ctx, path41, raw, f);
+    parse: (ctx, path39, f, raw) => {
+      const v = requireString(ctx, path39, raw, f);
       if (v === null) return void 0;
-      const at = `${path41}.${f}`;
+      const at = `${path39}.${f}`;
       if (v === "") {
         issue2(ctx, at, `${field} must be non-empty (a segment name)`);
         return void 0;
@@ -58164,12 +58312,12 @@ function relationSpec() {
   return {
     required: true,
     json: { enum: ["before", "after"] },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (v !== "before" && v !== "after") {
         issue2(
           ctx,
-          `${path41}.${field}`,
+          `${path39}.${field}`,
           `relation must be "before" or "after", got ${describeValue2(v)}`
         );
         return void 0;
@@ -58182,12 +58330,12 @@ function requireIntSpec() {
   return {
     required: true,
     json: { type: "integer" },
-    parse: (ctx, path41, field, raw) => {
+    parse: (ctx, path39, field, raw) => {
       const v = raw[field];
       if (typeof v !== "number" || !Number.isInteger(v)) {
         issue2(
           ctx,
-          `${path41}.${field}`,
+          `${path39}.${field}`,
           `${field} must be an integer, got ${describeValue2(v)}`
         );
         return void 0;
@@ -58249,12 +58397,12 @@ init_globals();
 var presetRootSpec = {
   required: false,
   json: { $ref: ROOT_FRAGMENT_REF },
-  parse: (ctx, path41, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path41}.${field}`, raw[field])
+  parse: (ctx, path39, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path39}.${field}`, raw[field])
 };
 var presetGlobalsSpec = {
   required: false,
   json: presetGlobalsJson(),
-  parse: (ctx, path41, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path41}.${field}`, raw[field])
+  parse: (ctx, path39, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path39}.${field}`, raw[field])
 };
 var PRESET_SCHEMA = {
   noun: "preset key",
@@ -58421,9 +58569,9 @@ function valueReads({ names, helpers, actions }) {
   });
   const ofTemplate = perTemplate(
     (template) => texts(template).flatMap(
-      (text4) => [...templateReads(text4, helpers).keys()].map((path41) => ({
-        path: path41,
-        reaches: variableRead(path41, names)
+      (text4) => [...templateReads(text4, helpers).keys()].map((path39) => ({
+        path: path39,
+        reaches: variableRead(path39, names)
       }))
     )
   );
@@ -58609,9 +58757,9 @@ function authoredPlacement(raw, name) {
   ];
   for (const [layoutKey, fragment] of layouts) {
     if (fragment === void 0) continue;
-    for (const [node, path41] of fragmentNodePaths(fragment, layoutKey)) {
+    for (const [node, path39] of fragmentNodePaths(fragment, layoutKey)) {
       if (node.kind === "segment" && node.name === name)
-        return { layoutKey, path: path41 };
+        return { layoutKey, path: path39 };
     }
   }
   return void 0;
@@ -58722,12 +58870,12 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     return AXIS_OF[node.direction] === "row" && !placesRows ? where : void 0;
   }
   const whereBelow = (node, where) => node.kind === "segment" ? "band" : AXIS_OF[node.direction] === "cell" ? "nested" : where;
-  const childPaths = (node, path41) => node.kind === "container" ? node.children.map((child, i) => [child, childPath(path41, i)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path41)]];
+  const childPaths = (node, path39) => node.kind === "container" ? node.children.map((child, i) => [child, childPath(path39, i)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path39)]];
   function* unreadBelow(children2, where) {
-    for (const [child, path41] of children2) {
+    for (const [child, path39] of children2) {
       const own2 = unreadAt(child, where);
-      if (own2 !== void 0) yield [own2, path41];
-      yield* unreadBelow(childPaths(child, path41), whereBelow(child, where));
+      if (own2 !== void 0) yield [own2, path39];
+      yield* unreadBelow(childPaths(child, path39), whereBelow(child, where));
     }
   }
   const reported = /* @__PURE__ */ new Set();
@@ -58736,27 +58884,27 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
       ([name, row2]) => [row2, `${layoutKey}.rows.${name}`]
     ) : childPaths(top, layoutKey);
-    for (const [where, path41] of unreadBelow(rows, whereBelow(top, "bar"))) {
+    for (const [where, path39] of unreadBelow(rows, whereBelow(top, "bar"))) {
       ctx.issues.push({
-        path: path41,
-        message: UNREAD_DISTRIBUTION[where](path41),
-        line: findKeyLine(ctx.source, path41.split("."))
+        path: path39,
+        message: UNREAD_DISTRIBUTION[where](path39),
+        line: findKeyLine(ctx.source, path39.split("."))
       });
     }
-    for (const [node, path41] of fragmentNodePaths(root, layoutKey)) {
-      const line = findKeyLine(ctx.source, path41.split("."));
+    for (const [node, path39] of fragmentNodePaths(root, layoutKey)) {
+      const line = findKeyLine(ctx.source, path39.split("."));
       if (node.when !== void 0) {
-        checkTemplateRefs(ctx, `${path41}.when`, node.when, templateScope, {
+        checkTemplateRefs(ctx, `${path39}.when`, node.when, templateScope, {
           line
         });
-        checkWhenParses(ctx, `${path41}.when`, node.when, line);
-        checkActionRefs(ctx, cfg, `${path41}.when`, node.when, line);
+        checkWhenParses(ctx, `${path39}.when`, node.when, line);
+        checkActionRefs(ctx, cfg, `${path39}.when`, node.when, line);
       }
       if (node.kind !== "segment") continue;
       if (isSettingsAnchor(node.name)) {
         if (node.id !== void 0 || node.settings !== void 0) {
           ctx.issues.push({
-            path: path41,
+            path: path39,
             message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings \u2014 the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
             line
           });
@@ -58767,12 +58915,12 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       if (reportable(placed)) {
         reported.add(node.name);
         ctx.unplaced.push({
-          path: path41,
+          path: path39,
           message: unplacedMessage(layoutKey, node.name, cfg.segments, placed),
           line
         });
       }
-      checkPlacementSettings(ctx, cfg, node, path41, line);
+      checkPlacementSettings(ctx, cfg, node, path39, line);
     }
   };
   if (authored.root !== void 0) checkLayoutTree(authored.root, "root");
@@ -58783,8 +58931,8 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   }
   const rendered = /* @__PURE__ */ new Map([["root", rootNode(cfg.root)]]);
   for (const name of presetNames(cfg.presets)) {
-    const { node, path: path41 } = presetRoot(cfg, name);
-    rendered.set(path41, node);
+    const { node, path: path39 } = presetRoot(cfg, name);
+    rendered.set(path39, node);
   }
   for (const [key, tree] of rendered) {
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
@@ -59021,9 +59169,9 @@ function checkRuleSlotReads(ctx, cfg) {
   const declared = new Map(declaredVariables(cfg));
   const fold = valueReadsOf(cfg);
   const slotRead = (reads, seen) => {
-    for (const { path: path41, reaches } of reads) {
+    for (const { path: path39, reaches } of reads) {
       const atSlot = EXPRESSION_SLOTS.find(
-        (slot) => SLOT_PATHS[slot] === path41 || SLOT_PATHS[slot].startsWith(`${path41}.`)
+        (slot) => SLOT_PATHS[slot] === path39 || SLOT_PATHS[slot].startsWith(`${path39}.`)
       );
       if (atSlot !== void 0)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
@@ -59051,27 +59199,27 @@ function checkRuleSlotReads(ctx, cfg) {
   for (const { at, rule } of authoredRules(cfg)) {
     const why2 = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
     if (why2 === null) continue;
-    const path41 = at.join(".");
+    const path39 = at.join(".");
     ctx.issues.push({
-      path: path41,
-      message: `${path41} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
+      path: path39,
+      message: `${path39} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
       line: findKeyLine(ctx.source, [...at])
     });
   }
 }
-function checkWhenParses(ctx, path41, when2, line) {
+function checkWhenParses(ctx, path39, when2, line) {
   try {
     SYNTAX_ENGINE.parse(when2);
   } catch (e) {
     ctx.issues.push({
-      path: path41,
-      message: `Template parse error in ${path41}: ${e.message}`,
+      path: path39,
+      message: `Template parse error in ${path39}: ${e.message}`,
       line
     });
   }
 }
-function checkActionRefs(ctx, cfg, path41, template, line) {
-  const field = path41.slice(path41.lastIndexOf(".") + 1);
+function checkActionRefs(ctx, cfg, path39, template, line) {
+  const field = path39.slice(path39.lastIndexOf(".") + 1);
   for (const { name: aref, site, via } of templateActionRefs(
     template,
     cfg.helpers
@@ -59087,7 +59235,7 @@ function checkActionRefs(ctx, cfg, path41, template, line) {
       continue;
     }
     ctx.issues.push({
-      path: path41,
+      path: path39,
       message: `${field} references unknown action "${aref}"${inOptions}`,
       line
     });
@@ -59125,10 +59273,10 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
   }
 }
 function checkHelperIssue(ctx, helper, message) {
-  const path41 = `helpers.${helper}`;
-  if (ctx.issues.some((i) => i.path === path41 && i.message === message)) return;
+  const path39 = `helpers.${helper}`;
+  if (ctx.issues.some((i) => i.path === path39 && i.message === message)) return;
   ctx.issues.push({
-    path: path41,
+    path: path39,
     message,
     line: findKeyLine(ctx.source, ["helpers", helper])
   });
@@ -59488,22 +59636,6 @@ function validateNoNesting(ctx, cfg, names) {
 init_globals();
 var import_node_path18 = __toESM(require_path_browserify(), 1);
 var import_json52 = __toESM(require_dist(), 1);
-
-// src/utils/user-path.ts
-init_globals();
-init_os();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
-function expandHome(p2) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? os_default.homedir() + p2.slice(1) : p2;
-}
-function resolveUserPath(base, p2) {
-  return import_node_path17.default.resolve(base, expandHome(p2));
-}
-function explicitConfigPath(base, p2) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2) : void 0;
-}
-
-// src/config/loader/plugins.ts
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }
@@ -60355,11 +60487,11 @@ var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
-function presence(path41) {
+function presence(path39) {
   try {
-    return fs_default.statSync(path41, { throwIfNoEntry: false }) === void 0 ? "absent" : "present";
+    return fs_default.statSync(path39, { throwIfNoEntry: false }) === void 0 ? "absent" : "present";
   } catch (e) {
-    return { path: path41, error: e.message };
+    return { path: path39, error: e.message };
   }
 }
 
@@ -60450,8 +60582,8 @@ function xdgConfigBase() {
   const xdgConfigHome = process_default.env.XDG_CONFIG_HOME ?? import_node_path21.default.join(os_default.homedir(), ".config");
   return import_node_path21.default.join(xdgConfigHome, "cc-candybar", "config");
 }
-function homeLayer(path41) {
-  return { path: path41, scope: "plugins" };
+function homeLayer(path39) {
+  return { path: path39, scope: "plugins" };
 }
 function resolveDslConfig(answers, projectDir, cwd2, configFile) {
   const unchecked = [];
@@ -60578,10 +60710,10 @@ function detectConfigCollisions(projectDir, cwd2) {
 }
 
 // src/config/dsl-loader.ts
-function loadConfig(path41, dflt, ctx, allowedPalettes) {
-  return path41 === null ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) } : loadConfigSource(
-    path41,
-    fs_default.readFileSync(path41, "utf-8"),
+function loadConfig(path39, dflt, ctx, allowedPalettes) {
+  return path39 === null ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) } : loadConfigSource(
+    path39,
+    fs_default.readFileSync(path39, "utf-8"),
     dflt,
     ctx,
     allowedPalettes
@@ -60593,15 +60725,15 @@ var NO_PROJECT = {
   checkout: null,
   beneath: { dropped: [], rendering: /* @__PURE__ */ new Map() }
 };
-function loadConfigSource(path41, source, dflt, ctx, allowedPalettes) {
-  const parsed2 = parseDslFile(path41, source, allowedPalettes, (refs, names) => {
+function loadConfigSource(path39, source, dflt, ctx, allowedPalettes) {
+  const parsed2 = parseDslFile(path39, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path41, ctx.scope),
+      listedPlugins(refs, path39, ctx.scope),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path41, allowedPalettes)
+      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path39, allowedPalettes)
     );
     const owning2 = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -60677,11 +60809,11 @@ function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_defaul
   );
   const base = plugins2.config;
   const layers = [];
-  for (const { path: path41, scope } of chain2) {
+  for (const { path: path39, scope } of chain2) {
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
-      path41,
-      read2(path41),
+      path39,
+      read2(path39),
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
@@ -60699,7 +60831,7 @@ function loadConfigChain(chain2, dflt, trace, session, read2 = (p2) => fs_defaul
       allowedPalettes
     );
     trace.warned(loaded.warnings);
-    layers.push({ ...loaded, path: path41 });
+    layers.push({ ...loaded, path: path39 });
   }
   const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
   const isReached = (d) => reached.has(d.path);
@@ -62804,8 +62936,8 @@ function filePath(fileKey) {
   }
   return persistPath(target);
 }
-function holds(doc, path41) {
-  const [step4, ...rest2] = path41;
+function holds(doc, path39) {
+  const [step4, ...rest2] = path39;
   if (step4 === void 0) return doc !== void 0;
   return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
 }
@@ -63517,16 +63649,16 @@ function requireDeclared(doc, own2, bundled, key) {
   }
 }
 function valuePathOf(doc, target) {
-  const path41 = persistPath(target);
+  const path39 = persistPath(target);
   if (target.scope === "segment-palette") {
     requireDeclared(
       doc,
       ["segments", target.segment],
       RAW_SEGMENTS[target.segment],
-      path41.join(".")
+      path39.join(".")
     );
   }
-  return path41;
+  return path39;
 }
 function bundledDoc(value) {
   return parseDocument(json5Text(value));
@@ -63541,25 +63673,25 @@ function bundledRowLayers() {
     };
   });
 }
-function fileLayer(doc, path41) {
-  const fragment = doc === null ? void 0 : nodeAt(doc, path41);
-  return fragment === void 0 ? null : { path: path41, fragment, unit: null };
+function fileLayer(doc, path39) {
+  const fragment = doc === null ? void 0 : nodeAt(doc, path39);
+  return fragment === void 0 ? null : { path: path39, fragment, unit: null };
 }
-function bundledRootLayer(path41, root) {
+function bundledRootLayer(path39, root) {
   if (root === void 0) return null;
   const authored = authoredFragment(root);
   return {
-    path: path41,
+    path: path39,
     fragment: bundledDoc(authored),
-    unit: { path: path41, value: authored }
+    unit: { path: path39, value: authored }
   };
 }
 function presetLayer(doc, preset) {
   const own2 = ["presets", preset];
-  const path41 = [...own2, "root"];
+  const path39 = [...own2, "root"];
   const bundled = RAW_PRESETS[preset];
-  requireDeclared(doc, own2, bundled, path41.join("."));
-  const layer = fileLayer(doc, path41) ?? bundledRootLayer(path41, bundled?.root);
+  requireDeclared(doc, own2, bundled, path39.join("."));
+  const layer = fileLayer(doc, path39) ?? bundledRootLayer(path39, bundled?.root);
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 var TREE_BLOCK = "#";
@@ -63623,12 +63755,12 @@ function requireValueTarget(key) {
   }
   return target;
 }
-function commit2(store, home, before, after, refuse3) {
+function commit2(store, home, before, after, refuse4) {
   const will = loadOrRefuse(home, after);
   let held;
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
-  refuse3(home, was, will);
+  refuse4(home, was, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
@@ -63777,25 +63909,25 @@ function withPlacements(text4, file, placements, own2) {
 function ownRow(text4, preset, id2) {
   const doc = docOf(text4);
   const own2 = ["presets", preset, "root"];
-  for (const [row2, { path: path41, unit, node }] of cascadeOf(doc, preset)) {
+  for (const [row2, { path: path39, unit, node }] of cascadeOf(doc, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
-    if (own2.every((key, i) => path41[i] === key)) return text4;
+    if (own2.every((key, i) => path39[i] === key)) return text4;
     const rowText = unit === null ? movableTextOf(text4, node) : json5Text(unit.value);
     if (row2 !== TREE_BLOCK) {
       return setValue(text4, [...own2, "rows", row2], rowText, JSON5_DIALECT);
     }
     if (presetLayer(doc, preset) !== null) {
       throw new BadVerbArgs(
-        `cannot give preset "${preset}" its own copy of ${path41.join(".")}: it already stages rows of its own over that tree`
+        `cannot give preset "${preset}" its own copy of ${path39.join(".")}: it already stages rows of its own over that tree`
       );
     }
     return setValue(text4, own2, rowText, JSON5_DIALECT);
   }
   return text4;
 }
-function deleteAtPath(text4, path41) {
-  const ownPreset = path41[0] === "presets" && path41.length > 2 && !isBundledPreset(path41[1]);
-  return deleteValue(text4, path41, ownPreset ? 2 : 0);
+function deleteAtPath(text4, path39) {
+  const ownPreset = path39[0] === "presets" && path39.length > 2 && !isBundledPreset(path39[1]);
+  return deleteValue(text4, path39, ownPreset ? 2 : 0);
 }
 function deleteValues(store, home, keys2) {
   const targets = keys2.map(requireTarget);
@@ -63933,14 +64065,14 @@ function applyLayoutOp(store, home, key, op) {
   commit2(store, home, before, after, refuseHidden);
   return placed;
 }
-function spliceOp(text4, path41, op, rendered) {
+function spliceOp(text4, path39, op, rendered) {
   switch (op.op) {
     case "remove":
-      return { after: removeSegmentRef(text4, path41, op.target), placed: null };
+      return { after: removeSegmentRef(text4, path39, op.target), placed: null };
     case "insert": {
       const placed = mintPlacement(op.segment, op.anchor, rendered());
       return {
-        after: insertSegmentRef(text4, path41, placed, op.anchor, op.relation),
+        after: insertSegmentRef(text4, path39, placed, op.anchor, op.relation),
         placed
       };
     }
@@ -63973,7 +64105,7 @@ function recordingView(store, records, onChange) {
     clear: (sessionId2, key) => recorded(sessionId2, [key], () => store.clear(sessionId2, key))
   };
 }
-var EPHEMERAL_STORAGE = {
+var EPHEMERAL_SESSION_STORAGE = {
   load: () => ({}),
   save: () => {
   },
@@ -63982,7 +64114,7 @@ var EPHEMERAL_STORAGE = {
 };
 var DEFAULT_MAX_SESSIONS = 256;
 var SessionState = class {
-  constructor(storage = EPHEMERAL_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
+  constructor(storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
     this.maxSessions = maxSessions;
     this.storage = storage;
     this.sessions = /* @__PURE__ */ new Map();
@@ -64001,15 +64133,6 @@ var SessionState = class {
   // every mutation reports changed. Coarse-grained reactivity is correct for
   // session-state's load — mutations are rare and computeds are cheap.
   atom = createAtom("SessionState");
-  // [LAW:single-enforcer] Bind a persistence backend after construction. Only
-  // the daemon process calls this (with the disk-backed storage), so importers
-  // that merely load this module — the CLI relay, subcommands — keep the
-  // ephemeral default and never read or write the state file. Must run before
-  // the daemon serves requests, since it replaces in-memory state with disk.
-  useStorage(storage) {
-    this.storage = storage;
-    this.hydrateFromStorage();
-  }
   hydrateFromStorage() {
     this.sessions = new Map(
       Object.entries(this.storage.load()).map(([sessionId2, kv]) => [
@@ -64132,6 +64255,14 @@ var SessionState = class {
   flush() {
     this.storage.flush();
   }
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
+  // lands, and anything that lands later (a render that was awaiting, a run
+  // settling) stays in memory, so it can never write over the file a next
+  // daemon has taken up.
+  close() {
+    this.flush();
+    this.storage = EPHEMERAL_SESSION_STORAGE;
+  }
   persist() {
     this.storage.save(this.serialize());
   }
@@ -64145,8 +64276,11 @@ var SessionState = class {
 };
 
 // src/daemon/settings-history.ts
-var EPHEMERAL_STORAGE2 = { load: () => ({}), save: () => {
-} };
+var EPHEMERAL_HISTORY_STORAGE = {
+  load: () => ({}),
+  save: () => {
+  }
+};
 var SETTING_SESSION_KEYS = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey)
 );
@@ -64157,8 +64291,8 @@ var MAX_BYTES2 = 8 * 1024 * 1024;
 var EMPTY = { past: [], future: [] };
 var identity2 = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
 var SettingsHistory = class {
-  constructor(sessionState2, logger, storage = EPHEMERAL_STORAGE2) {
-    this.sessionState = sessionState2;
+  constructor(sessionState, logger, storage = EPHEMERAL_HISTORY_STORAGE) {
+    this.sessionState = sessionState;
     this.logger = logger;
     this.storage = storage;
     this.state = new Map(Object.entries(storage.load()));
@@ -64180,12 +64314,6 @@ var SettingsHistory = class {
   }
   set state(next2) {
     runInAction(() => this.held.replace(next2));
-  }
-  // [LAW:single-enforcer] Mirrors SessionState.useStorage: only the daemon
-  // binds the file, after it has won the socket.
-  useStorage(storage) {
-    this.storage = storage;
-    this.state = new Map(Object.entries(storage.load()));
   }
   depth(sessionId2) {
     const { past, future, savepoint } = this.state.get(sessionId2) ?? EMPTY;
@@ -64210,7 +64338,7 @@ var SettingsHistory = class {
       pending2.set(sessionId2, changes);
     };
     const toggles = /* @__PURE__ */ new Map();
-    const sessionState2 = recordingView(
+    const sessionState = recordingView(
       this.sessionState,
       (key) => isSettingKey(key) || key === EDIT_MODE_KEY,
       (sessionId2, key, before, after) => {
@@ -64226,7 +64354,7 @@ var SettingsHistory = class {
       }
     );
     return {
-      sessionState: sessionState2,
+      sessionState,
       file: (sessionId2, file, before, after) => note(sessionId2, { kind: "file", file, before, after }),
       commit: () => {
         const committing = new Map(pending2);
@@ -64941,20 +65069,20 @@ function sessionEnv(daemonEnv, facts) {
 init_globals();
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function parseMarkBook(doc) {
-  const fault2 = (reason) => ({
+  const fault = (reason) => ({
     kind: "failed",
     reason
   });
-  if (!isRecord(doc)) return fault2("is not an object");
+  if (!isRecord(doc)) return fault("is not an object");
   for (const [check, sightings] of Object.entries(doc)) {
     if (!isRecord(sightings)) {
-      return fault2(
+      return fault(
         `holds ${JSON.stringify(check)} as something other than its sightings`
       );
     }
     for (const [id2, mark] of Object.entries(sightings)) {
       if (!GLYPH_MARKS.includes(mark)) {
-        return fault2(
+        return fault(
           `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
         );
       }
@@ -65041,15 +65169,15 @@ function tmuxRun(result, args) {
   const detail = result.error ?? [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
   return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
 }
-function runTmux(hint, category, args, stdinInput) {
+function runTmux(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
-    launchSync(invocation(hint, category, args, stdinInput)),
+    launcher.launchSync(invocation(hint, category, args, stdinInput)),
     args
   );
 }
-async function runTmuxAsync(hint, category, args, stdinInput) {
+async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
-    await launch(invocation(hint, category, args, stdinInput)),
+    await launcher.launch(invocation(hint, category, args, stdinInput)),
     args
   );
 }
@@ -65345,6 +65473,12 @@ function configIdentity(configPath) {
   }
 }
 var GitService = class {
+  // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
+  // close refuses the next read of a pass under way.
+  constructor(launcher) {
+    this.launcher = launcher;
+  }
+  launcher;
   isGitRepo(workingDir) {
     return holdsGit(workingDir);
   }
@@ -65359,7 +65493,7 @@ var GitService = class {
   // counting subclass in test/git-spawn-budget.test.ts is that seam; the
   // daemon's own GitDataProvider already extends this class.
   async execGitAsync(args, options) {
-    return launch({
+    return this.launcher.launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -65790,7 +65924,7 @@ var GitService = class {
   // (this is a network call, not a local git read). Returns the typed
   // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
   async execForgeAsync(bin, args, options) {
-    return launch({
+    return this.launcher.launch({
       bin,
       args: [...args],
       cwd: options.cwd,
@@ -66132,7 +66266,7 @@ function anyPathStartsWith(paths, prefix) {
   return false;
 }
 function gitOptionsFromClosure(needed) {
-  const has3 = (path41) => needed.has(path41);
+  const has3 = (path39) => needed.has(path39);
   const wantsWorkingTree = has3("git.staged") || has3("git.unstaged") || has3("git.untracked") || has3("git.conflicts");
   return {
     ...has3("git.sha") && { showSha: true },
@@ -66337,8 +66471,8 @@ function readLanes(inputs) {
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
     if (!needed) return ABSENT2;
-    const fault2 = deps.faults.of(sessionId2, lane);
-    if (fault2 !== void 0) return fault2;
+    const fault = deps.faults.of(sessionId2, lane);
+    if (fault !== void 0) return fault;
     try {
       return value();
     } catch (e) {
@@ -66573,7 +66707,7 @@ function payloadOf(inputs, draw2) {
   return projectPayload(inputs, draw2, readLanes(inputs));
 }
 function todayOf({
-  usageStore: usageStore2,
+  usageStore,
   faults,
   log
 }, lane, hookData2, at) {
@@ -66583,7 +66717,7 @@ function todayOf({
   if (set2.kind !== "ok") return void 0;
   const read2 = () => {
     try {
-      return usageStore2.todayAt(set2.value, hookData2, at);
+      return usageStore.todayAt(set2.value, hookData2, at);
     } catch (e) {
       log("error", `today read threw: ${inspect(e)}`);
       return ABSENT2;
@@ -66975,8 +67109,8 @@ function parseJsonlLines(text4) {
   }
   return entries;
 }
-function longLinesWith(longLines, path41, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path41, offset: read2.start, bytes: read2.longLine }];
+function longLinesWith(longLines, path39, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path39, offset: read2.start, bytes: read2.longLine }];
 }
 function longLineLog(longLines) {
   return longLines.map(
@@ -67847,8 +67981,8 @@ function run(argv) {
   );
 }
 `;
-function jxa(args) {
-  const run3 = launchSync({
+function jxa(launcher, args) {
+  const run3 = launcher.launchSync({
     bin: "osascript",
     args: ["-l", "JavaScript", "-e", JXA, ...args],
     timeoutMs: 3e3,
@@ -67872,8 +68006,8 @@ function jxa(args) {
 }
 var glyphsOf2 = (points) => points.map((p2) => String.fromCodePoint(parseInt(p2, 16)));
 var pointsArg = (glyphs) => [...glyphs].map(hex).join(",");
-function macCoverage(ref, glyphs) {
-  const answer2 = jxa([
+function macCoverage(launcher, ref, glyphs) {
+  const answer2 = jxa(launcher, [
     "font",
     ref.kind,
     ref.name,
@@ -67931,12 +68065,12 @@ function itermFontInUse(profiles, wanted2, version) {
     }
   };
 }
-function itermFont(version, env2, glyphs) {
+function itermFont(launcher, version, env2, glyphs) {
   if (process_default.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
   const wanted2 = env2.ITERM_PROFILE ?? null;
-  const answer2 = jxa(["iterm", wanted2 ?? "", pointsArg(glyphs)]);
+  const answer2 = jxa(launcher, ["iterm", wanted2 ?? "", pointsArg(glyphs)]);
   if (answer2.kind === "failed") return answer2;
   const profiles = answer2.value.profiles.map((p2) => ({
     ...p2,
@@ -67970,8 +68104,8 @@ function fcMatchCoverage(output, glyphs) {
   return { kind: "ok", value: { font: fonts[0].family, lacks } };
 }
 var fcEscape = (value) => value.replace(/[\\:,=-]/g, "\\$&");
-function fcCoverage(family, glyphs) {
-  const run3 = launchSync({
+function fcCoverage(launcher, family, glyphs) {
+  const run3 = launcher.launchSync({
     bin: "fc-match",
     args: [
       "--sort",
@@ -67989,8 +68123,8 @@ function fcCoverage(family, glyphs) {
   }
   return fcMatchCoverage(run3.stdout, glyphs);
 }
-function coverage(ref, glyphs) {
-  return process_default.platform === "darwin" ? macCoverage(ref, glyphs) : fcCoverage(ref.name, glyphs);
+function coverage(launcher, ref, glyphs) {
+  return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
   const xdg = xdgConfigHome || import_node_path28.default.join(home, ".config");
@@ -68048,7 +68182,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   return { kind: "ok", value: found };
 }
-function alacrittyFont(env2, glyphs) {
+function alacrittyFont(launcher, env2, glyphs) {
   const home = os_default.homedir();
   const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
     (p2) => fs_default.existsSync(p2)
@@ -68057,7 +68191,7 @@ function alacrittyFont(env2, glyphs) {
   if (named3.kind === "failed") return named3;
   const family = named3.value?.family ?? alacrittyDefaultFamily(process_default.platform);
   const from = named3.value?.from ?? (config2 === void 0 ? "Alacritty's default, no config file" : `Alacritty's default, ${config2} sets none`);
-  const drawn = coverage({ kind: "family", name: family }, glyphs);
+  const drawn = coverage(launcher, { kind: "family", name: family }, glyphs);
   if (drawn.kind === "failed") return drawn;
   const { font, lacks } = drawn.value;
   return {
@@ -68071,10 +68205,10 @@ function alacrittyFont(env2, glyphs) {
 }
 var READERS = {
   iterm2: itermFont,
-  alacritty: (_version, env2, glyphs) => alacrittyFont(env2, glyphs)
+  alacritty: (launcher, _version, env2, glyphs) => alacrittyFont(launcher, env2, glyphs)
 };
-function fontInUse(terminal, env2, glyphs) {
-  return READERS[terminal.name](terminal.version, env2, glyphs);
+function fontInUse(launcher, terminal, env2, glyphs) {
+  return READERS[terminal.name](launcher, terminal.version, env2, glyphs);
 }
 
 // src/doctor/post-mortems-read.ts
@@ -68184,8 +68318,8 @@ function descendsFromRemoteLogin(table, pid2) {
   }
   return { kind: "ok", value: false };
 }
-function remoteLogin(pid2) {
-  const run3 = launchSync({
+function remoteLogin(launcher, pid2) {
+  const run3 = launcher.launchSync({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
     timeoutMs: 2e3,
@@ -68227,8 +68361,8 @@ function ownsEntry(entry) {
   const root = DAEMON_ENTRY.exec(real)?.[1];
   return root !== void 0 && fs_default.existsSync(import_node_path29.default.join(root, "bin", "cc-candybar"));
 }
-function daemons() {
-  const run3 = launchSync({
+function daemons(launcher) {
+  const run3 = launcher.launchSync({
     bin: "ps",
     args: [
       "-U",
@@ -68249,8 +68383,8 @@ function daemons() {
   }
   return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
 }
-function probeTmux(hint) {
-  const run3 = runTmux(hint, "doctor.tmux", [
+function probeTmux(launcher, hint) {
+  const run3 = runTmux(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
@@ -68261,16 +68395,16 @@ function probeTmux(hint) {
   if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
   return parseTmuxClient(run3.stdout);
 }
-function productionEdge(loadConfig3) {
+function productionEdge(launcher, loadConfig3) {
   return {
-    probeTmux,
-    remoteLogin,
-    fontInUse,
+    probeTmux: (hint) => probeTmux(launcher, hint),
+    remoteLogin: (pid2) => remoteLogin(launcher, pid2),
+    fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs),
     loadConfig: loadConfig3,
     managedSettingsDir: process_default.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform),
     install: productionInstallEdge,
-    daemons,
-    forge: forgeLogin,
+    daemons: () => daemons(launcher),
+    forge: (cwd2) => forgeLogin(launcher, cwd2),
     transcript: readTranscriptWindow
   };
 }
@@ -68319,10 +68453,10 @@ var FORGE_PROBE = {
     nonZero: "failed"
   }
 };
-function forgeLogin(cwd2) {
+function forgeLogin(launcher, cwd2) {
   if (gitRootOf(cwd2) === void 0) return { kind: "ok", value: null };
   const remotes = remotesOf(
-    launchSync({
+    launcher.launchSync({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd: cwd2,
@@ -68339,7 +68473,7 @@ function forgeLogin(cwd2) {
   const cli = FORGE_CLI[forge];
   const probe2 = FORGE_PROBE[forge];
   const host = probe2.loginHost(remoteHost(url));
-  const run3 = launchSync({
+  const run3 = launcher.launchSync({
     bin: cli,
     args: [...probe2.args(host)],
     cwd: cwd2,
@@ -68360,9 +68494,10 @@ function forgeLoginOf(cli, host, nonZero, run3) {
   }
   return { kind: "failed", reason: launchFailure(cli, run3) };
 }
-function configFacts(load) {
+function configFacts(load, target) {
   const base = {
     layers: load.layers,
+    target,
     warnings: load.warning === null ? [] : load.warning.split("\n")
   };
   return load.error !== null ? { ...base, kind: "failed", error: load.error } : {
@@ -68529,7 +68664,7 @@ function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits, tran
       processes: edge.daemons(),
       read: stores.postMortemsRead
     },
-    config: configFacts(load),
+    config: configFacts(load, origin.target),
     sighted,
     frames: bars.kind === "failed" ? bars : { kind: "read" },
     data: segmentDataFacts(
@@ -68629,14 +68764,22 @@ var RuntimeStats = class _RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
+  // Launches asked for that started nothing: the launcher had closed, the
+  // category's interval had not passed, or the caller had aborted first.
+  subprocessRefusals = /* @__PURE__ */ new Map();
   subprocessCount = /* @__PURE__ */ new Map();
   subprocessHistogram = /* @__PURE__ */ new Map();
   subprocessHistogramRotator = /* @__PURE__ */ new Map();
   rollingTimestamps = [];
   rollingHead = 0;
+  // Readable off the value because a closed daemon's work is still refused, and
+  // no request reads a closed daemon.
+  get subprocessRefused() {
+    return this.subprocessRefusals;
+  }
   // [LAW:one-source-of-truth] The same object that owns the counters also
-  // exposes the metering handle. The launch primitive calls these two
-  // methods; nothing else mutates subprocess state.
+  // exposes the metering handle. The launch primitive calls these methods;
+  // nothing else mutates subprocess state.
   launchStats = {
     onStart: (category) => {
       this.subprocessTotal++;
@@ -68650,6 +68793,12 @@ var RuntimeStats = class _RuntimeStats {
     onEnd: (category, durationMs) => {
       this.subprocessInFlight = Math.max(0, this.subprocessInFlight - 1);
       this.recordDuration(category, durationMs);
+    },
+    onRefused: (category) => {
+      this.subprocessRefusals.set(
+        category,
+        (this.subprocessRefusals.get(category) ?? 0) + 1
+      );
     }
   };
   recordRollingNow() {
@@ -68705,6 +68854,7 @@ var RuntimeStats = class _RuntimeStats {
       inFlight: this.subprocessInFlight,
       lastMinute,
       byCategory,
+      refused: Object.fromEntries(this.subprocessRefused),
       p50DurationMs: p50,
       p99DurationMs: p99
     };
@@ -68781,6 +68931,7 @@ var RuntimeStats = class _RuntimeStats {
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      sourceDigest: null,
       daemon: {
         pid: 0,
         memory: { kind: "unmeasured" },
@@ -68799,7 +68950,7 @@ var RuntimeStats = class _RuntimeStats {
     return {
       pid: process_default.pid,
       version: PACKAGE_VERSION,
-      sourceDigest: bakedDigest(),
+      sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1e3),
@@ -69204,13 +69355,13 @@ function typeSlash(edge, hint, line) {
 }
 var THEN = ";";
 var BUFFER = "cc-candybar-slash";
-function tmux(hint, category, args, stdinInput) {
-  const run3 = runTmux(hint, category, args, stdinInput);
+function tmux(launcher, hint, category, args, stdinInput) {
+  const run3 = runTmux(launcher, hint, category, args, stdinInput);
   if (run3.kind === "failed") throw new Error(run3.reason);
   return run3;
 }
-function read(hint) {
-  const run3 = tmux(hint, "claude-input.read", [
+function read(launcher, hint) {
+  const run3 = tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -69248,8 +69399,9 @@ function pasteLineArgs(pane, buffer, before) {
     "Enter"
   ];
 }
-function type2(hint, line) {
+function type2(launcher, hint, line) {
   const run3 = tmux(
+    launcher,
     hint,
     "claude-input.type",
     pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
@@ -69260,8 +69412,11 @@ function type2(hint, line) {
     reason: `cc-candybar typed a command moments ago \u2014 click again in a second (${run3.reason})`
   };
 }
-function productionClaudeInputEdge() {
-  return { read, type: type2 };
+function productionClaudeInputEdge(launcher) {
+  return {
+    read: (hint) => read(launcher, hint),
+    type: (hint, line) => type2(launcher, hint, line)
+  };
 }
 
 // src/daemon/session-id.ts
@@ -69281,11 +69436,11 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
-function clickLaunch(opts, what, dlog2) {
-  const result = launchSync(opts);
+function clickLaunch(launcher, opts, what, log) {
+  const result = launcher.launchSync(opts);
   if (result.ok) return;
   if (result.reason === "rate-limited") {
-    dlog2("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
   const said = result.error ?? result.stderr.trim();
@@ -69295,9 +69450,10 @@ function clickLaunch(opts, what, dlog2) {
 }
 function pbcopy(text4, ctx) {
   clickLaunch(
+    ctx.launcher,
     { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
     "pbcopy",
-    ctx.dlog
+    ctx.log
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -69323,13 +69479,14 @@ var copyDiagnostic = (value, ctx) => {
   pbcopy(text4, ctx);
 };
 var openVscode = (value, ctx) => clickLaunch(
+  ctx.launcher,
   {
     bin: "/usr/bin/open",
     args: ["-a", "Visual Studio Code", oneArg(value)],
     category: "click.open"
   },
   'open -a "Visual Studio Code"',
-  ctx.dlog
+  ctx.log
 );
 var toolbarToggle = (value, ctx) => {
   const sessionId2 = requireSessionId(oneArg(value));
@@ -69368,7 +69525,7 @@ var setState = (rawValue, ctx) => {
   refuseDisorderedPicks(ctx, sid, "set-state", validated);
   ctx.navigating.setBatch(sid, validated);
   const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
-  ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
+  ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 var STEP_INT_RE = /^-?\d+$/;
 function stepWithin(current, by, min2, max2) {
@@ -69413,7 +69570,7 @@ var stepState = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
   );
@@ -69444,13 +69601,24 @@ function stepFrom(verb, key, params, declared) {
 }
 var SESSION_RENDER_ORIGIN_KEY = "render-origin";
 function sessionRenderOrigin(requested, state, sid) {
-  return {
-    ...requested,
-    configFile: state.get(sid, SESSION_CONFIG_OVERRIDE_KEY) ?? requested.configFile
-  };
+  const pick2 = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
+  return pick2 === null ? requested : { ...requested, target: { source: "pick", path: pick2 } };
 }
-function encodeRenderOrigin(origin) {
-  return JSON.stringify(origin);
+function encodeRenderOrigin({
+  projectDir,
+  cwd: cwd2,
+  target
+}) {
+  return JSON.stringify({
+    projectDir,
+    cwd: cwd2,
+    configFile: target.path ?? null,
+    source: target.source
+  });
+}
+function recordedTarget(source, configFile) {
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
 }
 function parseRenderOrigin(raw) {
   let parsed2;
@@ -69462,11 +69630,11 @@ function parseRenderOrigin(raw) {
   if (parsed2 === null || typeof parsed2 !== "object") {
     throw new BadVerbArgs(`render origin is not an object: ${raw}`);
   }
-  const { projectDir, cwd: cwd2, configFile } = parsed2;
+  const { projectDir, cwd: cwd2, configFile, source } = parsed2;
   if (typeof projectDir !== "string" || typeof cwd2 !== "string" || configFile !== null && typeof configFile !== "string") {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  return { projectDir, cwd: cwd2, configFile };
+  return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
 }
 function sessionOrigin(ctx, sid) {
   const origin = recordedOrigin(ctx, sid);
@@ -69488,8 +69656,8 @@ function recordedOrigin(ctx, sid) {
 function reloadIfWritten(ctx, sid, step4) {
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
-  const { path: path41 } = originHome(origin);
-  if (step4.some((c) => c.kind === "file" && c.file === path41)) {
+  const { path: path39 } = originHome(origin);
+  if (step4.some((c) => c.kind === "file" && c.file === path39)) {
     ctx.reloadConfig(origin);
   }
 }
@@ -69511,13 +69679,13 @@ function originHome(origin) {
     repoConfigs().read(),
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? void 0
+    origin.target.path
   );
 }
 function editStore(ctx, sid) {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.dlog
+    logger: ctx.log
   };
 }
 var setConfig = (rawValue, ctx) => {
@@ -69543,7 +69711,7 @@ var setConfig = (rawValue, ctx) => {
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
   );
@@ -69591,7 +69759,7 @@ var stepConfig = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
@@ -69605,7 +69773,7 @@ var save = (value, ctx) => {
   const drafts = settingDrafts(config2, pick2);
   const placements = placementDrafts(config2, pick2);
   if (drafts.length + placements.length === 0) {
-    ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
+    ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
   const gate2 = stateGate(config2);
@@ -69624,7 +69792,7 @@ var save = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `save: ${[
       ...pairs2.map(([k, v]) => `${k}=${v}`),
@@ -69672,7 +69840,7 @@ var savePreset = (value, ctx) => {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
@@ -69702,7 +69870,7 @@ var saveThemeDefault = (value, ctx) => {
     (f) => SETTINGS[f].sessionKey
   ).filter((key) => !drafted.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
@@ -69721,7 +69889,7 @@ var deletePreset2 = (value, ctx) => {
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
 var resetConfig = (value, ctx) => {
   const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
@@ -69741,7 +69909,7 @@ var resetConfig = (value, ctx) => {
   deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
-  ctx.dlog(
+  ctx.log(
     "info",
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
   );
@@ -69799,7 +69967,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
   ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
-  ctx.dlog(
+  ctx.log(
     "info",
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`
   );
@@ -69810,7 +69978,7 @@ var undo = (value, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.undo(sid);
   reloadIfWritten(ctx, sid, step4);
-  ctx.dlog("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
+  ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
 var back = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
@@ -69820,14 +69988,14 @@ var back = (value, ctx) => {
     stateGate(sessionConfig(ctx, sid))
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
-  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
+  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 var rewind = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
-  ctx.dlog(
+  ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
@@ -69838,7 +70006,7 @@ var redo = (value, ctx) => {
   ctx.journal.commit();
   const step4 = ctx.history.redo(sid);
   reloadIfWritten(ctx, sid, step4);
-  ctx.dlog("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
+  ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
 var applyUpdate = (value, ctx) => {
   requireSessionId(oneArg(value));
@@ -69866,9 +70034,9 @@ function sessionHints(ctx, sid) {
 function writeReport(ctx, sid, facts) {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
-  ctx.dlog(
+  ctx.log(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
 }
 function clickFacts(ctx, sid) {
@@ -69877,7 +70045,7 @@ function clickFacts(ctx, sid) {
     sessionId: sid,
     via: ctx.arrival.via
   };
-  const said = ctx.clients.ofSession(sid, instantOf(/* @__PURE__ */ new Date()));
+  const said = ctx.clients.ofSession(sid, ctx.now());
   let gathered;
   try {
     gathered = gatherFacts(
@@ -69918,7 +70086,7 @@ function clickedFrom(ctx, { terminal, clicked }) {
       (list2) => withClicked(list2, sighting)
     );
   } catch (e) {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
     );
@@ -69938,7 +70106,7 @@ var doctorProbe = (value, ctx) => {
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
   const { handler } = ctx.arrival;
   ctx.probes.arrive({ nonce, handler });
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`
   );
@@ -69963,7 +70131,7 @@ var doctorFix = (value, ctx) => {
   if (after.kind === "failed") {
     throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
   );
@@ -69997,7 +70165,7 @@ var doctorMark = (value, ctx) => {
   if (marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
   );
@@ -70024,13 +70192,13 @@ var slash = (value, ctx) => {
     action2.slash
   );
   if (result.kind === "refused") {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
     );
     throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
-  ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 function runOf([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -70113,7 +70281,7 @@ var repoConfig = (value, ctx) => {
     throw new Error(`${dir} was not ${answered2}: ${filed.reason}`);
   }
   const { superseded, absent, unchecked } = filed.value;
-  ctx.dlog(
+  ctx.log(
     "info",
     `repo-config: ${dir} ${answered2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
   );
@@ -70143,10 +70311,10 @@ var loadConfig2 = (value, ctx) => {
   }
   if (p2 === "") {
     ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.dlog("info", `load-config: override cleared (session=${sid})`);
+    ctx.log("info", `load-config: override cleared (session=${sid})`);
   } else {
     ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p2);
-    ctx.dlog("info", `load-config: ${p2} (session=${sid})`);
+    ctx.log("info", `load-config: ${p2} (session=${sid})`);
   }
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
@@ -70258,7 +70426,7 @@ var dispatch = (rawValue, ctx) => {
         ctx.sessionState,
         session.id,
         errors2.join("\n"),
-        instantOf(/* @__PURE__ */ new Date())
+        ctx.now()
       );
     }
     const message = `dispatch: ${errors2.join("; ")}`;
@@ -70275,7 +70443,7 @@ function journaled(handler, sessionOf) {
     const closing = (store) => closingView(
       store,
       (sid2) => nestOf(ctx, sid2),
-      (line) => ctx.dlog("info", line)
+      (line) => ctx.log("info", line)
     );
     try {
       handler(value, {
@@ -70341,7 +70509,7 @@ function closeIdleMenus(sid, idle, ctx) {
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
       );
-      c.dlog(
+      c.log(
         "info",
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
       );
@@ -70431,7 +70599,7 @@ var HOST_VERBS = /* @__PURE__ */ new Map([
   [VERB_RUN, "runs a program the config declares"]
 ]);
 
-// src/daemon/server.ts
+// src/daemon/daemon.ts
 init_globals();
 
 // src/daemon/link-key.ts
@@ -70620,138 +70788,19 @@ var Runs = class {
   }
 };
 
-// src/daemon/server.ts
-init_process();
-init_url();
-
-// src/daemon/socket-lease.ts
-init_globals();
-init_process();
-function readLease(leasePath2) {
-  let raw;
-  try {
-    raw = fs_default.readFileSync(leasePath2, "utf8");
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT") return { kind: "absent" };
-    return {
-      kind: "unreadable",
-      detail: `read failed: ${e.message}`
-    };
-  }
-  let parsed2;
-  try {
-    parsed2 = JSON.parse(raw);
-  } catch (e) {
-    return { kind: "unreadable", detail: `bad JSON: ${e.message}` };
-  }
-  const record2 = parsed2;
-  const pid2 = record2?.pid;
-  if (typeof pid2 !== "number" || !Number.isInteger(pid2) || pid2 <= 0) {
-    return {
-      kind: "unreadable",
-      detail: `no valid pid (got ${JSON.stringify(pid2)})`
-    };
-  }
-  const rawStartTime = record2?.startTime;
-  if (rawStartTime !== void 0 && rawStartTime !== null && typeof rawStartTime !== "string") {
-    return {
-      kind: "unreadable",
-      detail: `invalid startTime (got ${JSON.stringify(rawStartTime)})`
-    };
-  }
-  return { kind: "owned", pid: pid2, startTime: rawStartTime ?? null };
-}
-function removeLeaseIfOwned(leasePath2, myPid) {
-  const read2 = readLease(leasePath2);
-  if (read2.kind === "owned" && read2.pid === myPid) {
-    try {
-      fs_default.unlinkSync(leasePath2);
-    } catch {
-    }
-  }
-}
-
-// src/daemon/socket-ownership.ts
+// src/daemon/draw-bar.ts
 init_globals();
 
-// src/daemon/process-fingerprint.ts
+// src/daemon/update-notice.ts
 init_globals();
-function readStartTime(pid2, launch2 = launchSync) {
-  const res = launch2({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-
-// src/daemon/fork-bomb-breaker.ts
-init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/parent-watchdog.ts
-init_globals();
-init_process();
-function pidAlive(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return true;
-  } catch (e) {
-    return e.code === "EPERM";
-  }
-}
-
-// src/daemon/fork-bomb-breaker.ts
-function readRegistryEntry(filePath2) {
-  let raw;
-  try {
-    raw = fs_default.readFileSync(filePath2, "utf8");
-  } catch {
-    return null;
-  }
-  try {
-    const parsed2 = JSON.parse(raw);
-    const pid2 = parsed2?.pid;
-    if (typeof pid2 !== "number" || !Number.isInteger(pid2) || pid2 <= 0) {
-      return null;
-    }
-    const startTime = typeof parsed2?.startTime === "string" ? parsed2.startTime : null;
-    return { pid: pid2, startTime };
-  } catch {
-    return null;
-  }
-}
-function releaseRegistration(registryPath, myPid, readEntry, removeFile) {
-  const entry = readEntry(registryPath);
-  if (entry !== null && entry.pid === myPid) {
-    try {
-      removeFile(registryPath);
-    } catch {
-    }
-  }
-}
 
 // src/daemon/update-act.ts
 init_globals();
 init_os();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path34.default.join(stateDir2, "update-act", key);
+  return import_node_path33.default.join(stateDir2, "update-act", key);
 }
 var IDLE = { kind: "idle" };
 function judgeAct(facts) {
@@ -70771,11 +70820,11 @@ function judgeAct(facts) {
   return { kind: "failed", act, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path34.default.join(actDir, "stdout"),
-  stderr: import_node_path34.default.join(actDir, "stderr"),
-  status: import_node_path34.default.join(actDir, "status")
+  stdout: import_node_path33.default.join(actDir, "stdout"),
+  stderr: import_node_path33.default.join(actDir, "stderr"),
+  status: import_node_path33.default.join(actDir, "status")
 });
-var recordOf2 = (actDir) => import_node_path34.default.join(actDir, "record.json");
+var recordOf2 = (actDir) => import_node_path33.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -70799,9 +70848,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act) {
-  const leaving = import_node_path34.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  const leaving = import_node_path33.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fs_default.renameSync(import_node_path34.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path33.default.join(dir, String(act)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -70809,7 +70858,7 @@ function removeAct(dir, act) {
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
 var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
-function isRecordedJob(record2, read2 = readStartTime, boot = bootedAt()) {
+function isRecordedJob(record2, read2, boot = bootedAt()) {
   if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
   const leader = read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
@@ -70823,10 +70872,10 @@ function readRecord(actDir) {
   }
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
-function makeActReader(dir, read2 = readStartTime) {
+function makeActReader(dir, read2) {
   let known = null;
   function factsOf2(act) {
-    const actDir = import_node_path34.default.join(dir, String(act));
+    const actDir = import_node_path33.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -70850,7 +70899,7 @@ function makeActReader(dir, read2 = readStartTime) {
         if (act === void 0) return null;
         if (act === vanished) {
           throw new Error(
-            `${import_node_path34.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path33.default.join(dir, String(act))}: an act with no record`
           );
         }
         const facts = factsOf2(act);
@@ -70860,12 +70909,12 @@ function makeActReader(dir, read2 = readStartTime) {
     }
   };
 }
-function claimAct(dir, after, identity3, command, timeoutMs, now2, read2 = readStartTime) {
+function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
-  const actDir = import_node_path34.default.join(dir, String(act));
+  const actDir = import_node_path33.default.join(dir, String(act));
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path34.default.join(dir, ".claim-"));
-  const job = launchJobSync(command, filesOf(actDir));
+  const staging = fs_default.mkdtempSync(import_node_path33.default.join(dir, ".claim-"));
+  const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) {
     fs_default.rmSync(staging, { recursive: true, force: true });
     throw new Error(`apply-update: ${job.error}`);
@@ -70908,12 +70957,35 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts) {
-  const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path33.default.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
-// src/daemon/update-notice.ts
+// src/daemon/process-fingerprint.ts
 init_globals();
+function readStartTime(pid2, launch) {
+  const res = launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    env: { ...process_default.env, LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+
+// src/daemon/update-notice.ts
 var UPDATE_DISMISSED_KEY = "update.dismissed";
 var UPDATE_NOTICE_FIELD = "updateNotice";
 var UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
@@ -71062,7 +71134,9 @@ function reserveUpdateKeys() {
 }
 function makeUpdateWatch(opts) {
   const {
+    launcher,
     entryUrl,
+    digest: digest2,
     actsDir: actsDir2,
     intervalMs,
     releaseIntervalMs,
@@ -71073,12 +71147,19 @@ function makeUpdateWatch(opts) {
   } = opts;
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
-  const acts = makeActReader(actsDir2);
+  const readStart = (pid2) => readStartTime(pid2, launcher.launchSync);
+  const acts = makeActReader(actsDir2, readStart);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
-  const current = () => updateOf(build, release3);
+  let closed = false;
+  const armed = [];
+  const every = (run3, ms) => {
+    const timer = setInterval(run3, ms).unref();
+    armed.push(() => clearInterval(timer));
+  };
+  const current = () => closed ? null : updateOf(build, release3);
   function syncGate() {
     const update = current();
     const identity3 = update === null ? null : updateIdentity(update);
@@ -71090,7 +71171,7 @@ function makeUpdateWatch(opts) {
     };
   }
   function sampleBuild() {
-    build = assessBuild(entryUrl, bakedStamp);
+    build = assessBuild(entryUrl, () => bundleStamp(digest2));
     logBuild(describeBuild(build));
     syncGate();
   }
@@ -71147,15 +71228,20 @@ function makeUpdateWatch(opts) {
   }
   return {
     arm() {
-      reserveUpdateKeys();
+      armed.push(reserveUpdateKeys());
       sampleBuild();
-      setInterval(sampleBuild, intervalMs).unref();
+      every(sampleBuild, intervalMs);
       watchAct();
-      setInterval(watchAct, ACT_POLL_MS).unref();
+      every(watchAct, ACT_POLL_MS);
       if (build.kind === "not-source-checkout") {
         void pollRelease();
-        setInterval(() => void pollRelease(), releaseIntervalMs).unref();
+        every(() => void pollRelease(), releaseIntervalMs);
       }
+    },
+    close() {
+      closed = true;
+      syncGate();
+      armed.forEach((release4) => release4());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
     running() {
@@ -71176,12 +71262,14 @@ function makeUpdateWatch(opts) {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
       const claim = claimAct(
+        launcher,
         actsDir2,
         newest === null ? null : newest.act,
         updateIdentity(update),
         { ...facts.command, category: "update.apply" },
         ACT_TIMEOUT_MS,
-        Date.now()
+        Date.now(),
+        readStart
       );
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);
@@ -71195,11 +71283,5497 @@ function makeUpdateWatch(opts) {
   };
 }
 
+// src/dsl/render.ts
+init_globals();
+
+// src/render/fill.ts
+init_globals();
+
+// src/template-engine/layout.ts
+init_globals();
+function evaluateWhen(template, scope) {
+  if (template === void 0) return true;
+  const fragments = template.evaluate(scope);
+  return fragments.map((f) => f.plain).join("") !== "false";
+}
+var HIDDEN = { kind: "hidden" };
+var SHOWN = { kind: "shown" };
+function gateOf2(template, scope) {
+  try {
+    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
+  } catch (e) {
+    const pending2 = readPending(e);
+    return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+      kind: "failed",
+      message: e instanceof Error ? e.message : String(e)
+    };
+  }
+}
+function collapseToCell(cells, baseStyle) {
+  const merged = RichText.fromFragments(cells);
+  merged.end = "";
+  merged.overflow = "ignore";
+  if (baseStyle !== void 0 && !baseStyle.isNull) merged.style = baseStyle;
+  return merged;
+}
+function sizeCell(cell3, width, how) {
+  if (cell3.cellLength > width) {
+    cell3.truncate(width, { mode: how.truncate, marker: "\u2026" });
+  } else if (cell3.cellLength < width) {
+    cell3.align(how.justify, width);
+  }
+}
+function cellParts({ lead, text: text4, trail }) {
+  return [
+    ...lead === void 0 ? [] : [lead],
+    text4,
+    ...trail === void 0 ? [] : [trail]
+  ];
+}
+function heldCell({ text: text4, placement, lead, trail }) {
+  return {
+    text: unlinked(text4),
+    placement,
+    ...lead !== void 0 && { lead: unlinked(lead) },
+    ...trail !== void 0 && { trail: unlinked(trail) }
+  };
+}
+function unlinked(text4) {
+  const copy3 = text4.blankCopy(text4.plain);
+  copy3.style = resolvedStyle(text4.style).clearMetaAndLinks();
+  for (const { start, end, style } of text4.spans)
+    copy3.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
+  return copy3;
+}
+function stripItem(cell3) {
+  const parts = cellParts(cell3);
+  if (parts.length === 1) return cell3.text;
+  const joined = collapseToCell(parts);
+  joined.style = cell3.text.style;
+  return joined;
+}
+function applySegmentLayout(cells, options) {
+  const {
+    width,
+    justify,
+    truncate,
+    baseStyle,
+    padding,
+    placement,
+    lead = [],
+    trail = []
+  } = options;
+  if (cells.length === 0) return [];
+  const cell3 = collapseToCell(cells, baseStyle).pad(padding);
+  const pad = new RichText(" ".repeat(padding));
+  const tail = {
+    placement,
+    ...lead.length > 0 && {
+      lead: collapseToCell([pad, ...lead], baseStyle)
+    },
+    ...trail.length > 0 && {
+      trail: collapseToCell([...trail, pad], baseStyle)
+    }
+  };
+  if (width === "auto") return [{ text: cell3, ...tail }];
+  const how = { justify, truncate };
+  if (width === "fill") return [{ text: cell3, fill: how, ...tail }];
+  sizeCell(cell3, width, how);
+  return [{ text: cell3, ...tail }];
+}
+
+// src/render/fill.ts
+function drawnCols(drawing2) {
+  return Math.max(
+    0,
+    ...drawing2.split("\n").map((line) => cellLen(line.replace(INVISIBLE, "")))
+  );
+}
+function resolveFill(row2, options) {
+  const items = () => row2.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
+  const demands = [];
+  row2.forEach(({ fill }, at) => {
+    if (fill !== void 0) demands.push({ at, how: fill });
+  });
+  if (demands.length === 0) return items();
+  if (!Number.isFinite(options.width)) return items();
+  const natural = renderStripCells(row2.map(stripItem), options).split("\n");
+  if (natural.length > 1) return items();
+  const deficit = Math.max(0, options.width - drawnCols(natural[0] ?? ""));
+  const share = Math.floor(deficit / demands.length);
+  const remainder = deficit - share * demands.length;
+  demands.forEach(({ at, how }, i) => {
+    const grow = share + (i === demands.length - 1 ? remainder : 0);
+    const { text: text4 } = row2[at];
+    sizeCell(text4, text4.cellLength + grow, how);
+  });
+  return items();
+}
+
+// src/themes/index.ts
+init_globals();
+
+// src/template-engine/index.ts
+init_globals();
+
+// src/template-engine/cells.ts
+init_globals();
+function fragmentsToCells(fragments, baseStyle) {
+  const cells = [];
+  let group = [];
+  const flush2 = () => {
+    if (!group.length) return;
+    const cell3 = buildCell(group, baseStyle);
+    if (cell3.plain.length > 0) cells.push(cell3);
+    group = [];
+  };
+  for (const frag of fragments) {
+    const item = { frag, style: resolvedStyle(frag.style) };
+    if (item.style.link) {
+      flush2();
+      const cell3 = buildCell([item], baseStyle);
+      if (cell3.plain.length > 0) cells.push(cell3);
+    } else {
+      group.push(item);
+    }
+  }
+  flush2();
+  return cells;
+}
+function buildCell(items, baseStyle) {
+  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
+  const layered = items.map(
+    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
+  );
+  const cell3 = RichText.fromFragments(layered);
+  cell3.end = "";
+  cell3.overflow = "ignore";
+  if (layered.length === 1) {
+    cell3.style = layered[0].style;
+  } else if (base !== void 0) {
+    cell3.style = base;
+  }
+  return cell3;
+}
+function withStyle(frag, style) {
+  const copy3 = frag.copy();
+  copy3.style = style;
+  return copy3;
+}
+
+// src/render/action.ts
+init_globals();
+function renderBinding(runtime, reader) {
+  if (runtime.bound === void 0) {
+    throw new Error(
+      `${reader} ran outside a render: no render bound its store and clocks`
+    );
+  }
+  return runtime.bound;
+}
+function renderLook(runtime, reader) {
+  const { look } = renderBinding(runtime, reader);
+  if (look === void 0) {
+    throw new Error(`${reader} read the render's look before it was resolved`);
+  }
+  return look;
+}
+function renderLayout(runtime, reader) {
+  const { layout } = renderBinding(runtime, reader);
+  if (layout === void 0) {
+    throw new Error(`${reader} read the render's rows before they were laid`);
+  }
+  return layout();
+}
+function bindRender(runtime, binding) {
+  if (runtime.bound !== void 0) {
+    throw new Error("a render bound a compile another render holds");
+  }
+  runtime.bound = binding;
+  return {
+    [Symbol.dispose]: () => {
+      runtime.bound = void 0;
+    }
+  };
+}
+function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
+  const out = /* @__PURE__ */ new Map();
+  const entries = Object.entries(actions);
+  for (const [name, action2] of [
+    ...entries.filter(([, a]) => !("do" in a)),
+    ...entries.filter(([, a]) => "do" in a)
+  ]) {
+    out.set(
+      name,
+      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
+    );
+  }
+  return out;
+}
+function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
+  if ("set" in action2) {
+    const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
+    if ("to" in action2) {
+      return {
+        kind: "set-literal",
+        key: action2.set,
+        value: action2.to,
+        stateVar
+      };
+    }
+    if ("from" in action2) {
+      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      return {
+        kind: "set-option",
+        key: action2.set,
+        stateVar,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        library: domain.library
+      };
+    }
+    if ("int" in action2) {
+      return { kind: "set-int", key: action2.set, stateVar };
+    }
+    if ("cycle" in action2) {
+      return {
+        kind: "set-cycle",
+        key: action2.set,
+        stateVar,
+        members: action2.cycle
+      };
+    }
+    return {
+      kind: "set-bounded",
+      key: action2.set,
+      by: action2.by
+    };
+  }
+  if ("persist" in action2) {
+    const stateVar = CONFIG_KEY_TO_EFFECTIVE_VAR.get(action2.persist) ?? action2.persist;
+    if ("to" in action2) {
+      return {
+        kind: "persist-literal",
+        key: action2.persist,
+        value: action2.to,
+        stateVar
+      };
+    }
+    if ("from" in action2) {
+      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      return {
+        kind: "persist-option",
+        key: action2.persist,
+        stateVar,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        library: domain.library
+      };
+    }
+    if ("cycle" in action2) {
+      return {
+        kind: "persist-cycle",
+        key: action2.persist,
+        stateVar,
+        members: action2.cycle
+      };
+    }
+    if ("removeSegment" in action2) {
+      return {
+        kind: "layout-op",
+        key: action2.persist,
+        op: { op: "remove", target: action2.removeSegment }
+      };
+    }
+    if ("insertSegment" in action2) {
+      return {
+        kind: "layout-op",
+        key: action2.persist,
+        op: {
+          op: "insert",
+          segment: action2.insertSegment,
+          anchor: action2.anchor,
+          relation: action2.relation
+        }
+      };
+    }
+    if ("insertSegmentFrom" in action2) {
+      const domain = resolveOptionDomain(
+        action2.insertSegmentFrom,
+        perConfigDomains
+      );
+      return {
+        kind: "layout-op-option",
+        key: action2.persist,
+        anchor: action2.anchor,
+        relation: action2.relation,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        library: domain.library
+      };
+    }
+    return {
+      kind: "persist-bounded",
+      key: action2.persist,
+      by: action2.by
+    };
+  }
+  if ("copy" in action2) {
+    return {
+      kind: "copy",
+      text: parseActionTemplate(parse3, action2.copy, name)
+    };
+  }
+  if ("open" in action2) {
+    return {
+      kind: "open",
+      target: parseActionTemplate(parse3, action2.open, name)
+    };
+  }
+  if ("reset" in action2) {
+    return { kind: "reset", key: action2.reset };
+  }
+  if ("doctor" in action2) {
+    switch (action2.doctor) {
+      case "run":
+        return { kind: "doctor-run" };
+      case "fix":
+        return { kind: "doctor-fix", check: action2.check };
+      case "mark":
+        return { kind: "doctor-mark", check: action2.check, mark: action2.mark };
+    }
+  }
+  if ("slash" in action2) return { kind: "slash", line: action2.slash };
+  if ("run" in action2) {
+    return {
+      kind: "run",
+      name,
+      declaration: runDeclaration(action2),
+      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
+      env: Object.entries(action2.env).map(
+        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
+      )
+    };
+  }
+  if ("undo" in action2) return { kind: "undo" };
+  if ("redo" in action2) return { kind: "redo" };
+  if ("back" in action2) return { kind: "back" };
+  if ("rewind" in action2) return { kind: "rewind" };
+  if ("save" in action2) return { kind: "save" };
+  if ("preset" in action2) {
+    return action2.preset === "save" ? { kind: "preset-save" } : {
+      kind: "preset-delete",
+      name: parseActionTemplate(parse3, action2.name, name)
+    };
+  }
+  if ("themeDefault" in action2) return { kind: "theme-default-save" };
+  const [head, ...rest2] = action2.do.map((member) => {
+    const c = compiled.get(member);
+    if (c === void 0) {
+      throw new Error(
+        `action "${name}" fires "${member}", which is not declared in this config`
+      );
+    }
+    return c;
+  });
+  return { kind: "do", head, rest: rest2 };
+}
+function presentedAction(c) {
+  return c.kind === "do" ? presentedAction(c.head) : c;
+}
+function bindsTemplateValue(c) {
+  const presented = presentedAction(c);
+  switch (presented.kind) {
+    case "set-option":
+    case "set-int":
+    case "persist-option":
+    case "layout-op-option":
+      return true;
+    case "set-literal":
+    case "set-bounded":
+    case "set-cycle":
+    case "copy":
+    case "open":
+    case "persist-literal":
+    case "persist-bounded":
+    case "persist-cycle":
+    case "reset":
+    case "layout-op":
+    case "undo":
+    case "redo":
+    case "back":
+    case "rewind":
+    case "save":
+    case "preset-save":
+    case "preset-delete":
+    case "theme-default-save":
+    case "doctor-run":
+    case "doctor-fix":
+    case "doctor-mark":
+    case "slash":
+    case "run":
+    case "do":
+      return false;
+  }
+}
+function parseActionTemplate(parse3, src, name) {
+  try {
+    return parse3(src);
+  } catch (e) {
+    throw new Error(
+      `Template parse error in actions.${name}: ${e.message}`,
+      { cause: e }
+    );
+  }
+}
+function readVar(store, name) {
+  return store.has(name) ? toString2(store.read(name)) : "";
+}
+function evalTemplate(tpl, scope) {
+  return tpl.evaluate(scope).map((f) => f.plain).join("");
+}
+function linkFragment(text4, url, active2, base) {
+  const rt = new RichText(text4, {
+    style: Style.combine([base, new Style({ link: url, bold: active2 })])
+  });
+  rt.overflow = "ignore";
+  rt.end = "";
+  return rt;
+}
+function linkOver(cell3, url, current = false) {
+  const link = new Style({ link: url, bold: current ? true : void 0 });
+  const linked = new RichText(cell3.plain, {
+    style: Style.combine([resolvedStyle(cell3.style), link])
+  });
+  for (const span of cell3.spans) {
+    linked.stylize(
+      Style.combine([resolvedStyle(span.style), link]),
+      span.start,
+      span.end
+    );
+  }
+  linked.overflow = "ignore";
+  linked.end = "";
+  return linked;
+}
+function cycleIndex(c, store) {
+  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+}
+function realize(c, display, boundValue, store, sessionId2, signer) {
+  switch (c.kind) {
+    case "set-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
+        active: current === c.value
+      };
+    }
+    case "set-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "set-int": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "set-cycle": {
+      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
+        active: false
+      };
+    }
+    case "set-bounded": {
+      return {
+        effects: [
+          {
+            verb: VERB_STEP_STATE,
+            args: [sessionId2, c.key, String(c.by)]
+          }
+        ],
+        active: false
+      };
+    }
+    case "copy":
+      return {
+        effects: [
+          {
+            verb: VERB_COPY,
+            args: [evalTemplate(c.text, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    case "open":
+      return {
+        effects: [
+          {
+            verb: VERB_OPEN_VSCODE,
+            args: [evalTemplate(c.target, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
+    // verbatim (same literal/option/cycle/bounded semantics), only the wire
+    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
+    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
+    // the write durable, not the click itself.
+    case "persist-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, c.value] }],
+        active: current === c.value
+      };
+    }
+    case "persist-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "persist-cycle": {
+      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      return {
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, next2] }],
+        active: false
+      };
+    }
+    case "persist-bounded": {
+      return {
+        effects: [
+          {
+            verb: VERB_STEP_CONFIG,
+            args: [sessionId2, c.key, String(c.by)]
+          }
+        ],
+        active: false
+      };
+    }
+    case "reset":
+      return {
+        effects: [{ verb: VERB_RESET_CONFIG, args: [sessionId2, c.key] }],
+        active: false
+      };
+    // [LAW:one-source-of-truth] No key to carry — the click just says "step
+    // the history", and which entry moves is entirely server-side state
+    // (never wire input, so there is nothing here to gate). Never "active":
+    // a history step is a one-shot trigger, not a current-selection toggle.
+    case "undo":
+      return {
+        effects: [{ verb: VERB_UNDO, args: [sessionId2] }],
+        active: false
+      };
+    case "redo":
+      return {
+        effects: [{ verb: VERB_REDO, args: [sessionId2] }],
+        active: false
+      };
+    case "back":
+      return {
+        effects: [{ verb: VERB_BACK, args: [sessionId2] }],
+        active: false
+      };
+    // One-shot, like undo: which steps it takes back is server-side state.
+    case "rewind":
+      return {
+        effects: [{ verb: VERB_REWIND, args: [sessionId2] }],
+        active: false
+      };
+    case "save":
+      return {
+        effects: [{ verb: VERB_SAVE, args: [sessionId2] }],
+        active: false
+      };
+    // Never "active": one-shot triggers, like save.
+    case "preset-save":
+      return {
+        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId2] }],
+        active: false
+      };
+    case "theme-default-save":
+      return {
+        effects: [{ verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId2] }],
+        active: false
+      };
+    case "preset-delete":
+      return {
+        effects: [
+          {
+            verb: VERB_DELETE_PRESET,
+            args: [sessionId2, evalTemplate(c.name, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    // Never "active": running the doctor and applying a fix are one-shot
+    // triggers; the report they produce is state the ROW segments read.
+    case "doctor-run":
+      return {
+        effects: [{ verb: VERB_DOCTOR_RUN, args: [sessionId2] }],
+        active: false
+      };
+    case "doctor-fix":
+      return {
+        effects: [{ verb: VERB_DOCTOR_FIX, args: [sessionId2, c.check] }],
+        active: false
+      };
+    case "doctor-mark":
+      return {
+        effects: [
+          { verb: VERB_DOCTOR_MARK, args: [sessionId2, c.check, c.mark] }
+        ],
+        active: false
+      };
+    // Never "active": typing a command is a one-shot trigger.
+    case "slash":
+      return {
+        effects: [{ verb: VERB_SLASH, args: [sessionId2, c.line] }],
+        active: false
+      };
+    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
+    // draw, as copy's text is. The link carries what was evaluated and its
+    // mac, so the click runs what the bar showed and nothing a URL made up.
+    // Never "active": a run is a one-shot trigger.
+    case "run": {
+      const scope = buildScope(store);
+      const evaluated2 = JSON.stringify({
+        run: c.argv.map((item) => evalTemplate(item, scope)),
+        env: Object.fromEntries(
+          c.env.map(([variable, value]) => [
+            variable,
+            evalTemplate(value, scope)
+          ])
+        )
+      });
+      const mac = signer.sign({
+        sessionId: sessionId2,
+        action: c.name,
+        declaration: c.declaration,
+        evaluated: evaluated2
+      });
+      return {
+        effects: [
+          { verb: VERB_RUN, args: [sessionId2, c.name, evaluated2, mac] }
+        ],
+        active: false
+      };
+    }
+    // [LAW:one-source-of-truth] The op is fixed at compile time (see
+    // compileAction) — the click just delivers it. `apply-layout-op`'s
+    // handler does read-current-append-write (see verbs/index.ts), unlike
+    // persist-literal's plain overwrite, so it is its own verb rather than
+    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
+    // trigger, not a current-selection toggle.
+    case "layout-op":
+      return {
+        effects: [
+          {
+            verb: VERB_APPLY_LAYOUT_OP,
+            args: [sessionId2, c.key, encodeLayoutOp(c.op)]
+          }
+        ],
+        active: false
+      };
+    case "do": {
+      const head = realize(
+        c.head,
+        display,
+        boundValue,
+        store,
+        sessionId2,
+        signer
+      );
+      return {
+        effects: [
+          ...head.effects,
+          ...c.rest.flatMap(
+            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
+          )
+        ],
+        active: head.active
+      };
+    }
+    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
+    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
+    // relation are the compiled literals. Same wire shape a literal layout-op
+    // emits, so the daemon's apply-layout-op handler and undo/redo need no
+    // knowledge of where the segment name came from. Never "active": a
+    // structural edit is a one-shot trigger, not a current-selection toggle.
+    case "layout-op-option": {
+      const segment = boundValue ?? display;
+      const op = {
+        op: "insert",
+        segment,
+        anchor: c.anchor,
+        relation: c.relation
+      };
+      return {
+        effects: [
+          {
+            verb: VERB_APPLY_LAYOUT_OP,
+            args: [sessionId2, c.key, encodeLayoutOp(op)]
+          }
+        ],
+        active: false
+      };
+    }
+  }
+}
+function selectDisplay(name, action2, displays, store) {
+  if (displays.length === 0) {
+    throw new Error(`action "${name}" needs a display (the clickable text)`);
+  }
+  if (action2.kind === "set-cycle" || action2.kind === "persist-cycle") {
+    const display = pickCycleDisplay(
+      `action "${name}"`,
+      displays,
+      action2.members.length,
+      cycleIndex(action2, store)
+    );
+    return { display, boundValue: void 0 };
+  }
+  if (displays.length > 2) {
+    throw new Error(
+      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`
+    );
+  }
+  return { display: displays[0], boundValue: displays[1]?.plain };
+}
+function renderAction(name, displays, runtime) {
+  const declared = runtime.compiled.get(name);
+  if (!declared) {
+    throw new Error(`action "${name}" is not declared in this config`);
+  }
+  const store = renderBinding(runtime, `action "${name}"`).store;
+  const { display, boundValue } = selectDisplay(
+    name,
+    presentedAction(declared),
+    displays,
+    store
+  );
+  const sessionId2 = readVar(store, "session.id");
+  const { effects, active: active2 } = realize(
+    declared,
+    display.plain,
+    boundValue,
+    store,
+    sessionId2,
+    runtime.signer
+  );
+  return linkOver(display, effectsUrl(effects), active2);
+}
+function actionFuncs(runtime) {
+  return {
+    action: {
+      fn: (name, ...displays) => renderAction(name, displays, runtime),
+      argTypes: ["string", "liftable"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/disclosure-close.ts
+init_globals();
+function disclosureCloseFragment(store, key) {
+  return linkFragment(
+    DISCLOSURE_GLYPH_CLOSE,
+    effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED]
+      }
+    ]),
+    false
+  );
+}
+
+// src/render/picker.ts
+init_globals();
+
+// src/render/band-style.ts
+init_globals();
+function stateCell(palette, background, drawnAt) {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(background),
+    color: ColorSpec.fromRgba(textOn(palette, background, drawnAt))
+  });
+}
+function decoratedCell({
+  tint,
+  text: text4
+}) {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(tint),
+    color: ColorSpec.fromRgba(text4)
+  });
+}
+function closeOn(palette, ground, drawnAt) {
+  return new Style({
+    color: ColorSpec.fromRgba(
+      ensureContrast(
+        paletteRole(palette, DISCLOSURE_CLOSE_ROLE),
+        ground,
+        TEXT_MIN_CONTRAST,
+        drawnAt
+      )
+    )
+  });
+}
+function closeCell(palette, background, drawnAt) {
+  return Style.combine([
+    stateCell(palette, background, drawnAt),
+    closeOn(palette, background, drawnAt)
+  ]);
+}
+function bandItemStyle(active2, step4, drawnAt) {
+  return decoratedCell(
+    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
+  );
+}
+
+// src/render/option-paint.ts
+init_globals();
+
+// src/render/swatch.ts
+init_globals();
+var SWATCH_GLYPH = "\u2580";
+function swatch(palette) {
+  const ground = ColorSpec.fromRgba(paletteRole(palette, "background"));
+  const drawn = RichText.fromFragments(
+    DECOR_HUES.map(
+      (role) => new RichText(SWATCH_GLYPH, {
+        style: new Style({
+          color: ColorSpec.fromRgba(paletteRole(palette, role)),
+          bgcolor: ground
+        })
+      })
+    )
+  );
+  drawn.overflow = "ignore";
+  drawn.end = "";
+  return drawn;
+}
+
+// src/render/option-paint.ts
+var cell2 = (text4, style) => {
+  const drawn = typeof text4 === "string" ? new RichText(text4, { style }) : text4;
+  drawn.overflow = "ignore";
+  drawn.end = "";
+  return drawn;
+};
+var currentMark = (current) => new Style({ bold: current });
+function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
+  if (paletteOf === void 0) {
+    return (position, _option, label2, current) => cell2(
+      label2,
+      Style.combine([
+        bandItemStyle(active2, { ...position, distribution }, drawnAt),
+        currentMark(current)
+      ])
+    );
+  }
+  const text4 = stateCell(active2.palette, ground, drawnAt);
+  return (_position, option, label2, current) => named2(
+    label2,
+    Style.combine([text4, currentMark(current)]),
+    paletteOf(option, render3)
+  );
+}
+var named2 = (label2, text4, palette) => cell2(
+  RichText.fromFragments([
+    cell2(label2, text4),
+    cell2(" ", text4),
+    swatch(palette)
+  ])
+);
+function labelPaint(render3, paletteOf) {
+  if (paletteOf === void 0) return (_option, label2) => cell2(label2);
+  return (option, label2) => named2(label2, void 0, paletteOf(option, render3));
+}
+function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
+  const text4 = stateCell(active2.palette, ground, drawnAt);
+  return (_position, option, _label, current) => cell2(
+    RichText.fromFragments([
+      cell2(current ? "[" : " ", text4),
+      swatch(paletteOf(option, render3)),
+      cell2(current ? "]" : " ", text4)
+    ])
+  );
+}
+
+// src/render/library.ts
+init_globals();
+var LIBRARY_PAGE_ROWS = 8;
+function libraryLayout(entries, groups, paged) {
+  const sections = groups.map((group) => ({
+    label: group.label,
+    indices: entries.flatMap(
+      (entry, i) => entry.group === group.id ? [i] : []
+    )
+  })).filter((section) => section.indices.length > 0);
+  const placed = sections.reduce((n, s) => n + s.indices.length, 0);
+  if (placed !== entries.length) {
+    const known = new Set(groups.map((g) => g.id));
+    const stray = entries.flatMap(
+      (entry, i) => known.has(entry.group) ? [] : [`#${i} (group "${entry.group}")`]
+    );
+    throw new Error(
+      `library: ${stray.join(", ")} name a group the domain does not list (${[...known].join(", ")})`
+    );
+  }
+  return paged ? sections.flatMap(
+    (section) => chunk2(section.indices, LIBRARY_PAGE_ROWS).map((indices) => [
+      { label: section.label, indices }
+    ])
+  ) : [sections];
+}
+function chunk2(items, size) {
+  return Array.from(
+    { length: Math.ceil(items.length / size) },
+    (_, n) => items.slice(n * size, (n + 1) * size)
+  );
+}
+function fitCells(text4, width) {
+  return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
+}
+
+// src/render/active-segment.ts
+init_globals();
+function createActiveSegmentRef(drawnAt) {
+  return { current: null, drawnAt };
+}
+function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
+  const active2 = {
+    segName,
+    placementId: placementId2,
+    palette,
+    disclosure,
+    tint,
+    text: text4,
+    bg: void 0,
+    drops: []
+  };
+  ref.current = active2;
+  return active2;
+}
+function inSegment(ref, place, run3) {
+  return publishing(
+    ref,
+    () => run3(
+      openSegment(
+        ref,
+        place.segName,
+        place.placementId,
+        place.palette,
+        place.disclosure,
+        place.tint,
+        place.text
+      )
+    )
+  );
+}
+function outsideSegments(ref, run3) {
+  return publishing(ref, () => {
+    ref.current = null;
+    return run3();
+  });
+}
+function publishing(ref, run3) {
+  const prior = ref.current;
+  try {
+    return run3();
+  } finally {
+    ref.current = prior;
+  }
+}
+function requireActiveSegment(ref, spelling) {
+  const active2 = ref.current;
+  if (active2 === null) {
+    throw new Error(
+      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
+    );
+  }
+  return active2;
+}
+
+// src/render/picker.ts
+var PICKER_PREV = "\u2190";
+var PICKER_NEXT = "\u2192";
+function cellWidth2(text4) {
+  return new RichText(text4).cellLength;
+}
+function rowBudget(runtime) {
+  const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
+  return Math.max(1, width - chromeCols - 2 * padding);
+}
+function ledRowBudget(runtime) {
+  const { padding, seamCols } = renderBinding(runtime, "a row fit");
+  return Math.max(
+    1,
+    rowBudget(runtime) - (cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 2 * padding + seamCols)
+  );
+}
+function paginate(widths, available, reserve) {
+  if (!Number.isFinite(available)) {
+    return widths.length > 0 ? [widths.map((_, i) => i)] : [];
+  }
+  const usable = Math.max(1, available - reserve);
+  const pages = [];
+  let cur = [];
+  let curW = 0;
+  for (let i = 0; i < widths.length; i++) {
+    const w = widths[i];
+    if (cur.length === 0) {
+      cur = [i];
+      curW = w;
+    } else if (curW + 1 + w <= usable) {
+      cur.push(i);
+      curW += 1 + w;
+    } else {
+      pages.push(cur);
+      cur = [i];
+      curW = w;
+    }
+  }
+  if (cur.length > 0) pages.push(cur);
+  return pages;
+}
+function gridPages(widths, available, navReserve) {
+  const arrowReserve = cellWidth2(PICKER_PREV) + 1 + cellWidth2(PICKER_NEXT) + 1;
+  const firstPass = paginate(widths, available, navReserve);
+  return (firstPass.length > 1 ? paginate(widths, available, navReserve + arrowReserve) : firstPass).map((cells) => [{ label: "", indices: cells }]);
+}
+function assemble(frags, paged) {
+  const spaced = [];
+  for (const frag of frags) {
+    if (spaced.length > 0) spaced.push(new RichText(" "));
+    spaced.push(frag);
+  }
+  const assembled = RichText.fromFragments(spaced);
+  assembled.overflow = paged ? "ignore" : void 0;
+  assembled.end = "";
+  return assembled;
+}
+function requireKind(runtime, name, kind, shape, helper) {
+  const action2 = runtime.compiled.get(name);
+  if (!action2 || action2.kind !== kind) {
+    throw new Error(
+      `${helper} references action "${name}" which must be ${shape}, got ${action2 ? `a ${action2.kind} action` : "no such action"}`
+    );
+  }
+  return action2;
+}
+function requireOptionKind(runtime, name, helper) {
+  const declared = runtime.compiled.get(name);
+  const action2 = declared ? presentedAction(declared) : declared;
+  if (!action2 || action2.kind !== "set-option" && action2.kind !== "persist-option" && action2.kind !== "layout-op-option") {
+    throw new Error(
+      `${helper} references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action2 ? `a ${action2.kind} action` : "no such action"}`
+    );
+  }
+  return action2;
+}
+function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint, closeStyle, steps2 = []) {
+  const declared = runtime.compiled.get(applyName);
+  const store = renderBinding(runtime, "picker").store;
+  const sessionId2 = readVar(store, "session.id");
+  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const optionFace = (i, label2) => {
+    const option = apply.options[i];
+    return itemPaint(
+      { index: i, count: apply.options.length },
+      option,
+      label2,
+      option === current
+    );
+  };
+  const available = !paged ? Infinity : close2.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
+  const navReserve = (close2.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
+  const catalogue = apply.library && {
+    groups: apply.library.groups,
+    entries: apply.options.map(apply.library.entry)
+  };
+  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, option)) : [];
+  const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
+    gridFaces.map((face) => face.cellLength),
+    available,
+    navReserve
+  );
+  const rawPage = parseInt(readVar(store, page2.stateVar), 10);
+  const pageHolding = (index) => Math.max(
+    0,
+    pages.findIndex(
+      (sections) => sections.some((section) => section.indices.includes(index))
+    )
+  );
+  const holding2 = pageHolding(
+    current === void 0 ? -1 : apply.options.indexOf(current)
+  );
+  const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
+  const pageSections = pages[pageIdx] ?? [];
+  const pageUrl = (value) => effectsUrl([
+    { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
+  ]);
+  const closeWrite = close2.kind === "led" ? [] : [
+    {
+      verb: VERB_SET_STATE,
+      args: [sessionId2, ...close2.writes.flatMap(([k, v]) => [k, v])]
+    }
+  ];
+  const closeEffects = close2.kind === "own" && close2.onPick ? closeWrite : [];
+  const optionUrl = (option) => effectsUrl([
+    ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+    ...closeEffects
+  ]);
+  const optionCell = (face, i) => linkOver(face, optionUrl(apply.options[i]));
+  const nav = close2.kind === "led" ? [] : [
+    linkFragment(
+      DISCLOSURE_GLYPH_CLOSE,
+      effectsUrl(closeWrite),
+      false,
+      closeStyle
+    )
+  ];
+  nav.push(
+    ...steps2.map(
+      ({ glyph, option }) => linkFragment(
+        glyph,
+        effectsUrl([
+          ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+          {
+            verb: VERB_SET_STATE,
+            args: [
+              sessionId2,
+              page2.key,
+              String(pageHolding(apply.options.indexOf(option)))
+            ]
+          }
+        ]),
+        false
+      )
+    )
+  );
+  if (pageIdx > 0) {
+    nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
+  }
+  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
+  if (catalogue === void 0) {
+    const indices = pageSections.flatMap((section) => section.indices);
+    return [
+      assemble(
+        [...nav, ...indices.map((i) => optionCell(gridFaces[i], i)), ...next2],
+        paged
+      )
+    ];
+  }
+  const bold = new Style({ bold: true });
+  const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
+  const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
+  const lines2 = [assemble([...nav, ...where, ...next2], paged)];
+  for (const section of pageSections) {
+    if (pageSections.length > 1) {
+      lines2.push(
+        assemble([new RichText(section.label, { style: bold })], paged)
+      );
+    }
+    const nameWidth = Math.max(
+      ...section.indices.map((i) => cellWidth2(apply.options[i]))
+    );
+    for (const i of section.indices) {
+      const option = apply.options[i];
+      const authored = catalogue.entries[i].description;
+      const description = authored === void 0 ? void 0 : sanitizeText(authored);
+      const gap = " ".repeat(nameWidth - cellWidth2(option) + 2);
+      const row2 = description === void 0 ? option : `${option}${gap}${description}`;
+      lines2.push(
+        assemble(
+          [optionCell(optionFace(i, fitCells(row2, available)), i)],
+          paged
+        )
+      );
+    }
+  }
+  return lines2;
+}
+function pickerFuncs(runtime, activeSegment) {
+  return {
+    picker: {
+      fn: (applyName, pageName, closeOnPick, paged, inBody, ...extra) => {
+        refuseSurplus(
+          `picker "${applyName}"`,
+          ["closeOnPick", "paged", "inBody"],
+          extra
+        );
+        const page2 = requireKind(
+          runtime,
+          pageName,
+          "set-int",
+          "an int action ({ set, int: true })",
+          "picker"
+        );
+        if (inBody === true && closeOnPick === true) {
+          throw new Error(
+            `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
+          );
+        }
+        const apply = requireOptionKind(runtime, applyName, "picker");
+        const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
+        if (active2.bg === void 0) {
+          throw new Error(
+            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
+          );
+        }
+        const drawnAt = activeSegment.drawnAt();
+        const draw2 = (ground) => renderPicker(
+          applyName,
+          apply,
+          { key: page2.key, stateVar: page2.stateVar },
+          inBody === true ? { kind: "led" } : {
+            kind: "own",
+            writes: [[page2.key, "-1"]],
+            onPick: closeOnPick === true
+          },
+          paged === true,
+          runtime,
+          // A bare `{{ picker }}` authors no options dict, so it places by
+          // the default — the same resolution a `{{ menu }}` with no
+          // "distribution" option makes.
+          optionPaint(
+            active2,
+            placedBy(void 0),
+            renderLook(runtime, "{{ picker }}"),
+            apply.paletteOf,
+            drawnAt,
+            ground
+          ),
+          closeOn(active2.palette, ground, drawnAt)
+        );
+        const band = bandFor(active2.palette, active2.disclosure, drawnAt);
+        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        if (rows.length === 0) return draw2(active2.bg)[0];
+        active2.drops.push(...rows);
+        return draw2(band.state)[0];
+      },
+      argTypes: ["string", "string", "bool"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/carousel.ts
+init_globals();
+var CAROUSEL_PREV = "\u25C0";
+var CAROUSEL_NEXT = "\u25B6";
+function ringAround(options, current) {
+  const count = options.length;
+  const centre = Math.max(options.indexOf(current), 0);
+  return (offset) => ((centre + offset) % count + count) % count;
+}
+function renderCarousel(applyName, apply, openName, label2, runtime) {
+  if (!("stateVar" in apply)) {
+    throw new Error(
+      `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
+    );
+  }
+  const store = renderBinding(runtime, "carousel").store;
+  if (!store.has(apply.stateVar)) {
+    throw new Error(
+      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
+    );
+  }
+  const declared = runtime.compiled.get(applyName);
+  const sessionId2 = readVar(store, "session.id");
+  const { options } = apply;
+  if (options.length === 0) return assemble([], true);
+  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const ring = (offset) => options[indexAt(offset)];
+  const step4 = (offset) => effectsUrl(
+    realize(
+      declared,
+      ring(offset),
+      ring(offset),
+      store,
+      sessionId2,
+      runtime.signer
+    ).effects
+  );
+  return assemble(
+    [
+      linkFragment(CAROUSEL_PREV, step4(-1), false),
+      linkOver(
+        // Drawn as the arrows are, in the segment's own colours (Brandon: "The
+        // name loses its styling"), beside the swatch of the value in force
+        // when the domain is colour-valued.
+        labelPaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
+          ring(0),
+          label2
+        ),
+        effectsUrl(
+          realize(
+            runtime.compiled.get(openName),
+            ring(0),
+            void 0,
+            store,
+            sessionId2,
+            runtime.signer
+          ).effects
+        )
+      ),
+      linkFragment(CAROUSEL_NEXT, step4(1), false)
+    ],
+    true
+  );
+}
+function carouselFuncs(runtime) {
+  return {
+    carousel: {
+      fn: (applyName, openName, label2) => {
+        if (label2 === "") {
+          throw new Error(`carousel "${applyName}": label is empty`);
+        }
+        if (!runtime.compiled.has(openName)) {
+          throw new Error(
+            `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`
+          );
+        }
+        if (bindsTemplateValue(runtime.compiled.get(openName))) {
+          throw new Error(
+            `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
+          );
+        }
+        return renderCarousel(
+          applyName,
+          requireOptionKind(runtime, applyName, "carousel"),
+          openName,
+          label2,
+          runtime
+        );
+      },
+      argTypes: ["string", "string", "string"],
+      arity: { kind: "exact" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/theme-preview.ts
+init_globals();
+
+// src/render/swatches.ts
+init_globals();
+var SWATCHES_RANDOM = "?";
+function requireSwatchable(runtime, applyName, helper) {
+  const apply = requireOptionKind(runtime, applyName, helper);
+  if (!("stateVar" in apply)) {
+    throw new Error(
+      `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
+    );
+  }
+  if (apply.paletteOf === void 0) {
+    throw new Error(
+      `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
+    );
+  }
+  return apply;
+}
+function randomOther(seed, count, centre) {
+  let h = Math.imul(seed ^ seed >>> 16, 73244475);
+  h = Math.imul(h ^ h >>> 16, 73244475);
+  h ^= h >>> 16;
+  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
+}
+function optionPalette(runtime, applyName, helper, chosen) {
+  const apply = requireSwatchable(runtime, applyName, helper);
+  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
+  if (!apply.options.includes(option)) {
+    throw new Error(
+      `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
+    );
+  }
+  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
+}
+function swatchFuncs(runtime) {
+  return {
+    swatch: {
+      fn: (applyName, ...tail) => {
+        const [option, ...extra] = tail;
+        refuseSurplus(`swatch "${applyName}"`, ["option"], extra);
+        if (option !== void 0 && typeof option !== "string") {
+          throw new Error(
+            `swatch "${applyName}": option must be text, got ${JSON.stringify(option)}`
+          );
+        }
+        return swatch(optionPalette(runtime, applyName, "swatch", option));
+      },
+      argTypes: ["string", "value"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+function swatchesFuncs(runtime, activeSegment, clock) {
+  return {
+    swatches: {
+      fn: (applyName, pageName) => {
+        const apply = requireSwatchable(runtime, applyName, "swatches");
+        const page2 = requireKind(
+          runtime,
+          pageName,
+          "set-int",
+          "an int action ({ set, int: true })",
+          "swatches"
+        );
+        const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
+        if (active2.bg === void 0) {
+          throw new Error(
+            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
+          );
+        }
+        const drawnAt = activeSegment.drawnAt();
+        const { options } = apply;
+        const count = options.length;
+        const steps2 = () => {
+          const at = ringAround(
+            options,
+            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
+          );
+          return [
+            { glyph: CAROUSEL_PREV, option: options[at(-1)] },
+            {
+              glyph: SWATCHES_RANDOM,
+              option: options[randomOther(clock().getTime(), count, at(0))]
+            },
+            { glyph: CAROUSEL_NEXT, option: options[at(1)] }
+          ];
+        };
+        const [line] = renderPicker(
+          applyName,
+          apply,
+          { key: page2.key, stateVar: page2.stateVar },
+          { kind: "led" },
+          true,
+          runtime,
+          swatchPaint(
+            active2,
+            renderLook(runtime, "{{ swatches }}"),
+            apply.paletteOf,
+            drawnAt,
+            active2.bg
+          ),
+          closeOn(active2.palette, active2.bg, drawnAt),
+          count === 0 ? [] : steps2()
+        );
+        return line;
+      },
+      argTypes: ["string", "string"],
+      arity: { kind: "exact" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/theme-preview.ts
+var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
+function previewRows(palette, decor, opens, drawnAt) {
+  const band = bandFor(palette, opens, drawnAt);
+  const chosen = (text4, colour) => ({
+    text: text4,
+    colour,
+    ink: textOn(palette, colour, drawnAt)
+  });
+  return [
+    [
+      vocabularyOf(palette, decor, drawnAt).map((entry, i) => {
+        const colour = decorEntryColour(palette, entry);
+        return {
+          text: BAR_WORDS[i % BAR_WORDS.length],
+          colour,
+          ink: decor.shade.text(palette, entry.hue, colour, drawnAt)
+        };
+      })
+    ],
+    [
+      [chosen("\u25BE open", band.state), chosen("menu", band.plane)],
+      [
+        chosen("warn", paletteRole(palette, "warning")),
+        chosen("error", paletteRole(palette, "error"))
+      ]
+    ]
+  ];
+}
+function renderRow(groups, available) {
+  const cells = groups.flatMap(
+    (group, g) => group.map(({ text: text4, colour, ink }, i) => ({
+      gap: g > 0 && i === 0 ? " " : "",
+      cell: new RichText(` ${text4} `, {
+        style: decoratedCell({ tint: colour, text: ink })
+      })
+    }))
+  );
+  const fragments = [];
+  let width = 0;
+  for (const { gap, cell: cell3 } of cells) {
+    width += gap.length + cell3.cellLength;
+    if (width > available) break;
+    if (gap !== "") fragments.push(new RichText(gap));
+    fragments.push(cell3);
+  }
+  return fragments;
+}
+function renderThemePreview(palette, decor, opens, drawnAt, available) {
+  const rows = previewRows(palette, decor, opens, drawnAt).map(
+    (row2) => renderRow(row2, available)
+  );
+  const preview = RichText.fromFragments(
+    rows.flatMap((row2, i) => i === 0 ? row2 : [new RichText("\n"), ...row2])
+  );
+  preview.overflow = "ignore";
+  preview.end = "";
+  return preview;
+}
+function themePreviewFuncs(runtime, activeSegment) {
+  return {
+    // `{{ themePreview }}` samples the palette the bar is drawn in;
+    // `{{ themePreview "applyAction" }}` the palette the option that action's
+    // key holds puts in force — the theme picker's demo of the selected theme.
+    themePreview: {
+      fn: (...args) => {
+        const [applyName, ...extra] = args;
+        refuseSurplus("themePreview", ["applyAction"], extra);
+        if (applyName !== void 0 && typeof applyName !== "string") {
+          throw new Error(
+            `themePreview: applyAction must name a declared action, got ${JSON.stringify(applyName)}`
+          );
+        }
+        const { palette, decor } = renderLook(runtime, "{{ themePreview }}");
+        return renderThemePreview(
+          applyName === void 0 ? palette : optionPalette(runtime, applyName, "themePreview"),
+          decor,
+          // The bar trigger's band of the lineage the preview stands in: a
+          // band is coloured from the row its trigger stands in, which only
+          // the trigger's own region knows (decor.ts `decorationFor`).
+          {
+            ...requireActiveSegment(activeSegment, "{{ themePreview }}").disclosure,
+            depth: 0
+          },
+          activeSegment.drawnAt(),
+          ledRowBudget(runtime)
+        );
+      },
+      argTypes: ["value"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/layout-preview.ts
+init_globals();
+var blockLabel = (name) => name.slice(name.lastIndexOf(".") + 1);
+var clippedLabel = (name, most) => {
+  const label2 = new RichText(blockLabel(name));
+  label2.truncate(most, { marker: "\u2026" });
+  return label2.plain;
+};
+function labelBudget(rows, available) {
+  const widths = rows.map(
+    (row2) => row2.map(({ name }) => cellWidth2(blockLabel(name)))
+  );
+  const fits = (most2) => widths.every(
+    (row2) => row2.reduce((sum, w) => sum + Math.min(w, most2) + 2, 0) <= available
+  );
+  let most = Math.max(1, ...widths.flat());
+  while (most > 1 && !fits(most)) most -= 1;
+  return most;
+}
+function renderLayoutPreview(rows, decor, drawnAt, available) {
+  const most = labelBudget(rows, available);
+  const lines2 = rows.map((row2) => {
+    const blocks = [];
+    let width = 0;
+    for (const { name, address, palette } of row2) {
+      const block = new RichText(` ${clippedLabel(name, most)} `, {
+        style: decoratedCell(
+          decorationFor(palette, { kind: "bar", decor, address }, drawnAt)
+        )
+      });
+      width += block.cellLength;
+      if (width > available) break;
+      blocks.push(block);
+    }
+    return blocks;
+  });
+  const preview = RichText.fromFragments(
+    lines2.flatMap(
+      (blocks, i) => i === 0 ? blocks : [new RichText("\n"), ...blocks]
+    )
+  );
+  preview.overflow = "ignore";
+  preview.end = "";
+  return preview;
+}
+var LAYOUT_PREVIEW = "layoutPreview";
+function layoutPreviewFuncs(runtime, activeSegment) {
+  return {
+    [LAYOUT_PREVIEW]: {
+      fn: () => renderLayoutPreview(
+        renderLayout(runtime, "{{ layoutPreview }}"),
+        renderLook(runtime, "{{ layoutPreview }}").decor,
+        activeSegment.drawnAt(),
+        ledRowBudget(runtime)
+      ),
+      argTypes: [],
+      arity: { kind: "exact" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/menu.ts
+init_globals();
+function renderMenu(applyName, displays, options, runtime) {
+  const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
+  const action2 = runtime.action;
+  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
+  const pageKey = menuPageKey(stateKey);
+  const member = menuMember(applyName);
+  const store = renderBinding(action2, "menu").store;
+  const open2 = readVar(store, stateKey) === member;
+  const sessionId2 = readVar(store, "session.id");
+  const successor = open2 ? DISCLOSURE_CLOSED : member;
+  const glyph = linkFragment(
+    pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
+    effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [sessionId2, stateKey, successor, pageKey, "0"]
+      }
+    ]),
+    false
+  );
+  const body = () => {
+    const drawnAt = runtime.activeSegment.drawnAt();
+    const plane = bandFor(
+      placement.palette,
+      placement.disclosure,
+      drawnAt
+    ).plane;
+    const apply = requireOptionKind(action2, applyName, "menu");
+    return renderPicker(
+      applyName,
+      apply,
+      { key: pageKey, stateVar: pageKey },
+      {
+        kind: "own",
+        writes: [
+          [stateKey, DISCLOSURE_CLOSED],
+          [pageKey, "0"]
+        ],
+        onPick: options.closeOnPick
+      },
+      options.paged,
+      action2,
+      // Placed by THIS menu's distribution: the picker knows positions,
+      // the instance knows how it places them. Unless the domain is
+      // colour-valued, in which case every option is its name in the
+      // plane's text beside its swatch; one call decides, the same one the
+      // standalone `{{ picker }}` makes.
+      optionPaint(
+        placement,
+        options.distribution,
+        renderLook(action2, "{{ menu }}"),
+        apply.paletteOf,
+        drawnAt,
+        plane
+      ),
+      closeOn(placement.palette, plane, drawnAt)
+    );
+  };
+  placement.drops.push(...open2 ? body() : []);
+  return glyph;
+}
+var isDict = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function parseMenuArgs(applyName, tail) {
+  const last2 = tail[tail.length - 1];
+  const optsArg = isDict(last2) ? last2 : void 0;
+  const displayArgs = optsArg === void 0 ? tail : tail.slice(0, -1);
+  const bad = displayArgs.findIndex((d) => typeof d !== "string");
+  if (bad !== -1) {
+    throw new Error(
+      `{{ menu "${applyName}" }} display #${bad + 1} is not text (${JSON.stringify(displayArgs[bad])}) \u2014 a menu binds its trigger text, then an optional trailing (dict \u2026) of options`
+    );
+  }
+  return {
+    displays: displayArgs,
+    // [LAW:one-source-of-truth] The same option reader the loader folds over
+    // the static dict — vocabulary, types, defaults live once.
+    options: parseMenuOptions(optsArg ?? {})
+  };
+}
+function menuFuncs(runtime) {
+  return {
+    menu: {
+      fn: (applyName, ...tail) => {
+        const { displays, options } = parseMenuArgs(applyName, tail);
+        return renderMenu(applyName, displays, options, runtime);
+      },
+      argTypes: ["string", "value"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/segment-color.ts
+init_globals();
+
+// src/template-engine/gauge.ts
+init_globals();
+function renderGauge(spec) {
+  const { value, max: max2, width, filled, empty: empty2, colourAt } = spec;
+  const lit = litCells(value, max2, width);
+  const cells = [];
+  for (let i = 0; i < width; i++) {
+    const isLit = i < lit;
+    const hex3 = isLit && colourAt !== void 0 ? colourAt(i * max2 / width) : void 0;
+    cells.push(
+      new RichText(isLit ? filled : empty2, {
+        style: hex3 === void 0 ? void 0 : new Style({ color: hex3 })
+      })
+    );
+  }
+  const gauge = RichText.fromFragments(cells);
+  gauge.end = "";
+  gauge.overflow = "ignore";
+  return gauge;
+}
+function litCells(value, max2, width) {
+  if (!Number.isFinite(value) || !Number.isFinite(max2) || max2 <= 0) return 0;
+  return Math.min(width, Math.max(0, Math.round(value / max2 * width)));
+}
+
+// src/render/segment-color.ts
+function segmentColorFuncs(ref) {
+  const bgOf = {
+    fn: (() => {
+      const active2 = requireActiveSegment(ref, "{{ bgOf }}");
+      if (active2.bg === void 0) {
+        throw new Error(
+          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
+        );
+      }
+      return active2.bg.hex;
+    }),
+    argTypes: [],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const tint = {
+    fn: (() => requireActiveSegment(ref, "{{ tint }}").tint.hex),
+    argTypes: [],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const roleTextOn = {
+    fn: ((role, bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
+      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
+    }),
+    argTypes: ["string", "string"],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const keptOn = {
+    fn: ((fgRef, bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ keptOn }}");
+      const fg = resolveColorRef(palette2, fgRef);
+      const bg = resolveColorRef(palette2, bgRef);
+      const held = contrastRatio(
+        drawnColour(fg, ColorDepth.TRUECOLOR),
+        drawnColour(bg, ColorDepth.TRUECOLOR)
+      );
+      const floor2 = Math.min(
+        TEXT_MIN_CONTRAST,
+        Math.max(held, QUIET_MIN_CONTRAST)
+      );
+      return (ensureDrawn(
+        fg,
+        ref.drawnAt(),
+        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor2
+      ) ?? fg).hex;
+    }),
+    argTypes: ["string", "string"],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const palette = paletteFuncs(
+    () => requireActiveSegment(ref, "{{ color }} / {{ ramp }} / {{ gauge }}").palette
+  );
+  const gauge = {
+    fn: ((value, max2, width, filled, empty2, easing, ...stops) => {
+      const ramped = easing === void 0 ? void 0 : [easing, ...flattenStops(stops)];
+      return renderGauge({
+        value,
+        max: max2,
+        width,
+        filled,
+        empty: empty2,
+        colourAt: ramped === void 0 ? void 0 : (position) => String(
+          palette.ramp.fn(position, ...ramped)
+        )
+      });
+    }),
+    // "float" for the two measurements (a percentage need not be whole), "int"
+    // for the cell count, the glyph pair, then a repeating string slot for the
+    // optional easing and its stops — Go's spelling of an optional tail is a
+    // variadic one, so the gate requires the five and `ramp` refuses an easing
+    // with no stop.
+    argTypes: ["float", "float", "int", "string", "string", "string"],
+    arity: { kind: "variadic" },
+    returnType: "T"
+  };
+  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+}
+var RUNGS_OUT = {
+  "#000000": ["darken-1", "darken-2", "darken-3"],
+  "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
+};
+var RUNGS = Object.values(RUNGS_OUT).flat();
+function namedRoleText(palette, role, ground) {
+  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
+  const named3 = (name) => {
+    const colour = resolveColorRef(palette, name);
+    return {
+      colour,
+      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown)
+    };
+  };
+  const pole = contrastFor(shown).hex;
+  const out = RUNGS_OUT[pole];
+  if (out === void 0) {
+    throw new Error(
+      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
+    );
+  }
+  const text4 = `text-${role}`;
+  const rung = (step4) => `${role}-${step4}`;
+  const colours = new Map(
+    [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
+  );
+  const preferred = [text4, role, ...out.map(rung)].map(
+    (name) => colours.get(name)
+  );
+  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
+    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
+  )).colour;
+}
+function flattenStops(stops) {
+  return stops.flatMap((stop2) => {
+    const cut = stop2.indexOf(":");
+    const at = cut < 0 ? NaN : Number(stop2.slice(0, cut));
+    if (!Number.isFinite(at)) {
+      throw new Error(
+        `{{ gauge }} stop "${stop2}" must be "<position>:<colour>", e.g. "80:error" or "80:#ff0000"`
+      );
+    }
+    return [at, stop2.slice(cut + 1)];
+  });
+}
+
+// src/dsl/variable-scope.ts
+init_globals();
+function policyReads(decl, fold) {
+  if (decl.kind !== "shell" && decl.kind !== "file") return [];
+  const readsDepth = "key" in decl.cache && [...fold.calls(decl.cache.key)].some((name) => DEPTH_FUNCTIONS.has(name));
+  return [
+    ...fold.ofVariable(decl).flatMap(
+      ({ reaches }) => reaches.length === 0 ? [null] : reaches
+    ),
+    ...readsDepth ? [null] : []
+  ];
+}
+var KIND_SCOPE = {
+  input: "view",
+  state: "view",
+  template: "view",
+  time: "view",
+  literal: "directory",
+  env: "directory",
+  dropped: "directory",
+  // A plugin source is read per session: its reading is the session's own
+  // file, which reaches the view through its payload.
+  source: "view"
+};
+var SCOPES = /* @__PURE__ */ new WeakMap();
+function variableScopes(config2) {
+  let scopes = SCOPES.get(config2);
+  if (scopes === void 0) {
+    scopes = scopesOf(config2);
+    SCOPES.set(config2, scopes);
+  }
+  return scopes;
+}
+function scopesOf(config2) {
+  const declared = new Map(declaredVariables(config2));
+  const fold = valueReadsOf(config2);
+  const scopes = new Map(
+    [...declared].map(([name, decl]) => [
+      name,
+      decl.kind === "shell" || decl.kind === "file" ? "directory" : KIND_SCOPE[decl.kind]
+    ])
+  );
+  const reads = new Map(
+    [...declared].map(([name, decl]) => [name, policyReads(decl, fold)])
+  );
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const [name, read2] of reads) {
+      if (scopes.get(name) === "view") continue;
+      if (read2.some((r) => r === null || scopes.get(r) !== "directory")) {
+        scopes.set(name, "view");
+        moved = true;
+      }
+    }
+  }
+  return scopes;
+}
+
+// src/dsl/parts.ts
+init_globals();
+
+// src/dsl/node-registry.ts
+init_globals();
+
+// src/render/split-lines.ts
+init_globals();
+function splitCellsIntoLines(cells) {
+  const lines2 = [];
+  let current = [];
+  for (const cell3 of cells) {
+    if (!cell3.contains("\n")) {
+      current.push(cell3);
+      continue;
+    }
+    const pieces = cell3.split("\n");
+    current.push(pieces[0]);
+    for (let i = 1; i < pieces.length; i++) {
+      lines2.push(current);
+      current = [pieces[i]];
+    }
+  }
+  lines2.push(current);
+  return lines2;
+}
+
+// src/dsl/node-registry.ts
+function rowIdentities(lines2) {
+  const counts = /* @__PURE__ */ new Map();
+  return lines2.map((line) => {
+    const kind = `${line.place}.${line.band}`;
+    const nth = counts.get(kind) ?? 0;
+    counts.set(kind, nth + 1);
+    return { line, row: `${kind}#${nth}` };
+  });
+}
+var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
+function within2(parent, own2) {
+  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
+}
+function returnedBy(id2, lines2) {
+  const own2 = [];
+  const deeper = [];
+  let ground;
+  for (const line of lines2) {
+    (line.band === "own" ? own2 : deeper).push(line);
+    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
+  }
+  return {
+    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
+    deeper
+  };
+}
+function heldLine(line) {
+  return { ...line, cells: line.cells.map(heldCell) };
+}
+function composeBlocks(direction, blocks) {
+  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
+  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
+  return [...above, ...composeFlow(direction, flow3)];
+}
+function composeFlow(direction, blocks) {
+  switch (direction) {
+    case "vertical":
+      return blocks.flatMap((b) => b);
+    case "horizontal": {
+      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
+      if (height === 0) return [];
+      const row0 = {
+        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
+        band: "own",
+        place: "flow"
+      };
+      const drops = blocks.flatMap((b) => b.slice(1));
+      return [row0, ...drops];
+    }
+  }
+}
+function layoutRows(node, shown) {
+  const lines2 = (n, address) => {
+    if (!shown(n)) return [];
+    if (n.kind === "segment") {
+      return [
+        {
+          cells: [{ name: n.name, address, settings: n.settings }],
+          band: "own",
+          place: "flow"
+        }
+      ];
+    }
+    return composeBlocks(
+      n.direction,
+      n.children.map(
+        (child, index) => lines2(child, [...address, childStep(n, index)])
+      )
+    );
+  };
+  return lines2(node, []).map((line) => [...line.cells]);
+}
+function childStep(node, index) {
+  return node.steps[index];
+}
+function spanOf(node) {
+  if (node.kind === "segment" || node.unit === true) {
+    return { width: 1, reach: 1 };
+  }
+  const laid = laidOut(node);
+  return { width: widthOf2(laid), reach: reachOf(laid) };
+}
+function laidOut(node) {
+  const spans = node.children.map(spanOf);
+  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
+  if (node.direction === "vertical" || node.unit === true) {
+    return spans.map((span, i) => ({ start: 0, span, ownLine: ownLine(i) }));
+  }
+  let start = 0;
+  return spans.map((span, i) => {
+    const at = start;
+    start += span.width;
+    return { start: at, span, ownLine: ownLine(i) };
+  });
+}
+var widthOf2 = (laid) => laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
+var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
+function placeChildren(node, at) {
+  const laid = laidOut(node);
+  if (at?.axis === "cell") {
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
+    });
+  }
+  const axis = AXIS_OF[node.direction];
+  const distribution = placedBy(node.distribution);
+  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
+  return places.map((index) => ({
+    index,
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd
+  }));
+}
+var containerType = {
+  compile(node, cctx) {
+    const steps2 = placeChildren(node, cctx.at);
+    return {
+      kind: "container",
+      direction: node.direction,
+      when: cctx.when,
+      steps: steps2,
+      children: node.children.map(
+        (child, i) => cctx.compileChild(child, childPath(cctx.path, i), steps2[i])
+      )
+    };
+  },
+  render(node, ctx) {
+    if (ctx.gate.kind === "failed") ctx.gate.report();
+    return composeBlocks(
+      node.direction,
+      node.children.map(
+        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
+      )
+    );
+  }
+};
+var BODY_PLACE = {
+  drop: (line) => line.place,
+  above: () => "above"
+};
+var OPEN_LEAD = {
+  drop: (inline, close2) => ({ lead: close2(), stays: inline }),
+  above: (inline) => ({
+    lead: inline.slice(0, 1).flatMap((line) => line.cells),
+    stays: inline.slice(1)
+  })
+};
+var segmentType = {
+  compile(node, cctx) {
+    return {
+      kind: "segment",
+      when: cctx.when,
+      name: node.name,
+      id: placementId(node),
+      settings: cctx.placementSettings(node),
+      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
+      // predicate by the one `disclosureGate` every disclosure reads through.
+      ...node.opens !== void 0 && {
+        opens: {
+          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
+          // A body roots a band: its first step is placed afresh.
+          body: cctx.compileChild(
+            node.opens.body,
+            bodyPath(cctx.path),
+            void 0
+          ),
+          key: node.opens.ref.key,
+          placement: node.opens.placement
+        }
+      },
+      ...node.lead !== void 0 && {
+        lead: cctx.parse(node.lead, "lead")
+      },
+      ...node.trail !== void 0 && {
+        trail: cctx.parse(node.trail, "trail")
+      }
+    };
+  },
+  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
+  // hidden, gated off, drawn, broken — is reported to the session's record, so
+  // one that stops drawing leaves the bar as it was last drawn.
+  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
+};
+function drawSegment(node, ctx) {
+  const seg2 = ctx.lookupSegment(node.name);
+  if (seg2 === void 0) {
+    throw new Error(`Layout segment "${node.name}" has no matching segment`);
+  }
+  if (ctx.gate.kind === "hidden") return [];
+  const scope = placementScope(ctx.scope, node.settings);
+  if (ctx.gate.kind === "failed") {
+    return brokenSegment(node, scope, ctx, ctx.gate.message);
+  }
+  try {
+    const parts = ctx.placement(node);
+    const gate2 = within2(ctx.gate, parts.gate());
+    if (gate2.kind === "failed") {
+      return brokenSegment(node, scope, ctx, gate2.message);
+    }
+    if (gate2.kind === "hidden") return [];
+    const ownBodyGate = parts.bodyGate();
+    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
+    if (bodyGate.kind === "failed") {
+      return brokenSegment(node, scope, ctx, bodyGate.message);
+    }
+    const palette = placementPalette(node.settings.theme, ctx.palette);
+    const placement = {
+      id: node.id,
+      effect: node.settings.effect,
+      ground: groundOf(palette)
+    };
+    const layoutOf = (baseStyle) => ({
+      width: seg2.width ?? "auto",
+      justify: seg2.justify ?? "left",
+      truncate: seg2.truncate ?? "right",
+      baseStyle,
+      // [LAW:dataflow-not-control-flow] Padding is uniform across every
+      // line a segment contributes — inline rows AND dropped menu bands —
+      // one value, no per-line-kind branch. The picker reserves 2×padding
+      // at its pagination seam so a padded band still fits the width
+      // budget.
+      padding: ctx.padding,
+      placement
+    });
+    const bodyOpen = bodyGate.kind === "shown";
+    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
+    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
+    const drawn = own2.kind === "drawn" ? drawnRows(own2.segment, layoutOf) : waitingRows(
+      node,
+      scope,
+      ctx,
+      own2.variable,
+      palette,
+      bodyOpen,
+      layoutOf
+    );
+    if (drawn === null) return [];
+    const { styles, inline: inlineLines, drops: dropLines } = drawn;
+    const opens = node.opens;
+    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
+      ...line,
+      place: BODY_PLACE[opens.placement](line)
+    }));
+    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
+      ...layoutOf(style),
+      width: "auto",
+      padding
+    });
+    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
+      inlineLines,
+      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
+    ) : { lead: [], stays: inlineLines };
+    const holdLead = openLead.flatMap(
+      (cell3) => leadCell(
+        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
+        styles.trigger,
+        0
+      )
+    );
+    const leadOf = (line, i) => line.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
+    const ledBody = bodyLines.map((line, i) => ({
+      cells: [...leadOf(line, i), ...line.cells],
+      band: "deeper",
+      place: line.place
+    }));
+    const laidLines = [...stays, ...dropLines];
+    if (ctx.perSegmentSink !== void 0) {
+      ctx.perSegmentSink.set(
+        node.id,
+        [
+          ...laidLines.flatMap((line) => line.cells),
+          ...bodyLines.flatMap(leadOf)
+        ].flatMap(cellParts)
+      );
+    }
+    return [...laidLines, ...ledBody];
+  } catch (err) {
+    return brokenSegment(
+      node,
+      scope,
+      ctx,
+      err.message ?? String(err)
+    );
+  }
+}
+var waitingOn = (variable) => ({
+  kind: "waiting",
+  variable
+});
+function ownAnswer(evaluate) {
+  try {
+    return { kind: "drawn", segment: evaluate() };
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 === void 0) throw err;
+    return waitingOn(pending2.variable);
+  }
+}
+function drawnRows(segment, layoutOf) {
+  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
+  const baseStyle = open2 ? styles.trigger : styles.closed;
+  const layout = layoutOf(baseStyle);
+  const inline = splitCellsIntoLines(
+    fragmentsToCells(fragments, baseStyle)
+  ).map((line, i) => ({
+    cells: applySegmentLayout(line, {
+      ...layout,
+      lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
+      trail: i === 0 ? fragmentsToCells(trail, baseStyle) : []
+    }),
+    band: "own",
+    place: "flow"
+  }));
+  return {
+    styles,
+    inline,
+    drops: drops.map((body) => ({
+      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
+        ...layout,
+        baseStyle: styles.band
+      }),
+      band: "deeper",
+      place: "flow"
+    }))
+  };
+}
+var LOADING_GLYPH = "\u2026";
+function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
+  ctx.waited(variable);
+  const last2 = ctx.lastDrawn(node.id);
+  if (last2?.kind === "hidden") return null;
+  const styles = ctx.decorations(node, palette);
+  const style = bodyOpen ? styles.trigger : styles.closed;
+  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
+  const trail = fragmentsToCells(
+    errorAffix(node.trail, node, scope, ctx),
+    style
+  );
+  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
+    (line) => line.cells.map((cell3) => cell3.text.cellLength)
+  );
+  return {
+    styles,
+    inline: rows.map((widths, row2) => ({
+      cells: widths.flatMap((width, i) => {
+        const first2 = row2 === 0 && i === 0;
+        return applySegmentLayout(
+          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
+          {
+            ...layoutOf(style),
+            width,
+            justify: "left",
+            truncate: "right",
+            lead: first2 ? lead : [],
+            trail: first2 ? trail : []
+          }
+        );
+      }),
+      band: "own",
+      place: "flow"
+    })),
+    drops: []
+  };
+}
+function cellsWidth(cells) {
+  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
+}
+function brokenSegment(node, scope, ctx, message) {
+  ctx.onSegmentError?.(node.id, message);
+  const oneLine = message.replace(/\s*\n\s*/g, " ");
+  return [
+    {
+      cells: applySegmentLayout(
+        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
+        {
+          width: "auto",
+          justify: "left",
+          truncate: "right",
+          padding: 0,
+          // It follows the bar, and fades in from the bar's ground: the
+          // failure it reports may be the read of this placement's own
+          // settings.
+          placement: {
+            id: node.id,
+            effect: FOLLOW_BAR,
+            ground: groundOf(ctx.palette)
+          },
+          lead: errorAffix(node.lead, node, scope, ctx),
+          trail: errorAffix(node.trail, node, scope, ctx)
+        }
+      ),
+      band: "own",
+      place: "flow"
+    }
+  ];
+}
+function errorAffix(affix, node, scope, ctx) {
+  if (affix === void 0) return [];
+  try {
+    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 !== void 0) ctx.waited(pending2.variable);
+    else ctx.onSegmentError?.(node.id, err.message ?? String(err));
+    return [];
+  }
+}
+var REGISTRY = {
+  container: containerType,
+  segment: segmentType
+};
+function nodeType(kind) {
+  return REGISTRY[kind];
+}
+
+// src/render/frame-memory.ts
+init_globals();
+var FrameMemory = class {
+  last = null;
+  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
+  // drawn from another config, preset, state revision or width says nothing of
+  // where a placement stands in this one — its ids may name other placements,
+  // its rows were sized for another width, and a write to the session's state
+  // shows what it reveals at once — so it is no frame to draw from or compare
+  // against.
+  from(source) {
+    const { last: last2 } = this;
+    return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+  }
+  begin(source, returned2) {
+    const placements = /* @__PURE__ */ new Map();
+    const rules = /* @__PURE__ */ new Map();
+    return {
+      placed: (id2, lines2) => {
+        const { drawing: drawing2 } = returned2(id2, lines2);
+        placements.set(
+          id2,
+          drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
+        );
+        return lines2;
+      },
+      rule: (slot, name) => rules.set(slot, name),
+      commit: () => {
+        this.last = { source, placements, rules };
+      }
+    };
+  }
+};
+var HIDDEN_RECORD = { kind: "hidden" };
+
+// src/dsl/parts.ts
+var SELECTION_OF = {
+  palette: "theme",
+  style: "style",
+  effect: "effect"
+};
+var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
+var COLOR_FLOOR = "truecolor";
+var UNDRAWN = {
+  width: 0,
+  chromeCols: 0,
+  padding: 0,
+  seamCols: 0,
+  preset: ""
+};
+function answerOf2(deriver) {
+  try {
+    return { ok: true, value: deriver() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+function unwrap2(answer2) {
+  if (answer2.ok) return answer2.value;
+  throw answer2.error;
+}
+var always = (value) => ({ read: () => value });
+var sameLook = sameBy({
+  basePalette: is,
+  palette: is,
+  decor: sameDecor
+});
+var ViewParts = class {
+  constructor(store, registry, source, view) {
+    this.store = store;
+    this.registry = registry;
+    this.source = source;
+    this.view = observable.box(view, { deep: false });
+    this.scope = buildScope(store);
+    this.depth = store.derive("drawn depth", "computed", () => {
+      const said = this.inputAt(COLOR_PATH);
+      return typeof said === "string" && isColorCompatibility(said) ? said : COLOR_FLOOR;
+    });
+    const drawn = observable(UNDRAWN, void 0, { deep: false });
+    this.facts = drawn;
+    const look = this.look;
+    const phase = this.phase;
+    const layout = () => this.layout.read();
+    this.binding = {
+      store,
+      registry,
+      get width() {
+        return drawn.width;
+      },
+      get chromeCols() {
+        return drawn.chromeCols;
+      },
+      get padding() {
+        return drawn.padding;
+      },
+      get seamCols() {
+        return drawn.seamCols;
+      },
+      get look() {
+        return phase.ruling ? void 0 : look.get();
+      },
+      get layout() {
+        return phase.ruling ? void 0 : layout;
+      }
+    };
+    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
+      const root = source.roots.get(drawn.preset);
+      const palette = look.get().palette;
+      return layoutRows(root, (node) => this.shown(node)).map(
+        (row2) => row2.flatMap(({ name: placedName, address, settings }) => {
+          const name = arrangedSegment(placedName);
+          return name === void 0 ? [] : [
+            {
+              name,
+              address,
+              palette: placementPalette(settings.theme, palette)
+            }
+          ];
+        })
+      );
+    });
+    registry.bindInputs({
+      read: (path39) => this.inputAt(path39),
+      drawnAt: () => drawnDepth(this.colorCompatibility())
+    });
+  }
+  store;
+  registry;
+  source;
+  // How many parts have derived since the view's first draw: what one draw
+  // adds is how many of its parts it evaluated.
+  evaluated = 0;
+  // What the view's last drawn frame showed: the one thing a draw writes.
+  memory = new FrameMemory();
+  // [LAW:one-source-of-truth] The view's one scope. Its names are the
+  // store's when it is built, at the view's first draw: a view declares
+  // every variable before it is drawn.
+  scope;
+  binding;
+  facts;
+  look = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
+  });
+  layout;
+  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
+  // draw resolves its look — the look is what the rules decide — so while one
+  // is, the binding has neither look nor layout to give: a read is refused by
+  // name (renderLook, renderLayout), never answered with the last draw's.
+  // Read outside every kept part but the rule's own, which always runs here.
+  phase = { ruling: false };
+  gates = /* @__PURE__ */ new Map();
+  placements = /* @__PURE__ */ new Map();
+  rules = /* @__PURE__ */ new Map();
+  slots = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
+  // and its slots read it as it stands, never a copy a draw wrote.
+  view;
+  // The draw in progress's own facts — the payload fields its instant answers
+  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
+  // the projections over them, which only a draw reads.
+  projected = void 0;
+  drawnSlots = /* @__PURE__ */ new Map();
+  // What the view draws from: a session view's source is bound once; a caller
+  // drawing a fixed payload binds each.
+  bind(view) {
+    runInAction(() => this.view.set(view));
+  }
+  // The selections in force.
+  selections() {
+    return this.view.get().selections();
+  }
+  // The draw's facts, before it reads a part, and the payload fields its own
+  // instant answers.
+  draw(facts, projected) {
+    this.draws++;
+    this.projected = projected;
+    this.drawnSlots.clear();
+    runInAction(() => Object.assign(this.facts, facts));
+  }
+  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
+  // answers it: a selection's `.effective` its slot, a field of the instant
+  // the draw in progress, every other the view's payload.
+  inputAt(path39) {
+    const slot = slotAt(path39);
+    if (slot !== void 0) return this.slotName(slot);
+    if (drawProjectionAt(path39) !== void 0)
+      return resolvePath(this.projected, path39);
+    return resolvePath(this.view.get().payload(), path39);
+  }
+  // The depth the view's colour setting draws at: its floor while the payload
+  // has not said, or says something no depth is.
+  depth;
+  colorCompatibility() {
+    return this.depth.read();
+  }
+  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
+  // the rule's answer. A rule that reads no instant is kept: settled in the
+  // turn what it reads changes, so a cache policy over the slot's
+  // `.effective` re-runs then, never at a draw. A pending answer keeps the
+  // name last settled (the floor before any); a failure is the floor with
+  // its warning, which every draw reading the slot reports.
+  slot(slot) {
+    let node = this.slots.get(slot);
+    if (node === void 0) {
+      let last2;
+      const settle3 = () => {
+        const selection2 = this.selections()[SELECTION_OF[slot]];
+        if (selection2.kind === "decided")
+          return settled2(selection2.name, null, null);
+        const rule = compiledRule(this.source, slot, selection2.source);
+        if (this.source.instant.has(rule.template))
+          return { kind: "per-draw", rule };
+        const outcome = this.rule(rule.template);
+        switch (outcome.kind) {
+          case "named": {
+            let warning = null;
+            last2 = decideSlot(
+              this.source,
+              slot,
+              outcome.name,
+              rule.where,
+              (m) => {
+                warning = m;
+              }
+            );
+            return settled2(last2, warning, null);
+          }
+          case "pending":
+            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
+          case "failed":
+            last2 = SLOT_FLOORS[slot];
+            return settled2(
+              last2,
+              ruleFloorMessage(
+                rule.where,
+                slot,
+                `the rule failed \u2014 ${outcome.error}`
+              ),
+              null
+            );
+        }
+      };
+      let held;
+      node = this.store.derive(`slot ${slot}`, "computed", () => {
+        const next2 = settle3();
+        if (held === void 0 || !sameSlot(held, next2)) held = next2;
+        return held;
+      });
+      this.slots.set(slot, node);
+    }
+    return node.read();
+  }
+  // The name a slot's `.effective` reads: its settled name, or what this
+  // draw's rule settled on.
+  slotName(slot) {
+    const state = this.slot(slot);
+    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
+  }
+  // What a per-draw rule settled on in the draw in progress.
+  drawnSlot(slot, name) {
+    this.drawnSlots.set(slot, name);
+  }
+  // Which draw is in progress: a part that reads the instant answers once in it.
+  draws = 0;
+  // The look the draw resolved, before its walk.
+  publishLook(look) {
+    runInAction(() => this.look.set(look));
+  }
+  // A layout node's own `when`, as the walk asks it.
+  gate(node) {
+    const { when: when2 } = node;
+    if (when2 === void 0) return gateOf2(when2, this.scope);
+    let part = this.gates.get(node);
+    if (part === void 0) {
+      part = this.derive(
+        "when",
+        this.readsInstant(when2),
+        () => outsideSegments(
+          this.source.activeSegment,
+          () => gateOf2(when2, this.scope)
+        )
+      );
+      this.gates.set(node, part);
+    }
+    return part.read();
+  }
+  placement(node) {
+    let parts = this.placements.get(node);
+    if (parts === void 0) {
+      parts = new Placement(this, node);
+      this.placements.set(node, parts);
+    }
+    return parts;
+  }
+  rule(template) {
+    let part = this.rules.get(template);
+    if (part === void 0) {
+      part = this.derive(
+        "rule",
+        this.readsInstant(template),
+        () => {
+          this.phase.ruling = true;
+          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
+          try {
+            return {
+              kind: "named",
+              name: template.evaluate(this.scope).map((f) => f.plain).join("")
+            };
+          } catch (e) {
+            const pending2 = readPending(e);
+            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+              kind: "failed",
+              error: e instanceof Error ? e.message : String(e)
+            };
+          } finally {
+            bound?.[Symbol.dispose]();
+            this.phase.ruling = false;
+          }
+        }
+      );
+      this.rules.set(template, part);
+    }
+    return part.read();
+  }
+  readsInstant(...templates) {
+    return templates.some(
+      (template) => template !== void 0 && this.source.instant.has(template)
+    );
+  }
+  // [LAW:single-enforcer] Every part derives here: kept by the store, or
+  // derived at every read when it reads the instant, and counted.
+  // A part that reads the instant is derived once per draw however often the
+  // draw reads it — a body reads its colours, its lead and trail read both —
+  // since one draw is one instant over one store.
+  derive(name, readsInstant, deriver) {
+    const counted2 = () => {
+      this.evaluated++;
+      return deriver();
+    };
+    return this.store.derive(
+      `part ${name}`,
+      readsInstant ? "projection" : "computed",
+      readsInstant ? this.oncePerDraw(counted2) : counted2
+    );
+  }
+  oncePerDraw(deriver) {
+    let memo = null;
+    return () => {
+      if (memo?.draw !== this.draws) {
+        memo = { draw: this.draws, answer: answerOf2(deriver) };
+      }
+      return unwrap2(memo.answer);
+    };
+  }
+  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
+  // the rows a layout lays out are drawn by: a node's `when`, then a
+  // segment's own — and a segment either `when` of which throws is SHOWN,
+  // because the walk draws an error cell exactly there, where a container
+  // whose `when` throws draws nothing. A `when` not answered yet is shown,
+  // and under it a segment as its own `when` says, as the walk asks it. Edit
+  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
+  // part of it, while a name label stands in for its segment
+  // (`arrangedSegment`).
+  shown(node) {
+    const gate2 = this.gate(node);
+    if (node.kind === "container")
+      return gate2.kind === "shown" || gate2.kind === "pending";
+    if (arrangedSegment(node.name) === void 0) return false;
+    if (gate2.kind === "hidden") return false;
+    if (gate2.kind === "failed") return true;
+    return this.placement(node).gate().kind !== "hidden";
+  }
+};
+function bindView(source, store, registry, view) {
+  const parts = source.views.get(store);
+  if (parts !== void 0) {
+    parts.bind(view);
+    return parts;
+  }
+  const made = new ViewParts(store, registry, source, view);
+  source.views.set(store, made);
+  return made;
+}
+function partsOf(source, store) {
+  const parts = source.views.get(store);
+  if (parts === void 0) {
+    throw new Error(
+      "a store was drawn before its view was bound (bindView): its inputs have no source"
+    );
+  }
+  return parts;
+}
+var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
+var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
+function compiledRule(source, slot, rule) {
+  const compiled = source.globalExpressions.get(slot)?.get(rule);
+  if (compiled === void 0) {
+    throw new Error(
+      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
+    );
+  }
+  return compiled;
+}
+function decideSlot(source, slot, name, where, warn) {
+  switch (slot) {
+    case "palette":
+      return decideThemeName(name, where, warn).name;
+    case "style":
+      return decideStyleName(name, source.styles).name;
+    case "effect":
+      return decideEffectName(name).name;
+  }
+}
+var Placement = class {
+  // What the walk hands each part: where it draws the placement, then what
+  // the colours and the body evaluated to.
+  where = inlet(
+    sameBy({ palette: is, region: sameRegion })
+  );
+  ground = inlet(
+    sameBy({
+      colours: sameDealt,
+      bodyOpen: is
+    })
+  );
+  opened = inlet(
+    sameBy({
+      colours: sameDealt,
+      open: is
+    })
+  );
+  ownGate;
+  open;
+  colours;
+  body;
+  affixes;
+  constructor(view, node) {
+    const seg2 = view.source.segments[node.name];
+    const ref = view.source.activeSegment;
+    const scope = placementScope(view.scope, node.settings);
+    const { when: when2, bg, fg, template } = seg2;
+    const { lead, trail } = node;
+    const opens = node.opens?.open;
+    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
+      `${node.id} when`,
+      view.readsInstant(when2),
+      () => outsideSegments(ref, () => gateOf2(when2, scope))
+    );
+    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
+      `${node.id} body gate`,
+      view.readsInstant(opens),
+      () => outsideSegments(ref, () => gateOf2(opens, view.scope))
+    );
+    this.colours = view.derive(
+      `${node.id} colours`,
+      view.readsInstant(bg, fg),
+      () => {
+        const { palette, region } = this.where.get();
+        return coloursOf(
+          ref,
+          node,
+          palette,
+          region,
+          view.registry.drawnAt(),
+          bg,
+          fg,
+          scope
+        );
+      }
+    );
+    this.body = view.derive(
+      `${node.id} body`,
+      view.readsInstant(template),
+      () => {
+        const { colours, bodyOpen } = this.ground.get();
+        return bodyOf(ref, node, colours, template, bodyOpen, scope);
+      }
+    );
+    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
+      `${node.id} affixes`,
+      view.readsInstant(lead, trail),
+      () => {
+        const { colours, open: open2 } = this.opened.get();
+        return affixesOf(ref, node, colours, open2, lead, trail, scope);
+      }
+    );
+  }
+  gate() {
+    return this.ownGate.read();
+  }
+  bodyGate() {
+    return this.open.read();
+  }
+  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
+  // what the one before it evaluated to: the colours, then the body over its
+  // ground, then the lead and trail over what the body opened.
+  evaluate(palette, region) {
+    this.where.set({ palette, region });
+    const colours = this.colours.read();
+    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
+    const body = this.body.read();
+    this.opened.set({ colours, open: body.open });
+    return evaluated(colours, body, this.affixes.read());
+  }
+};
+function inlet(same) {
+  const box = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && same(a, b)
+  });
+  return {
+    set: (value) => runInAction(() => box.set(value)),
+    // [LAW:no-defensive-null-guards] Filled before it is read (above).
+    get: () => box.get()
+  };
+}
+var sameHex = (a, b) => a.hex === b.hex;
+var sameDealt = sameBy({
+  palette: is,
+  drawnAt: is,
+  tint: sameHex,
+  text: sameHex,
+  bg: sameHex,
+  disclosure: sameDisclosure
+});
+function placeOf(node, colours) {
+  return {
+    segName: node.name,
+    placementId: node.id,
+    palette: colours.palette,
+    disclosure: colours.disclosure,
+    tint: colours.tint,
+    text: colours.text
+  };
+}
+var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
+function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
+  const dealt = {
+    palette,
+    drawnAt,
+    ...decorationFor(palette, region, drawnAt)
+  };
+  return inSegment(ref, placeOf(node, dealt), (active2) => {
+    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
+    return { ...dealt, bg: active2.bg, style };
+  });
+}
+function bodyOf(ref, node, colours, template, bodyOpen, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
+    const fragments = template.evaluate(scope);
+    return {
+      fragments,
+      drops: active2.drops,
+      open: active2.drops.length > 0 || bodyOpen
+    };
+  });
+}
+function affixesOf(ref, node, colours, open2, lead, trail, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = open2 ? bandOf(colours).state : colours.bg;
+    return {
+      lead: lead?.evaluate(scope) ?? [],
+      trail: trail?.evaluate(scope) ?? [],
+      drops: active2.drops
+    };
+  });
+}
+var NO_AFFIXES = { lead: [], trail: [], drops: [] };
+function stylesOf(colours) {
+  const { palette, drawnAt, disclosure } = colours;
+  return {
+    closed: colours.style,
+    get trigger() {
+      return stateCell(palette, bandOf(colours).state, drawnAt);
+    },
+    get band() {
+      return stateCell(palette, bandOf(colours).plane, drawnAt);
+    },
+    get close() {
+      return closeCell(palette, bandOf(colours).state, drawnAt);
+    },
+    disclosure
+  };
+}
+function evaluated(colours, body, affixes) {
+  return {
+    styles: stylesOf(colours),
+    fragments: body.fragments,
+    lead: affixes.lead,
+    trail: affixes.trail,
+    drops: [...body.drops, ...affixes.drops],
+    open: body.open
+  };
+}
+function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
+  const colours = coloursOf(
+    ref,
+    node,
+    palette,
+    region,
+    drawnAt,
+    void 0,
+    void 0,
+    scope
+  );
+  return evaluated(
+    colours,
+    bodyOf(ref, node, colours, body, false, scope),
+    NO_AFFIXES
+  );
+}
+function decoratedStyles(ref, node, palette, region, drawnAt) {
+  return stylesOf(
+    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
+  );
+}
+
+// src/dsl/view-source.ts
+init_globals();
+
+// src/dsl/render.ts
+function toCachePolicy(cache2) {
+  if ("ttl" in cache2)
+    return { kind: "ttl", durationMs: parseDuration(cache2.ttl) };
+  if ("watch_file" in cache2)
+    return { kind: "watch_file", path: cache2.watch_file };
+  if ("depends_on" in cache2)
+    return { kind: "depends_on", varNames: cache2.depends_on };
+  if ("key" in cache2) return { kind: "key", template: cache2.key };
+  if ("never" in cache2) return { kind: "never" };
+  throw new Error(
+    `Unknown CacheDecl discriminator \u2014 loader invariant violated: ${JSON.stringify(cache2)}`
+  );
+}
+function toSourceParse(parse3, dflt) {
+  switch (parseArm(parse3)) {
+    case "json":
+      return { kind: "json", default: dflt };
+    case "regex":
+      return {
+        kind: "regex",
+        regex: new RegExp(parse3.regex),
+        default: dflt
+      };
+    case "text":
+      return { kind: "text", default: dflt };
+  }
+}
+function declareOne(registry, name, decl, cwd2, derivation) {
+  switch (decl.kind) {
+    case "literal":
+      registry.declareLiteral(name, decl.value);
+      break;
+    case "dropped":
+      registry.declareFailedDocument(name, decl.reason);
+      break;
+    // [LAW:single-enforcer] A plugin source's reading is read by the managed
+    // storage owner and carried by the view's payload at the source's name
+    // (src/daemon/render-payload.ts); the view derives the document from it.
+    case "source":
+      registry.declareSourceDocument(name);
+      break;
+    case "input":
+      registry.declareInput(
+        name,
+        decl.path,
+        decl.type ?? "string",
+        decl.default,
+        derivation
+      );
+      break;
+    case "env":
+      registry.declareEnv(name, decl.name, decl.default);
+      break;
+    case "file":
+      registry.declareFile(name, decl.path, {
+        readMode: decl.readMode,
+        cache: toCachePolicy(decl.cache),
+        parse: toSourceParse(decl.parse, decl.default)
+      });
+      break;
+    case "shell":
+      registry.declareShell(name, decl.command, {
+        cwd: cwd2,
+        cache: toCachePolicy(decl.cache),
+        parse: toSourceParse(decl.parse, decl.default)
+      });
+      break;
+    case "template":
+      registry.declareTemplate(name, decl.template, {
+        type: decl.type ?? "string",
+        varDefault: decl.default,
+        derivation
+      });
+      break;
+    case "time":
+      registry.declareTime(name, {
+        format: decl.layout,
+        varDefault: decl.default
+      });
+      break;
+    case "state":
+      registry.declareState(name, {
+        key: decl.key,
+        ...decl.default !== void 0 && { varDefault: decl.default }
+      });
+      break;
+  }
+}
+function compileHelpers(engine, helpers) {
+  let defines = Defines.EMPTY;
+  for (const [name, body] of Object.entries(helpers)) {
+    try {
+      defines = engine.parse(`{{ define "${name}" }}${body}{{ end }}`, defines).defines();
+    } catch (e) {
+      throw new Error(
+        `Template parse error in helpers.${name}: ${e.message}`,
+        { cause: e }
+      );
+    }
+  }
+  return defines;
+}
+var compileAlone = (signer) => (_key, input) => compileDslConfig(input, signer);
+function registerCompiled(config2, registry, cwd2, compile, scopes = EVERY_SCOPE) {
+  const input = compileInputOf(config2);
+  const key = compileKey(input);
+  return {
+    compiled: compile(key, input),
+    compileKey: key,
+    loadWarnings: declareDslVariables(config2, registry, cwd2, scopes)
+  };
+}
+function compileInputOf(config2) {
+  const { variables, ...rest2 } = config2;
+  const stateKeyToVar = /* @__PURE__ */ new Map();
+  for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
+    if (name in variables) stateKeyToVar.set(key, name);
+  }
+  for (const [name, decl] of stateVarDecls(config2)) {
+    if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
+  }
+  return {
+    config: rest2,
+    stateReads: [...stateKeyToVar].sort(([a], [b]) => a < b ? -1 : 1),
+    projections: [...projectionsOf(config2)].sort(
+      ([a], [b]) => a < b ? -1 : 1
+    )
+  };
+}
+function compileKey(input) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+function declareDslVariables(config2, registry, cwd2, scopes) {
+  const scopeOf2 = variableScopes(config2);
+  const projections = projectionsOf(config2);
+  const loadWarnings = [];
+  for (const [name, decl] of declaredVariables(config2)) {
+    if (!scopes.has(scopeOf2.get(name))) continue;
+    try {
+      declareOne(
+        registry,
+        name,
+        decl,
+        cwd2,
+        projections.has(name) ? "projection" : "computed"
+      );
+    } catch (err) {
+      loadWarnings.push(
+        `Variable "${name}": ${err.message ?? String(err)}`
+      );
+    }
+  }
+  return loadWarnings;
+}
+var EVERY_SCOPE = /* @__PURE__ */ new Set([
+  "directory",
+  "view"
+]);
+function compileDslConfig({ config: config2, stateReads, projections }, signer) {
+  const actionRuntime = {
+    bound: void 0,
+    compiled: /* @__PURE__ */ new Map(),
+    signer
+  };
+  const drawnAt = () => renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
+  const activeSegment = createActiveSegmentRef(drawnAt);
+  const menuRuntime = {
+    action: actionRuntime,
+    activeSegment
+  };
+  const styleNames = Object.keys(config2.styles);
+  const presetOptions = presetNames(config2.presets);
+  const perConfigDomains = configOptionDomains(config2);
+  const renderClocks = [
+    (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now)
+  ];
+  const engine = createCcCandybarEngine({
+    extraFuncs: {
+      ...actionFuncs(actionRuntime),
+      ...swatchFuncs(actionRuntime),
+      ...pickerFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime),
+      ...themePreviewFuncs(actionRuntime, activeSegment),
+      ...layoutPreviewFuncs(actionRuntime, activeSegment),
+      ...menuFuncs(menuRuntime),
+      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
+      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
+      // from, published by the walk. Binding it to a palette captured HERE
+      // (registration runs once per config load, renders happen per tick) was
+      // the two-clocks bug this seam exists to close: a session theme click or
+      // a style moved a segment's background while every in-body color stayed
+      // where it was, so one segment painted from two palettes at once. Reading
+      // live costs nothing structurally — FuncMap bodies run at evaluate time,
+      // so parse-once/evaluate-many is untouched.
+      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
+      ...segmentColorFuncs(activeSegment),
+      // [LAW:one-type-per-behavior] The per-config sibling of the static
+      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
+      // projection of the "styles" option domain. Injected here — not in the
+      // static FuncMap — because the domain is this config's styles block.
+      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
+      // The presets domain's twin of the binding above — same per-config
+      // reason, same shape. A hand-authored `range presets` and a
+      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
+      // derived click gate admits.
+      presets: {
+        fn: () => presetOptions,
+        argTypes: [],
+        arity: { kind: "exact" }
+      }
+    },
+    clockFuncs: renderClocks,
+    drawnAt
+  });
+  const helpers = compileHelpers(engine, config2.helpers);
+  const sources = /* @__PURE__ */ new Map();
+  const parse3 = (src) => {
+    const parsed2 = engine.parse(src, helpers);
+    sources.set(parsed2, src);
+    return parsed2;
+  };
+  const nodeTemplates = /* @__PURE__ */ new Map();
+  const parseShared = (src) => {
+    const known = nodeTemplates.get(src);
+    if (known !== void 0) return known;
+    const parsed2 = parse3(src);
+    nodeTemplates.set(src, parsed2);
+    return parsed2;
+  };
+  const stateKeyToVar = new Map(stateReads);
+  actionRuntime.compiled = compileActions(
+    parse3,
+    config2.actions,
+    stateKeyToVar,
+    perConfigDomains
+  );
+  const compiled = /* @__PURE__ */ Object.create(
+    null
+  );
+  for (const [segName, seg2] of Object.entries(config2.segments)) {
+    const parseField = (src, field, read2 = parse3) => {
+      try {
+        return read2(src);
+      } catch (e) {
+        throw new Error(
+          `Template parse error in segments.${segName}.${field}: ${e.message}`,
+          { cause: e }
+        );
+      }
+    };
+    compiled[segName] = {
+      when: seg2.when !== void 0 ? parseField(seg2.when, "when", parseShared) : void 0,
+      template: parseField(seg2.template, "template"),
+      bg: seg2.bg !== void 0 ? parseField(seg2.bg, "bg") : void 0,
+      fg: seg2.fg !== void 0 ? parseField(seg2.fg, "fg") : void 0
+    };
+  }
+  const parseNodeField = (src, path39, field) => {
+    try {
+      return parseShared(src);
+    } catch (e) {
+      throw new Error(
+        `Template parse error in ${path39}.${field}: ${e.message}`,
+        { cause: e }
+      );
+    }
+  };
+  const resolvedSettings = (node) => {
+    const declared = settingsOf(config2.segments[node.name]);
+    const out = /* @__PURE__ */ Object.create(null);
+    for (const [name, decl] of Object.entries(declared)) {
+      Object.defineProperty(out, name, {
+        enumerable: true,
+        get: () => placementSetting(
+          node,
+          name,
+          decl,
+          (draft) => String(
+            renderBinding(actionRuntime, `setting ${name}`).store.read(
+              draft.variable
+            )
+          )
+        )
+      });
+    }
+    return Object.freeze(out);
+  };
+  const compileNode = (node, path39, at) => {
+    const cctx = {
+      path: path39,
+      at,
+      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path39, "when"),
+      parse: (src, field) => parseNodeField(src, path39, field),
+      compileChild: compileNode,
+      placementSettings: resolvedSettings
+    };
+    return nodeType(node.kind).compile(node, cctx);
+  };
+  const roots = /* @__PURE__ */ new Map();
+  for (const name of presetOptions) {
+    const { node, path: path39 } = presetRoot(config2, name);
+    roots.set(name, compileNode(node, path39, void 0));
+  }
+  const globalExpressions = new Map(
+    EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
+  );
+  for (const { at, slot, rule: authored } of authoredRules(config2)) {
+    const where = at.join(".");
+    const rules = globalExpressions.get(slot);
+    const seen = rules.get(authored);
+    rules.set(
+      authored,
+      seen === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen.where}, ${where}`, template: seen.template }
+    );
+  }
+  const basis = {
+    reads: valueReads({
+      names: new Set(projections.map(([name]) => name)),
+      helpers: config2.helpers,
+      actions: config2.actions
+    }),
+    projections: new Map(projections),
+    clock: engineClockFunctions(renderClocks)
+  };
+  const gateReadsInstant = templateInstants(basis);
+  const gates = [...roots.values()].flatMap(layoutGates(compiled));
+  const layoutReadsInstant = gates.some(
+    (gate2) => gateReadsInstant(sources.get(gate2))
+  );
+  const readsInstant = layoutReadsInstant ? templateInstants({
+    ...basis,
+    clock: /* @__PURE__ */ new Set([...basis.clock, LAYOUT_PREVIEW])
+  }) : gateReadsInstant;
+  const instant = new Set(
+    [...sources].flatMap(
+      ([template, source]) => readsInstant(source) ? [template] : []
+    )
+  );
+  return {
+    segments: compiled,
+    roots,
+    activeSegment,
+    menuRuntime,
+    globalExpressions,
+    instant,
+    layoutReadsInstant,
+    styles: config2.styles,
+    runtime: actionRuntime,
+    views: /* @__PURE__ */ new WeakMap()
+  };
+}
+function instantSegments(compiled) {
+  return Object.entries(compiled.segments).flatMap(
+    ([name, segment]) => [segment.when, segment.bg, segment.fg, segment.template].some(
+      (template) => template !== void 0 && compiled.instant.has(template)
+    ) ? [name] : []
+  );
+}
+var layoutGates = (segments) => (root) => {
+  const asked2 = [];
+  layoutRows(root, (node) => {
+    asked2.push(node);
+    return true;
+  });
+  return asked2.flatMap((node) => [
+    ...node.when === void 0 ? [] : [node.when],
+    ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
+  ]);
+};
+function parseExpressionSlot(parse3, path39, source) {
+  try {
+    return parse3(source);
+  } catch (e) {
+    throw new Error(
+      `${path39} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+}
+var unreachable = (message) => {
+  throw new Error(`a slot settled on a name its domain refuses: ${message}`);
+};
+function evalRule(slot, rule, parts, warn, frame) {
+  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame);
+  frame.settled(slot, name);
+  return name;
+}
+function ruleName(slot, rule, outcome, warn, frame) {
+  switch (outcome.kind) {
+    case "named":
+      return outcome.name;
+    case "pending":
+      frame.waited(outcome.variable);
+      return frame.held(slot) ?? SLOT_FLOORS[slot];
+    case "failed":
+      warn({
+        kind: "rule",
+        slot,
+        message: ruleFloorMessage(
+          rule.where,
+          slot,
+          `the rule failed \u2014 ${outcome.error}`
+        )
+      });
+      return SLOT_FLOORS[slot];
+  }
+}
+function placementsUnder(node) {
+  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.id);
+}
+function segmentsUnder(node) {
+  if (node.kind === "container") return node.children.flatMap(segmentsUnder);
+  return [
+    node,
+    ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
+  ];
+}
+function drawDsl(config2, compiled, store, registry, projected, at, opts, observers, selection2) {
+  var _stack = [];
+  try {
+    const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
+    const warn = (warning) => onRenderWarning?.(warning);
+    const effects = selection2.effects ?? new SessionEffects("");
+    const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
+    const drawClock = __using(_stack, bindClock(at, clock.timeline));
+    const parts = partsOf(compiled, store);
+    const drawOpts = {
+      ...opts,
+      colorCompatibility: parts.colorCompatibility()
+    };
+    parts.draw(
+      {
+        width: drawOpts.width,
+        chromeCols: stripChromeCols(drawOpts),
+        padding: drawOpts.padding,
+        seamCols: stripSeamCols(drawOpts),
+        preset: selection2.preset
+      },
+      projected
+    );
+    const evaluatedBefore = parts.evaluated;
+    const _bound = __using(_stack, bindRender(compiled.menuRuntime.action, parts.binding));
+    const { preset, transitions } = selection2;
+    const decor = {
+      variation: VARIATIONS[selection2.variation],
+      shade: SHADES[selection2.shade]
+    };
+    const source = {
+      config: config2,
+      preset,
+      revision: registry.stateRevision(),
+      width: drawOpts.width
+    };
+    const record2 = parts.memory.begin(source, returnedBy);
+    const last2 = parts.memory.from(source);
+    const waited = /* @__PURE__ */ new Set();
+    const ruleFrame = {
+      held: (slot) => last2?.rules.get(slot),
+      waited: (variable) => waited.add(variable),
+      settled: record2.rule
+    };
+    const rules = /* @__PURE__ */ new Map();
+    const slotted = (slot) => {
+      const state = parts.slot(slot);
+      rules.set(slot, state.kind === "settled" ? "kept" : "per-draw");
+      if (state.kind === "settled") {
+        if (state.warning !== null)
+          warn({ kind: "rule", slot, message: state.warning });
+        if (state.waited !== null) waited.add(state.waited);
+        return state.name;
+      }
+      const name = decideSlot(
+        compiled,
+        slot,
+        evalRule(slot, state.rule, parts, warn, ruleFrame),
+        state.rule.where,
+        (message) => warn({ kind: "rule", slot, message })
+      );
+      parts.drawnSlot(slot, name);
+      return name;
+    };
+    const {
+      theme: decidedTheme,
+      style: decidedStyle,
+      effect: decidedEffect
+    } = parts.selections();
+    const theme24 = decidedTheme.kind === "decided" ? decidedTheme : decideThemeName(slotted("palette"), "", unreachable);
+    const style = decidedStyle.kind === "decided" ? decidedStyle : decideStyleName(slotted("style"), config2.styles);
+    const effect = decidedEffect.kind === "decided" ? decidedEffect : decideEffectName(slotted("effect"));
+    const basePalette = theme24.value;
+    const palette = transposedPalette(basePalette, style.value);
+    parts.publishLook({ basePalette, palette, decor });
+    const flashFill = paletteRole(palette, "warning");
+    const flash = selection2.idleSince === void 0 ? null : {
+      idleSince: selection2.idleSince,
+      timeoutS: selection2.menuTimeout,
+      fill: flashFill,
+      text: textOn(palette, flashFill, registry.drawnAt())
+    };
+    const motion = effects.motion(
+      effect.value,
+      clock,
+      {
+        transitions,
+        source,
+        last: last2,
+        returned: returnedBy,
+        hold: heldLine
+      },
+      flash
+    );
+    perSegmentSink?.clear();
+    const lookupSegment = (name) => config2.segments[name];
+    const renderNode = (node, parent, region) => {
+      const evaluated2 = parent.kind === "hidden" ? parent : within2(parent, parts.gate(node));
+      const gate2 = evaluated2.kind === "failed" ? {
+        ...evaluated2,
+        report: () => {
+          const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
+          warn({
+            kind: "when",
+            where,
+            error: evaluated2.message,
+            message: `${where}: ${evaluated2.message} \u2014 what it gates is hidden`
+          });
+        }
+      } : evaluated2;
+      const ctx = {
+        scope: parts.scope,
+        palette,
+        gate: gate2,
+        padding: drawOpts.padding,
+        region,
+        perSegmentSink,
+        onSegmentError,
+        placement: (node2) => parts.placement(node2),
+        evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
+          compiled.activeSegment,
+          node2,
+          palette2,
+          region,
+          registry.drawnAt(),
+          body,
+          scope
+        ),
+        lookupSegment,
+        renderChild: (child, held, step4) => renderNode(child, held, descend(region, step4)),
+        // A disclosure body starts a NEW region: the root of the band its
+        // trigger opens. Depth is a fact of that band — counted up by
+        // `decorationFor` each time a band item opens the next — so a nested
+        // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
+        renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
+        // [LAW:one-source-of-truth] The row ✕ reads the session id from the
+        // same store every other affordance's URL does.
+        closeDisclosure: (key) => disclosureCloseFragment(store, key),
+        placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
+        lastDrawn: (id2) => last2?.placements.get(id2),
+        waited: (variable) => waited.add(variable),
+        decorations: (node2, palette2) => decoratedStyles(
+          compiled.activeSegment,
+          node2,
+          palette2,
+          region,
+          registry.drawnAt()
+        )
+      };
+      return nodeType(node.kind).render(node, ctx);
+    };
+    const root = compiled.roots.get(preset);
+    if (root === void 0) {
+      throw new Error(
+        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
+      );
+    }
+    const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row: row2 }) => {
+      const items = resolveFill(line.cells, drawOpts);
+      const kind = line.band === "deeper" ? "menu" : "bar";
+      return {
+        kind,
+        ...drawStripCells(
+          items.map((item) => item.owner),
+          drawOpts,
+          motion.row(row2, kind, items)
+        )
+      };
+    });
+    motion.drawn();
+    record2.commit();
+    const menuRows = rendered.filter((row2) => row2.kind === "menu").length;
+    const armed = () => menuRows > 0 || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
+      ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
+    );
+    const nextChange = Math.min(
+      drawClock.heard(),
+      ...rendered.map((row2) => row2.nextChange)
+    );
+    const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
+    for (const [variable, fault] of registry.cachePolicyFaults())
+      warn({
+        kind: "refresh",
+        variable,
+        error: fault.message,
+        message: `variable "${variable}" cannot refresh: ${fault.message}`
+      });
+    return {
+      text: rendered.map((row2) => row2.text).join("\n"),
+      nextChange,
+      motion: frameMotion,
+      menuRows,
+      evaluated: parts.evaluated - evaluatedBefore,
+      pending: [...waited].sort(),
+      rules
+    };
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+
+// src/daemon/frame-feed.ts
+init_globals();
+var FEED_PERIODS = {
+  moving: 1e3 / MOVING_FPS,
+  still: 1e3
+};
+var RATE_WINDOW_S = 1;
+var TIMER_RESOLUTION_S = 2e-3;
+var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
+function feedsFact(feeds) {
+  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
+    const { subscribers, fps, shown } = feeds[lane];
+    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
+  }).join(",") || "-";
+}
+function noteSent(rate, at) {
+  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
+  rate.splice(0, rate.length, ...kept, at);
+}
+var sentOf = (resp) => ({
+  resp,
+  bytes: JSON.stringify(resp)
+});
+var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.bar : answers.statusline;
+var paceOf = (period) => Math.round(1e3 / period);
+var SUMMARY_EVERY_MS = 6e4;
+var MAX_REQUESTS = 256;
+var FrameFeeds = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  requests = /* @__PURE__ */ new Map();
+  feeds = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] The stop of what runs while any feed
+  // exists: held exactly from the first feed opening to the last closing.
+  stopWatching = null;
+  drawn = 0;
+  pushed = 0;
+  refused = 0;
+  lookups = 0;
+  found = 0;
+  // A valid render request the daemon received `order`-th. The latest request
+  // a session sent is where the feeds find the session: whether its pane is
+  // shown, and which sessions a wake or a lookup matches. Its frames draw by
+  // the request its view is declared with. One that arrived before it — a
+  // slow render finishing late — is not the session's latest.
+  note(sessionId2, req, order2) {
+    const held = this.requests.get(sessionId2);
+    if (held !== void 0 && held.order > order2) return;
+    this.requests.delete(sessionId2);
+    this.requests.set(sessionId2, { req, order: order2 });
+    for (const oldest of this.requests.keys()) {
+      if (this.requests.size <= MAX_REQUESTS) break;
+      if (!this.feeds.has(oldest)) this.requests.delete(oldest);
+    }
+    const feed = this.feeds.get(sessionId2);
+    if (feed === void 0) return;
+    feed.noted++;
+  }
+  // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
+  // lane the session's settings switch off is refused here before any feed
+  // opens, and one whose lane is switched off while it streams is ended in
+  // `push`. A session with no view yet waits, and its first frame decides.
+  subscribe(sessionId2, sub2) {
+    const lanes = this.deps.lanes(sessionId2);
+    if (lanes !== null && !lanes[sub2.lane]) {
+      this.refuse(sessionId2, sub2);
+      return () => {
+      };
+    }
+    const held = this.feeds.get(sessionId2);
+    const feed = held ?? this.open(sessionId2);
+    feed.followers.set(sub2, null);
+    if (!feed.rates.has(sub2.lane)) feed.rates.set(sub2.lane, []);
+    if (held !== void 0) this.send(feed, sub2);
+    this.hasten(feed);
+    this.deps.log(
+      "info",
+      `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed.followers.size} view=${lanes === null ? "N" : "Y"}`
+    );
+    return () => this.unsubscribe(feed, sub2);
+  }
+  // The lanes whose subscribers follow the session's frames and draw them now.
+  following(sessionId2) {
+    return new Set(
+      [...this.feeds.get(sessionId2)?.followers.keys() ?? []].filter((s) => s.drawing()).map((s) => s.lane)
+    );
+  }
+  // Something the session's bar shows changed, for `cause`: its next frame,
+  // if anyone is watching it, is drawn as soon as the feed's spacing allows.
+  wake(sessionId2, cause) {
+    const feed = this.feeds.get(sessionId2);
+    if (feed === void 0) return;
+    feed.woke[cause]++;
+    if (!this.hasten(feed)) feed.coalesced++;
+  }
+  // Wake, for `cause`, every watched session whose latest request `match`
+  // accepts.
+  wakeWhere(cause, match) {
+    for (const { sessionId: sessionId2, req } of this.watched())
+      if (match(req)) this.wake(sessionId2, cause);
+  }
+  // The session of the newest request `match` accepts, among the latest
+  // request of each session the daemon holds, or null when none does.
+  newestWhere(match) {
+    let newest = null;
+    for (const [sessionId2, { req, order: order2 }] of this.requests)
+      if (match(req) && (newest === null || order2 > newest.order))
+        newest = { sessionId: sessionId2, order: order2 };
+    this.lookups++;
+    if (newest !== null) this.found++;
+    return newest?.sessionId ?? null;
+  }
+  // The latest request the daemon holds of `sessionId`, or null when it
+  // holds none.
+  latest(sessionId2) {
+    return this.requests.get(sessionId2)?.req ?? null;
+  }
+  // The latest request of every session someone is watching, by session.
+  watched() {
+    return [...this.feeds.keys()].flatMap((sessionId2) => {
+      const noted = this.requests.get(sessionId2);
+      return noted === void 0 ? [] : [{ sessionId: sessionId2, req: noted.req }];
+    });
+  }
+  // [LAW:nothing-unseen] What each lane of `sessionId`'s frames is doing now:
+  // its subscribers, the frames that went out to it in the last second, and
+  // whether the session's pane is on a screen, which decides the rate a moving
+  // bar is drawn at.
+  // [LAW:one-source-of-truth] Counted against the instant of the draw asking,
+  // never a clock of the feed's own, so a frame's count is a function of the
+  // frames before it and its own instant: like every value relative to now,
+  // it is the draw's, and it changes nothing the feed wakes on.
+  feedsOf(sessionId2, at) {
+    const feed = this.feeds.get(sessionId2);
+    if (feed === void 0) return UNFOLLOWED_FEEDS;
+    const since = at - RATE_WINDOW_S;
+    const shown = this.shown(feed);
+    return perLane((lane) => {
+      const rate = feed.rates.get(lane);
+      if (rate === void 0) return UNFOLLOWED;
+      let subscribers = 0;
+      for (const sub2 of feed.followers.keys())
+        if (sub2.lane === lane) subscribers++;
+      let fps = 0;
+      for (const sent of rate) if (sent > since && sent <= at) fps++;
+      return { subscribers, fps, shown };
+    });
+  }
+  getStats() {
+    let subscribers = 0;
+    for (const feed of this.feeds.values()) subscribers += feed.followers.size;
+    return {
+      feeds: this.feeds.size,
+      subscribers,
+      drawn: this.drawn,
+      pushed: this.pushed,
+      refused: this.refused,
+      lookups: this.lookups,
+      found: this.found
+    };
+  }
+  open(sessionId2) {
+    const now2 = this.deps.now();
+    const feed = {
+      sessionId: sessionId2,
+      followers: /* @__PURE__ */ new Map(),
+      rates: /* @__PURE__ */ new Map(),
+      unwatch: this.deps.watch(sessionId2, () => this.wake(sessionId2, "state")),
+      unpin: this.deps.pin(sessionId2),
+      phase: { kind: "waiting" },
+      // Never drawn: its first frame may be drawn now.
+      lastStart: -Infinity,
+      last: null,
+      since: now2,
+      drawn: 0,
+      noted: 0,
+      noView: 0,
+      moving: 0,
+      unseen: 0,
+      failed: 0,
+      pushed: 0,
+      drawMs: 0,
+      evaluated: 0,
+      woke: { data: 0, state: 0, reload: 0, visibility: 0 },
+      coalesced: 0,
+      summarizedAt: now2,
+      refreshesAtOpen: this.deps.refreshes()
+    };
+    this.feeds.set(sessionId2, feed);
+    this.stopWatching ??= this.deps.watching();
+    return feed;
+  }
+  // The daemon's close: every feed ends as its last subscriber's leaving ends
+  // it, and the pane follow with the last of them.
+  close() {
+    for (const feed of [...this.feeds.values()])
+      for (const sub2 of [...feed.followers.keys()]) this.unsubscribe(feed, sub2);
+  }
+  unsubscribe(feed, sub2) {
+    if (!feed.followers.delete(sub2)) return;
+    if (![...feed.followers.keys()].some((s) => s.lane === sub2.lane))
+      feed.rates.delete(sub2.lane);
+    if (feed.followers.size > 0) {
+      this.hasten(feed);
+      return;
+    }
+    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    feed.unwatch();
+    feed.unpin();
+    this.feeds.delete(feed.sessionId);
+    if (this.feeds.size === 0) {
+      this.stopWatching?.();
+      this.stopWatching = null;
+    }
+    this.summarize(feed, "closed");
+  }
+  // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
+  // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
+  // is logged as the feed's fault, and the feed's next frame is set as a
+  // still frame's is. A frame step runs off a timer, so a throw it let go
+  // would be an unhandled rejection, which exits the daemon.
+  // [LAW:no-ambient-temporal-coupling] The frame is drawn for the instant its
+  // timer was set for, kept within TIMER_RESOLUTION_S of the wall clock: a
+  // frame set for a change shows it however early its timer fires, and none is
+  // ever drawn further ahead of the wall than that, so nothing carries from
+  // one frame to the next. Its moment on the monotonic clock is that instant's.
+  draw(feed, due) {
+    feed.phase = { kind: "drawing" };
+    const started2 = this.deps.now();
+    const wall = this.deps.instant();
+    const at = Math.min(
+      Math.max(due, wall),
+      wall + TIMER_RESOLUTION_S
+    );
+    const moment2 = started2 + (at - wall) * 1e3;
+    try {
+      this.step(feed, started2, moment2, at);
+    } catch (error) {
+      feed.lastStart = moment2;
+      this.deps.log(
+        "error",
+        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`
+      );
+      if (this.feeds.get(feed.sessionId) !== feed) return;
+      this.schedule(feed, null, at);
+    }
+  }
+  step(feed, started2, moment2, at) {
+    const frame = this.deps.render(
+      feed.sessionId,
+      paceOf(this.spacingOf(feed)),
+      at
+    );
+    if (frame === null) {
+      feed.noView++;
+      feed.phase = { kind: "waiting" };
+      return;
+    }
+    feed.lastStart = moment2;
+    const finished = this.deps.now();
+    this.drawn++;
+    feed.drawn++;
+    feed.drawMs += finished - started2;
+    feed.evaluated += frame.evaluated;
+    if (this.feeds.get(feed.sessionId) !== feed) return;
+    this.countFailure(feed, frame);
+    this.push(feed, frame, at);
+    if (this.feeds.get(feed.sessionId) !== feed) return;
+    if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
+      this.summarize(feed, "running");
+    this.schedule(feed, frame, at);
+  }
+  // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
+  // next changes, measured from the instant this one was drawn for — no
+  // sooner than the feed's spacing allows and no later than the still period
+  // — so a 1 s beat is drawn once a second, for the moment it turns, and a
+  // continuous effect at the moving rate. Set as an instant, so the time this
+  // frame took to draw comes off the wait and the rate holds whatever a render
+  // costs. A frame step that faulted is followed as a still frame is.
+  // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
+  // next change is Infinity, and an unseen bar's spacing is the still period.
+  schedule(feed, frame, at) {
+    const { moving, still } = this.deps.periods;
+    const until2 = ((frame?.nextChange ?? Infinity) - at) * 1e3;
+    const shownPeriod = Math.min(Math.max(until2, moving), still);
+    const shown = this.shown(feed);
+    if (shownPeriod < still && shown) feed.moving++;
+    if (shownPeriod < still && !shown) feed.unseen++;
+    const period = shown ? shownPeriod : still;
+    this.arm(feed, at + period / 1e3, this.deps.instant());
+  }
+  // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
+  // moving period while its bar is on a screen, the still period while it is
+  // not. No cause of a wake sets the rate, so an unseen feed draws at most
+  // once a still period however often it is woken.
+  spacingOf(feed) {
+    return this.shown(feed) ? this.deps.periods.moving : this.deps.periods.still;
+  }
+  // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
+  // to the earliest its spacing allows after the last frame was drawn for,
+  // never later than it already falls due. Answers whether it moved anything:
+  // a wake that did not was coalesced into a frame already due. Spaced on the
+  // monotonic clock, so a wall clock stepped back cannot stall a wake.
+  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
+  // turn and opens nothing, so a wake while it draws is the draw's own, and
+  // the frame reads what that moved: it is coalesced into that frame.
+  hasten(feed) {
+    const { phase } = feed;
+    if (phase.kind === "drawing") return false;
+    const now2 = this.deps.now();
+    const at = Math.max(now2, feed.lastStart + this.spacingOf(feed));
+    if (phase.kind === "due" && phase.at <= at) return false;
+    const wall = this.deps.instant();
+    this.arm(feed, wall + (at - now2) / 1e3, wall);
+    return true;
+  }
+  // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
+  // the wall instant `due`, in a later turn than the caller's however soon
+  // that is. Its wait is measured from `wall`, the caller's own reading, so
+  // the instant a caller set is never rebuilt from a second, truncated one;
+  // its monotonic due time is what a wake compares against.
+  arm(feed, due, wall) {
+    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    const delay = Math.max(0, (due - wall) * 1e3);
+    feed.phase = {
+      kind: "due",
+      at: this.deps.now() + delay,
+      timer: setTimeout(() => this.draw(feed, due), delay)
+    };
+  }
+  shown(feed) {
+    const noted = this.requests.get(feed.sessionId);
+    return noted === void 0 || this.deps.shown(noted.req);
+  }
+  countFailure(feed, frame) {
+    if (frame.failure !== null) feed.failed++;
+  }
+  push(feed, frame, at) {
+    const lanes = this.deps.lanes(feed.sessionId);
+    if (lanes !== null) {
+      for (const sub2 of [...feed.followers.keys()]) {
+        if (lanes[sub2.lane]) continue;
+        this.unsubscribe(feed, sub2);
+        this.refuse(feed.sessionId, sub2);
+      }
+    }
+    if (feed.followers.size === 0) return;
+    frame.delivered();
+    const answers = {
+      bar: sentOf(frame.resp),
+      statusline: sentOf(frame.statusline)
+    };
+    if (feed.last?.answers.bar.bytes === answers.bar.bytes && feed.last.answers.statusline.bytes === answers.statusline.bytes)
+      return;
+    const before = feed.last?.answers ?? null;
+    feed.last = { answers };
+    this.pushed++;
+    feed.pushed++;
+    if (frame.failure !== null)
+      this.deps.log(frame.failure.level, frame.failure.line);
+    for (const [lane, rate] of feed.rates)
+      if (before === null || answerOf3(before, lane).bytes !== answerOf3(answers, lane).bytes)
+        noteSent(rate, at);
+    for (const sub2 of feed.followers.keys()) this.send(feed, sub2);
+  }
+  // The last frame's answer for `sub`'s lane, unless it was sent that already.
+  send(feed, sub2) {
+    if (feed.last === null) return;
+    const { resp, bytes } = answerOf3(feed.last.answers, sub2.lane);
+    if (feed.followers.get(sub2) === bytes) return;
+    sub2.frame(resp, bytes);
+    feed.followers.set(sub2, bytes);
+  }
+  // A subscription its lane's toggle refuses, told why.
+  refuse(sessionId2, sub2) {
+    this.refused++;
+    this.deps.log(
+      "info",
+      `feed sid=${JSON.stringify(sessionId2)} refused lane=${sub2.lane} switched-off`
+    );
+    sub2.refused({
+      ok: false,
+      error: laneOffReason(sub2.lane),
+      code: "SWITCHED_OFF",
+      daemonV: PROTOCOL_VERSION
+    });
+  }
+  // [LAW:nothing-unseen] A feed's frames are not render requests, so they write
+  // no render event each: a feed says what it drew in a summary, when it
+  // closes and once a minute while it runs.
+  //
+  // `daemonRefreshed=` is every refresh the daemon made while the feed ran,
+  // whichever session's: a frame refreshes nothing, so it bounds what the
+  // feed's `drawn=` frames could have read fresh, and is never their own.
+  summarize(feed, state) {
+    const now2 = this.deps.now();
+    const refreshes = this.deps.refreshes();
+    const seconds = (now2 - feed.since) / 1e3;
+    const achieved = seconds === 0 ? "-" : `${(feed.drawn / seconds).toFixed(1)}fps`;
+    const refreshed = REFRESH_TRIGGERS.map(
+      (by) => `${by}:${refreshes[by] - feed.refreshesAtOpen[by]}`
+    ).join(",");
+    this.deps.log(
+      "info",
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
+    );
+    feed.summarizedAt = now2;
+  }
+};
+
+// src/daemon/lane-handoff.ts
+init_globals();
+function handedOffTo(lanes, following) {
+  return LANE_NAMES.filter(
+    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane)
+  );
+}
+var HANDOFF_BUTTON = "[\u27F2 claude]";
+function laneHandoff(sessionId2, lanes) {
+  const reset = effectsUrl([
+    {
+      verb: VERB_RESET_CONFIG,
+      args: [sessionId2, ...lanes.map((lane) => LANES[lane].switch.setting)]
+    }
+  ]);
+  return {
+    severity: HANDOFF_SEVERITY,
+    lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]]
+  };
+}
+
+// src/daemon/request-event.ts
+init_globals();
+function noteFacts(facts, learned) {
+  for (const entry of Object.entries(learned)) facts.push(entry);
+}
+var LEVEL = {
+  ok: "info",
+  "bad-request": "warn",
+  threw: "error"
+};
+function detailOf(outcome) {
+  switch (outcome.kind) {
+    case "ok":
+      return [];
+    case "bad-request":
+      return [["problems", outcome.problems.join("; ")]];
+    case "threw":
+      return [["error", inspect(outcome.error)]];
+  }
+}
+function requestEvent(kind, facts, outcome, tookMs) {
+  const fields2 = [
+    ...facts,
+    ["took", `${tookMs}ms`],
+    ["outcome", outcome.kind],
+    ...detailOf(outcome)
+  ];
+  return {
+    level: LEVEL[outcome.kind],
+    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
+  };
+}
+
+// src/daemon/draw-bar.ts
+var NOTHING_DELIVERED = () => {
+};
+var renderFailed = (err) => ({
+  ok: false,
+  error: err instanceof Error ? err.message : inspect(err),
+  code: "RENDER_FAILED",
+  daemonV: PROTOCOL_VERSION
+});
+function renderFrame(parts, sessionId2, fps, at) {
+  const { clock, frameFeeds } = parts;
+  const started2 = clock.date().getTime();
+  const facts = [];
+  try {
+    var _stack = [];
+    try {
+      const setup = __using(_stack, setUpFrame(parts, sessionId2, at, facts));
+      if (setup === null) return null;
+      const { drawn, nextChange, evaluated: evaluated2, delivered, lanes } = drawRender(
+        parts,
+        setup,
+        {
+          by: "feed",
+          fps
+        }
+      );
+      const output = composeBar(drawn);
+      return {
+        resp: { ok: true, output },
+        statusline: {
+          ok: true,
+          output: statuslineOf(
+            sessionId2,
+            drawn,
+            output,
+            handedOffTo(lanes, frameFeeds.following(sessionId2))
+          )
+        },
+        nextChange,
+        evaluated: evaluated2,
+        delivered,
+        failure: null
+      };
+    } catch (_) {
+      var _error = _, _hasError = true;
+    } finally {
+      __callDispose(_stack, _error, _hasError);
+    }
+  } catch (error) {
+    const outcome = { kind: "threw", error };
+    const { level, line } = requestEvent(
+      "render",
+      facts,
+      outcome,
+      clock.date().getTime() - started2
+    );
+    const failed2 = renderFailed(error);
+    return {
+      resp: failed2,
+      statusline: failed2,
+      nextChange: Infinity,
+      evaluated: 0,
+      delivered: NOTHING_DELIVERED,
+      failure: { level, line: `frame ${line}` }
+    };
+  }
+}
+function sessionGlobals2(parts, sessionId2, state) {
+  const { sessionState } = parts;
+  return resolveEffectiveGlobals(
+    state.config,
+    (key) => sessionState.get(sessionId2, key),
+    (preset) => state.authoredRoots.has(preset)
+  );
+}
+function viewLanes(parts, sessionId2) {
+  var _stack = [];
+  try {
+    const { renderCache } = parts;
+    const hold = __using(_stack, renderCache.holdView(sessionId2));
+    return hold === null ? null : laneSwitches(
+      hold.view.source.effective(),
+      inTmux(hold.view.facts().hints.tmux)
+    );
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+function lanesAt(parts, origin, sessionId2) {
+  var _stack = [];
+  try {
+    const { renderCache, frameFeeds } = parts;
+    const hold = __using(_stack, renderCache.hold(
+      origin.projectDir,
+      origin.cwd,
+      origin.target.path
+    ));
+    const latest = frameFeeds.latest(sessionId2);
+    return laneSwitches(
+      sessionGlobals2(parts, sessionId2, hold.state),
+      latest === null || inTmux(latest.hints.tmux)
+    );
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+function requestFacts(req, at, facts) {
+  noteFacts(facts, {
+    sid: req.sessionId,
+    at: at.toFixed(3)
+  });
+  const hints = req.hints;
+  const refused = refusedHints(req, hints);
+  const hintsError = refusedHintsError(refused);
+  noteFacts(facts, {
+    termCols: String(hints.termCols ?? "?"),
+    termRows: String(hints.termRows ?? "?"),
+    refused: refused.map((r) => r.hint).join(",") || "-",
+    badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
+    // Which program drew this bar (src/client-hint.ts); `unreported` for a
+    // client too old to say.
+    client: hints.client?.kind ?? "unreported",
+    // What the sighting recorded of the rate-limit windows — the fact the
+    // doctor's segment-data check reads (RenderSightings).
+    rateLimits: req.rateLimits
+  });
+  return hintsError;
+}
+function setUpRender(parts, req, at, facts) {
+  const { sessionState, renderCache } = parts;
+  const sessionId2 = req.sessionId;
+  const hintsError = requestFacts(req, at, facts);
+  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
+  const hold = renderCache.holdSession(
+    origin.projectDir,
+    origin.cwd,
+    origin.target.path,
+    req
+  );
+  return setUpDraw(parts, hold, req, hintsError, at, facts);
+}
+function setUpFrame(parts, sessionId2, at, facts) {
+  const { renderCache } = parts;
+  const hold = renderCache.holdView(sessionId2);
+  if (hold === null) {
+    const failed2 = renderCache.openFailure(sessionId2);
+    if (failed2 !== null) throw failed2.error;
+    return null;
+  }
+  const req = hold.view.facts();
+  let hintsError;
+  try {
+    hintsError = requestFacts(req, at, facts);
+  } catch (e) {
+    hold[Symbol.dispose]();
+    throw e;
+  }
+  return setUpDraw(parts, hold, req, hintsError, at, facts);
+}
+function setUpDraw(parts, hold, req, hintsError, at, facts) {
+  const { payloadProviders } = parts;
+  try {
+    const { entry, state, view } = hold;
+    const { sessionId: sessionId2, hints } = req;
+    const effective = view.source.effective();
+    const payloadInputs = {
+      hookData: req.hookData,
+      deps: {
+        ...payloadProviders,
+        // The lanes the session's view declared: what this render reads of
+        // the daemon's shared entries.
+        lanes: view.lanes
+      },
+      cwd: req.cwd,
+      neededInputPaths: state.neededInputPaths(effective.preset),
+      hints
+    };
+    return {
+      req,
+      at,
+      facts,
+      sessionId: sessionId2,
+      entry,
+      state,
+      view,
+      hintsError,
+      payloadInputs,
+      [Symbol.dispose]: () => hold[Symbol.dispose]()
+    };
+  } catch (e) {
+    hold[Symbol.dispose]();
+    throw e;
+  }
+}
+function drawRender(parts, setup, drawing2) {
+  const {
+    sessionState,
+    frameFeeds,
+    renderCache,
+    updateWatch,
+    linkSigner: linkSigner2,
+    fileEvents,
+    renderWarnings,
+    payloadProviders,
+    effectSessions,
+    menuIdle,
+    launcher
+  } = parts;
+  const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
+  const effective = view.source.effective();
+  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
+  });
+  const { hints } = view.facts();
+  const width = renderWidth(hints);
+  noteFacts(facts, { width: String(width) });
+  const payload = view.source.payload();
+  const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
+  const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
+  const updates = updateWatch.notice({
+    sessionId: sessionId2,
+    dismissed: sessionState.get(sessionId2, UPDATE_DISMISSED_KEY),
+    enabled: effective.updateNotice
+  });
+  const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
+  const sourced = (about, text4) => ({
+    about,
+    text: text4,
+    copy: text4
+  });
+  const said = (text4) => sourced(text4 ?? "", text4);
+  const errors2 = [
+    said(refusedArgsError(req.refusedArgs)),
+    said(hintsError),
+    sourced("load", entry.lastError),
+    sourced("update-act", updateWatch.error()),
+    ...state.dropped.map((e) => ({
+      about: `dropped\0${e.file}`,
+      text: e.message,
+      copy: e.prompt
+    })),
+    said(clickShown?.text)
+  ].flatMap(
+    ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
+  );
+  const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch);
+  const standing = [
+    ...fileEventsWarnings(fileEvents.delivery()),
+    ...launcher.lifelineWarnings(),
+    ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
+    ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
+  ];
+  const scope = { config: state.config };
+  const diagnostics = collectDiagnostics(
+    sessionId2,
+    drawing2.by,
+    errors2,
+    [...updates, ...questions],
+    [
+      ...standing,
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
+    ].map((w) => ({
+      about: `${w.kind}\0${w.message}`,
+      text: w.message,
+      copy: w.message
+    }))
+  );
+  const projected = {
+    diagnostics: diagnosticsProjection(diagnostics),
+    drawing: drawing2,
+    feeds: frameFeeds.feedsOf(sessionId2, at),
+    today: todayOf(
+      payloadProviders,
+      view.lanes().today,
+      view.facts().hookData,
+      at
+    )
+  };
+  const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
+  noteFacts(facts, sourcesFactOf(view.lanes().sources));
+  noteFacts(facts, {
+    prompts: String(metrics?.messageCount ?? "-"),
+    nonPrompts: String(metrics?.nonPrompts ?? "-"),
+    pr: prFactOf(
+      payload.git,
+      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths).showPullRequest === true
+    ),
+    feeds: feedsFact(projected.feeds)
+  });
+  const drawnWarnings = [];
+  const renderOpts = renderOptionsOf(effective, width);
+  const effects = effectSessions.of(sessionId2);
+  const idleSince = menuIdle.since(sessionId2, at);
+  const frame = drawDsl(
+    state.config,
+    state.compiled,
+    view.store,
+    view.registry,
+    projected,
+    at,
+    renderOpts,
+    // [LAW:single-enforcer] The per-segment StripCell sink for the
+    // `debug segments` projection. Its identity stays stable for the
+    // view's lifetime; drawDsl clears + repopulates it
+    // in place. Cells are cheap (already computed during the render);
+    // the per-segment ANSI serialization happens lazily inside the
+    // debug handler so normal renders pay no extra serializer cost.
+    {
+      perSegmentSink: view.lastRenderCellsBySegment,
+      onRenderWarning: (warning) => drawnWarnings.push(warning)
+    },
+    // [LAW:one-source-of-truth] The draw's own settings and the session's
+    // effect memory. The theme, style and effect are not among them: the
+    // view's slots settle those names (src/dsl/parts.ts), the same ones its
+    // payload's `.effective` fields read.
+    { ...effective, effects, idleSince }
+  );
+  const keys2 = copyKeys(diagnostics);
+  const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
+  const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
+  menuIdle.observe(sessionId2, at, frame.menuRows > 0, effective.menuTimeout);
+  const menusSince = menuIdle.since(sessionId2, at);
+  noteFacts(facts, {
+    menuIdle: menusSince === void 0 ? "-" : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`
+  });
+  const recorded = renderWarnings.drawn(
+    sessionId2,
+    drawing2.by,
+    scope,
+    drawnWarnings
+  );
+  const geometry = {
+    width,
+    // A feed's one frame is shown by every lane switched on, so it pages
+    // within the shortest of their surfaces.
+    rows: viewerRowCap(
+      hints.termRows,
+      drawing2.by === "feed" ? LANE_NAMES.flatMap((lane) => {
+        const rows = LANES[lane].rows;
+        return lanes[lane] && rows !== null ? [rows] : [];
+      }) : []
+    ),
+    colorCompatibility: effective.colorCompatibility
+  };
+  const viewing = viewedIndex(
+    sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
+    diagnostics
+  );
+  const body = viewing === null ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion } : {
+    text: viewerRows(
+      diagnostics,
+      viewing,
+      sessionId2,
+      drawing2.by,
+      geometry
+    ),
+    nextChange: Infinity,
+    motion: frame.motion === "still" ? "still" : "can-move"
+  };
+  const g = payloadProviders.gitProvider.getStats();
+  const u = payloadProviders.usageStore.getStats();
+  const fx = effects.lastFrame();
+  const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
+  const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
+  const tagOf = (w) => {
+    switch (w.kind) {
+      case "rule":
+        return `rule:${w.slot}`;
+      case "refresh":
+        return `refresh:${w.variable}`;
+      case "file-events":
+        return `${w.kind}:${w.state}`;
+      case "load":
+      case "config-watch":
+      case "lifeline":
+      case "when":
+        return w.kind;
+    }
+  };
+  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
+  noteFacts(facts, {
+    git: `${g.size}/${g.hits}h/${g.misses}m`,
+    usage: `${u.size}/${u.hits}h/${u.misses}m`,
+    effect: fx.effect,
+    effectT: fx.t.toFixed(3),
+    // The rate the session's animation clock ran at for this frame.
+    speed: `${fx.speed}x`,
+    effectRows: `${fx.made}made/${fx.reused}reused`,
+    effectOwn: own2,
+    fadeBasis: fx.basis,
+    stateRev: String(fx.revision),
+    fades: passages(fx.fades),
+    leaves: passages(fx.leaves),
+    // What the body drew: whether anything on it changes without new data.
+    motion: body.motion,
+    // How many of the view's parts it evaluated: between data changes, only
+    // those that read the instant (src/dsl/parts.ts).
+    evaluated: String(frame.evaluated),
+    // The sources it drew as not answered yet; `-` for none.
+    pending: frame.pending.join(",") || "-",
+    // Each globals rule in force, as its slot settled it: `kept` outside the
+    // draw, `per-draw` at this frame's instant; `-` for none.
+    rules: [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
+    err: errors2.length > 0 ? "Y" : "N",
+    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    upd: String(updates.length),
+    // How many repositories the bar asked about.
+    ask: String(questions.length),
+    warn: warned,
+    // What the indicator counted, and whether this frame's warnings moved
+    // its renderer's record (`new`) or matched it (`kept`).
+    diag: String(diagnostics.length),
+    warnRecord: recorded ? "new" : "kept",
+    // The message the viewer showed in the body's place, `-` while closed.
+    viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
+  });
+  return {
+    drawn: {
+      body: body.text,
+      viewerOpen: viewing !== null,
+      diagnostics,
+      geometry
+    },
+    motion: body.motion,
+    nextChange: body.nextChange,
+    evaluated: frame.evaluated,
+    clickShown,
+    delivered,
+    lanes
+  };
+}
+function composeBar(drawn) {
+  return drawn.body + "\n";
+}
+function recordRequest(parts, req) {
+  const { sessionState } = parts;
+  const sessionId2 = req.sessionId;
+  const { client: _client, ...recorded } = req.hints;
+  const hintRecord = JSON.stringify(recorded);
+  if (sessionState.get(sessionId2, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
+    sessionState.set(sessionId2, SESSION_CLIENT_HINTS_KEY, hintRecord);
+  }
+  const origin = encodeRenderOrigin(req.requested);
+  if (sessionState.get(sessionId2, SESSION_RENDER_ORIGIN_KEY) !== origin) {
+    sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
+  }
+}
+async function answerRequest(parts, req, at, wait, facts) {
+  recordRequest(parts, req);
+  return drawAnswer(parts, req, at, wait, facts);
+}
+function arrived2(parts, req, lanes) {
+  const { laneSetups, tmuxStatusLines } = parts;
+  laneSetups.noted(laneSessionOf(parts, req), lanes);
+  tmuxStatusLines.observe(
+    req.hookData.session_id,
+    req.hints.tmux,
+    lanes.tmuxStatus
+  );
+}
+function laneSessionOf(parts, req) {
+  const { sessionState } = parts;
+  const sessionId2 = req.hookData.session_id;
+  return {
+    sessionId: sessionId2,
+    hints: req.hints,
+    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
+    transcript: req.hookData.transcript_path,
+    answered: answeredOf(req.hookData)
+  };
+}
+function laneClicked(parts, sessionId2, before, after) {
+  const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
+  const latest = frameFeeds.latest(sessionId2);
+  laneSetups.clicked(
+    sessionId2,
+    latest === null ? null : laneSessionOf(parts, latest),
+    before,
+    after
+  );
+  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
+    tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
+}
+async function drawAnswer(parts, req, at, wait, facts) {
+  var _stack = [];
+  try {
+    const { clock, frameFeeds, log } = parts;
+    const setup = __using(_stack, setUpRender(parts, req, at, facts));
+    arrived2(
+      parts,
+      req,
+      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
+    );
+    noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
+    const waitFrom = clock.monotonic();
+    const refreshed = /* @__PURE__ */ new Map();
+    const ended = await waitWithin(
+      (signal) => Promise.all([
+        settlePayload(setup.payloadInputs, at, refreshed),
+        setup.view.registry.inFlight(signal)
+      ]),
+      wait.endsAt - waitFrom,
+      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
+      // it is a bug, said against the session, never one that ends the daemon.
+      (e) => log(
+        "error",
+        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
+      )
+    );
+    const drawFrom = clock.monotonic();
+    noteFacts(facts, {
+      waited: `${Math.round(drawFrom - waitFrom)}ms`,
+      ended,
+      refreshed: refreshedFact(refreshed)
+    });
+    const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+      parts,
+      setup,
+      ANSWERING
+    );
+    const output = composeBar(drawn);
+    const sessionId2 = req.sessionId;
+    const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
+    const statusline = statuslineOf(sessionId2, drawn, output, elsewhere);
+    const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
+    noteFacts(facts, {
+      handoff: (toStatusline ? elsewhere : []).join(",") || "-",
+      drew: `${Math.round(clock.monotonic() - drawFrom)}ms`
+    });
+    return {
+      answer: toStatusline ? statusline : output,
+      motion,
+      clickShown,
+      delivered
+    };
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+function statuslineOf(sessionId2, drawn, output, elsewhere) {
+  const [first2, ...rest2] = elsewhere;
+  return first2 === void 0 || drawn.viewerOpen ? output : handoffRows(
+    laneHandoff(sessionId2, [first2, ...rest2]),
+    drawn.diagnostics,
+    sessionId2,
+    drawn.geometry
+  ) + "\n";
+}
+
+// src/daemon/reply.ts
+init_globals();
+init_process();
+
+// src/daemon/render-checkpoint.ts
+init_globals();
+var import_node_path34 = __toESM(require_path_browserify(), 1);
+
+// src/utils/schema-validator.ts
+init_globals();
+var KNOWN_TOP_LEVEL = /* @__PURE__ */ new Set([
+  "hook_event_name",
+  // cc-candybar internal
+  "session_id",
+  "session_name",
+  "transcript_path",
+  "cwd",
+  "model",
+  "workspace",
+  "version",
+  "output_style",
+  "cost",
+  "context_window",
+  "exceeds_200k_tokens",
+  "effort",
+  "thinking",
+  "rate_limits",
+  "vim",
+  "agent",
+  "worktree"
+]);
+var REQUIRED_FIELDS = [
+  ["session_id", "string"],
+  ["transcript_path", "string"],
+  ["cwd", "string"],
+  ["model", "object"],
+  ["model.id", "string"],
+  ["model.display_name", "string"],
+  ["workspace", "object"],
+  ["workspace.current_dir", "string"],
+  ["workspace.project_dir", "string"]
+];
+var OPTIONAL_FIELDS = [
+  ["workspace.added_dirs", "string-list"]
+];
+function validateHookData(raw) {
+  const report2 = {
+    missingRequired: [],
+    typeMismatches: [],
+    unknownTopLevelFields: []
+  };
+  const obj = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  for (const [path39, expectedType] of REQUIRED_FIELDS) {
+    const value = resolvePath2(obj, path39);
+    if (value === void 0 || value === null) {
+      report2.missingRequired.push(path39);
+    } else {
+      const got = kindOf(value);
+      if (got !== expectedType) {
+        report2.typeMismatches.push({ path: path39, expected: expectedType, got });
+      }
+    }
+  }
+  for (const [path39, expectedType] of OPTIONAL_FIELDS) {
+    const value = resolvePath2(obj, path39);
+    const got = value === void 0 ? expectedType : listKind(value);
+    if (got !== expectedType) {
+      report2.typeMismatches.push({ path: path39, expected: expectedType, got });
+    }
+  }
+  for (const key of Object.keys(obj)) {
+    if (!KNOWN_TOP_LEVEL.has(key)) {
+      report2.unknownTopLevelFields.push(key);
+    }
+  }
+  return { data: raw, report: report2 };
+}
+function kindOf(value) {
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string" && !value.isWellFormed())
+    return "ill-formed string";
+  return typeof value;
+}
+function listKind(value) {
+  return Array.isArray(value) && value.every((v) => kindOf(v) === "string") ? "string-list" : kindOf(value);
+}
+function resolvePath2(obj, dotPath) {
+  let cur = obj;
+  for (const key of dotPath.split(".")) {
+    if (cur === null || cur === void 0 || typeof cur !== "object" || Array.isArray(cur)) {
+      return void 0;
+    }
+    cur = cur[key];
+  }
+  return cur;
+}
+
+// src/daemon/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var DRAW_RESERVE_MS = 40;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
+  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
+  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
+  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
+}
+
+// src/daemon/render-checkpoint.ts
+function parseRenderArgs(args, cwd2) {
+  const { tokens: tokens2 } = (0, import_parseargs.parseArgs)({
+    args: args.slice(1),
+    // skip binary path
+    options: { config: { type: "string" } },
+    strict: false,
+    tokens: true,
+    allowPositionals: true
+  });
+  const config2 = (tokens2 ?? []).filter(
+    (t2) => t2.kind === "option" && t2.name === "config"
+  ).at(-1);
+  const refused = (tokens2 ?? []).flatMap((t2) => {
+    switch (t2.kind) {
+      case "option":
+        return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
+      case "positional":
+        return [{ arg: t2.value, why: "positional" }];
+      // `--` only ends the flags; the words after it are positionals.
+      case "option-terminator":
+        return [];
+    }
+  });
+  return {
+    configFile: explicitConfigPath(cwd2, config2?.value),
+    // In argv order, each refusal once.
+    refusedArgs: refused.filter(
+      (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
+    )
+  };
+}
+function checkRenderRequest(req, stats, log) {
+  const { report: report2 } = validateHookData(req.hookData);
+  const wireProblems = [];
+  for (const path39 of report2.missingRequired) {
+    wireProblems.push(`missing required field '${path39}'`);
+  }
+  for (const { path: path39, expected, got } of report2.typeMismatches) {
+    wireProblems.push(`field '${path39}' expected ${expected}, got ${got}`);
+  }
+  const sessionId2 = parseSessionId(req.hookData?.session_id);
+  if (!sessionId2.ok) {
+    wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
+  }
+  if (typeof req.cwd !== "string" || !(0, import_node_path34.isAbsolute)(req.cwd)) {
+    wireProblems.push(
+      `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
+    );
+  }
+  if (!Array.isArray(req.args) || !req.args.every((a) => typeof a === "string")) {
+    wireProblems.push(
+      `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
+    );
+  }
+  const deadline = parseClientDeadline(
+    req.deadline
+  );
+  if (deadline.kind === "refused")
+    return { ok: false, problems: [...wireProblems, deadline.problem] };
+  if (wireProblems.length > 0 || !sessionId2.ok)
+    return { ok: false, problems: wireProblems };
+  for (const field of report2.unknownTopLevelFields) {
+    if (stats.firstSightOfUnknownHookField(field)) {
+      log(
+        "info",
+        `schema: unknown field ${JSON.stringify(field)} \u2014 Anthropic may have added it`
+      );
+    }
+  }
+  const hints = parseClientHints(req);
+  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd);
+  return {
+    ok: true,
+    req: {
+      ...req,
+      deadline,
+      sessionId: sessionId2.id,
+      hints,
+      rateLimits: rateLimitsSeen(req.hookData),
+      requested: {
+        projectDir: req.hookData.workspace.project_dir,
+        cwd: req.cwd,
+        target: requestedConfigTarget(configFile, hints.configEnv)
+      },
+      refusedArgs
+    }
+  };
+}
+
+// src/daemon/debug.ts
+init_globals();
+function buildDebugSnapshot(what, state) {
+  switch (what) {
+    case "vars":
+      return { what, vars: introspectVars(state) };
+    case "segments":
+      return { what, segments: introspectSegments(state) };
+    case "config":
+      return { what, config: introspectConfig(state) };
+  }
+}
+function introspectVars(state) {
+  if (state === null) return [];
+  const { store, registry, config: config2 } = state;
+  const sourceByName = buildSourceKindIndex(config2);
+  const names = store.names().sort();
+  const out = [];
+  for (const name of names) {
+    const node = store.getNode(name);
+    const value = valueOf2(node);
+    const err = registry.getLastError(name);
+    out.push({
+      name,
+      source: sourceByName.get(name) ?? null,
+      ...value,
+      lastError: err !== void 0 ? { timestampMs: err.timestamp, message: err.message } : null,
+      ageMs: ageFromNode(node.lastUpdatedMs())
+    });
+  }
+  return out;
+}
+function valueOf2(node) {
+  if (node.kind === "projection") {
+    return { type: node.type, value: "(read at each frame's instant)" };
+  }
+  if (node.kind !== "document") {
+    try {
+      return { type: node.type, value: node.read() };
+    } catch (e) {
+      return {
+        type: node.type,
+        value: e instanceof Error ? e.message : String(e)
+      };
+    }
+  }
+  const doc = node.read();
+  switch (doc.kind) {
+    case "ok":
+      return { type: "document", value: JSON.stringify(doc.value) };
+    case "pending":
+      return { type: "document", value: "(not yet scanned)" };
+    case "absent":
+      return { type: "document", value: "(nothing to read, and no default)" };
+    case "failed":
+      return { type: "document", value: doc.reason };
+  }
+}
+function ageFromNode(lastUpdatedMs) {
+  if (lastUpdatedMs === null) return null;
+  return Math.max(0, Date.now() - lastUpdatedMs);
+}
+function buildSourceKindIndex(config2) {
+  const index = /* @__PURE__ */ new Map();
+  for (const [name, decl] of Object.entries(config2.variables)) {
+    index.set(name, sourceKindOf(decl));
+  }
+  for (const [segName, seg2] of Object.entries(config2.segments)) {
+    if (!seg2.vars) continue;
+    for (const [varName, decl] of Object.entries(seg2.vars)) {
+      index.set(`${segName}.${varName}`, sourceKindOf(decl));
+    }
+  }
+  return index;
+}
+function sourceKindOf(decl) {
+  return decl.kind;
+}
+function introspectSegments(state) {
+  if (state === null) return [];
+  const { store, config: config2, lastRenderBySegment } = state;
+  const declaredNames = new Set(store.names());
+  const segNames = orderedSegmentNames(config2);
+  const placed = placementsBySegment(config2);
+  const out = [];
+  for (const name of segNames) {
+    const seg2 = config2.segments[name];
+    if (!seg2) continue;
+    out.push({
+      name,
+      description: seg2.description ?? null,
+      template: seg2.template,
+      referencedVars: extractReferencedVars(
+        seg2.template,
+        config2.helpers,
+        declaredNames
+      ),
+      // The render sink is keyed by placement id, so each placement reads
+      // its own.
+      placements: (placed.get(name) ?? []).map((id2) => ({
+        id: id2,
+        lastRender: lastRenderBySegment.get(id2) ?? null
+      }))
+    });
+  }
+  return out;
+}
+function placementsBySegment(config2) {
+  const out = /* @__PURE__ */ new Map();
+  for (const preset of presetNames(config2.presets)) {
+    for (const node of walkNodes(presetRoot(config2, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const ids = out.get(node.name) ?? [];
+      const id2 = placementId(node);
+      if (!ids.includes(id2)) out.set(node.name, [...ids, id2]);
+    }
+  }
+  return out;
+}
+function orderedSegmentNames(config2) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const node of walkNodes(rootNode(config2.root))) {
+    if (node.kind !== "segment") continue;
+    if (config2.segments[node.name] && !seen.has(node.name)) {
+      out.push(node.name);
+      seen.add(node.name);
+    }
+  }
+  for (const name of Object.keys(config2.segments)) {
+    if (!seen.has(name)) {
+      out.push(name);
+      seen.add(name);
+    }
+  }
+  return out;
+}
+function extractReferencedVars(template, helpers, declared) {
+  const found = new Set(
+    [...templateReads(template, helpers).keys()].flatMap(
+      (path39) => variableRead(path39, declared)
+    )
+  );
+  return Array.from(found).sort();
+}
+function introspectConfig(state) {
+  if (state === null) return null;
+  return state.config;
+}
+
+// src/daemon/debug-types.ts
+init_globals();
+var DEBUG_WHATS = ["vars", "segments", "config"];
+function isDebugWhat(v) {
+  return typeof v === "string" && DEBUG_WHATS.includes(v);
+}
+
+// src/daemon/reply.ts
+var stay = (resp) => ({
+  resp,
+  exitAfterFlush: null,
+  delivered: NOTHING_DELIVERED
+});
+var replied = (reply) => ({ kind: "reply", ...reply });
+var REPLY_KINDS = {
+  render: true,
+  "pane-session": true,
+  shutdown: true,
+  stats: true,
+  click: true,
+  debug: true
+};
+var refuse3 = (code, error) => replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
+function subscription(req) {
+  const sessionId2 = parseSessionId(req.sessionId);
+  if (!sessionId2.ok)
+    return refuse3("BAD_REQUEST", `subscribe's sessionId ${sessionId2.problem}`);
+  if (req.lane === void 0)
+    return refuse3(
+      "VERSION_MISMATCH",
+      `this client's subscribe names no lane (${LANE_NAMES.join(", ")}): it predates the lane toggles \u2014 update it`
+    );
+  const lane = parseLane(req.lane);
+  if (lane === null)
+    return refuse3(
+      "BAD_REQUEST",
+      `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`
+    );
+  return { kind: "subscribe", sessionId: sessionId2.id, lane };
+}
+async function handleRequest(parts, req, timedOut, accepted) {
+  if (!req || typeof req !== "object" || typeof req.v !== "number") {
+    return refuse3("BAD_REQUEST", "malformed request");
+  }
+  if (req.v !== PROTOCOL_VERSION) {
+    if (req.v > PROTOCOL_VERSION) {
+      parts.log(
+        "info",
+        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
+      );
+    } else {
+      parts.log(
+        "info",
+        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
+      );
+    }
+    return {
+      kind: "reply",
+      resp: {
+        ok: false,
+        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+        code: "VERSION_MISMATCH",
+        daemonV: PROTOCOL_VERSION
+      },
+      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+      // Exit is sequenced on the response flush, so the client always sees
+      // the VERSION_MISMATCH diagnostic — never a dead socket.
+      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
+      delivered: NOTHING_DELIVERED
+    };
+  }
+  if (req.kind === "subscribe") return subscription(req);
+  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
+    return refuse3("BAD_REQUEST", "unknown kind");
+  return replied(await replyTo(parts, req, timedOut, accepted));
+}
+async function replyTo(parts, req, timedOut, accepted) {
+  const {
+    stats,
+    clock,
+    frameFeeds,
+    renderCache,
+    payloadProviders: { gitProvider, usageStore },
+    fileEvents,
+    runs,
+    effectSessions,
+    menuIdle,
+    sessionState,
+    tmuxStatusLines,
+    watcherRegistry,
+    limits,
+    handlerProbes,
+    renderSightings,
+    bundle,
+    sourceDigest: sourceDigest2,
+    doctorStores
+  } = parts;
+  if (req.kind === "shutdown") {
+    return {
+      resp: { ok: true, output: "" },
+      exitAfterFlush: 0,
+      delivered: NOTHING_DELIVERED
+    };
+  }
+  if (req.kind === "pane-session") {
+    const { socket, pane } = req;
+    if (typeof socket !== "string" || typeof pane !== "string")
+      return stay({
+        ok: false,
+        error: "pane-session needs a string socket and pane",
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION
+      });
+    return stay({
+      ok: true,
+      paneSession: frameFeeds.newestWhere(
+        ({ hints: { tmux: tmux3 } }) => tmux3 !== null && tmux3 !== void 0 && tmux3.socket === socket && tmux3.pane === pane
+      )
+    });
+  }
+  if (req.kind === "stats") {
+    return stay({
+      ok: true,
+      stats: stats.snapshot({
+        gitCache: gitProvider.getStats(),
+        usageCache: usageStore.getStats(),
+        sources: sourceSnapshots(parts),
+        fileEvents: fileEvents.stats(),
+        runs: runs.stats(),
+        transcriptReads: transcriptReads(),
+        renderCache: renderCache.stats,
+        effectCache: effectSessions.getStats(),
+        menuIdle: menuIdle.getStats(),
+        sessionState: {
+          sessions: sessionState.size(),
+          observers: sessionState.observers(),
+          revision: sessionState.latestRevision()
+        },
+        frameFeeds: frameFeeds.getStats(),
+        tmuxStatus: tmuxStatusLines.stats(),
+        watchersActive: watcherRegistry.size(),
+        dirWatchesActive: watcherRegistry.dirWatches(),
+        nextRestartReason: limits.describeNextRestart(),
+        handlerProbes: handlerProbes.list(),
+        clients: renderSightings.list(instantOf(clock.date())),
+        bundle,
+        sourceDigest: sourceDigest2,
+        daemon: limits.serving(),
+        doctorStores: readStores(doctorStores)
+      })
+    });
+  }
+  if (req.kind === "render") {
+    const started2 = clock.date();
+    const at = instantOf(started2);
+    const t0 = clock.monotonic();
+    const queuedMs = Math.round(t0 - accepted);
+    const facts = [];
+    const order2 = ++stats.requestsTotal;
+    const checked = checkRenderRequest(req, stats, parts.log);
+    const sighted = (req2, frame) => renderSightings.see(
+      req2.sessionId,
+      {
+        client: req2.hints.client ?? null,
+        termCols: req2.hints.termCols ?? null,
+        rateLimits: req2.rateLimits,
+        claudeConfigDir: claudeConfigDir(req2.hints.claudeConfigDir),
+        projectDir: req2.requested.projectDir,
+        transcript: transcriptSaid(req2.hookData),
+        frame
+      },
+      at,
+      order2
+    );
+    if (checked.ok) {
+      sighted(checked.req, "drawing");
+      frameFeeds.note(checked.req.sessionId, checked.req, order2);
+    }
+    const waitFor = (req2) => {
+      const ms = waitBudgetMs(req2.deadline, accepted, {
+        epochMs: started2.getTime(),
+        monoMs: t0
+      });
+      return { stated: req2.deadline.kind, ms, endsAt: t0 + ms };
+    };
+    const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(
+      parts,
+      checked.req,
+      at,
+      waitFor(checked.req),
+      facts
+    ).then(
+      ({ answer: answer2, motion, clickShown, delivered }) => {
+        sighted(checked.req, motion);
+        return {
+          outcome: { kind: "ok" },
+          resp: { ok: true, output: answer2 },
+          // [LAW:single-enforcer] An answer carrying the click error that
+          // reaches its client is the one that delivered it
+          // (src/daemon/click-error.ts).
+          delivered: () => {
+            delivered();
+            if (clickShown !== null)
+              answeredClickError(
+                sessionState,
+                checked.req.sessionId,
+                clickShown
+              );
+          }
+        };
+      },
+      (error) => {
+        sighted(checked.req, "failed");
+        return {
+          outcome: { kind: "threw", error },
+          resp: renderFailed(error),
+          delivered: NOTHING_DELIVERED
+        };
+      }
+    );
+    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      queued: `${queuedMs}ms`
+    });
+    const { level, line } = requestEvent(
+      "render",
+      facts,
+      rendered.outcome,
+      Math.round(clock.monotonic() - t0)
+    );
+    parts.log(level, line);
+    return {
+      resp: rendered.resp,
+      exitAfterFlush: null,
+      delivered: rendered.delivered
+    };
+  }
+  if (req.kind === "click") {
+    const t0 = clock.monotonic();
+    const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+    const outcome = clickOutcome(parts, req, facts);
+    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const { level, line } = requestEvent(
+      "click",
+      facts,
+      outcome,
+      Math.round(clock.monotonic() - t0)
+    );
+    parts.log(level, line);
+    return stay(clickReply(outcome));
+  }
+  if (req.kind === "debug") {
+    if (!isDebugWhat(req.what)) {
+      return stay({
+        ok: false,
+        // [LAW:no-silent-failure] Include the allowed values so a
+        // CLI consumer (or operator) sees what is supported without
+        // grep — same pattern as the set-state verb's unknown-key error
+        // in src/daemon/verbs/state-validators.ts.
+        error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION
+      });
+    }
+    const dbgView = renderCache.latestView();
+    const dbgState = dbgView === null ? null : {
+      store: dbgView.store,
+      registry: dbgView.registry,
+      config: dbgView.state.config,
+      compiled: dbgView.state.compiled,
+      lastRenderBySegment: req.what === "segments" ? serializeSegmentCells(
+        dbgView.lastRenderCellsBySegment,
+        dbgView.state.config.globals.colorCompatibility ?? floorOf2("colorCompatibility")
+      ) : EMPTY_RENDER_MAP
+    };
+    return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
+  }
+  const unanswered = req;
+  throw new Error(`no reply for request ${inspect(unanswered)}`);
+}
+function sourceSnapshots(parts) {
+  const {
+    payloadProviders: {
+      gitProvider,
+      tmuxService,
+      usageStore,
+      managedStorage,
+      hostService
+    },
+    renderCache,
+    refreshLedger
+  } = parts;
+  const git = gitProvider.getStats();
+  const tmux3 = tmuxService.getStats();
+  const today = usageStore.scanStats();
+  const storage = managedStorage.stats();
+  const cache2 = renderCache.stats;
+  return {
+    records: refreshLedger.snapshot(),
+    homes: {
+      daemon: 1,
+      configDir: today.entries,
+      repo: git.size,
+      directory: cache2.size,
+      session: usageStore.getStats().size,
+      view: cache2.views,
+      pane: tmux3.entries
+    },
+    held: {
+      git: git.held,
+      tmux: tmux3.held,
+      host: hostService.held(),
+      today: today.held,
+      pluginStorage: storage.held
+    },
+    pluginStorage: {
+      folders: storage.folders,
+      faults: storage.faults,
+      lost: storage.lost
+    }
+  };
+}
+var RENDER_OPTS_BASE = {
+  endcaps: floorOf2("endcaps"),
+  colorCompatibility: floorOf2("colorCompatibility"),
+  wrap: floorOf2("autoWrap"),
+  padding: floorOf2("padding")
+};
+var DEBUG_RENDER_OPTS = {
+  ...RENDER_OPTS_BASE,
+  width: Number.POSITIVE_INFINITY
+};
+var EMPTY_RENDER_MAP = /* @__PURE__ */ new Map();
+function serializeSegmentCells(cells, colorCompatibility) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [name, segCells] of cells) {
+    out.set(
+      name,
+      renderStripCells(segCells, {
+        ...DEBUG_RENDER_OPTS,
+        colorCompatibility
+      })
+    );
+  }
+  return out;
+}
+function clickOutcome(parts, req, facts) {
+  const { verb, value } = req;
+  if (typeof verb !== "string" || typeof value !== "string") {
+    return {
+      kind: "bad-request",
+      problems: [
+        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`
+      ]
+    };
+  }
+  try {
+    return handleClick(
+      parts,
+      verb,
+      value,
+      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
+      facts
+    );
+  } catch (error) {
+    return error instanceof BadVerbArgs ? { kind: "bad-request", problems: [error.message] } : { kind: "threw", error };
+  }
+}
+var VERB_FACT = {
+  link: "verb",
+  "tmux-status": "linkVerb"
+};
+function handleClick(parts, verb, value, arrival, facts) {
+  const { clock, menuIdle, verbCtx } = parts;
+  if (verb === VERB_TMUX_STATUS_CLICK) {
+    noteFacts(facts, { verb });
+    return statusLineClick(parts, value, facts);
+  }
+  const handler = VERBS.get(verb);
+  if (!handler) {
+    return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
+  }
+  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
+  const session = clickSessionOf(verb, value);
+  if (session === null) noteFacts(facts, { sid: "-" });
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    menuIdle.clicked(session.id, instantOf(clock.date()));
+  }
+  handler(value, { ...verbCtx, arrival });
+  return { kind: "ok" };
+}
+function clickReply(outcome) {
+  switch (outcome.kind) {
+    case "ok":
+      return { ok: true, output: "" };
+    case "bad-request":
+      return {
+        ok: false,
+        error: outcome.problems.join("; "),
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION
+      };
+    case "threw":
+      return renderFailed(outcome.error);
+  }
+}
+function statusLineClick(parts, value, facts) {
+  const { tmuxStatusLines } = parts;
+  const refused = (problem) => ({
+    kind: "bad-request",
+    problems: [problem]
+  });
+  const click2 = tmuxStatusLines.linkAt(value);
+  if (click2.kind === "refused") return refused(click2.reason);
+  noteFacts(facts, { link: click2.url });
+  if (click2.url.startsWith("cc-candybar://")) {
+    const parsed2 = decodeWire(() => parseHandlerUrl(click2.url));
+    if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
+      return refused("a status-line link names another status-line click");
+    return handleClick(
+      parts,
+      parsed2.verb,
+      parsed2.value,
+      { via: "tmux-status" },
+      facts
+    );
+  }
+  clickLaunch(
+    parts.launcher,
+    {
+      bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
+      args: [click2.url],
+      category: "click.open"
+    },
+    `opening ${click2.url}`,
+    parts.log
+  );
+  return { kind: "ok" };
+}
+var refusedRender = (problems) => ({
+  outcome: { kind: "bad-request", problems },
+  resp: {
+    ok: false,
+    error: `malformed hookData: ${problems.join("; ")}`,
+    code: "BAD_REQUEST",
+    daemonV: PROTOCOL_VERSION
+  },
+  delivered: NOTHING_DELIVERED
+});
+
 // src/daemon/binary-watch.ts
 init_globals();
-function mtimeOf(path41, stat3) {
+function mtimeOf(path39, stat3) {
   try {
-    return ok(stat3(path41).mtimeMs);
+    return ok(stat3(path39).mtimeMs);
   } catch (e) {
     const code = e.code;
     return code === "ENOENT" || code === "ENOTDIR" ? ABSENT2 : failed(e.message);
@@ -71211,18 +76785,18 @@ function sameStamp(a, b) {
 function makeBinaryWatch(opts) {
   const { targets, intervalMs, stat: stat3, held, exit: exit2, log } = opts;
   const logHeld = changeLogger(log);
-  const boot = targets.map((path41) => ({ path: path41, stamp: mtimeOf(path41, stat3) }));
+  const boot = targets.map((path39) => ({ path: path39, stamp: mtimeOf(path39, stat3) }));
   const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
   let timer = null;
   const sample = () => {
-    for (const { path: path41, stamp: stamp2 } of watched) {
-      const now2 = mtimeOf(path41, stat3);
+    for (const { path: path39, stamp: stamp2 } of watched) {
+      const now2 = mtimeOf(path39, stat3);
       if (now2.kind === "failed") {
-        log("warn", `binary stat failed (${path41}): ${now2.reason}`);
+        log("warn", `binary stat failed (${path39}): ${now2.reason}`);
         continue;
       }
       if (!sameStamp(stamp2, now2)) {
-        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path41})`;
+        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path39})`;
         if (held()) {
           logHeld([
             "info",
@@ -71239,218 +76813,23 @@ function makeBinaryWatch(opts) {
   };
   return {
     arm() {
-      for (const { path: path41, stamp: stamp2 } of boot) {
+      for (const { path: path39, stamp: stamp2 } of boot) {
         if (stamp2.kind === "failed") {
           log(
             "warn",
-            `binary stat failed at boot (${path41}): ${stamp2.reason}; not watched`
+            `binary stat failed at boot (${path39}): ${stamp2.reason}; not watched`
           );
         }
       }
       timer = setInterval(sample, intervalMs);
       timer.unref();
     },
-    checkNow: sample
+    checkNow: sample,
+    close() {
+      if (timer) clearInterval(timer);
+    }
   };
 }
-
-// src/daemon/lane-frames.ts
-init_globals();
-
-// src/band/frames.ts
-init_globals();
-
-// src/render/outcome-plan.ts
-init_globals();
-
-// src/render/error-glyph.ts
-init_globals();
-var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
-var PREFIX = "\u26A0 cc-candybar: ";
-var MAX_MESSAGE_LEN = 60;
-function formatPermanentGlyph(outcome) {
-  return `${OPEN}${PREFIX}${describe3(outcome)}${ANSI_RESET}
-`;
-}
-function describe3(outcome) {
-  switch (outcome.cause) {
-    case "version_mismatch": {
-      const daemon3 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
-      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon3})`;
-    }
-    case "bad_request":
-      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "render_failed":
-      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "switched_off":
-      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "malformed_response":
-      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-  }
-}
-
-// src/render/outcome-plan.ts
-function planOutcome(outcome) {
-  switch (outcome.kind) {
-    case "ok":
-      return { output: outcome.value, kick: false, debug: null };
-    case "transient":
-      return {
-        output: "\n",
-        kick: true,
-        debug: `daemon unavailable (transient: ${outcome.cause}: ${outcome.message}) \u2014 kicking daemon`
-      };
-    case "permanent":
-      return {
-        output: formatPermanentGlyph(outcome),
-        kick: false,
-        debug: `daemon refused request (permanent: ${outcome.cause}) \u2014 not kicking`
-      };
-  }
-}
-
-// src/band/frames.ts
-var ATTRIBUTES = {
-  bold: "bold",
-  dim: "dimColor",
-  italic: "italic",
-  underline: "underline",
-  strike: "strikethrough",
-  reverse: "inverse",
-  blink: null,
-  blink2: null,
-  conceal: null,
-  underline2: null,
-  frame: null,
-  encircle: null,
-  overline: null
-};
-var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES);
-var PLAIN2 = new Style();
-
-// src/tmux-status/frames.ts
-init_globals();
-var RANGE_PREFIX = "ccb";
-var RANGE_HASH_HEX = 15 - RANGE_PREFIX.length;
-function rangeOf2(url) {
-  return RANGE_PREFIX + createHash("sha256").update(url).digest("hex").slice(0, RANGE_HASH_HEX);
-}
-var STANDARD_NAMES = [
-  "black",
-  "red",
-  "green",
-  "yellow",
-  "blue",
-  "magenta",
-  "cyan",
-  "white",
-  "brightblack",
-  "brightred",
-  "brightgreen",
-  "brightyellow",
-  "brightblue",
-  "brightmagenta",
-  "brightcyan",
-  "brightwhite"
-];
-function tmuxColor(spec) {
-  if (spec === void 0 || spec.isDefault) return "terminal";
-  switch (spec.type) {
-    case ColorDepth.STANDARD: {
-      const name = spec.number === void 0 ? void 0 : STANDARD_NAMES[spec.number];
-      if (name !== void 0) return name;
-      break;
-    }
-    case ColorDepth.EIGHT_BIT:
-      if (spec.number !== void 0) return `colour${spec.number}`;
-      break;
-    case ColorDepth.TRUECOLOR: {
-      const fixed = spec.fixedValue;
-      if (fixed !== void 0) return fixed.hex;
-      break;
-    }
-    case ColorDepth.DEFAULT:
-    case ColorDepth.WINDOWS:
-      break;
-  }
-  throw new Error(`frames: no tmux colour for ${spec.name}`);
-}
-var ATTRIBUTES2 = {
-  bold: "bold",
-  dim: "dim",
-  italic: "italics",
-  underline: "underscore",
-  strike: "strikethrough",
-  reverse: "reverse",
-  blink: "blink",
-  conceal: "hidden",
-  underline2: "double-underscore",
-  overline: "overline",
-  blink2: null,
-  frame: null,
-  encircle: null
-};
-var ATTRIBUTE_NAMES3 = Object.keys(ATTRIBUTES2);
-function escaped(text4) {
-  return text4.replaceAll("#", "##");
-}
-function directive(style) {
-  const attributes = ATTRIBUTE_NAMES3.filter((name) => style[name] === true).map(
-    (name) => {
-      const tmux3 = ATTRIBUTES2[name];
-      if (tmux3 === null)
-        throw new Error(`frames: a tmux status line cannot draw ${name} text`);
-      return tmux3;
-    }
-  );
-  return `#[${["none", `fg=${tmuxColor(style.color)}`, `bg=${tmuxColor(style.bgcolor)}`, ...attributes].join(",")}]`;
-}
-var PLAIN3 = new Style();
-function tmuxStatusFrame(ansi) {
-  const links3 = {};
-  const run3 = (text4, style) => {
-    const drawn = directive(style) + escaped(text4);
-    if (style.link === void 0) return drawn;
-    const range = rangeOf2(style.link);
-    links3[range] = style.link;
-    return `#[range=user|${range}]${drawn}#[norange]`;
-  };
-  const rows = new AnsiDecoder().decode(ansi).map((line) => {
-    const plain = line.plain;
-    const runs2 = [];
-    let at = 0;
-    for (const span of line.spans) {
-      if (!(span.style instanceof Style)) {
-        throw new Error(
-          `frames: the decoder gave a span a ${typeof span.style} style`
-        );
-      }
-      if (span.start > at) runs2.push(run3(plain.slice(at, span.start), PLAIN3));
-      runs2.push(run3(plain.slice(span.start, span.end), span.style));
-      at = span.end;
-    }
-    if (at < plain.length) runs2.push(run3(plain.slice(at), PLAIN3));
-    return runs2.join("");
-  });
-  return { rows, links: links3 };
-}
-function tmuxStatusResponse(resp) {
-  const ansi = planOutcome(renderOutcomeOf(resp)).output;
-  try {
-    return tmuxStatusFrame(ansi);
-  } catch (error) {
-    const why2 = sanitizeText(
-      error instanceof Error ? error.message : String(error)
-    );
-    return tmuxStatusFrame(
-      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}\u26A0 cc-candybar ${why2}${ANSI_RESET}
-`
-    );
-  }
-}
-
-// src/daemon/server.ts
-var import_node_path45 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/payload-providers.ts
 init_globals();
@@ -71584,8 +76963,8 @@ var GitDataProvider = class {
   watchers;
   ownsWatchers;
   logger;
-  constructor(opts = {}) {
-    this.inner = opts.inner ?? new GitService();
+  constructor(opts) {
+    this.inner = opts.inner;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
@@ -72923,8 +78302,8 @@ function mergeFolds(files) {
     days
   };
 }
-function under(path41, roots) {
-  return path41 !== void 0 && roots.some((root) => path41.startsWith(root));
+function under(path39, roots) {
+  return path39 !== void 0 && roots.some((root) => path39.startsWith(root));
 }
 function daySumsOver(slots, roots) {
   const sums = /* @__PURE__ */ new Map();
@@ -73899,7 +79278,7 @@ var NAME_PERIOD_MS = 3e4;
 var MAX_ENTRIES = 64;
 var TmuxService = class {
   names;
-  constructor(opts = {}) {
+  constructor(opts) {
     const logger = opts.logger ?? quietLogger;
     this.names = new KeyedSource({
       name: "tmux",
@@ -73909,7 +79288,7 @@ var TmuxService = class {
       keyOf: (hint) => `${hint.socket}
 ${hint.pane}`,
       fields: (hint) => `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
-      read: askSessionName,
+      read: (hint) => askSessionName(opts.launcher, hint),
       every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
       maxEntries: MAX_ENTRIES,
       logger,
@@ -73934,8 +79313,8 @@ ${hint.pane}`,
     this.names.close();
   }
 };
-async function askSessionName(hint) {
-  const run3 = await runTmuxAsync(hint, "tmux", [
+async function askSessionName(launcher, hint) {
+  const run3 = await runTmuxAsync(launcher, hint, "tmux", [
     "display-message",
     "-p",
     "-t",
@@ -74467,8 +79846,8 @@ var ManagedStorage = class {
     }
   }
   async read(f) {
-    const fault2 = this.standing(f.storage);
-    if (fault2 !== null) return failed(fault2);
+    const fault = this.standing(f.storage);
+    if (fault !== null) return failed(fault);
     const file = fileOf(f);
     let text4;
     try {
@@ -74521,10 +79900,11 @@ var ManagedStorage = class {
 
 // src/daemon/payload-providers.ts
 function createPayloadProviders(opts) {
-  const { logger, ledger } = opts;
+  const { launcher, logger, ledger } = opts;
   return {
     hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
+      inner: new GitService(launcher),
       watchers: opts.watchers,
       logger,
       ledger
@@ -74533,7 +79913,7 @@ function createPayloadProviders(opts) {
     contextProvider: new ContextProvider({ logger, ledger }),
     metricsProvider: new MetricsProvider({ logger, ledger }),
     activityProvider: new ActivityProvider({ logger, ledger }),
-    tmuxService: new TmuxService({ logger, ledger }),
+    tmuxService: new TmuxService({ launcher, logger, ledger }),
     autoCompact: new AutoCompactProvider(logger, ledger),
     cacheExpiry: new CacheExpiryProvider(logger, ledger),
     managedStorage: new ManagedStorage({
@@ -74550,3665 +79930,6 @@ function createPayloadProviders(opts) {
 // src/daemon/cache/render.ts
 init_globals();
 var import_node_path39 = __toESM(require_path_browserify(), 1);
-
-// src/dsl/render.ts
-init_globals();
-
-// src/render/fill.ts
-init_globals();
-
-// src/template-engine/layout.ts
-init_globals();
-function evaluateWhen(template, scope) {
-  if (template === void 0) return true;
-  const fragments = template.evaluate(scope);
-  return fragments.map((f) => f.plain).join("") !== "false";
-}
-var HIDDEN = { kind: "hidden" };
-var SHOWN = { kind: "shown" };
-function gateOf2(template, scope) {
-  try {
-    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
-  } catch (e) {
-    const pending2 = readPending(e);
-    return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-      kind: "failed",
-      message: e instanceof Error ? e.message : String(e)
-    };
-  }
-}
-function collapseToCell(cells, baseStyle) {
-  const merged = RichText.fromFragments(cells);
-  merged.end = "";
-  merged.overflow = "ignore";
-  if (baseStyle !== void 0 && !baseStyle.isNull) merged.style = baseStyle;
-  return merged;
-}
-function sizeCell(cell3, width, how) {
-  if (cell3.cellLength > width) {
-    cell3.truncate(width, { mode: how.truncate, marker: "\u2026" });
-  } else if (cell3.cellLength < width) {
-    cell3.align(how.justify, width);
-  }
-}
-function cellParts({ lead, text: text4, trail }) {
-  return [
-    ...lead === void 0 ? [] : [lead],
-    text4,
-    ...trail === void 0 ? [] : [trail]
-  ];
-}
-function heldCell({ text: text4, placement, lead, trail }) {
-  return {
-    text: unlinked(text4),
-    placement,
-    ...lead !== void 0 && { lead: unlinked(lead) },
-    ...trail !== void 0 && { trail: unlinked(trail) }
-  };
-}
-function unlinked(text4) {
-  const copy3 = text4.blankCopy(text4.plain);
-  copy3.style = resolvedStyle(text4.style).clearMetaAndLinks();
-  for (const { start, end, style } of text4.spans)
-    copy3.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
-  return copy3;
-}
-function stripItem(cell3) {
-  const parts = cellParts(cell3);
-  if (parts.length === 1) return cell3.text;
-  const joined = collapseToCell(parts);
-  joined.style = cell3.text.style;
-  return joined;
-}
-function applySegmentLayout(cells, options) {
-  const {
-    width,
-    justify,
-    truncate,
-    baseStyle,
-    padding,
-    placement,
-    lead = [],
-    trail = []
-  } = options;
-  if (cells.length === 0) return [];
-  const cell3 = collapseToCell(cells, baseStyle).pad(padding);
-  const pad = new RichText(" ".repeat(padding));
-  const tail = {
-    placement,
-    ...lead.length > 0 && {
-      lead: collapseToCell([pad, ...lead], baseStyle)
-    },
-    ...trail.length > 0 && {
-      trail: collapseToCell([...trail, pad], baseStyle)
-    }
-  };
-  if (width === "auto") return [{ text: cell3, ...tail }];
-  const how = { justify, truncate };
-  if (width === "fill") return [{ text: cell3, fill: how, ...tail }];
-  sizeCell(cell3, width, how);
-  return [{ text: cell3, ...tail }];
-}
-
-// src/render/fill.ts
-function drawnCols(drawing2) {
-  return Math.max(
-    0,
-    ...drawing2.split("\n").map((line) => cellLen(line.replace(INVISIBLE, "")))
-  );
-}
-function resolveFill(row2, options) {
-  const items = () => row2.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
-  const demands = [];
-  row2.forEach(({ fill }, at) => {
-    if (fill !== void 0) demands.push({ at, how: fill });
-  });
-  if (demands.length === 0) return items();
-  if (!Number.isFinite(options.width)) return items();
-  const natural = renderStripCells(row2.map(stripItem), options).split("\n");
-  if (natural.length > 1) return items();
-  const deficit = Math.max(0, options.width - drawnCols(natural[0] ?? ""));
-  const share = Math.floor(deficit / demands.length);
-  const remainder = deficit - share * demands.length;
-  demands.forEach(({ at, how }, i) => {
-    const grow = share + (i === demands.length - 1 ? remainder : 0);
-    const { text: text4 } = row2[at];
-    sizeCell(text4, text4.cellLength + grow, how);
-  });
-  return items();
-}
-
-// src/themes/index.ts
-init_globals();
-
-// src/template-engine/index.ts
-init_globals();
-
-// src/template-engine/cells.ts
-init_globals();
-function fragmentsToCells(fragments, baseStyle) {
-  const cells = [];
-  let group = [];
-  const flush2 = () => {
-    if (!group.length) return;
-    const cell3 = buildCell(group, baseStyle);
-    if (cell3.plain.length > 0) cells.push(cell3);
-    group = [];
-  };
-  for (const frag of fragments) {
-    const item = { frag, style: resolvedStyle(frag.style) };
-    if (item.style.link) {
-      flush2();
-      const cell3 = buildCell([item], baseStyle);
-      if (cell3.plain.length > 0) cells.push(cell3);
-    } else {
-      group.push(item);
-    }
-  }
-  flush2();
-  return cells;
-}
-function buildCell(items, baseStyle) {
-  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
-  const layered = items.map(
-    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
-  );
-  const cell3 = RichText.fromFragments(layered);
-  cell3.end = "";
-  cell3.overflow = "ignore";
-  if (layered.length === 1) {
-    cell3.style = layered[0].style;
-  } else if (base !== void 0) {
-    cell3.style = base;
-  }
-  return cell3;
-}
-function withStyle(frag, style) {
-  const copy3 = frag.copy();
-  copy3.style = style;
-  return copy3;
-}
-
-// src/render/action.ts
-init_globals();
-function renderBinding(runtime, reader) {
-  if (runtime.bound === void 0) {
-    throw new Error(
-      `${reader} ran outside a render: no render bound its store and clocks`
-    );
-  }
-  return runtime.bound;
-}
-function renderLook(runtime, reader) {
-  const { look } = renderBinding(runtime, reader);
-  if (look === void 0) {
-    throw new Error(`${reader} read the render's look before it was resolved`);
-  }
-  return look;
-}
-function renderLayout(runtime, reader) {
-  const { layout } = renderBinding(runtime, reader);
-  if (layout === void 0) {
-    throw new Error(`${reader} read the render's rows before they were laid`);
-  }
-  return layout();
-}
-function bindRender(runtime, binding) {
-  if (runtime.bound !== void 0) {
-    throw new Error("a render bound a compile another render holds");
-  }
-  runtime.bound = binding;
-  return {
-    [Symbol.dispose]: () => {
-      runtime.bound = void 0;
-    }
-  };
-}
-function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
-  const out = /* @__PURE__ */ new Map();
-  const entries = Object.entries(actions);
-  for (const [name, action2] of [
-    ...entries.filter(([, a]) => !("do" in a)),
-    ...entries.filter(([, a]) => "do" in a)
-  ]) {
-    out.set(
-      name,
-      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
-    );
-  }
-  return out;
-}
-function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
-  if ("set" in action2) {
-    const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
-    if ("to" in action2) {
-      return {
-        kind: "set-literal",
-        key: action2.set,
-        value: action2.to,
-        stateVar
-      };
-    }
-    if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
-      return {
-        kind: "set-option",
-        key: action2.set,
-        stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        library: domain.library
-      };
-    }
-    if ("int" in action2) {
-      return { kind: "set-int", key: action2.set, stateVar };
-    }
-    if ("cycle" in action2) {
-      return {
-        kind: "set-cycle",
-        key: action2.set,
-        stateVar,
-        members: action2.cycle
-      };
-    }
-    return {
-      kind: "set-bounded",
-      key: action2.set,
-      by: action2.by
-    };
-  }
-  if ("persist" in action2) {
-    const stateVar = CONFIG_KEY_TO_EFFECTIVE_VAR.get(action2.persist) ?? action2.persist;
-    if ("to" in action2) {
-      return {
-        kind: "persist-literal",
-        key: action2.persist,
-        value: action2.to,
-        stateVar
-      };
-    }
-    if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
-      return {
-        kind: "persist-option",
-        key: action2.persist,
-        stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        library: domain.library
-      };
-    }
-    if ("cycle" in action2) {
-      return {
-        kind: "persist-cycle",
-        key: action2.persist,
-        stateVar,
-        members: action2.cycle
-      };
-    }
-    if ("removeSegment" in action2) {
-      return {
-        kind: "layout-op",
-        key: action2.persist,
-        op: { op: "remove", target: action2.removeSegment }
-      };
-    }
-    if ("insertSegment" in action2) {
-      return {
-        kind: "layout-op",
-        key: action2.persist,
-        op: {
-          op: "insert",
-          segment: action2.insertSegment,
-          anchor: action2.anchor,
-          relation: action2.relation
-        }
-      };
-    }
-    if ("insertSegmentFrom" in action2) {
-      const domain = resolveOptionDomain(
-        action2.insertSegmentFrom,
-        perConfigDomains
-      );
-      return {
-        kind: "layout-op-option",
-        key: action2.persist,
-        anchor: action2.anchor,
-        relation: action2.relation,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        library: domain.library
-      };
-    }
-    return {
-      kind: "persist-bounded",
-      key: action2.persist,
-      by: action2.by
-    };
-  }
-  if ("copy" in action2) {
-    return {
-      kind: "copy",
-      text: parseActionTemplate(parse3, action2.copy, name)
-    };
-  }
-  if ("open" in action2) {
-    return {
-      kind: "open",
-      target: parseActionTemplate(parse3, action2.open, name)
-    };
-  }
-  if ("reset" in action2) {
-    return { kind: "reset", key: action2.reset };
-  }
-  if ("doctor" in action2) {
-    switch (action2.doctor) {
-      case "run":
-        return { kind: "doctor-run" };
-      case "fix":
-        return { kind: "doctor-fix", check: action2.check };
-      case "mark":
-        return { kind: "doctor-mark", check: action2.check, mark: action2.mark };
-    }
-  }
-  if ("slash" in action2) return { kind: "slash", line: action2.slash };
-  if ("run" in action2) {
-    return {
-      kind: "run",
-      name,
-      declaration: runDeclaration(action2),
-      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
-      env: Object.entries(action2.env).map(
-        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
-      )
-    };
-  }
-  if ("undo" in action2) return { kind: "undo" };
-  if ("redo" in action2) return { kind: "redo" };
-  if ("back" in action2) return { kind: "back" };
-  if ("rewind" in action2) return { kind: "rewind" };
-  if ("save" in action2) return { kind: "save" };
-  if ("preset" in action2) {
-    return action2.preset === "save" ? { kind: "preset-save" } : {
-      kind: "preset-delete",
-      name: parseActionTemplate(parse3, action2.name, name)
-    };
-  }
-  if ("themeDefault" in action2) return { kind: "theme-default-save" };
-  const [head, ...rest2] = action2.do.map((member) => {
-    const c = compiled.get(member);
-    if (c === void 0) {
-      throw new Error(
-        `action "${name}" fires "${member}", which is not declared in this config`
-      );
-    }
-    return c;
-  });
-  return { kind: "do", head, rest: rest2 };
-}
-function presentedAction(c) {
-  return c.kind === "do" ? presentedAction(c.head) : c;
-}
-function bindsTemplateValue(c) {
-  const presented = presentedAction(c);
-  switch (presented.kind) {
-    case "set-option":
-    case "set-int":
-    case "persist-option":
-    case "layout-op-option":
-      return true;
-    case "set-literal":
-    case "set-bounded":
-    case "set-cycle":
-    case "copy":
-    case "open":
-    case "persist-literal":
-    case "persist-bounded":
-    case "persist-cycle":
-    case "reset":
-    case "layout-op":
-    case "undo":
-    case "redo":
-    case "back":
-    case "rewind":
-    case "save":
-    case "preset-save":
-    case "preset-delete":
-    case "theme-default-save":
-    case "doctor-run":
-    case "doctor-fix":
-    case "doctor-mark":
-    case "slash":
-    case "run":
-    case "do":
-      return false;
-  }
-}
-function parseActionTemplate(parse3, src, name) {
-  try {
-    return parse3(src);
-  } catch (e) {
-    throw new Error(
-      `Template parse error in actions.${name}: ${e.message}`,
-      { cause: e }
-    );
-  }
-}
-function readVar(store, name) {
-  return store.has(name) ? toString2(store.read(name)) : "";
-}
-function evalTemplate(tpl, scope) {
-  return tpl.evaluate(scope).map((f) => f.plain).join("");
-}
-function linkFragment(text4, url, active2, base) {
-  const rt = new RichText(text4, {
-    style: Style.combine([base, new Style({ link: url, bold: active2 })])
-  });
-  rt.overflow = "ignore";
-  rt.end = "";
-  return rt;
-}
-function linkOver(cell3, url, current = false) {
-  const link = new Style({ link: url, bold: current ? true : void 0 });
-  const linked = new RichText(cell3.plain, {
-    style: Style.combine([resolvedStyle(cell3.style), link])
-  });
-  for (const span of cell3.spans) {
-    linked.stylize(
-      Style.combine([resolvedStyle(span.style), link]),
-      span.start,
-      span.end
-    );
-  }
-  linked.overflow = "ignore";
-  linked.end = "";
-  return linked;
-}
-function cycleIndex(c, store) {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
-}
-function realize(c, display, boundValue, store, sessionId2, signer) {
-  switch (c.kind) {
-    case "set-literal": {
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
-        active: current === c.value
-      };
-    }
-    case "set-option": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "set-int": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "set-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
-        active: false
-      };
-    }
-    case "set-bounded": {
-      return {
-        effects: [
-          {
-            verb: VERB_STEP_STATE,
-            args: [sessionId2, c.key, String(c.by)]
-          }
-        ],
-        active: false
-      };
-    }
-    case "copy":
-      return {
-        effects: [
-          {
-            verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    case "open":
-      return {
-        effects: [
-          {
-            verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
-    // verbatim (same literal/option/cycle/bounded semantics), only the wire
-    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
-    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
-    // the write durable, not the click itself.
-    case "persist-literal": {
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, c.value] }],
-        active: current === c.value
-      };
-    }
-    case "persist-option": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "persist-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, next2] }],
-        active: false
-      };
-    }
-    case "persist-bounded": {
-      return {
-        effects: [
-          {
-            verb: VERB_STEP_CONFIG,
-            args: [sessionId2, c.key, String(c.by)]
-          }
-        ],
-        active: false
-      };
-    }
-    case "reset":
-      return {
-        effects: [{ verb: VERB_RESET_CONFIG, args: [sessionId2, c.key] }],
-        active: false
-      };
-    // [LAW:one-source-of-truth] No key to carry — the click just says "step
-    // the history", and which entry moves is entirely server-side state
-    // (never wire input, so there is nothing here to gate). Never "active":
-    // a history step is a one-shot trigger, not a current-selection toggle.
-    case "undo":
-      return {
-        effects: [{ verb: VERB_UNDO, args: [sessionId2] }],
-        active: false
-      };
-    case "redo":
-      return {
-        effects: [{ verb: VERB_REDO, args: [sessionId2] }],
-        active: false
-      };
-    case "back":
-      return {
-        effects: [{ verb: VERB_BACK, args: [sessionId2] }],
-        active: false
-      };
-    // One-shot, like undo: which steps it takes back is server-side state.
-    case "rewind":
-      return {
-        effects: [{ verb: VERB_REWIND, args: [sessionId2] }],
-        active: false
-      };
-    case "save":
-      return {
-        effects: [{ verb: VERB_SAVE, args: [sessionId2] }],
-        active: false
-      };
-    // Never "active": one-shot triggers, like save.
-    case "preset-save":
-      return {
-        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId2] }],
-        active: false
-      };
-    case "theme-default-save":
-      return {
-        effects: [{ verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId2] }],
-        active: false
-      };
-    case "preset-delete":
-      return {
-        effects: [
-          {
-            verb: VERB_DELETE_PRESET,
-            args: [sessionId2, evalTemplate(c.name, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    // Never "active": running the doctor and applying a fix are one-shot
-    // triggers; the report they produce is state the ROW segments read.
-    case "doctor-run":
-      return {
-        effects: [{ verb: VERB_DOCTOR_RUN, args: [sessionId2] }],
-        active: false
-      };
-    case "doctor-fix":
-      return {
-        effects: [{ verb: VERB_DOCTOR_FIX, args: [sessionId2, c.check] }],
-        active: false
-      };
-    case "doctor-mark":
-      return {
-        effects: [
-          { verb: VERB_DOCTOR_MARK, args: [sessionId2, c.check, c.mark] }
-        ],
-        active: false
-      };
-    // Never "active": typing a command is a one-shot trigger.
-    case "slash":
-      return {
-        effects: [{ verb: VERB_SLASH, args: [sessionId2, c.line] }],
-        active: false
-      };
-    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
-    // draw, as copy's text is. The link carries what was evaluated and its
-    // mac, so the click runs what the bar showed and nothing a URL made up.
-    // Never "active": a run is a one-shot trigger.
-    case "run": {
-      const scope = buildScope(store);
-      const evaluated2 = JSON.stringify({
-        run: c.argv.map((item) => evalTemplate(item, scope)),
-        env: Object.fromEntries(
-          c.env.map(([variable, value]) => [
-            variable,
-            evalTemplate(value, scope)
-          ])
-        )
-      });
-      const mac = signer.sign({
-        sessionId: sessionId2,
-        action: c.name,
-        declaration: c.declaration,
-        evaluated: evaluated2
-      });
-      return {
-        effects: [
-          { verb: VERB_RUN, args: [sessionId2, c.name, evaluated2, mac] }
-        ],
-        active: false
-      };
-    }
-    // [LAW:one-source-of-truth] The op is fixed at compile time (see
-    // compileAction) — the click just delivers it. `apply-layout-op`'s
-    // handler does read-current-append-write (see verbs/index.ts), unlike
-    // persist-literal's plain overwrite, so it is its own verb rather than
-    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
-    // trigger, not a current-selection toggle.
-    case "layout-op":
-      return {
-        effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId2, c.key, encodeLayoutOp(c.op)]
-          }
-        ],
-        active: false
-      };
-    case "do": {
-      const head = realize(
-        c.head,
-        display,
-        boundValue,
-        store,
-        sessionId2,
-        signer
-      );
-      return {
-        effects: [
-          ...head.effects,
-          ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
-          )
-        ],
-        active: head.active
-      };
-    }
-    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
-    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
-    // relation are the compiled literals. Same wire shape a literal layout-op
-    // emits, so the daemon's apply-layout-op handler and undo/redo need no
-    // knowledge of where the segment name came from. Never "active": a
-    // structural edit is a one-shot trigger, not a current-selection toggle.
-    case "layout-op-option": {
-      const segment = boundValue ?? display;
-      const op = {
-        op: "insert",
-        segment,
-        anchor: c.anchor,
-        relation: c.relation
-      };
-      return {
-        effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId2, c.key, encodeLayoutOp(op)]
-          }
-        ],
-        active: false
-      };
-    }
-  }
-}
-function selectDisplay(name, action2, displays, store) {
-  if (displays.length === 0) {
-    throw new Error(`action "${name}" needs a display (the clickable text)`);
-  }
-  if (action2.kind === "set-cycle" || action2.kind === "persist-cycle") {
-    const display = pickCycleDisplay(
-      `action "${name}"`,
-      displays,
-      action2.members.length,
-      cycleIndex(action2, store)
-    );
-    return { display, boundValue: void 0 };
-  }
-  if (displays.length > 2) {
-    throw new Error(
-      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`
-    );
-  }
-  return { display: displays[0], boundValue: displays[1]?.plain };
-}
-function renderAction(name, displays, runtime) {
-  const declared = runtime.compiled.get(name);
-  if (!declared) {
-    throw new Error(`action "${name}" is not declared in this config`);
-  }
-  const store = renderBinding(runtime, `action "${name}"`).store;
-  const { display, boundValue } = selectDisplay(
-    name,
-    presentedAction(declared),
-    displays,
-    store
-  );
-  const sessionId2 = readVar(store, "session.id");
-  const { effects, active: active2 } = realize(
-    declared,
-    display.plain,
-    boundValue,
-    store,
-    sessionId2,
-    runtime.signer
-  );
-  return linkOver(display, effectsUrl(effects), active2);
-}
-function actionFuncs(runtime) {
-  return {
-    action: {
-      fn: (name, ...displays) => renderAction(name, displays, runtime),
-      argTypes: ["string", "liftable"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/disclosure-close.ts
-init_globals();
-function disclosureCloseFragment(store, key) {
-  return linkFragment(
-    DISCLOSURE_GLYPH_CLOSE,
-    effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED]
-      }
-    ]),
-    false
-  );
-}
-
-// src/render/picker.ts
-init_globals();
-
-// src/render/band-style.ts
-init_globals();
-function stateCell(palette, background, drawnAt) {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(background),
-    color: ColorSpec.fromRgba(textOn(palette, background, drawnAt))
-  });
-}
-function decoratedCell({
-  tint,
-  text: text4
-}) {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(tint),
-    color: ColorSpec.fromRgba(text4)
-  });
-}
-function closeOn(palette, ground, drawnAt) {
-  return new Style({
-    color: ColorSpec.fromRgba(
-      ensureContrast(
-        paletteRole(palette, DISCLOSURE_CLOSE_ROLE),
-        ground,
-        TEXT_MIN_CONTRAST,
-        drawnAt
-      )
-    )
-  });
-}
-function closeCell(palette, background, drawnAt) {
-  return Style.combine([
-    stateCell(palette, background, drawnAt),
-    closeOn(palette, background, drawnAt)
-  ]);
-}
-function bandItemStyle(active2, step4, drawnAt) {
-  return decoratedCell(
-    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
-  );
-}
-
-// src/render/option-paint.ts
-init_globals();
-
-// src/render/swatch.ts
-init_globals();
-var SWATCH_GLYPH = "\u2580";
-function swatch(palette) {
-  const ground = ColorSpec.fromRgba(paletteRole(palette, "background"));
-  const drawn = RichText.fromFragments(
-    DECOR_HUES.map(
-      (role) => new RichText(SWATCH_GLYPH, {
-        style: new Style({
-          color: ColorSpec.fromRgba(paletteRole(palette, role)),
-          bgcolor: ground
-        })
-      })
-    )
-  );
-  drawn.overflow = "ignore";
-  drawn.end = "";
-  return drawn;
-}
-
-// src/render/option-paint.ts
-var cell2 = (text4, style) => {
-  const drawn = typeof text4 === "string" ? new RichText(text4, { style }) : text4;
-  drawn.overflow = "ignore";
-  drawn.end = "";
-  return drawn;
-};
-var currentMark = (current) => new Style({ bold: current });
-function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
-  if (paletteOf === void 0) {
-    return (position, _option, label2, current) => cell2(
-      label2,
-      Style.combine([
-        bandItemStyle(active2, { ...position, distribution }, drawnAt),
-        currentMark(current)
-      ])
-    );
-  }
-  const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, label2, current) => named2(
-    label2,
-    Style.combine([text4, currentMark(current)]),
-    paletteOf(option, render3)
-  );
-}
-var named2 = (label2, text4, palette) => cell2(
-  RichText.fromFragments([
-    cell2(label2, text4),
-    cell2(" ", text4),
-    swatch(palette)
-  ])
-);
-function valuePaint(render3, paletteOf) {
-  if (paletteOf === void 0)
-    return (_position, _option, label2) => cell2(label2);
-  return (_position, option, label2) => named2(label2, void 0, paletteOf(option, render3));
-}
-function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
-  const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, _label, current) => cell2(
-    RichText.fromFragments([
-      cell2(current ? "[" : " ", text4),
-      swatch(paletteOf(option, render3)),
-      cell2(current ? "]" : " ", text4)
-    ])
-  );
-}
-
-// src/render/library.ts
-init_globals();
-var LIBRARY_PAGE_ROWS = 8;
-function libraryLayout(entries, groups, paged) {
-  const sections = groups.map((group) => ({
-    label: group.label,
-    indices: entries.flatMap(
-      (entry, i) => entry.group === group.id ? [i] : []
-    )
-  })).filter((section) => section.indices.length > 0);
-  const placed = sections.reduce((n, s) => n + s.indices.length, 0);
-  if (placed !== entries.length) {
-    const known = new Set(groups.map((g) => g.id));
-    const stray = entries.flatMap(
-      (entry, i) => known.has(entry.group) ? [] : [`#${i} (group "${entry.group}")`]
-    );
-    throw new Error(
-      `library: ${stray.join(", ")} name a group the domain does not list (${[...known].join(", ")})`
-    );
-  }
-  return paged ? sections.flatMap(
-    (section) => chunk2(section.indices, LIBRARY_PAGE_ROWS).map((indices) => [
-      { label: section.label, indices }
-    ])
-  ) : [sections];
-}
-function chunk2(items, size) {
-  return Array.from(
-    { length: Math.ceil(items.length / size) },
-    (_, n) => items.slice(n * size, (n + 1) * size)
-  );
-}
-function fitCells(text4, width) {
-  return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
-}
-
-// src/render/active-segment.ts
-init_globals();
-function createActiveSegmentRef(drawnAt) {
-  return { current: null, drawnAt };
-}
-function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
-  const active2 = {
-    segName,
-    placementId: placementId2,
-    palette,
-    disclosure,
-    tint,
-    text: text4,
-    bg: void 0,
-    drops: []
-  };
-  ref.current = active2;
-  return active2;
-}
-function inSegment(ref, place, run3) {
-  return publishing(
-    ref,
-    () => run3(
-      openSegment(
-        ref,
-        place.segName,
-        place.placementId,
-        place.palette,
-        place.disclosure,
-        place.tint,
-        place.text
-      )
-    )
-  );
-}
-function outsideSegments(ref, run3) {
-  return publishing(ref, () => {
-    ref.current = null;
-    return run3();
-  });
-}
-function publishing(ref, run3) {
-  const prior = ref.current;
-  try {
-    return run3();
-  } finally {
-    ref.current = prior;
-  }
-}
-function requireActiveSegment(ref, spelling) {
-  const active2 = ref.current;
-  if (active2 === null) {
-    throw new Error(
-      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
-    );
-  }
-  return active2;
-}
-
-// src/render/picker.ts
-var PICKER_PREV = "\u2190";
-var PICKER_NEXT = "\u2192";
-function cellWidth2(text4) {
-  return new RichText(text4).cellLength;
-}
-function rowBudget(runtime) {
-  const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
-  return Math.max(1, width - chromeCols - 2 * padding);
-}
-function ledRowBudget(runtime) {
-  const { padding, seamCols } = renderBinding(runtime, "a row fit");
-  return Math.max(
-    1,
-    rowBudget(runtime) - (cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 2 * padding + seamCols)
-  );
-}
-function paginate(widths, available, reserve) {
-  if (!Number.isFinite(available)) {
-    return widths.length > 0 ? [widths.map((_, i) => i)] : [];
-  }
-  const usable = Math.max(1, available - reserve);
-  const pages = [];
-  let cur = [];
-  let curW = 0;
-  for (let i = 0; i < widths.length; i++) {
-    const w = widths[i];
-    if (cur.length === 0) {
-      cur = [i];
-      curW = w;
-    } else if (curW + 1 + w <= usable) {
-      cur.push(i);
-      curW += 1 + w;
-    } else {
-      pages.push(cur);
-      cur = [i];
-      curW = w;
-    }
-  }
-  if (cur.length > 0) pages.push(cur);
-  return pages;
-}
-function gridPages(widths, available, navReserve) {
-  const arrowReserve = cellWidth2(PICKER_PREV) + 1 + cellWidth2(PICKER_NEXT) + 1;
-  const firstPass = paginate(widths, available, navReserve);
-  return (firstPass.length > 1 ? paginate(widths, available, navReserve + arrowReserve) : firstPass).map((cells) => [{ label: "", indices: cells }]);
-}
-function assemble(frags, paged) {
-  const spaced = [];
-  for (const frag of frags) {
-    if (spaced.length > 0) spaced.push(new RichText(" "));
-    spaced.push(frag);
-  }
-  const assembled = RichText.fromFragments(spaced);
-  assembled.overflow = paged ? "ignore" : void 0;
-  assembled.end = "";
-  return assembled;
-}
-function requireKind(runtime, name, kind, shape, helper) {
-  const action2 = runtime.compiled.get(name);
-  if (!action2 || action2.kind !== kind) {
-    throw new Error(
-      `${helper} references action "${name}" which must be ${shape}, got ${action2 ? `a ${action2.kind} action` : "no such action"}`
-    );
-  }
-  return action2;
-}
-function requireOptionKind(runtime, name, helper) {
-  const declared = runtime.compiled.get(name);
-  const action2 = declared ? presentedAction(declared) : declared;
-  if (!action2 || action2.kind !== "set-option" && action2.kind !== "persist-option" && action2.kind !== "layout-op-option") {
-    throw new Error(
-      `${helper} references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action2 ? `a ${action2.kind} action` : "no such action"}`
-    );
-  }
-  return action2;
-}
-function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint, closeStyle, steps2 = []) {
-  const declared = runtime.compiled.get(applyName);
-  const store = renderBinding(runtime, "picker").store;
-  const sessionId2 = readVar(store, "session.id");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
-  const optionFace = (i, label2) => {
-    const option = apply.options[i];
-    return itemPaint(
-      { index: i, count: apply.options.length },
-      option,
-      label2,
-      option === current
-    );
-  };
-  const available = !paged ? Infinity : close2.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
-  const navReserve = (close2.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
-  const catalogue = apply.library && {
-    groups: apply.library.groups,
-    entries: apply.options.map(apply.library.entry)
-  };
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, option)) : [];
-  const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
-    gridFaces.map((face) => face.cellLength),
-    available,
-    navReserve
-  );
-  const rawPage = parseInt(readVar(store, page2.stateVar), 10);
-  const pageHolding = (index) => Math.max(
-    0,
-    pages.findIndex(
-      (sections) => sections.some((section) => section.indices.includes(index))
-    )
-  );
-  const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
-  );
-  const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
-  const pageSections = pages[pageIdx] ?? [];
-  const pageUrl = (value) => effectsUrl([
-    { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
-  ]);
-  const closeWrite = close2.kind === "led" ? [] : [
-    {
-      verb: VERB_SET_STATE,
-      args: [sessionId2, ...close2.writes.flatMap(([k, v]) => [k, v])]
-    }
-  ];
-  const closeEffects = close2.kind === "own" && close2.onPick ? closeWrite : [];
-  const optionUrl = (option) => effectsUrl([
-    ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
-    ...closeEffects
-  ]);
-  const optionCell = (face, i) => linkOver(face, optionUrl(apply.options[i]));
-  const nav = close2.kind === "led" ? [] : [
-    linkFragment(
-      DISCLOSURE_GLYPH_CLOSE,
-      effectsUrl(closeWrite),
-      false,
-      closeStyle
-    )
-  ];
-  nav.push(
-    ...steps2.map(
-      ({ glyph, option }) => linkFragment(
-        glyph,
-        effectsUrl([
-          ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
-          {
-            verb: VERB_SET_STATE,
-            args: [
-              sessionId2,
-              page2.key,
-              String(pageHolding(apply.options.indexOf(option)))
-            ]
-          }
-        ]),
-        false
-      )
-    )
-  );
-  if (pageIdx > 0) {
-    nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
-  }
-  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
-  if (catalogue === void 0) {
-    const indices = pageSections.flatMap((section) => section.indices);
-    return [
-      assemble(
-        [...nav, ...indices.map((i) => optionCell(gridFaces[i], i)), ...next2],
-        paged
-      )
-    ];
-  }
-  const bold = new Style({ bold: true });
-  const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
-  const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
-  const lines2 = [assemble([...nav, ...where, ...next2], paged)];
-  for (const section of pageSections) {
-    if (pageSections.length > 1) {
-      lines2.push(
-        assemble([new RichText(section.label, { style: bold })], paged)
-      );
-    }
-    const nameWidth = Math.max(
-      ...section.indices.map((i) => cellWidth2(apply.options[i]))
-    );
-    for (const i of section.indices) {
-      const option = apply.options[i];
-      const authored = catalogue.entries[i].description;
-      const description = authored === void 0 ? void 0 : sanitizeText(authored);
-      const gap = " ".repeat(nameWidth - cellWidth2(option) + 2);
-      const row2 = description === void 0 ? option : `${option}${gap}${description}`;
-      lines2.push(
-        assemble(
-          [optionCell(optionFace(i, fitCells(row2, available)), i)],
-          paged
-        )
-      );
-    }
-  }
-  return lines2;
-}
-function pickerFuncs(runtime, activeSegment) {
-  return {
-    picker: {
-      fn: (applyName, pageName, closeOnPick, paged, inBody, ...extra) => {
-        refuseSurplus(
-          `picker "${applyName}"`,
-          ["closeOnPick", "paged", "inBody"],
-          extra
-        );
-        const page2 = requireKind(
-          runtime,
-          pageName,
-          "set-int",
-          "an int action ({ set, int: true })",
-          "picker"
-        );
-        if (inBody === true && closeOnPick === true) {
-          throw new Error(
-            `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
-          );
-        }
-        const apply = requireOptionKind(runtime, applyName, "picker");
-        const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
-        if (active2.bg === void 0) {
-          throw new Error(
-            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
-          );
-        }
-        const drawnAt = activeSegment.drawnAt();
-        const draw2 = (ground) => renderPicker(
-          applyName,
-          apply,
-          { key: page2.key, stateVar: page2.stateVar },
-          inBody === true ? { kind: "led" } : {
-            kind: "own",
-            writes: [[page2.key, "-1"]],
-            onPick: closeOnPick === true
-          },
-          paged === true,
-          runtime,
-          // A bare `{{ picker }}` authors no options dict, so it places by
-          // the default — the same resolution a `{{ menu }}` with no
-          // "distribution" option makes.
-          optionPaint(
-            active2,
-            placedBy(void 0),
-            renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
-            drawnAt,
-            ground
-          ),
-          closeOn(active2.palette, ground, drawnAt)
-        );
-        const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
-        if (rows.length === 0) return draw2(active2.bg)[0];
-        active2.drops.push(...rows);
-        return draw2(band.state)[0];
-      },
-      argTypes: ["string", "string", "bool"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/carousel.ts
-init_globals();
-var CAROUSEL_PREV = "\u25C0";
-var CAROUSEL_NEXT = "\u25B6";
-function ringAround(options, current) {
-  const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
-  return (offset) => ((centre + offset) % count + count) % count;
-}
-function renderCarousel(applyName, apply, openName, label2, runtime) {
-  if (!("stateVar" in apply)) {
-    throw new Error(
-      `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
-    );
-  }
-  const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply.stateVar)) {
-    throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
-    );
-  }
-  const declared = runtime.compiled.get(applyName);
-  const sessionId2 = readVar(store, "session.id");
-  const { options } = apply;
-  const count = options.length;
-  if (count === 0) return assemble([], true);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
-  const ring = (offset) => options[indexAt(offset)];
-  const step4 = (offset) => effectsUrl(
-    realize(
-      declared,
-      ring(offset),
-      ring(offset),
-      store,
-      sessionId2,
-      runtime.signer
-    ).effects
-  );
-  return assemble(
-    [
-      linkFragment(CAROUSEL_PREV, step4(-1), false),
-      linkOver(
-        // Drawn as the arrows are, in the segment's own colours (Brandon: "The
-        // name loses its styling"), beside the swatch of the value in force
-        // when the domain is colour-valued.
-        valuePaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
-          { index: indexAt(0), count },
-          ring(0),
-          label2,
-          false
-        ),
-        effectsUrl(
-          realize(
-            runtime.compiled.get(openName),
-            ring(0),
-            void 0,
-            store,
-            sessionId2,
-            runtime.signer
-          ).effects
-        )
-      ),
-      linkFragment(CAROUSEL_NEXT, step4(1), false)
-    ],
-    true
-  );
-}
-function carouselFuncs(runtime) {
-  return {
-    carousel: {
-      fn: (applyName, openName, label2) => {
-        if (!runtime.compiled.has(openName)) {
-          throw new Error(
-            `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`
-          );
-        }
-        if (bindsTemplateValue(runtime.compiled.get(openName))) {
-          throw new Error(
-            `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
-          );
-        }
-        return renderCarousel(
-          applyName,
-          requireOptionKind(runtime, applyName, "carousel"),
-          openName,
-          label2,
-          runtime
-        );
-      },
-      argTypes: ["string", "string", "string"],
-      arity: { kind: "exact" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/theme-preview.ts
-init_globals();
-
-// src/render/swatches.ts
-init_globals();
-var SWATCHES_RANDOM = "?";
-function requireSwatchable(runtime, applyName, helper) {
-  const apply = requireOptionKind(runtime, applyName, helper);
-  if (!("stateVar" in apply)) {
-    throw new Error(
-      `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
-    );
-  }
-  if (apply.paletteOf === void 0) {
-    throw new Error(
-      `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
-    );
-  }
-  return apply;
-}
-function randomOther(seed, count, centre) {
-  let h = Math.imul(seed ^ seed >>> 16, 73244475);
-  h = Math.imul(h ^ h >>> 16, 73244475);
-  h ^= h >>> 16;
-  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
-}
-function optionPalette(runtime, applyName, helper, chosen) {
-  const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
-  if (!apply.options.includes(option)) {
-    throw new Error(
-      `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
-    );
-  }
-  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
-}
-function swatchFuncs(runtime) {
-  return {
-    swatch: {
-      fn: (applyName, ...tail) => {
-        const [option, ...extra] = tail;
-        refuseSurplus(`swatch "${applyName}"`, ["option"], extra);
-        if (option !== void 0 && typeof option !== "string") {
-          throw new Error(
-            `swatch "${applyName}": option must be text, got ${JSON.stringify(option)}`
-          );
-        }
-        return swatch(optionPalette(runtime, applyName, "swatch", option));
-      },
-      argTypes: ["string", "value"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-function swatchesFuncs(runtime, activeSegment, clock) {
-  return {
-    swatches: {
-      fn: (applyName, pageName) => {
-        const apply = requireSwatchable(runtime, applyName, "swatches");
-        const page2 = requireKind(
-          runtime,
-          pageName,
-          "set-int",
-          "an int action ({ set, int: true })",
-          "swatches"
-        );
-        const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
-        if (active2.bg === void 0) {
-          throw new Error(
-            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
-          );
-        }
-        const drawnAt = activeSegment.drawnAt();
-        const { options } = apply;
-        const count = options.length;
-        const steps2 = () => {
-          const at = ringAround(
-            options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
-          );
-          return [
-            { glyph: CAROUSEL_PREV, option: options[at(-1)] },
-            {
-              glyph: SWATCHES_RANDOM,
-              option: options[randomOther(clock().getTime(), count, at(0))]
-            },
-            { glyph: CAROUSEL_NEXT, option: options[at(1)] }
-          ];
-        };
-        const [line] = renderPicker(
-          applyName,
-          apply,
-          { key: page2.key, stateVar: page2.stateVar },
-          { kind: "led" },
-          true,
-          runtime,
-          swatchPaint(
-            active2,
-            renderLook(runtime, "{{ swatches }}"),
-            apply.paletteOf,
-            drawnAt,
-            active2.bg
-          ),
-          closeOn(active2.palette, active2.bg, drawnAt),
-          count === 0 ? [] : steps2()
-        );
-        return line;
-      },
-      argTypes: ["string", "string"],
-      arity: { kind: "exact" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/theme-preview.ts
-var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
-function previewRows(palette, decor, opens, drawnAt) {
-  const band = bandFor(palette, opens, drawnAt);
-  const chosen = (text4, colour) => ({
-    text: text4,
-    colour,
-    ink: textOn(palette, colour, drawnAt)
-  });
-  return [
-    [
-      vocabularyOf(palette, decor, drawnAt).map((entry, i) => {
-        const colour = decorEntryColour(palette, entry);
-        return {
-          text: BAR_WORDS[i % BAR_WORDS.length],
-          colour,
-          ink: decor.shade.text(palette, entry.hue, colour, drawnAt)
-        };
-      })
-    ],
-    [
-      [chosen("\u25BE open", band.state), chosen("menu", band.plane)],
-      [
-        chosen("warn", paletteRole(palette, "warning")),
-        chosen("error", paletteRole(palette, "error"))
-      ]
-    ]
-  ];
-}
-function renderRow(groups, available) {
-  const cells = groups.flatMap(
-    (group, g) => group.map(({ text: text4, colour, ink }, i) => ({
-      gap: g > 0 && i === 0 ? " " : "",
-      cell: new RichText(` ${text4} `, {
-        style: decoratedCell({ tint: colour, text: ink })
-      })
-    }))
-  );
-  const fragments = [];
-  let width = 0;
-  for (const { gap, cell: cell3 } of cells) {
-    width += gap.length + cell3.cellLength;
-    if (width > available) break;
-    if (gap !== "") fragments.push(new RichText(gap));
-    fragments.push(cell3);
-  }
-  return fragments;
-}
-function renderThemePreview(palette, decor, opens, drawnAt, available) {
-  const rows = previewRows(palette, decor, opens, drawnAt).map(
-    (row2) => renderRow(row2, available)
-  );
-  const preview = RichText.fromFragments(
-    rows.flatMap((row2, i) => i === 0 ? row2 : [new RichText("\n"), ...row2])
-  );
-  preview.overflow = "ignore";
-  preview.end = "";
-  return preview;
-}
-function themePreviewFuncs(runtime, activeSegment) {
-  return {
-    // `{{ themePreview }}` samples the palette the bar is drawn in;
-    // `{{ themePreview "applyAction" }}` the palette the option that action's
-    // key holds puts in force — the theme picker's demo of the selected theme.
-    themePreview: {
-      fn: (...args) => {
-        const [applyName, ...extra] = args;
-        refuseSurplus("themePreview", ["applyAction"], extra);
-        if (applyName !== void 0 && typeof applyName !== "string") {
-          throw new Error(
-            `themePreview: applyAction must name a declared action, got ${JSON.stringify(applyName)}`
-          );
-        }
-        const { palette, decor } = renderLook(runtime, "{{ themePreview }}");
-        return renderThemePreview(
-          applyName === void 0 ? palette : optionPalette(runtime, applyName, "themePreview"),
-          decor,
-          // The bar trigger's band of the lineage the preview stands in: a
-          // band is coloured from the row its trigger stands in, which only
-          // the trigger's own region knows (decor.ts `decorationFor`).
-          {
-            ...requireActiveSegment(activeSegment, "{{ themePreview }}").disclosure,
-            depth: 0
-          },
-          activeSegment.drawnAt(),
-          ledRowBudget(runtime)
-        );
-      },
-      argTypes: ["value"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/layout-preview.ts
-init_globals();
-var blockLabel = (name) => name.slice(name.lastIndexOf(".") + 1);
-var clippedLabel = (name, most) => {
-  const label2 = new RichText(blockLabel(name));
-  label2.truncate(most, { marker: "\u2026" });
-  return label2.plain;
-};
-function labelBudget(rows, available) {
-  const widths = rows.map(
-    (row2) => row2.map(({ name }) => cellWidth2(blockLabel(name)))
-  );
-  const fits = (most2) => widths.every(
-    (row2) => row2.reduce((sum, w) => sum + Math.min(w, most2) + 2, 0) <= available
-  );
-  let most = Math.max(1, ...widths.flat());
-  while (most > 1 && !fits(most)) most -= 1;
-  return most;
-}
-function renderLayoutPreview(rows, decor, drawnAt, available) {
-  const most = labelBudget(rows, available);
-  const lines2 = rows.map((row2) => {
-    const blocks = [];
-    let width = 0;
-    for (const { name, address, palette } of row2) {
-      const block = new RichText(` ${clippedLabel(name, most)} `, {
-        style: decoratedCell(
-          decorationFor(palette, { kind: "bar", decor, address }, drawnAt)
-        )
-      });
-      width += block.cellLength;
-      if (width > available) break;
-      blocks.push(block);
-    }
-    return blocks;
-  });
-  const preview = RichText.fromFragments(
-    lines2.flatMap(
-      (blocks, i) => i === 0 ? blocks : [new RichText("\n"), ...blocks]
-    )
-  );
-  preview.overflow = "ignore";
-  preview.end = "";
-  return preview;
-}
-var LAYOUT_PREVIEW = "layoutPreview";
-function layoutPreviewFuncs(runtime, activeSegment) {
-  return {
-    [LAYOUT_PREVIEW]: {
-      fn: () => renderLayoutPreview(
-        renderLayout(runtime, "{{ layoutPreview }}"),
-        renderLook(runtime, "{{ layoutPreview }}").decor,
-        activeSegment.drawnAt(),
-        ledRowBudget(runtime)
-      ),
-      argTypes: [],
-      arity: { kind: "exact" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/menu.ts
-init_globals();
-function renderMenu(applyName, displays, options, runtime) {
-  const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
-  const action2 = runtime.action;
-  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
-  const pageKey = menuPageKey(stateKey);
-  const member = menuMember(applyName);
-  const store = renderBinding(action2, "menu").store;
-  const open2 = readVar(store, stateKey) === member;
-  const sessionId2 = readVar(store, "session.id");
-  const successor = open2 ? DISCLOSURE_CLOSED : member;
-  const glyph = linkFragment(
-    pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
-    effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId2, stateKey, successor, pageKey, "0"]
-      }
-    ]),
-    false
-  );
-  const body = () => {
-    const drawnAt = runtime.activeSegment.drawnAt();
-    const plane = bandFor(
-      placement.palette,
-      placement.disclosure,
-      drawnAt
-    ).plane;
-    const apply = requireOptionKind(action2, applyName, "menu");
-    return renderPicker(
-      applyName,
-      apply,
-      { key: pageKey, stateVar: pageKey },
-      {
-        kind: "own",
-        writes: [
-          [stateKey, DISCLOSURE_CLOSED],
-          [pageKey, "0"]
-        ],
-        onPick: options.closeOnPick
-      },
-      options.paged,
-      action2,
-      // Placed by THIS menu's distribution: the picker knows positions,
-      // the instance knows how it places them. Unless the domain is
-      // colour-valued, in which case every option is its name in the
-      // plane's text beside its swatch; one call decides, the same one the
-      // standalone `{{ picker }}` makes.
-      optionPaint(
-        placement,
-        options.distribution,
-        renderLook(action2, "{{ menu }}"),
-        apply.paletteOf,
-        drawnAt,
-        plane
-      ),
-      closeOn(placement.palette, plane, drawnAt)
-    );
-  };
-  placement.drops.push(...open2 ? body() : []);
-  return glyph;
-}
-var isDict = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function parseMenuArgs(applyName, tail) {
-  const last2 = tail[tail.length - 1];
-  const optsArg = isDict(last2) ? last2 : void 0;
-  const displayArgs = optsArg === void 0 ? tail : tail.slice(0, -1);
-  const bad = displayArgs.findIndex((d) => typeof d !== "string");
-  if (bad !== -1) {
-    throw new Error(
-      `{{ menu "${applyName}" }} display #${bad + 1} is not text (${JSON.stringify(displayArgs[bad])}) \u2014 a menu binds its trigger text, then an optional trailing (dict \u2026) of options`
-    );
-  }
-  return {
-    displays: displayArgs,
-    // [LAW:one-source-of-truth] The same option reader the loader folds over
-    // the static dict — vocabulary, types, defaults live once.
-    options: parseMenuOptions(optsArg ?? {})
-  };
-}
-function menuFuncs(runtime) {
-  return {
-    menu: {
-      fn: (applyName, ...tail) => {
-        const { displays, options } = parseMenuArgs(applyName, tail);
-        return renderMenu(applyName, displays, options, runtime);
-      },
-      argTypes: ["string", "value"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/segment-color.ts
-init_globals();
-
-// src/template-engine/gauge.ts
-init_globals();
-function renderGauge(spec) {
-  const { value, max: max2, width, filled, empty: empty2, colourAt } = spec;
-  const lit = litCells(value, max2, width);
-  const cells = [];
-  for (let i = 0; i < width; i++) {
-    const isLit = i < lit;
-    const hex3 = isLit && colourAt !== void 0 ? colourAt(i * max2 / width) : void 0;
-    cells.push(
-      new RichText(isLit ? filled : empty2, {
-        style: hex3 === void 0 ? void 0 : new Style({ color: hex3 })
-      })
-    );
-  }
-  const gauge = RichText.fromFragments(cells);
-  gauge.end = "";
-  gauge.overflow = "ignore";
-  return gauge;
-}
-function litCells(value, max2, width) {
-  if (!Number.isFinite(value) || !Number.isFinite(max2) || max2 <= 0) return 0;
-  return Math.min(width, Math.max(0, Math.round(value / max2 * width)));
-}
-
-// src/render/segment-color.ts
-function segmentColorFuncs(ref) {
-  const bgOf = {
-    fn: (() => {
-      const active2 = requireActiveSegment(ref, "{{ bgOf }}");
-      if (active2.bg === void 0) {
-        throw new Error(
-          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
-        );
-      }
-      return active2.bg.hex;
-    }),
-    argTypes: [],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const tint = {
-    fn: (() => requireActiveSegment(ref, "{{ tint }}").tint.hex),
-    argTypes: [],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const roleTextOn = {
-    fn: ((role, bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
-    }),
-    argTypes: ["string", "string"],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const keptOn = {
-    fn: ((fgRef, bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ keptOn }}");
-      const fg = resolveColorRef(palette2, fgRef);
-      const bg = resolveColorRef(palette2, bgRef);
-      const held = contrastRatio(
-        drawnColour(fg, ColorDepth.TRUECOLOR),
-        drawnColour(bg, ColorDepth.TRUECOLOR)
-      );
-      const floor2 = Math.min(
-        TEXT_MIN_CONTRAST,
-        Math.max(held, QUIET_MIN_CONTRAST)
-      );
-      return (ensureDrawn(
-        fg,
-        ref.drawnAt(),
-        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor2
-      ) ?? fg).hex;
-    }),
-    argTypes: ["string", "string"],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const palette = paletteFuncs(
-    () => requireActiveSegment(ref, "{{ color }} / {{ ramp }} / {{ gauge }}").palette
-  );
-  const gauge = {
-    fn: ((value, max2, width, filled, empty2, easing, ...stops) => {
-      const ramped = easing === void 0 ? void 0 : [easing, ...flattenStops(stops)];
-      return renderGauge({
-        value,
-        max: max2,
-        width,
-        filled,
-        empty: empty2,
-        colourAt: ramped === void 0 ? void 0 : (position) => String(
-          palette.ramp.fn(position, ...ramped)
-        )
-      });
-    }),
-    // "float" for the two measurements (a percentage need not be whole), "int"
-    // for the cell count, the glyph pair, then a repeating string slot for the
-    // optional easing and its stops — Go's spelling of an optional tail is a
-    // variadic one, so the gate requires the five and `ramp` refuses an easing
-    // with no stop.
-    argTypes: ["float", "float", "int", "string", "string", "string"],
-    arity: { kind: "variadic" },
-    returnType: "T"
-  };
-  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
-}
-var RUNGS_OUT = {
-  "#000000": ["darken-1", "darken-2", "darken-3"],
-  "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
-};
-var RUNGS = Object.values(RUNGS_OUT).flat();
-function namedRoleText(palette, role, ground) {
-  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
-  const named3 = (name) => {
-    const colour = resolveColorRef(palette, name);
-    return {
-      colour,
-      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown)
-    };
-  };
-  const pole = contrastFor(shown).hex;
-  const out = RUNGS_OUT[pole];
-  if (out === void 0) {
-    throw new Error(
-      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
-    );
-  }
-  const text4 = `text-${role}`;
-  const rung = (step4) => `${role}-${step4}`;
-  const colours = new Map(
-    [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
-  );
-  const preferred = [text4, role, ...out.map(rung)].map(
-    (name) => colours.get(name)
-  );
-  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
-    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
-  )).colour;
-}
-function flattenStops(stops) {
-  return stops.flatMap((stop2) => {
-    const cut = stop2.indexOf(":");
-    const at = cut < 0 ? NaN : Number(stop2.slice(0, cut));
-    if (!Number.isFinite(at)) {
-      throw new Error(
-        `{{ gauge }} stop "${stop2}" must be "<position>:<colour>", e.g. "80:error" or "80:#ff0000"`
-      );
-    }
-    return [at, stop2.slice(cut + 1)];
-  });
-}
-
-// src/dsl/variable-scope.ts
-init_globals();
-function policyReads(decl, fold) {
-  if (decl.kind !== "shell" && decl.kind !== "file") return [];
-  const readsDepth = "key" in decl.cache && [...fold.calls(decl.cache.key)].some((name) => DEPTH_FUNCTIONS.has(name));
-  return [
-    ...fold.ofVariable(decl).flatMap(
-      ({ reaches }) => reaches.length === 0 ? [null] : reaches
-    ),
-    ...readsDepth ? [null] : []
-  ];
-}
-var KIND_SCOPE = {
-  input: "view",
-  state: "view",
-  template: "view",
-  time: "view",
-  literal: "directory",
-  env: "directory",
-  dropped: "directory",
-  // A plugin source is read per session: its reading is the session's own
-  // file, which reaches the view through its payload.
-  source: "view"
-};
-var SCOPES = /* @__PURE__ */ new WeakMap();
-function variableScopes(config2) {
-  let scopes = SCOPES.get(config2);
-  if (scopes === void 0) {
-    scopes = scopesOf(config2);
-    SCOPES.set(config2, scopes);
-  }
-  return scopes;
-}
-function scopesOf(config2) {
-  const declared = new Map(declaredVariables(config2));
-  const fold = valueReadsOf(config2);
-  const scopes = new Map(
-    [...declared].map(([name, decl]) => [
-      name,
-      decl.kind === "shell" || decl.kind === "file" ? "directory" : KIND_SCOPE[decl.kind]
-    ])
-  );
-  const reads = new Map(
-    [...declared].map(([name, decl]) => [name, policyReads(decl, fold)])
-  );
-  for (let moved = true; moved; ) {
-    moved = false;
-    for (const [name, read2] of reads) {
-      if (scopes.get(name) === "view") continue;
-      if (read2.some((r) => r === null || scopes.get(r) !== "directory")) {
-        scopes.set(name, "view");
-        moved = true;
-      }
-    }
-  }
-  return scopes;
-}
-
-// src/dsl/parts.ts
-init_globals();
-
-// src/dsl/node-registry.ts
-init_globals();
-
-// src/render/split-lines.ts
-init_globals();
-function splitCellsIntoLines(cells) {
-  const lines2 = [];
-  let current = [];
-  for (const cell3 of cells) {
-    if (!cell3.contains("\n")) {
-      current.push(cell3);
-      continue;
-    }
-    const pieces = cell3.split("\n");
-    current.push(pieces[0]);
-    for (let i = 1; i < pieces.length; i++) {
-      lines2.push(current);
-      current = [pieces[i]];
-    }
-  }
-  lines2.push(current);
-  return lines2;
-}
-
-// src/dsl/node-registry.ts
-function rowIdentities(lines2) {
-  const counts = /* @__PURE__ */ new Map();
-  return lines2.map((line) => {
-    const kind = `${line.place}.${line.band}`;
-    const nth = counts.get(kind) ?? 0;
-    counts.set(kind, nth + 1);
-    return { line, row: `${kind}#${nth}` };
-  });
-}
-var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
-function within2(parent, own2) {
-  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
-}
-function returnedBy(id2, lines2) {
-  const own2 = [];
-  const deeper = [];
-  let ground;
-  for (const line of lines2) {
-    (line.band === "own" ? own2 : deeper).push(line);
-    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
-  }
-  return {
-    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
-    deeper
-  };
-}
-function heldLine(line) {
-  return { ...line, cells: line.cells.map(heldCell) };
-}
-function composeBlocks(direction, blocks) {
-  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
-  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
-  return [...above, ...composeFlow(direction, flow3)];
-}
-function composeFlow(direction, blocks) {
-  switch (direction) {
-    case "vertical":
-      return blocks.flatMap((b) => b);
-    case "horizontal": {
-      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
-      if (height === 0) return [];
-      const row0 = {
-        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
-        band: "own",
-        place: "flow"
-      };
-      const drops = blocks.flatMap((b) => b.slice(1));
-      return [row0, ...drops];
-    }
-  }
-}
-function layoutRows(node, shown) {
-  const lines2 = (n, address) => {
-    if (!shown(n)) return [];
-    if (n.kind === "segment") {
-      return [
-        {
-          cells: [{ name: n.name, address, settings: n.settings }],
-          band: "own",
-          place: "flow"
-        }
-      ];
-    }
-    return composeBlocks(
-      n.direction,
-      n.children.map(
-        (child, index) => lines2(child, [...address, childStep(n, index)])
-      )
-    );
-  };
-  return lines2(node, []).map((line) => [...line.cells]);
-}
-function childStep(node, index) {
-  return node.steps[index];
-}
-function spanOf(node) {
-  if (node.kind === "segment" || node.unit === true) {
-    return { width: 1, reach: 1 };
-  }
-  const laid = laidOut(node);
-  return { width: widthOf2(laid), reach: reachOf(laid) };
-}
-function laidOut(node) {
-  const spans = node.children.map(spanOf);
-  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
-  if (node.direction === "vertical" || node.unit === true) {
-    return spans.map((span, i) => ({ start: 0, span, ownLine: ownLine(i) }));
-  }
-  let start = 0;
-  return spans.map((span, i) => {
-    const at = start;
-    start += span.width;
-    return { start: at, span, ownLine: ownLine(i) };
-  });
-}
-var widthOf2 = (laid) => laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
-var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
-function placeChildren(node, at) {
-  const laid = laidOut(node);
-  if (at?.axis === "cell") {
-    return laid.map(({ start, span, ownLine }) => {
-      const index = at.index + start;
-      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
-    });
-  }
-  const axis = AXIS_OF[node.direction];
-  const distribution = placedBy(node.distribution);
-  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
-  return places.map((index) => ({
-    index,
-    count,
-    distribution,
-    axis,
-    lineStart: 0,
-    lineEnd
-  }));
-}
-var containerType = {
-  compile(node, cctx) {
-    const steps2 = placeChildren(node, cctx.at);
-    return {
-      kind: "container",
-      direction: node.direction,
-      when: cctx.when,
-      steps: steps2,
-      children: node.children.map(
-        (child, i) => cctx.compileChild(child, childPath(cctx.path, i), steps2[i])
-      )
-    };
-  },
-  render(node, ctx) {
-    if (ctx.gate.kind === "failed") ctx.gate.report();
-    return composeBlocks(
-      node.direction,
-      node.children.map(
-        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
-      )
-    );
-  }
-};
-var BODY_PLACE = {
-  drop: (line) => line.place,
-  above: () => "above"
-};
-var OPEN_LEAD = {
-  drop: (inline, close2) => ({ lead: close2(), stays: inline }),
-  above: (inline) => ({
-    lead: inline.slice(0, 1).flatMap((line) => line.cells),
-    stays: inline.slice(1)
-  })
-};
-var segmentType = {
-  compile(node, cctx) {
-    return {
-      kind: "segment",
-      when: cctx.when,
-      name: node.name,
-      id: placementId(node),
-      settings: cctx.placementSettings(node),
-      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
-      // predicate by the one `disclosureGate` every disclosure reads through.
-      ...node.opens !== void 0 && {
-        opens: {
-          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          // A body roots a band: its first step is placed afresh.
-          body: cctx.compileChild(
-            node.opens.body,
-            bodyPath(cctx.path),
-            void 0
-          ),
-          key: node.opens.ref.key,
-          placement: node.opens.placement
-        }
-      },
-      ...node.lead !== void 0 && {
-        lead: cctx.parse(node.lead, "lead")
-      },
-      ...node.trail !== void 0 && {
-        trail: cctx.parse(node.trail, "trail")
-      }
-    };
-  },
-  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
-  // hidden, gated off, drawn, broken — is reported to the session's record, so
-  // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
-};
-function drawSegment(node, ctx) {
-  const seg2 = ctx.lookupSegment(node.name);
-  if (seg2 === void 0) {
-    throw new Error(`Layout segment "${node.name}" has no matching segment`);
-  }
-  if (ctx.gate.kind === "hidden") return [];
-  const scope = placementScope(ctx.scope, node.settings);
-  if (ctx.gate.kind === "failed") {
-    return brokenSegment(node, scope, ctx, ctx.gate.message);
-  }
-  try {
-    const parts = ctx.placement(node);
-    const gate2 = within2(ctx.gate, parts.gate());
-    if (gate2.kind === "failed") {
-      return brokenSegment(node, scope, ctx, gate2.message);
-    }
-    if (gate2.kind === "hidden") return [];
-    const ownBodyGate = parts.bodyGate();
-    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
-    if (bodyGate.kind === "failed") {
-      return brokenSegment(node, scope, ctx, bodyGate.message);
-    }
-    const palette = placementPalette(node.settings.theme, ctx.palette);
-    const placement = {
-      id: node.id,
-      effect: node.settings.effect,
-      ground: groundOf(palette)
-    };
-    const layoutOf = (baseStyle) => ({
-      width: seg2.width ?? "auto",
-      justify: seg2.justify ?? "left",
-      truncate: seg2.truncate ?? "right",
-      baseStyle,
-      // [LAW:dataflow-not-control-flow] Padding is uniform across every
-      // line a segment contributes — inline rows AND dropped menu bands —
-      // one value, no per-line-kind branch. The picker reserves 2×padding
-      // at its pagination seam so a padded band still fits the width
-      // budget.
-      padding: ctx.padding,
-      placement
-    });
-    const bodyOpen = bodyGate.kind === "shown";
-    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
-    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
-    const drawn = own2.kind === "drawn" ? drawnRows(own2.segment, layoutOf) : waitingRows(
-      node,
-      scope,
-      ctx,
-      own2.variable,
-      palette,
-      bodyOpen,
-      layoutOf
-    );
-    if (drawn === null) return [];
-    const { styles, inline: inlineLines, drops: dropLines } = drawn;
-    const opens = node.opens;
-    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
-      ...line,
-      place: BODY_PLACE[opens.placement](line)
-    }));
-    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
-      ...layoutOf(style),
-      width: "auto",
-      padding
-    });
-    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
-    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
-      inlineLines,
-      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
-    ) : { lead: [], stays: inlineLines };
-    const holdLead = openLead.flatMap(
-      (cell3) => leadCell(
-        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
-        styles.trigger,
-        0
-      )
-    );
-    const leadOf = (line, i) => line.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
-    const ledBody = bodyLines.map((line, i) => ({
-      cells: [...leadOf(line, i), ...line.cells],
-      band: "deeper",
-      place: line.place
-    }));
-    const laidLines = [...stays, ...dropLines];
-    if (ctx.perSegmentSink !== void 0) {
-      ctx.perSegmentSink.set(
-        node.id,
-        [
-          ...laidLines.flatMap((line) => line.cells),
-          ...bodyLines.flatMap(leadOf)
-        ].flatMap(cellParts)
-      );
-    }
-    return [...laidLines, ...ledBody];
-  } catch (err) {
-    return brokenSegment(
-      node,
-      scope,
-      ctx,
-      err.message ?? String(err)
-    );
-  }
-}
-var waitingOn = (variable) => ({
-  kind: "waiting",
-  variable
-});
-function ownAnswer(evaluate) {
-  try {
-    return { kind: "drawn", segment: evaluate() };
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 === void 0) throw err;
-    return waitingOn(pending2.variable);
-  }
-}
-function drawnRows(segment, layoutOf) {
-  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
-  const baseStyle = open2 ? styles.trigger : styles.closed;
-  const layout = layoutOf(baseStyle);
-  const inline = splitCellsIntoLines(
-    fragmentsToCells(fragments, baseStyle)
-  ).map((line, i) => ({
-    cells: applySegmentLayout(line, {
-      ...layout,
-      lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
-      trail: i === 0 ? fragmentsToCells(trail, baseStyle) : []
-    }),
-    band: "own",
-    place: "flow"
-  }));
-  return {
-    styles,
-    inline,
-    drops: drops.map((body) => ({
-      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
-        ...layout,
-        baseStyle: styles.band
-      }),
-      band: "deeper",
-      place: "flow"
-    }))
-  };
-}
-var LOADING_GLYPH = "\u2026";
-function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
-  ctx.waited(variable);
-  const last2 = ctx.lastDrawn(node.id);
-  if (last2?.kind === "hidden") return null;
-  const styles = ctx.decorations(node, palette);
-  const style = bodyOpen ? styles.trigger : styles.closed;
-  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
-  const trail = fragmentsToCells(
-    errorAffix(node.trail, node, scope, ctx),
-    style
-  );
-  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
-    (line) => line.cells.map((cell3) => cell3.text.cellLength)
-  );
-  return {
-    styles,
-    inline: rows.map((widths, row2) => ({
-      cells: widths.flatMap((width, i) => {
-        const first2 = row2 === 0 && i === 0;
-        return applySegmentLayout(
-          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
-          {
-            ...layoutOf(style),
-            width,
-            justify: "left",
-            truncate: "right",
-            lead: first2 ? lead : [],
-            trail: first2 ? trail : []
-          }
-        );
-      }),
-      band: "own",
-      place: "flow"
-    })),
-    drops: []
-  };
-}
-function cellsWidth(cells) {
-  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
-}
-function brokenSegment(node, scope, ctx, message) {
-  ctx.onSegmentError?.(node.id, message);
-  const oneLine = message.replace(/\s*\n\s*/g, " ");
-  return [
-    {
-      cells: applySegmentLayout(
-        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
-        {
-          width: "auto",
-          justify: "left",
-          truncate: "right",
-          padding: 0,
-          // It follows the bar, and fades in from the bar's ground: the
-          // failure it reports may be the read of this placement's own
-          // settings.
-          placement: {
-            id: node.id,
-            effect: FOLLOW_BAR,
-            ground: groundOf(ctx.palette)
-          },
-          lead: errorAffix(node.lead, node, scope, ctx),
-          trail: errorAffix(node.trail, node, scope, ctx)
-        }
-      ),
-      band: "own",
-      place: "flow"
-    }
-  ];
-}
-function errorAffix(affix, node, scope, ctx) {
-  if (affix === void 0) return [];
-  try {
-    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 !== void 0) ctx.waited(pending2.variable);
-    else ctx.onSegmentError?.(node.id, err.message ?? String(err));
-    return [];
-  }
-}
-var REGISTRY = {
-  container: containerType,
-  segment: segmentType
-};
-function nodeType(kind) {
-  return REGISTRY[kind];
-}
-
-// src/render/frame-memory.ts
-init_globals();
-var FrameMemory = class {
-  last = null;
-  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
-  // drawn from another config, preset, state revision or width says nothing of
-  // where a placement stands in this one — its ids may name other placements,
-  // its rows were sized for another width, and a write to the session's state
-  // shows what it reveals at once — so it is no frame to draw from or compare
-  // against.
-  from(source) {
-    const { last: last2 } = this;
-    return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
-  }
-  begin(source, returned2) {
-    const placements = /* @__PURE__ */ new Map();
-    const rules = /* @__PURE__ */ new Map();
-    return {
-      placed: (id2, lines2) => {
-        const { drawing: drawing2 } = returned2(id2, lines2);
-        placements.set(
-          id2,
-          drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
-        );
-        return lines2;
-      },
-      rule: (slot, name) => rules.set(slot, name),
-      commit: () => {
-        this.last = { source, placements, rules };
-      }
-    };
-  }
-};
-var HIDDEN_RECORD = { kind: "hidden" };
-
-// src/dsl/parts.ts
-var SELECTION_OF = {
-  palette: "theme",
-  style: "style",
-  effect: "effect"
-};
-var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
-var COLOR_FLOOR = "truecolor";
-var UNDRAWN = {
-  width: 0,
-  chromeCols: 0,
-  padding: 0,
-  seamCols: 0,
-  preset: ""
-};
-function answerOf2(deriver) {
-  try {
-    return { ok: true, value: deriver() };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
-function unwrap2(answer2) {
-  if (answer2.ok) return answer2.value;
-  throw answer2.error;
-}
-var always = (value) => ({ read: () => value });
-var sameLook = sameBy({
-  basePalette: is,
-  palette: is,
-  decor: sameDecor
-});
-var ViewParts = class {
-  constructor(store, registry, source, view) {
-    this.store = store;
-    this.registry = registry;
-    this.source = source;
-    this.view = observable.box(view, { deep: false });
-    this.scope = buildScope(store);
-    this.depth = store.derive("drawn depth", "computed", () => {
-      const said = this.inputAt(COLOR_PATH);
-      return typeof said === "string" && isColorCompatibility(said) ? said : COLOR_FLOOR;
-    });
-    const drawn = observable(UNDRAWN, void 0, { deep: false });
-    this.facts = drawn;
-    const look = this.look;
-    const phase = this.phase;
-    const layout = () => this.layout.read();
-    this.binding = {
-      store,
-      registry,
-      get width() {
-        return drawn.width;
-      },
-      get chromeCols() {
-        return drawn.chromeCols;
-      },
-      get padding() {
-        return drawn.padding;
-      },
-      get seamCols() {
-        return drawn.seamCols;
-      },
-      get look() {
-        return phase.ruling ? void 0 : look.get();
-      },
-      get layout() {
-        return phase.ruling ? void 0 : layout;
-      }
-    };
-    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
-      const root = source.roots.get(drawn.preset);
-      const palette = look.get().palette;
-      return layoutRows(root, (node) => this.shown(node)).map(
-        (row2) => row2.flatMap(({ name: placedName, address, settings }) => {
-          const name = arrangedSegment(placedName);
-          return name === void 0 ? [] : [
-            {
-              name,
-              address,
-              palette: placementPalette(settings.theme, palette)
-            }
-          ];
-        })
-      );
-    });
-    registry.bindInputs({
-      read: (path41) => this.inputAt(path41),
-      drawnAt: () => drawnDepth(this.colorCompatibility())
-    });
-  }
-  store;
-  registry;
-  source;
-  // How many parts have derived since the view's first draw: what one draw
-  // adds is how many of its parts it evaluated.
-  evaluated = 0;
-  // What the view's last drawn frame showed: the one thing a draw writes.
-  memory = new FrameMemory();
-  // [LAW:one-source-of-truth] The view's one scope. Its names are the
-  // store's when it is built, at the view's first draw: a view declares
-  // every variable before it is drawn.
-  scope;
-  binding;
-  facts;
-  look = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
-  });
-  layout;
-  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
-  // draw resolves its look — the look is what the rules decide — so while one
-  // is, the binding has neither look nor layout to give: a read is refused by
-  // name (renderLook, renderLayout), never answered with the last draw's.
-  // Read outside every kept part but the rule's own, which always runs here.
-  phase = { ruling: false };
-  gates = /* @__PURE__ */ new Map();
-  placements = /* @__PURE__ */ new Map();
-  rules = /* @__PURE__ */ new Map();
-  slots = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
-  // and its slots read it as it stands, never a copy a draw wrote.
-  view;
-  // The draw in progress's own facts — the payload fields its instant answers
-  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
-  // the projections over them, which only a draw reads.
-  projected = void 0;
-  drawnSlots = /* @__PURE__ */ new Map();
-  // What the view draws from: a session view's source is bound once; a caller
-  // drawing a fixed payload binds each.
-  bind(view) {
-    runInAction(() => this.view.set(view));
-  }
-  // The selections in force.
-  selections() {
-    return this.view.get().selections();
-  }
-  // The draw's facts, before it reads a part, and the payload fields its own
-  // instant answers.
-  draw(facts, projected) {
-    this.draws++;
-    this.projected = projected;
-    this.drawnSlots.clear();
-    runInAction(() => Object.assign(this.facts, facts));
-  }
-  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
-  // answers it: a selection's `.effective` its slot, a field of the instant
-  // the draw in progress, every other the view's payload.
-  inputAt(path41) {
-    const slot = slotAt(path41);
-    if (slot !== void 0) return this.slotName(slot);
-    if (drawProjectionAt(path41) !== void 0)
-      return resolvePath(this.projected, path41);
-    return resolvePath(this.view.get().payload(), path41);
-  }
-  // The depth the view's colour setting draws at: its floor while the payload
-  // has not said, or says something no depth is.
-  depth;
-  colorCompatibility() {
-    return this.depth.read();
-  }
-  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
-  // the rule's answer. A rule that reads no instant is kept: settled in the
-  // turn what it reads changes, so a cache policy over the slot's
-  // `.effective` re-runs then, never at a draw. A pending answer keeps the
-  // name last settled (the floor before any); a failure is the floor with
-  // its warning, which every draw reading the slot reports.
-  slot(slot) {
-    let node = this.slots.get(slot);
-    if (node === void 0) {
-      let last2;
-      const settle3 = () => {
-        const selection2 = this.selections()[SELECTION_OF[slot]];
-        if (selection2.kind === "decided")
-          return settled2(selection2.name, null, null);
-        const rule = compiledRule(this.source, slot, selection2.source);
-        if (this.source.instant.has(rule.template))
-          return { kind: "per-draw", rule };
-        const outcome = this.rule(rule.template);
-        switch (outcome.kind) {
-          case "named": {
-            let warning = null;
-            last2 = decideSlot(
-              this.source,
-              slot,
-              outcome.name,
-              rule.where,
-              (m) => {
-                warning = m;
-              }
-            );
-            return settled2(last2, warning, null);
-          }
-          case "pending":
-            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
-          case "failed":
-            last2 = SLOT_FLOORS[slot];
-            return settled2(
-              last2,
-              ruleFloorMessage(
-                rule.where,
-                slot,
-                `the rule failed \u2014 ${outcome.error}`
-              ),
-              null
-            );
-        }
-      };
-      let held;
-      node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next2 = settle3();
-        if (held === void 0 || !sameSlot(held, next2)) held = next2;
-        return held;
-      });
-      this.slots.set(slot, node);
-    }
-    return node.read();
-  }
-  // The name a slot's `.effective` reads: its settled name, or what this
-  // draw's rule settled on.
-  slotName(slot) {
-    const state = this.slot(slot);
-    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
-  }
-  // What a per-draw rule settled on in the draw in progress.
-  drawnSlot(slot, name) {
-    this.drawnSlots.set(slot, name);
-  }
-  // Which draw is in progress: a part that reads the instant answers once in it.
-  draws = 0;
-  // The look the draw resolved, before its walk.
-  publishLook(look) {
-    runInAction(() => this.look.set(look));
-  }
-  // A layout node's own `when`, as the walk asks it.
-  gate(node) {
-    const { when: when2 } = node;
-    if (when2 === void 0) return gateOf2(when2, this.scope);
-    let part = this.gates.get(node);
-    if (part === void 0) {
-      part = this.derive(
-        "when",
-        this.readsInstant(when2),
-        () => outsideSegments(
-          this.source.activeSegment,
-          () => gateOf2(when2, this.scope)
-        )
-      );
-      this.gates.set(node, part);
-    }
-    return part.read();
-  }
-  placement(node) {
-    let parts = this.placements.get(node);
-    if (parts === void 0) {
-      parts = new Placement(this, node);
-      this.placements.set(node, parts);
-    }
-    return parts;
-  }
-  rule(template) {
-    let part = this.rules.get(template);
-    if (part === void 0) {
-      part = this.derive(
-        "rule",
-        this.readsInstant(template),
-        () => {
-          this.phase.ruling = true;
-          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
-          try {
-            return {
-              kind: "named",
-              name: template.evaluate(this.scope).map((f) => f.plain).join("")
-            };
-          } catch (e) {
-            const pending2 = readPending(e);
-            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-              kind: "failed",
-              error: e instanceof Error ? e.message : String(e)
-            };
-          } finally {
-            bound?.[Symbol.dispose]();
-            this.phase.ruling = false;
-          }
-        }
-      );
-      this.rules.set(template, part);
-    }
-    return part.read();
-  }
-  readsInstant(...templates) {
-    return templates.some(
-      (template) => template !== void 0 && this.source.instant.has(template)
-    );
-  }
-  // [LAW:single-enforcer] Every part derives here: kept by the store, or
-  // derived at every read when it reads the instant, and counted.
-  // A part that reads the instant is derived once per draw however often the
-  // draw reads it — a body reads its colours, its lead and trail read both —
-  // since one draw is one instant over one store.
-  derive(name, readsInstant, deriver) {
-    const counted2 = () => {
-      this.evaluated++;
-      return deriver();
-    };
-    return this.store.derive(
-      `part ${name}`,
-      readsInstant ? "projection" : "computed",
-      readsInstant ? this.oncePerDraw(counted2) : counted2
-    );
-  }
-  oncePerDraw(deriver) {
-    let memo = null;
-    return () => {
-      if (memo?.draw !== this.draws) {
-        memo = { draw: this.draws, answer: answerOf2(deriver) };
-      }
-      return unwrap2(memo.answer);
-    };
-  }
-  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
-  // the rows a layout lays out are drawn by: a node's `when`, then a
-  // segment's own — and a segment either `when` of which throws is SHOWN,
-  // because the walk draws an error cell exactly there, where a container
-  // whose `when` throws draws nothing. A `when` not answered yet is shown,
-  // and under it a segment as its own `when` says, as the walk asks it. Edit
-  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
-  // part of it, while a name label stands in for its segment
-  // (`arrangedSegment`).
-  shown(node) {
-    const gate2 = this.gate(node);
-    if (node.kind === "container")
-      return gate2.kind === "shown" || gate2.kind === "pending";
-    if (arrangedSegment(node.name) === void 0) return false;
-    if (gate2.kind === "hidden") return false;
-    if (gate2.kind === "failed") return true;
-    return this.placement(node).gate().kind !== "hidden";
-  }
-};
-function bindView(source, store, registry, view) {
-  const parts = source.views.get(store);
-  if (parts !== void 0) {
-    parts.bind(view);
-    return parts;
-  }
-  const made = new ViewParts(store, registry, source, view);
-  source.views.set(store, made);
-  return made;
-}
-function partsOf(source, store) {
-  const parts = source.views.get(store);
-  if (parts === void 0) {
-    throw new Error(
-      "a store was drawn before its view was bound (bindView): its inputs have no source"
-    );
-  }
-  return parts;
-}
-var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
-var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
-function compiledRule(source, slot, rule) {
-  const compiled = source.globalExpressions.get(slot)?.get(rule);
-  if (compiled === void 0) {
-    throw new Error(
-      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
-    );
-  }
-  return compiled;
-}
-function decideSlot(source, slot, name, where, warn) {
-  switch (slot) {
-    case "palette":
-      return decideThemeName(name, where, warn).name;
-    case "style":
-      return decideStyleName(name, source.styles).name;
-    case "effect":
-      return decideEffectName(name).name;
-  }
-}
-var Placement = class {
-  // What the walk hands each part: where it draws the placement, then what
-  // the colours and the body evaluated to.
-  where = inlet(
-    sameBy({ palette: is, region: sameRegion })
-  );
-  ground = inlet(
-    sameBy({
-      colours: sameDealt,
-      bodyOpen: is
-    })
-  );
-  opened = inlet(
-    sameBy({
-      colours: sameDealt,
-      open: is
-    })
-  );
-  ownGate;
-  open;
-  colours;
-  body;
-  affixes;
-  constructor(view, node) {
-    const seg2 = view.source.segments[node.name];
-    const ref = view.source.activeSegment;
-    const scope = placementScope(view.scope, node.settings);
-    const { when: when2, bg, fg, template } = seg2;
-    const { lead, trail } = node;
-    const opens = node.opens?.open;
-    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
-      `${node.id} when`,
-      view.readsInstant(when2),
-      () => outsideSegments(ref, () => gateOf2(when2, scope))
-    );
-    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
-      `${node.id} body gate`,
-      view.readsInstant(opens),
-      () => outsideSegments(ref, () => gateOf2(opens, view.scope))
-    );
-    this.colours = view.derive(
-      `${node.id} colours`,
-      view.readsInstant(bg, fg),
-      () => {
-        const { palette, region } = this.where.get();
-        return coloursOf(
-          ref,
-          node,
-          palette,
-          region,
-          view.registry.drawnAt(),
-          bg,
-          fg,
-          scope
-        );
-      }
-    );
-    this.body = view.derive(
-      `${node.id} body`,
-      view.readsInstant(template),
-      () => {
-        const { colours, bodyOpen } = this.ground.get();
-        return bodyOf(ref, node, colours, template, bodyOpen, scope);
-      }
-    );
-    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
-      `${node.id} affixes`,
-      view.readsInstant(lead, trail),
-      () => {
-        const { colours, open: open2 } = this.opened.get();
-        return affixesOf(ref, node, colours, open2, lead, trail, scope);
-      }
-    );
-  }
-  gate() {
-    return this.ownGate.read();
-  }
-  bodyGate() {
-    return this.open.read();
-  }
-  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
-  // what the one before it evaluated to: the colours, then the body over its
-  // ground, then the lead and trail over what the body opened.
-  evaluate(palette, region) {
-    this.where.set({ palette, region });
-    const colours = this.colours.read();
-    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
-    const body = this.body.read();
-    this.opened.set({ colours, open: body.open });
-    return evaluated(colours, body, this.affixes.read());
-  }
-};
-function inlet(same) {
-  const box = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && same(a, b)
-  });
-  return {
-    set: (value) => runInAction(() => box.set(value)),
-    // [LAW:no-defensive-null-guards] Filled before it is read (above).
-    get: () => box.get()
-  };
-}
-var sameHex = (a, b) => a.hex === b.hex;
-var sameDealt = sameBy({
-  palette: is,
-  drawnAt: is,
-  tint: sameHex,
-  text: sameHex,
-  bg: sameHex,
-  disclosure: sameDisclosure
-});
-function placeOf(node, colours) {
-  return {
-    segName: node.name,
-    placementId: node.id,
-    palette: colours.palette,
-    disclosure: colours.disclosure,
-    tint: colours.tint,
-    text: colours.text
-  };
-}
-var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
-function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
-  const dealt = {
-    palette,
-    drawnAt,
-    ...decorationFor(palette, region, drawnAt)
-  };
-  return inSegment(ref, placeOf(node, dealt), (active2) => {
-    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
-    return { ...dealt, bg: active2.bg, style };
-  });
-}
-function bodyOf(ref, node, colours, template, bodyOpen, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
-    const fragments = template.evaluate(scope);
-    return {
-      fragments,
-      drops: active2.drops,
-      open: active2.drops.length > 0 || bodyOpen
-    };
-  });
-}
-function affixesOf(ref, node, colours, open2, lead, trail, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = open2 ? bandOf(colours).state : colours.bg;
-    return {
-      lead: lead?.evaluate(scope) ?? [],
-      trail: trail?.evaluate(scope) ?? [],
-      drops: active2.drops
-    };
-  });
-}
-var NO_AFFIXES = { lead: [], trail: [], drops: [] };
-function stylesOf(colours) {
-  const { palette, drawnAt, disclosure } = colours;
-  return {
-    closed: colours.style,
-    get trigger() {
-      return stateCell(palette, bandOf(colours).state, drawnAt);
-    },
-    get band() {
-      return stateCell(palette, bandOf(colours).plane, drawnAt);
-    },
-    get close() {
-      return closeCell(palette, bandOf(colours).state, drawnAt);
-    },
-    disclosure
-  };
-}
-function evaluated(colours, body, affixes) {
-  return {
-    styles: stylesOf(colours),
-    fragments: body.fragments,
-    lead: affixes.lead,
-    trail: affixes.trail,
-    drops: [...body.drops, ...affixes.drops],
-    open: body.open
-  };
-}
-function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
-  const colours = coloursOf(
-    ref,
-    node,
-    palette,
-    region,
-    drawnAt,
-    void 0,
-    void 0,
-    scope
-  );
-  return evaluated(
-    colours,
-    bodyOf(ref, node, colours, body, false, scope),
-    NO_AFFIXES
-  );
-}
-function decoratedStyles(ref, node, palette, region, drawnAt) {
-  return stylesOf(
-    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
-  );
-}
-
-// src/dsl/view-source.ts
-init_globals();
-
-// src/dsl/render.ts
-function toCachePolicy(cache2) {
-  if ("ttl" in cache2)
-    return { kind: "ttl", durationMs: parseDuration(cache2.ttl) };
-  if ("watch_file" in cache2)
-    return { kind: "watch_file", path: cache2.watch_file };
-  if ("depends_on" in cache2)
-    return { kind: "depends_on", varNames: cache2.depends_on };
-  if ("key" in cache2) return { kind: "key", template: cache2.key };
-  if ("never" in cache2) return { kind: "never" };
-  throw new Error(
-    `Unknown CacheDecl discriminator \u2014 loader invariant violated: ${JSON.stringify(cache2)}`
-  );
-}
-function toSourceParse(parse3, dflt) {
-  switch (parseArm(parse3)) {
-    case "json":
-      return { kind: "json", default: dflt };
-    case "regex":
-      return {
-        kind: "regex",
-        regex: new RegExp(parse3.regex),
-        default: dflt
-      };
-    case "text":
-      return { kind: "text", default: dflt };
-  }
-}
-function declareOne(registry, name, decl, cwd2, derivation) {
-  switch (decl.kind) {
-    case "literal":
-      registry.declareLiteral(name, decl.value);
-      break;
-    case "dropped":
-      registry.declareFailedDocument(name, decl.reason);
-      break;
-    // [LAW:single-enforcer] A plugin source's reading is read by the managed
-    // storage owner and carried by the view's payload at the source's name
-    // (src/daemon/render-payload.ts); the view derives the document from it.
-    case "source":
-      registry.declareSourceDocument(name);
-      break;
-    case "input":
-      registry.declareInput(
-        name,
-        decl.path,
-        decl.type ?? "string",
-        decl.default,
-        derivation
-      );
-      break;
-    case "env":
-      registry.declareEnv(name, decl.name, decl.default);
-      break;
-    case "file":
-      registry.declareFile(name, decl.path, {
-        readMode: decl.readMode,
-        cache: toCachePolicy(decl.cache),
-        parse: toSourceParse(decl.parse, decl.default)
-      });
-      break;
-    case "shell":
-      registry.declareShell(name, decl.command, {
-        cwd: cwd2,
-        cache: toCachePolicy(decl.cache),
-        parse: toSourceParse(decl.parse, decl.default)
-      });
-      break;
-    case "template":
-      registry.declareTemplate(name, decl.template, {
-        type: decl.type ?? "string",
-        varDefault: decl.default,
-        derivation
-      });
-      break;
-    case "time":
-      registry.declareTime(name, {
-        format: decl.layout,
-        varDefault: decl.default
-      });
-      break;
-    case "state":
-      registry.declareState(name, {
-        key: decl.key,
-        ...decl.default !== void 0 && { varDefault: decl.default }
-      });
-      break;
-  }
-}
-function compileHelpers(engine, helpers) {
-  let defines = Defines.EMPTY;
-  for (const [name, body] of Object.entries(helpers)) {
-    try {
-      defines = engine.parse(`{{ define "${name}" }}${body}{{ end }}`, defines).defines();
-    } catch (e) {
-      throw new Error(
-        `Template parse error in helpers.${name}: ${e.message}`,
-        { cause: e }
-      );
-    }
-  }
-  return defines;
-}
-var compileAlone = (signer) => (_key, input) => compileDslConfig(input, signer);
-function registerCompiled(config2, registry, cwd2, compile, scopes = EVERY_SCOPE) {
-  const input = compileInputOf(config2);
-  const key = compileKey(input);
-  return {
-    compiled: compile(key, input),
-    compileKey: key,
-    loadWarnings: declareDslVariables(config2, registry, cwd2, scopes)
-  };
-}
-function compileInputOf(config2) {
-  const { variables, ...rest2 } = config2;
-  const stateKeyToVar = /* @__PURE__ */ new Map();
-  for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
-    if (name in variables) stateKeyToVar.set(key, name);
-  }
-  for (const [name, decl] of stateVarDecls(config2)) {
-    if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
-  }
-  return {
-    config: rest2,
-    stateReads: [...stateKeyToVar].sort(([a], [b]) => a < b ? -1 : 1),
-    projections: [...projectionsOf(config2)].sort(
-      ([a], [b]) => a < b ? -1 : 1
-    )
-  };
-}
-function compileKey(input) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
-}
-function declareDslVariables(config2, registry, cwd2, scopes) {
-  const scopeOf2 = variableScopes(config2);
-  const projections = projectionsOf(config2);
-  const loadWarnings = [];
-  for (const [name, decl] of declaredVariables(config2)) {
-    if (!scopes.has(scopeOf2.get(name))) continue;
-    try {
-      declareOne(
-        registry,
-        name,
-        decl,
-        cwd2,
-        projections.has(name) ? "projection" : "computed"
-      );
-    } catch (err) {
-      loadWarnings.push(
-        `Variable "${name}": ${err.message ?? String(err)}`
-      );
-    }
-  }
-  return loadWarnings;
-}
-var EVERY_SCOPE = /* @__PURE__ */ new Set([
-  "directory",
-  "view"
-]);
-function compileDslConfig({ config: config2, stateReads, projections }, signer) {
-  const actionRuntime = {
-    bound: void 0,
-    compiled: /* @__PURE__ */ new Map(),
-    signer
-  };
-  const drawnAt = () => renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
-  const activeSegment = createActiveSegmentRef(drawnAt);
-  const menuRuntime = {
-    action: actionRuntime,
-    activeSegment
-  };
-  const styleNames = Object.keys(config2.styles);
-  const presetOptions = presetNames(config2.presets);
-  const perConfigDomains = configOptionDomains(config2);
-  const renderClocks = [
-    (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now)
-  ];
-  const engine = createCcCandybarEngine({
-    extraFuncs: {
-      ...actionFuncs(actionRuntime),
-      ...swatchFuncs(actionRuntime),
-      ...pickerFuncs(actionRuntime, activeSegment),
-      ...carouselFuncs(actionRuntime),
-      ...themePreviewFuncs(actionRuntime, activeSegment),
-      ...layoutPreviewFuncs(actionRuntime, activeSegment),
-      ...menuFuncs(menuRuntime),
-      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
-      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
-      // from, published by the walk. Binding it to a palette captured HERE
-      // (registration runs once per config load, renders happen per tick) was
-      // the two-clocks bug this seam exists to close: a session theme click or
-      // a style moved a segment's background while every in-body color stayed
-      // where it was, so one segment painted from two palettes at once. Reading
-      // live costs nothing structurally — FuncMap bodies run at evaluate time,
-      // so parse-once/evaluate-many is untouched.
-      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
-      ...segmentColorFuncs(activeSegment),
-      // [LAW:one-type-per-behavior] The per-config sibling of the static
-      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
-      // projection of the "styles" option domain. Injected here — not in the
-      // static FuncMap — because the domain is this config's styles block.
-      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
-      // The presets domain's twin of the binding above — same per-config
-      // reason, same shape. A hand-authored `range presets` and a
-      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
-      // derived click gate admits.
-      presets: {
-        fn: () => presetOptions,
-        argTypes: [],
-        arity: { kind: "exact" }
-      }
-    },
-    clockFuncs: renderClocks,
-    drawnAt
-  });
-  const helpers = compileHelpers(engine, config2.helpers);
-  const sources = /* @__PURE__ */ new Map();
-  const parse3 = (src) => {
-    const parsed2 = engine.parse(src, helpers);
-    sources.set(parsed2, src);
-    return parsed2;
-  };
-  const nodeTemplates = /* @__PURE__ */ new Map();
-  const parseShared = (src) => {
-    const known = nodeTemplates.get(src);
-    if (known !== void 0) return known;
-    const parsed2 = parse3(src);
-    nodeTemplates.set(src, parsed2);
-    return parsed2;
-  };
-  const stateKeyToVar = new Map(stateReads);
-  actionRuntime.compiled = compileActions(
-    parse3,
-    config2.actions,
-    stateKeyToVar,
-    perConfigDomains
-  );
-  const compiled = /* @__PURE__ */ Object.create(
-    null
-  );
-  for (const [segName, seg2] of Object.entries(config2.segments)) {
-    const parseField = (src, field, read2 = parse3) => {
-      try {
-        return read2(src);
-      } catch (e) {
-        throw new Error(
-          `Template parse error in segments.${segName}.${field}: ${e.message}`,
-          { cause: e }
-        );
-      }
-    };
-    compiled[segName] = {
-      when: seg2.when !== void 0 ? parseField(seg2.when, "when", parseShared) : void 0,
-      template: parseField(seg2.template, "template"),
-      bg: seg2.bg !== void 0 ? parseField(seg2.bg, "bg") : void 0,
-      fg: seg2.fg !== void 0 ? parseField(seg2.fg, "fg") : void 0
-    };
-  }
-  const parseNodeField = (src, path41, field) => {
-    try {
-      return parseShared(src);
-    } catch (e) {
-      throw new Error(
-        `Template parse error in ${path41}.${field}: ${e.message}`,
-        { cause: e }
-      );
-    }
-  };
-  const resolvedSettings = (node) => {
-    const declared = settingsOf(config2.segments[node.name]);
-    const out = /* @__PURE__ */ Object.create(null);
-    for (const [name, decl] of Object.entries(declared)) {
-      Object.defineProperty(out, name, {
-        enumerable: true,
-        get: () => placementSetting(
-          node,
-          name,
-          decl,
-          (draft) => String(
-            renderBinding(actionRuntime, `setting ${name}`).store.read(
-              draft.variable
-            )
-          )
-        )
-      });
-    }
-    return Object.freeze(out);
-  };
-  const compileNode = (node, path41, at) => {
-    const cctx = {
-      path: path41,
-      at,
-      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path41, "when"),
-      parse: (src, field) => parseNodeField(src, path41, field),
-      compileChild: compileNode,
-      placementSettings: resolvedSettings
-    };
-    return nodeType(node.kind).compile(node, cctx);
-  };
-  const roots = /* @__PURE__ */ new Map();
-  for (const name of presetOptions) {
-    const { node, path: path41 } = presetRoot(config2, name);
-    roots.set(name, compileNode(node, path41, void 0));
-  }
-  const globalExpressions = new Map(
-    EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
-  );
-  for (const { at, slot, rule: authored } of authoredRules(config2)) {
-    const where = at.join(".");
-    const rules = globalExpressions.get(slot);
-    const seen = rules.get(authored);
-    rules.set(
-      authored,
-      seen === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen.where}, ${where}`, template: seen.template }
-    );
-  }
-  const basis = {
-    reads: valueReads({
-      names: new Set(projections.map(([name]) => name)),
-      helpers: config2.helpers,
-      actions: config2.actions
-    }),
-    projections: new Map(projections),
-    clock: engineClockFunctions(renderClocks)
-  };
-  const gateReadsInstant = templateInstants(basis);
-  const gates = [...roots.values()].flatMap(layoutGates(compiled));
-  const layoutReadsInstant = gates.some(
-    (gate2) => gateReadsInstant(sources.get(gate2))
-  );
-  const readsInstant = layoutReadsInstant ? templateInstants({
-    ...basis,
-    clock: /* @__PURE__ */ new Set([...basis.clock, LAYOUT_PREVIEW])
-  }) : gateReadsInstant;
-  const instant = new Set(
-    [...sources].flatMap(
-      ([template, source]) => readsInstant(source) ? [template] : []
-    )
-  );
-  return {
-    segments: compiled,
-    roots,
-    activeSegment,
-    menuRuntime,
-    globalExpressions,
-    instant,
-    layoutReadsInstant,
-    styles: config2.styles,
-    runtime: actionRuntime,
-    views: /* @__PURE__ */ new WeakMap()
-  };
-}
-function instantSegments(compiled) {
-  return Object.entries(compiled.segments).flatMap(
-    ([name, segment]) => [segment.when, segment.bg, segment.fg, segment.template].some(
-      (template) => template !== void 0 && compiled.instant.has(template)
-    ) ? [name] : []
-  );
-}
-var layoutGates = (segments) => (root) => {
-  const asked2 = [];
-  layoutRows(root, (node) => {
-    asked2.push(node);
-    return true;
-  });
-  return asked2.flatMap((node) => [
-    ...node.when === void 0 ? [] : [node.when],
-    ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
-  ]);
-};
-function parseExpressionSlot(parse3, path41, source) {
-  try {
-    return parse3(source);
-  } catch (e) {
-    throw new Error(
-      `${path41} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
-    );
-  }
-}
-var unreachable = (message) => {
-  throw new Error(`a slot settled on a name its domain refuses: ${message}`);
-};
-function evalRule(slot, rule, parts, warn, frame) {
-  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame);
-  frame.settled(slot, name);
-  return name;
-}
-function ruleName(slot, rule, outcome, warn, frame) {
-  switch (outcome.kind) {
-    case "named":
-      return outcome.name;
-    case "pending":
-      frame.waited(outcome.variable);
-      return frame.held(slot) ?? SLOT_FLOORS[slot];
-    case "failed":
-      warn({
-        kind: "rule",
-        slot,
-        message: ruleFloorMessage(
-          rule.where,
-          slot,
-          `the rule failed \u2014 ${outcome.error}`
-        )
-      });
-      return SLOT_FLOORS[slot];
-  }
-}
-function placementsUnder(node) {
-  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.id);
-}
-function segmentsUnder(node) {
-  if (node.kind === "container") return node.children.flatMap(segmentsUnder);
-  return [
-    node,
-    ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
-  ];
-}
-function drawDsl(config2, compiled, store, registry, projected, at, opts, observers, selection2) {
-  var _stack = [];
-  try {
-    const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
-    const warn = (warning) => onRenderWarning?.(warning);
-    const effects = selection2.effects ?? new SessionEffects("");
-    const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
-    const drawClock = __using(_stack, bindClock(at, clock.timeline));
-    const parts = partsOf(compiled, store);
-    const drawOpts = {
-      ...opts,
-      colorCompatibility: parts.colorCompatibility()
-    };
-    parts.draw(
-      {
-        width: drawOpts.width,
-        chromeCols: stripChromeCols(drawOpts),
-        padding: drawOpts.padding,
-        seamCols: stripSeamCols(drawOpts),
-        preset: selection2.preset
-      },
-      projected
-    );
-    const evaluatedBefore = parts.evaluated;
-    const _bound = __using(_stack, bindRender(compiled.menuRuntime.action, parts.binding));
-    const { preset, transitions } = selection2;
-    const decor = {
-      variation: VARIATIONS[selection2.variation],
-      shade: SHADES[selection2.shade]
-    };
-    const source = {
-      config: config2,
-      preset,
-      revision: registry.stateRevision(),
-      width: drawOpts.width
-    };
-    const record2 = parts.memory.begin(source, returnedBy);
-    const last2 = parts.memory.from(source);
-    const waited = /* @__PURE__ */ new Set();
-    const ruleFrame = {
-      held: (slot) => last2?.rules.get(slot),
-      waited: (variable) => waited.add(variable),
-      settled: record2.rule
-    };
-    const rules = /* @__PURE__ */ new Map();
-    const slotted = (slot) => {
-      const state = parts.slot(slot);
-      rules.set(slot, state.kind === "settled" ? "kept" : "per-draw");
-      if (state.kind === "settled") {
-        if (state.warning !== null)
-          warn({ kind: "rule", slot, message: state.warning });
-        if (state.waited !== null) waited.add(state.waited);
-        return state.name;
-      }
-      const name = decideSlot(
-        compiled,
-        slot,
-        evalRule(slot, state.rule, parts, warn, ruleFrame),
-        state.rule.where,
-        (message) => warn({ kind: "rule", slot, message })
-      );
-      parts.drawnSlot(slot, name);
-      return name;
-    };
-    const {
-      theme: decidedTheme,
-      style: decidedStyle,
-      effect: decidedEffect
-    } = parts.selections();
-    const theme24 = decidedTheme.kind === "decided" ? decidedTheme : decideThemeName(slotted("palette"), "", unreachable);
-    const style = decidedStyle.kind === "decided" ? decidedStyle : decideStyleName(slotted("style"), config2.styles);
-    const effect = decidedEffect.kind === "decided" ? decidedEffect : decideEffectName(slotted("effect"));
-    const basePalette = theme24.value;
-    const palette = transposedPalette(basePalette, style.value);
-    parts.publishLook({ basePalette, palette, decor });
-    const flashFill = paletteRole(palette, "warning");
-    const flash = selection2.idleSince === void 0 ? null : {
-      idleSince: selection2.idleSince,
-      timeoutS: selection2.menuTimeout,
-      fill: flashFill,
-      text: textOn(palette, flashFill, registry.drawnAt())
-    };
-    const motion = effects.motion(
-      effect.value,
-      clock,
-      {
-        transitions,
-        source,
-        last: last2,
-        returned: returnedBy,
-        hold: heldLine
-      },
-      flash
-    );
-    perSegmentSink?.clear();
-    const lookupSegment = (name) => config2.segments[name];
-    const renderNode = (node, parent, region) => {
-      const evaluated2 = parent.kind === "hidden" ? parent : within2(parent, parts.gate(node));
-      const gate2 = evaluated2.kind === "failed" ? {
-        ...evaluated2,
-        report: () => {
-          const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
-          warn({
-            kind: "when",
-            where,
-            error: evaluated2.message,
-            message: `${where}: ${evaluated2.message} \u2014 what it gates is hidden`
-          });
-        }
-      } : evaluated2;
-      const ctx = {
-        scope: parts.scope,
-        palette,
-        gate: gate2,
-        padding: drawOpts.padding,
-        region,
-        perSegmentSink,
-        onSegmentError,
-        placement: (node2) => parts.placement(node2),
-        evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
-          compiled.activeSegment,
-          node2,
-          palette2,
-          region,
-          registry.drawnAt(),
-          body,
-          scope
-        ),
-        lookupSegment,
-        renderChild: (child, held, step4) => renderNode(child, held, descend(region, step4)),
-        // A disclosure body starts a NEW region: the root of the band its
-        // trigger opens. Depth is a fact of that band — counted up by
-        // `decorationFor` each time a band item opens the next — so a nested
-        // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
-        renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
-        // [LAW:one-source-of-truth] The row ✕ reads the session id from the
-        // same store every other affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(store, key),
-        placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
-        lastDrawn: (id2) => last2?.placements.get(id2),
-        waited: (variable) => waited.add(variable),
-        decorations: (node2, palette2) => decoratedStyles(
-          compiled.activeSegment,
-          node2,
-          palette2,
-          region,
-          registry.drawnAt()
-        )
-      };
-      return nodeType(node.kind).render(node, ctx);
-    };
-    const root = compiled.roots.get(preset);
-    if (root === void 0) {
-      throw new Error(
-        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
-      );
-    }
-    const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row: row2 }) => {
-      const items = resolveFill(line.cells, drawOpts);
-      const kind = line.band === "deeper" ? "menu" : "bar";
-      return {
-        kind,
-        ...drawStripCells(
-          items.map((item) => item.owner),
-          drawOpts,
-          motion.row(row2, kind, items)
-        )
-      };
-    });
-    motion.drawn();
-    record2.commit();
-    const menuRows = rendered.filter((row2) => row2.kind === "menu").length;
-    const armed = () => menuRows > 0 || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
-      ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
-    );
-    const nextChange = Math.min(
-      drawClock.heard(),
-      ...rendered.map((row2) => row2.nextChange)
-    );
-    const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
-    for (const [variable, fault2] of registry.cachePolicyFaults())
-      warn({
-        kind: "refresh",
-        variable,
-        error: fault2.message,
-        message: `variable "${variable}" cannot refresh: ${fault2.message}`
-      });
-    return {
-      text: rendered.map((row2) => row2.text).join("\n"),
-      nextChange,
-      motion: frameMotion,
-      menuRows,
-      evaluated: parts.evaluated - evaluatedBefore,
-      pending: [...waited].sort(),
-      rules
-    };
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
 
 // src/config/unused.ts
 init_globals();
@@ -78400,7 +80121,7 @@ function pluginLoadLine(layers, {
   );
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
-  return `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
+  return `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
 }
 var heardField = (heard) => {
   switch (heard.kind) {
@@ -78427,7 +80148,7 @@ var causeField = (cause) => {
 };
 function configLoadedLine(entry, cause, settled3) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -78566,6 +80287,7 @@ function buildRenderState(load, deps) {
   const warnings = [];
   const store = new VariableStore();
   const registry = new SourceRegistry(
+    deps.launcher,
     store,
     config2.globals.default_empty_value ?? "",
     deps.sessionState,
@@ -78710,12 +80432,12 @@ function fallbackState(cwd2, repo2, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { sessionState: sessionState2, declare, source: sourceOf, changed, log }) {
+function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf, changed, log }) {
   const { sessionId: sessionId2 } = facts;
   const registry = state.registry.view();
   const holds2 = new Holds();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
-  const presetNow = () => presetOf(state.config, (key) => sessionState2.get(sessionId2, key));
+  const presetNow = () => presetOf(state.config, (key) => sessionState.get(sessionId2, key));
   const lanesFor = (facts2, preset) => {
     try {
       const reads = state.neededInputPaths(preset);
@@ -78724,10 +80446,10 @@ function openView(state, cwd2, facts, { sessionState: sessionState2, declare, so
         acquired,
         released
       } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
-      for (const fault2 of faults) {
+      for (const fault of faults) {
         log(
           "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault2}`
+          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
         );
       }
       if (acquired + released > 0) {
@@ -79422,10 +81144,6 @@ var RenderCache = class {
   }
 };
 
-// src/daemon/session-state-file.ts
-init_globals();
-var import_node_path40 = __toESM(require_path_browserify(), 1);
-
 // src/daemon/navigation-history.ts
 init_globals();
 var MAX_STEPS2 = 20;
@@ -79470,7 +81188,7 @@ var NavigationHistory = class {
   // where undo reaches it.
   begin(store) {
     const pending2 = /* @__PURE__ */ new Map();
-    const sessionState2 = recordingView(
+    const sessionState = recordingView(
       store,
       isNavigationKey,
       (sessionId2, key, before, after) => {
@@ -79481,7 +81199,7 @@ var NavigationHistory = class {
       }
     );
     return {
-      sessionState: sessionState2,
+      sessionState,
       commit: () => {
         for (const [sessionId2, changes] of pending2) {
           const step4 = [...changes.values()].filter(
@@ -79536,252 +81254,6 @@ var NavigationHistory = class {
   }
 };
 
-// src/utils/schema-validator.ts
-init_globals();
-var KNOWN_TOP_LEVEL = /* @__PURE__ */ new Set([
-  "hook_event_name",
-  // cc-candybar internal
-  "session_id",
-  "session_name",
-  "transcript_path",
-  "cwd",
-  "model",
-  "workspace",
-  "version",
-  "output_style",
-  "cost",
-  "context_window",
-  "exceeds_200k_tokens",
-  "effort",
-  "thinking",
-  "rate_limits",
-  "vim",
-  "agent",
-  "worktree"
-]);
-var REQUIRED_FIELDS = [
-  ["session_id", "string"],
-  ["transcript_path", "string"],
-  ["cwd", "string"],
-  ["model", "object"],
-  ["model.id", "string"],
-  ["model.display_name", "string"],
-  ["workspace", "object"],
-  ["workspace.current_dir", "string"],
-  ["workspace.project_dir", "string"]
-];
-var OPTIONAL_FIELDS = [
-  ["workspace.added_dirs", "string-list"]
-];
-function validateHookData(raw) {
-  const report2 = {
-    missingRequired: [],
-    typeMismatches: [],
-    unknownTopLevelFields: []
-  };
-  const obj = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  for (const [path41, expectedType] of REQUIRED_FIELDS) {
-    const value = resolvePath2(obj, path41);
-    if (value === void 0 || value === null) {
-      report2.missingRequired.push(path41);
-    } else {
-      const got = kindOf(value);
-      if (got !== expectedType) {
-        report2.typeMismatches.push({ path: path41, expected: expectedType, got });
-      }
-    }
-  }
-  for (const [path41, expectedType] of OPTIONAL_FIELDS) {
-    const value = resolvePath2(obj, path41);
-    const got = value === void 0 ? expectedType : listKind(value);
-    if (got !== expectedType) {
-      report2.typeMismatches.push({ path: path41, expected: expectedType, got });
-    }
-  }
-  for (const key of Object.keys(obj)) {
-    if (!KNOWN_TOP_LEVEL.has(key)) {
-      report2.unknownTopLevelFields.push(key);
-    }
-  }
-  return { data: raw, report: report2 };
-}
-function kindOf(value) {
-  if (Array.isArray(value)) return "array";
-  if (typeof value === "string" && !value.isWellFormed())
-    return "ill-formed string";
-  return typeof value;
-}
-function listKind(value) {
-  return Array.isArray(value) && value.every((v) => kindOf(v) === "string") ? "string-list" : kindOf(value);
-}
-function resolvePath2(obj, dotPath) {
-  let cur = obj;
-  for (const key of dotPath.split(".")) {
-    if (cur === null || cur === void 0 || typeof cur !== "object" || Array.isArray(cur)) {
-      return void 0;
-    }
-    cur = cur[key];
-  }
-  return cur;
-}
-
-// src/daemon/debug.ts
-init_globals();
-function buildDebugSnapshot(what, state) {
-  switch (what) {
-    case "vars":
-      return { what, vars: introspectVars(state) };
-    case "segments":
-      return { what, segments: introspectSegments(state) };
-    case "config":
-      return { what, config: introspectConfig(state) };
-  }
-}
-function introspectVars(state) {
-  if (state === null) return [];
-  const { store, registry, config: config2 } = state;
-  const sourceByName = buildSourceKindIndex(config2);
-  const names = store.names().sort();
-  const out = [];
-  for (const name of names) {
-    const node = store.getNode(name);
-    const value = valueOf2(node);
-    const err = registry.getLastError(name);
-    out.push({
-      name,
-      source: sourceByName.get(name) ?? null,
-      ...value,
-      lastError: err !== void 0 ? { timestampMs: err.timestamp, message: err.message } : null,
-      ageMs: ageFromNode(node.lastUpdatedMs())
-    });
-  }
-  return out;
-}
-function valueOf2(node) {
-  if (node.kind === "projection") {
-    return { type: node.type, value: "(read at each frame's instant)" };
-  }
-  if (node.kind !== "document") {
-    try {
-      return { type: node.type, value: node.read() };
-    } catch (e) {
-      return {
-        type: node.type,
-        value: e instanceof Error ? e.message : String(e)
-      };
-    }
-  }
-  const doc = node.read();
-  switch (doc.kind) {
-    case "ok":
-      return { type: "document", value: JSON.stringify(doc.value) };
-    case "pending":
-      return { type: "document", value: "(not yet scanned)" };
-    case "absent":
-      return { type: "document", value: "(nothing to read, and no default)" };
-    case "failed":
-      return { type: "document", value: doc.reason };
-  }
-}
-function ageFromNode(lastUpdatedMs) {
-  if (lastUpdatedMs === null) return null;
-  return Math.max(0, Date.now() - lastUpdatedMs);
-}
-function buildSourceKindIndex(config2) {
-  const index = /* @__PURE__ */ new Map();
-  for (const [name, decl] of Object.entries(config2.variables)) {
-    index.set(name, sourceKindOf(decl));
-  }
-  for (const [segName, seg2] of Object.entries(config2.segments)) {
-    if (!seg2.vars) continue;
-    for (const [varName, decl] of Object.entries(seg2.vars)) {
-      index.set(`${segName}.${varName}`, sourceKindOf(decl));
-    }
-  }
-  return index;
-}
-function sourceKindOf(decl) {
-  return decl.kind;
-}
-function introspectSegments(state) {
-  if (state === null) return [];
-  const { store, config: config2, lastRenderBySegment } = state;
-  const declaredNames = new Set(store.names());
-  const segNames = orderedSegmentNames(config2);
-  const placed = placementsBySegment(config2);
-  const out = [];
-  for (const name of segNames) {
-    const seg2 = config2.segments[name];
-    if (!seg2) continue;
-    out.push({
-      name,
-      description: seg2.description ?? null,
-      template: seg2.template,
-      referencedVars: extractReferencedVars(
-        seg2.template,
-        config2.helpers,
-        declaredNames
-      ),
-      // The render sink is keyed by placement id, so each placement reads
-      // its own.
-      placements: (placed.get(name) ?? []).map((id2) => ({
-        id: id2,
-        lastRender: lastRenderBySegment.get(id2) ?? null
-      }))
-    });
-  }
-  return out;
-}
-function placementsBySegment(config2) {
-  const out = /* @__PURE__ */ new Map();
-  for (const preset of presetNames(config2.presets)) {
-    for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.kind !== "segment") continue;
-      const ids = out.get(node.name) ?? [];
-      const id2 = placementId(node);
-      if (!ids.includes(id2)) out.set(node.name, [...ids, id2]);
-    }
-  }
-  return out;
-}
-function orderedSegmentNames(config2) {
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const node of walkNodes(rootNode(config2.root))) {
-    if (node.kind !== "segment") continue;
-    if (config2.segments[node.name] && !seen.has(node.name)) {
-      out.push(node.name);
-      seen.add(node.name);
-    }
-  }
-  for (const name of Object.keys(config2.segments)) {
-    if (!seen.has(name)) {
-      out.push(name);
-      seen.add(name);
-    }
-  }
-  return out;
-}
-function extractReferencedVars(template, helpers, declared) {
-  const found = new Set(
-    [...templateReads(template, helpers).keys()].flatMap(
-      (path41) => variableRead(path41, declared)
-    )
-  );
-  return Array.from(found).sort();
-}
-function introspectConfig(state) {
-  if (state === null) return null;
-  return state.config;
-}
-
-// src/daemon/debug-types.ts
-init_globals();
-var DEBUG_WHATS = ["vars", "segments", "config"];
-function isDebugWhat(v) {
-  return typeof v === "string" && DEBUG_WHATS.includes(v);
-}
-
 // src/daemon/session-source.ts
 init_globals();
 function sessionSource(deps) {
@@ -79825,415 +81297,6 @@ function sessionSource(deps) {
     };
   };
 }
-
-// src/daemon/frame-feed.ts
-init_globals();
-var FEED_PERIODS = {
-  moving: 1e3 / MOVING_FPS,
-  still: 1e3
-};
-var RATE_WINDOW_S = 1;
-var TIMER_RESOLUTION_S = 2e-3;
-var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
-function feedsFact(feeds) {
-  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
-    const { subscribers, fps, shown } = feeds[lane];
-    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
-  }).join(",") || "-";
-}
-function noteSent(rate, at) {
-  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
-  rate.splice(0, rate.length, ...kept, at);
-}
-var sentOf = (resp) => ({
-  resp,
-  bytes: JSON.stringify(resp)
-});
-var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.bar : answers.statusline;
-var paceOf = (period) => Math.round(1e3 / period);
-var SUMMARY_EVERY_MS = 6e4;
-var MAX_REQUESTS = 256;
-var FrameFeeds = class {
-  constructor(deps) {
-    this.deps = deps;
-  }
-  deps;
-  requests = /* @__PURE__ */ new Map();
-  feeds = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] The stop of what runs while any feed
-  // exists: held exactly from the first feed opening to the last closing.
-  stopWatching = null;
-  drawn = 0;
-  pushed = 0;
-  refused = 0;
-  lookups = 0;
-  found = 0;
-  // A valid render request the daemon received `order`-th. The latest request
-  // a session sent is where the feeds find the session: whether its pane is
-  // shown, and which sessions a wake or a lookup matches. Its frames draw by
-  // the request its view is declared with. One that arrived before it — a
-  // slow render finishing late — is not the session's latest.
-  note(sessionId2, req, order2) {
-    const held = this.requests.get(sessionId2);
-    if (held !== void 0 && held.order > order2) return;
-    this.requests.delete(sessionId2);
-    this.requests.set(sessionId2, { req, order: order2 });
-    for (const oldest of this.requests.keys()) {
-      if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.feeds.has(oldest)) this.requests.delete(oldest);
-    }
-    const feed = this.feeds.get(sessionId2);
-    if (feed === void 0) return;
-    feed.noted++;
-  }
-  // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
-  // lane the session's settings switch off is refused here before any feed
-  // opens, and one whose lane is switched off while it streams is ended in
-  // `push`. A session with no view yet waits, and its first frame decides.
-  subscribe(sessionId2, sub2) {
-    const lanes = this.deps.lanes(sessionId2);
-    if (lanes !== null && !lanes[sub2.lane]) {
-      this.refuse(sessionId2, sub2);
-      return () => {
-      };
-    }
-    const held = this.feeds.get(sessionId2);
-    const feed = held ?? this.open(sessionId2);
-    feed.followers.set(sub2, null);
-    if (!feed.rates.has(sub2.lane)) feed.rates.set(sub2.lane, []);
-    if (held !== void 0) this.send(feed, sub2);
-    this.hasten(feed);
-    this.deps.log(
-      "info",
-      `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed.followers.size} view=${lanes === null ? "N" : "Y"}`
-    );
-    return () => this.unsubscribe(feed, sub2);
-  }
-  // The lanes whose subscribers follow the session's frames and draw them now.
-  following(sessionId2) {
-    return new Set(
-      [...this.feeds.get(sessionId2)?.followers.keys() ?? []].filter((s) => s.drawing()).map((s) => s.lane)
-    );
-  }
-  // Something the session's bar shows changed, for `cause`: its next frame,
-  // if anyone is watching it, is drawn as soon as the feed's spacing allows.
-  wake(sessionId2, cause) {
-    const feed = this.feeds.get(sessionId2);
-    if (feed === void 0) return;
-    feed.woke[cause]++;
-    if (!this.hasten(feed)) feed.coalesced++;
-  }
-  // Wake, for `cause`, every watched session whose latest request `match`
-  // accepts.
-  wakeWhere(cause, match) {
-    for (const { sessionId: sessionId2, req } of this.watched())
-      if (match(req)) this.wake(sessionId2, cause);
-  }
-  // The session of the newest request `match` accepts, among the latest
-  // request of each session the daemon holds, or null when none does.
-  newestWhere(match) {
-    let newest = null;
-    for (const [sessionId2, { req, order: order2 }] of this.requests)
-      if (match(req) && (newest === null || order2 > newest.order))
-        newest = { sessionId: sessionId2, order: order2 };
-    this.lookups++;
-    if (newest !== null) this.found++;
-    return newest?.sessionId ?? null;
-  }
-  // The latest request the daemon holds of `sessionId`, or null when it
-  // holds none.
-  latest(sessionId2) {
-    return this.requests.get(sessionId2)?.req ?? null;
-  }
-  // The latest request of every session someone is watching, by session.
-  watched() {
-    return [...this.feeds.keys()].flatMap((sessionId2) => {
-      const noted = this.requests.get(sessionId2);
-      return noted === void 0 ? [] : [{ sessionId: sessionId2, req: noted.req }];
-    });
-  }
-  // [LAW:nothing-unseen] What each lane of `sessionId`'s frames is doing now:
-  // its subscribers, the frames that went out to it in the last second, and
-  // whether the session's pane is on a screen, which decides the rate a moving
-  // bar is drawn at.
-  // [LAW:one-source-of-truth] Counted against the instant of the draw asking,
-  // never a clock of the feed's own, so a frame's count is a function of the
-  // frames before it and its own instant: like every value relative to now,
-  // it is the draw's, and it changes nothing the feed wakes on.
-  feedsOf(sessionId2, at) {
-    const feed = this.feeds.get(sessionId2);
-    if (feed === void 0) return UNFOLLOWED_FEEDS;
-    const since = at - RATE_WINDOW_S;
-    const shown = this.shown(feed);
-    return perLane((lane) => {
-      const rate = feed.rates.get(lane);
-      if (rate === void 0) return UNFOLLOWED;
-      let subscribers = 0;
-      for (const sub2 of feed.followers.keys())
-        if (sub2.lane === lane) subscribers++;
-      let fps = 0;
-      for (const sent of rate) if (sent > since && sent <= at) fps++;
-      return { subscribers, fps, shown };
-    });
-  }
-  getStats() {
-    let subscribers = 0;
-    for (const feed of this.feeds.values()) subscribers += feed.followers.size;
-    return {
-      feeds: this.feeds.size,
-      subscribers,
-      drawn: this.drawn,
-      pushed: this.pushed,
-      refused: this.refused,
-      lookups: this.lookups,
-      found: this.found
-    };
-  }
-  open(sessionId2) {
-    const now2 = this.deps.now();
-    const feed = {
-      sessionId: sessionId2,
-      followers: /* @__PURE__ */ new Map(),
-      rates: /* @__PURE__ */ new Map(),
-      unwatch: this.deps.watch(sessionId2, () => this.wake(sessionId2, "state")),
-      unpin: this.deps.pin(sessionId2),
-      phase: { kind: "waiting" },
-      // Never drawn: its first frame may be drawn now.
-      lastStart: -Infinity,
-      last: null,
-      since: now2,
-      drawn: 0,
-      noted: 0,
-      noView: 0,
-      moving: 0,
-      unseen: 0,
-      failed: 0,
-      pushed: 0,
-      drawMs: 0,
-      evaluated: 0,
-      woke: { data: 0, state: 0, reload: 0, visibility: 0 },
-      coalesced: 0,
-      summarizedAt: now2,
-      refreshesAtOpen: this.deps.refreshes()
-    };
-    this.feeds.set(sessionId2, feed);
-    this.stopWatching ??= this.deps.watching();
-    return feed;
-  }
-  unsubscribe(feed, sub2) {
-    if (!feed.followers.delete(sub2)) return;
-    if (![...feed.followers.keys()].some((s) => s.lane === sub2.lane))
-      feed.rates.delete(sub2.lane);
-    if (feed.followers.size > 0) {
-      this.hasten(feed);
-      return;
-    }
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
-    feed.unwatch();
-    feed.unpin();
-    this.feeds.delete(feed.sessionId);
-    if (this.feeds.size === 0) {
-      this.stopWatching?.();
-      this.stopWatching = null;
-    }
-    this.summarize(feed, "closed");
-  }
-  // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
-  // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
-  // is logged as the feed's fault, and the feed's next frame is set as a
-  // still frame's is. A frame step runs off a timer, so a throw it let go
-  // would be an unhandled rejection, which exits the daemon.
-  // [LAW:no-ambient-temporal-coupling] The frame is drawn for the instant its
-  // timer was set for, kept within TIMER_RESOLUTION_S of the wall clock: a
-  // frame set for a change shows it however early its timer fires, and none is
-  // ever drawn further ahead of the wall than that, so nothing carries from
-  // one frame to the next. Its moment on the monotonic clock is that instant's.
-  draw(feed, due) {
-    feed.phase = { kind: "drawing" };
-    const started2 = this.deps.now();
-    const wall = this.deps.instant();
-    const at = Math.min(
-      Math.max(due, wall),
-      wall + TIMER_RESOLUTION_S
-    );
-    const moment2 = started2 + (at - wall) * 1e3;
-    try {
-      this.step(feed, started2, moment2, at);
-    } catch (error) {
-      feed.lastStart = moment2;
-      this.deps.log(
-        "error",
-        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`
-      );
-      if (this.feeds.get(feed.sessionId) !== feed) return;
-      this.schedule(feed, null, at);
-    }
-  }
-  step(feed, started2, moment2, at) {
-    const frame = this.deps.render(
-      feed.sessionId,
-      paceOf(this.spacingOf(feed)),
-      at
-    );
-    if (frame === null) {
-      feed.noView++;
-      feed.phase = { kind: "waiting" };
-      return;
-    }
-    feed.lastStart = moment2;
-    const finished = this.deps.now();
-    this.drawn++;
-    feed.drawn++;
-    feed.drawMs += finished - started2;
-    feed.evaluated += frame.evaluated;
-    if (this.feeds.get(feed.sessionId) !== feed) return;
-    this.countFailure(feed, frame);
-    this.push(feed, frame, at);
-    if (this.feeds.get(feed.sessionId) !== feed) return;
-    if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
-      this.summarize(feed, "running");
-    this.schedule(feed, frame, at);
-  }
-  // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
-  // next changes, measured from the instant this one was drawn for — no
-  // sooner than the feed's spacing allows and no later than the still period
-  // — so a 1 s beat is drawn once a second, for the moment it turns, and a
-  // continuous effect at the moving rate. Set as an instant, so the time this
-  // frame took to draw comes off the wait and the rate holds whatever a render
-  // costs. A frame step that faulted is followed as a still frame is.
-  // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
-  // next change is Infinity, and an unseen bar's spacing is the still period.
-  schedule(feed, frame, at) {
-    const { moving, still } = this.deps.periods;
-    const until2 = ((frame?.nextChange ?? Infinity) - at) * 1e3;
-    const shownPeriod = Math.min(Math.max(until2, moving), still);
-    const shown = this.shown(feed);
-    if (shownPeriod < still && shown) feed.moving++;
-    if (shownPeriod < still && !shown) feed.unseen++;
-    const period = shown ? shownPeriod : still;
-    this.arm(feed, at + period / 1e3, this.deps.instant());
-  }
-  // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
-  // moving period while its bar is on a screen, the still period while it is
-  // not. No cause of a wake sets the rate, so an unseen feed draws at most
-  // once a still period however often it is woken.
-  spacingOf(feed) {
-    return this.shown(feed) ? this.deps.periods.moving : this.deps.periods.still;
-  }
-  // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
-  // to the earliest its spacing allows after the last frame was drawn for,
-  // never later than it already falls due. Answers whether it moved anything:
-  // a wake that did not was coalesced into a frame already due. Spaced on the
-  // monotonic clock, so a wall clock stepped back cannot stall a wake.
-  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
-  // turn and opens nothing, so a wake while it draws is the draw's own, and
-  // the frame reads what that moved: it is coalesced into that frame.
-  hasten(feed) {
-    const { phase } = feed;
-    if (phase.kind === "drawing") return false;
-    const now2 = this.deps.now();
-    const at = Math.max(now2, feed.lastStart + this.spacingOf(feed));
-    if (phase.kind === "due" && phase.at <= at) return false;
-    const wall = this.deps.instant();
-    this.arm(feed, wall + (at - now2) / 1e3, wall);
-    return true;
-  }
-  // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
-  // the wall instant `due`, in a later turn than the caller's however soon
-  // that is. Its wait is measured from `wall`, the caller's own reading, so
-  // the instant a caller set is never rebuilt from a second, truncated one;
-  // its monotonic due time is what a wake compares against.
-  arm(feed, due, wall) {
-    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
-    const delay = Math.max(0, (due - wall) * 1e3);
-    feed.phase = {
-      kind: "due",
-      at: this.deps.now() + delay,
-      timer: setTimeout(() => this.draw(feed, due), delay)
-    };
-  }
-  shown(feed) {
-    const noted = this.requests.get(feed.sessionId);
-    return noted === void 0 || this.deps.shown(noted.req);
-  }
-  countFailure(feed, frame) {
-    if (frame.failure !== null) feed.failed++;
-  }
-  push(feed, frame, at) {
-    const lanes = this.deps.lanes(feed.sessionId);
-    if (lanes !== null) {
-      for (const sub2 of [...feed.followers.keys()]) {
-        if (lanes[sub2.lane]) continue;
-        this.unsubscribe(feed, sub2);
-        this.refuse(feed.sessionId, sub2);
-      }
-    }
-    if (feed.followers.size === 0) return;
-    frame.delivered();
-    const answers = {
-      bar: sentOf(frame.resp),
-      statusline: sentOf(frame.statusline)
-    };
-    if (feed.last?.answers.bar.bytes === answers.bar.bytes && feed.last.answers.statusline.bytes === answers.statusline.bytes)
-      return;
-    const before = feed.last?.answers ?? null;
-    feed.last = { answers };
-    this.pushed++;
-    feed.pushed++;
-    if (frame.failure !== null)
-      this.deps.log(frame.failure.level, frame.failure.line);
-    for (const [lane, rate] of feed.rates)
-      if (before === null || answerOf3(before, lane).bytes !== answerOf3(answers, lane).bytes)
-        noteSent(rate, at);
-    for (const sub2 of feed.followers.keys()) this.send(feed, sub2);
-  }
-  // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  send(feed, sub2) {
-    if (feed.last === null) return;
-    const { resp, bytes } = answerOf3(feed.last.answers, sub2.lane);
-    if (feed.followers.get(sub2) === bytes) return;
-    sub2.frame(resp, bytes);
-    feed.followers.set(sub2, bytes);
-  }
-  // A subscription its lane's toggle refuses, told why.
-  refuse(sessionId2, sub2) {
-    this.refused++;
-    this.deps.log(
-      "info",
-      `feed sid=${JSON.stringify(sessionId2)} refused lane=${sub2.lane} switched-off`
-    );
-    sub2.refused({
-      ok: false,
-      error: laneOffReason(sub2.lane),
-      code: "SWITCHED_OFF",
-      daemonV: PROTOCOL_VERSION
-    });
-  }
-  // [LAW:nothing-unseen] A feed's frames are not render requests, so they write
-  // no render event each: a feed says what it drew in a summary, when it
-  // closes and once a minute while it runs.
-  //
-  // `daemonRefreshed=` is every refresh the daemon made while the feed ran,
-  // whichever session's: a frame refreshes nothing, so it bounds what the
-  // feed's `drawn=` frames could have read fresh, and is never their own.
-  summarize(feed, state) {
-    const now2 = this.deps.now();
-    const refreshes = this.deps.refreshes();
-    const seconds = (now2 - feed.since) / 1e3;
-    const achieved = seconds === 0 ? "-" : `${(feed.drawn / seconds).toFixed(1)}fps`;
-    const refreshed = REFRESH_TRIGGERS.map(
-      (by) => `${by}:${refreshes[by] - feed.refreshesAtOpen[by]}`
-    ).join(",");
-    this.deps.log(
-      "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
-    );
-    feed.summarizedAt = now2;
-  }
-};
-
-// src/utils/newest-wins.ts
-init_globals();
 
 // src/daemon/pane-visibility.ts
 init_globals();
@@ -80384,6 +81447,180 @@ function sameView(a, b) {
 
 // src/daemon/tmux-status.ts
 init_globals();
+
+// src/tmux-status/frames.ts
+init_globals();
+
+// src/render/outcome-plan.ts
+init_globals();
+
+// src/render/error-glyph.ts
+init_globals();
+var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
+var PREFIX = "\u26A0 cc-candybar: ";
+var MAX_MESSAGE_LEN = 60;
+function formatPermanentGlyph(outcome) {
+  return `${OPEN}${PREFIX}${describe3(outcome)}${ANSI_RESET}
+`;
+}
+function describe3(outcome) {
+  switch (outcome.cause) {
+    case "version_mismatch": {
+      const daemon3 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
+      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon3})`;
+    }
+    case "bad_request":
+      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "render_failed":
+      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "switched_off":
+      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "malformed_response":
+      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+  }
+}
+
+// src/render/outcome-plan.ts
+function planOutcome(outcome) {
+  switch (outcome.kind) {
+    case "ok":
+      return { output: outcome.value, kick: false, debug: null };
+    case "transient":
+      return {
+        output: "\n",
+        kick: true,
+        debug: `daemon unavailable (transient: ${outcome.cause}: ${outcome.message}) \u2014 kicking daemon`
+      };
+    case "permanent":
+      return {
+        output: formatPermanentGlyph(outcome),
+        kick: false,
+        debug: `daemon refused request (permanent: ${outcome.cause}) \u2014 not kicking`
+      };
+  }
+}
+
+// src/tmux-status/frames.ts
+var RANGE_PREFIX = "ccb";
+var RANGE_HASH_HEX = 15 - RANGE_PREFIX.length;
+function rangeOf2(url) {
+  return RANGE_PREFIX + createHash("sha256").update(url).digest("hex").slice(0, RANGE_HASH_HEX);
+}
+var STANDARD_NAMES = [
+  "black",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "white",
+  "brightblack",
+  "brightred",
+  "brightgreen",
+  "brightyellow",
+  "brightblue",
+  "brightmagenta",
+  "brightcyan",
+  "brightwhite"
+];
+function tmuxColor(spec) {
+  if (spec === void 0 || spec.isDefault) return "terminal";
+  switch (spec.type) {
+    case ColorDepth.STANDARD: {
+      const name = spec.number === void 0 ? void 0 : STANDARD_NAMES[spec.number];
+      if (name !== void 0) return name;
+      break;
+    }
+    case ColorDepth.EIGHT_BIT:
+      if (spec.number !== void 0) return `colour${spec.number}`;
+      break;
+    case ColorDepth.TRUECOLOR: {
+      const fixed = spec.fixedValue;
+      if (fixed !== void 0) return fixed.hex;
+      break;
+    }
+    case ColorDepth.DEFAULT:
+    case ColorDepth.WINDOWS:
+      break;
+  }
+  throw new Error(`frames: no tmux colour for ${spec.name}`);
+}
+var ATTRIBUTES = {
+  bold: "bold",
+  dim: "dim",
+  italic: "italics",
+  underline: "underscore",
+  strike: "strikethrough",
+  reverse: "reverse",
+  blink: "blink",
+  conceal: "hidden",
+  underline2: "double-underscore",
+  overline: "overline",
+  blink2: null,
+  frame: null,
+  encircle: null
+};
+var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES);
+function escaped(text4) {
+  return text4.replaceAll("#", "##");
+}
+function directive(style) {
+  const attributes = ATTRIBUTE_NAMES2.filter((name) => style[name] === true).map(
+    (name) => {
+      const tmux3 = ATTRIBUTES[name];
+      if (tmux3 === null)
+        throw new Error(`frames: a tmux status line cannot draw ${name} text`);
+      return tmux3;
+    }
+  );
+  return `#[${["none", `fg=${tmuxColor(style.color)}`, `bg=${tmuxColor(style.bgcolor)}`, ...attributes].join(",")}]`;
+}
+var PLAIN2 = new Style();
+function tmuxStatusFrame(ansi) {
+  const links3 = {};
+  const run3 = (text4, style) => {
+    const drawn = directive(style) + escaped(text4);
+    if (style.link === void 0) return drawn;
+    const range = rangeOf2(style.link);
+    links3[range] = style.link;
+    return `#[range=user|${range}]${drawn}#[norange]`;
+  };
+  const rows = new AnsiDecoder().decode(ansi).map((line) => {
+    const plain = line.plain;
+    const runs = [];
+    let at = 0;
+    for (const span of line.spans) {
+      if (!(span.style instanceof Style)) {
+        throw new Error(
+          `frames: the decoder gave a span a ${typeof span.style} style`
+        );
+      }
+      if (span.start > at) runs.push(run3(plain.slice(at, span.start), PLAIN2));
+      runs.push(run3(plain.slice(span.start, span.end), span.style));
+      at = span.end;
+    }
+    if (at < plain.length) runs.push(run3(plain.slice(at), PLAIN2));
+    return runs.join("");
+  });
+  return { rows, links: links3 };
+}
+function tmuxStatusResponse(resp) {
+  const ansi = planOutcome(renderOutcomeOf(resp)).output;
+  try {
+    return tmuxStatusFrame(ansi);
+  } catch (error) {
+    const why2 = sanitizeText(
+      error instanceof Error ? error.message : String(error)
+    );
+    return tmuxStatusFrame(
+      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}\u26A0 cc-candybar ${why2}${ANSI_RESET}
+`
+    );
+  }
+}
+
+// src/daemon/tmux-status.ts
 var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
@@ -81073,20 +82310,16 @@ function segmentsOf(value) {
   }
 }
 
-// src/daemon/server.ts
+// src/daemon/daemon.ts
 init_timers();
 
 // src/daemon/lane-setup.ts
 init_globals();
-var import_node_path42 = __toESM(require_path_browserify(), 1);
-
-// src/config-hint.ts
-init_globals();
-var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+var import_node_path41 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/claude-relaunch.ts
 init_globals();
-var import_node_path41 = __toESM(require_path_browserify(), 1);
+var import_node_path40 = __toESM(require_path_browserify(), 1);
 var keep = (arity) => ({ arity, keep: true });
 var drop = (arity) => ({ arity, keep: false });
 var FLAGS = {
@@ -81188,7 +82421,7 @@ function startPlace(startDir, cwd2) {
     args: ["--worktree", tree.name]
   };
 }
-var within3 = (dir, top) => dir === top || dir.startsWith(top + import_node_path41.default.sep);
+var within3 = (dir, top) => dir === top || dir.startsWith(top + import_node_path40.default.sep);
 function relaunchArgs(argv2) {
   const kept = [];
   const tokens2 = argv2.slice(1);
@@ -81220,14 +82453,14 @@ function relaunchArgs(argv2) {
   return { kind: "args", args: kept };
 }
 function worktreeOf(dir) {
-  const parts = dir.split(import_node_path41.default.sep);
+  const parts = dir.split(import_node_path40.default.sep);
   const at = parts.findLastIndex(
     (p2, i) => p2 === "worktrees" && parts[i - 1] === ".claude" && i + 1 < parts.length
   );
   return at === -1 ? null : {
     name: parts[at + 1].replaceAll("+", "/"),
-    top: parts.slice(0, at + 2).join(import_node_path41.default.sep),
-    repo: parts.slice(0, at - 1).join(import_node_path41.default.sep) || import_node_path41.default.sep
+    top: parts.slice(0, at + 2).join(import_node_path40.default.sep),
+    repo: parts.slice(0, at - 1).join(import_node_path40.default.sep) || import_node_path40.default.sep
   };
 }
 function takeWhile(xs, ok3) {
@@ -81237,7 +82470,7 @@ function takeWhile(xs, ok3) {
 
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
-var BAND_CLIENT = import_node_path42.default.join("bin", "cc-candybar-native");
+var BAND_CLIENT = import_node_path41.default.join("bin", "cc-candybar-native");
 var BAR_PANE_OPTION = "@cc-candybar-bar-pane";
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
@@ -81257,7 +82490,7 @@ var LANE_SETUP = {
           `${LANES.band.label} runs the band mod from a cc-candybar source checkout, and this daemon runs ${host.bundle} \u2014 run the daemon from a checkout (mod/README.md)`
         );
       }
-      const client = import_node_path42.default.join(checkout, BAND_CLIENT);
+      const client = import_node_path41.default.join(checkout, BAND_CLIENT);
       if (!edge.fileExists(client)) {
         throw new BadVerbArgs(
           `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
@@ -81638,13 +82871,25 @@ var LaneSetups = class {
 // src/daemon/lane-edge.ts
 init_globals();
 
+// src/daemon/parent-watchdog.ts
+init_globals();
+init_process();
+function pidAlive(pid2) {
+  try {
+    process_default.kill(pid2, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
 // src/path-search.ts
 init_globals();
-var import_node_path43 = __toESM(require_path_browserify(), 1);
+var import_node_path42 = __toESM(require_path_browserify(), 1);
 function executableOn(name, pathVariable, isExecutable) {
-  for (const dir of (pathVariable ?? "").split(import_node_path43.default.delimiter)) {
-    if (!import_node_path43.default.isAbsolute(dir)) continue;
-    const file = import_node_path43.default.join(dir, name);
+  for (const dir of (pathVariable ?? "").split(import_node_path42.default.delimiter)) {
+    if (!import_node_path42.default.isAbsolute(dir)) continue;
+    const file = import_node_path42.default.join(dir, name);
     if (isExecutable(file)) return file;
   }
   return null;
@@ -81661,13 +82906,13 @@ function canonical(file) {
   try {
     return fs_default.realpathSync(file);
   } catch {
-    return import_node_path43.default.resolve(file);
+    return import_node_path42.default.resolve(file);
   }
 }
 
 // src/attach-preload.ts
 init_globals();
-var import_node_path44 = __toESM(require_path_browserify(), 1);
+var import_node_path43 = __toESM(require_path_browserify(), 1);
 function launcherNode(pathVariable, isExecutable, canonical2) {
   const node = executableOn("node", pathVariable, isExecutable);
   if (node === null) {
@@ -81676,7 +82921,7 @@ function launcherNode(pathVariable, isExecutable, canonical2) {
       why: "no `node` on PATH to run the attach launcher"
     };
   }
-  return import_node_path44.default.basename(canonical2(node)) === "bun" ? {
+  return import_node_path43.default.basename(canonical2(node)) === "bun" ? {
     kind: "refused",
     why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
   } : { kind: "node", file: node };
@@ -81686,8 +82931,8 @@ function launcherNode(pathVariable, isExecutable, canonical2) {
 var SHELL_BUFFER = "cc-candybar-lane";
 var EXIT_POLL_MS = 100;
 var SHELL_PATIENCE_MS = 2e3;
-function tmux2(hint, args, stdinInput) {
-  const run3 = runTmux(hint, "lane.tmux", args, stdinInput);
+function tmux2(launcher, hint, args, stdinInput) {
+  const run3 = runTmux(launcher, hint, "lane.tmux", args, stdinInput);
   if (run3.kind !== "ok") throw new Error(run3.reason);
   return run3.stdout;
 }
@@ -81696,7 +82941,7 @@ function ran(what, result) {
   const detail = result.error ?? [result.reason, result.stderr.trim(), result.stdout.trim()].filter((s) => s !== "").join(": ");
   throw new Error(`${what} failed (${detail})`);
 }
-function refusalOf(stdout2) {
+function refusalOf2(stdout2) {
   try {
     const said = JSON.parse(stdout2);
     if (typeof said === "object" && said !== null && "ok" in said && said.ok === false && "reason" in said && typeof said.reason === "string") {
@@ -81736,7 +82981,7 @@ var PROCARGS2 = [
   "end = words.index('', argc) if '' in words[argc:] else len(words)",
   "print(json.dumps({'executable': exe, 'argv': words[:argc], 'env': words[argc:end]}))"
 ].join("\n");
-async function imageOf(pid2) {
+async function imageOf(launcher, pid2) {
   if (process_default.platform === "linux") {
     return {
       executable: await fs_default.promises.readlink(`/proc/${pid2}/exe`),
@@ -81746,7 +82991,7 @@ async function imageOf(pid2) {
   }
   const out = ran(
     `reading process ${pid2}'s arguments`,
-    await launch({
+    await launcher.launch({
       bin: "python3",
       args: ["-c", PROCARGS2, String(pid2)],
       timeoutMs: 5e3,
@@ -81755,10 +83000,10 @@ async function imageOf(pid2) {
   );
   return JSON.parse(out);
 }
-async function ps(what, args) {
+async function ps(launcher, what, args) {
   return ran(
     what,
-    await launch({
+    await launcher.launch({
       bin: "ps",
       args,
       timeoutMs: 2e3,
@@ -81766,8 +83011,8 @@ async function ps(what, args) {
     })
   );
 }
-async function paneForeground(hint) {
-  const display = await runTmuxAsync(hint, "lane.tmux", [
+async function paneForeground(launcher, hint) {
+  const display = await runTmuxAsync(launcher, hint, "lane.tmux", [
     "display",
     "-p",
     "-t",
@@ -81776,7 +83021,7 @@ async function paneForeground(hint) {
   ]);
   if (display.kind !== "ok") throw new Error(display.reason);
   const [panePid = "", cwd2 = ""] = display.stdout.trimEnd().split("	");
-  const foreground = (await ps(`asking pane ${hint.pane}'s foreground job`, [
+  const foreground = (await ps(launcher, `asking pane ${hint.pane}'s foreground job`, [
     "-o",
     "tpgid=",
     "-p",
@@ -81784,10 +83029,18 @@ async function paneForeground(hint) {
   ])).trim();
   return { panePid: Number(panePid), cwd: cwd2, foreground: Number(foreground) };
 }
-async function paneClaude(hint) {
-  const { panePid, cwd: cwd2, foreground: pid2 } = await paneForeground(hint);
-  const table = await ps("listing processes", ["-A", "-o", "pid=,ppid=,args="]);
-  const image = await imageOf(pid2);
+async function paneClaude(launcher, hint) {
+  const {
+    panePid,
+    cwd: cwd2,
+    foreground: pid2
+  } = await paneForeground(launcher, hint);
+  const table = await ps(launcher, "listing processes", [
+    "-A",
+    "-o",
+    "pid=,ppid=,args="
+  ]);
+  const image = await imageOf(launcher, pid2);
   const parent = processTable(table).get(pid2)?.ppid;
   if (parent === void 0) {
     throw new Error(`pane ${hint.pane}'s foreground job ${pid2} is gone`);
@@ -81807,17 +83060,18 @@ async function paneClaude(hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(following) {
+function productionLaneEdge(launcher, following, closing) {
+  const wait = (ms) => setTimeout2(ms, void 0, { signal: closing });
   return {
-    claudeInput: productionClaudeInputEdge(),
+    claudeInput: productionClaudeInputEdge(launcher),
     barPanes: (hint) => taggedBarPanes(
-      tmux2(hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
+      tmux2(launcher, hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
       hint.pane
     ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
     openBarPane: (hint, argv2, env2) => {
-      const opened = tmux2(hint, [
+      const opened = tmux2(launcher, hint, [
         "split-window",
         "-d",
         "-v",
@@ -81831,7 +83085,7 @@ function productionLaneEdge(following) {
         ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
         ...argv2
       ]).trim();
-      tmux2(hint, [
+      tmux2(launcher, hint, [
         "set-option",
         "-p",
         "-t",
@@ -81841,13 +83095,13 @@ function productionLaneEdge(following) {
       ]);
       return opened;
     },
-    closePane: (hint, pane) => void tmux2(hint, ["kill-pane", "-t", pane]),
+    closePane: (hint, pane) => void tmux2(launcher, hint, ["kill-pane", "-t", pane]),
     // [LAW:single-enforcer] The session's process environment: the
     // session's facts, never those of whichever shell spawned this detached
     // daemon.
     claude: async (args, session) => void ran(
       `claude ${args.join(" ")}`,
-      await launch({
+      await launcher.launch({
         bin: "claude",
         args: [...args],
         env: sessionEnv(process_default.env, session),
@@ -81857,7 +83111,7 @@ function productionLaneEdge(following) {
     ),
     fileExists: (file) => fs_default.existsSync(file),
     presence,
-    paneClaude,
+    paneClaude: (hint) => paneClaude(launcher, hint),
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
@@ -81868,7 +83122,7 @@ function productionLaneEdge(following) {
     paneDir: async (hint, shell) => {
       const until2 = Date.now() + SHELL_PATIENCE_MS;
       for (; ; ) {
-        const pane = await paneForeground(hint);
+        const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
           if (pane.cwd === "") {
             throw new Error(`tmux read no directory for pane ${hint.pane}`);
@@ -81880,7 +83134,7 @@ function productionLaneEdge(following) {
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1e3} s`
           );
         }
-        await setTimeout2(EXIT_POLL_MS);
+        await wait(EXIT_POLL_MS);
       }
     },
     launcherNode: (pathVariable) => launcherNode(
@@ -81900,19 +83154,19 @@ function productionLaneEdge(following) {
       const until2 = Date.now() + withinMs;
       while (!following(sessionId2).has(lane)) {
         if (Date.now() > until2) return false;
-        await setTimeout2(FOLLOW_POLL_MS);
+        await wait(FOLLOW_POLL_MS);
       }
       return true;
     },
     // In a child: the reader holds the whole binary (~200 MB) in memory.
     moduleGraph: async (node, reader, executable) => {
-      const result = await launch({
+      const result = await launcher.launch({
         bin: node,
         args: [reader, executable],
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused = !result.ok && result.reason === "non-zero" ? refusalOf(result.stdout) : null;
+      const refused = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
       if (refused !== null) return { ok: false, reason: refused };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
@@ -81920,6 +83174,7 @@ function productionLaneEdge(following) {
     // [LAW:no-silent-failure] A kill the OS refuses says which process it was
     // sent to, not a bare `kill ESRCH`.
     terminate: (pid2) => {
+      closing.throwIfAborted();
       try {
         process_default.kill(pid2, "SIGTERM");
       } catch (err) {
@@ -81932,34 +83187,18 @@ function productionLaneEdge(following) {
       const until2 = Date.now() + withinMs;
       while (pidAlive(pid2)) {
         if (Date.now() > until2) return false;
-        await setTimeout2(EXIT_POLL_MS);
+        await wait(EXIT_POLL_MS);
       }
       return true;
     },
     // Typed as a slash command is, but with no ctrl+s first: in a shell that
     // stops the terminal's output.
-    typeShellLine: (hint, line) => void tmux2(hint, pasteLineArgs(hint.pane, SHELL_BUFFER, []), line)
-  };
-}
-
-// src/daemon/lane-handoff.ts
-init_globals();
-function handedOffTo(lanes, following) {
-  return LANE_NAMES.filter(
-    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane)
-  );
-}
-var HANDOFF_BUTTON = "[\u27F2 claude]";
-function laneHandoff(sessionId2, lanes) {
-  const reset = effectsUrl([
-    {
-      verb: VERB_RESET_CONFIG,
-      args: [sessionId2, ...lanes.map((lane) => LANES[lane].switch.setting)]
-    }
-  ]);
-  return {
-    severity: HANDOFF_SEVERITY,
-    lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]]
+    typeShellLine: (hint, line) => void tmux2(
+      launcher,
+      hint,
+      pasteLineArgs(hint.pane, SHELL_BUFFER, []),
+      line
+    )
   };
 }
 
@@ -82032,6 +83271,7 @@ var MenuIdle = class {
   }
   deps;
   sessions = /* @__PURE__ */ new Map();
+  disposed = false;
   // A click in the session starts a new idle period.
   clicked(sessionId2, at) {
     this.record(sessionId2, at).since = at;
@@ -82066,6 +83306,7 @@ var MenuIdle = class {
     return { sessions: this.sessions.size, armed };
   }
   dispose() {
+    this.disposed = true;
     for (const idle of this.sessions.values()) this.disarm(idle);
     this.sessions.clear();
   }
@@ -82089,7 +83330,7 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown ? closesAt(idle.since, idle.timeoutS) : null;
+    const due = idle.shown && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -82128,1364 +83369,432 @@ var MenuIdle = class {
   }
 };
 
-// src/daemon/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 40;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
-
-// src/daemon/request-event.ts
-init_globals();
-function noteFacts(facts, learned) {
-  for (const entry of Object.entries(learned)) facts.push(entry);
-}
-var LEVEL = {
-  ok: "info",
-  "bad-request": "warn",
-  threw: "error"
+// src/daemon/daemon.ts
+var SYSTEM_CLOCK = {
+  date: () => /* @__PURE__ */ new Date(),
+  monotonic: () => performance.now()
 };
-function detailOf(outcome) {
-  switch (outcome.kind) {
-    case "ok":
-      return [];
-    case "bad-request":
-      return [["problems", outcome.problems.join("; ")]];
-    case "threw":
-      return [["error", inspect(outcome.error)]];
+var liveDaemon = null;
+function createDaemon(inputs) {
+  if (liveDaemon !== null && !liveDaemon.aborted) {
+    throw new Error("a daemon is already live in this process");
   }
-}
-function requestEvent(kind, facts, outcome, tookMs) {
-  const fields2 = [
-    ...facts,
-    ["took", `${tookMs}ms`],
-    ["outcome", outcome.kind],
-    ...detailOf(outcome)
-  ];
-  return {
-    level: LEVEL[outcome.kind],
-    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
-  };
-}
-
-// src/daemon/server.ts
-var stats = new RuntimeStats();
-var handlerProbes = new ProbeArrivals();
-var renderSightings = new RenderSightings();
-var DAEMON_BUNDLE = fileURLToPath("file:///app/dist/index.mjs");
-var DOCTOR_STORES = fileStores(stateDir());
-setLaunchStats(stats.launchStats);
-var watcherRegistry = new WatcherRegistry({
-  counters: stats,
-  logger: dlog
-});
-var refreshLedger = new RefreshLedger(dlog);
-var fileEvents = new FileEventDelivery({
-  watchers: watcherRegistry,
-  logger: dlog
-});
-var payloadProviders = createPayloadProviders({
-  watchers: watcherRegistry,
-  fileEvents,
-  logger: dlog,
-  ledger: refreshLedger
-});
-var {
-  gitProvider: gitService,
-  usageStore,
-  tmuxService,
-  hostService,
-  managedStorage
-} = payloadProviders;
-var sessionState = new SessionState();
-var settingsHistory = new SettingsHistory(sessionState, dlog);
-var navigationHistory = new NavigationHistory();
-var effectSessions = new EffectSessions();
-var menuIdle = new MenuIdle({
-  now: () => instantOf(/* @__PURE__ */ new Date()),
-  close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
-  failed: (sessionId2, error) => dlog(
-    "error",
-    `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
-  )
-});
-var linkSigner2 = linkSignerFromKeyFile();
-var runs = new Runs({
-  supersede: (storage, sessionId2) => managedStorage.supersede(storage, sessionId2),
-  launch,
-  state: sessionState,
-  log: dlog,
-  now: () => instantOf(/* @__PURE__ */ new Date())
-});
-var DAEMON_NODE = [process_default.execPath, ...process_default.execArgv];
-var laneSetups = new LaneSetups({
-  edge: productionLaneEdge((sessionId2) => frameFeeds.following(sessionId2)),
-  // A bar pane runs this bundle under the node running it now, with the
-  // flags it runs with (tsx's loader, under the test harness).
-  host: {
-    bundle: DAEMON_BUNDLE,
-    node: DAEMON_NODE,
-    socket: socketPath(),
-    preload: stableAttachPreload(DAEMON_BUNDLE)
-  },
-  state: sessionState,
-  log: dlog,
-  now: () => instantOf(/* @__PURE__ */ new Date()),
-  defer: (run3) => void setImmediate(run3)
-});
-var tmuxStatusLines = new TmuxStatusLines({
-  edge: {
-    run: (socket, args, stdin) => runTmuxAsync({ socket }, "tmux-status", args, stdin),
-    runSync: (socket, args, stdin) => runTmux({ socket }, "tmux-status", args, stdin)
-  },
-  subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
-  sessionInPane: (socket, pane) => frameFeeds.newestWhere(
-    ({ hints: { tmux: tmux3 } }) => tmux3 !== null && tmux3 !== void 0 && tmux3.socket === socket && tmux3.pane === pane
-  ),
-  handler: [
-    `CC_CANDYBAR_SOCKET=${shellWord(socketPath())}`,
-    ...[...DAEMON_NODE, DAEMON_BUNDLE].map(shellWord),
-    "url-handle"
-  ].join(" "),
-  owner: socketPath(),
-  log: dlog
-});
-var frameFeeds = new FrameFeeds({
-  render: (sessionId2, fps, at) => renderFrame(sessionId2, fps, at),
-  // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-  // which fires in a later turn, so a click's whole run of writes and its
-  // journal commit land before a frame of it is drawn.
-  watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
-  lanes: (sessionId2) => viewLanes(sessionId2),
-  // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
-  // moment the feed stops drawing, so its drawn copies retire with it.
-  pin: (sessionId2) => {
-    const unpin = renderCache.pin(sessionId2);
-    return () => {
-      renderCache.stopDrawing(sessionId2, "feed");
-      unpin();
-    };
-  },
-  shown: (req) => paneVisibility.shown(req.hints.tmux),
-  watching: () => paneVisibility.follow(),
-  refreshes: () => refreshLedger.totals(),
-  periods: FEED_PERIODS,
-  now: () => performance.now(),
-  instant: () => instantOf(/* @__PURE__ */ new Date()),
-  log: dlog
-});
-var paneVisibility = new PaneVisibility({
-  listPanes: (socket) => runTmuxAsync({ socket }, "frames.visibility", [
-    "list-panes",
-    "-a",
-    "-F",
-    LIST_PANES_FORMAT
-  ]),
-  listClients: (socket) => runTmuxAsync({ socket }, "frames.visibility", [
-    "list-clients",
-    "-F",
-    LIST_CLIENTS_FORMAT
-  ]),
-  // The servers of the sessions someone is watching.
-  sockets: () => new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
-  onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
-  // Only the sessions on a server whose view changed are drawn again.
-  onChange: (sockets) => frameFeeds.wakeWhere(
-    "visibility",
-    (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
-  ),
-  intervalMs: 1e3,
-  log: dlog
-});
-function tmuxServersOf({
-  hints: { tmux: tmux3 }
-}) {
-  return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
-}
-var renderWarnings = new RenderWarningRecords();
-var renderCache = new RenderCache(
-  {
+  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2 } = inputs;
+  const instant = () => instantOf(clock.date());
+  const closing = new AbortController();
+  let closed = false;
+  const log = (level, msg) => dlog(level, closed ? `after close: ${msg}` : msg);
+  const stats = new RuntimeStats();
+  const launcher = createLauncher({
+    stats: stats.launchStats,
+    signal: closing.signal,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it is said in daemon.log, and every feed redraws, so its warning
+    // comes and goes on frames too.
+    observeLifeline: (fault) => {
+      log(
+        fault === null ? "info" : "warn",
+        fault === null ? "launch lifeline running again" : `launch lifeline ${fault}; the next launch starts another`
+      );
+      frameFeeds.wakeWhere("data", () => true);
+    }
+  });
+  const storage = inputs.storage(log);
+  const sessionState = new SessionState(storage.session);
+  const settingsHistory = new SettingsHistory(
     sessionState,
-    watchers: watcherRegistry,
-    log: dlog,
-    storage: managedStorage,
-    signer: linkSigner2,
-    ledger: refreshLedger,
-    // [LAW:single-enforcer] The delivery owner's catch-ups, which a
-    // `watch_file` source's watch, riding the same OS stream, may have missed.
-    catchUps: (caughtUp) => fileEvents.subscribe((notice) => {
-      if (notice.kind === "caught-up") caughtUp();
-    }),
-    declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
-    // [LAW:single-enforcer] What every session's view draws from: its payload
-    // derived over its declaration, its picks and its histories' depths.
-    source: sessionSource({
-      // [LAW:single-enforcer] Every provider logs the refreshes it makes,
-      // through the one ledger, so a view's payload logs none of them.
-      providers: payloadProviders,
-      sessionState,
-      history: (sessionId2) => settingsHistory.depth(sessionId2),
-      // Measured against the gate of the config the view draws with.
-      navigation: (sessionId2, config2) => navigationHistory.depth(sessionId2, sessionState, stateGate(config2))
-    })
-  },
-  {
-    // [LAW:no-ambient-temporal-coupling] The budget as boot established it
-    // (establishLimits, which refuses a malformed override through daemon.log):
-    // a render before that is the boot-order bug establishedLimits names.
-    budgetBytes: () => {
-      establishedLimits();
-      return renderCacheBudget(budgetBytes);
-    },
-    observers: {
-      // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-      // daemon.log with its cause — the operator's only record of why a load
-      // ran, and whether a save was picked up cleanly, kept rendering
-      // last-known-good behind an error, or resolved to a different file.
-      onReload: (entry, sessions, cause, settled3) => {
-        dlog("info", configLoadedLine(entry, cause, settled3));
-        for (const sessionId2 of sessions) frameFeeds.wake(sessionId2, "reload");
-      },
-      // [LAW:single-enforcer] What a session's view draws from moved: its
-      // feed's next frame is brought forward, whatever moved it: a request's
-      // facts, a refresh landing after its deadline, a source publishing, a
-      // pick. The dump link, which no view holds, wakes the same way.
-      onViewChanged: (sessionId2) => frameFeeds.wake(sessionId2, "data")
-    }
-  }
-);
-fileEvents.subscribe((notice) => {
-  switch (notice.kind) {
-    case "period":
-      watcherRegistry.judge();
-      return;
-    case "caught-up":
-      renderCache.reloadEvery({ kind: "events-resumed", since: notice.since });
-      frameFeeds.wakeWhere("data", () => true);
-      return;
-    case "moved":
-      frameFeeds.wakeWhere("data", () => true);
-      return;
-  }
-});
-setLifelineObserver((fault2) => {
-  dlog(
-    fault2 === null ? "info" : "warn",
-    fault2 === null ? "launch lifeline running again" : `launch lifeline ${fault2}; the next launch starts another`
+    log,
+    storage.history
   );
-  frameFeeds.wakeWhere("data", () => true);
-});
-var BIN_CHECK_INTERVAL_MS = 60 * 1e3;
-var RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
-var binaryWatch = makeBinaryWatch({
-  // One target per path: run as `node dist/index.mjs`, both name one file.
-  targets: [
-    .../* @__PURE__ */ new Set([
-      ..."file:///app/dist/index.mjs".startsWith("file://") ? [fileURLToPath("file:///app/dist/index.mjs")] : [],
-      ...process_default.argv[1] ? [process_default.argv[1]] : []
-    ])
-  ],
-  intervalMs: BIN_CHECK_INTERVAL_MS,
-  stat: fs_default.statSync,
-  // The update notice's act rewrites the bundle, and a restart in the middle
-  // would start the next daemon from a half-written one: a restart waits for
-  // it. A success samples again at once; after a failure the next tick does.
-  held: () => updateWatch.running(),
-  exit: () => shutdown(0),
-  log: dlog
-});
-var updateWatch = makeUpdateWatch({
-  entryUrl: "file:///app/dist/index.mjs",
-  // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
-  // this daemon runs from.
-  actsDir: actsDir(stateDir(), DAEMON_BUNDLE),
-  intervalMs: BIN_CHECK_INTERVAL_MS,
-  releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
-  registryUrl: process_default.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
-  fetchImpl: fetch,
-  onApplied: () => binaryWatch.checkNow(),
-  log: dlog
-});
-var breakerRegistryPath = null;
-var budgetBytes = 0;
-function sourceSnapshots() {
-  const git = gitService.getStats();
-  const tmux3 = tmuxService.getStats();
-  const today = usageStore.scanStats();
-  const storage = managedStorage.stats();
-  const cache2 = renderCache.stats;
-  return {
-    records: refreshLedger.snapshot(),
-    homes: {
-      daemon: 1,
-      configDir: today.entries,
-      repo: git.size,
-      directory: cache2.size,
-      session: usageStore.getStats().size,
-      view: cache2.views,
-      pane: tmux3.entries
-    },
-    held: {
-      git: git.held,
-      tmux: tmux3.held,
-      host: hostService.held(),
-      today: today.held,
-      pluginStorage: storage.held
-    },
-    pluginStorage: {
-      folders: storage.folders,
-      faults: storage.faults,
-      lost: storage.lost
-    }
-  };
-}
-var limits = null;
-function establishedLimits() {
-  if (limits === null) throw new Error("daemon: limits not yet established");
-  return limits;
-}
-function establishLimits(env2) {
-  budgetBytes = memoryLimitBytes(env2);
-  limits = makeLimits(
-    realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code), {
-      limitBytes: budgetBytes
-    })
-  );
-}
-var shuttingDown = false;
-function shutdown(code) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  setTimeout(() => process_default.kill(process_default.pid, "SIGKILL"), 500);
-  const teardown = [
-    // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-    // back before it goes (src/daemon/tmux-status.ts).
-    ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
-    ["gitService close", () => gitService.close()],
-    ["usageStore close", () => usageStore.close()],
-    ["tmuxService close", () => tmuxService.close()],
-    ["hostService close", () => hostService.close()],
-    // Before the storage it resumes: an aborted run resumes its sources once
-    // its program is gone.
-    ["runs close", () => runs.close()],
-    ["managedStorage close", () => managedStorage.close()],
-    ["fileEvents close", () => fileEvents.close()],
-    ["watcherRegistry close", () => watcherRegistry.closeAll()],
-    ["sessionState flush", () => sessionState.flush()]
-  ];
-  for (const [step4, run3] of teardown) {
-    try {
-      run3();
-    } catch (e) {
-      dlog("warn", `${step4} failed: ${e.message}`);
-    }
-  }
-  removeLeaseIfOwned(leasePath(), process_default.pid);
-  if (breakerRegistryPath !== null) {
-    releaseRegistration(
-      breakerRegistryPath,
-      process_default.pid,
-      readRegistryEntry,
-      (p2) => fs_default.unlinkSync(p2)
-    );
-  }
-  process_default.exit(code);
-}
-var NOTHING_DELIVERED = () => {
-};
-var stay = (resp) => ({
-  resp,
-  exitAfterFlush: null,
-  delivered: NOTHING_DELIVERED
-});
-var renderFailed = (err) => ({
-  ok: false,
-  error: err instanceof Error ? err.message : inspect(err),
-  code: "RENDER_FAILED",
-  daemonV: PROTOCOL_VERSION
-});
-async function replyTo(req, timedOut, accepted) {
-  if (req.kind === "shutdown") {
-    return {
-      resp: { ok: true, output: "" },
-      exitAfterFlush: 0,
-      delivered: NOTHING_DELIVERED
-    };
-  }
-  if (req.kind === "pane-session") {
-    const { socket, pane } = req;
-    if (typeof socket !== "string" || typeof pane !== "string")
-      return stay({
-        ok: false,
-        error: "pane-session needs a string socket and pane",
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION
-      });
-    return stay({
-      ok: true,
-      paneSession: frameFeeds.newestWhere(
-        ({ hints: { tmux: tmux3 } }) => tmux3 !== null && tmux3 !== void 0 && tmux3.socket === socket && tmux3.pane === pane
-      )
-    });
-  }
-  if (req.kind === "stats") {
-    return stay({
-      ok: true,
-      stats: stats.snapshot({
-        gitCache: gitService.getStats(),
-        usageCache: usageStore.getStats(),
-        sources: sourceSnapshots(),
-        fileEvents: fileEvents.stats(),
-        runs: runs.stats(),
-        transcriptReads: transcriptReads(),
-        renderCache: renderCache.stats,
-        effectCache: effectSessions.getStats(),
-        menuIdle: menuIdle.getStats(),
-        sessionState: {
-          sessions: sessionState.size(),
-          observers: sessionState.observers(),
-          revision: sessionState.latestRevision()
-        },
-        frameFeeds: frameFeeds.getStats(),
-        tmuxStatus: tmuxStatusLines.stats(),
-        watchersActive: watcherRegistry.size(),
-        dirWatchesActive: watcherRegistry.dirWatches(),
-        nextRestartReason: establishedLimits().describeNextRestart(),
-        handlerProbes: handlerProbes.list(),
-        clients: renderSightings.list(instantOf(/* @__PURE__ */ new Date())),
-        bundle: DAEMON_BUNDLE,
-        daemon: establishedLimits().serving(),
-        doctorStores: readStores(DOCTOR_STORES)
-      })
-    });
-  }
-  if (req.kind === "render") {
-    const started2 = /* @__PURE__ */ new Date();
-    const at = instantOf(started2);
-    const t0 = performance.now();
-    const queuedMs = Math.round(t0 - accepted);
-    const facts = [];
-    const order2 = ++stats.requestsTotal;
-    const checked = checkRenderRequest(req);
-    const sighted = (req2, frame) => renderSightings.see(
-      req2.sessionId,
+  const limits = makeLimits(
+    realLimitsDeps(
+      stats.startedAt.getTime(),
+      exit2,
+      { launcher, log },
       {
-        client: req2.hints.client ?? null,
-        termCols: req2.hints.termCols ?? null,
-        rateLimits: req2.rateLimits,
-        claudeConfigDir: claudeConfigDir(req2.hints.claudeConfigDir),
-        projectDir: req2.requested.projectDir,
-        transcript: transcriptSaid(req2.hookData),
-        frame
-      },
-      at,
-      order2
-    );
-    if (checked.ok) {
-      sighted(checked.req, "drawing");
-      frameFeeds.note(checked.req.sessionId, checked.req, order2);
-    }
-    const waitFor = (req2) => {
-      const ms = waitBudgetMs(req2.deadline, accepted, {
-        epochMs: started2.getTime(),
-        monoMs: t0
-      });
-      return { stated: req2.deadline.kind, ms, endsAt: t0 + ms };
-    };
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(checked.req, at, waitFor(checked.req), facts).then(
-      ({ answer: answer2, motion, clickShown, delivered }) => {
-        sighted(checked.req, motion);
-        return {
-          outcome: { kind: "ok" },
-          resp: { ok: true, output: answer2 },
-          // [LAW:single-enforcer] An answer carrying the click error that
-          // reaches its client is the one that delivered it
-          // (src/daemon/click-error.ts).
-          delivered: () => {
-            delivered();
-            if (clickShown !== null)
-              answeredClickError(
-                sessionState,
-                checked.req.sessionId,
-                clickShown
-              );
-          }
-        };
-      },
-      (error) => {
-        sighted(checked.req, "failed");
-        return {
-          outcome: { kind: "threw", error },
-          resp: renderFailed(error),
-          delivered: NOTHING_DELIVERED
-        };
+        limitBytes: memoryLimitBytes2
       }
-    );
-    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      queued: `${queuedMs}ms`
-    });
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      rendered.outcome,
-      Math.round(performance.now() - t0)
-    );
-    dlog(level, line);
-    return {
-      resp: rendered.resp,
-      exitAfterFlush: null,
-      delivered: rendered.delivered
-    };
-  }
-  if (req.kind === "click") {
-    const t0 = performance.now();
-    const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = clickOutcome(req, facts);
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
-    const { level, line } = requestEvent(
-      "click",
-      facts,
-      outcome,
-      Math.round(performance.now() - t0)
-    );
-    dlog(level, line);
-    return stay(clickReply(outcome));
-  }
-  if (req.kind === "debug") {
-    if (!isDebugWhat(req.what)) {
-      return stay({
-        ok: false,
-        // [LAW:no-silent-failure] Include the allowed values so a
-        // CLI consumer (or operator) sees what is supported without
-        // grep — same pattern as the set-state verb's unknown-key error
-        // in src/daemon/verbs/state-validators.ts.
-        error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION
-      });
-    }
-    const dbgView = renderCache.latestView();
-    const dbgState = dbgView === null ? null : {
-      store: dbgView.store,
-      registry: dbgView.registry,
-      config: dbgView.state.config,
-      compiled: dbgView.state.compiled,
-      lastRenderBySegment: req.what === "segments" ? serializeSegmentCells(
-        dbgView.lastRenderCellsBySegment,
-        dbgView.state.config.globals.colorCompatibility ?? floorOf2("colorCompatibility")
-      ) : EMPTY_RENDER_MAP
-    };
-    return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
-  }
-  const unanswered = req;
-  throw new Error(`no reply for request ${inspect(unanswered)}`);
-}
-function parseRenderArgs(args, cwd2) {
-  const { tokens: tokens2 } = (0, import_parseargs.parseArgs)({
-    args: args.slice(1),
-    // skip binary path
-    options: { config: { type: "string" } },
-    strict: false,
-    tokens: true,
-    allowPositionals: true
-  });
-  const config2 = (tokens2 ?? []).filter(
-    (t2) => t2.kind === "option" && t2.name === "config"
-  ).at(-1);
-  const refused = (tokens2 ?? []).flatMap((t2) => {
-    switch (t2.kind) {
-      case "option":
-        return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
-      case "positional":
-        return [{ arg: t2.value, why: "positional" }];
-      // `--` only ends the flags; the words after it are positionals.
-      case "option-terminator":
-        return [];
-    }
-  });
-  return {
-    configFile: explicitConfigPath(cwd2, config2?.value),
-    // In argv order, each refusal once.
-    refusedArgs: refused.filter(
-      (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
     )
-  };
-}
-var verbCtx = {
-  sessionState,
-  dlog,
-  applyUpdate: () => updateWatch.act(),
-  // The load the session's bar is drawn from: its cache entry's load
-  // outcome, and what the config that entry renders left unused.
-  // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
-  // doctor click is a verdict on the files as they are now, not on
-  // whether the fs watcher has caught up with an edit made a moment ago.
-  doctor: productionEdge((origin) => {
-    const at = [
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? void 0
-    ];
-    renderCache.reload(...at, { kind: "doctor" });
-    const entry = renderCache.getOrCreate(...at);
-    return {
-      layers: entry.configLayers,
-      error: entry.lastError,
-      warning: entry.lastWarning,
-      unused: entry.state.unused,
-      config: entry.state.config
-    };
-  }),
-  doctorStores: DOCTOR_STORES,
-  probes: handlerProbes,
-  clients: renderSightings,
-  bundle: DAEMON_BUNDLE,
-  serving: () => establishedLimits().serving(),
-  claudeInput: productionClaudeInputEdge(),
-  history: settingsHistory,
-  navigation: navigationHistory,
-  // The config a session's last render resolved from — the same entry the
-  // render drew the bar with, so a save compares against the bar the user saw.
-  configFor: (origin) => renderCache.getOrCreate(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0
-  ).state.config,
-  reloadConfig: (origin) => renderCache.reload(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0,
-    { kind: "write" }
-  ),
-  // The storage keys of the same entry `configFor` reads the config of.
-  sourcesFor: (origin) => renderCache.getOrCreate(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0
-  ).state.sources,
-  links: linkSigner2,
-  runs,
-  lanes: { of: lanesAt, clicked: laneClicked },
-  views: {
-    follow: (sessionId2, origin) => renderCache.follow(
-      sessionId2,
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? void 0
+  );
+  const handlerProbes = new ProbeArrivals();
+  const renderSightings = new RenderSightings();
+  const doctorStores = fileStores(stateDir());
+  const watcherRegistry = new WatcherRegistry({
+    counters: stats,
+    logger: log
+  });
+  const refreshLedger = new RefreshLedger(log);
+  const fileEvents = new FileEventDelivery({
+    watchers: watcherRegistry,
+    logger: log
+  });
+  const payloadProviders = createPayloadProviders({
+    launcher,
+    watchers: watcherRegistry,
+    fileEvents,
+    logger: log,
+    ledger: refreshLedger
+  });
+  const {
+    gitProvider: gitService,
+    usageStore,
+    tmuxService,
+    hostService,
+    managedStorage
+  } = payloadProviders;
+  const navigationHistory = new NavigationHistory();
+  const effectSessions = new EffectSessions();
+  const menuIdle = new MenuIdle({
+    now: instant,
+    close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
+    failed: (sessionId2, error) => log(
+      "error",
+      `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
     )
-  },
-  diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
-};
-var reloadConfig = verbCtx.reloadConfig;
-var RENDER_OPTS_BASE = {
-  endcaps: floorOf2("endcaps"),
-  colorCompatibility: floorOf2("colorCompatibility"),
-  wrap: floorOf2("autoWrap"),
-  padding: floorOf2("padding")
-};
-var DEBUG_RENDER_OPTS = {
-  ...RENDER_OPTS_BASE,
-  width: Number.POSITIVE_INFINITY
-};
-var EMPTY_RENDER_MAP = /* @__PURE__ */ new Map();
-function serializeSegmentCells(cells, colorCompatibility) {
-  const out = /* @__PURE__ */ new Map();
-  for (const [name, segCells] of cells) {
-    out.set(
-      name,
-      renderStripCells(segCells, {
-        ...DEBUG_RENDER_OPTS,
-        colorCompatibility
+  });
+  const linkSigner2 = linkSignerFromKeyFile();
+  const runs = new Runs({
+    supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
+    launch: launcher.launch,
+    state: sessionState,
+    log,
+    now: instant
+  });
+  const laneSetups = new LaneSetups({
+    edge: productionLaneEdge(
+      launcher,
+      (sessionId2) => frameFeeds.following(sessionId2),
+      closing.signal
+    ),
+    // A bar pane runs this bundle under the node running it now, with the
+    // flags it runs with (tsx's loader, under the test harness).
+    host: {
+      bundle: bundle.path,
+      node: bundle.node,
+      socket: socketPath(),
+      preload: stableAttachPreload(bundle.path)
+    },
+    state: sessionState,
+    log,
+    now: instant,
+    defer: (run3) => void setImmediate(run3)
+  });
+  const tmuxStatusLines = new TmuxStatusLines({
+    edge: {
+      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
+      runSync: (socket, args, stdin) => runTmux(launcher, { socket }, "tmux-status", args, stdin)
+    },
+    subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
+    sessionInPane: (socket, pane) => frameFeeds.newestWhere(
+      ({ hints: { tmux: tmux3 } }) => tmux3 !== null && tmux3 !== void 0 && tmux3.socket === socket && tmux3.pane === pane
+    ),
+    handler: [
+      `CC_CANDYBAR_SOCKET=${shellWord(socketPath())}`,
+      ...[...bundle.node, bundle.path].map(shellWord),
+      "url-handle"
+    ].join(" "),
+    owner: socketPath(),
+    log
+  });
+  const frameFeeds = new FrameFeeds({
+    render: (sessionId2, fps, at) => renderFrame(parts, sessionId2, fps, at),
+    // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
+    // which fires in a later turn, so a click's whole run of writes and its
+    // journal commit land before a frame of it is drawn.
+    watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
+    lanes: (sessionId2) => viewLanes(parts, sessionId2),
+    // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+    // moment the feed stops drawing, so its drawn copies retire with it.
+    pin: (sessionId2) => {
+      const unpin = renderCache.pin(sessionId2);
+      return () => {
+        renderCache.stopDrawing(sessionId2, "feed");
+        unpin();
+      };
+    },
+    shown: (req) => paneVisibility.shown(req.hints.tmux),
+    watching: () => paneVisibility.follow(),
+    refreshes: () => refreshLedger.totals(),
+    periods: FEED_PERIODS,
+    now: () => clock.monotonic(),
+    instant,
+    log
+  });
+  const paneVisibility = new PaneVisibility({
+    listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
+      "list-panes",
+      "-a",
+      "-F",
+      LIST_PANES_FORMAT
+    ]),
+    listClients: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
+      "list-clients",
+      "-F",
+      LIST_CLIENTS_FORMAT
+    ]),
+    // The servers of the sessions someone is watching.
+    sockets: () => new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
+    onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
+    // Only the sessions on a server whose view changed are drawn again.
+    onChange: (sockets) => frameFeeds.wakeWhere(
+      "visibility",
+      (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
+    ),
+    intervalMs: 1e3,
+    log
+  });
+  function tmuxServersOf({
+    hints: { tmux: tmux3 }
+  }) {
+    return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
+  }
+  const renderWarnings = new RenderWarningRecords();
+  const renderCache = new RenderCache(
+    {
+      launcher,
+      sessionState,
+      watchers: watcherRegistry,
+      log,
+      storage: managedStorage,
+      signer: linkSigner2,
+      ledger: refreshLedger,
+      // [LAW:single-enforcer] The delivery owner's catch-ups, which a
+      // `watch_file` source's watch, riding the same OS stream, may have missed.
+      catchUps: (caughtUp) => fileEvents.subscribe((notice) => {
+        if (notice.kind === "caught-up") caughtUp();
+      }),
+      declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
+      // [LAW:single-enforcer] What every session's view draws from: its payload
+      // derived over its declaration, its picks and its histories' depths.
+      source: sessionSource({
+        // [LAW:single-enforcer] Every provider logs the refreshes it makes,
+        // through the one ledger, so a view's payload logs none of them.
+        providers: payloadProviders,
+        sessionState,
+        history: (sessionId2) => settingsHistory.depth(sessionId2),
+        // Measured against the gate of the config the view draws with.
+        navigation: (sessionId2, config2) => navigationHistory.depth(sessionId2, sessionState, stateGate(config2))
       })
-    );
-  }
-  return out;
-}
-function clickOutcome(req, facts) {
-  const { verb, value } = req;
-  if (typeof verb !== "string" || typeof value !== "string") {
-    return {
-      kind: "bad-request",
-      problems: [
-        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`
-      ]
-    };
-  }
-  try {
-    return handleClick(
-      verb,
-      value,
-      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
-      facts
-    );
-  } catch (error) {
-    return error instanceof BadVerbArgs ? { kind: "bad-request", problems: [error.message] } : { kind: "threw", error };
-  }
-}
-var VERB_FACT = {
-  link: "verb",
-  "tmux-status": "linkVerb"
-};
-function handleClick(verb, value, arrival, facts) {
-  if (verb === VERB_TMUX_STATUS_CLICK) {
-    noteFacts(facts, { verb });
-    return statusLineClick(value, facts);
-  }
-  const handler = VERBS.get(verb);
-  if (!handler) {
-    return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
-  }
-  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  const session = clickSessionOf(verb, value);
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    menuIdle.clicked(session.id, instantOf(/* @__PURE__ */ new Date()));
-  }
-  handler(value, { ...verbCtx, arrival });
-  return { kind: "ok" };
-}
-function clickReply(outcome) {
-  switch (outcome.kind) {
-    case "ok":
-      return { ok: true, output: "" };
-    case "bad-request":
-      return {
-        ok: false,
-        error: outcome.problems.join("; "),
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION
-      };
-    case "threw":
-      return renderFailed(outcome.error);
-  }
-}
-function statusLineClick(value, facts) {
-  const refused = (problem) => ({
-    kind: "bad-request",
-    problems: [problem]
-  });
-  const click2 = tmuxStatusLines.linkAt(value);
-  if (click2.kind === "refused") return refused(click2.reason);
-  noteFacts(facts, { link: click2.url });
-  if (click2.url.startsWith("cc-candybar://")) {
-    const parsed2 = decodeWire(() => parseHandlerUrl(click2.url));
-    if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
-    return handleClick(
-      parsed2.verb,
-      parsed2.value,
-      { via: "tmux-status" },
-      facts
-    );
-  }
-  clickLaunch(
-    {
-      bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [click2.url],
-      category: "click.open"
     },
-    `opening ${click2.url}`,
-    dlog
-  );
-  return { kind: "ok" };
-}
-function renderFrame(sessionId2, fps, at) {
-  const started2 = Date.now();
-  const facts = [];
-  try {
-    var _stack = [];
-    try {
-      const setup = __using(_stack, setUpFrame(sessionId2, at, facts));
-      if (setup === null) return null;
-      const { drawn, nextChange, evaluated: evaluated2, delivered, lanes } = drawRender(
-        setup,
-        {
-          by: "feed",
-          fps
-        }
-      );
-      const output = composeBar(drawn);
-      return {
-        resp: { ok: true, output },
-        statusline: {
-          ok: true,
-          output: statuslineOf(
-            sessionId2,
-            drawn,
-            output,
-            handedOffTo(lanes, frameFeeds.following(sessionId2))
-          )
+    {
+      budgetBytes: () => renderCacheBudget(memoryLimitBytes2),
+      observers: {
+        // [LAW:no-silent-failure] Every config (re)load's outcome lands in
+        // daemon.log with its cause — the operator's only record of why a load
+        // ran, and whether a save was picked up cleanly, kept rendering
+        // last-known-good behind an error, or resolved to a different file.
+        onReload: (entry, sessions, cause, settled3) => {
+          log("info", configLoadedLine(entry, cause, settled3));
+          for (const sessionId2 of sessions)
+            frameFeeds.wake(sessionId2, "reload");
         },
-        nextChange,
-        evaluated: evaluated2,
-        delivered,
-        failure: null
+        // [LAW:single-enforcer] What a session's view draws from moved: its
+        // feed's next frame is brought forward, whatever moved it: a request's
+        // facts, a refresh landing after its deadline, a source publishing, a
+        // pick. The dump link, which no view holds, wakes the same way.
+        onViewChanged: (sessionId2) => frameFeeds.wake(sessionId2, "data")
+      }
+    }
+  );
+  fileEvents.subscribe((notice) => {
+    switch (notice.kind) {
+      case "period":
+        watcherRegistry.judge();
+        return;
+      case "caught-up":
+        renderCache.reloadEvery({
+          kind: "events-resumed",
+          since: notice.since
+        });
+        frameFeeds.wakeWhere("data", () => true);
+        return;
+      case "moved":
+        frameFeeds.wakeWhere("data", () => true);
+        return;
+    }
+  });
+  const BIN_CHECK_INTERVAL_MS = 60 * 1e3;
+  const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+  const binaryWatch = makeBinaryWatch({
+    targets: bundle.targets,
+    intervalMs: BIN_CHECK_INTERVAL_MS,
+    stat: fs_default.statSync,
+    // The update notice's act rewrites the bundle, and a restart in the middle
+    // would start the next daemon from a half-written one: a restart waits for
+    // it. A success samples again at once; after a failure the next tick does.
+    held: () => updateWatch.running(),
+    exit: () => exit2(0),
+    log
+  });
+  const updateWatch = makeUpdateWatch({
+    launcher,
+    entryUrl: bundle.entryUrl,
+    digest: bundle.digest,
+    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
+    // this daemon runs from.
+    actsDir: actsDir(stateDir(), bundle.path),
+    intervalMs: BIN_CHECK_INTERVAL_MS,
+    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
+    registryUrl,
+    fetchImpl: fetch,
+    onApplied: () => binaryWatch.checkNow(),
+    log
+  });
+  const verbCtx = {
+    sessionState,
+    log,
+    launcher,
+    now: instant,
+    applyUpdate: () => updateWatch.act(),
+    // The load the session's bar is drawn from: its cache entry's load
+    // outcome, and what the config that entry renders left unused.
+    // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
+    // doctor click is a verdict on the files as they are now, not on
+    // whether the fs watcher has caught up with an edit made a moment ago.
+    doctor: productionEdge(launcher, (origin) => {
+      const at = [origin.projectDir, origin.cwd, origin.target.path];
+      renderCache.reload(...at, { kind: "doctor" });
+      const entry = renderCache.getOrCreate(...at);
+      return {
+        layers: entry.configLayers,
+        error: entry.lastError,
+        warning: entry.lastWarning,
+        unused: entry.state.unused,
+        config: entry.state.config
       };
-    } catch (_) {
-      var _error = _, _hasError = true;
-    } finally {
-      __callDispose(_stack, _error, _hasError);
-    }
-  } catch (error) {
-    const outcome = { kind: "threw", error };
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      outcome,
-      Date.now() - started2
-    );
-    const failed2 = renderFailed(error);
-    return {
-      resp: failed2,
-      statusline: failed2,
-      nextChange: Infinity,
-      evaluated: 0,
-      delivered: NOTHING_DELIVERED,
-      failure: { level, line: `frame ${line}` }
-    };
-  }
-}
-function sessionGlobals2(sessionId2, state) {
-  return resolveEffectiveGlobals(
-    state.config,
-    (key) => sessionState.get(sessionId2, key),
-    (preset) => state.authoredRoots.has(preset)
-  );
-}
-function viewLanes(sessionId2) {
-  var _stack = [];
-  try {
-    const hold = __using(_stack, renderCache.holdView(sessionId2));
-    return hold === null ? null : laneSwitches(
-      hold.view.source.effective(),
-      inTmux(hold.view.facts().hints.tmux)
-    );
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-function lanesAt(origin, sessionId2) {
-  var _stack = [];
-  try {
-    const hold = __using(_stack, renderCache.hold(
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? void 0
-    ));
-    const latest = frameFeeds.latest(sessionId2);
-    return laneSwitches(
-      sessionGlobals2(sessionId2, hold.state),
-      latest === null || inTmux(latest.hints.tmux)
-    );
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-function checkRenderRequest(req) {
-  const { report: report2 } = validateHookData(req.hookData);
-  const wireProblems = [];
-  for (const path41 of report2.missingRequired) {
-    wireProblems.push(`missing required field '${path41}'`);
-  }
-  for (const { path: path41, expected, got } of report2.typeMismatches) {
-    wireProblems.push(`field '${path41}' expected ${expected}, got ${got}`);
-  }
-  const sessionId2 = parseSessionId(req.hookData?.session_id);
-  if (!sessionId2.ok) {
-    wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
-  }
-  if (typeof req.cwd !== "string" || !(0, import_node_path45.isAbsolute)(req.cwd)) {
-    wireProblems.push(
-      `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
-    );
-  }
-  if (!Array.isArray(req.args) || !req.args.every((a) => typeof a === "string")) {
-    wireProblems.push(
-      `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
-    );
-  }
-  const deadline = parseClientDeadline(
-    req.deadline
-  );
-  if (deadline.kind === "refused")
-    return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId2.ok)
-    return { ok: false, problems: wireProblems };
-  for (const field of report2.unknownTopLevelFields) {
-    if (stats.firstSightOfUnknownHookField(field)) {
-      dlog(
-        "info",
-        `schema: unknown field ${JSON.stringify(field)} \u2014 Anthropic may have added it`
-      );
-    }
-  }
-  const hints = parseClientHints(req);
-  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd);
-  return {
-    ok: true,
-    req: {
-      ...req,
-      deadline,
-      sessionId: sessionId2.id,
-      hints,
-      rateLimits: rateLimitsSeen(req.hookData),
-      requested: {
-        projectDir: req.hookData.workspace.project_dir,
-        cwd: req.cwd,
-        configFile: configFile ?? hints.configEnv ?? null
-      },
-      refusedArgs
-    }
-  };
-}
-var refusedRender = (problems) => ({
-  outcome: { kind: "bad-request", problems },
-  resp: {
-    ok: false,
-    error: `malformed hookData: ${problems.join("; ")}`,
-    code: "BAD_REQUEST",
-    daemonV: PROTOCOL_VERSION
-  },
-  delivered: NOTHING_DELIVERED
-});
-function requestFacts(req, at, facts) {
-  noteFacts(facts, {
-    sid: req.sessionId,
-    at: at.toFixed(3)
-  });
-  const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
-  noteFacts(facts, {
-    termCols: String(hints.termCols ?? "?"),
-    termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
-    badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
-    // Which program drew this bar (src/client-hint.ts); `unreported` for a
-    // client too old to say.
-    client: hints.client?.kind ?? "unreported",
-    // What the sighting recorded of the rate-limit windows — the fact the
-    // doctor's segment-data check reads (RenderSightings).
-    rateLimits: req.rateLimits
-  });
-  return hintsError;
-}
-function setUpRender(req, at, facts) {
-  const sessionId2 = req.sessionId;
-  const hintsError = requestFacts(req, at, facts);
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
-  const hold = renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0,
-    req
-  );
-  return setUpDraw(hold, req, hintsError, at, facts);
-}
-function setUpFrame(sessionId2, at, facts) {
-  const hold = renderCache.holdView(sessionId2);
-  if (hold === null) {
-    const failed2 = renderCache.openFailure(sessionId2);
-    if (failed2 !== null) throw failed2.error;
-    return null;
-  }
-  const req = hold.view.facts();
-  let hintsError;
-  try {
-    hintsError = requestFacts(req, at, facts);
-  } catch (e) {
-    hold[Symbol.dispose]();
-    throw e;
-  }
-  return setUpDraw(hold, req, hintsError, at, facts);
-}
-function setUpDraw(hold, req, hintsError, at, facts) {
-  try {
-    const { entry, state, view } = hold;
-    const { sessionId: sessionId2, hints } = req;
-    const effective = view.source.effective();
-    const payloadInputs = {
-      hookData: req.hookData,
-      deps: {
-        ...payloadProviders,
-        // The lanes the session's view declared: what this render reads of
-        // the daemon's shared entries.
-        lanes: view.lanes
-      },
-      cwd: req.cwd,
-      neededInputPaths: state.neededInputPaths(effective.preset),
-      hints
-    };
-    return {
-      req,
-      at,
-      facts,
-      sessionId: sessionId2,
-      entry,
-      state,
-      view,
-      hintsError,
-      payloadInputs,
-      [Symbol.dispose]: () => hold[Symbol.dispose]()
-    };
-  } catch (e) {
-    hold[Symbol.dispose]();
-    throw e;
-  }
-}
-function drawRender(setup, drawing2) {
-  const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
-  const effective = view.source.effective();
-  const lanes = laneSwitches(effective, inTmux(view.facts().hints.tmux));
-  noteFacts(facts, {
-    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-"
-  });
-  const { hints } = view.facts();
-  const width = renderWidth(hints);
-  noteFacts(facts, { width: String(width) });
-  const payload = view.source.payload();
-  const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
-  const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const updates = updateWatch.notice({
-    sessionId: sessionId2,
-    dismissed: sessionState.get(sessionId2, UPDATE_DISMISSED_KEY),
-    enabled: effective.updateNotice
-  });
-  const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
-  const sourced = (about, text4) => ({
-    about,
-    text: text4,
-    copy: text4
-  });
-  const said = (text4) => sourced(text4 ?? "", text4);
-  const errors2 = [
-    said(refusedArgsError(req.refusedArgs)),
-    said(hintsError),
-    sourced("load", entry.lastError),
-    sourced("update-act", updateWatch.error()),
-    ...state.dropped.map((e) => ({
-      about: `dropped\0${e.file}`,
-      text: e.message,
-      copy: e.prompt
-    })),
-    said(clickShown?.text)
-  ].flatMap(
-    ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
-  );
-  const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch);
-  const standing = [
-    ...fileEventsWarnings(fileEvents.delivery()),
-    ...lifelineWarnings(),
-    ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
-    ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
-  ];
-  const scope = { config: state.config };
-  const diagnostics = collectDiagnostics(
-    sessionId2,
-    drawing2.by,
-    errors2,
-    [...updates, ...questions],
-    [
-      ...standing,
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
-    ].map((w) => ({
-      about: `${w.kind}\0${w.message}`,
-      text: w.message,
-      copy: w.message
-    }))
-  );
-  const projected = {
-    diagnostics: diagnosticsProjection(diagnostics),
-    drawing: drawing2,
-    feeds: frameFeeds.feedsOf(sessionId2, at),
-    today: todayOf(
-      payloadProviders,
-      view.lanes().today,
-      view.facts().hookData,
-      at
-    )
-  };
-  const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
-  noteFacts(facts, sourcesFactOf(view.lanes().sources));
-  noteFacts(facts, {
-    prompts: String(metrics?.messageCount ?? "-"),
-    nonPrompts: String(metrics?.nonPrompts ?? "-"),
-    pr: prFactOf(
-      payload.git,
-      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths).showPullRequest === true
-    ),
-    feeds: feedsFact(projected.feeds)
-  });
-  const drawnWarnings = [];
-  const renderOpts = renderOptionsOf(effective, width);
-  const effects = effectSessions.of(sessionId2);
-  const idleSince = menuIdle.since(sessionId2, at);
-  const frame = drawDsl(
-    state.config,
-    state.compiled,
-    view.store,
-    view.registry,
-    projected,
-    at,
-    renderOpts,
-    // [LAW:single-enforcer] The per-segment StripCell sink for the
-    // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; drawDsl clears + repopulates it
-    // in place. Cells are cheap (already computed during the render);
-    // the per-segment ANSI serialization happens lazily inside the
-    // debug handler so normal renders pay no extra serializer cost.
-    {
-      perSegmentSink: view.lastRenderCellsBySegment,
-      onRenderWarning: (warning) => drawnWarnings.push(warning)
+    }),
+    doctorStores,
+    probes: handlerProbes,
+    clients: renderSightings,
+    bundle: bundle.path,
+    serving: () => limits.serving(),
+    claudeInput: productionClaudeInputEdge(launcher),
+    history: settingsHistory,
+    navigation: navigationHistory,
+    // The config a session's last render resolved from — the same entry the
+    // render drew the bar with, so a save compares against the bar the user saw.
+    configFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.config,
+    reloadConfig: (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
+      kind: "write"
+    }),
+    // The storage keys of the same entry `configFor` reads the config of.
+    sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
+    links: linkSigner2,
+    runs,
+    lanes: {
+      of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
+      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after)
     },
-    // [LAW:one-source-of-truth] The draw's own settings and the session's
-    // effect memory. The theme, style and effect are not among them: the
-    // view's slots settle those names (src/dsl/parts.ts), the same ones its
-    // payload's `.effective` fields read.
-    { ...effective, effects, idleSince }
-  );
-  const keys2 = copyKeys(diagnostics);
-  const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
-  const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
-  menuIdle.observe(sessionId2, at, frame.menuRows > 0, effective.menuTimeout);
-  const menusSince = menuIdle.since(sessionId2, at);
-  noteFacts(facts, {
-    menuIdle: menusSince === void 0 ? "-" : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`
-  });
-  const recorded = renderWarnings.drawn(
-    sessionId2,
-    drawing2.by,
-    scope,
-    drawnWarnings
-  );
-  const geometry = {
-    width,
-    // A feed's one frame is shown by every lane switched on, so it pages
-    // within the shortest of their surfaces.
-    rows: viewerRowCap(
-      hints.termRows,
-      drawing2.by === "feed" ? LANE_NAMES.flatMap((lane) => {
-        const rows = LANES[lane].rows;
-        return lanes[lane] && rows !== null ? [rows] : [];
-      }) : []
-    ),
-    colorCompatibility: effective.colorCompatibility
-  };
-  const viewing = viewedIndex(
-    sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
-    diagnostics
-  );
-  const body = viewing === null ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion } : {
-    text: viewerRows(
-      diagnostics,
-      viewing,
-      sessionId2,
-      drawing2.by,
-      geometry
-    ),
-    nextChange: Infinity,
-    motion: frame.motion === "still" ? "still" : "can-move"
-  };
-  const g = gitService.getStats();
-  const u = usageStore.getStats();
-  const fx = effects.lastFrame();
-  const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
-  const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  const tagOf = (w) => {
-    switch (w.kind) {
-      case "rule":
-        return `rule:${w.slot}`;
-      case "refresh":
-        return `refresh:${w.variable}`;
-      case "file-events":
-        return `${w.kind}:${w.state}`;
-      case "load":
-      case "config-watch":
-      case "lifeline":
-      case "when":
-        return w.kind;
-    }
-  };
-  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
-  noteFacts(facts, {
-    git: `${g.size}/${g.hits}h/${g.misses}m`,
-    usage: `${u.size}/${u.hits}h/${u.misses}m`,
-    effect: fx.effect,
-    effectT: fx.t.toFixed(3),
-    // The rate the session's animation clock ran at for this frame.
-    speed: `${fx.speed}x`,
-    effectRows: `${fx.made}made/${fx.reused}reused`,
-    effectOwn: own2,
-    fadeBasis: fx.basis,
-    stateRev: String(fx.revision),
-    fades: passages(fx.fades),
-    leaves: passages(fx.leaves),
-    // What the body drew: whether anything on it changes without new data.
-    motion: body.motion,
-    // How many of the view's parts it evaluated: between data changes, only
-    // those that read the instant (src/dsl/parts.ts).
-    evaluated: String(frame.evaluated),
-    // The sources it drew as not answered yet; `-` for none.
-    pending: frame.pending.join(",") || "-",
-    // Each globals rule in force, as its slot settled it: `kept` outside the
-    // draw, `per-draw` at this frame's instant; `-` for none.
-    rules: [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
-    err: errors2.length > 0 ? "Y" : "N",
-    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    upd: String(updates.length),
-    // How many repositories the bar asked about.
-    ask: String(questions.length),
-    warn: warned,
-    // What the indicator counted, and whether this frame's warnings moved
-    // its renderer's record (`new`) or matched it (`kept`).
-    diag: String(diagnostics.length),
-    warnRecord: recorded ? "new" : "kept",
-    // The message the viewer showed in the body's place, `-` while closed.
-    viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
-  });
-  return {
-    drawn: {
-      body: body.text,
-      viewerOpen: viewing !== null,
-      diagnostics,
-      geometry
-    },
-    motion: body.motion,
-    nextChange: body.nextChange,
-    evaluated: frame.evaluated,
-    clickShown,
-    delivered,
-    lanes
-  };
-}
-function composeBar(drawn) {
-  return drawn.body + "\n";
-}
-function recordRequest(req) {
-  const sessionId2 = req.sessionId;
-  const { client: _client, ...recorded } = req.hints;
-  const hintRecord = JSON.stringify(recorded);
-  if (sessionState.get(sessionId2, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
-    sessionState.set(sessionId2, SESSION_CLIENT_HINTS_KEY, hintRecord);
-  }
-  const origin = encodeRenderOrigin(req.requested);
-  if (sessionState.get(sessionId2, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-    sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
-  }
-}
-async function answerRequest(req, at, wait, facts) {
-  recordRequest(req);
-  return drawAnswer(req, at, wait, facts);
-}
-function arrived2(req, lanes) {
-  laneSetups.noted(laneSessionOf(req), lanes);
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus
-  );
-}
-function laneSessionOf(req) {
-  const sessionId2 = req.hookData.session_id;
-  return {
-    sessionId: sessionId2,
-    hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
-    transcript: req.hookData.transcript_path,
-    answered: answeredOf(req.hookData)
-  };
-}
-function laneClicked(sessionId2, before, after) {
-  const latest = frameFeeds.latest(sessionId2);
-  laneSetups.clicked(
-    sessionId2,
-    latest === null ? null : laneSessionOf(latest),
-    before,
-    after
-  );
-  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
-}
-async function drawAnswer(req, at, wait, facts) {
-  var _stack = [];
-  try {
-    const setup = __using(_stack, setUpRender(req, at, facts));
-    arrived2(
-      req,
-      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
-    );
-    noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
-    const waitFrom = performance.now();
-    const refreshed = /* @__PURE__ */ new Map();
-    const ended = await waitWithin(
-      (signal) => Promise.all([
-        settlePayload(setup.payloadInputs, at, refreshed),
-        setup.view.registry.inFlight(signal)
-      ]),
-      wait.endsAt - waitFrom,
-      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-      // it is a bug, said against the session, never one that ends the daemon.
-      (e) => dlog(
-        "error",
-        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
+    views: {
+      follow: (sessionId2, origin) => renderCache.follow(
+        sessionId2,
+        origin.projectDir,
+        origin.cwd,
+        origin.target.path
       )
-    );
-    const drawFrom = performance.now();
-    noteFacts(facts, {
-      waited: `${Math.round(drawFrom - waitFrom)}ms`,
-      ended,
-      refreshed: refreshedFact(refreshed)
-    });
-    const { drawn, motion, clickShown, delivered, lanes } = drawRender(
-      setup,
-      ANSWERING
-    );
-    const output = composeBar(drawn);
-    const sessionId2 = req.sessionId;
-    const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
-    const statusline = statuslineOf(sessionId2, drawn, output, elsewhere);
-    const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-    noteFacts(facts, {
-      handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-      drew: `${Math.round(performance.now() - drawFrom)}ms`
-    });
-    return {
-      answer: toStatusline ? statusline : output,
-      motion,
-      clickShown,
-      delivered
-    };
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-function statuslineOf(sessionId2, drawn, output, elsewhere) {
-  const [first2, ...rest2] = elsewhere;
-  return first2 === void 0 || drawn.viewerOpen ? output : handoffRows(
-    laneHandoff(sessionId2, [first2, ...rest2]),
-    drawn.diagnostics,
-    sessionId2,
-    drawn.geometry
-  ) + "\n";
+    },
+    diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
+  };
+  const parts = {
+    launcher,
+    log,
+    clock,
+    bundle: bundle.path,
+    sourceDigest: bundle.digest,
+    doctorStores,
+    stats,
+    handlerProbes,
+    renderSightings,
+    watcherRegistry,
+    refreshLedger,
+    fileEvents,
+    payloadProviders,
+    sessionState,
+    effectSessions,
+    menuIdle,
+    linkSigner: linkSigner2,
+    runs,
+    laneSetups,
+    tmuxStatusLines,
+    frameFeeds,
+    renderWarnings,
+    renderCache,
+    updateWatch,
+    limits,
+    verbCtx
+  };
+  liveDaemon = closing.signal;
+  return {
+    stats,
+    launcher,
+    log,
+    memoryLimitBytes: memoryLimitBytes2,
+    clock,
+    exit: exit2,
+    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
+    // the way in. A click runs in the turn it enters, so one that got in has
+    // landed before any close; a subscribe its request reached as the daemon
+    // closed is refused here and opens no feed.
+    handle: async (req, timedOut, accepted) => {
+      closing.signal.throwIfAborted();
+      return handleRequest(parts, req, timedOut, accepted);
+    },
+    reply: async (req, timedOut, accepted) => {
+      closing.signal.throwIfAborted();
+      return replyTo(parts, req, timedOut, accepted);
+    },
+    subscribe: (sessionId2, subscriber) => {
+      closing.signal.throwIfAborted();
+      return frameFeeds.subscribe(sessionId2, subscriber);
+    },
+    reloadConfig: (origin) => {
+      closing.signal.throwIfAborted();
+      verbCtx.reloadConfig(origin);
+    },
+    arm() {
+      closing.signal.throwIfAborted();
+      fileEvents.start(watchProbeDir());
+      binaryWatch.arm();
+      updateWatch.arm();
+      limits.arm();
+    },
+    close() {
+      const teardown = [
+        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+        // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
+        // comes before the abort that ends the daemon's launches.
+        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
+        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+        // is in flight is terminated, whichever owner's work it was, and the
+        // launcher's lifeline goes.
+        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        ["frameFeeds close", () => frameFeeds.close()],
+        ["menuIdle dispose", () => menuIdle.dispose()],
+        ["updateWatch close", () => updateWatch.close()],
+        ["binaryWatch close", () => binaryWatch.close()],
+        ["limits disarm", () => limits.disarm()],
+        // Before the sources and the storage its states hold.
+        ["renderCache close", () => renderCache.close()],
+        ["gitService close", () => gitService.close()],
+        ["usageStore close", () => usageStore.close()],
+        ["tmuxService close", () => tmuxService.close()],
+        ["hostService close", () => hostService.close()],
+        ["runs close", () => runs.close()],
+        ["managedStorage close", () => managedStorage.close()],
+        ["fileEvents close", () => fileEvents.close()],
+        ["watcherRegistry close", () => watcherRegistry.closeAll()],
+        ["sessionState close", () => sessionState.close()]
+      ];
+      for (const [step4, run3] of teardown) {
+        try {
+          run3();
+        } catch (e) {
+          log("warn", `${step4} failed: ${e.message}`);
+        }
+      }
+      closed = true;
+    }
+  };
 }
 
 // site/scenario.ts
@@ -83806,7 +84115,25 @@ var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
 var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
-establishLimits(process_default.env);
+var pageDaemon = createDaemon({
+  bundle: {
+    entryUrl: "file:///app/dist/index.mjs",
+    digest: null,
+    path: "/app/dist/index.mjs",
+    node: [],
+    targets: []
+  },
+  storage: () => ({
+    session: EPHEMERAL_SESSION_STORAGE,
+    history: EPHEMERAL_HISTORY_STORAGE
+  }),
+  memoryLimitBytes: memoryLimitBytes(process_default.env),
+  registryUrl: REGISTRY_URL,
+  clock: SYSTEM_CLOCK,
+  exit: (code) => {
+    throw new Error(`the page's daemon asked to exit ${code}`);
+  }
+});
 function lines(entry, at) {
   const base = { timestamp: new Date(clockAt(at) * 1e3).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output) => ({
@@ -83889,7 +84216,7 @@ function hookData() {
   };
 }
 async function daemon2(request2) {
-  const { resp, delivered } = await replyTo(request2, () => false, performance.now());
+  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic());
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";
@@ -83976,7 +84303,7 @@ var transport = {
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {
     forgetWrites();
-    reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
+    pageDaemon.reloadConfig({ projectDir: REPO, cwd: REPO, target: { source: "search" } });
     sessionId = crypto.randomUUID();
     startAt(t);
     notify();
