@@ -4,15 +4,22 @@
     {
       "version": "pr-524",
       "ref": "refs/pull/524/merge",
-      "sha": "220b5ebd926ffdba4778b655ad90b28e4414d6e8",
-      "timestamp": "2026-10-31T19:59:17.427Z",
+      "sha": "88b9daa25b48c0c8bd61aa6faa458bd7408f3bb3",
+      "timestamp": "2026-10-31T20:22:15.225Z",
       "commits": [
         {
-          "sha": "220b5ebd926ffdba4778b655ad90b28e4414d6e8",
+          "sha": "88b9daa25b48c0c8bd61aa6faa458bd7408f3bb3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:58:34Z",
-          "message": "Merge 78095c24322c36a8bce8598036d194c423197985 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+          "timestamp": "2026-10-31T20:21:32Z",
+          "message": "Merge 4241cdf6ce8dc7d95c591982ed041bd89c9e6ad1 into e12259f251ecab0872cb94d03b6f9f536d80c2a9\n"
+        },
+        {
+          "sha": "4241cdf6ce8dc7d95c591982ed041bd89c9e6ad1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T14:21:21-06:00",
+          "message": "test(daemon): the backstop case goes back to a process, and the harness holds the update keys (candybar-testing-0x6u.1ur)\n\nThe running source from the last commit did not make the timedOut case\ndeterministic: CI's reply still beat the backstop, and it failed 2 of 6\nruns here. Whether the backstop wins is decided by the loop's own turns,\nso the case returns to a real process, after the deadline case as on\nmain, with its original config.\n\nAn in-worker daemon now holds the update keys as a booted one does, in\nthe one place that starts it, so the config-env file needs no workaround.\nA later listen error stays loud, and /restart keeps the new bar if the\nold one's stop rejects. Two comments move back beside their cases, and\nthe false \"nothing of the first is left\" comments go.\n"
         },
         {
           "sha": "78095c24322c36a8bce8598036d194c423197985",
