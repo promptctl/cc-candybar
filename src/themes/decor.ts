@@ -1041,10 +1041,10 @@ const DISTRIBUTION_NAME = new Map<Distribution, DistributionName>(
  * ladder that is (`widen`). Both neighbours, because its other neighbour is
  * of its own hue, kept apart from it by the distribution: a tone drawn like
  * that one would move the collision one seam over. And drawn as neither of
- * them nor the shade an open trigger on the bar wears (`pressedOnBar`): a
- * trigger can stand beside the cell that moves, and the press keeps apart
- * only from the tones the windows deal, because a band's colours never
- * depend on where its trigger stands, so a rung past a window is one the
+ * them nor the shade an open trigger on the bar wears (`drawnPress` at
+ * depth 0): a trigger can stand beside the cell that moves, and the press
+ * keeps apart only from the tones the windows deal, because a band's colours
+ * never depend on where its trigger stands, so a rung past a window is one the
  * press cannot see. A cell's neighbours are a fact of its address, so the
  * cell is the one that keeps off the press. Where its ladder has no such
  * rung, the cell before the turn takes one by the same rule. Where neither
@@ -1082,7 +1082,11 @@ function turnsHeld(
     const entry = line[at];
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
-  const pressed = pressedOnBar(palette, decor, drawnAt);
+  // Every trigger on the bar opens its lineage at depth 0, whatever its row
+  // or place (`decorationFor`), so what an open trigger on the bar wears is
+  // one colour for the whole bar, known without a position: the rule keeps a
+  // cell off it by the cell's address alone.
+  const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
   // The entry `at` takes to stand apart from the cells either side of it and
   // from every colour `off` names: its own hue, at the first tone of its
   // window, else the nearest rung of its ladder, drawn as none of them.
@@ -1321,7 +1325,7 @@ export const bandEntries = (
  * cell a hue turn moves past its window is not among them, because which
  * rung it takes depends on where it stands, and a band's colours never
  * depend on where its trigger stands; that cell keeps off this shade
- * instead (`turnsHeld`).
+ * instead, wherever its ladder has a rung to give (`turnsHeld`).
  *
  * [LAW:one-source-of-truth] Read by `bandFor`, so the trigger, its band's
  * leads and its ✕ wear one shade. [LAW:dataflow-not-control-flow] Built once
@@ -1354,7 +1358,7 @@ export function pressedAt(
       variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
     const besideBand = (up: Disclosure): string[] => [
       ...dealt(hueOf(up)),
-      drawnIn(palette, hueOf(up), drawnAt)(pressedAt(palette, up, drawnAt)),
+      drawnPress(palette, up, drawnAt),
     ];
     const besideTrigger =
       depth === 0
@@ -1374,28 +1378,24 @@ export function pressedAt(
 const PRESSED = memoPerPalette<RoleShade>();
 
 /**
- * What an open trigger on the bar under `decor` wears, as `drawnAt` draws it:
- * every trigger on the bar opens its lineage at depth 0, whatever its row or
- * place (`decorationFor`), so this is one colour for the whole bar, known
- * without any position — which is what lets the turn rule (`turnsHeld`) keep
- * a cell off it by its address alone.
- * [LAW:one-source-of-truth] The band's own pressed shade, read through
- * `pressedAt` as `bandFor` reads it, so the colour a cell keeps off is the
- * one the trigger is drawn in. [LAW:dataflow-not-control-flow] A lookup of
- * that memoised entry.
+ * The colour the pressed shade of the band `disclosure` opens is drawn in at
+ * `drawnAt`: what its trigger, its ✕ and its blank leads are sent.
+ * [LAW:one-source-of-truth] The shade `bandFor` reads, drawn as a window's
+ * tones are, so what the press one depth down keeps apart from (`pressedAt`)
+ * and what a cell at a hue turn keeps off (`turnsHeld`) are the colour this
+ * press is drawn in. [LAW:dataflow-not-control-flow] A lookup of the
+ * memoised shade.
  */
-const pressedOnBar = (
+const drawnPress = (
   palette: Palette,
-  decor: Decor,
+  disclosure: Disclosure,
   drawnAt: ColorDepth,
-): string => {
-  const opened: Disclosure = { decor, depth: 0 };
-  return drawnIn(
+): string =>
+  drawnIn(
     palette,
-    hueOf(opened),
+    hueOf(disclosure),
     drawnAt,
-  )(pressedAt(palette, opened, drawnAt));
-};
+  )(pressedAt(palette, disclosure, drawnAt));
 
 /** The band a trigger standing in `disclosure`'s band opens: one depth further. */
 const nestedIn = (disclosure: Disclosure): Disclosure => ({

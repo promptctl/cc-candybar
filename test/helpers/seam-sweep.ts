@@ -56,7 +56,7 @@ import {
 } from "../../src/themes/decor";
 import { instantOf } from "../../src/utils/instant";
 import { LADDER, TODAY, besidePress } from "./decor-vocabulary";
-import { cellAfter, cellBefore, drawnChars, seams, shown } from "./seams";
+import { cellAfter, cellBefore, drawnChars, seams, shown, visible } from "./seams";
 import { sessionBar, type SessionBar } from "./session-bar";
 
 const THEMES = listThemePalettes();
@@ -133,7 +133,6 @@ function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDep
 
 // A cell's background as the render dealt it, before the writer rounds it.
 const dealt = (cell: RichText): ColorRgba | undefined => resolvedStyle(cell.style).bgcolor?.value;
-const visible = (text: string): string => text.replace(/\s/g, "");
 
 /**
  * The bundled bar drawn at each depth, one rig per depth: parse and compile

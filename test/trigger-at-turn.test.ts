@@ -13,7 +13,7 @@ import { menuStateKey } from "../src/config/menu-keys";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { SHADES, VARIATIONS, bandFor, decorEntryColour, windowAt, type Decor, type DecorHue, type VariationName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
-import { cellAfter, cellBefore, drawnChars, seams, shown } from "./helpers/seams";
+import { cellAfter, cellBefore, drawnChars, seams, shown, visible } from "./helpers/seams";
 import { pressHasNoneToGive } from "./helpers/seam-sweep";
 import { sessionBar } from "./helpers/session-bar";
 
@@ -62,13 +62,11 @@ function source(frame: Frame, compatibility: string): string {
   }`;
 }
 
-const visible = (text: string): string => text.replace(/\s/g, "");
-
 describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
   test(`under ${frame.variation}, the trigger at cell ${frame.trigger} draws apart from both its neighbours, cell ${frame.across} across the turn among them, under every bundled theme at 256 colours and ansi`, () => {
     const decor: Decor = { variation: VARIATIONS[frame.variation], shade: SHADES.middle };
     const alike: string[] = [];
-    const seen = { seams: 0, across: 0, open: 0, pastWindow: 0, pressed: 0 };
+    const seen = { seams: 0, across: 0, open: 0, pastWindow: 0 };
     for (const [compatibility, drawnAt] of DEPTHS) {
       const bar = sessionBar(source(frame, compatibility), 200);
       bar.pick("variation", frame.variation);
@@ -99,10 +97,7 @@ describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
           seen.seams++;
           if (cells.includes(other)) seen.across++;
           if (shown(left) !== shown(right)) continue;
-          if (noneToGive) {
-            seen.pressed++;
-            continue;
-          }
+          if (noneToGive) continue;
           alike.push(`${theme} at ${compatibility}: ${cells.join(" | ")} both on ${shown(left)}`);
         }
       }

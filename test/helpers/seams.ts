@@ -155,3 +155,6 @@ export const cellAfter = (chars: readonly Char[], at: number): string => {
   while (to < chars.length && !chars[to]!.joiner) to++;
   return chars.slice(at + 1, to).map((c) => c.ch).join("");
 };
+
+/** A cell's text as a seam names it: without its padding or any space. */
+export const visible = (text: string): string => text.replace(/\s/g, "");
