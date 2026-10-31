@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-526",
+      "ref": "refs/pull/526/merge",
+      "sha": "d9b2872fac991dbfc4b33744cf928118422a0a57",
+      "timestamp": "2026-10-31T22:40:40.063Z",
+      "commits": [
+        {
+          "sha": "d9b2872fac991dbfc4b33744cf928118422a0a57",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:40:02-06:00",
+          "message": "Merge e03fb1196345f3940e096df16b7a573b129534a2 into 5906e458d69d135a44baeafed475d436482c7355\n"
+        },
+        {
+          "sha": "e03fb1196345f3940e096df16b7a573b129534a2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:39:49-06:00",
+          "message": "test(protocol): each message-bearing cause's whole glyph is in the one table (brandon-unfiled-3248.1izo)\n\nThe wiring tests kept after the clip moved to the table were a hand-mirrored pair of their own: each runtime spelled the four labels, an all-x message could not tell a real clip from a UTF-16 or byte slice, and expected text derived from the constant left the budget's value unpinned. A row per cause with an astral message and the exact bytes closes all three, and replaces the wiring pair and the short-message tests. The budget constant goes back to private: nothing outside its module names it now.\n"
+        },
+        {
+          "sha": "03003d6c34338acaa109f7fb5b99647641407c63",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:32:45-06:00",
+          "message": "docs(protocol): the glyph header names the one table that pins the clip (brandon-unfiled-3248.1izo)\n"
+        },
+        {
+          "sha": "3ad57049e6e9cf4f83c1fb9545600f6cab44971c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:32:08-06:00",
+          "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-518",
       "ref": "refs/pull/518/merge",
       "sha": "62aee6787245f7ebecc2c845d113bc24d744f71d",
@@ -34,35 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T04:45:01-06:00",
           "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-526",
-      "ref": "refs/pull/526/merge",
-      "sha": "92f84fb741c471c81c8984fc3af85850b3d5a5ea",
-      "timestamp": "2026-10-31T22:34:09.365Z",
-      "commits": [
-        {
-          "sha": "92f84fb741c471c81c8984fc3af85850b3d5a5ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:33:10Z",
-          "message": "Merge 03003d6c34338acaa109f7fb5b99647641407c63 into 5906e458d69d135a44baeafed475d436482c7355\n"
-        },
-        {
-          "sha": "03003d6c34338acaa109f7fb5b99647641407c63",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:32:45-06:00",
-          "message": "docs(protocol): the glyph header names the one table that pins the clip (brandon-unfiled-3248.1izo)\n"
-        },
-        {
-          "sha": "3ad57049e6e9cf4f83c1fb9545600f6cab44971c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:32:08-06:00",
-          "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n"
         }
       ]
     },
