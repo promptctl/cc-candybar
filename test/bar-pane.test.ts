@@ -8,7 +8,8 @@ import { paint } from "../src/bar-pane/paint";
 describe("bar-pane paint", () => {
   it("places each bar line on its own row and erases what is below", () => {
     expect(paint("row one\nrow two")).toEqual({
-      bytes: "\x1b[1H\x1b[2Krow one\x1b[2H\x1b[2Krow two\x1b[J",
+      bytes:
+        "\x1b[?2026h\x1b[1Hrow one\x1b[0m\x1b[K\x1b[2Hrow two\x1b[0m\x1b[K\x1b[J\x1b[?2026l",
       rows: 2,
     });
   });
