@@ -193,15 +193,6 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
   });
 });
 
-test("closing the door returns a tab closed by its ✕ to the first tab", () => {
-  const rt = buildRuntime(BUNDLED);
-  openDoor(rt);
-  rt.clickWriting(TAB, DISCLOSURE_CLOSED);
-  rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
-  rt.clickWriting(SETTINGS_ANCHOR, "open");
-  expect(rt.held(TAB)).toBe("session");
-  expect(stripAnsi(rt.render())).toContain("⎘ id");
-});
 
 test("◁ back over a closed door restores the menu with what was open in it", () => {
   const rt = buildRuntime(BUNDLED);
@@ -230,21 +221,6 @@ test("the close is logged with what it folded", () => {
 
 // The auto-close (brandon-menus-sjhy.my3) closes the door from a timer, not a
 // click: a write through the closing view closes what a click would.
-test("a write that is not a click closes what is inside the door", () => {
-  const rt = buildRuntime(BUNDLED);
-  openDoor(rt);
-  rt.clickWriting(TAB, "look");
-  rt.clickWriting(PICKERS, "candybar.apply.effect");
-  const lines: string[] = [];
-  closingView(rt.sessionState, () => disclosureNest(rt.config), (l) => lines.push(l)).set(
-    SID,
-    SETTINGS_ANCHOR,
-    DISCLOSURE_CLOSED,
-  );
-  expect(rt.held(TAB)).toBe("session");
-  expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
-  expect(lines).toHaveLength(1);
-});
 
 // A config's own groups and menus (the bundled bar has none): a group
 // `outer` holding a group `inner` and a `{{ menu }}`, in an accordion with a

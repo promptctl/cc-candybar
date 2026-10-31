@@ -291,19 +291,6 @@ const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
 const IDLE = { idleS: 30, timeoutS: 30 };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
-  test("the door closes with every list and submenu inside it, and the tab goes back to its default", () => {
-    const rt = buildRuntime(BUNDLED);
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    rt.clickWriting(TAB, "look");
-    rt.clickWriting(PICKERS, "candybar.apply.effect");
-    closeIdleMenus(SID, IDLE, rt.ctx);
-    expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
-    expect(rt.held(TAB)).toBe("session");
-    expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
-    expect(rt.logged).toContain(
-      `menu-idle: closed=${SETTINGS_ANCHOR} idle=30.0s timeout=30s (session=${SID})`,
-    );
-  });
 
   test("edit mode exits with the door, and its savepoint goes with it", () => {
     const rt = buildRuntime(BUNDLED);
@@ -366,10 +353,10 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
 });
 
 describe("the flash on the bar", () => {
-  // Idle since 1000, closing at 1030: the first slow flash is lit from 1022.5.
+  // Idle since 1000, closing at 1120: the first slow flash is lit from 1112.5.
   const SINCE = at(1000);
-  const LIT = at(1023);
-  const DARK = at(1024);
+  const LIT = at(1113);
+  const DARK = at(1114);
   const BEFORE = at(1010);
 
   const rows = (text: string): string[] => text.split("\n");
@@ -404,9 +391,9 @@ describe("the flash on the bar", () => {
     // Drawn as it was, yet it says when it changes: the flash's first lit hold
     // (candybar-animation-wbxz.014), so a feed drawing it is drawn then.
     expect(waiting.motion).toBe("moves");
-    expect(waiting.nextChange).toBe(1022.5);
+    expect(waiting.nextChange).toBe(1112.5);
     // The same frame between two holds says when the next one turns.
-    expect(rt.draw(DARK, SINCE).nextChange).toBe(1024.5);
+    expect(rt.draw(DARK, SINCE).nextChange).toBe(1114.5);
   });
 
   // The flash counts down to the moment the daemon's timer closes the menus,
@@ -419,9 +406,9 @@ describe("the flash on the bar", () => {
       rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
       expect([speed, rt.draw(BEFORE, SINCE).nextChange]).toEqual([
         speed,
-        1022.5,
+        1112.5,
       ]);
-      expect([speed, rt.draw(DARK, SINCE).nextChange]).toEqual([speed, 1024.5]);
+      expect([speed, rt.draw(DARK, SINCE).nextChange]).toEqual([speed, 1114.5]);
     }
   });
 

@@ -537,7 +537,7 @@ a different thing: it writes the session key `update.dismissed` with the
 identity of the newer thing, so a dismissal lapses by itself the next time
 something newer appears.
 
-`menuTimeout` (seconds, 10–600, default 30) is how long a session's open
+`menuTimeout` (seconds, 15–600, default 120) is how long a session's open
 menus — every disclosure body and dropped `{{ menu }}` — stay open with no
 click in that session, counted from the later of that click and the first
 frame that drew them. They flash for their last 7.5 s, every lit cell a solid
