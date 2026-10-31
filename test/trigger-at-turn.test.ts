@@ -11,7 +11,7 @@
 import { ColorDepth, getThemePalette, listThemePalettes } from "@promptctl/rich-js";
 import { menuStateKey } from "../src/config/menu-keys";
 import { resolvedStyle } from "../src/render/rich-theme";
-import { SHADES, VARIATIONS, bandFor, decorEntryColour, windowAt, type Decor, type DecorHue, type VariationName } from "../src/themes/decor";
+import { DECOR_HUES, SHADES, VARIATIONS, bandFor, decorEntryColour, windowAt, type Decor, type DecorHue, type VariationName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { cellAfter, cellBefore, drawnChars, seams, shown, visible } from "./helpers/seams";
 import { pressHasNoneToGive } from "./helpers/seam-sweep";
@@ -87,8 +87,11 @@ describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
         if (!window.includes(worn(across) ?? "")) seen.pastWindow++;
         // The sweep's press exemption, for the band every bar trigger opens:
         // a press whose ladder the depth draws only in colours the design
-        // stands beside it has none to give.
+        // stands beside it has none to give, so it meets one of them, a tone
+        // a window deals. A cell beside it wearing anything else was put
+        // there by the turn rule, and that seam is held.
         const noneToGive = pressHasNoneToGive(palette, decor, 0, drawnAt);
+        const dealtTones = new Set(DECOR_HUES.flatMap((hue) => windowAt(palette, hue, decor.shade, drawnAt).map((tone) => decorEntryColour(palette, { hue, shade: tone }).hex)));
         const [trigger, other] = [visible(onBar(TRIGGER).plain), visible(onBar(across).plain)] as const;
         const chars = drawnChars(text);
         for (const { left, right, at } of seams(chars)) {
@@ -97,7 +100,9 @@ describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
           seen.seams++;
           if (cells.includes(other)) seen.across++;
           if (shown(left) !== shown(right)) continue;
-          if (noneToGive) continue;
+          // A plain cell's text is its name.
+          const met = cells.find((cell) => cell !== trigger)!;
+          if (noneToGive && dealtTones.has(worn(met) ?? "")) continue;
           alike.push(`${theme} at ${compatibility}: ${cells.join(" | ")} both on ${shown(left)}`);
         }
       }
