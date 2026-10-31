@@ -41,7 +41,10 @@ import type { ViewFacts } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { Holds } from "../src/utils/holds";
 import { stateGate } from "../src/daemon/verbs/state-validators";
-import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  WatcherRegistry,
+  type WatcherCounters,
+} from "../src/daemon/cache/watchers";
 import type { DaemonLogger } from "../src/utils/logger";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { editedConfig, editProjectConfig } from "./helpers/edited-config";
@@ -83,19 +86,18 @@ function makeCache(
   cleanups: Array<() => void>;
   reloads: ReloadSignal;
   watchers: WatcherRegistry;
+  counters: WatcherCounters;
 } {
   const cleanups: Array<() => void> = [];
-  const watchers = new WatcherRegistry({
-    counters: {
-      watchersOpened: 0,
-      watchersClosed: 0,
-      watchRefusals: 0,
-      watchErrors: 0,
-      dirWatchesOpened: 0,
-      dirWatchesClosed: 0,
-    },
-    logger: () => {},
-  });
+  const counters: WatcherCounters = {
+    watchersOpened: 0,
+    watchersClosed: 0,
+    watchRefusals: 0,
+    watchErrors: 0,
+    dirWatchesOpened: 0,
+    dirWatchesClosed: 0,
+  };
+  const watchers = new WatcherRegistry({ counters, logger: () => {} });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
@@ -116,7 +118,7 @@ function makeCache(
     },
   );
   cleanups.unshift(() => cache.close());
-  return { cache, cleanups, reloads, watchers };
+  return { cache, cleanups, reloads, watchers, counters };
 }
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
@@ -662,7 +664,7 @@ describe("RenderCache", () => {
   test("an entry whose project directory's parent is replaced by rename reads the new tree on the period's judgment, and hears the edit after it", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")));
     const proj = join(root, "proj", "app");
-    const { cache, cleanups, reloads, watchers } = makeCache();
+    const { cache, cleanups, reloads, watchers, counters } = makeCache();
     try {
       mkdirSync(proj, { recursive: true });
       answerRepo(proj);
@@ -689,7 +691,12 @@ describe("RenderCache", () => {
       renameSync(join(root, "proj"), join(root, "old"));
       mkdirSync(proj, { recursive: true });
       writeFileSync(cfg, config("new"));
+      // On macOS the watch follows the path and would hear the write on its
+      // own, so what proves the judgment on both platforms is the handle it
+      // closes, before any window can land.
+      const closed = counters.dirWatchesClosed;
       watchers.judge();
+      expect(counters.dirWatchesClosed).toBe(closed + 1);
       await until(() => x() === "new", "the entry read the tree now at its path");
       expect(entry.configLayers).toEqual([cfg]);
 
