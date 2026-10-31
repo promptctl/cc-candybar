@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-526",
+      "ref": "refs/pull/526/merge",
+      "sha": "70f81100e40ef615bd217e6c6ebb285cad0ce376",
+      "timestamp": "2026-10-31T22:55:13.632Z",
+      "commits": [
+        {
+          "sha": "70f81100e40ef615bd217e6c6ebb285cad0ce376",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:54:20Z",
+          "message": "Merge b7553742782fa7288518075c3d644b9ba14711a1 into e0b1483c0864fe01633d47904d1f453e411b8da2\n"
+        },
+        {
+          "sha": "b7553742782fa7288518075c3d644b9ba14711a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:45:21-06:00",
+          "message": "test(protocol): every permanent cause's glyph text is in the one table (brandon-unfiled-3248.1izo)\n\nversion_mismatch was still a hand-mirrored pair, the defect this branch removes for the clip, so a row is now one outcome and its text and the table covers every cause. The style envelope comes out of the rows: check-protocol already owns it, and four copies of it in a fixture were a third place to edit. The combining-mark row is spelled with escapes, because a normalizing editor would silently change what it tests.\n"
+        },
+        {
+          "sha": "e676d33ccd05333ae51006e0bfc7fe9380be8dfb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:39:49-06:00",
+          "message": "test(protocol): each message-bearing cause's whole glyph is in the one table (brandon-unfiled-3248.1izo)\n\nThe wiring tests kept after the clip moved to the table were a hand-mirrored pair of their own: each runtime spelled the four labels, an all-x message could not tell a real clip from a UTF-16 or byte slice, and expected text derived from the constant left the budget's value unpinned. A row per cause with an astral message and the exact bytes closes all three, and replaces the wiring pair and the short-message tests. The budget constant goes back to private: nothing outside its module names it now.\n"
+        },
+        {
+          "sha": "2f4ab2a9db5744ee40ad72b34b141941d61e4a69",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:32:45-06:00",
+          "message": "docs(protocol): the glyph header names the one table that pins the clip (brandon-unfiled-3248.1izo)\n"
+        },
+        {
+          "sha": "6ea1d7b819b50b59e40caf0474103f5752d77617",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T16:32:08-06:00",
+          "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e0b1483c0864fe01633d47904d1f453e411b8da2",
@@ -13,49 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T16:48:32-06:00",
           "message": "feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr) (#518)\n\n* feat(carousel): the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr)\n\n{{ carousel \"apply\" \"open\" \"label\" }} draws ◀ label ▶. The label is required, the neighbour ring and the themeSwitcher segment are gone, and a value outside the domain counts as the first member.\n\n* fix(carousel): names are the leading literals, trial controls say trials, and a removed themeSwitcher points somewhere (brandon-menus-sjhy.vxr)\n\n* fix(carousel): the label paint is a plain function, a control's label has one source, and the docs say what loads (brandon-menus-sjhy.vxr)\n\n* fix(carousel): a blank label is refused, computed bindings read the arg table, and the gap note names the real symptom (brandon-menus-sjhy.vxr)"
-        }
-      ]
-    },
-    {
-      "version": "pr-526",
-      "ref": "refs/pull/526/merge",
-      "sha": "4f52787439dbb4f24739711cb0dbe6b727f8aa6a",
-      "timestamp": "2026-10-31T22:46:22.658Z",
-      "commits": [
-        {
-          "sha": "4f52787439dbb4f24739711cb0dbe6b727f8aa6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:45:33Z",
-          "message": "Merge ef62d9cc583e54025530e0ae29d1cbb7bd281af9 into 5906e458d69d135a44baeafed475d436482c7355\n"
-        },
-        {
-          "sha": "ef62d9cc583e54025530e0ae29d1cbb7bd281af9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:45:21-06:00",
-          "message": "test(protocol): every permanent cause's glyph text is in the one table (brandon-unfiled-3248.1izo)\n\nversion_mismatch was still a hand-mirrored pair, the defect this branch removes for the clip, so a row is now one outcome and its text and the table covers every cause. The style envelope comes out of the rows: check-protocol already owns it, and four copies of it in a fixture were a third place to edit. The combining-mark row is spelled with escapes, because a normalizing editor would silently change what it tests.\n"
-        },
-        {
-          "sha": "e03fb1196345f3940e096df16b7a573b129534a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:39:49-06:00",
-          "message": "test(protocol): each message-bearing cause's whole glyph is in the one table (brandon-unfiled-3248.1izo)\n\nThe wiring tests kept after the clip moved to the table were a hand-mirrored pair of their own: each runtime spelled the four labels, an all-x message could not tell a real clip from a UTF-16 or byte slice, and expected text derived from the constant left the budget's value unpinned. A row per cause with an astral message and the exact bytes closes all three, and replaces the wiring pair and the short-message tests. The budget constant goes back to private: nothing outside its module names it now.\n"
-        },
-        {
-          "sha": "03003d6c34338acaa109f7fb5b99647641407c63",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:32:45-06:00",
-          "message": "docs(protocol): the glyph header names the one table that pins the clip (brandon-unfiled-3248.1izo)\n"
-        },
-        {
-          "sha": "3ad57049e6e9cf4f83c1fb9545600f6cab44971c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T16:32:08-06:00",
-          "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n"
         }
       ]
     },

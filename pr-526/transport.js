@@ -38663,23 +38663,17 @@ var NAME_ARGS = {
 function* actionBindings(code) {
   let cursor = 0;
   let pending2 = 0;
-  let depth = 0;
   let site = "action";
   for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
     const between = code.slice(cursor, s.index);
     const kw = BINDING_KEYWORD_RE.exec(between);
     if (kw !== null) {
       pending2 = NAME_ARGS[kw[1]];
-      depth = 0;
       site = kw[1] === "action" ? "action" : "options";
-    } else {
-      for (const ch of between) {
-        if (ch === "(") depth++;
-        if (ch === ")") depth--;
-        if (depth < 0 || ch === "|" && depth === 0) pending2 = 0;
-      }
+    } else if (between.trim() !== "") {
+      pending2 = 0;
     }
-    if (pending2 > 0 && depth === 0) {
+    if (pending2 > 0) {
       yield { name: s[0].slice(1, -1), site, index: s.index };
       pending2--;
     }
@@ -38696,7 +38690,10 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-var COMPUTED_BINDING_RE = /(?<![\w.$])(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+(?=[^\s"`)|}])/;
+var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
+var COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
+);
 function bindsComputedAction(template, helpers) {
   for (const { code } of callGraph(template, helpers)) {
     if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
@@ -51291,7 +51288,7 @@ var GLOBAL_FIELDS = {
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("\u25A6", "door", { previews: ["layout", "presetDelete"] })
+    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -51300,7 +51297,7 @@ var GLOBAL_FIELDS = {
     "style",
     optionalStringSpec(),
     { from: "styles" },
-    control("\u25D0", "gear", { previews: ["palette"] }),
+    control("\u25D0 style", "gear", { previews: ["palette"] }),
     { themeDefault: true }
   ),
   // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
@@ -51309,19 +51306,24 @@ var GLOBAL_FIELDS = {
     "effect",
     effectOrRuleSpec,
     { from: EFFECT_NAMES },
-    control("\u2728", "look")
+    control("\u2728 effect", "look")
   ),
   // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
-  endcaps: enumSetting(ENDCAPS_SHAPES, "powerline", control("\u2726", "look"), {
-    optionDomain: "endcaps"
-  }),
+  endcaps: enumSetting(
+    ENDCAPS_SHAPES,
+    "powerline",
+    control("\u2726 endcaps", "look"),
+    {
+      optionDomain: "endcaps"
+    }
+  ),
   // Which theme role each ROW of the closed bar wears, in order — a named
   // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
   // `accent` by default (brandon-theme-picker-bgw.7g6).
   variation: enumSetting(
     VARIATION_NAMES,
     "accent",
-    control("\u{1F3BC}", "gear", {
+    control("\u{1F3BC} variation", "gear", {
       previews: ["layout"],
       trials: TRIAL_VARIATION_NAMES
     }),
@@ -51335,7 +51337,10 @@ var GLOBAL_FIELDS = {
   shade: enumSetting(
     SHADE_NAMES,
     "middle",
-    control("\u{1F506}", "gear", { previews: ["layout"], trials: TRIAL_SHADE_NAMES }),
+    control("\u{1F506} shade", "gear", {
+      previews: ["layout"],
+      trials: TRIAL_SHADE_NAMES
+    }),
     {
       optionDomain: "shades",
       themeDefault: true
@@ -52275,7 +52280,7 @@ function settingControl(decl, key, readVar2, name, listKey) {
   }
   if ("from" in domain) {
     return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ "${label2}" }} {{ carousel "${n.apply}" 0 "${n.open}" }}`,
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
       rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
     }));
   }
@@ -54985,15 +54990,16 @@ var offeredHere = (name, domain, trials) => {
   }
   return domain;
 };
-var menuControl = (name, id2, place, domain, laidAfter) => {
+var menuControl = (name, id2, place, label2, domain, laidAfter) => {
   const row2 = SETTINGS[name];
   return {
     ...row2,
     name,
     id: id2,
     place,
+    label: label2,
     control: settingControl(
-      { label: row2.label, domain },
+      { label: label2, domain },
       row2.sessionKey,
       row2.effectiveVar,
       controlApply(id2),
@@ -55008,6 +55014,7 @@ var CONTROLS = Object.keys(SETTINGS).map(
     name,
     name,
     PLACE[name],
+    SETTINGS[name].label,
     offeredHere(
       name,
       settingControlDomain(SETTINGS[name].configKey),
@@ -55024,6 +55031,9 @@ var TRIAL_CONTROLS = Object.keys(SETTINGS).filter((name) => SETTINGS[name].trial
     name,
     `${name}.trials`,
     "trials",
+    // Beside the setting's own control and over the same key, so only the
+    // label says this one ranges the trial values.
+    `\u{1F9EA} ${name}`,
     { from: SETTINGS[name].trials },
     { help: [], submenus: [] }
   )
@@ -56474,9 +56484,20 @@ var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
       source: "promptctl/links-issue-tracker"
     }
   ],
-  // The context ceiling left the bundled bar: the program that owns the
-  // ceiling draws it through a plugin it ships and installs itself.
-  ["ceiling", { kind: "removed" }]
+  [
+    "ceiling",
+    {
+      kind: "removed",
+      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
+    }
+  ],
+  [
+    "themeSwitcher",
+    {
+      kind: "removed",
+      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
+    }
+  ]
 ]);
 function renamedHint(name) {
   const renamed = RENAMED_SEGMENTS.get(name);
@@ -56487,7 +56508,7 @@ function renamedHint(name) {
     case "plugin":
       return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
     case "removed":
-      return ` (the built-in segment "${name}" was removed: the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment)`;
+      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
   }
 }
 
@@ -61855,22 +61876,6 @@ var RAW_DEFAULT_DSL_CONFIG = {
       template: COMMAND_TRAY.template,
       when: COMMAND_TRAY.when
     },
-    // Declared-but-opt-in: a theme stepper that lives ON the bar — one click
-    // per theme, with no menu to open (brandon-theme-picker-bgw.exj).
-    // Kept out of the bundled rows because every setting lives behind the
-    // door by default; place it by naming it in a row.
-    //
-    // [LAW:one-type-per-behavior] Not a second theme picker: it is the
-    // settings menu's own `{{ carousel }}` asked for zero neighbours, over a
-    // plain `{ set: "theme", from: "themes" }` — the session key the menu's
-    // theme control writes unsaved, read back through `theme.effective` (the
-    // theme the bar wears), so the two can never disagree about the current
-    // theme. Nothing here a user config could not author itself.
-    themeSwitcher: {
-      group: "session-tools",
-      description: "`\u25C0 <theme> \u25B6`: the theme the bar is wearing; \u25C0 and \u25B6 switch this session to the previous or next theme, wrapping at the ends.",
-      template: '{{ carousel "stepTheme" 0 }}'
-    },
     session: {
       group: "cost-limits",
       description: "This session's cost and token total, with a budget warning once a budget is configured.",
@@ -62142,10 +62147,6 @@ var RAW_DEFAULT_DSL_CONFIG = {
     ...COMMAND_TRAY.actions,
     // The `directory` cell's click: the full path its abbreviation hides.
     copyDir: { copy: "{{ .current_dir }}" },
-    // The `themeSwitcher` segment's click: each arrow writes the theme it
-    // points at into this session. Gated by the themes domain it names, the
-    // same allow-list the settings menu's theme control derives.
-    stepTheme: { set: "theme", from: "themes" },
     // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
     gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
     ...AUTOCOMPACT2.actions
@@ -72201,10 +72202,8 @@ var named2 = (label2, text4, palette) => cell2(
     swatch(palette)
   ])
 );
-function valuePaint(render3, paletteOf) {
-  if (paletteOf === void 0)
-    return (_position, _option, label2) => cell2(label2);
-  return (_position, option, label2) => named2(label2, void 0, paletteOf(option, render3));
+function labelPaint(render3, paletteOf, option, label2) {
+  return paletteOf === void 0 ? cell2(label2) : named2(label2, void 0, paletteOf(option, render3));
 }
 function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
   const text4 = stateCell(active2.palette, ground, drawnAt);
@@ -72586,19 +72585,7 @@ function ringAround(options, current) {
   const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
-function neighbourLevels(width, count, base, available, cap) {
-  const most = Math.min(Math.floor((count - 1) / 2), cap);
-  let used = base;
-  let levels = 0;
-  while (levels < most) {
-    const next2 = used + width(-(levels + 1)) + 1 + width(levels + 1) + 1;
-    if (next2 > available) break;
-    used = next2;
-    levels += 1;
-  }
-  return levels;
-}
-function renderCarousel(applyName, apply, runtime, itemPaint, neighbours, centreAction) {
+function renderCarousel(applyName, apply, openName, label2, runtime) {
   if (!("stateVar" in apply)) {
     throw new Error(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
@@ -72613,147 +72600,75 @@ function renderCarousel(applyName, apply, runtime, itemPaint, neighbours, centre
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = readVar(store, "session.id");
   const { options } = apply;
-  const count = options.length;
-  if (count === 0) return assemble([], true);
-  const current = readVar(store, apply.stateVar);
-  const named3 = centreAction === void 0 || current === "" || options.includes(current) ? options : [current, ...options];
-  const indexAt = ringAround(named3, current);
-  const ring = (offset) => named3[indexAt(offset)];
-  const urls = /* @__PURE__ */ new Map();
-  const url = (offset) => {
-    const known = urls.get(offset);
-    if (known !== void 0) return known;
-    const made = effectsUrl(
-      realize(
-        declared,
-        ring(offset),
-        ring(offset),
-        store,
-        sessionId2,
-        runtime.signer
-      ).effects
-    );
-    urls.set(offset, made);
-    return made;
-  };
-  const face = (offset) => itemPaint(
-    { index: options.indexOf(ring(offset)), count },
-    ring(offset),
-    ring(offset),
-    ring(offset) === current
+  if (options.length === 0) return assemble([], true);
+  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const ring = (offset) => options[indexAt(offset)];
+  const step4 = (offset) => effectsUrl(
+    realize(
+      declared,
+      ring(offset),
+      ring(offset),
+      store,
+      sessionId2,
+      runtime.signer
+    ).effects
   );
-  const cells = /* @__PURE__ */ new Map();
-  const option = (offset) => {
-    const known = cells.get(offset);
-    if (known !== void 0) return known;
-    const made = linkOver(face(offset), url(offset));
-    cells.set(offset, made);
-    return made;
-  };
-  const middle = centreAction === void 0 ? option(0) : linkOver(
-    // Drawn as the arrows are, in the segment's own colours: the name
-    // is the control's text, not an option laid out for picking
-    // (Brandon: "The name loses its styling"), its swatch beside it
-    // when the domain is colour-valued. A value the domain lacks has
-    // no palette to show, so it is its name alone.
-    valuePaint(
-      renderLook(runtime, "{{ carousel }}"),
-      named3 === options ? apply.paletteOf : void 0
-    )({ index: indexAt(0), count }, ring(0), ring(0), false),
-    effectsUrl(
-      realize(
-        runtime.compiled.get(centreAction),
-        ring(0),
-        void 0,
-        store,
-        sessionId2,
-        runtime.signer
-      ).effects
-    )
-  );
-  const base = cellWidth2(CAROUSEL_PREV) + 1 + middle.cellLength + 1 + cellWidth2(CAROUSEL_NEXT);
-  const levels = neighbourLevels(
-    (offset) => option(offset).cellLength,
-    named3.length,
-    base,
-    ledRowBudget(runtime),
-    neighbours
-  );
-  const side = (sign) => Array.from({ length: levels }, (_, i) => option(sign * (i + 1)));
   return assemble(
     [
-      ...side(-1).reverse(),
-      linkFragment(CAROUSEL_PREV, url(-1), false),
-      middle,
-      linkFragment(CAROUSEL_NEXT, url(1), false),
-      ...side(1)
+      linkFragment(CAROUSEL_PREV, step4(-1), false),
+      linkOver(
+        // Drawn as the arrows are, in the segment's own colours (Brandon: "The
+        // name loses its styling"), beside the swatch of the value in force
+        // when the domain is colour-valued.
+        labelPaint(
+          renderLook(runtime, "{{ carousel }}"),
+          apply.paletteOf,
+          ring(0),
+          label2
+        ),
+        effectsUrl(
+          realize(
+            runtime.compiled.get(openName),
+            ring(0),
+            void 0,
+            store,
+            sessionId2,
+            runtime.signer
+          ).effects
+        )
+      ),
+      linkFragment(CAROUSEL_NEXT, step4(1), false)
     ],
     true
   );
 }
-function carouselFuncs(runtime, activeSegment) {
+function carouselFuncs(runtime) {
   return {
     carousel: {
-      // `neighbours` caps how many options each side of the centre may show;
-      // width still decides within the cap. `0` is the bare stepper
-      // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
-      // neighbours are what makes it wide. Omitted = as many as fit. `centre`
-      // names a declared action the current option's cell fires instead of
-      // applying itself (`{{ carousel "a" 0 "openList" }}`: arrows step, the
-      // name opens).
-      //
-      // [LAW:parse-dont-validate] The slots differ in type and the engine
-      // repeats only the trailing one, so the tail arrives as values and is
-      // parsed here: a whole number ≥ 0, then one action name, then nothing.
-      fn: (applyName, ...tail) => {
-        const [neighbours, centre, ...extra] = tail;
-        refuseSurplus(
-          `carousel "${applyName}"`,
-          ["neighbours", "centre"],
-          extra
-        );
-        if (neighbours !== void 0 && !(Number.isInteger(neighbours) && neighbours >= 0)) {
+      fn: (applyName, openName, label2) => {
+        if (label2.trim() === "") {
+          throw new Error(`carousel "${applyName}": label is empty`);
+        }
+        if (!runtime.compiled.has(openName)) {
           throw new Error(
-            `carousel "${applyName}": neighbours must be a whole number \u2265 0 (0 shows only \u25C0 CURRENT \u25B6), got ${String(neighbours)}`
+            `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`
           );
         }
-        if (centre !== void 0 && !(typeof centre === "string" && runtime.compiled.has(centre))) {
+        if (bindsTemplateValue(runtime.compiled.get(openName))) {
           throw new Error(
-            `carousel "${applyName}": centre must name a declared action, got ${JSON.stringify(centre)}`
-          );
-        }
-        if (centre !== void 0 && bindsTemplateValue(runtime.compiled.get(centre))) {
-          throw new Error(
-            `carousel "${applyName}": centre "${centre}" writes a value the template binds, and the centre binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
-          );
-        }
-        const cap = neighbours ?? Infinity;
-        const apply = requireOptionKind(runtime, applyName, "carousel");
-        const active2 = requireActiveSegment(activeSegment, "{{ carousel }}");
-        if (active2.bg === void 0) {
-          throw new Error(
-            `{{ carousel }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a carousel is drawn on that background`
+            `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
           );
         }
         return renderCarousel(
           applyName,
-          apply,
-          runtime,
-          // Its options sit on the segment's own background, inline in it.
-          optionPaint(
-            active2,
-            placedBy(void 0),
-            renderLook(runtime, "{{ carousel }}"),
-            apply.paletteOf,
-            activeSegment.drawnAt(),
-            active2.bg
-          ),
-          cap,
-          centre
+          requireOptionKind(runtime, applyName, "carousel"),
+          openName,
+          label2,
+          runtime
         );
       },
-      argTypes: ["string", "value"],
-      arity: { kind: "variadic" },
+      argTypes: ["string", "string", "string"],
+      arity: { kind: "exact" },
       returnType: "T"
     }
   };
@@ -74593,7 +74508,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
       ...actionFuncs(actionRuntime),
       ...swatchFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
-      ...carouselFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime),
       ...themePreviewFuncs(actionRuntime, activeSegment),
       ...layoutPreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
