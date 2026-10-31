@@ -4,15 +4,22 @@
     {
       "version": "pr-513",
       "ref": "refs/pull/513/merge",
-      "sha": "60d44bc9bebc91ea459cb213d48aaaf6961a83d4",
-      "timestamp": "2026-10-31T00:47:01.040Z",
+      "sha": "2b0ebe0846415c827555eeba3251134e765c3cc5",
+      "timestamp": "2026-10-31T00:49:53.281Z",
       "commits": [
         {
-          "sha": "60d44bc9bebc91ea459cb213d48aaaf6961a83d4",
+          "sha": "2b0ebe0846415c827555eeba3251134e765c3cc5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T00:45:52Z",
-          "message": "Merge eca49a234ad97f573b50d69f663cd055f522707e into bbb46f5827993af9bdecb4eb063b8ddf756f5ef8\n"
+          "timestamp": "2026-10-31T00:49:13Z",
+          "message": "Merge 09b08212ae18abc70781954050f793814bb15306 into bbb46f5827993af9bdecb4eb063b8ddf756f5ef8\n"
+        },
+        {
+          "sha": "09b08212ae18abc70781954050f793814bb15306",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T18:49:03-06:00",
+          "message": "docs(memory): name the native build as what stages inside a checkout; the parked and moved states of a checkout install read apart (brandon-unfiled-3248.bh7x)\n"
         },
         {
           "sha": "eca49a234ad97f573b50d69f663cd055f522707e",
