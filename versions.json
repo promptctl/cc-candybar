@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-520",
-      "ref": "refs/pull/520/merge",
-      "sha": "613f16b2f831c11d5b1128413d51b45b5cb593ae",
-      "timestamp": "2026-10-31T13:53:54.556Z",
-      "commits": [
-        {
-          "sha": "613f16b2f831c11d5b1128413d51b45b5cb593ae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:53:15Z",
-          "message": "Merge f0cf6604d734e4dbe0cb90c57e726e83f06226db into 196c9029832167dd5178243f96554cec4c614836\n"
-        },
-        {
-          "sha": "f0cf6604d734e4dbe0cb90c57e726e83f06226db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T07:53:03-06:00",
-          "message": "fix(daemon): storage refuses a build with nothing running, and a retired lifeline takes its fault with it (candybar-testing-0x6u.3c7)\n\nSession and history storage now load before the first owner that arms a timer. retireLifeline clears the fault, which described a lifeline the next daemon never held. Daemon exposes its clock, so a connection's accepted time is on the monotonic reading the daemon compares it with. The boot refusal logs through inspect, which is total over whatever was thrown.\n\nDeletes a teardown comment that claimed the run step's order mattered for a resume: that resume lands after every step, on an entry already dropped. Memory gains the one trap a one-daemon scope leaves: a daemon built while a closed one is unwinding lends that work a live scope.\n"
-        },
-        {
-          "sha": "3986ba92ef230100b93fd53e4b6347f593f2396e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T07:38:29-06:00",
-          "message": "fix(daemon): a read the launch scope ended is a failed read, and a second daemon is refused before it builds (candybar-testing-0x6u.3c7)\n\nA launch the scope aborted reached the shell source as its own abort, whose reason is undefined until the source closes, so the run threw undefined, the registry took it for its own abort, and no failure was recorded.\n\nThe one-daemon check moves to the first line of createDaemon, so a refused build has built nothing, and the scope is still installed last. Every way into a closed daemon now refuses, arm and reloadConfig included.\n\nA boot refusal logs its stack: the catch now covers the whole of boot. The shell keeps no in-flight count beside daemon.stats.\n"
-        },
-        {
-          "sha": "7b28d0d2f24ff6a6dcf88d30b16d74d79fc6921b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T07:23:54-06:00",
-          "message": "fix(daemon): a closed daemon refuses what reaches it, and launches share one listener on its signal (candybar-testing-0x6u.3c7)\n\nA per-launch AbortSignal.any over the scope's signal grows the heap on Node 20 and 24 even with its listener removed, and a listener per launch warns past ten on Node 20 and 22, so the launches in flight share one listener over a set.\n\nA launch reports to the scope it started under, so one outlasting its daemon's close no longer lands in the next daemon's stats. The scope is installed last, so a build that throws leaves no live scope behind it.\n\nhandle, reply and subscribe refuse once the daemon has closed. A click runs in the turn it enters, so this one check also covers a late settings-history write.\n\nlimits.disarm() replaces the per-arm handle, and DaemonParts carries the providers once, in payloadProviders.\n"
-        },
-        {
-          "sha": "a244c9ddc7c622478e50c1132c554d29ced17854",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T06:57:27-06:00",
-          "message": "refactor(daemon): the daemon is a value, built and closed by the process that serves it (candybar-testing-0x6u.3c7)\n\nserver.ts is the process shell; daemon.ts builds what import built, and owns arm and close. Nothing runs at import, so a jest worker can load the daemon, drive its own request handling, close it with nothing left running, and build it again over the same storage. The shell and a test tear down by one close. Launches end at one scope in the launcher, session state stops persisting at close, and a throw anywhere in the boot takes the death funnel.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3405285f6ee15d063c84e720f6659f9babe4bc6a",
-      "timestamp": "2026-10-31T11:52:46.704Z",
+      "sha": "3ae450498e70764c7dcf2aa915fc118d0b1eae83",
+      "timestamp": "2026-10-31T14:03:11.963Z",
       "commits": [
         {
-          "sha": "3405285f6ee15d063c84e720f6659f9babe4bc6a",
+          "sha": "3ae450498e70764c7dcf2aa915fc118d0b1eae83",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:51:52-06:00",
-          "message": "fix(doctor): the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb) (#519)\n\n* fix(doctor): the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb)\n\nThe doctor printed a verdict about a file it never named, so a run under\nan unset argument or under the environment variable could not say which\nconfig it had judged. Both verdicts now name the file or chain, and the\nspelling that won.\n\nThe render origin carries a typed target in place of a bare path, so the\nsource travels in the one record that holds the path and the click never\nhas to infer it. The precedence has one composer, used by the request\ncheckpoint and both CLIs. The record stays flat and additive, because\nbuilds of either age read one unversioned state file.\n\n* fix(doctor): an unreadable source no longer fails a click, and an empty chain says what is true (brandon-unfiled-3248.hpxb)\n\nA record's source only labels its path, so one this build cannot read now\nleaves the path standing with its source unknown instead of failing every\ndurable click on the session. An empty chain reads \"no config file loaded\":\na repository's config awaiting approval is left out of the chain, so \"found\"\nwas false.\n\ncheck's fatal arm joins through chainName, and the comments and the doctor's\nUI map stop naming what moved.\n\n* fix(doctor): every chain joins through one function, and comments say what is true (brandon-unfiled-3248.hpxb)\n\nThe render cache's log lines spelled the join twice more; they go through\nchainName with their bytes kept. Comments that still placed the precedence in\nserver.ts or said a config was not found are corrected, and the UI map's\nsamples show the absolute paths the row prints."
+          "timestamp": "2026-10-31T08:02:18-06:00",
+          "message": "refactor(daemon): the daemon is a value, built and closed by the process that serves it (candybar-testing-0x6u.3c7) (#520)\n\n* refactor(daemon): the daemon is a value, built and closed by the process that serves it (candybar-testing-0x6u.3c7)\n\nserver.ts is the process shell; daemon.ts builds what import built, and owns arm and close. Nothing runs at import, so a jest worker can load the daemon, drive its own request handling, close it with nothing left running, and build it again over the same storage. The shell and a test tear down by one close. Launches end at one scope in the launcher, session state stops persisting at close, and a throw anywhere in the boot takes the death funnel.\n\n* fix(daemon): a closed daemon refuses what reaches it, and launches share one listener on its signal (candybar-testing-0x6u.3c7)\n\nA per-launch AbortSignal.any over the scope's signal grows the heap on Node 20 and 24 even with its listener removed, and a listener per launch warns past ten on Node 20 and 22, so the launches in flight share one listener over a set.\n\nA launch reports to the scope it started under, so one outlasting its daemon's close no longer lands in the next daemon's stats. The scope is installed last, so a build that throws leaves no live scope behind it.\n\nhandle, reply and subscribe refuse once the daemon has closed. A click runs in the turn it enters, so this one check also covers a late settings-history write.\n\nlimits.disarm() replaces the per-arm handle, and DaemonParts carries the providers once, in payloadProviders.\n\n* fix(daemon): a read the launch scope ended is a failed read, and a second daemon is refused before it builds (candybar-testing-0x6u.3c7)\n\nA launch the scope aborted reached the shell source as its own abort, whose reason is undefined until the source closes, so the run threw undefined, the registry took it for its own abort, and no failure was recorded.\n\nThe one-daemon check moves to the first line of createDaemon, so a refused build has built nothing, and the scope is still installed last. Every way into a closed daemon now refuses, arm and reloadConfig included.\n\nA boot refusal logs its stack: the catch now covers the whole of boot. The shell keeps no in-flight count beside daemon.stats.\n\n* fix(daemon): storage refuses a build with nothing running, and a retired lifeline takes its fault with it (candybar-testing-0x6u.3c7)\n\nSession and history storage now load before the first owner that arms a timer. retireLifeline clears the fault, which described a lifeline the next daemon never held. Daemon exposes its clock, so a connection's accepted time is on the monotonic reading the daemon compares it with. The boot refusal logs through inspect, which is total over whatever was thrown.\n\nDeletes a teardown comment that claimed the run step's order mattered for a resume: that resume lands after every step, on an entry already dropped. Memory gains the one trap a one-daemon scope leaves: a daemon built while a closed one is unwinding lends that work a live scope."
         },
         {
-          "sha": "5e0bacd349c60a4c51df5ff2f2abc9a5b247985c",
+          "sha": "196c9029832167dd5178243f96554cec4c614836",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-31T06:02:14Z",
-          "message": "chore(release): set `package.json` to 1.170.0 [skip ci]\n\n## [1.170.0](https://github.com/promptctl/cc-candybar/compare/v1.169.2...v1.170.0) (2026-10-31)\n\n### Features\n\n* **menu:** the menu opens with no tab open, and its timeout defaults to 120s in 15s steps ([#516](https://github.com/promptctl/cc-candybar/issues/516)) ([8da9964](https://github.com/promptctl/cc-candybar/commit/8da9964e91dd7db20d259a81a05cf0f2328ee0c2))\n"
+          "timestamp": "2026-10-31T12:00:03Z",
+          "message": "chore(release): set `package.json` to 1.170.1 [skip ci]\n\n## [1.170.1](https://github.com/promptctl/cc-candybar/compare/v1.170.0...v1.170.1) (2026-10-31)\n\n### Bug Fixes\n\n* **doctor:** the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb) ([#519](https://github.com/promptctl/cc-candybar/issues/519)) ([3405285](https://github.com/promptctl/cc-candybar/commit/3405285f6ee15d063c84e720f6659f9babe4bc6a))\n"
         }
       ]
     },
