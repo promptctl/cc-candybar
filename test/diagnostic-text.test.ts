@@ -1,14 +1,11 @@
 // [LAW:one-source-of-truth] Tests for the shared sanitize-and-truncate
 // primitive used by BOTH src/render/error-glyph.ts (permanent client glyph)
 // AND src/render/diagnostics.ts diagnosticSpan (every message the
-// diagnostics viewer shows). This file pins the predicate's ranges and the clip; what the
-// sanitizer does to a string is the fixture both runtimes assert
-// (test/diagnostic-sanitize-cases.test.ts).
+// diagnostics viewer shows). This file pins the predicate's ranges; what the
+// pass does to a string is the fixture both runtimes assert
+// (test/diagnostic-text-cases.test.ts).
 
-import {
-  sanitizeAndTruncate,
-  isControlChar,
-} from "../src/render/diagnostic-text";
+import { isControlChar } from "../src/render/diagnostic-text";
 
 describe("isControlChar", () => {
   test("classifies C0 controls (0x00..0x1F) as control", () => {
@@ -36,35 +33,5 @@ describe("isControlChar", () => {
     expect(isControlChar(0x7e)).toBe(false); // '~'
     expect(isControlChar(0xa0)).toBe(false); // non-breaking space (above C1)
     expect(isControlChar(0x1f680)).toBe(false); // rocket emoji
-  });
-});
-
-describe("sanitizeAndTruncate", () => {
-  test("passes short ASCII through unchanged", () => {
-    expect(sanitizeAndTruncate("hello world", 100)).toBe("hello world");
-  });
-
-  test("sanitizes before it clips", () => {
-    expect(sanitizeAndTruncate("a‮b  c", 100)).toBe("a b c");
-  });
-
-  test("truncates with ellipsis when input exceeds maxLen", () => {
-    const input = "x".repeat(200);
-    const out = sanitizeAndTruncate(input, 60);
-    expect([...out].length).toBe(60); // visible length budget honored
-    expect(out.endsWith("…")).toBe(true);
-  });
-
-  test("does not append ellipsis when input fits", () => {
-    expect(sanitizeAndTruncate("hi", 60).endsWith("…")).toBe(false);
-  });
-
-  test("truncation counts code points, not UTF-16 units (astral-safe)", () => {
-    // 100 rockets = 100 code points but 200 UTF-16 units. A UTF-16-based
-    // truncate would split a surrogate pair; this must count code points.
-    const input = "🚀".repeat(100);
-    const out = sanitizeAndTruncate(input, 60);
-    expect([...out].length).toBe(60);
-    expect(out.endsWith("…")).toBe(true);
   });
 });

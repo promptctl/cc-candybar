@@ -2,7 +2,8 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { formatPermanentGlyph } from "../src/render/error-glyph";
+import { formatPermanentGlyph, MAX_MESSAGE_LEN } from "../src/render/error-glyph";
+import { sanitizeAndTruncate } from "../src/render/diagnostic-text";
 import type { PermanentOutcome } from "../src/daemon/client-transport";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 
@@ -98,19 +99,18 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     );
   });
 
-  test("long messages are truncated to a single-line budget", () => {
-    const long = "x".repeat(200);
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "render_failed",
-      message: long,
-    });
-    // 60-char budget: 59 x's then an ellipsis. The full 200 must not appear.
-    expect(glyph).not.toContain("x".repeat(200));
-    expect(glyph).toContain("…");
-    // Body fits well under any reasonable statusline width.
-    const body = glyph.slice(OPEN.length, -TAIL.length);
-    expect(body.length).toBeLessThan(100);
+  // The fixture proves what the clip does to a string; this proves each
+  // message path goes through it.
+  test.each([
+    ["bad_request", "daemon rejected request"],
+    ["render_failed", "render failed"],
+    ["switched_off", "switched off"],
+    ["malformed_response", "malformed daemon response"],
+  ] as const)("a long %s message is clipped to the budget", (cause, label) => {
+    const message = "x".repeat(MAX_MESSAGE_LEN + 1);
+    expect(formatPermanentGlyph({ kind: "permanent", cause, message })).toBe(
+      `${OPEN}${PREFIX}${label}: ${sanitizeAndTruncate(message, MAX_MESSAGE_LEN)}${TAIL}`,
+    );
   });
 
   // [LAW:one-type-per-behavior] The single-line glyph contract documented in
@@ -184,41 +184,6 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       expect(body).not.toMatch(/[\n\r]/);
       // Each part appears, in order, separated by exactly one space.
       expect(body).toContain(parts.join(" "));
-    }
-  });
-
-  // [LAW:one-type-per-behavior] Truncation must count Unicode scalar values,
-  // not UTF-16 code units. Astral characters (each 2 UTF-16 units / 1 code
-  // point) would otherwise truncate at a different boundary than the Rust
-  // mirror, and the byte-identical contract this module advertises would only
-  // hold for ASCII input. Rocket (U+1F680) is a single emoji that exercises
-  // surrogate-pair handling specifically.
-  test("truncation counts code points, not UTF-16 units (astral-safe)", () => {
-    const rockets = "🚀".repeat(100); // 100 code points, 200 UTF-16 units
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "render_failed",
-      message: rockets,
-    });
-    const body = glyph.slice(OPEN.length + PREFIX.length, -TAIL.length);
-    // After "render failed: " prefix in the body, the message is truncated
-    // to exactly MAX_MESSAGE_LEN code points (59 rockets + ellipsis).
-    const message = body.slice("render failed: ".length);
-    expect([...message].length).toBe(60);
-    expect(message.endsWith("…")).toBe(true);
-    // Critically, no lone surrogate ever appears in the output.
-    for (let i = 0; i < glyph.length; i++) {
-      const code = glyph.charCodeAt(i);
-      const isHigh = code >= 0xd800 && code <= 0xdbff;
-      const isLow = code >= 0xdc00 && code <= 0xdfff;
-      if (isHigh) {
-        const next = glyph.charCodeAt(i + 1);
-        expect(next >= 0xdc00 && next <= 0xdfff).toBe(true);
-      }
-      if (isLow) {
-        const prev = glyph.charCodeAt(i - 1);
-        expect(prev >= 0xd800 && prev <= 0xdbff).toBe(true);
-      }
     }
   });
 });

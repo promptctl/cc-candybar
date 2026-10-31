@@ -6,7 +6,7 @@
 // [LAW:one-type-per-behavior] Mirrors src/render/error-glyph.ts byte-for-byte
 // for the same logical cause — both runtimes show the same diagnostic so the
 // user's experience does not depend on which client is on the hot path. The
-// unit tests below pin this against the same fixtures the Node side asserts.
+// unit tests below pin this against the one case table the Node side asserts.
 //
 // [LAW:one-source-of-truth] The style constants are a literal mirror of the
 // canonical TS leaf (src/render/diagnostic-style.ts) — Rust cannot import a
@@ -40,16 +40,16 @@ fn describe(cause: &PermanentCause) -> String {
             format!("protocol mismatch (client v{client_v} ≠ daemon {daemon})")
         }
         PermanentCause::BadRequest(msg) => {
-            format!("daemon rejected request: {}", truncate(msg))
+            format!("daemon rejected request: {}", truncate(msg, MAX_MESSAGE_LEN))
         }
         PermanentCause::RenderFailed(msg) => {
-            format!("render failed: {}", truncate(msg))
+            format!("render failed: {}", truncate(msg, MAX_MESSAGE_LEN))
         }
         PermanentCause::SwitchedOff(msg) => {
-            format!("switched off: {}", truncate(msg))
+            format!("switched off: {}", truncate(msg, MAX_MESSAGE_LEN))
         }
         PermanentCause::MalformedResponse(msg) => {
-            format!("malformed daemon response: {}", truncate(msg))
+            format!("malformed daemon response: {}", truncate(msg, MAX_MESSAGE_LEN))
         }
     }
 }
@@ -81,7 +81,7 @@ fn describe(cause: &PermanentCause) -> String {
 // one use) to the bare fold, so a change to either runtime's set alone
 // fails it. What the whole pass does to a string is behaviour, not a
 // literal, so both suites assert the one case table at
-// test/fixtures/diagnostic-sanitize-cases.json.
+// test/fixtures/diagnostic-text-cases.json.
 //
 // The collapse predicate adds U+FEFF to `char::is_whitespace()`: the TS
 // side collapses on JS `\s`, which is Unicode White_Space minus U+0085
@@ -121,13 +121,12 @@ fn sanitize(s: &str) -> String {
     sanitized
 }
 
-// Sanitize, then clip to MAX_MESSAGE_LEN visible code points, replacing the
-// last one with an ellipsis when over budget so visible length stays at
-// budget.
-fn truncate(s: &str) -> String {
+// Sanitize, then clip to `budget` visible code points, replacing the last
+// one with an ellipsis when over budget so visible length stays at budget.
+fn truncate(s: &str, budget: usize) -> String {
     let mut out = String::new();
     for (count, ch) in sanitize(s).chars().enumerate() {
-        if count == MAX_MESSAGE_LEN {
+        if count == budget {
             out.pop();
             out.push('…');
             return out;
@@ -183,20 +182,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn render_failed_truncates_long_message() {
-        let long = "x".repeat(200);
-        let g = format_permanent_glyph(&PermanentCause::RenderFailed(long));
-        // 60 chars after the colon-space: 59 x's then an ellipsis.
-        assert!(g.contains("render failed: "));
-        assert!(g.contains('…'));
-        let expected_tail = format!("{}…{TAIL}", "x".repeat(59));
-        assert!(
-            g.ends_with(&expected_tail),
-            "got: {g:?}, expected to end with: {expected_tail:?}"
-        );
-    }
-
     // [LAW:one-type-per-behavior] ESC + C0 sanitization paired with the TS
     // mirror. A crafted error message containing `\x1b[0m` would otherwise
     // prematurely terminate the glyph's styled envelope; the entire C0
@@ -230,18 +215,22 @@ mod tests {
         assert!(body.contains("bypass"), "lost safe content after C1: {g:?}");
     }
 
-    // [LAW:one-source-of-truth] [LAW:one-type-per-behavior] The sanitizer's
-    // behaviour, from the one table test/diagnostic-sanitize-cases.test.ts
-    // asserts against the TS sanitizeText, so a collapse or neutralize rule
-    // changed in one runtime fails the other's test.
-    const CASES: &str = include_str!("../../test/fixtures/diagnostic-sanitize-cases.json");
+    // [LAW:one-source-of-truth] [LAW:one-type-per-behavior] The pass's
+    // behaviour, from the one table test/diagnostic-text-cases.test.ts asserts
+    // against the TS sanitizeText and sanitizeAndTruncate, so a collapse,
+    // neutralize or clip rule changed in one runtime fails the other's test.
+    const CASES: &str = include_str!("../../test/fixtures/diagnostic-text-cases.json");
+
+    fn cases(key: &str) -> Vec<serde_json::Value> {
+        let all: serde_json::Value = serde_json::from_str(CASES).expect("the fixture is JSON");
+        let cases = all[key].as_array().expect("the key is a list").clone();
+        assert!(!cases.is_empty());
+        cases
+    }
 
     #[test]
     fn sanitize_cases() {
-        let all: serde_json::Value = serde_json::from_str(CASES).expect("the fixture is JSON");
-        let cases = all["cases"].as_array().expect("cases is a list");
-        assert!(!cases.is_empty());
-        for case in cases {
+        for case in cases("sanitize") {
             let input = case["input"].as_str().expect("input is a string");
             let output = case["output"].as_str().expect("output is a string");
             // Escaped, not raw: the inputs carry ESC, 8-bit CSI and bidi
@@ -256,21 +245,38 @@ mod tests {
         }
     }
 
-    // [LAW:one-type-per-behavior] Astral-character coverage symmetric to the
-    // TS side. Rust's `chars().take(...)` already counts Unicode scalar values;
-    // this test pins that contract against the same input the TS test uses, so
-    // a future change that drops the `chars()` primitive on either side breaks
-    // its own suite rather than silently diverging from the mirror.
     #[test]
-    fn render_failed_truncates_at_code_point_boundary() {
-        let rockets = "🚀".repeat(100); // 100 code points, 400 UTF-8 bytes
-        let g = format_permanent_glyph(&PermanentCause::RenderFailed(rockets));
-        // 59 rockets + ellipsis after the "render failed: " label.
-        let expected_tail = format!("{}…{TAIL}", "🚀".repeat(59));
-        assert!(
-            g.ends_with(&expected_tail),
-            "got: {g:?}, expected to end with: {expected_tail:?}"
-        );
+    fn clip_cases() {
+        for case in cases("clip") {
+            let input = case["input"].as_str().expect("input is a string");
+            let budget = case["budget"].as_u64().expect("budget is a count") as usize;
+            let output = case["output"].as_str().expect("output is a string");
+            assert_eq!(
+                truncate(input, budget),
+                output,
+                "input \"{}\" to {budget}",
+                input.escape_default()
+            );
+        }
+    }
+
+    // The fixture proves what the clip does to a string; this proves each
+    // message path goes through it.
+    #[test]
+    fn long_messages_are_clipped_to_the_budget() {
+        let long = || "x".repeat(MAX_MESSAGE_LEN + 1);
+        let clipped = truncate(&long(), MAX_MESSAGE_LEN);
+        for (cause, label) in [
+            (PermanentCause::BadRequest(long()), "daemon rejected request"),
+            (PermanentCause::RenderFailed(long()), "render failed"),
+            (PermanentCause::SwitchedOff(long()), "switched off"),
+            (PermanentCause::MalformedResponse(long()), "malformed daemon response"),
+        ] {
+            assert_eq!(
+                format_permanent_glyph(&cause),
+                format!("{OPEN}⚠ cc-candybar: {label}: {clipped}{TAIL}")
+            );
+        }
     }
 
     #[test]

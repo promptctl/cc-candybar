@@ -43,7 +43,7 @@ const ELLIPSIS = "…";
 // `pnpm check:protocol`. The Rust side also mirrors the collapse-whitespace-
 // runs + trim pass below, so the two runtimes produce byte-identical output;
 // that is behaviour, not a literal, so both suites assert the one case
-// table at test/fixtures/diagnostic-sanitize-cases.json.
+// table at test/fixtures/diagnostic-text-cases.json.
 //
 // Inclusive ranges: C0 (U+0000..U+001F), DEL and C1 (U+007F..U+009F) — the
 // Unicode Cc class — then the two bidi/format ranges above.
