@@ -22,10 +22,6 @@ function isSnapshot(value: unknown): value is SessionSnapshot {
   return true;
 }
 
-// A click's write waits out this window or the daemon's close, whichever comes
-// first.
-export const SESSION_SAVE_DEBOUNCE_MS = 500;
-
 // [LAW:single-enforcer] The debounce + atomic write lives here, not in
 // SessionState. The store calls save() on every mutation; this coalesces the
 // bursty 22-session × 1 Hz write load into at most one disk write per window.
@@ -43,7 +39,7 @@ export class FileSessionStorage implements SessionStorage {
 
   constructor(
     private readonly filePath: string,
-    private readonly debounceMs: number = SESSION_SAVE_DEBOUNCE_MS,
+    private readonly debounceMs: number = 500,
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes `dlog`, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,

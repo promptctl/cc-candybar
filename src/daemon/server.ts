@@ -10,8 +10,6 @@ import {
   leasePath,
   leasePathFor,
   socketPath,
-  sessionStatePath,
-  settingsHistoryPath,
 } from "./paths";
 import {
   arbitrateSocket,
@@ -48,11 +46,7 @@ import { PROTOCOL_VERSION } from "./protocol";
 import { mb, memoryLimitBytes } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
-import {
-  FileSessionStorage,
-  SESSION_SAVE_DEBOUNCE_MS,
-} from "./session-state-file";
-import { fileHistoryStorage } from "./settings-history";
+import { fileStorage } from "./file-storage";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
 // single-instance enforcer (two daemons cannot both bind the same path; the
@@ -175,14 +169,7 @@ function boot(): void {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     bundle: runningBundle(),
-    storage: {
-      session: new FileSessionStorage(
-        sessionStatePath(),
-        SESSION_SAVE_DEBOUNCE_MS,
-        dlog,
-      ),
-      history: fileHistoryStorage(settingsHistoryPath(), dlog),
-    },
+    storage: fileStorage(),
     memoryLimitBytes: memoryLimit,
     registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: SYSTEM_CLOCK,

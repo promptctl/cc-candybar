@@ -18,19 +18,10 @@ import {
   type RunningBundle,
 } from "../../src/daemon/daemon";
 import { memoryLimitBytes } from "../../src/daemon/limits";
-import { dlog, drained } from "../../src/daemon/log";
-import {
-  logPath,
-  sessionStatePath,
-  settingsHistoryPath,
-  stateDir,
-} from "../../src/daemon/paths";
+import { fileStorage } from "../../src/daemon/file-storage";
+import { drained } from "../../src/daemon/log";
+import { logPath, stateDir } from "../../src/daemon/paths";
 import { sendOne, type Request } from "../../src/daemon/protocol";
-import {
-  FileSessionStorage,
-  SESSION_SAVE_DEBOUNCE_MS,
-} from "../../src/daemon/session-state-file";
-import { fileHistoryStorage } from "../../src/daemon/settings-history";
 import type { DaemonEndpoint } from "./daemon-wire";
 import { memoryConnection } from "./memory-connection";
 
@@ -71,15 +62,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
       throw new Error(`a daemon under test asked to exit ${code}`);
     },
     ...overrides,
-    storage: {
-      session: new FileSessionStorage(
-        sessionStatePath(),
-        SESSION_SAVE_DEBOUNCE_MS,
-        dlog,
-      ),
-      history: fileHistoryStorage(settingsHistoryPath(), dlog),
-      ...overrides.storage,
-    },
+    storage: { ...fileStorage(), ...overrides.storage },
   });
 }
 

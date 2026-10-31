@@ -1,9 +1,16 @@
 import type { ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
 
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { sessionStatePath } from "../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { click, killAndWait, render } from "./helpers/daemon-e2e";
 import {
+  prepareIsolatedDaemonEnv,
+  spawnDaemonWithEnv,
   spawnIsolatedDaemon,
   type IsolatedDaemonHandle,
+  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
 
@@ -114,6 +121,35 @@ describe("daemon shutdown contract", () => {
       await expectExitWithinBudget(handle.child);
     } finally {
       handle.cleanup();
+    }
+  });
+
+  // [LAW:verifiable-goals] A signal, the memory backstop and the watchdog all
+  // end a daemon through one funnel, and a click's session write waits out the
+  // file's debounce. So the close in that funnel is what keeps a click a recycled
+  // daemon had not written yet, and only a real process has that funnel.
+  test("a session write still inside its debounce lands before a signal ends the daemon", async () => {
+    const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+      "cc-candybar-shutdown",
+    );
+    const sessionId = "shutdown-write";
+    let daemon: RunningDaemon | undefined;
+    try {
+      daemon = await spawnDaemonWithEnv(env);
+      await render(sockPath, sessionId, stateDir);
+      await click(
+        sockPath,
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
+        ]),
+      );
+      await killAndWait(daemon, "SIGTERM");
+
+      const saved = JSON.parse(readFileSync(sessionStatePath(env), "utf8"));
+      expect(saved[sessionId]).toMatchObject({ padding: "4" });
+    } finally {
+      daemon?.killTree();
+      removeTmpDirs();
     }
   });
 });
