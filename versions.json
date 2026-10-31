@@ -4,15 +4,22 @@
     {
       "version": "pr-512",
       "ref": "refs/pull/512/merge",
-      "sha": "2b57ebe3aefe7c0c5ebd781591d7fa6eee1e4714",
-      "timestamp": "2026-10-31T00:06:09.618Z",
+      "sha": "4161d8ca160870754dc21475e2b442360de882ba",
+      "timestamp": "2026-10-31T00:07:56.561Z",
       "commits": [
         {
-          "sha": "2b57ebe3aefe7c0c5ebd781591d7fa6eee1e4714",
+          "sha": "4161d8ca160870754dc21475e2b442360de882ba",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T00:05:24Z",
-          "message": "Merge 214ea1ede8ccb40054263b30b838b3c190b4f699 into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+          "timestamp": "2026-10-31T00:07:01Z",
+          "message": "Merge 968ba925c5c6c579af4dc25437855ffef88a4142 into 0ed75d194e35c845f139e257b73bd2118c63d722\n"
+        },
+        {
+          "sha": "968ba925c5c6c579af4dc25437855ffef88a4142",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T18:06:52-06:00",
+          "message": "test(colour): the trigger frame exempts a no-rung press only where the cell it meets wears a tone a window deals (candybar-joiners-e5r4.34r)\n\nSecond review pass of #512. A press with none to give meets one of the colours the design stands beside it, and those are the tones the windows deal. A cell the turn rule moved past its window onto that press is the turn rule's collision, so the frame test now holds that seam.\n\nOn main the frame now fails at ansi in three more themes, all of them cells main moved past their window onto a no-rung press: catppuccin-frappe and catppuccin-macchiato under alt, and solarized-light under start-secondary. The branch passes.\n"
         },
         {
           "sha": "214ea1ede8ccb40054263b30b838b3c190b4f699",
