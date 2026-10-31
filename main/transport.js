@@ -83680,6 +83680,7 @@ function createDaemon(inputs) {
     stats,
     memoryLimitBytes: memoryLimitBytes2,
     clock,
+    exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click runs in the turn it enters, so one that got in has
     // landed before any close; a subscribe its request reached as the daemon

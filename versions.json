@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-521",
-      "ref": "refs/pull/521/merge",
-      "sha": "d060ae526b09afaa3fc7d85d4f16617bd666319f",
-      "timestamp": "2026-10-31T15:00:08.102Z",
-      "commits": [
-        {
-          "sha": "d060ae526b09afaa3fc7d85d4f16617bd666319f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T14:59:19Z",
-          "message": "Merge bc70e3863c0dda223763f52e2cc38fc11dce9a21 into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
-        },
-        {
-          "sha": "bc70e3863c0dda223763f52e2cc38fc11dce9a21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T08:58:51-06:00",
-          "message": "docs(daemon): the connection's comments say what holds of it (candybar-testing-0x6u.spa)\n\nA stream also owes the connection Buffer chunks, a client told TIMEOUT asks again only if it runs on a tick, a subscriber has no backstop to end it after a close, and the pointers to moved code name where it lives now.\n"
-        },
-        {
-          "sha": "4d94c2809c18cb6e82797a331ba1eda0c5d3371a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T08:51:26-06:00",
-          "message": "fix(daemon): an exit stays with its own reply (candybar-testing-0x6u.spa)\n\nA request exits only once its own response has flushed, so its client sees the diagnostic. Exiting on another responder's flush broke that, and on a subscription exited with nothing flushed. So a beaten reply's exit goes unsent with it, loudly, and the client told TIMEOUT asks again. The comment calling this path unreachable was the wrong part: a busy daemon reads a request the backstop has already answered.\n\nThe memory line saying no timer stays armed after a close now carves out a connection, which the daemon holds no list of.\n"
-        },
-        {
-          "sha": "61d9e983022c6099445ff80a91d661e650c92bc6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T08:43:13-06:00",
-          "message": "fix(daemon): an exit a reply carries survives whoever answered first (candybar-testing-0x6u.spa)\n\nA request read after the backstop answered it dropped its exit, because the first responder owned the flush and the late reply only logged. An exit is the request's work, which the backstop does not abandon, so every reply's exit now waits on the one flush, and a subscription, which has none to wait on, lets it through. The connection also states what it needs of a stream: a vanished peer destroys it.\n\nThe in-worker cases took the first answer of a cold daemon under the real 200 ms backstop, so a loaded runner read TIMEOUT as a failure. They ask again as a client does, and name what came back. The clock case reads the render event, which an answered backstop does not abandon, from a state dir of its own, because another run's teardown sweeps a lease-less one.\n"
-        },
-        {
-          "sha": "194076806a083332914e1dba2199f01493c2496c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T08:28:45-06:00",
-          "message": "refactor(daemon): a connection runs over any stream, and the net server only hands it a socket (candybar-testing-0x6u.spa)\n\nThe request backstop, a half-close, a hang-up, the exit a reply carries and a subscriber's frames lived in server.ts, private to the process shell. They move as they stood to connection.ts, over a Duplex, so a jest worker drives them with no socket.\n\nThe connection now states its own half-close rule instead of leaving it to the listener's option, which any other stream would have to repeat. It reaches the exit through the funnel the daemon was built with, so a harness stands in for one exit, not two.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3ae450498e70764c7dcf2aa915fc118d0b1eae83",
-      "timestamp": "2026-10-31T14:03:11.963Z",
+      "sha": "82152d4ea6859d018e7af98d2651d77804e31aad",
+      "timestamp": "2026-10-31T15:08:47.110Z",
       "commits": [
         {
-          "sha": "3ae450498e70764c7dcf2aa915fc118d0b1eae83",
+          "sha": "82152d4ea6859d018e7af98d2651d77804e31aad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T08:02:18-06:00",
-          "message": "refactor(daemon): the daemon is a value, built and closed by the process that serves it (candybar-testing-0x6u.3c7) (#520)\n\n* refactor(daemon): the daemon is a value, built and closed by the process that serves it (candybar-testing-0x6u.3c7)\n\nserver.ts is the process shell; daemon.ts builds what import built, and owns arm and close. Nothing runs at import, so a jest worker can load the daemon, drive its own request handling, close it with nothing left running, and build it again over the same storage. The shell and a test tear down by one close. Launches end at one scope in the launcher, session state stops persisting at close, and a throw anywhere in the boot takes the death funnel.\n\n* fix(daemon): a closed daemon refuses what reaches it, and launches share one listener on its signal (candybar-testing-0x6u.3c7)\n\nA per-launch AbortSignal.any over the scope's signal grows the heap on Node 20 and 24 even with its listener removed, and a listener per launch warns past ten on Node 20 and 22, so the launches in flight share one listener over a set.\n\nA launch reports to the scope it started under, so one outlasting its daemon's close no longer lands in the next daemon's stats. The scope is installed last, so a build that throws leaves no live scope behind it.\n\nhandle, reply and subscribe refuse once the daemon has closed. A click runs in the turn it enters, so this one check also covers a late settings-history write.\n\nlimits.disarm() replaces the per-arm handle, and DaemonParts carries the providers once, in payloadProviders.\n\n* fix(daemon): a read the launch scope ended is a failed read, and a second daemon is refused before it builds (candybar-testing-0x6u.3c7)\n\nA launch the scope aborted reached the shell source as its own abort, whose reason is undefined until the source closes, so the run threw undefined, the registry took it for its own abort, and no failure was recorded.\n\nThe one-daemon check moves to the first line of createDaemon, so a refused build has built nothing, and the scope is still installed last. Every way into a closed daemon now refuses, arm and reloadConfig included.\n\nA boot refusal logs its stack: the catch now covers the whole of boot. The shell keeps no in-flight count beside daemon.stats.\n\n* fix(daemon): storage refuses a build with nothing running, and a retired lifeline takes its fault with it (candybar-testing-0x6u.3c7)\n\nSession and history storage now load before the first owner that arms a timer. retireLifeline clears the fault, which described a lifeline the next daemon never held. Daemon exposes its clock, so a connection's accepted time is on the monotonic reading the daemon compares it with. The boot refusal logs through inspect, which is total over whatever was thrown.\n\nDeletes a teardown comment that claimed the run step's order mattered for a resume: that resume lands after every step, on an entry already dropped. Memory gains the one trap a one-daemon scope leaves: a daemon built while a closed one is unwinding lends that work a live scope."
-        },
-        {
-          "sha": "196c9029832167dd5178243f96554cec4c614836",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-31T12:00:03Z",
-          "message": "chore(release): set `package.json` to 1.170.1 [skip ci]\n\n## [1.170.1](https://github.com/promptctl/cc-candybar/compare/v1.170.0...v1.170.1) (2026-10-31)\n\n### Bug Fixes\n\n* **doctor:** the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb) ([#519](https://github.com/promptctl/cc-candybar/issues/519)) ([3405285](https://github.com/promptctl/cc-candybar/commit/3405285f6ee15d063c84e720f6659f9babe4bc6a))\n"
+          "timestamp": "2026-10-31T09:07:52-06:00",
+          "message": "refactor(daemon): a connection runs over any stream, and the net server only hands it a socket (candybar-testing-0x6u.spa) (#521)\n\n* refactor(daemon): a connection runs over any stream, and the net server only hands it a socket (candybar-testing-0x6u.spa)\n\nThe request backstop, a half-close, a hang-up, the exit a reply carries and a subscriber's frames lived in server.ts, private to the process shell. They move as they stood to connection.ts, over a Duplex, so a jest worker drives them with no socket.\n\nThe connection now states its own half-close rule instead of leaving it to the listener's option, which any other stream would have to repeat. It reaches the exit through the funnel the daemon was built with, so a harness stands in for one exit, not two.\n\n* fix(daemon): an exit a reply carries survives whoever answered first (candybar-testing-0x6u.spa)\n\nA request read after the backstop answered it dropped its exit, because the first responder owned the flush and the late reply only logged. An exit is the request's work, which the backstop does not abandon, so every reply's exit now waits on the one flush, and a subscription, which has none to wait on, lets it through. The connection also states what it needs of a stream: a vanished peer destroys it.\n\nThe in-worker cases took the first answer of a cold daemon under the real 200 ms backstop, so a loaded runner read TIMEOUT as a failure. They ask again as a client does, and name what came back. The clock case reads the render event, which an answered backstop does not abandon, from a state dir of its own, because another run's teardown sweeps a lease-less one.\n\n* fix(daemon): an exit stays with its own reply (candybar-testing-0x6u.spa)\n\nA request exits only once its own response has flushed, so its client sees the diagnostic. Exiting on another responder's flush broke that, and on a subscription exited with nothing flushed. So a beaten reply's exit goes unsent with it, loudly, and the client told TIMEOUT asks again. The comment calling this path unreachable was the wrong part: a busy daemon reads a request the backstop has already answered.\n\nThe memory line saying no timer stays armed after a close now carves out a connection, which the daemon holds no list of.\n\n* docs(daemon): the connection's comments say what holds of it (candybar-testing-0x6u.spa)\n\nA stream also owes the connection Buffer chunks, a client told TIMEOUT asks again only if it runs on a tick, a subscriber has no backstop to end it after a close, and the pointers to moved code name where it lives now."
         }
       ]
     },
