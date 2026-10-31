@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-527",
+      "ref": "refs/pull/527/merge",
+      "sha": "31ab99d93d304f1a2868a07b516b423d72d6f69c",
+      "timestamp": "2026-10-31T23:58:01.657Z",
+      "commits": [
+        {
+          "sha": "31ab99d93d304f1a2868a07b516b423d72d6f69c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:57:12Z",
+          "message": "Merge 667b17bcd09d2ece7924e6a4254c730c4caae838 into 8433e004510534547d91ea68a0e77f398becab3d\n"
+        },
+        {
+          "sha": "667b17bcd09d2ece7924e6a4254c730c4caae838",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T17:56:55-06:00",
+          "message": "chore(settings): retire stale trials text and an unused import (brandon-menus-sjhy.pyt)\n"
+        },
+        {
+          "sha": "1daa5a0e8950ef6361b49c642a96bafce505cf32",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T17:41:03-06:00",
+          "message": "refactor(settings): an option's label is a facet of its domain (brandon-menus-sjhy.pyt)\n\nEvery picker over variations or shades now marks trials, not just the\nsettings menu's own. Authored labels had no caller, so they go with\ntheir loader, schema and cross-ref checks.\n"
+        },
+        {
+          "sha": "89763793c1c106d3657f59b999ef0b7209db2f23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T17:17:29-06:00",
+          "message": "feat(settings): a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-528",
       "ref": "refs/pull/528/merge",
       "sha": "68c6aab0c4960b4ea262720ca2e89b28618e31ce",
@@ -34,35 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T17:23:41-06:00",
           "message": "feat(effect): the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8)\n\nThe wheel lives in rich-js, and 0.27.0 reads a segment's place from the\nframe it is handed, so moving to it is the feature and the row wrapping\nhere does not change.\n\n0.27.0's Palette is built from a total set of roles, so paletteRole's\nundefined branch cannot run. paletteRole, DecorRole and ThemePole go, and\nso do the two tests of a palette that can no longer be built.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-527",
-      "ref": "refs/pull/527/merge",
-      "sha": "013f8fcc46ce6121ee3bf7f1ba89eb71724f77be",
-      "timestamp": "2026-10-31T23:42:06.178Z",
-      "commits": [
-        {
-          "sha": "013f8fcc46ce6121ee3bf7f1ba89eb71724f77be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:41:13Z",
-          "message": "Merge 1daa5a0e8950ef6361b49c642a96bafce505cf32 into 8433e004510534547d91ea68a0e77f398becab3d\n"
-        },
-        {
-          "sha": "1daa5a0e8950ef6361b49c642a96bafce505cf32",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:41:03-06:00",
-          "message": "refactor(settings): an option's label is a facet of its domain (brandon-menus-sjhy.pyt)\n\nEvery picker over variations or shades now marks trials, not just the\nsettings menu's own. Authored labels had no caller, so they go with\ntheir loader, schema and cross-ref checks.\n"
-        },
-        {
-          "sha": "89763793c1c106d3657f59b999ef0b7209db2f23",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:17:29-06:00",
-          "message": "feat(settings): a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt)\n"
         }
       ]
     },
