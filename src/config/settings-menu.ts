@@ -102,10 +102,7 @@ import {
 } from "./menu-places.js";
 import { BOOLEAN_TRUE } from "../themes/policy.js";
 import { settingControlDomain } from "./loader/globals.js";
-import {
-  settingControl,
-  type Affordance,
-} from "./setting-control.js";
+import { settingControl, type Affordance } from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
 import {
   drawingVar,
