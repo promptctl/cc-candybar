@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-521",
+      "ref": "refs/pull/521/merge",
+      "sha": "5ee7c30d76890b77f3ce7720b703257e74fefd19",
+      "timestamp": "2026-10-31T14:30:05.902Z",
+      "commits": [
+        {
+          "sha": "5ee7c30d76890b77f3ce7720b703257e74fefd19",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T08:29:05-06:00",
+          "message": "Merge 194076806a083332914e1dba2199f01493c2496c into 3ae450498e70764c7dcf2aa915fc118d0b1eae83\n"
+        },
+        {
+          "sha": "194076806a083332914e1dba2199f01493c2496c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T08:28:45-06:00",
+          "message": "refactor(daemon): a connection runs over any stream, and the net server only hands it a socket (candybar-testing-0x6u.spa)\n\nThe request backstop, a half-close, a hang-up, the exit a reply carries and a subscriber's frames lived in server.ts, private to the process shell. They move as they stood to connection.ts, over a Duplex, so a jest worker drives them with no socket.\n\nThe connection now states its own half-close rule instead of leaving it to the listener's option, which any other stream would have to repeat. It reaches the exit through the funnel the daemon was built with, so a harness stands in for one exit, not two.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3ae450498e70764c7dcf2aa915fc118d0b1eae83",
