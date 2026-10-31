@@ -161,13 +161,13 @@ export async function spawnDaemonWithEnv(
     );
   }
   const daemon = await spawnTestDaemon(env, daemonPool, entry);
-  const { child, killTree, release } = daemon;
+  const { child, killTree, stderrTail, release } = daemon;
 
   const readiness = await awaitReadiness(child, sockPath);
   if (readiness.phase !== "serving") {
     killTree();
     release();
-    throw new Error(readinessFailure(readiness, sockPath, env));
+    throw new Error(readinessFailure(readiness, sockPath, env, stderrTail()));
   }
 
   return {
@@ -296,10 +296,11 @@ export function readinessFailure(
   readiness: ReadinessFailure,
   sockPath: string,
   env: NodeJS.ProcessEnv,
+  stderr: string,
 ): string {
   return (
     `daemon never became ready: ${socketDid(readiness.phase, sockPath)}; ` +
-    `${processDid(readiness.exit)}\n${daemonLogTail(env)}`
+    `${processDid(readiness.exit)}\n${daemonLogTail(env)}\nstderr:\n${stderr}`
   );
 }
 
@@ -321,14 +322,14 @@ function processDid(exit: ExitResult | null): string {
   }
   const how =
     exit.signal !== null ? `signal ${exit.signal}` : `code ${exit.code}`;
-  return `the process exited (${how}), and said why in the log below`;
+  return `the process exited (${how}), and said why below`;
 }
 
 // [LAW:no-silent-failure] A daemon that never answered wrote its own reason
 // down — `refusing to boot`, `EADDRINUSE … exiting`, `parent watchdog` — in
-// the log this env points it at (its stdio is drained into nothing). A
-// readiness failure that quotes that log names its cause, where the phase above
-// only names which half of the boot it died in.
+// the log this env points it at, or on stderr if it died before it had a log. A
+// readiness failure that quotes both names its cause, where the phase above only
+// names which half of the boot it died in.
 function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
   const file = logPath(env);
   let text: string;
