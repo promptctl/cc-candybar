@@ -8,6 +8,7 @@ import type { ClientHints } from "../../src/daemon/protocol";
 import { links, stripAnsi } from "./ansi";
 import { effectsOf } from "./click";
 import { click, render } from "./daemon-e2e";
+import type { DaemonTarget } from "./daemon-wire";
 
 // The indicator's text in a rendered bar (`⚠ N`), or null when it shows none.
 export function indicatorOf(rendered: string): string | null {
@@ -61,7 +62,7 @@ export function pageOf(rendered: string): ViewerPage {
 // already showing the viewer is refused: it has no indicator, and reading it
 // as "no messages" hides whatever left the viewer open.
 export async function readDiagnostics(
-  sockPath: string,
+  target: DaemonTarget,
   sessionId: string,
   cwd: string,
   bar: string,
@@ -73,8 +74,8 @@ export async function readDiagnostics(
   const open = viewerLink(bar, "open");
   if (open === undefined) return [];
   const draw = (): Promise<string> =>
-    render(sockPath, sessionId, cwd, hints, args);
-  await click(sockPath, open.url);
+    render(target, sessionId, cwd, hints, args);
+  await click(target, open.url);
   const pages: ViewerPage[] = [];
   let shown = await draw();
   for (;;) {
@@ -82,9 +83,9 @@ export async function readDiagnostics(
     pages.push(page);
     const [at, of] = page.position.split("/").map(Number);
     if (at! >= of!) break;
-    await click(sockPath, viewerLink(shown, "›")!.url);
+    await click(target, viewerLink(shown, "›")!.url);
     shown = await draw();
   }
-  await click(sockPath, viewerLink(shown, "✕")!.url);
+  await click(target, viewerLink(shown, "✕")!.url);
   return pages;
 }

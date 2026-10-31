@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
@@ -522,7 +522,7 @@ export function makeFrameReader(
 // client hangs up when it said it would. Resolves to the parsed response or
 // rejects on timeout / parse error / socket error.
 export function sendOne(
-  sock: Socket,
+  sock: Duplex,
   req: Request,
   deadline: number,
 ): Promise<Response> {
@@ -532,7 +532,11 @@ export function sendOne(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      sock.removeAllListeners();
+      // [LAW:locality-or-seam] Only its own: the stream's other listeners are
+      // what carry its end and its hang-up, and they aren't this call's.
+      sock.off("data", reader);
+      sock.off("error", onError);
+      sock.off("close", onClose);
       try {
         fn();
       } catch {}
@@ -548,11 +552,12 @@ export function sendOne(
       (frame) => finish(() => resolve(frame as Response)),
       (err) => finish(() => reject(err)),
     );
+    const onError = (err: Error): void => finish(() => reject(err));
+    const onClose = (): void =>
+      finish(() => reject(new Error("socket closed before response")));
     sock.on("data", reader);
-    sock.on("error", (err) => finish(() => reject(err)));
-    sock.on("close", () =>
-      finish(() => reject(new Error("socket closed before response"))),
-    );
+    sock.on("error", onError);
+    sock.on("close", onClose);
 
     sock.write(encodeFrame(req));
   });
