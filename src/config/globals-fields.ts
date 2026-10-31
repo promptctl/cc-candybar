@@ -63,7 +63,7 @@ import {
   type Renderer,
   type ToggledLane,
 } from "./lanes.js";
-import type { DomainLibrary } from "./option-domain.js";
+import type { DomainLibrary, OptionLabel } from "./option-domain.js";
 import type { ControlDomain } from "./setting-control.js";
 import type { SettingRange } from "./dsl-types.js";
 import { MENU_TIMEOUT_DEFAULT, MENU_TIMEOUT_RANGE } from "./menu-timeout.js";
@@ -79,9 +79,6 @@ export interface Control {
   readonly label: string;
   readonly place: Place;
   readonly previews: readonly PreviewName[];
-  // Members of the setting's domain still on trial: the control's list marks
-  // each with 🧪.
-  readonly trials: readonly string[];
   // A template expression, true in the sessions the control is offered to:
   // `true` for one every session may turn, or a session fact such as being
   // inside tmux for a setting only such a session can act on.
@@ -105,6 +102,7 @@ export interface NamedDomain {
   // A catalogue's groups and a line per member, when its picker lays it out
   // as one described row per option (option-domain.ts).
   readonly library?: DomainLibrary;
+  readonly labelOf?: OptionLabel;
 }
 
 interface Valued<T> {
@@ -168,15 +166,14 @@ const control = (
   place: Place,
   {
     previews = [],
-    trials = [],
     shown = "true",
-  }: Partial<Pick<Control, "previews" | "trials" | "shown">> = {},
-): Control => ({ label, place, previews, trials, shown });
+  }: Partial<Pick<Control, "previews" | "shown">> = {},
+): Control => ({ label, place, previews, shown });
 
 const enumValues = <T extends string>(
   members: readonly T[],
   optionDomain?: string,
-  library?: DomainLibrary,
+  facets: Pick<NamedDomain, "library" | "labelOf"> = {},
 ) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members } as ValueDomain<T>,
@@ -186,10 +183,16 @@ const enumValues = <T extends string>(
     optionDomain: {
       name: optionDomain,
       members,
-      ...(library !== undefined && { library }),
+      ...facets,
     },
   }),
 });
+
+// A member still on trial shows marked 🧪, in every list of its domain.
+const markTrials =
+  (trials: readonly string[]): OptionLabel =>
+  (option) =>
+    trials.includes(option) ? `🧪 ${option}` : option;
 
 const boolValues = {
   spec: optionalBooleanSpec(),
@@ -210,12 +213,16 @@ function enumSetting<T extends string, const D extends boolean = false>(
   extra: {
     readonly optionDomain?: string;
     readonly library?: DomainLibrary;
+    readonly labelOf?: OptionLabel;
     readonly themeDefault?: D;
   } = {},
 ): SessionRow<T, D> {
   return {
     kind: "session",
-    ...enumValues(members, extra.optionDomain, extra.library),
+    ...enumValues(members, extra.optionDomain, {
+      library: extra.library,
+      labelOf: extra.labelOf,
+    }),
     floor,
     control: shown,
     themeDefault: (extra.themeDefault ?? false) as D,
@@ -455,9 +462,12 @@ export const GLOBAL_FIELDS = {
     "accent",
     control("🎼 variation", "gear", {
       previews: ["layout"],
-      trials: TRIAL_VARIATION_NAMES,
     }),
-    { optionDomain: "variations", themeDefault: true },
+    {
+      optionDomain: "variations",
+      labelOf: markTrials(TRIAL_VARIATION_NAMES),
+      themeDefault: true,
+    },
   ),
   // Which of its role's shades each CELL of the closed bar wears — a named
   // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
@@ -469,10 +479,10 @@ export const GLOBAL_FIELDS = {
     "middle",
     control("🔆 shade", "gear", {
       previews: ["layout"],
-      trials: TRIAL_SHADE_NAMES,
     }),
     {
       optionDomain: "shades",
+      labelOf: markTrials(TRIAL_SHADE_NAMES),
       themeDefault: true,
     },
   ),

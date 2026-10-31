@@ -194,8 +194,7 @@ const pairWindow = (apart: number): Shade => ({
 // Trial jumps (brandon-menus-sjhy.4fi, "a bigger jump in color between
 // sequential segments"): the role's window widened to two and three rungs each
 // side, and the strict two-tone pairs at those widths. Positions of the dial
-// like any other, offered in the settings menu's 🧪 trials beside the dial
-// rather than on it.
+// like any other, marked 🧪 in every list of the dial.
 const TRIAL_SHADES = {
   wide: centredWindow(2),
   widest: centredWindow(3),
@@ -336,8 +335,8 @@ type TuningName =
   `${keyof typeof KEYSTONE_PLACEMENTS}-${keyof typeof OPEN_LINEAGES}`;
 
 // Every keystone placement under every lineage: `door-primary`, `ends-alternate`, …
-// Trial tunings of the accent variation (brandon-menus-sjhy.4fi): offered in
-// the settings menu's 🧪 trials beside the variation's own control.
+// Trial tunings of the accent variation (brandon-menus-sjhy.4fi): marked 🧪
+// in every list of the variations.
 function tunings(): Record<TuningName, Variation> {
   const rows = Object.entries(KEYSTONE_PLACEMENTS).flatMap(([at, keystones]) =>
     Object.entries(OPEN_LINEAGES).map(

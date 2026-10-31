@@ -87,7 +87,7 @@ declares exactly one value source:
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
-| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration. An optional `labels: { value: "text" }` sets what a list shows for a value; the click still writes the value |
+| `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration. |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |

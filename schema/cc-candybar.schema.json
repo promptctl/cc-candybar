@@ -734,13 +734,6 @@
                     "uniqueItems": true
                   }
                 ]
-              },
-              "labels": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
               }
             },
             "required": [
@@ -849,13 +842,6 @@
                     "uniqueItems": true
                   }
                 ]
-              },
-              "labels": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
               }
             },
             "required": [

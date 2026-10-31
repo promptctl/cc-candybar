@@ -81,7 +81,12 @@ export interface ResolvedDomain {
   readonly members: readonly string[];
   readonly paletteOf?: OptionPalette;
   readonly library?: DomainLibrary;
+  readonly labelOf?: OptionLabel;
 }
+
+// What a list shows for a member, whose value is what a click writes. Absent,
+// a member shows as itself.
+export type OptionLabel = (option: string) => string;
 
 // [LAW:types-are-the-program] The other thing a domain may know about itself:
 // that its members are a CATALOGUE — each with a group it belongs to and a line
@@ -108,6 +113,7 @@ interface DomainEntry {
   readonly resolve: OptionDomainResolver;
   readonly paletteOf?: OptionPalette;
   readonly library?: DomainLibrary;
+  readonly labelOf?: OptionLabel;
 }
 
 const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
@@ -115,7 +121,7 @@ const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
 function registerBuiltinDomain(
   name: string,
   resolve: OptionDomainResolver,
-  facets: Pick<DomainEntry, "paletteOf" | "library"> = {},
+  facets: Pick<DomainEntry, "paletteOf" | "library" | "labelOf"> = {},
 ): void {
   _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
 }
@@ -154,8 +160,8 @@ registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
 // puts another palette in force. A row that describes its members (the
 // renderers) registers them as a catalogue, so its picker lays them out as
 // the add-segment menu does.
-for (const { name, members, library } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library });
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
 }
 
 // [LAW:no-silent-failure] A built-in domain can never be re-claimed — a
@@ -268,6 +274,7 @@ export function resolveOptionDomain(
       members: entry.resolve(),
       paletteOf: entry.paletteOf,
       library: entry.library,
+      labelOf: entry.labelOf,
     };
   }
   throw new Error(unknownOptionDomain(from, perConfigDomains));

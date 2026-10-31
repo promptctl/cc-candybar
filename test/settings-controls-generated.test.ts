@@ -127,9 +127,7 @@ describe("each controlled field's control is generated from its declared domain"
       expect(writers.length).toBeGreaterThan(0);
       if (typeof domain === "object" && !("min" in domain)) {
         const declared = "from" in domain ? domain.from : domain.themes;
-        expect(writers).toContainEqual(
-          expect.objectContaining({ set: row.sessionKey, from: declared }),
-        );
+        expect(writers).toContainEqual({ set: row.sessionKey, from: declared });
       }
       expect(
         Object.values(config.actions).some(
@@ -206,7 +204,7 @@ describe("a global the menu has never seen gets its control from the generator",
       `{
       variables: ${JSON.stringify({
         zoom: { kind: "state", key: "zoom", default: "mid" },
-        "zoomList": { kind: "state", key: "zoomList", default: "apply.zoom" },
+        zoomList: { kind: "state", key: "zoomList", default: "apply.zoom" },
       })},
       segments: {
         zoomer: { template: ${JSON.stringify(control.template)} },
@@ -223,10 +221,26 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+    const registry = new SourceRegistry(
+      processLauncher,
+      store,
+      "",
+      sessionState,
+    );
+    const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp/proj",
+    });
     const render = () =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
+      renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        PAYLOAD,
+        instantOf(new Date()),
+        OPTS,
+      );
     const gate = stateGate(config);
     expect(gate.validate("zoom", "high").ok).toBe(true);
     expect(gate.validate("zoom", "max").ok).toBe(false);

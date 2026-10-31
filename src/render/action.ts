@@ -28,14 +28,11 @@ import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import {
-  runDeclaration,
-  type ActionDecl,
-  type OptionSource,
-} from "../config/action.js";
+import { runDeclaration, type ActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
+  type OptionLabel,
   type OptionPalette,
   type RenderPalettes,
   type ResolvedDomain,
@@ -98,14 +95,14 @@ export type CompiledActionDecl =
       // without re-resolving the source list, and so the set-option IS
       // self-describing (it knows its own domain), not just a key.
       readonly options: readonly string[];
-      // What a list shows for a member, which the member itself is the value of.
-      readonly labelOf: (option: string) => string;
       // [LAW:one-source-of-truth] The domain's OTHER facet, resolved at the same
       // moment from the same registry entry: how a member paints itself, when
       // the domain is colour-valued (brandon-picker-31z). Always present as a
       // key, `undefined` for every domain that is not, so a reader discriminates
       // on the kind it already has rather than on whether a field was spread in.
       readonly paletteOf: OptionPalette | undefined;
+      // The domain's display facet: what a list shows for a member.
+      readonly labelOf: OptionLabel | undefined;
       // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
       // same registry entry as `paletteOf`; `undefined` unless the domain is one.
       readonly library: DomainLibrary | undefined;
@@ -164,9 +161,10 @@ export type CompiledActionDecl =
       readonly key: string;
       readonly stateVar: string;
       readonly options: readonly string[];
-      readonly labelOf: (option: string) => string;
       // set-option's durability twin, so it carries the same domain facts.
       readonly paletteOf: OptionPalette | undefined;
+      // The domain's display facet: what a list shows for a member.
+      readonly labelOf: OptionLabel | undefined;
       // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
       // same registry entry as `paletteOf`; `undefined` unless the domain is one.
       readonly library: DomainLibrary | undefined;
@@ -207,12 +205,13 @@ export type CompiledActionDecl =
       readonly anchor: string;
       readonly relation: "before" | "after";
       readonly options: readonly string[];
-      readonly labelOf: (option: string) => string;
       // Carried for the same reason the other two option kinds carry it: the
       // rule is "a picker over a colour-valued domain paints its options",
       // uniform over every option kind, not a list of kinds that qualify.
       // Segment names are not colour-valued, so this is `undefined` in practice.
       readonly paletteOf: OptionPalette | undefined;
+      // The domain's display facet: what a list shows for a member.
+      readonly labelOf: OptionLabel | undefined;
       // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
       // same registry entry as `paletteOf`; `undefined` unless the domain is one.
       readonly library: DomainLibrary | undefined;
@@ -458,11 +457,6 @@ export function compileActions(
 // compiled shape — the discriminator is which key is present (set's value SOURCE
 // for the three set arms; copy/open otherwise). Every arm reads only its own
 // fields; a new arm is one new branch.
-const optionLabel =
-  (labels: OptionSource["labels"]) =>
-  (option: string): string =>
-    labels?.[option] ?? option;
-
 function compileAction(
   parse: (src: string) => Template<RichText>,
   name: string,
@@ -488,8 +482,8 @@ function compileAction(
         key: action.set,
         stateVar,
         options: [...domain.members],
-        labelOf: optionLabel(action.labels),
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library,
       };
     }
@@ -528,8 +522,8 @@ function compileAction(
         key: action.persist,
         stateVar,
         options: [...domain.members],
-        labelOf: optionLabel(action.labels),
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library,
       };
     }
@@ -571,8 +565,8 @@ function compileAction(
         anchor: action.anchor,
         relation: action.relation,
         options: [...domain.members],
-        labelOf: optionLabel(undefined),
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library,
       };
     }

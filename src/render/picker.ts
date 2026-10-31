@@ -365,10 +365,11 @@ export function renderPicker(
     groups: apply.library.groups,
     entries: apply.options.map(apply.library.entry),
   };
+  const labelOf = apply.labelOf ?? ((option: string) => option);
   // A grid's cells are drawn once: measured to page them, then laid.
   const gridFaces =
     catalogue === undefined
-      ? apply.options.map((option, i) => optionFace(i, apply.labelOf(option)))
+      ? apply.options.map((option, i) => optionFace(i, labelOf(option)))
       : [];
   const pages: readonly LibraryPageLayout[] =
     catalogue !== undefined
@@ -508,12 +509,10 @@ export function renderPicker(
       );
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i) =>
-        cellWidth(apply.labelOf(apply.options[i]!)),
-      ),
+      ...section.indices.map((i) => cellWidth(labelOf(apply.options[i]!))),
     );
     for (const i of section.indices) {
-      const name = apply.labelOf(apply.options[i]!);
+      const name = labelOf(apply.options[i]!);
       // An authored description is free text and a row is one cell: control
       // characters and line breaks fold to single spaces, as a diagnostic's do.
       const authored = catalogue.entries[i]!.description;

@@ -445,25 +445,6 @@ const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
 // The submenus laid right after a setting's control.
 const submenusBeside = (name: SettingName): SubmenuName[] =>
   SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-// A setting's trial members stay in its one list, marked as trials there. Only
-// a list of members can mark them.
-const markTrials = (
-  name: SettingName,
-  domain: ControlDomain,
-  trials: readonly string[],
-): ControlDomain => {
-  if (trials.length === 0) return domain;
-  // [LAW:no-silent-failure] Trials named on any other domain would go unmarked.
-  if (typeof domain !== "object" || !("from" in domain)) {
-    throw new Error(
-      `setting "${name}" names trials, but its control does not range a list of members to mark them in`,
-    );
-  }
-  return {
-    ...domain,
-    labels: Object.fromEntries(trials.map((t) => [t, `🧪 ${t}`])),
-  };
-};
 const menuControl = (name: SettingName): MenuControl => {
   const row: SettingProjection = SETTINGS[name];
   const place = PLACE[name];
@@ -474,11 +455,7 @@ const menuControl = (name: SettingName): MenuControl => {
     control: settingControl(
       {
         label: row.label,
-        domain: markTrials(
-          name,
-          settingControlDomain(row.configKey),
-          row.trials,
-        ),
+        domain: settingControlDomain(row.configKey),
       },
       row.sessionKey,
       row.effectiveVar,

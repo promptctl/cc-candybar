@@ -3,6 +3,7 @@
 // writes. Driven through the real loader and `renderDsl`.
 
 import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { resolveOptionDomain } from "../src/config/option-domain";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
@@ -25,24 +26,30 @@ function menu() {
       .flatMap((l) => effectsOf(l.url))
       .filter((e) => e.args[1] === key)
       .map((e) => e.args[2]!);
-  return { open, writes, set: (key: string, value: string) => bar.pick(key, value) };
+  return {
+    open,
+    writes,
+    set: (key: string, value: string) => bar.pick(key, value),
+  };
 }
 
 test.each([
   ["variation", TRIAL_VARIATION_NAMES, "duo"],
   ["shade", TRIAL_SHADE_NAMES, "muted"],
-] as const)("%s's one list marks its trials and writes their plain values", (setting, trials, shipped) => {
-  const { open, writes } = menu();
-  const list = open(`${SETTINGS_NS}apply.${setting}`);
-  const shown = stripAnsi(list);
-  for (const trial of trials) {
-    expect(shown).toContain(`🧪 ${trial}`);
-    expect(writes(list, setting)).toContain(trial);
-  }
-  expect(shown).toContain(shipped);
-  expect(shown).not.toContain(`🧪 ${shipped}`);
-  expect(shown).not.toContain("🧪 trials");
-});
+] as const)(
+  "%s's one list marks its trials and writes their plain values",
+  (setting, trials, shipped) => {
+    const { open, writes } = menu();
+    const list = open(`${SETTINGS_NS}apply.${setting}`);
+    const shown = links(list).map((l) => stripAnsi(l.text).trim());
+    for (const trial of trials) {
+      expect(shown).toContain(`🧪 ${trial}`);
+      expect(writes(list, setting)).toContain(trial);
+    }
+    expect(shown).toContain(shipped);
+    expect(shown).not.toContain("🧪 trials");
+  },
+);
 
 test("a value on trial is on its ring: ▶ steps on from it", () => {
   const { open, set } = menu();
@@ -54,8 +61,12 @@ test("a value on trial is on its ring: ▶ steps on from it", () => {
   expect(next.map((e) => e.args[2])).toEqual([TRIAL_SHADE_NAMES[1]]);
 });
 
-test("a label for a value its domain lacks is refused at load", () => {
-  expect(() =>
-    sessionBar(`{ actions: { pick: { set: "k", from: ["a"], labels: { b: "B" } } } }`, 80),
-  ).toThrow(/"b" is not a member of its from domain/);
-});
+test.each(["variations", "shades"])(
+  "the trial mark is %s's own, so any picker over it shows it",
+  (name) => {
+    const { members, labelOf } = resolveOptionDomain(name, new Map());
+    const labels = members.map(labelOf!);
+    expect(labels.filter((l) => l.startsWith("🧪 ")).length).toBeGreaterThan(0);
+    expect(labels.map((l) => l.replace("🧪 ", ""))).toEqual(members);
+  },
+);

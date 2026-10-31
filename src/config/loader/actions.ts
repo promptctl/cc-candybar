@@ -23,7 +23,6 @@ import {
   type ActionDecl,
   type ActionKey,
   type OptionDomain,
-  type OptionSource,
 } from "../action.js";
 import nodePath from "node:path";
 import { findKeyLine } from "./diagnostics.js";
@@ -769,13 +768,11 @@ const TO_FIELDS_SET: FieldSpecMap<{ to: string }> = {
 const TO_FIELDS_PERSIST: FieldSpecMap<{ to: string }> = {
   to: setLiteralSpec("persist"),
 };
-const FROM_FIELDS_SET: FieldSpecMap<OptionSource> = {
+const FROM_FIELDS_SET: FieldSpecMap<{ from: OptionDomain }> = {
   from: fromSpec("set"),
-  labels: labelsSpec(),
 };
-const FROM_FIELDS_PERSIST: FieldSpecMap<OptionSource> = {
+const FROM_FIELDS_PERSIST: FieldSpecMap<{ from: OptionDomain }> = {
   from: fromSpec("persist"),
-  labels: labelsSpec(),
 };
 const BOUNDED_FIELDS: FieldSpecMap<{ min: number; max: number; by: number }> = {
   min: requireIntSpec(),
@@ -1071,34 +1068,6 @@ function setLiteralSpec(discriminator: Discriminator): FieldSpec<string> {
 // symmetric to how a layout node's segment ref or a `{{ action }}` ref
 // resolves post-merge. Built once per discriminator, same reason as
 // setLiteralSpec.
-function labelsSpec(): FieldSpec<Readonly<Record<string, string>>> {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      additionalProperties: { type: "string", minLength: 1 },
-    },
-    parse: (ctx, path, field, raw) => {
-      const labels = raw[field];
-      if (labels === undefined) return undefined;
-      if (
-        typeof labels !== "object" ||
-        labels === null ||
-        Array.isArray(labels) ||
-        Object.values(labels).some((l) => typeof l !== "string" || l === "")
-      ) {
-        issue(
-          ctx,
-          `${path}.${field}`,
-          `${field} must map option values to non-empty display text`,
-        );
-        return undefined;
-      }
-      return labels as Readonly<Record<string, string>>;
-    },
-  };
-}
-
 function fromSpec(discriminator: Discriminator): FieldSpec<OptionDomain> {
   const wire = wireName(discriminator);
   return {
