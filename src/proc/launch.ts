@@ -277,14 +277,15 @@ export type LaunchResult =
 // `LaunchResult` to return still carries the reason rather than guessing one.
 type Refusal = Extract<LaunchResult, { ok: false }> & { error: string };
 
-const refusedAsAborted = (): Refusal => ({
+// [LAW:one-source-of-truth] Whoever aborted a signal said why when they did.
+const refusedAsAborted = ({ reason }: AbortSignal): Refusal => ({
   ok: false,
   reason: "aborted",
   stdout: "",
   stderr: "",
   exitCode: null,
   signal: null,
-  error: "aborted before it started",
+  error: reason instanceof Error ? reason.message : String(reason),
 });
 
 function rateLimitedResult(
@@ -370,7 +371,8 @@ function refusalOf(
   category: LaunchCategory,
   signal: AbortSignal | undefined,
 ): Refusal | null {
-  if (state.scope.signal.aborted || signal?.aborted) return refusedAsAborted();
+  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
+  if (signal?.aborted) return refusedAsAborted(signal);
   const gate = checkRateLimit(state.lastStartAt, category);
   return gate.allowed
     ? null

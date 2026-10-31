@@ -351,7 +351,7 @@ export async function doctorCommandPlan(
     ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
     : await doctorPlan(
         productionEdge(processLauncher, loadConfigOnce),
-        productionHandlerProbeEdge(),
+        productionHandlerProbeEdge(processLauncher),
         askDaemon,
         process.env,
         process.cwd(),

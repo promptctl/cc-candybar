@@ -515,7 +515,7 @@ describe("SourceRegistry — shell: basic", () => {
 
   it("a read its launcher refused is a failed read, not the registry's abort", async () => {
     const closing = new AbortController();
-    closing.abort();
+    closing.abort(new Error("the daemon closed"));
     const registry = new SourceRegistry(
       createLauncher({ signal: closing.signal }),
       new VariableStore(),
@@ -524,7 +524,7 @@ describe("SourceRegistry — shell: basic", () => {
     registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
     await ran(registry);
     expect(registry.getLastError("val")!.message).toBe(
-      `shell "echo x" aborted in ${process.cwd()}`,
+      `shell "echo x" aborted: the daemon closed in ${process.cwd()}`,
     );
   });
 

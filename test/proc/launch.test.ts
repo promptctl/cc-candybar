@@ -572,7 +572,7 @@ describe("a launcher's scope", () => {
   it("refuses every kind of launch once its signal has aborted, spawning nothing", async () => {
     const closing = new AbortController();
     scoped({ signal: closing.signal });
-    closing.abort();
+    closing.abort(new Error("the daemon closed"));
     const marker = path.join(scratch, "scope-refused");
 
     expect(await launch(touching(marker))).toMatchObject({
@@ -593,7 +593,7 @@ describe("a launcher's scope", () => {
         stderr: path.join(scratch, "job.err"),
         status: path.join(scratch, "job.status"),
       }),
-    ).toEqual({ ok: false, error: "aborted before it started" });
+    ).toEqual({ ok: false, error: "the daemon closed" });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(fs.existsSync(marker)).toBe(false);
@@ -722,8 +722,11 @@ describe("a launcher's scope", () => {
     const marker = path.join(scratch, "caller-aborted");
 
     expect(
-      await launch({ ...touching(marker), signal: AbortSignal.abort() }),
-    ).toMatchObject({ ok: false, reason: "aborted" });
+      await launch({
+        ...touching(marker),
+        signal: AbortSignal.abort(new Error("superseded")),
+      }),
+    ).toMatchObject({ ok: false, reason: "aborted", error: "superseded" });
 
     expect(refused).toEqual(["user-shell"]);
     expect(starts).toEqual([]);

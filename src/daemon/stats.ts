@@ -211,9 +211,9 @@ export class RuntimeStats {
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
-  // Launches refused, closed or rate-limited: public because a closed daemon's
-  // work is still refused, and no request reads a closed daemon.
-  readonly subprocessRefused = new Map<LaunchCategory, number>();
+  // Launches asked for that started nothing: the launcher had closed, the
+  // category's interval had not passed, or the caller had aborted first.
+  private readonly subprocessRefusals = new Map<LaunchCategory, number>();
   private readonly subprocessCount = new Map<LaunchCategory, number>();
   private readonly subprocessHistogram = new Map<LaunchCategory, number[]>();
   private readonly subprocessHistogramRotator = new Map<
@@ -222,6 +222,12 @@ export class RuntimeStats {
   >();
   private readonly rollingTimestamps: number[] = [];
   private rollingHead = 0;
+
+  // Readable off the value because a closed daemon's work is still refused, and
+  // no request reads a closed daemon.
+  get subprocessRefused(): ReadonlyMap<LaunchCategory, number> {
+    return this.subprocessRefusals;
+  }
 
   // [LAW:one-source-of-truth] The same object that owns the counters also
   // exposes the metering handle. The launch primitive calls these methods;
@@ -241,9 +247,9 @@ export class RuntimeStats {
       this.recordDuration(category, durationMs);
     },
     onRefused: (category) => {
-      this.subprocessRefused.set(
+      this.subprocessRefusals.set(
         category,
-        (this.subprocessRefused.get(category) ?? 0) + 1,
+        (this.subprocessRefusals.get(category) ?? 0) + 1,
       );
     },
   };

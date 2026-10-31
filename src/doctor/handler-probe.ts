@@ -19,7 +19,7 @@ import { describeFailure } from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { handlerCommand, handlerScriptPath } from "../install/index.js";
-import { processLauncher, type LaunchCategory } from "../proc/launch.js";
+import type { LaunchCategory, Launcher } from "../proc/launch.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
 
 const ok = <T>(value: T): Asked<T> => ({ kind: "ok", value });
@@ -172,11 +172,12 @@ export async function probeUrlHandler(
 const SPAWN_MS = 5000;
 
 function run(
+  launcher: Launcher,
   category: LaunchCategory,
   bin: string,
   args: readonly string[],
 ): Asked<string> {
-  const result = processLauncher.launchSync({
+  const result = launcher.launchSync({
     bin,
     args: [...args],
     category,
@@ -209,7 +210,9 @@ async function daemonView(): Promise<Asked<DaemonView>> {
   return ok({ version, arrivals: handlerProbes });
 }
 
-export function productionHandlerProbeEdge(): HandlerProbeEdge {
+export function productionHandlerProbeEdge(
+  launcher: Launcher,
+): HandlerProbeEdge {
   return {
     platform: process.platform,
     sockets: { own: socketPath(), handler: defaultSocketPath() },
@@ -218,23 +221,23 @@ export function productionHandlerProbeEdge(): HandlerProbeEdge {
     daemon: daemonView,
     open: (url) => {
       // -g: the handler app must not take focus from the terminal.
-      const opened = run("doctor.open", "/usr/bin/open", ["-g", url]);
+      const opened = run(launcher, "doctor.open", "/usr/bin/open", ["-g", url]);
       return opened.kind === "ok" ? null : opened.reason;
     },
     pause: () => new Promise((resolve) => setTimeout(resolve, POLL_MS)),
     opener: () => {
-      const asked = run("doctor.launch-services", "/usr/bin/osascript", [
-        "-l",
-        "JavaScript",
-        "-e",
-        OPENER_SCRIPT,
-      ]);
+      const asked = run(
+        launcher,
+        "doctor.launch-services",
+        "/usr/bin/osascript",
+        ["-l", "JavaScript", "-e", OPENER_SCRIPT],
+      );
       if (asked.kind === "failed") return asked;
       const app = asked.value.trim();
       return ok(app === "" ? null : app);
     },
     script: (app) =>
-      run("doctor.osadecompile", "/usr/bin/osadecompile", [
+      run(launcher, "doctor.osadecompile", "/usr/bin/osadecompile", [
         handlerScriptPath(app),
       ]),
     exists: fs.existsSync,

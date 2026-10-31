@@ -252,7 +252,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
 
   const eventsOf = (sessionId: string): RenderEvent[] =>
     logLines(log)
-      .filter((l) => l.includes(` render sid=${valueOf(sessionId)} `))
+      .filter((l) => l.includes(`] render sid=${valueOf(sessionId)} `))
       .map(parseRenderEvent);
 
   const lastEventSince = async (

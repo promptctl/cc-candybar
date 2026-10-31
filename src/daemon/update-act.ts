@@ -26,9 +26,9 @@ import {
   type JobEnd,
   type JobFiles,
   type LaunchOpts,
+  type Launcher,
 } from "../proc/launch";
 import { readTailSync } from "../utils/transcript-fs";
-import type { Launcher } from "../proc/launch";
 import type { StartTimeRead } from "./process-fingerprint";
 
 export function actsDir(stateDir: string, entryPath: string): string {

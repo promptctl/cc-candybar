@@ -5,6 +5,7 @@
 // daemon's own is exercised — a project config found first, a user config
 // unread behind it, and a declaration the project config never uses.
 
+import { processLauncher } from "../src/proc/launch";
 import { builtBundle } from "./helpers/spawn-test-daemon";
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -258,7 +259,7 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
     daemon = await spawnDaemonWithEnv(env);
     const delivered: Promise<unknown>[] = [];
     const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(),
+      ...productionHandlerProbeEdge(processLauncher),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon.
       sockets: { own: sockPath, handler: sockPath },
