@@ -4,15 +4,22 @@
     {
       "version": "pr-513",
       "ref": "refs/pull/513/merge",
-      "sha": "5c810d9d335e2450853943ba36f709b57b2ffff8",
-      "timestamp": "2026-10-31T00:38:59.148Z",
+      "sha": "60d44bc9bebc91ea459cb213d48aaaf6961a83d4",
+      "timestamp": "2026-10-31T00:47:01.040Z",
       "commits": [
         {
-          "sha": "5c810d9d335e2450853943ba36f709b57b2ffff8",
+          "sha": "60d44bc9bebc91ea459cb213d48aaaf6961a83d4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:38:10-06:00",
-          "message": "Merge 87943bff1734adfb1f9c43585188e18e9376f3ef into bbb46f5827993af9bdecb4eb063b8ddf756f5ef8\n"
+          "timestamp": "2026-10-31T00:45:52Z",
+          "message": "Merge eca49a234ad97f573b50d69f663cd055f522707e into bbb46f5827993af9bdecb4eb063b8ddf756f5ef8\n"
+        },
+        {
+          "sha": "eca49a234ad97f573b50d69f663cd055f522707e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T18:45:43-06:00",
+          "message": "docs(memory): a checkout is an install only when the statusline names a path inside it; install from a checkout stages a copy the tree never reaches (brandon-unfiled-3248.bh7x)\n"
         },
         {
           "sha": "87943bff1734adfb1f9c43585188e18e9376f3ef",
