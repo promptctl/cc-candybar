@@ -2396,13 +2396,16 @@ var init_timers = __esm({
 });
 
 // site/shims/globals.ts
-var import_buffer;
+var import_buffer, symbols;
 var init_globals = __esm({
   "site/shims/globals.ts"() {
     "use strict";
     init_process();
     import_buffer = __toESM(require_buffer(), 1);
     init_timers();
+    symbols = Symbol;
+    symbols.dispose ??= /* @__PURE__ */ Symbol.for("Symbol.dispose");
+    symbols.asyncDispose ??= /* @__PURE__ */ Symbol.for("Symbol.asyncDispose");
   }
 });
 
@@ -3894,10 +3897,10 @@ var require_inspectBrand = __commonJS({
     exports.prefixOf = prefixOf;
     var ownKeys3 = (value) => {
       const keys2 = Object.keys(value);
-      const symbols = Object.getOwnPropertySymbols(value);
-      for (let i = 0; i < symbols.length; i++)
-        if (exports.isEnumerable.call(value, symbols[i]))
-          keys2.push(symbols[i]);
+      const symbols2 = Object.getOwnPropertySymbols(value);
+      for (let i = 0; i < symbols2.length; i++)
+        if (exports.isEnumerable.call(value, symbols2[i]))
+          keys2.push(symbols2[i]);
       return keys2;
     };
     exports.ownKeys = ownKeys3;
@@ -34915,7 +34918,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.169.0";
+var PACKAGE_VERSION = "1.169.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -39348,11 +39351,11 @@ function isES6Set(thing) {
 }
 function getPlainObjectKeys(object) {
   const keys2 = Object.keys(object);
-  const symbols = Object.getOwnPropertySymbols(object);
-  if (!symbols.length) {
+  const symbols2 = Object.getOwnPropertySymbols(object);
+  if (!symbols2.length) {
     return keys2;
   }
-  return [...keys2, ...symbols.filter((s) => objectPrototype.propertyIsEnumerable.call(object, s))];
+  return [...keys2, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object, s))];
 }
 var ownKeys2 = Reflect.ownKeys;
 function stringifyKey(key) {

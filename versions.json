@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-515",
-      "ref": "refs/pull/515/merge",
-      "sha": "d17218d06549535df9d04a449f68ff850242a25e",
-      "timestamp": "2026-10-31T05:14:19.703Z",
-      "commits": [
-        {
-          "sha": "d17218d06549535df9d04a449f68ff850242a25e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:13:30-06:00",
-          "message": "Merge 3f237d92f2563a145a1c133244d8c8c11fff2c10 into 71f9a26bd1aaa0a15fda13105bdf616ee70d078b\n"
-        },
-        {
-          "sha": "3f237d92f2563a145a1c133244d8c8c11fff2c10",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:13:21-06:00",
-          "message": "fix(site): the live bar defines Symbol.dispose where Safari has none\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0d7e32730906f412f757614cd2ea4aed3dbd3cac",
-      "timestamp": "2026-10-31T02:30:27.392Z",
+      "sha": "0a5c459f404f83438a0772eb02741da617b6a82b",
+      "timestamp": "2026-10-31T05:18:18.892Z",
       "commits": [
         {
-          "sha": "0d7e32730906f412f757614cd2ea4aed3dbd3cac",
+          "sha": "0a5c459f404f83438a0772eb02741da617b6a82b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T20:29:35-06:00",
-          "message": "fix(watchers): every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl) (#514)\n\n* fix(watchers): every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl)\n\nA directory watch binds an inode. A strict ancestor of a watched directory\nrenamed away and another tree put at its path reports nothing to the handle:\ninotify reports a directory's own removal or self-move, never its parent's,\nso the handle stays listening, bound to a folder no longer at its path, and\nthe config cache, which has no period, never re-derives its key. Edits at the\npath go unheard and no fault shows.\n\nThe registry's one rule that a directory watch names the folder at its path\nnow runs over every directory watch on the file-event delivery owner's\nperiod, which the daemon already keeps time by: a deaf directory is opened\nagain and one whose path holds another folder is reopened in place, telling\nevery slot on it an unknown window, through which the config cache, the git\nprovider, watch_file sources and the plugin storage owner recover as they\nalready do.\n\nThe period is the one owned bound on retrying a deaf directory, so a kept\nfollow retries nothing. The deaf-only retry a kept follow ran, its\nfailed-window gate, and the window threaded to it through the config cache,\nthe git repo state and watch_file sources are removed.\n\n* fix(watchers): a reload that keeps its watch is what retries nothing, and the git watch asks for its pass directly (brandon-unfiled-3248.erwl)\n\nThe memory sentence and the judgment's comment claimed the period was the only retry of a deaf directory; an acquire judges the directories it names too. The git provider's heard wrapper had no job left once the failed window went.\n\n* test(render-cache): the parent-rename test proves the judgment closed a handle before any window lands (brandon-unfiled-3248.erwl)\n\nOn macOS the watch follows the path and would hear the write by itself, so the entry reading the new tree proved nothing about the judgment there. The synchronous close is the reopen, on both platforms."
+          "timestamp": "2026-10-30T23:17:29-06:00",
+          "message": "fix(site): the live bar defines Symbol.dispose where Safari has none (#515)"
+        },
+        {
+          "sha": "71f9a26bd1aaa0a15fda13105bdf616ee70d078b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-31T02:40:23Z",
+          "message": "chore(release): set `package.json` to 1.169.1 [skip ci]\n\n## [1.169.1](https://github.com/promptctl/cc-candybar/compare/v1.169.0...v1.169.1) (2026-10-31)\n\n### Bug Fixes\n\n* **watchers:** every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl) ([#514](https://github.com/promptctl/cc-candybar/issues/514)) ([0d7e327](https://github.com/promptctl/cc-candybar/commit/0d7e32730906f412f757614cd2ea4aed3dbd3cac))\n"
         }
       ]
     }
