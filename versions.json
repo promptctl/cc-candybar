@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-519",
-      "ref": "refs/pull/519/merge",
-      "sha": "f769439960891430843408398415d33412937086",
-      "timestamp": "2026-10-31T11:44:19.764Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3405285f6ee15d063c84e720f6659f9babe4bc6a",
+      "timestamp": "2026-10-31T11:52:46.704Z",
       "commits": [
         {
-          "sha": "f769439960891430843408398415d33412937086",
+          "sha": "3405285f6ee15d063c84e720f6659f9babe4bc6a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T11:43:25Z",
-          "message": "Merge 5f20a806b8e0a11ac7a81a058f538d7a7cf124e1 into 5e0bacd349c60a4c51df5ff2f2abc9a5b247985c\n"
+          "timestamp": "2026-10-31T05:51:52-06:00",
+          "message": "fix(doctor): the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb) (#519)\n\n* fix(doctor): the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb)\n\nThe doctor printed a verdict about a file it never named, so a run under\nan unset argument or under the environment variable could not say which\nconfig it had judged. Both verdicts now name the file or chain, and the\nspelling that won.\n\nThe render origin carries a typed target in place of a bare path, so the\nsource travels in the one record that holds the path and the click never\nhas to infer it. The precedence has one composer, used by the request\ncheckpoint and both CLIs. The record stays flat and additive, because\nbuilds of either age read one unversioned state file.\n\n* fix(doctor): an unreadable source no longer fails a click, and an empty chain says what is true (brandon-unfiled-3248.hpxb)\n\nA record's source only labels its path, so one this build cannot read now\nleaves the path standing with its source unknown instead of failing every\ndurable click on the session. An empty chain reads \"no config file loaded\":\na repository's config awaiting approval is left out of the chain, so \"found\"\nwas false.\n\ncheck's fatal arm joins through chainName, and the comments and the doctor's\nUI map stop naming what moved.\n\n* fix(doctor): every chain joins through one function, and comments say what is true (brandon-unfiled-3248.hpxb)\n\nThe render cache's log lines spelled the join twice more; they go through\nchainName with their bytes kept. Comments that still placed the precedence in\nserver.ts or said a config was not found are corrected, and the UI map's\nsamples show the absolute paths the row prints."
         },
         {
-          "sha": "5f20a806b8e0a11ac7a81a058f538d7a7cf124e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:43:07-06:00",
-          "message": "fix(doctor): every chain joins through one function, and comments say what is true (brandon-unfiled-3248.hpxb)\n\nThe render cache's log lines spelled the join twice more; they go through\nchainName with their bytes kept. Comments that still placed the precedence in\nserver.ts or said a config was not found are corrected, and the UI map's\nsamples show the absolute paths the row prints.\n"
-        },
-        {
-          "sha": "b9f06536ac17957ce5a6841d2453596924de52be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:36:32-06:00",
-          "message": "fix(doctor): an unreadable source no longer fails a click, and an empty chain says what is true (brandon-unfiled-3248.hpxb)\n\nA record's source only labels its path, so one this build cannot read now\nleaves the path standing with its source unknown instead of failing every\ndurable click on the session. An empty chain reads \"no config file loaded\":\na repository's config awaiting approval is left out of the chain, so \"found\"\nwas false.\n\ncheck's fatal arm joins through chainName, and the comments and the doctor's\nUI map stop naming what moved.\n"
-        },
-        {
-          "sha": "04496a4c33f129f00a9c0f1d32a5ad50c63cffdf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T05:01:32-06:00",
-          "message": "fix(doctor): the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb)\n\nThe doctor printed a verdict about a file it never named, so a run under\nan unset argument or under the environment variable could not say which\nconfig it had judged. Both verdicts now name the file or chain, and the\nspelling that won.\n\nThe render origin carries a typed target in place of a bare path, so the\nsource travels in the one record that holds the path and the click never\nhas to infer it. The precedence has one composer, used by the request\ncheckpoint and both CLIs. The record stays flat and additive, because\nbuilds of either age read one unversioned state file.\n"
+          "sha": "5e0bacd349c60a4c51df5ff2f2abc9a5b247985c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-31T06:02:14Z",
+          "message": "chore(release): set `package.json` to 1.170.0 [skip ci]\n\n## [1.170.0](https://github.com/promptctl/cc-candybar/compare/v1.169.2...v1.170.0) (2026-10-31)\n\n### Features\n\n* **menu:** the menu opens with no tab open, and its timeout defaults to 120s in 15s steps ([#516](https://github.com/promptctl/cc-candybar/issues/516)) ([8da9964](https://github.com/promptctl/cc-candybar/commit/8da9964e91dd7db20d259a81a05cf0f2328ee0c2))\n"
         }
       ]
     },
@@ -92,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T23:43:59-06:00",
           "message": "feat(site): site:dev serves the live bar and reloads it on every rebuild\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "8da9964e91dd7db20d259a81a05cf0f2328ee0c2",
-      "timestamp": "2026-10-31T05:52:05.704Z",
-      "commits": [
-        {
-          "sha": "8da9964e91dd7db20d259a81a05cf0f2328ee0c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T23:51:12-06:00",
-          "message": "feat(menu): the menu opens with no tab open, and its timeout defaults to 120s in 15s steps (#516)"
-        },
-        {
-          "sha": "1eb0b0c4631cd6287997adbaddb0d7db1f9452a0",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-31T05:28:34Z",
-          "message": "chore(release): set `package.json` to 1.169.2 [skip ci]\n\n## [1.169.2](https://github.com/promptctl/cc-candybar/compare/v1.169.1...v1.169.2) (2026-10-31)\n\n### Bug Fixes\n\n* **site:** the live bar defines Symbol.dispose where Safari has none ([#515](https://github.com/promptctl/cc-candybar/issues/515)) ([0a5c459](https://github.com/promptctl/cc-candybar/commit/0a5c459f404f83438a0772eb02741da617b6a82b))\n"
         }
       ]
     }

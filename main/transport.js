@@ -34918,7 +34918,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.169.2";
+var PACKAGE_VERSION = "1.170.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -38177,7 +38177,7 @@ function parseSessionInt(raw, range) {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/config/synthesis-inputs.ts
 init_globals();
@@ -52913,6 +52913,36 @@ var TMUX_ENV = {
 };
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
+// src/config-hint.ts
+init_globals();
+
+// src/utils/user-path.ts
+init_globals();
+init_os();
+var import_node_path15 = __toESM(require_path_browserify(), 1);
+function expandHome(p2) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? os_default.homedir() + p2.slice(1) : p2;
+}
+function resolveUserPath(base, p2) {
+  return import_node_path15.default.resolve(base, expandHome(p2));
+}
+function explicitConfigPath(base, p2) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2) : void 0;
+}
+
+// src/config-hint.ts
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function requestedConfigTarget(argument, environment) {
+  if (argument !== void 0) return { source: "argument", path: argument };
+  if (environment !== void 0) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+function chainName(paths, none = "bundled default (no config file loaded)") {
+  return paths.join(" < ") || none;
+}
+
 // src/render/strip.ts
 init_globals();
 
@@ -53776,27 +53806,44 @@ var UNUSED = {
   helper: "is never called",
   segment: "is in no preset"
 };
+var NAMED_BY = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  pick: "load-config pick",
+  unknown: "source unknown"
+};
+function judgedConfig({ target, layers }) {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
+}
+function configProblems(config2) {
+  switch (config2.kind) {
+    case "failed": {
+      const problems = [
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
+        ...config2.warnings
+      ];
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config2.warnings,
+        ...config2.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
+        )
+      ];
+  }
+}
 var config = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config: config2 }) => {
-    switch (config2.kind) {
-      case "failed": {
-        const [reason = "the config failed to load", ...more] = [
-          ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
-          ...config2.warnings
-        ];
-        return { ok: false, reason, more };
-      }
-      case "loaded":
-        return problemsVerdict([
-          ...config2.warnings,
-          ...config2.unused.map(
-            ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
-          )
-        ]);
-    }
+    const judged = judgedConfig(config2);
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";
@@ -54386,6 +54433,9 @@ function doctorReportKeys(checkName) {
     fixable: `${base}fixable`,
     sighting: `${base}sighting`
   };
+}
+function configFields({ target }) {
+  return `configTarget=${target.source}`;
 }
 function linkFields(terminal, clicked) {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
@@ -55543,7 +55593,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path15.default.join(import_node_path15.default.basename(import_node_path15.default.dirname(file)), import_node_path15.default.basename(file));
+  return import_node_path16.default.join(import_node_path16.default.basename(import_node_path16.default.dirname(file)), import_node_path16.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -57456,7 +57506,7 @@ function synthesizePlacementMenus(config2, issues) {
 
 // src/config/loader/actions.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
   if (!isPlainObject3(raw)) {
@@ -57510,7 +57560,7 @@ function validateActionDecl(ctx, path41, raw, home) {
   return actionArms(home)[present[0]](ctx, path41, raw);
 }
 function actionHomeOf(filePath2) {
-  return import_node_path16.default.isAbsolute(filePath2) ? { dir: import_node_path16.default.dirname(filePath2) } : { text: filePath2 };
+  return import_node_path17.default.isAbsolute(filePath2) ? { dir: import_node_path17.default.dirname(filePath2) } : { text: filePath2 };
 }
 var actionArms = (home) => ({
   set: (ctx, path41, raw) => valueSourceAction(ctx, path41, raw, "set", SET_ARMS),
@@ -59480,22 +59530,6 @@ function validateNoNesting(ctx, cfg, names) {
 init_globals();
 var import_node_path18 = __toESM(require_path_browserify(), 1);
 var import_json52 = __toESM(require_dist(), 1);
-
-// src/utils/user-path.ts
-init_globals();
-init_os();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
-function expandHome(p2) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? os_default.homedir() + p2.slice(1) : p2;
-}
-function resolveUserPath(base, p2) {
-  return import_node_path17.default.resolve(base, expandHome(p2));
-}
-function explicitConfigPath(base, p2) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2) : void 0;
-}
-
-// src/config/loader/plugins.ts
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }
@@ -68372,9 +68406,10 @@ function forgeLoginOf(cli, host, nonZero, run3) {
   }
   return { kind: "failed", reason: launchFailure(cli, run3) };
 }
-function configFacts(load) {
+function configFacts(load, target) {
   const base = {
     layers: load.layers,
+    target,
     warnings: load.warning === null ? [] : load.warning.split("\n")
   };
   return load.error !== null ? { ...base, kind: "failed", error: load.error } : {
@@ -68541,7 +68576,7 @@ function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits, tran
       processes: edge.daemons(),
       read: stores.postMortemsRead
     },
-    config: configFacts(load),
+    config: configFacts(load, origin.target),
     sighted,
     frames: bars.kind === "failed" ? bars : { kind: "read" },
     data: segmentDataFacts(
@@ -69456,13 +69491,24 @@ function stepFrom(verb, key, params, declared) {
 }
 var SESSION_RENDER_ORIGIN_KEY = "render-origin";
 function sessionRenderOrigin(requested, state, sid) {
-  return {
-    ...requested,
-    configFile: state.get(sid, SESSION_CONFIG_OVERRIDE_KEY) ?? requested.configFile
-  };
+  const pick2 = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
+  return pick2 === null ? requested : { ...requested, target: { source: "pick", path: pick2 } };
 }
-function encodeRenderOrigin(origin) {
-  return JSON.stringify(origin);
+function encodeRenderOrigin({
+  projectDir,
+  cwd: cwd2,
+  target
+}) {
+  return JSON.stringify({
+    projectDir,
+    cwd: cwd2,
+    configFile: target.path ?? null,
+    source: target.source
+  });
+}
+function recordedTarget(source, configFile) {
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
 }
 function parseRenderOrigin(raw) {
   let parsed2;
@@ -69474,11 +69520,11 @@ function parseRenderOrigin(raw) {
   if (parsed2 === null || typeof parsed2 !== "object") {
     throw new BadVerbArgs(`render origin is not an object: ${raw}`);
   }
-  const { projectDir, cwd: cwd2, configFile } = parsed2;
+  const { projectDir, cwd: cwd2, configFile, source } = parsed2;
   if (typeof projectDir !== "string" || typeof cwd2 !== "string" || configFile !== null && typeof configFile !== "string") {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  return { projectDir, cwd: cwd2, configFile };
+  return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
 }
 function sessionOrigin(ctx, sid) {
   const origin = recordedOrigin(ctx, sid);
@@ -69523,7 +69569,7 @@ function originHome(origin) {
     repoConfigs().read(),
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? void 0
+    origin.target.path
   );
 }
 function editStore(ctx, sid) {
@@ -69880,7 +69926,7 @@ function writeReport(ctx, sid, facts) {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
 }
 function clickFacts(ctx, sid) {
@@ -78498,7 +78544,7 @@ function pluginLoadLine(layers, {
   );
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
-  return `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
+  return `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
 }
 var heardField = (heard) => {
   switch (heard.kind) {
@@ -78525,7 +78571,7 @@ var causeField = (cause) => {
 };
 function configLoadedLine(entry, cause, settled3) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -81178,10 +81224,6 @@ init_timers();
 init_globals();
 var import_node_path42 = __toESM(require_path_browserify(), 1);
 
-// src/config-hint.ts
-init_globals();
-var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
-
 // src/daemon/claude-relaunch.ts
 init_globals();
 var import_node_path41 = __toESM(require_path_browserify(), 1);
@@ -82831,11 +82873,7 @@ var verbCtx = {
   // doctor click is a verdict on the files as they are now, not on
   // whether the fs watcher has caught up with an edit made a moment ago.
   doctor: productionEdge((origin) => {
-    const at = [
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? void 0
-    ];
+    const at = [origin.projectDir, origin.cwd, origin.target.path];
     renderCache.reload(...at, { kind: "doctor" });
     const entry = renderCache.getOrCreate(...at);
     return {
@@ -82856,23 +82894,12 @@ var verbCtx = {
   navigation: navigationHistory,
   // The config a session's last render resolved from — the same entry the
   // render drew the bar with, so a save compares against the bar the user saw.
-  configFor: (origin) => renderCache.getOrCreate(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0
-  ).state.config,
-  reloadConfig: (origin) => renderCache.reload(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0,
-    { kind: "write" }
-  ),
+  configFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.config,
+  reloadConfig: (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
+    kind: "write"
+  }),
   // The storage keys of the same entry `configFor` reads the config of.
-  sourcesFor: (origin) => renderCache.getOrCreate(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? void 0
-  ).state.sources,
+  sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
   links: linkSigner2,
   runs,
   lanes: { of: lanesAt, clicked: laneClicked },
@@ -82881,7 +82908,7 @@ var verbCtx = {
       sessionId2,
       origin.projectDir,
       origin.cwd,
-      origin.configFile ?? void 0
+      origin.target.path
     )
   },
   diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
@@ -83083,7 +83110,7 @@ function lanesAt(origin, sessionId2) {
     const hold = __using(_stack, renderCache.hold(
       origin.projectDir,
       origin.cwd,
-      origin.configFile ?? void 0
+      origin.target.path
     ));
     const latest = frameFeeds.latest(sessionId2);
     return laneSwitches(
@@ -83147,7 +83174,7 @@ function checkRenderRequest(req) {
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
-        configFile: configFile ?? hints.configEnv ?? null
+        target: requestedConfigTarget(configFile, hints.configEnv)
       },
       refusedArgs
     }
@@ -83192,7 +83219,7 @@ function setUpRender(req, at, facts) {
   const hold = renderCache.holdSession(
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? void 0,
+    origin.target.path,
     req
   );
   return setUpDraw(hold, req, hintsError, at, facts);
@@ -84074,7 +84101,7 @@ var transport = {
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {
     forgetWrites();
-    reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
+    reloadConfig({ projectDir: REPO, cwd: REPO, target: { source: "search" } });
     sessionId = crypto.randomUUID();
     startAt(t);
     notify();
