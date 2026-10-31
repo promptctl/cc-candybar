@@ -261,7 +261,7 @@ describe("a connection over a stream", () => {
     expect(delivered).not.toHaveBeenCalled();
   });
 
-  test("the exit a reply carries survives a backstop that answered first", async () => {
+  test("the exit a reply carries goes unsent with a reply the backstop beat", async () => {
     const request = held();
     const { send, received } = open(standIn({ handle: request.handle }));
     send(STATS);
@@ -272,11 +272,11 @@ describe("a connection over a stream", () => {
     request.answer(replyWith({ exitAfterFlush: 0 }));
     await settled();
 
-    expect(exit).toHaveBeenCalledWith(0);
+    expect(exit).not.toHaveBeenCalled();
     expect(received).toEqual([expect.objectContaining({ code: "TIMEOUT" })]);
   });
 
-  test("a late reply leaves a subscription streaming, and its exit still runs", async () => {
+  test("a late reply and its exit leave a subscription streaming", async () => {
     const request = held();
     const { client, send, received, ended } = open(
       standIn({
@@ -294,7 +294,7 @@ describe("a connection over a stream", () => {
     request.answer(replyWith({ exitAfterFlush: 0 }));
     await settled();
 
-    expect(exit).toHaveBeenCalledWith(0);
+    expect(exit).not.toHaveBeenCalled();
     expect(received).toEqual([]);
     expect(ended()).toBe(false);
     client.destroy();
