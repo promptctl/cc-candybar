@@ -79,6 +79,10 @@
     <button type="button" data-cols="200">200</button>
     <button type="button" id="fit">fit window</button>
   </div>
+  <div class="group"><span class="label">font</span>
+    <input type="range" id="font-slider" aria-label="Font size" style="accent-color: currentColor; width: 120px">
+    <span id="font-size"></span>
+  </div>
   <div class="group"><span class="label">terminal ground</span>
     <button type="button" data-ground="dark" aria-pressed="true">dark</button>
     <button type="button" data-ground="light">light</button>
@@ -137,9 +141,13 @@ function say(text, cls) {
   $("status").replaceChildren(Object.assign(document.createElement("span"), { className: cls ?? "", textContent: text }));
 }
 
+const FONT_SIZES = { min: 10, max: 32, default: 16 };
+const FONT_SIZE_KEY = "cc-candybar:bar-font-size";
+const storedFontSize = Number(localStorage.getItem(FONT_SIZE_KEY));
+
 const term = new Terminal({
   fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--mono"),
-  fontSize: 14,
+  fontSize: storedFontSize || FONT_SIZES.default,
   convertEol: true,
   disableStdin: true,
   cursorBlink: false,
@@ -267,6 +275,16 @@ function setCols(cols) {
 const press = (selector, chosen) =>
   document.querySelectorAll(selector).forEach((o) => o.setAttribute("aria-pressed", String(o === chosen)));
 $("fit").addEventListener("click", () => { frame.style.width = "100%"; });
+// The frame keeps its width, so a larger font is fewer columns and the bar lays itself out again.
+const fontSlider = $("font-slider");
+Object.assign(fontSlider, { min: FONT_SIZES.min, max: FONT_SIZES.max, value: term.options.fontSize });
+$("font-size").textContent = `${term.options.fontSize}px`;
+fontSlider.addEventListener("input", () => {
+  term.options.fontSize = fontSlider.valueAsNumber;
+  localStorage.setItem(FONT_SIZE_KEY, fontSlider.value);
+  $("font-size").textContent = `${fontSlider.value}px`;
+  refit();
+});
 document.querySelectorAll("[data-ground]").forEach((b) => b.addEventListener("click", () => {
   term.options.theme = GROUNDS[b.dataset.ground];
   frame.style.setProperty("--ground", GROUNDS[b.dataset.ground].background);
