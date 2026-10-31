@@ -1,3 +1,9 @@
+## [1.170.0](https://github.com/promptctl/cc-candybar/compare/v1.169.2...v1.170.0) (2026-10-31)
+
+### Features
+
+* **menu:** the menu opens with no tab open, and its timeout defaults to 120s in 15s steps ([#516](https://github.com/promptctl/cc-candybar/issues/516)) ([8da9964](https://github.com/promptctl/cc-candybar/commit/8da9964e91dd7db20d259a81a05cf0f2328ee0c2))
+
 ## [1.169.2](https://github.com/promptctl/cc-candybar/compare/v1.169.1...v1.169.2) (2026-10-31)
 
 ### Bug Fixes
