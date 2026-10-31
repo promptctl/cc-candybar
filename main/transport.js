@@ -34918,7 +34918,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.169.1";
+var PACKAGE_VERSION = "1.169.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -51031,8 +51031,8 @@ var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
   (sum, { seconds }) => sum + seconds,
   0
 );
-var MENU_TIMEOUT_RANGE = { min: 10, max: 600, step: 5 };
-var MENU_TIMEOUT_DEFAULT = 30;
+var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
+var MENU_TIMEOUT_DEFAULT = 120;
 var closesAt = (since, timeoutS) => since + timeoutS;
 var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
@@ -54723,7 +54723,6 @@ var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
 var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
 var seg = (name) => ({ kind: "segment", name });
 var TAB_KEY = `${SETTINGS_NS}tab`;
-var FIRST_TAB = "session";
 var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
 var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
 var tabRef = (tab) => ({
@@ -55206,7 +55205,7 @@ function settingsArtifacts(doorGlyph) {
       default: 0
     };
   }
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
   for (const { member, label: label2 } of TABS) {
     artifacts.actions[tabToggle(member)] = disclosureCycleAction(
       TAB_KEY,
