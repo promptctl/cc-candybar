@@ -4,15 +4,22 @@
     {
       "version": "pr-525",
       "ref": "refs/pull/525/merge",
-      "sha": "120f82a41544b898805d04a0f597d5f6e9ff7515",
-      "timestamp": "2026-10-31T21:38:22.329Z",
+      "sha": "b6fd5e2844cec1fbf29963bc25a20b3265c4d104",
+      "timestamp": "2026-10-31T21:51:49.022Z",
       "commits": [
         {
-          "sha": "120f82a41544b898805d04a0f597d5f6e9ff7515",
+          "sha": "b6fd5e2844cec1fbf29963bc25a20b3265c4d104",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T15:37:26-06:00",
-          "message": "Merge 9bc1828e309683252208b0d5181dc5031c5e656b into f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc\n"
+          "timestamp": "2026-10-31T21:51:02Z",
+          "message": "Merge ff39a6f4b39ffe63527bf5424e98ebb7cd44e6c9 into f29e8fb0c8e63b499dd91d1472691e8c9a5c63dc\n"
+        },
+        {
+          "sha": "ff39a6f4b39ffe63527bf5424e98ebb7cd44e6c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T15:50:50-06:00",
+          "message": "test(daemon): CI runs the tier after the build and the rest before it, and preloads share one merge (candybar-testing-0x6u.886)\n\nA run outside the tier needing no build was checked once by hand. CI now\npartitions the suite at the build, so that holds on every push at no added\ntime. The ledger's NODE_OPTIONS merge was a copy of the stamp's, which that\nfile says there is one of. The pool case's cleanup no longer depends on the\nthird spawn having succeeded.\n"
         },
         {
           "sha": "9bc1828e309683252208b0d5181dc5031c5e656b",
