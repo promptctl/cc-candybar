@@ -35222,6 +35222,7 @@ function unguard(group) {
 function retireLifeline() {
   const line = lifeline;
   lifeline = null;
+  fault = null;
   line?.pipe.end();
 }
 function signalGroup(pid2, sig) {
@@ -83352,6 +83353,12 @@ function createDaemon(inputs) {
   const instant = () => instantOf(clock.date());
   const closing = new AbortController();
   const stats = new RuntimeStats();
+  const sessionState = new SessionState(storage.session);
+  const settingsHistory = new SettingsHistory(
+    sessionState,
+    dlog,
+    storage.history
+  );
   const limits = makeLimits(
     realLimitsDeps(stats.startedAt.getTime(), exit2, {
       limitBytes: memoryLimitBytes2
@@ -83382,12 +83389,6 @@ function createDaemon(inputs) {
     hostService,
     managedStorage
   } = payloadProviders;
-  const sessionState = new SessionState(storage.session);
-  const settingsHistory = new SettingsHistory(
-    sessionState,
-    dlog,
-    storage.history
-  );
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
   const menuIdle = new MenuIdle({
@@ -83678,6 +83679,7 @@ function createDaemon(inputs) {
   return {
     stats,
     memoryLimitBytes: memoryLimitBytes2,
+    clock,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click runs in the turn it enters, so one that got in has
     // landed before any close; a subscribe its request reached as the daemon
@@ -83725,8 +83727,6 @@ function createDaemon(inputs) {
         ["usageStore close", () => usageStore.close()],
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
-        // Before the storage it resumes: an aborted run resumes its sources once
-        // its program is gone.
         ["runs close", () => runs.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
@@ -84163,7 +84163,7 @@ function hookData() {
   };
 }
 async function daemon2(request2) {
-  const { resp, delivered } = await pageDaemon.reply(request2, () => false, performance.now());
+  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic());
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";

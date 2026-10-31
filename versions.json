@@ -4,15 +4,22 @@
     {
       "version": "pr-520",
       "ref": "refs/pull/520/merge",
-      "sha": "d4a477f25421b4bc576da2e19074ba4951dbfc1a",
-      "timestamp": "2026-10-31T13:39:34.456Z",
+      "sha": "613f16b2f831c11d5b1128413d51b45b5cb593ae",
+      "timestamp": "2026-10-31T13:53:54.556Z",
       "commits": [
         {
-          "sha": "d4a477f25421b4bc576da2e19074ba4951dbfc1a",
+          "sha": "613f16b2f831c11d5b1128413d51b45b5cb593ae",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T13:38:39Z",
-          "message": "Merge 3986ba92ef230100b93fd53e4b6347f593f2396e into 196c9029832167dd5178243f96554cec4c614836\n"
+          "timestamp": "2026-10-31T13:53:15Z",
+          "message": "Merge f0cf6604d734e4dbe0cb90c57e726e83f06226db into 196c9029832167dd5178243f96554cec4c614836\n"
+        },
+        {
+          "sha": "f0cf6604d734e4dbe0cb90c57e726e83f06226db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T07:53:03-06:00",
+          "message": "fix(daemon): storage refuses a build with nothing running, and a retired lifeline takes its fault with it (candybar-testing-0x6u.3c7)\n\nSession and history storage now load before the first owner that arms a timer. retireLifeline clears the fault, which described a lifeline the next daemon never held. Daemon exposes its clock, so a connection's accepted time is on the monotonic reading the daemon compares it with. The boot refusal logs through inspect, which is total over whatever was thrown.\n\nDeletes a teardown comment that claimed the run step's order mattered for a resume: that resume lands after every step, on an entry already dropped. Memory gains the one trap a one-daemon scope leaves: a daemon built while a closed one is unwinding lends that work a live scope.\n"
         },
         {
           "sha": "3986ba92ef230100b93fd53e4b6347f593f2396e",
