@@ -3,7 +3,7 @@
 // the socket uses, closed with nothing left running, and built again over the
 // same storage to see a restart.
 
-import { createHook } from "node:async_hooks";
+import { AsyncLocalStorage, createHook } from "node:async_hooks";
 import {
   chmodSync,
   existsSync,
@@ -15,7 +15,6 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import type { RenderOrigin } from "../src/config-hint";
@@ -43,10 +42,17 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
-const live = new Map<number, string>();
+// `until` runs on timers of its own: what starts inside this context is the
+// wait's, not the daemon's, whenever it lands.
+const waiting = new AsyncLocalStorage<true>();
+const wait = (...args: Parameters<typeof until>): Promise<void> =>
+  waiting.run(true, () => until(...args));
+const LIFELINE = new Set(["PROCESSWRAP", "PIPEWRAP"]);
+const live = new Map<number, { type: string; origin: string }>();
 const resources = createHook({
   init: (id, type) => {
-    if (WATCHED.has(type)) live.set(id, type);
+    if (!WATCHED.has(type) || waiting.getStore()) return;
+    live.set(id, { type, origin: new Error(type).stack ?? type });
   },
   destroy: (id) => {
     live.delete(id);
@@ -336,12 +342,12 @@ describe("the daemon is a value", () => {
       drawing: () => true,
     });
     expect(refused).not.toHaveBeenCalled();
-    await until(() => existsSync(pidFile), "the claude stub started");
+    await wait(() => existsSync(pidFile), "the claude stub started");
     const claudePid = Number(readFileSync(pidFile, "utf8").trim());
     expect(pidAlive(claudePid)).toBe(true);
 
     // A render waiting on the slow source as the daemon closes.
-    await until(() => existsSync(ran), "the slow source running");
+    await wait(() => existsSync(ran), "the slow source running");
     const midWait = daemon.handle(
       renderRequest("value-close", 20_000),
       () => false,
@@ -352,18 +358,30 @@ describe("the daemon is a value", () => {
     close(daemon);
     const closedWith = readFileSync(sessionFile, "utf8");
 
-    await until(() => !pidAlive(claudePid), "the claude stub ended", 2_000);
+    await wait(() => !pidAlive(claudePid), "the claude stub ended", 2_000);
     await midWait;
 
-    // Past the session file's debounce, and past the kill grace of anything
-    // the close terminated. Read in a turn of its own, so this wait's own
-    // timers have landed their destroys.
-    await sleep(700);
-    await new Promise((resolve) => setImmediate(resolve));
-    const leftover = [...live]
-      .filter(([id]) => !settled.includes(id))
-      .map(([, type]) => type);
-    expect(leftover).toEqual([]);
+    const leftover = () =>
+      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
+    const origins = (held: ReturnType<typeof leftover>) =>
+      held.map(({ origin }) => origin);
+    // Read in a turn of its own, so what ended has landed its destroy.
+    const turn = () => new Promise((resolve) => setImmediate(resolve));
+
+    // A timer gets no wait: one the close left fails here, however soon it
+    // would have fired.
+    await turn();
+    expect(
+      origins(leftover().filter(({ type }) => !LIFELINE.has(type))),
+    ).toEqual([]);
+    // The lifeline is the one thing the close leaves to end on its own: it
+    // reaps the process group, then exits.
+    await wait(
+      () => !leftover().some(({ type }) => type === "PROCESSWRAP"),
+      () => `the lifeline ended: ${origins(leftover()).join("\n")}`,
+    );
+    await turn();
+    expect(origins(leftover())).toEqual([]);
     expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
     // Late work that would start a child finds its launcher closed.
     expect(
