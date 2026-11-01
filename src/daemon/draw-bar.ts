@@ -119,8 +119,9 @@ const RENDER_ANSWERS: Readonly<
 };
 
 // One frame of a subscribed session, drawn from its latest request at this
-// instant, by the render a request gets. The response is the one that request
-// would be answered with, and the bar moves when its effects say it does.
+// instant, by the render a request gets. The response is what that request
+// would draw, in the bytes its lanes read whatever encoding it asked its own
+// answer in, and the bar moves when its effects say it does.
 // [LAW:parse-dont-validate] The request the session's view is declared with
 // crossed the checkpoint when it arrived, so a frame draws by it without
 // asking again. Null while the session has no view: a frame opens none.

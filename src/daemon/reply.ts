@@ -325,7 +325,8 @@ export async function replyTo(
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
       // from it, brought forward as its view takes it up. Its answer is its
-      // own client's, drawn for a request, and never a frame
+      // own client's, drawn for a request and never pushed, and its `encoding`
+      // says how that answer is spelled and reaches no feed
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
     }

@@ -88,6 +88,12 @@ describe("a render answers in the encoding it asks for", () => {
       expect(composeBar(opened)).toBe(output);
       expect(opened.rows.length).toBeGreaterThan(closed.rows.length);
       expect(linksOf(opened).length).toBeGreaterThan(linksOf(closed).length);
+      // What the wire carries beside text and links: at `none` a run has no look.
+      const runs = opened.rows.flatMap((row) => row.runs);
+      expect(runs.some((run) => run.bg !== undefined)).toBe(depth !== "none");
+      expect(runs.some((run) => (run.attrs ?? []).length > 0)).toBe(
+        depth !== "none",
+      );
     },
   );
 

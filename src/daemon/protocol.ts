@@ -377,8 +377,8 @@ export interface DebugRequest {
   what: DebugWhat;
 }
 
-// [LAW:one-type-per-behavior] A subscription's stream is a stream of the
-// responses a render request is answered with: every frame the daemon draws
+// [LAW:one-type-per-behavior] A subscription's stream is a stream of
+// responses, each in its lane's own encoding: every frame the daemon draws
 // for the session whose bytes differ from the last one sent, until the
 // subscriber closes the socket. The frames are drawn from the session's latest
 // render request (src/daemon/frame-feed.ts), so a session subscribed to before
