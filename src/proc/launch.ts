@@ -525,12 +525,27 @@ type Terminated = "timeout" | "aborted";
 
 // Signal a waited child's whole process group (it leads its own; see the
 // header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
-// — the state this call exists to reach; any other failure propagates.
+// — the state this call exists to reach; any other failure propagates, but for
+// the zombie below.
 function signalGroup(pid: number, sig: NodeJS.Signals): void {
   try {
     process.kill(-pid, sig);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH" && !(code === "EPERM" && leaderIsOurs(pid))) throw err;
+  }
+}
+
+// Darwin answers EPERM for a group whose only member is a zombie, an exited
+// child not yet reaped: the same answer as a refusal. They differ at the
+// leader, which still answers signal 0 as a zombie of ours and refuses it when
+// it changed its real uid.
+function leaderIsOurs(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 

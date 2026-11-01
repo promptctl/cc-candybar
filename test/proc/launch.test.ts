@@ -239,14 +239,11 @@ describe("launch (async)", () => {
   });
 
   it("a group the launcher cannot signal settles as signal-refused — nothing rejects or escapes a timer", async () => {
-    // process.kill refuses the group (EPERM: a child that changed its real
-    // uid). The child ends on its own soon after, so nothing is orphaned.
-    const realKill = process.kill.bind(process);
-    const spy = jest.spyOn(process, "kill").mockImplementation((pid, sig) => {
-      if (typeof pid === "number" && pid < 0) {
-        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
-      }
-      return realKill(pid, sig);
+    // process.kill refuses the group and its leader (EPERM: a child that
+    // changed its real uid). The child ends on its own soon after, so nothing
+    // is orphaned.
+    const spy = jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("EPERM"), { code: "EPERM" });
     });
     try {
       const r = await launch({
@@ -264,6 +261,24 @@ describe("launch (async)", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("a child that exited before its abort, not yet reaped, is no refusal", async () => {
+    const controller = new AbortController();
+    const run = launch({
+      bin: "/usr/bin/true",
+      args: [],
+      category: "user-shell",
+      signal: controller.signal,
+    });
+    // The event loop held past the exit, so the child is a zombie at the abort.
+    const until = Date.now() + 150;
+    while (Date.now() < until);
+    controller.abort();
+    await expect(run).resolves.toMatchObject({
+      reason: "aborted",
+      exitCode: 0,
+    });
   });
 
   it("an already-aborted signal spawns nothing", async () => {
