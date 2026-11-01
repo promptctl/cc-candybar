@@ -4,15 +4,22 @@
     {
       "version": "pr-545",
       "ref": "refs/pull/545/merge",
-      "sha": "07a30e31a24e0ab3449cfbd0268db562b22791b7",
-      "timestamp": "2026-11-01T09:00:53.488Z",
+      "sha": "637fd16f185c7f6e7e48b3c90685900697fe67f7",
+      "timestamp": "2026-11-01T09:10:10.698Z",
       "commits": [
         {
-          "sha": "07a30e31a24e0ab3449cfbd0268db562b22791b7",
+          "sha": "637fd16f185c7f6e7e48b3c90685900697fe67f7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T09:00:04Z",
-          "message": "Merge d83089d651fb75adf1037cefd0f66603d5cabdba into 22a4d977fc08426311fbc21d544a5c130ec8183b\n"
+          "timestamp": "2026-11-01T09:09:13Z",
+          "message": "Merge 991e2896ce59e642ddaa1269e4ffdefe1565915c into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
+        },
+        {
+          "sha": "991e2896ce59e642ddaa1269e4ffdefe1565915c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:09:03-07:00",
+          "message": "fix(daemon): clickLaunch owns its bound, a terminated launch says why, stats print the journal's turn (candybar-launch-q7o7.gp7)\n"
         },
         {
           "sha": "d83089d651fb75adf1037cefd0f66603d5cabdba",

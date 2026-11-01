@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.175.0";
+var PACKAGE_VERSION = "1.176.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35881,7 +35881,8 @@ async function launchWaited(state, opts) {
           reason: terminated,
           ...output(),
           exitCode: code,
-          signal: signal2
+          signal: signal2,
+          error: `${terminated} after ${Date.now() - t0}ms`
         });
         return;
       }
@@ -69814,7 +69815,10 @@ function oneArg(value) {
 }
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 async function clickLaunch(launcher, opts, what, log) {
-  const result = await launcher.launch(opts);
+  const result = await launcher.launch({
+    ...opts,
+    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
+  });
   if (result.ok) return;
   if (result.reason === "rate-limited") {
     log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
@@ -69833,7 +69837,6 @@ function pbcopy(text4, ctx) {
       {
         bin: "/usr/bin/pbcopy",
         stdinInput: text4,
-        timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
         category: "click.pbcopy"
       },
       "pbcopy",
@@ -69869,7 +69872,6 @@ var openVscode = (value, ctx) => ctx.landed(
     {
       bin: "/usr/bin/open",
       args: ["-a", "Visual Studio Code", oneArg(value)],
-      timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
       category: "click.open"
     },
     'open -a "Visual Studio Code"',
@@ -77232,7 +77234,6 @@ async function statusLineClick(parts, value, facts, clientGone) {
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
       args: [click2.url],
-      timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
       category: "click.open"
     },
     `opening ${click2.url}`,
