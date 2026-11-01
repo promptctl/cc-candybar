@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-529",
+      "ref": "refs/pull/529/merge",
+      "sha": "40f0821e23d78551cab6e8c562f80990e92a4969",
+      "timestamp": "2026-11-01T00:22:14.745Z",
+      "commits": [
+        {
+          "sha": "40f0821e23d78551cab6e8c562f80990e92a4969",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:21:23-06:00",
+          "message": "Merge fad31f1ac326cdfd0ba82e199f6ed19f3cbffc39 into f5a917eecd0f8034a952dd73b375161230378ad2\n"
+        },
+        {
+          "sha": "fad31f1ac326cdfd0ba82e199f6ed19f3cbffc39",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:21:14-06:00",
+          "message": "fix(test): the carried probe keeps the wait's synchronous path and states what it leaves unread (candybar-testing-0x6u.6el)\n"
+        },
+        {
+          "sha": "90164ad34dc17bc1559283924bd5c55f738a77ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:17:43-06:00",
+          "message": "fix(test): one probe runs across a wait's rounds, so its late answer lands in the wait (candybar-testing-0x6u.6el)\n"
+        },
+        {
+          "sha": "46b0f7793f53880e02492dd1b09ae493b110e87a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:12:37-06:00",
+          "message": "fix(test): a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-528",
       "ref": "refs/pull/528/merge",
       "sha": "4ce0c977e6bcaa1d216b17a4c07ad07ead5b33ef",
@@ -41,35 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T17:23:41-06:00",
           "message": "feat(effect): the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8)\n\nThe wheel lives in rich-js, and 0.27.0 reads a segment's place from the\nframe it is handed, so moving to it is the feature and the row wrapping\nhere does not change.\n\n0.27.0's Palette is built from a total set of roles, so paletteRole's\nundefined branch cannot run. paletteRole, DecorRole and ThemePole go, and\nso do the two tests of a palette that can no longer be built.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-529",
-      "ref": "refs/pull/529/merge",
-      "sha": "2eb9e67a16bc908c5031eef71de23dabc928814c",
-      "timestamp": "2026-11-01T00:19:25.394Z",
-      "commits": [
-        {
-          "sha": "2eb9e67a16bc908c5031eef71de23dabc928814c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:17:53Z",
-          "message": "Merge 90164ad34dc17bc1559283924bd5c55f738a77ee into 3439d4a05a61f8cd02c3099414d573b8e8e1cffc\n"
-        },
-        {
-          "sha": "90164ad34dc17bc1559283924bd5c55f738a77ee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:17:43-06:00",
-          "message": "fix(test): one probe runs across a wait's rounds, so its late answer lands in the wait (candybar-testing-0x6u.6el)\n"
-        },
-        {
-          "sha": "46b0f7793f53880e02492dd1b09ae493b110e87a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:12:37-06:00",
-          "message": "fix(test): a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el)\n"
         }
       ]
     },
