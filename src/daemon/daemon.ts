@@ -19,7 +19,7 @@ import {
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
-import { createLauncher, type Launcher } from "../proc/launch";
+import { createLauncher, type Launcher, type Settled } from "../proc/launch";
 import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
 import { makeUpdateWatch } from "./update-notice";
@@ -164,8 +164,9 @@ export interface Daemon {
   arm(): void;
   // [LAW:no-ambient-temporal-coupling] After this nothing launches, no timer
   // stays armed once what was in flight has settled, and only the log is
-  // written. A read already under way may finish.
-  close(): void;
+  // written. A read already under way may finish. Its value settles when the
+  // launches and lifeline it ended have ended.
+  close(): Promise<Settled>;
 }
 
 // [LAW:no-shared-mutable-globals] One daemon is live in a process at a time,
@@ -708,6 +709,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         }
       }
       closed = true;
+      return launcher.settled();
     },
   };
 }

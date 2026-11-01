@@ -346,6 +346,19 @@ interface LaunchState {
   // lifeline runs, or before one is needed. Its observer hears each change, and
   // the daemon shows it as a standing warning.
   fault: string | null;
+  // What has not ended: each launch in flight and each lifeline.
+  readonly ending: Set<Promise<unknown>>;
+  // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
+  // while their children live: a result was delivered, and they still run.
+  readonly unreaped: Map<ChildProcess, LaunchCategory>;
+}
+
+// [LAW:no-ambient-temporal-coupling] `ending` is the one record of whether what
+// a launcher started has ended.
+function track<T>(state: LaunchState, work: Promise<T>): Promise<T> {
+  const entry = work.finally(() => state.ending.delete(entry));
+  state.ending.add(entry);
+  return entry;
 }
 
 // The one gate each launch form crosses: closed, aborted by its caller, or
@@ -471,6 +484,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  void track(state, new Promise((closed) => line.once("close", closed)));
   line.unref();
   pipe.unref();
   for (const group of state.liveGroups) pipe.write(`+ ${group}\n`);
@@ -588,6 +602,7 @@ async function launchWaited(
       try {
         signalGroup(pid, sig);
       } catch (err) {
+        state.unreaped.set(child, opts.category);
         settle({
           ok: false,
           reason: "signal-refused",
@@ -618,10 +633,14 @@ async function launchWaited(
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
-        killTimer = setTimeout(
-          () => signal(pid, "SIGKILL"),
-          TIMEOUT_KILL_GRACE_MS,
-        );
+        // [LAW:no-ambient-temporal-coupling] The pipes go with the SIGKILL: a
+        // descendant that left the group could otherwise hold them open, and
+        // keep this launch from ever resolving.
+        killTimer = setTimeout(() => {
+          signal(pid, "SIGKILL");
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+        }, TIMEOUT_KILL_GRACE_MS);
         signal(pid, "SIGTERM");
       }
     };
@@ -646,6 +665,7 @@ async function launchWaited(
     });
 
     child.on("close", (code, signal) => {
+      state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
@@ -1026,9 +1046,17 @@ export interface Launcher {
   lifelineWarnings(): LifelineWarning[];
 }
 
+export interface Settled {
+  // Launches the OS refused to end, whose children still run.
+  readonly unreaped: readonly LaunchCategory[];
+}
+
 // What `createLauncher` returns, and not what a launcher is handed around as, so
 // nothing holding a `Launcher` can reach this.
 export interface TestableLauncher extends Launcher {
+  // Settles once every waited launch and lifeline has ended: for the owner
+  // that holds the abort, since a lifeline ends only with it.
+  settled(): Promise<Settled>;
   // Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
   // death gives it — and names its pid. A cut lifeline is lost at once, so the
   // test's next launch starts another rather than writing to a closed pipe.
@@ -1039,11 +1067,15 @@ export interface TestableLauncher extends Launcher {
 // and refuses what comes after, for good, whichever other launchers run.
 export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
   const launcher: TestableLauncher = {
-    launch: (opts) => launchWaited(state, opts),
+    launch: (opts) => track(state, launchWaited(state, opts)),
     launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
+    settled: async () => {
+      await Promise.all(state.ending);
+      return { unreaped: [...state.unreaped.values()] };
+    },
     __lifelineForTest: () => {
       const line = state.lifeline;
       return {
@@ -1071,6 +1103,8 @@ export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
     liveGroups: new Set(),
     lifeline: null,
     fault: null,
+    ending: new Set(),
+    unreaped: new Map(),
   };
   state.scope.signal.addEventListener(
     "abort",

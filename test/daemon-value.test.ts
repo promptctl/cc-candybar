@@ -42,11 +42,23 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
-const CHILD = new Set(["PROCESSWRAP", "PIPEWRAP"]);
 const live = new Map<number, Error>();
+// From a close's return on: `init` and `before` run as the timer is armed and
+// as it fires, where `destroy` lands some turns later. Null until then.
+let baseline = new Set<number>();
+let afterClose: { armed: Error[]; fired: Error[] } | null = null;
 const resources = createHook({
   init: (id, type) => {
-    if (WATCHED.has(type)) live.set(id, new Error(type));
+    if (!WATCHED.has(type)) return;
+    const origin = new Error(type);
+    live.set(id, origin);
+    if (type === "Timeout") afterClose?.armed.push(origin);
+  },
+  before: (id) => {
+    const origin = live.get(id);
+    if (origin?.message === "Timeout" && !baseline.has(id)) {
+      afterClose?.fired.push(origin);
+    }
   },
   destroy: (id) => {
     live.delete(id);
@@ -221,6 +233,7 @@ describe("the daemon is a value", () => {
       flush: () => {},
     };
     const settled = [...live.keys()];
+    baseline = new Set(settled);
     expect(() => construct({ session: unreadable })).toThrow(
       "the session file cannot be read",
     );
@@ -341,38 +354,32 @@ describe("the daemon is a value", () => {
     );
 
     const sessionFile = sessionStatePath();
-    close(daemon);
+    const closing = daemon.close();
+    open = null;
+    afterClose = { armed: [], fired: [] };
     const closedWith = readFileSync(sessionFile, "utf8");
 
-    await until(() => !pidAlive(claudePid), "the claude stub ended", 2_000);
+    expect(await closing).toEqual({ unreaped: [] });
+    expect(pidAlive(claudePid)).toBe(false);
     await midWait;
+
+    // Turns, not timers: a wait of this test's own would be in the record.
     const leftover = () =>
       [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
+    const quietBy = Date.now() + 5_000;
+    while (leftover().length > 0 && Date.now() < quietBy) {
+      await new Promise((turn) => setImmediate(turn));
+    }
+    const { armed, fired } = afterClose;
+    afterClose = null;
     const origins = (held: Error[]) => held.map(({ stack }) => stack);
-    const isLifeline = ({ stack }: Error) => stack?.includes("spawnLifeline");
-    // Read in a turn of its own, so what ended has landed its destroy.
-    const turn = () => new Promise((resolve) => setImmediate(resolve));
-
-    // A launch's handles close after its result lands, so its end is read off
-    // the ledger itself.
-    const launches = () =>
-      leftover().filter((held) => CHILD.has(held.message) && !isLifeline(held));
-    await until(
-      () => launches().length === 0,
-      () => `the launches ended: ${origins(launches()).join("\n")}`,
-    );
-    // Only what is live at this read shows: a timer that already fired is gone.
-    await turn();
-    expect(origins(leftover().filter((held) => !isLifeline(held)))).toEqual([]);
-    // The lifeline is the one thing the close leaves to end on its own: it
-    // reaps the process group, then exits.
-    await until(
-      () => !leftover().some(isLifeline),
-      () =>
-        `the lifeline ended: ${origins(leftover().filter(isLifeline)).join("\n")}`,
-    );
-    await turn();
     expect(origins(leftover())).toEqual([]);
+    expect(origins(armed)).toEqual([]);
+    // A launch's SIGKILL escalation is the one timer a close means to leave
+    // armed: on a slow turn it fires before the child's end clears it.
+    expect(
+      origins(fired.filter(({ stack }) => !stack?.includes("terminate"))),
+    ).toEqual([]);
     expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
     // Late work that would start a child finds its launcher closed.
     expect(

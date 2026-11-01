@@ -208,16 +208,13 @@ export function startDaemon(
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
     // go, and a request's backstop goes with its stream. What is logged by now
     // is awaited before the env goes back, because the log reads its path when
-    // it writes. Nothing says a closed daemon's work has settled, so this waits
-    // for none of it: its launches are refused, by its own launcher, and a line
+    // it writes. A closed daemon's work is not waited for here: its launches are refused, by its own launcher, and a line
     // of its says it came after the close, whichever log the env names by then.
     stop: async () => {
-      daemon.close();
+      void daemon.close();
       for (const end of open) end.destroy();
       await Promise.all(
-        servers.map(
-          (server) => new Promise((closed) => server.close(closed)),
-        ),
+        servers.map((server) => new Promise((closed) => server.close(closed))),
       );
       await drained();
       releaseUpdateKeys();
