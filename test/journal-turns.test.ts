@@ -38,9 +38,11 @@ function setup() {
     log: (_level, msg) => logged.push(msg),
     monotonic: () => performance.now(),
   });
+  const followed: string[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
     journalTurns: turns,
+    views: { follow: (sid) => followed.push(sid) },
     log: (_level, msg) => logged.push(msg),
   };
   // A click writing `theme`, parked on `parked` before it writes `style`.
@@ -55,7 +57,7 @@ function setup() {
       () => SID,
       () => {},
     )("", ctx);
-  return { sessionState, ctx, turns, logged, click };
+  return { sessionState, ctx, turns, logged, click, followed };
 }
 
 const undoDepth = (ctx: VerbContext): number =>
@@ -150,6 +152,27 @@ describe("the idle close decides in its turn", () => {
     m.idle.dispose();
   });
 
+  test("a close whose session was evicted while queued keeps what its click opened", async () => {
+    const { ctx, logged } = setup();
+    const m = idleOver(ctx);
+    const held = gate();
+    const slow = journaled<VerbContext>(
+      "slow",
+      () => held.wait,
+      () => SID,
+      () => {},
+    )("", ctx);
+    m.idle.observe(SID, m.at(), true, 30);
+    m.advance(30);
+    for (let i = 0; i < 256; i++) m.idle.clicked(`other${i}`, m.at());
+    m.idle.clicked(SID, m.at());
+    held.open();
+    await jest.advanceTimersByTimeAsync(0);
+    await Promise.all([slow, ...m.fired]);
+    expect(logged).toContain(`menu-idle: a click came first, kept (session=${SID})`);
+    m.idle.dispose();
+  });
+
   test("a rejected idle turn goes to failed, and is no unhandled rejection", async () => {
     const { ctx, turns } = setup();
     const m = idleOver(ctx);
@@ -168,25 +191,50 @@ describe("the idle close decides in its turn", () => {
   });
 });
 
+test("a navigation commit that throws leaves the settings journal committed", async () => {
+  const { sessionState, ctx } = setup();
+  const begin = ctx.navigation.begin.bind(ctx.navigation);
+  jest.spyOn(ctx.navigation, "begin").mockImplementation((store) => ({
+    ...begin(store),
+    commit: () => {
+      throw new Error("navigation broke");
+    },
+  }));
+  const click = journaled<VerbContext>(
+    "both",
+    (_value, c) => c.sessionState.set(SID, "theme", "nord"),
+    () => SID,
+    () => {},
+  );
+  await expect(click("", ctx)).rejects.toThrow("navigation broke");
+  expect(undoDepth(ctx)).toBe(1);
+  ctx.history.undo(SID);
+  expect(sessionState.get(SID, "theme")).toBeNull();
+});
+
 describe("close", () => {
   test("a click in flight stays undoable as one step, its verb logged, and is not committed again", async () => {
-    const { sessionState, ctx, turns, logged, click } = setup();
+    const { sessionState, ctx, turns, logged, click, followed } = setup();
     const held = gate();
-    let landed = 0;
     const cut = click("nord", "minimal", held.wait);
-    const counted: VerbContext = {
-      ...ctx,
-      views: { follow: () => landed++ },
-    };
     turns.close();
     expect(logged).toContain("journal: slow cut off by close, committing what landed");
     expect(undoDepth(ctx)).toBe(1);
     held.open();
     await cut;
-    expect(landed).toBe(0);
-    expect(undoDepth(counted)).toBe(1);
+    expect(followed).toEqual([]);
+    expect(undoDepth(ctx)).toBe(1);
     ctx.history.undo(SID);
     expect(sessionState.get(SID, "theme")).toBeNull();
+  });
+
+  test("a click that lands normally is followed, and its commit is no cut-off", async () => {
+    const { ctx, turns, logged, click, followed } = setup();
+    await click("nord", "minimal", Promise.resolve());
+    turns.close();
+    expect(followed).toEqual([SID]);
+    expect(logged.filter((l) => l.includes("cut off"))).toEqual([]);
+    expect(undoDepth(ctx)).toBe(1);
   });
 
   test("a click queued behind the turn it cut off is refused", async () => {

@@ -15,7 +15,6 @@ import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 interface InFlight {
   readonly verb: string;
   readonly commit: () => void;
-  committed: boolean;
 }
 
 export interface JournalTurn {
@@ -50,17 +49,13 @@ export class JournalTurns {
     return this.queue.run(DAEMON_WIDE, async () => {
       if (!this.open) throw new Error(`the daemon closed: ${verb} refused`);
       waited(Math.round(this.deps.monotonic() - asked));
-      try {
-        return await body({
-          holds: (commit) => {
-            const held = { verb, commit, committed: false };
-            this.inFlight = held;
-            return () => this.commit(held);
-          },
-        });
-      } finally {
-        this.inFlight = null;
-      }
+      return body({
+        holds: (commit) => {
+          const held = { verb, commit };
+          this.inFlight = held;
+          return () => this.commit(held);
+        },
+      });
     });
   }
 
@@ -76,8 +71,8 @@ export class JournalTurns {
   }
 
   private commit(held: InFlight): boolean {
-    if (held.committed) return false;
-    held.committed = true;
+    if (this.inFlight !== held) return false;
+    this.inFlight = null;
     held.commit();
     return true;
   }

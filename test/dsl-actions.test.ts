@@ -576,11 +576,11 @@ describe("2de.12 — copy / open actions derive no gate", () => {
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([]);
   });
 
-  test("copy carries the evaluated template; open carries the evaluated target", () => {
+  test("copy carries the evaluated template; open carries the evaluated target", async () => {
     const { render, click, sideEffects } = buildRuntime(SRC);
     const urls = ownUrls(render());
     expect(urls).toHaveLength(2);
-    urls.forEach(click);
+    for (const url of urls) await click(url);
     expect(sideEffects).toEqual([
       { verb: "copy", args: ["s1"] },
       { verb: "open-vscode", args: ["/tmp/proj"] },

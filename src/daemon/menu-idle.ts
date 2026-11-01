@@ -15,7 +15,8 @@ import type { IdleClose } from "./verbs/index.js";
 
 interface Idle {
   since: Instant;
-  // How many clicks the session has made: which is its last.
+  // How many times a click has stamped the clock, at its arrival and its
+  // landing: a close compares it to see whether one came since.
   clicks: number;
   timeoutS: number;
   shown: boolean;
@@ -160,7 +161,9 @@ export class MenuIdle {
     const closing: IdleClose = {
       idleS: now - idle.since,
       timeoutS: idle.timeoutS,
-      stillIdle: () => idle.clicks === lastClick,
+      // An evicted record stops counting, so its session is no longer known idle.
+      stillIdle: () =>
+        this.sessions.get(sessionId) === idle && idle.clicks === lastClick,
     };
     idle.since = now;
     idle.shown = false;

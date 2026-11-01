@@ -1898,6 +1898,15 @@ const dispatch: VerbHandler = async (rawValue, ctx) => {
   }
 };
 
+function throwAll(failures: readonly unknown[]): void {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new Error(
+      failures.map((e) => String((e as Error).message ?? e)).join("; "),
+    );
+  }
+}
+
 // [LAW:single-enforcer] One click is one undoable step, so the step boundary
 // is the click boundary: every entry of the table the daemon looks up against
 // runs inside a journal it opens and commits. `dispatch` folds its effects
@@ -1933,9 +1942,17 @@ export function journaled<C extends DaemonContext>(
     const lanes = sid === null ? null : laneMeter(ctx, sid);
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
+    // Each commit runs whatever the other did: both record what landed.
     const commit = turn.holds(() => {
-      navigation.commit();
-      journal.commit();
+      const failed: unknown[] = [];
+      for (const step of [navigation, journal]) {
+        try {
+          step.commit();
+        } catch (e) {
+          failed.push(e);
+        }
+      }
+      throwAll(failed);
     });
     const failures: unknown[] = [];
     // Both views close what a write closes, the navigating one above its
@@ -1982,12 +1999,7 @@ export function journaled<C extends DaemonContext>(
         failures.push(e);
       }
     }
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) {
-      throw new Error(
-        failures.map((e) => String((e as Error).message ?? e)).join("; "),
-      );
-    }
+    throwAll(failures);
   };
   return (value, ctx) =>
     ctx.journalTurns.take(
