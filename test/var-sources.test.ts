@@ -1564,7 +1564,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       }
     });
 
-    it("one stall is one publish, however many variables it faults", () => {
+    it("one stall is one publish of a registry, however many variables it faults", () => {
       const { dir, cleanup } = makeTmpDir();
       try {
         const { data, events, registry, cache } = rig(dir);
