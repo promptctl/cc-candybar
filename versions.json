@@ -4,15 +4,22 @@
     {
       "version": "pr-537",
       "ref": "refs/pull/537/merge",
-      "sha": "ce37314863fcd7cb270f406dc4a31a95d65edd87",
-      "timestamp": "2026-11-01T04:35:12.710Z",
+      "sha": "35e08d38e7a3a00660ed67679928cbb7b58ac930",
+      "timestamp": "2026-11-01T04:40:07.147Z",
       "commits": [
         {
-          "sha": "ce37314863fcd7cb270f406dc4a31a95d65edd87",
+          "sha": "35e08d38e7a3a00660ed67679928cbb7b58ac930",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:34:20Z",
-          "message": "Merge 16c457beda7796008f9d986f96b0c278fd5099b2 into ab694786f5e409c493d08be50100cc1251f6ff70\n"
+          "timestamp": "2026-11-01T04:39:17Z",
+          "message": "Merge af6fd01854287a14bf9ab710f4dfc54425fcb6ed into ab694786f5e409c493d08be50100cc1251f6ff70\n"
+        },
+        {
+          "sha": "af6fd01854287a14bf9ab710f4dfc54425fcb6ed",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:39:08-06:00",
+          "message": "fix(proc): a blocking launch calls only its own timeout a timeout (candybar-testing-0x6u.47e)\n"
         },
         {
           "sha": "16c457beda7796008f9d986f96b0c278fd5099b2",

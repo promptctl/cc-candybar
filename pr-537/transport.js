@@ -35939,8 +35939,7 @@ function launchBlocking(state, opts) {
     if (result.status === 0) {
       return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
     }
-    const hasTimeout = opts.timeoutMs !== void 0 && opts.timeoutMs > 0;
-    const reason = result.signal ? hasTimeout && result.signal === "SIGTERM" ? "timeout" : "signal" : "non-zero";
+    const reason = result.signal ? "signal" : "non-zero";
     return {
       ok: false,
       reason,
