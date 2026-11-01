@@ -36,7 +36,8 @@ import {
   disclosureGate,
   disclosureStateVar,
 } from "../disclosure.js";
-import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
+import { reservedNamespaceCollisions } from "./reserved-namespace.js";
+import { EDIT_NS } from "../reserved-names.js";
 import { SETTINGS_REF } from "../door.js";
 
 // [LAW:single-enforcer] The SessionState key edit mode's state lives at, and

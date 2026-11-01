@@ -3,8 +3,9 @@
 // lives inside the door (src/config/loader/edit-mode.ts), so both name one
 // door [LAW:one-way-deps].
 
+import { DISCLOSURE_OPEN } from "./disclosure.js";
 import type { DisclosureRef } from "./dsl-types.js";
-import { SETTINGS_NS } from "./loader/reserved-namespace.js";
+import { SETTINGS_NS } from "./reserved-names.js";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
 // segment name an author places in `root` to choose the menu's position, the
@@ -17,7 +18,7 @@ export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
 // The open member of every binary disclosure this menu mints — each holds the
 // CLOSED sentinel or this. The tab key is the accordion exception: it holds
 // the open tab's name.
-export const SETTINGS_OPEN = "open";
+export const SETTINGS_OPEN = DISCLOSURE_OPEN;
 
 // [LAW:one-source-of-truth] The door's disclosure as a ref rather than a gate
 // string (each tab's is `tabRef`): every gate the menu builds — and every
@@ -35,3 +36,5 @@ export const SETTINGS_REF: DisclosureRef = {
 // message and page it shows (viewerKey), closed at any value no message in the
 // draw's list has — ✕'s, or the key absent (src/render/diagnostics.ts).
 export const DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
+// What the viewer's ✕ writes: no message has it as its key.
+export const DIAGNOSTICS_CLOSED = "0";

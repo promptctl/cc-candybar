@@ -1,5 +1,5 @@
-// Test helpers for the click wire. A rendered click URL is `dispatch/e=…` (an
-// ordered effect list after the verb's `/`); these decode it to its behavioral
+// Test helpers for the click wire. A rendered click URL is `dispatch/does=…&e=…`
+// (an ordered effect list after the verb's `/`); these decode it to its behavioral
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 

@@ -37,7 +37,7 @@ import {
   DOOR_GLYPH,
 } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
-import { GROUP_NS } from "../src/config/loader/reserved-namespace";
+import { GROUP_NS } from "../src/config/reserved-names";
 import type { RichText } from "@promptctl/rich-js";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";

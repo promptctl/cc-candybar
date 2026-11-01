@@ -46,7 +46,7 @@ import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { ownLinks } from "./helpers/ambient-chrome";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { writeFileSync } from "node:fs";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -86,7 +86,7 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_NS } from "../src/config/reserved-names";
 import {
   addableSegmentDomains,
   ADDABLE_DOMAIN,

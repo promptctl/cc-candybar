@@ -53,7 +53,7 @@ import { PLACE, TABS, within } from "../src/config/menu-places";
 import type { SettingName } from "../src/config/setting-projections";
 import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_NS } from "../src/config/reserved-names";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";

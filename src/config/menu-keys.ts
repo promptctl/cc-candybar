@@ -25,7 +25,7 @@
 //               can see in the template, never on tree position.
 
 import { ident } from "./ident.js";
-import { MENU_NS, MENU_PAGE_NS } from "./loader/reserved-namespace.js";
+import { MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,

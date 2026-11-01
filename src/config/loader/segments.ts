@@ -23,7 +23,7 @@ import {
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import { SEGMENT_GROUPS } from "../segment-groups.js";
-import { isReservedName } from "./reserved-namespace.js";
+import { isReservedName } from "../reserved-names.js";
 import { renamedHint } from "./renamed-segments.js";
 import {
   describeType,

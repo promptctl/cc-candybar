@@ -31,7 +31,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 
 import {
   DISCLOSURE_CLOSED,

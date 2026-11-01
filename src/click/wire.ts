@@ -6,7 +6,7 @@
 //
 // [LAW:dataflow-not-control-flow] N effects ride one URL the SAME way for N=1 and
 // N=100 — a lone click is the degenerate one-element list. There is no
-// plain-vs-compound mode: every URL effectsUrl emits is `dispatch/e=…`, and the
+// plain-vs-compound mode: every URL effectsUrl emits is `dispatch/does=…&e=…`, and the
 // effect COUNT is data the dispatcher folds over, never a branch that selects a
 // wire. (The wire still ACCEPTS direct `cc-candybar://<verb>/…` URLs — old
 // scrollback links, a hand-authored `link` template — so a direct verb is the
@@ -18,11 +18,25 @@
 // (a path, a set-state key/value tail) round-trips untouched. base64 was
 // rejected as opaque; a slash-nested payload is unsafe under any single
 // whole-value decode (a `%2F` would un-escape into a structural separator). The
-// `e=…&e=…` payload follows the verb after a `/` (`dispatch/e=…`), NOT a `?`, so
+// payload follows the verb after a `/` (`dispatch/does=…&e=…`), NOT a `?`, so
 // `/` stays the one verb delimiter and `?` remains ordinary data in a bare-copy
 // value (`cc-candybar://hello?world`).
+//
+// A link says in words what its click does, as a `does` param ahead of the
+// effects: `dispatch/does=set+theme+to+dracula&e=…`. It leads because a terminal
+// that cuts a long URL on hover keeps its start, and it is a param rather than
+// a `#fragment` because URLSearchParams reads a fragment into the last effect.
+// parseEffects never reads it, so it is advisory: only a mac proves a link.
 
 import { URLSearchParams } from "node:url";
+
+import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
+import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
+import {
+  isReservedName,
+  MENU_NS,
+  MENU_PAGE_NS,
+} from "../config/reserved-names.js";
 
 // [LAW:one-source-of-truth] The scheme string lives here, with the codec that
 // emits it; install/ (Launch Services registration) imports it.
@@ -183,8 +197,109 @@ export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.
 export interface Effect {
-  readonly verb: string;
+  readonly verb: EffectVerb;
   readonly args: readonly string[];
+}
+
+const sayStep = (key: string, by: string): string =>
+  `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+
+const withoutNs = (key: string, ns: string): string =>
+  key.startsWith(ns) ? key.slice(ns.length) : key;
+
+// One session write in words. A disclosure's state keys read as the menu they
+// open or close, and a page cursor, which counts from 0, as the page the bar
+// numbers from 1; the rest read as the key they set. Disclosures are synthesized,
+// so an authored key's `closed` is its own data. The viewer's key holds a
+// message's identity, which no reader can use, so its write says what it does.
+function sayWrite(key: string, value: string): string {
+  if (key === DIAGNOSTICS_VIEWING)
+    return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
+  const set = `set ${key} to ${value}`;
+  if (!isReservedName(key)) return set;
+  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
+  if (key.startsWith(MENU_PAGE_NS))
+    return `turn ${menu} to page ${Number(value) + 1}`;
+  if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
+  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
+  return key.startsWith(MENU_NS) ? `open ${value}` : set;
+}
+
+// How much of a copied text a link says, and the mark where it was cut. Only a
+// copy is cut, because it alone has no natural length: the rest are names, paths
+// and what an author wrote. Both ends stay, by code point: a path differs at its
+// end, and half a surrogate pair cannot be encoded.
+const COPIED_LENGTH = 60;
+const ELISION = "...";
+function saidCopy(text: string): string {
+  const chars = [...text];
+  const kept = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
+  return chars.length <= COPIED_LENGTH
+    ? text
+    : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
+}
+
+// [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
+// words, read off the args the click carries, so the text cannot say anything
+// the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
+// list these ride in, and doctor-probe and tmux-status-click arrive as whole
+// URLs from outside a draw, so none of those three is ever an effect.
+const SAYS = {
+  [VERB_SET_STATE]: ([, ...pairs]) =>
+    pairs.flatMap((key, i) =>
+      i % 2 === 0 ? [sayWrite(key, pairs[i + 1]!)] : [],
+    ),
+  [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key!, by!)],
+  [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
+  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
+  [VERB_LOAD_CONFIG]: ([, path]) => [`load config ${path}`],
+  [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
+  [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key!, by!)}`],
+  [VERB_SAVE]: () => ["save settings"],
+  [VERB_SAVE_PRESET]: () => ["save as a new preset"],
+  [VERB_SAVE_THEME_DEFAULT]: () => ["save this look for the theme"],
+  [VERB_DELETE_PRESET]: ([, name]) => [`delete preset ${name}`],
+  [VERB_RESET_CONFIG]: ([, ...keys]) => keys.map((key) => `reset ${key}`),
+  [VERB_APPLY_LAYOUT_OP]: ([, key, op]) => [`edit ${op} in ${key}`],
+  [VERB_UNDO]: () => ["undo"],
+  [VERB_REDO]: () => ["redo"],
+  [VERB_BACK]: () => ["go back"],
+  [VERB_REWIND]: () => ["cancel edits"],
+  [VERB_APPLY_UPDATE]: () => ["update cc-candybar"],
+  [VERB_DOCTOR_RUN]: () => ["run doctor"],
+  [VERB_DOCTOR_FIX]: ([, check]) => [`fix ${check}`],
+  [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
+  [VERB_SLASH]: ([, line]) => [`type ${line}`],
+  [VERB_RUN]: ([, action]) => [`run ${action}`],
+  [VERB_REPO_CONFIG]: ([, dir, answer]) => [`mark config in ${dir} ${answer}`],
+  [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"],
+} satisfies Record<string, (args: readonly string[]) => string[]>;
+
+// [LAW:types-are-the-program] A verb the table does not say is no effect, so a
+// new verb cannot ride unsaid.
+export type EffectVerb = keyof typeof SAYS;
+
+// [LAW:single-enforcer] Form encoding, with `/` and `:` left as themselves so a
+// path or a layout op reads as it is written. Every character of the words
+// survives. OSC 8 URIs are printable ASCII, which is what the escapes are for.
+const spell = (text: string): string =>
+  encodeURIComponent(text)
+    .replaceAll("%20", "+")
+    .replaceAll("%2F", "/")
+    .replaceAll("%3A", ":");
+
+// A click's words: its face, then a count of what else it does. Session writes
+// are the bar's own housekeeping, so whatever else the click does is its face:
+// a confirm disarms first, but what it does is what it fires.
+function clickDoes(effects: readonly Effect[]): string {
+  const writesSession = (e: Effect): boolean =>
+    e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
+  const [face = "nothing", ...rest] = [
+    ...effects.filter((e) => !writesSession(e)),
+    ...effects.filter(writesSession),
+  ].flatMap((e) => SAYS[e.verb](e.args));
+  return rest.length > 0 ? `${face} and ${rest.length} more` : face;
 }
 
 // [LAW:types-are-the-program] A parsed effect as the dispatcher sees it: the verb
@@ -214,21 +329,25 @@ export function decodeFirstSegment(value: string): string {
   return decodeURIComponent(value.split("/", 1)[0]!);
 }
 
-// Serialize an effect list to its dispatch URL. Each effect becomes one ordered
-// `e` query param carrying `verb/<encoded-args>`, percent-encoded whole so its
-// internal `/`, `&`, `=` survive as data. The payload follows `dispatch/` (not
-// `dispatch?`) so `/` is the only verb delimiter parseHandlerUrl needs.
-export function effectsUrl(effects: readonly Effect[]): string {
-  const qs = effects
-    .map(
-      (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`,
-    )
-    .join("&");
+// Serialize an effect list to its dispatch URL: the words of what the click does,
+// then one ordered `e` query param per effect carrying `verb/<encoded-args>`,
+// percent-encoded whole so its internal `/`, `&`, `=` survive as data. The
+// payload follows `dispatch/` (not `dispatch?`) so `/` is the only verb delimiter
+// parseHandlerUrl needs. The words are the effects' own unless the draw holds a
+// fact they do not carry, such as the position it shows a key's message at.
+export function effectsUrl(
+  effects: readonly Effect[],
+  says: string = clickDoes(effects),
+): string {
+  const params = effects.map(
+    (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`,
+  );
+  const qs = [`does=${spell(says)}`, ...params].join("&");
   return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
 }
 
 // [LAW:dataflow-not-control-flow] Parse the dispatch verb's raw value (an
-// `e=…&e=…` query string) into the ordered effect list. URLSearchParams decodes
+// `does=…&e=…&e=…` query string) into the ordered effect list. URLSearchParams decodes
 // each param exactly once and preserves insertion order; splitting each on the
 // FIRST `/` recovers (verb, still-encoded tail) — the same split parseHandlerUrl
 // applies at the top level, one level down.

@@ -29,7 +29,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_NS } from "../src/config/reserved-names";
 import {
   decorEntryFor,
   decorFor,

@@ -19,7 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { isReservedName } from "../src/config/loader/reserved-namespace";
+import { isReservedName } from "../src/config/reserved-names";
 
 const ROOT = path.join(__dirname, "..");
 const README = "README.md";

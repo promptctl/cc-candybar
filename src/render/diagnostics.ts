@@ -20,7 +20,7 @@ import {
   VERB_COPY_DIAGNOSTIC,
   VERB_SET_STATE,
 } from "../click/wire.js";
-import { DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import type { Drawing } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
@@ -167,7 +167,7 @@ export function collectDiagnostics(
             [
               diagnosticSpan(
                 m.lines[0][0].text,
-                copyLink(sessionId, by, keys[i]!),
+                copyLink(sessionId, by, keys[i]!, i + 1),
               ),
             ],
             ...m.lines.slice(1),
@@ -203,10 +203,16 @@ export function copyKeys(list: DiagnosticList): readonly string[] {
 // [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
 // first line alike: the daemon reads what it copies from the frame renderer
 // `by` last delivered for the session when the click runs.
-function copyLink(sessionId: string, by: Drawing["by"], key: string): string {
-  return effectsUrl([
-    { verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, by, key] },
-  ]);
+function copyLink(
+  sessionId: string,
+  by: Drawing["by"],
+  key: string,
+  position: number,
+): string {
+  return effectsUrl(
+    [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, by, key] }],
+    `copy diagnostic ${position}`,
+  );
 }
 
 // The level the list counts as: the worst of its members, none when empty.
@@ -297,12 +303,9 @@ export function diagnosticsProjection(
       level === null ? "" : `⚠ ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
-    open: list.length === 0 ? VIEWER_CLOSED : viewerKey(list, 0, 0),
+    open: list.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list, 0, 0),
   };
 }
-
-// What the viewer's ✕ writes: no message has it as its key.
-const VIEWER_CLOSED = "0";
 
 // [LAW:dataflow-not-control-flow] Where the stored key `raw` stands in this
 // draw's list; none while closed, and none once its message is no longer in
@@ -359,7 +362,6 @@ export function viewerRows(
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg,
   });
-  const go = (key: string): string => viewerLink(sessionId, key);
   const button = (text: string, link: string | null): RichText =>
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
@@ -367,7 +369,14 @@ export function viewerRows(
   const step = (glyph: string, to: ViewerPosition | null): RichText =>
     to === null
       ? button(" ", null)
-      : button(glyph, go(viewerKey(list, to.index - 1, to.page)));
+      : button(
+          glyph,
+          viewerLink(
+            sessionId,
+            viewerKey(list, to.index - 1, to.page),
+            `show diagnostic ${to.index} of ${list.length} page ${to.page + 1}`,
+          ),
+        );
   // The header for a message of `pages` pages, shown at `page`.
   const headerOf = (pages: number, page: number): string => {
     const back =
@@ -389,13 +398,13 @@ export function viewerRows(
         : `[${index}/${list.length}]`;
     return renderStripCells(
       [
-        button("✕", go(VIEWER_CLOSED)),
+        button("✕", viewerLink(sessionId, DIAGNOSTICS_CLOSED)),
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
         button(
           "⧉ copy",
-          copyLink(sessionId, by, viewerKey(list, index - 1, 0)),
+          copyLink(sessionId, by, viewerKey(list, index - 1, 0), index),
         ),
       ],
       opts,
@@ -472,10 +481,11 @@ export function handoffRows(
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
-function viewerLink(sessionId: string, key: string): string {
-  return effectsUrl([
-    { verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] },
-  ]);
+function viewerLink(sessionId: string, key: string, says?: string): string {
+  return effectsUrl(
+    [{ verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] }],
+    says,
+  );
 }
 
 // The viewer's own fixed shape: a plain joiner with NO separator (each word

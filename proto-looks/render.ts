@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES, type ShadeName } from "../src/themes/decor";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { instantOf } from "../src/utils/instant";

@@ -200,6 +200,16 @@ describe("the viewer", () => {
     const keys = list.map((_, i) => viewerKey(list, i, 0));
     expect(new Set(keys).size).toBe(4);
     expect(keys.map((k) => viewedIndex(k, list)!.index)).toEqual([1, 2, 3, 4]);
+    const said = links(viewerRows(list, at(2), SID, "request", geometry(80))).map(
+      (l) => /does=([^&]*)/.exec(l.url)![1],
+    );
+    expect(said).toEqual([
+      "close+diagnostics",
+      "show+diagnostic+1+of+4+page+1",
+      "show+diagnostic+3+of+4+page+1",
+      "copy+diagnostic+2",
+      "copy+diagnostic+2",
+    ]);
     const next = links(viewerRows(list, at(2), SID, "request", geometry(80)))
       .filter((l) => stripAnsi(l.text).trim() === "›")
       .flatMap((l) => effectsOf(l.url));

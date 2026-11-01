@@ -16,9 +16,9 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_NS } from "../src/config/reserved-names";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { isReservedName } from "../src/config/loader/reserved-namespace";
+import { isReservedName } from "../src/config/reserved-names";
 import {
   GROUP_LABELS,
   LIBRARY_GROUPS,

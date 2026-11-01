@@ -33,7 +33,7 @@ import {
 import { effectsOf } from "./helpers/click";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import {
   VERB_DOCTOR_PROBE,
   VERB_DOCTOR_RUN,

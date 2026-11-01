@@ -75,8 +75,8 @@ import { synthesizeSettingsMenu } from "./settings-menu.js";
 import {
   pluginScopeCollisions,
   reservedNamespaceCollisions,
-  SETTINGS_NS,
 } from "./loader/reserved-namespace.js";
+import { SETTINGS_NS } from "./reserved-names.js";
 import {
   actionHomeOf,
   validateActions,

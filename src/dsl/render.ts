@@ -38,7 +38,7 @@ import {
 } from "../config/effective-globals.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
-import { EDIT_NS } from "../config/loader/reserved-namespace.js";
+import { EDIT_NS } from "../config/reserved-names.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { parseDuration, type CachePolicy } from "../var-system/sources.js";

@@ -21,7 +21,7 @@ import {
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
