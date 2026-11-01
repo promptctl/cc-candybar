@@ -827,7 +827,7 @@ describe("launch input a child does not read", () => {
       stdinInput: unread,
       timeoutMs: 100,
     });
-    expect(r).toMatchObject({ ok: false, reason: "timeout", signal: "SIGTERM" });
+    expect(r).toMatchObject({ ok: false, reason: "timeout" });
     expect(r).not.toHaveProperty("error");
   });
 
@@ -837,6 +837,9 @@ describe("launch input a child does not read", () => {
     expect(run("exit 0").ok).toBe(true);
     expect(run("exit 1")).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1 });
     expect(run("head -c 1 >/dev/null").ok).toBe(true);
+    expect(
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", "kill -TERM $$"], timeoutMs: 5000 }),
+    ).toMatchObject({ ok: false, reason: "signal", signal: "SIGTERM" });
     expect(run("kill -KILL $$")).toMatchObject({ ok: false, reason: "signal", signal: "SIGKILL" });
   });
 });

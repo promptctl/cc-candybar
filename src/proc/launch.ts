@@ -774,8 +774,8 @@ async function launchWaited(
     state.inFlight.add(onAbort);
 
     // [LAW:no-silent-failure] exception: a child may stop reading and still
-    // succeed (`head -1`), so its exit is the verdict and its stderr the
-    // explanation; the failed write is only a consequence of either.
+    // succeed (`head -1`), so its exit is the verdict, and the failed write
+    // says nothing that exit does not.
     child.stdin?.on("error", () => {});
     child.stdin?.end(opts.stdinInput);
   });
@@ -830,18 +830,9 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       return { ok: true, stdout, stderr, exitCode: result.status };
     }
 
-    // [LAW:dataflow-not-control-flow] The reason data lives in the
-    // spawnSync result, not in the surrounding control flow. Node sets
-    // `result.signal` whenever the child died from a signal — including but
-    // not limited to the timeout's SIGTERM. We can only attribute "timeout"
-    // when a timeout was actually requested; otherwise the signal came from
+    // A real timeout returned above on ETIMEDOUT, so a signal here came from
     // somewhere else (OOM killer, ctrl-C through the tty group, etc.).
-    const hasTimeout = opts.timeoutMs !== undefined && opts.timeoutMs > 0;
-    const reason: "timeout" | "signal" | "non-zero" = result.signal
-      ? hasTimeout && result.signal === "SIGTERM"
-        ? "timeout"
-        : "signal"
-      : "non-zero";
+    const reason: "signal" | "non-zero" = result.signal ? "signal" : "non-zero";
     return {
       ok: false,
       reason,
