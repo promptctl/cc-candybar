@@ -4,15 +4,22 @@
     {
       "version": "pr-554",
       "ref": "refs/pull/554/merge",
-      "sha": "cae2c5758ea8b243e92517326a6a9a8860399216",
-      "timestamp": "2026-11-01T17:50:47.888Z",
+      "sha": "889371698b4ef6cc4c7dab41c5134b40b15fa20f",
+      "timestamp": "2026-11-01T18:06:14.945Z",
       "commits": [
         {
-          "sha": "cae2c5758ea8b243e92517326a6a9a8860399216",
+          "sha": "889371698b4ef6cc4c7dab41c5134b40b15fa20f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T10:49:56-07:00",
-          "message": "Merge 8aebbd0a1d6f8bbcc77ca1651d80cc66add37bd8 into 7636ce26043a3cb0640f9fa33ff75084e9b1af7a\n"
+          "timestamp": "2026-11-01T18:05:19Z",
+          "message": "Merge 85d878d26c1d197d63c9d49e78a7f94d186fed9e into 7636ce26043a3cb0640f9fa33ff75084e9b1af7a\n"
+        },
+        {
+          "sha": "85d878d26c1d197d63c9d49e78a7f94d186fed9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T11:05:09-07:00",
+          "message": "fix(test): tests name what they pin, and comments name who binds (candybar-isolated-daemon-bfab.bzq)\n\nReview of the Frame migration. A failed click's error on Claude Code's bar is pinned in a session no lane follows, since a followed session's render answers the handoff row. A render's fit to its size is pinned where the Frame is held. truecolorOf refuses a colour the terminal owns, and runAt and backgroundsOf replace local copies. Comments that said drawDsl binds a payload, settles a selection or resolves an omitted one now name the view and the bind.\n"
         },
         {
           "sha": "8aebbd0a1d6f8bbcc77ca1651d80cc66add37bd8",
