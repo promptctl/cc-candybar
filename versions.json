@@ -2,60 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-537",
-      "ref": "refs/pull/537/merge",
-      "sha": "bc4348cef2dea7b577e8b93d73b8af17c510d2e3",
-      "timestamp": "2026-11-01T04:46:16.959Z",
-      "commits": [
-        {
-          "sha": "bc4348cef2dea7b577e8b93d73b8af17c510d2e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:45:32-06:00",
-          "message": "Merge 95433059a77334f9e61385554ddb657f03ace02c into ab694786f5e409c493d08be50100cc1251f6ff70\n"
-        },
-        {
-          "sha": "95433059a77334f9e61385554ddb657f03ace02c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:39:08-06:00",
-          "message": "fix(proc): a blocking launch calls only its own timeout a timeout (candybar-testing-0x6u.47e)\n"
-        },
-        {
-          "sha": "cfde81f72971492e47f19daf0d06f81fc537d59b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:34:10-06:00",
-          "message": "test(proc): unread input keeps the signal, timeout and partial-read verdicts (candybar-testing-0x6u.47e)\n"
-        },
-        {
-          "sha": "0a906049d79c3366f72296dd394b7a8fbb185f7b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:30:49-06:00",
-          "message": "fix(proc): a child's exit explains itself, and the blocking launch agrees (candybar-testing-0x6u.47e)\n"
-        },
-        {
-          "sha": "233009e646c445c77f75798a1970ce3a2e78d24c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:25:25-06:00",
-          "message": "fix(proc): input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "043f44379d2c1a27622f7b48535a323be7a59242",
-      "timestamp": "2026-11-01T04:22:57.524Z",
+      "sha": "e98fef8ecc1558cc8cdf59993c8534b6d584d2fd",
+      "timestamp": "2026-11-01T04:55:24.593Z",
       "commits": [
         {
-          "sha": "043f44379d2c1a27622f7b48535a323be7a59242",
+          "sha": "e98fef8ecc1558cc8cdf59993c8534b6d584d2fd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:22:14-06:00",
-          "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425) (#535)\n\n* fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n\n* fix(proc): a launch concludes with its group and leaves the holder its pipes (candybar-testing-0x6u.425)\n\n* fix(proc): every end of a launch leaves the holder its pipes, and a timeout reads the group first (candybar-testing-0x6u.425)\n\n* fix(proc): an abort stands, and no poll outlives a settled launch (candybar-testing-0x6u.425)\n\n* fix(proc): an abort of an ended group signals nothing (candybar-testing-0x6u.425)"
+          "timestamp": "2026-10-31T22:54:34-06:00",
+          "message": "fix(proc): input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e) (#537)\n\n* fix(proc): input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e)\n\n* fix(proc): a child's exit explains itself, and the blocking launch agrees (candybar-testing-0x6u.47e)\n\n* test(proc): unread input keeps the signal, timeout and partial-read verdicts (candybar-testing-0x6u.47e)\n\n* fix(proc): a blocking launch calls only its own timeout a timeout (candybar-testing-0x6u.47e)"
+        },
+        {
+          "sha": "ab694786f5e409c493d08be50100cc1251f6ff70",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T04:31:18Z",
+          "message": "chore(release): set `package.json` to 1.174.3 [skip ci]\n\n## [1.174.3](https://github.com/promptctl/cc-candybar/compare/v1.174.2...v1.174.3) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425) ([#535](https://github.com/promptctl/cc-candybar/issues/535)) ([043f443](https://github.com/promptctl/cc-candybar/commit/043f44379d2c1a27622f7b48535a323be7a59242))\n"
         }
       ]
     },

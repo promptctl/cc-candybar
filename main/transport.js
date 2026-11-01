@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.2";
+var PACKAGE_VERSION = "1.174.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35899,11 +35899,9 @@ async function launchWaited(state, opts) {
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
-    if (opts.stdinInput !== void 0 && child.stdin) {
-      child.stdin.end(opts.stdinInput);
-    } else if (child.stdin) {
-      child.stdin.end();
-    }
+    child.stdin?.on("error", () => {
+    });
+    child.stdin?.end(opts.stdinInput);
   });
 }
 function launchBlocking(state, opts) {
@@ -35925,8 +35923,8 @@ function launchBlocking(state, opts) {
     stats?.onEnd(opts.category, Date.now() - t0);
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
-    if (result.error) {
-      const code = result.error.code;
+    const code = result.error?.code;
+    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
       const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
         ok: false,
@@ -35941,8 +35939,7 @@ function launchBlocking(state, opts) {
     if (result.status === 0) {
       return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
     }
-    const hasTimeout = opts.timeoutMs !== void 0 && opts.timeoutMs > 0;
-    const reason = result.signal ? hasTimeout && result.signal === "SIGTERM" ? "timeout" : "signal" : "non-zero";
+    const reason = result.signal ? "signal" : "non-zero";
     return {
       ok: false,
       reason,
