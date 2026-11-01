@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.173.1";
+var PACKAGE_VERSION = "1.174.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35780,16 +35780,18 @@ async function launchWaited(state, opts) {
       try {
         signalGroup(pid2, "SIGKILL");
       } catch (err) {
-        if (child.exitCode !== null || child.signalCode !== null) return;
-        state.unreaped.set(child, opts.category);
-        settle3({
-          ok: false,
-          reason: "signal-refused",
-          stdout: stdout2,
-          stderr: stderr2,
-          exitCode: null,
-          signal: null,
-          error: err instanceof Error ? err.message : String(err)
+        setImmediate(() => {
+          if (child.exitCode !== null || child.signalCode !== null) return;
+          state.unreaped.set(child, opts.category);
+          settle3({
+            ok: false,
+            reason: "signal-refused",
+            stdout: stdout2,
+            stderr: stderr2,
+            exitCode: null,
+            signal: null,
+            error: err instanceof Error ? err.message : String(err)
+          });
         });
       }
     };

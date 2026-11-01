@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-534",
+      "ref": "refs/pull/534/merge",
+      "sha": "980f57c4f0d0cc1f5a88c1861946ea230943fa77",
+      "timestamp": "2026-11-01T02:52:17.395Z",
+      "commits": [
+        {
+          "sha": "980f57c4f0d0cc1f5a88c1861946ea230943fa77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:50:45Z",
+          "message": "Merge c5c1210d82b42147b829986bdea718c32626c474 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+        },
+        {
+          "sha": "c5c1210d82b42147b829986bdea718c32626c474",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:50:33-06:00",
+          "message": "fix(proc): the refusal verdict follows the poll that delivers the child's end (candybar-testing-0x6u.0mz)\n"
+        },
+        {
+          "sha": "ee4b6c831cdcd5f29125b1de9eb9987f8c3200c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:30:29-06:00",
+          "message": "fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n"
+        },
+        {
+          "sha": "adfc75a8721a472f4c733033e023605d542515e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:22:35-06:00",
+          "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-533",
       "ref": "refs/pull/533/merge",
       "sha": "f0555a0317e2cf4a056c6484c9cd418995227e31",
@@ -27,35 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:19:01-06:00",
           "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-534",
-      "ref": "refs/pull/534/merge",
-      "sha": "4bd435b6705a064f2857042bfe2b971e3795e234",
-      "timestamp": "2026-11-01T02:31:28.835Z",
-      "commits": [
-        {
-          "sha": "4bd435b6705a064f2857042bfe2b971e3795e234",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:30:40Z",
-          "message": "Merge ee4b6c831cdcd5f29125b1de9eb9987f8c3200c1 into d189b5c56cbf38da7151f2400b2ae226f8331328\n"
-        },
-        {
-          "sha": "ee4b6c831cdcd5f29125b1de9eb9987f8c3200c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:30:29-06:00",
-          "message": "fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n"
-        },
-        {
-          "sha": "adfc75a8721a472f4c733033e023605d542515e2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:22:35-06:00",
-          "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n"
         }
       ]
     },
