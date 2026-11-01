@@ -4,15 +4,22 @@
     {
       "version": "pr-529",
       "ref": "refs/pull/529/merge",
-      "sha": "6bcbe7b4dc66ec7f20f8c174f52cfd851d47c82b",
-      "timestamp": "2026-11-01T00:13:32.920Z",
+      "sha": "2eb9e67a16bc908c5031eef71de23dabc928814c",
+      "timestamp": "2026-11-01T00:19:25.394Z",
       "commits": [
         {
-          "sha": "6bcbe7b4dc66ec7f20f8c174f52cfd851d47c82b",
+          "sha": "2eb9e67a16bc908c5031eef71de23dabc928814c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:12:47-06:00",
-          "message": "Merge 46b0f7793f53880e02492dd1b09ae493b110e87a into 3439d4a05a61f8cd02c3099414d573b8e8e1cffc\n"
+          "timestamp": "2026-11-01T00:17:53Z",
+          "message": "Merge 90164ad34dc17bc1559283924bd5c55f738a77ee into 3439d4a05a61f8cd02c3099414d573b8e8e1cffc\n"
+        },
+        {
+          "sha": "90164ad34dc17bc1559283924bd5c55f738a77ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:17:43-06:00",
+          "message": "fix(test): one probe runs across a wait's rounds, so its late answer lands in the wait (candybar-testing-0x6u.6el)\n"
         },
         {
           "sha": "46b0f7793f53880e02492dd1b09ae493b110e87a",
