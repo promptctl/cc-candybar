@@ -597,7 +597,6 @@ async function launchWaited(
     let stdout = "";
     let stderr = "";
     let settled = false;
-    let released = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
     let groupEndTimer: NodeJS.Timeout | null = null;
@@ -619,6 +618,7 @@ async function launchWaited(
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      if (groupEndTimer) clearTimeout(groupEndTimer);
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
@@ -652,8 +652,6 @@ async function launchWaited(
     // pipes, drained: a destroyed one would kill it with SIGPIPE at its next
     // write, for as long as the launcher lives to read them.
     const concludeWithGroup = () => {
-      released = true;
-      if (groupEndTimer) clearTimeout(groupEndTimer);
       for (const pipe of [child.stdout, child.stderr]) {
         pipe?.removeAllListeners("data").resume();
         (pipe as Socket | null)?.unref();
@@ -662,11 +660,10 @@ async function launchWaited(
     };
     // While a member of the group lives the launch waits for it, guarded, so
     // SIGKILL still reaches it. The OS has no event for a group's end, so it is
-    // polled, with exponential backoff, until `close`: a launch settled by a
-    // refused signal still owns its pipes. The timer never holds the process.
+    // polled, with exponential backoff.
     if (group !== undefined) {
       const awaitGroupEnd = (delayMs: number) => {
-        if (released) return;
+        if (settled) return;
         if (groupGone(group)) {
           setImmediate(concludeWithGroup);
           return;
@@ -675,7 +672,6 @@ async function launchWaited(
           () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
           delayMs,
         );
-        groupEndTimer.unref();
       };
       void exited.then(() =>
         setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
@@ -694,10 +690,15 @@ async function launchWaited(
     // wrong target (verified: it can terminate the caller), so escalation is
     // gated on the pid actually existing.
     const terminate = (cause: Terminated) => {
-      // A group that ended between polls has its own verdict, and its id may
-      // no longer be the launch's to signal.
+      // A group that ended between polls did not time out, and its id may no
+      // longer be the launch's to signal. An abort stands whatever the group did.
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== undefined && groupGone(group)) {
+      if (
+        cause === "timeout" &&
+        ended &&
+        group !== undefined &&
+        groupGone(group)
+      ) {
         setImmediate(concludeWithGroup);
         return;
       }
@@ -768,11 +769,7 @@ async function launchWaited(
       });
     };
 
-    child.on("close", (code, signal) => {
-      released = true;
-      if (groupEndTimer) clearTimeout(groupEndTimer);
-      conclude(code, signal);
-    });
+    child.on("close", conclude);
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);

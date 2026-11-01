@@ -76,6 +76,25 @@ describe("a launch whose child ends with a descendant outside its group", () => 
     expect(r).toMatchObject({ ok: true, exitCode: 0 });
   });
 
+  it("reports an abort once the child has ended, whatever the group did", async () => {
+    const abort = new AbortController();
+    const running = launcher.launch({
+      category: "user-shell",
+      bin: "sh",
+      args: [
+        "-c",
+        'sleep 0.9 & python3 -c "$1"; exit 0',
+        "sh",
+        `${SET}${FORK_HOLDER}`,
+      ],
+      signal: abort.signal,
+    });
+    // After the member ends, before the next sample of the group.
+    await new Promise((end) => setTimeout(end, 1300));
+    abort.abort();
+    expect(await running).toMatchObject({ ok: false, reason: "aborted" });
+  });
+
   it("reports a non-zero exit as one", async () => {
     const r = await launch(python(`${SET}${FORK_HOLDER}os._exit(3)\n`));
     expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 3 });
