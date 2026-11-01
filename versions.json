@@ -2,45 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-546",
-      "ref": "refs/pull/546/merge",
-      "sha": "40aaef0ae3165cbd41ae19518f0a77eb39d9badd",
-      "timestamp": "2026-11-01T10:28:56.313Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1270b544662cfb3f1acdc49573860e38b9c3f14a",
+      "timestamp": "2026-11-01T10:35:50.698Z",
       "commits": [
         {
-          "sha": "40aaef0ae3165cbd41ae19518f0a77eb39d9badd",
+          "sha": "1270b544662cfb3f1acdc49573860e38b9c3f14a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T10:28:01Z",
-          "message": "Merge a5ccb1b12648063a594bd560f2377753678ada51 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
-        },
-        {
-          "sha": "a5ccb1b12648063a594bd560f2377753678ada51",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:27:49-07:00",
-          "message": "fix(click): regenerate the spine bytes and finish the namespace move (brandon-menus-sjhy.5y2)\n\nSecond review high on PR #546.\n\n- The spine snapshot still pinned the old door wording, failing CI.\n- design-docs/settings-menu-map-render.mts still imported SETTINGS_NS from the\n  loader module; no tsconfig covers `.mts` under design-docs.\n- HELP_OPEN and the viewer's `go` wrapper add nothing now, so both go.\n"
-        },
-        {
-          "sha": "b83d6174af887dd312c37e46cb97dd4f9c003e28",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:14:09-07:00",
-          "message": "fix(click): an authored key reads as itself, and the codec stays off the loader (brandon-menus-sjhy.5y2)\n\nReview medium on PR #546.\n\n- Only a synthesized key is a disclosure: an authored `prFilter` written\n  `closed` reads `set prFilter to closed`, not `close prFilter`.\n- The viewer's closed value moves beside its key, so a close derives\n  `close diagnostics` and ✕ needs no caption of its own.\n- The namespace constants and isReservedName move to config/reserved-names,\n  a leaf, so wire.ts no longer pulls in the loader's modules and json5.\n"
-        },
-        {
-          "sha": "c460d93793c81196f76cda96d2eab15fdb8d0491",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:03:11-07:00",
-          "message": "fix(click): a disclosure opens in the words it closes in (brandon-menus-sjhy.5y2)\n\nReview high on PR #546.\n\n- A disclosure's open member reads `open candybar.menu`, matching `close\n  candybar.menu`. DISCLOSURE_OPEN replaces three spellings of \"open\".\n- A namespace strips only as a prefix: `my.menus.x` no longer reads `my.x`.\n- step-state is a session write, so it no longer outranks what a click fires.\n- A repo-config answer reads `mark config in <dir> approved`, an action rather\n  than a finished state.\n- EffectVerb derives from SAYS, one list instead of two.\n- viewerLink requires its words, so a close cannot read as `open diagnostics`.\n"
-        },
-        {
-          "sha": "2ec68a934e001b94ffedbc97d14e065a9d1c3507",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:48:01-07:00",
-          "message": "feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2)\n\nA dispatch link leads with a `does` param, derived from the effects the\nclick fires, so a hover reads `does=set+preset+to+compact` before the\npercent-encoded payload. parseEffects reads only `e`, so drawn links and\nolder daemons are unaffected.\n\nA click's non-session effect is its face, so a confirm reads as what it\nfires rather than the disarm that precedes it. `does` is form-encoded and\nloses no character; only copied text is shortened. The diagnostics viewer\npasses its words, because the position it shows exists only at draw.\n"
+          "timestamp": "2026-11-01T03:34:54-07:00",
+          "message": "feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2) (#546)\n\n* feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2)\n\nA dispatch link leads with a `does` param, derived from the effects the\nclick fires, so a hover reads `does=set+preset+to+compact` before the\npercent-encoded payload. parseEffects reads only `e`, so drawn links and\nolder daemons are unaffected.\n\nA click's non-session effect is its face, so a confirm reads as what it\nfires rather than the disarm that precedes it. `does` is form-encoded and\nloses no character; only copied text is shortened. The diagnostics viewer\npasses its words, because the position it shows exists only at draw.\n\n* fix(click): a disclosure opens in the words it closes in (brandon-menus-sjhy.5y2)\n\nReview high on PR #546.\n\n- A disclosure's open member reads `open candybar.menu`, matching `close\n  candybar.menu`. DISCLOSURE_OPEN replaces three spellings of \"open\".\n- A namespace strips only as a prefix: `my.menus.x` no longer reads `my.x`.\n- step-state is a session write, so it no longer outranks what a click fires.\n- A repo-config answer reads `mark config in <dir> approved`, an action rather\n  than a finished state.\n- EffectVerb derives from SAYS, one list instead of two.\n- viewerLink requires its words, so a close cannot read as `open diagnostics`.\n\n* fix(click): an authored key reads as itself, and the codec stays off the loader (brandon-menus-sjhy.5y2)\n\nReview medium on PR #546.\n\n- Only a synthesized key is a disclosure: an authored `prFilter` written\n  `closed` reads `set prFilter to closed`, not `close prFilter`.\n- The viewer's closed value moves beside its key, so a close derives\n  `close diagnostics` and ✕ needs no caption of its own.\n- The namespace constants and isReservedName move to config/reserved-names,\n  a leaf, so wire.ts no longer pulls in the loader's modules and json5.\n\n* fix(click): regenerate the spine bytes and finish the namespace move (brandon-menus-sjhy.5y2)\n\nSecond review high on PR #546.\n\n- The spine snapshot still pinned the old door wording, failing CI.\n- design-docs/settings-menu-map-render.mts still imported SETTINGS_NS from the\n  loader module; no tsconfig covers `.mts` under design-docs.\n- HELP_OPEN and the viewer's `go` wrapper add nothing now, so both go."
         }
       ]
     },
@@ -99,28 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T03:15:15-07:00",
           "message": "gitaculous already shows the location, so the default layout drops directory\n\nThe default identity row and five bundled presets (compact, verbose, zen,\ngit, dense) still placed `directory` beside `gitaculous`, which now draws\nthe checkout path itself. Every default user saw the path twice. The\ndirectory segment stays defined in the library; only its placement goes.\n\nTests that read the bundled layout now name a segment the bar still places,\nand the doc fence shows the one path it renders.\n\nKnown consequence: `zen` now holds only `context`, so it no longer shows\nwhere you are. Its comment still describes the old intent.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0",
-      "timestamp": "2026-11-01T09:31:44.383Z",
-      "commits": [
-        {
-          "sha": "ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:30:42-07:00",
-          "message": "feat(daemon): click-rooted launches go async (candybar-launch-q7o7.gp7) (#545)\n\n* feat(daemon): click-rooted launches go async, and a click cut by close goes no further (candybar-launch-q7o7.gp7)\n\n* fix(daemon): clientLeft is its own fact, an aborted click launch is closing, doctor probes run together (candybar-launch-q7o7.gp7)\n\n* fix(daemon): clickLaunch owns its bound, a terminated launch says why, stats print the journal's turn (candybar-launch-q7o7.gp7)\n\n* test(launch): a timed-out launch says it timed out (candybar-launch-q7o7.gp7)\n\n* fix(daemon): a launch keeps the program's own words, clickLaunch's bound cannot be passed (candybar-launch-q7o7.gp7)"
-        },
-        {
-          "sha": "38c5c173ef1558a6bd85ec48336591cc57874b90",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T09:06:01Z",
-          "message": "chore(release): set `package.json` to 1.176.0 [skip ci]\n\n## [1.176.0](https://github.com/promptctl/cc-candybar/compare/v1.175.0...v1.176.0) (2026-11-01)\n\n### Features\n\n* **landscape:** captured bars play in the explorer, with capture tooling and the live-bar link ([#544](https://github.com/promptctl/cc-candybar/issues/544)) ([22a4d97](https://github.com/promptctl/cc-candybar/commit/22a4d977fc08426311fbc21d544a5c130ec8183b)), closes [#472](https://github.com/promptctl/cc-candybar/issues/472)\n"
         }
       ]
     },
