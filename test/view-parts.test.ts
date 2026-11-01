@@ -26,6 +26,7 @@ import { instantOf, type Instant } from "../src/utils/instant";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { links, stripAnsi } from "./helpers/ansi";
+import { ansiOf } from "../src/render/frame";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -91,7 +92,7 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     // frame is drawn for (`drawing.fps`, a draw projection), and the door's
     // own cell, whose indicator reads the draw's diagnostics; nothing else.
     expect(second.evaluated).toBe(3);
-    expect(stripAnsi(second.text)).toContain(String(Math.floor(B)));
+    expect(stripAnsi(ansiOf(second.frame))).toContain(String(Math.floor(B)));
     expect(view.errors).toEqual([]);
   });
 
@@ -102,15 +103,17 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     // `stamp`'s body, the door's two cells, and `shown`'s body: `shown`'s
     // colours read no `x`.
     expect(changed.evaluated).toBe(4);
-    expect(stripAnsi(changed.text)).toContain("x=2");
+    expect(stripAnsi(ansiOf(changed.frame))).toContain("x=2");
   });
 
   test("a wider strip, every part that fits a row to it", () => {
     const view = viewOf(CONFIG);
     view.draw({ x: "1" }, A);
     const wider = view.draw({ x: "1" }, A, { ...OPTS, width: 300 });
-    expect(stripAnsi(wider.text)).toBe(
-      stripAnsi(viewOf(CONFIG).draw({ x: "1" }, A, { ...OPTS, width: 300 }).text),
+    expect(stripAnsi(ansiOf(wider.frame))).toBe(
+      stripAnsi(
+        ansiOf(viewOf(CONFIG).draw({ x: "1" }, A, { ...OPTS, width: 300 }).frame),
+      ),
     );
   });
 });
@@ -128,8 +131,9 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     const urls = [A, B].map(
       (at) =>
-        links(view.draw({}, at).text).find((l) => stripAnsi(l.text) === "copy")!
-          .url,
+        links(ansiOf(view.draw({}, at).frame)).find(
+          (l) => stripAnsi(l.text) === "copy",
+        )!.url,
     );
     expect(urls[0]).toContain(String(Math.floor(A)));
     expect(urls[1]).toContain(String(Math.floor(B)));
@@ -150,8 +154,9 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     const urls = [A, B].map(
       (at) =>
-        links(view.draw({}, at).text).find((l) => stripAnsi(l.text) === "copy")!
-          .url,
+        links(ansiOf(view.draw({}, at).frame)).find(
+          (l) => stripAnsi(l.text) === "copy",
+        )!.url,
     );
     expect(urls[0]).toContain(String(Math.floor(A)));
     expect(urls[1]).toContain(String(Math.floor(B)));
@@ -340,11 +345,12 @@ describe("a kept view draws what a fresh one draws", () => {
       const opts = { ...OPTS, padding: 0, width };
       const drawn = kept.draw(payload(), at, opts, selection());
       const fresh = viewOf(config, sessionState);
-      const anew = fresh.draw(payload(), at, opts, selection()).text;
+      const anew = ansiOf(fresh.draw(payload(), at, opts, selection()).frame);
       fresh.registry.dispose();
-      expect(stripAnsi(drawn.text)).toBe(stripAnsi(anew));
-      expect(drawn.text).toBe(anew);
-      last = drawn.text;
+      const text = ansiOf(drawn.frame);
+      expect(stripAnsi(text)).toBe(stripAnsi(anew));
+      expect(text).toBe(anew);
+      last = text;
       return drawn.evaluated;
     };
     const clickText = async (text: string): Promise<void> => {

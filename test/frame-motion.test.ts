@@ -10,7 +10,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, drawPayload } from "../src/dsl/render";
 import type { DrawnMotion } from "../src/render/drawn-motion";
-import type { DrawnFrame } from "../src/dsl/render";
+import type { Frame } from "../src/render/frame";
 import type { ColorCompatibility } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { Instant } from "../src/utils/instant";
@@ -26,7 +26,7 @@ function frameOf(
   root = '{ h: ["cell"] }',
   picks: Readonly<Record<string, string>> = {},
   colorCompatibility: ColorCompatibility = "truecolor",
-): DrawnFrame {
+): Frame {
   const config = parseAndValidate(
     "<test>",
     `{ globals: ${globals}, segments: { cell: { template: ${JSON.stringify(template)} } }, root: ${root} }`,
@@ -56,7 +56,7 @@ function frameOf(
       },
       undefined,
       selectionFor(config, {}, picked(picks)),
-    );
+    ).frame;
   } finally {
     registry.dispose();
   }

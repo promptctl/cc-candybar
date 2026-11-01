@@ -59,6 +59,7 @@ import {
   type CompiledConfig,
   type RenderWarning,
 } from "./dsl/render.js";
+import { ansiOf } from "./render/frame.js";
 import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
@@ -658,7 +659,7 @@ export async function renderEffective(
   const { drawn, opts } = bindPass(prepared, effective, width, at);
   for (const line of stragglers(settle, await registry.inFlight(settle.signal)))
     advisories.add(line);
-  const rendered = drawDsl(
+  const { frame } = drawDsl(
     config,
     compiled,
     store,
@@ -672,8 +673,8 @@ export async function renderEffective(
       onRenderWarning: warned,
     },
     effective,
-  ).text;
-  return { rendered, failures, advisories };
+  );
+  return { rendered: ansiOf(frame), failures, advisories };
 }
 
 // The verdict: the prepared config rendered under every preset, every render

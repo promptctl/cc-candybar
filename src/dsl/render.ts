@@ -51,6 +51,7 @@ import {
   stripSeamCols,
 } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
+import { ansiOf, type Frame } from "../render/frame.js";
 import {
   SessionEffects,
   type MenuFlash,
@@ -1135,28 +1136,13 @@ export interface RenderObservers {
   readonly onRenderWarning?: (warning: RenderWarning) => void;
 }
 
-// [LAW:types-are-the-program] A drawn frame: its bytes, and its motion
-// (brandon-doctor-v62x.tgp). `moves` is a finite `nextChange`, what its cells
-// and the holds told to its draw say, never what the config asked for: a template's `frames` moves the bar as
-// surely as an effect does. `can-move` is a still frame whose config, under
-// the settings in force, can draw motion at a later render — a
-// `globals.effect` rule, placements that fade as they come and go, or a
-// placement wearing its own effect that is not drawn now (hidden by its
-// `when`, or in a closed body) — which no still cell can say.
+// [LAW:types-are-the-program] A draw: the frame it drew, and what the walk
+// that drew it reports of itself.
 export interface DrawnFrame {
-  readonly text: string;
-  // The moment, in wall seconds, the frame next changes without new data, or
-  // Infinity: what a feed drawing it waits for (src/daemon/frame-feed.ts).
-  readonly nextChange: number;
-  readonly motion: DrawnMotion;
-  // The rows an open menu added — a disclosure body, a dropped `{{ menu }}` —
-  // which flash and close once the session goes idle.
-  readonly menuRows: number;
+  readonly frame: Frame;
   // How many of the view's parts this frame evaluated (src/dsl/parts.ts):
   // between data changes, only those that read the instant.
   readonly evaluated: number;
-  // The sources whose values this frame drew as not answered yet, by name.
-  readonly pending: readonly string[];
   // How each slot whose selection is a rule settled: `kept`, settled in the
   // turn what it reads moved (outside any draw), or `per-draw`, a rule that
   // reads the instant, evaluated by this frame. A decided slot is absent.
@@ -1304,7 +1290,7 @@ export function drawPayload(
 
 // The bytes of `drawPayload`'s frame.
 export function renderDsl(...args: Parameters<typeof drawPayload>): string {
-  return drawPayload(...args).text;
+  return ansiOf(drawPayload(...args).frame);
 }
 
 export function drawDsl(
@@ -1561,11 +1547,10 @@ export function drawDsl(
     return nodeType(node.kind).render(node, ctx);
   };
 
-  // [LAW:single-enforcer] The ONE serialization pass: each composed line of cells
-  // runs through the strip joiner exactly once, here. drawStripCells may itself
-  // emit a "\n"-bearing string (FlexStrip width-overflow wrap); joining the per-
-  // line results with "\n" splices those in place — byte-identical to serializing
-  // each leaf row independently, since the cells and their order are unchanged.
+  // [LAW:single-enforcer] The ONE draw pass: each composed line of cells runs
+  // through the strip joiner exactly once, here. drawStripCells may itself
+  // return several lines (FlexStrip width-overflow wrap); each is a Row of the
+  // kind its composed line is, the one place that kind is known.
   // [LAW:no-defensive-null-guards] The active preset's compiled tree. By the
   // time a name reaches here it must be a member: effectivePresetName collapses
   // unknown names to the floor, and every merged config declares the floor — so
@@ -1603,14 +1588,13 @@ export function drawDsl(
     });
   motion.drawn();
   record.commit();
-  const menuRows = rendered.filter((row) => row.kind === "menu").length;
   // What the frame arms under the settings in force, drawn or not: a menu this
   // frame is the first to draw, whose idle period — and the flash before it
   // closes on its own — begins with it, an effect rule, fades, or a placement
   // of this preset — hidden by its `when` or a closed body right now — wearing
   // an effect of its own. Asked only of a frame nothing on which will change.
   const armed = (): boolean =>
-    menuRows > 0 ||
+    rendered.some((row) => row.kind === "menu") ||
     parts.selections().effect.kind === "expression" ||
     transitions ||
     segmentsUnder(root).some(
@@ -1639,12 +1623,16 @@ export function drawDsl(
       message: `variable "${variable}" cannot refresh: ${fault.message}`,
     });
   return {
-    text: rendered.map((row) => row.text).join("\n"),
-    nextChange,
-    motion: frameMotion,
-    menuRows,
+    frame: {
+      depth: drawOpts.colorCompatibility,
+      rows: rendered.flatMap(({ kind, lines }) =>
+        lines.map((runs) => ({ kind, runs })),
+      ),
+      nextChange,
+      motion: frameMotion,
+      pending: [...waited].sort(),
+    },
     evaluated: parts.evaluated - evaluatedBefore,
-    pending: [...waited].sort(),
     rules,
   };
 }

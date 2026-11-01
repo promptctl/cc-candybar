@@ -37,6 +37,7 @@ import {
 import { roleOf, answeredOf } from "./render-sightings";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
+import { ansiOf } from "../render/frame.js";
 import {
   renderOptionsOf,
   renderWidth,
@@ -597,7 +598,7 @@ export function drawRender(
   const idleSince = menuIdle.since(sessionId, at);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts.
-  const frame = drawDsl(
+  const { frame, evaluated, rules } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -631,7 +632,12 @@ export function drawRender(
   const delivered = (): void =>
     renderCache.delivered(sessionId, drawing.by, copies);
   // What this frame drew is what the session's close timer follows.
-  menuIdle.observe(sessionId, at, frame.menuRows > 0, effective.menuTimeout);
+  menuIdle.observe(
+    sessionId,
+    at,
+    frame.rows.some((row) => row.kind === "menu"),
+    effective.menuTimeout,
+  );
   const menusSince = menuIdle.since(sessionId, at);
   noteFacts(facts, {
     menuIdle:
@@ -675,7 +681,11 @@ export function drawRender(
   // period, not the hidden bar's beat; that bar can move again once it closes.
   const body: { text: string; nextChange: number; motion: DrawnMotion } =
     viewing === null
-      ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion }
+      ? {
+          text: ansiOf(frame),
+          nextChange: frame.nextChange,
+          motion: frame.motion,
+        }
       : {
           text: viewerRows(
             diagnostics,
@@ -738,13 +748,12 @@ export function drawRender(
     motion: body.motion,
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
-    evaluated: String(frame.evaluated),
+    evaluated: String(evaluated),
     // The sources it drew as not answered yet; `-` for none.
     pending: frame.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
     // draw, `per-draw` at this frame's instant; `-` for none.
-    rules:
-      [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
+    rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
@@ -770,7 +779,7 @@ export function drawRender(
     },
     motion: body.motion,
     nextChange: body.nextChange,
-    evaluated: frame.evaluated,
+    evaluated,
     clickShown,
     delivered,
     lanes,

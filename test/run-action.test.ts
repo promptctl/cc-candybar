@@ -54,6 +54,7 @@ import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
+import { ansiOf } from "../src/render/frame";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -227,7 +228,7 @@ function draw(view: SessionView<SessionSource>): {
 } {
   const effective = view.source.effective();
   const errors: string[] = [];
-  const frame = drawDsl(
+  const { frame } = drawDsl(
     view.state.config,
     view.state.compiled,
     view.store,
@@ -238,7 +239,8 @@ function draw(view: SessionView<SessionSource>): {
     { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
     effective,
   );
-  return { text: stripAnsi(frame.text), links: linkUrls(frame.text), errors };
+  const ansi = ansiOf(frame);
+  return { text: stripAnsi(ansi), links: linkUrls(ansi), errors };
 }
 
 function viewOf(r: Rig, configFile: string, sid = SID): SessionView<SessionSource> {
