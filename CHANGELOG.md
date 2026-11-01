@@ -1,3 +1,9 @@
+## [1.174.4](https://github.com/promptctl/cc-candybar/compare/v1.174.3...v1.174.4) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e) ([#537](https://github.com/promptctl/cc-candybar/issues/537)) ([e98fef8](https://github.com/promptctl/cc-candybar/commit/e98fef8ecc1558cc8cdf59993c8534b6d584d2fd))
+
 ## [1.174.3](https://github.com/promptctl/cc-candybar/compare/v1.174.2...v1.174.3) (2026-11-01)
 
 ### Bug Fixes
