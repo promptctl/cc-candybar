@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-532",
+      "ref": "refs/pull/532/merge",
+      "sha": "77e0313ea24a29256dbfebc1d41b2109d47b651e",
+      "timestamp": "2026-11-01T01:47:13.190Z",
+      "commits": [
+        {
+          "sha": "77e0313ea24a29256dbfebc1d41b2109d47b651e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T19:46:34-06:00",
+          "message": "Merge 6003a9b0dc34204e936a4b64e570bdf2be11b9c8 into 7b77d5fab04cc3822fa430e086169ef7f984b873\n"
+        },
+        {
+          "sha": "6003a9b0dc34204e936a4b64e570bdf2be11b9c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T19:46:07-06:00",
+          "message": "feat(daemon): close says when the launches it ended have ended (candybar-testing-0x6u.keo)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7b77d5fab04cc3822fa430e086169ef7f984b873",
