@@ -385,7 +385,10 @@ describe("the daemon is a value", () => {
     expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
     // Late work that would start a child finds its launcher closed.
     expect(
-      await daemon.launcher.launch({ bin: "/bin/echo", category: "user-shell" }),
+      await daemon.launcher.launch({
+        bin: "/bin/echo",
+        category: "user-shell",
+      }),
     ).toMatchObject({ ok: false, reason: "aborted" });
   });
 });
