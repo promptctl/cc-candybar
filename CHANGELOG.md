@@ -1,3 +1,9 @@
+## [1.174.1](https://github.com/promptctl/cc-candybar/compare/v1.174.0...v1.174.1) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz) ([#534](https://github.com/promptctl/cc-candybar/issues/534)) ([96f1881](https://github.com/promptctl/cc-candybar/commit/96f1881bee934f602971a13dea41977a614a98e3))
+
 ## [1.174.0](https://github.com/promptctl/cc-candybar/compare/v1.173.1...v1.174.0) (2026-11-01)
 
 ### Features
