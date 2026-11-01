@@ -36749,7 +36749,9 @@ function makeLimits(deps) {
     const identity3 = `${stamp2}-${deps.pid}`;
     await attempt(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity3);
-      deps.writeMemoryReport(file, await deps.captureMemoryReport());
+      const report2 = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report2);
       deps.log("info", `memory report written: ${file}`);
     });
     if (disarmed) {
@@ -71530,20 +71532,29 @@ function makeActReader(dir, read2) {
     }
   };
 }
-async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2, closed) {
-  const act = (after ?? 0) + 1;
-  const actDir = import_node_path33.default.join(dir, String(act));
+function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
   const staging = fs_default.mkdtempSync(import_node_path33.default.join(dir, ".claim-"));
-  const job = launcher.launchJobSync(command, filesOf(actDir));
-  if (!job.ok) {
+  try {
+    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
+    fs_default.renameSync(staging, actDir);
+    return true;
+  } catch (err) {
+    const code = err.code;
+    if (code === "ENOTEMPTY" || code === "EEXIST") return false;
+    throw err;
+  } finally {
     fs_default.rmSync(staging, { recursive: true, force: true });
-    throw new Error(`apply-update: ${job.error}`);
   }
+}
+async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
+  const act = (after ?? 0) + 1;
+  const actDir = import_node_path33.default.join(dir, String(act));
+  const job = launcher.launchJobSync(command, filesOf(actDir));
+  if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
   try {
     const start = await read2(job.pid);
-    if (closed()) return DAEMON_CLOSED;
     const record2 = {
       identity: identity3,
       pid: job.pid,
@@ -71551,14 +71562,7 @@ async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now
       started: now2,
       deadline: now2 + timeoutMs
     };
-    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
-    try {
-      fs_default.renameSync(staging, actDir);
-    } catch (err) {
-      const code = err.code;
-      if (code === "ENOTEMPTY" || code === "EEXIST") return CLAIMED_FIRST;
-      throw err;
-    }
+    if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act)) {
       removeAct(dir, act);
       return CLAIMED_FIRST;
@@ -71567,7 +71571,6 @@ async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now
   } finally {
     if (stood) job.release();
     else job.withdraw();
-    fs_default.rmSync(staging, { recursive: true, force: true });
   }
   for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
     removeAct(dir, n);
@@ -71578,7 +71581,6 @@ var CLAIMED_FIRST = {
   ok: false,
   reason: "another act claimed this bundle first"
 };
-var DAEMON_CLOSED = { ok: false, reason: "the daemon closed" };
 function endOverdue(dir, facts) {
   const status = filesOf(import_node_path33.default.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
@@ -71801,7 +71803,11 @@ function makeUpdateWatch(opts) {
   } = opts;
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
-  const readStart = (pid2) => readStartTime(pid2, launcher.launch);
+  const readStart = async (pid2) => {
+    const read2 = await readStartTime(pid2, launcher.launch);
+    if (closed) throw new DaemonClosing("apply-update");
+    return read2;
+  };
   const acts = makeActReader(actsDir2, readStart);
   let seen = null;
   let gate2 = null;
@@ -71849,6 +71855,9 @@ function makeUpdateWatch(opts) {
       unreadable = null;
       return { ok: true, value };
     } catch (err) {
+      if (err instanceof DaemonClosing) {
+        return { ok: false, error: err.message };
+      }
       unreadable = `update act files (${actsDir2}): ${err.message}`;
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
@@ -71923,6 +71932,7 @@ function makeUpdateWatch(opts) {
       }
       const facts = factsOf(update);
       const read2 = await touchActs(() => acts.read());
+      if (closed) throw new DaemonClosing("apply-update");
       if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
       const newest = read2.value;
       if (judgeAct(newest).kind === "running") {
@@ -71936,8 +71946,7 @@ function makeUpdateWatch(opts) {
         { ...facts.command, category: "update.apply" },
         ACT_TIMEOUT_MS,
         Date.now(),
-        readStart,
-        () => closed
+        readStart
       );
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);
@@ -77510,7 +77519,6 @@ function makeBinaryWatch(opts) {
   const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
   let timer = null;
   let ended = false;
-  const checks = new KeyedSerialQueue();
   const end = () => {
     ended = true;
     if (timer) clearInterval(timer);
@@ -77525,7 +77533,9 @@ function makeBinaryWatch(opts) {
       }
       if (!sameStamp(stamp2, now2)) {
         const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path40})`;
-        if (await held()) {
+        const waiting2 = await held();
+        if (ended) return;
+        if (waiting2) {
           logHeld([
             "info",
             `${what}; the restart waits for the running update`
@@ -77539,7 +77549,7 @@ function makeBinaryWatch(opts) {
       }
     }
   };
-  const check = () => checks.run("check", sample).catch((e) => {
+  const check = () => sample().catch((e) => {
     log("error", `binary check failed: ${e.message}`);
   });
   return {
