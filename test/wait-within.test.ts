@@ -35,6 +35,22 @@ test("work still out at the deadline ends the wait there, and its signal aborts"
   expect(seen?.aborted).toBe(true);
 });
 
+test("a wait ends when its time does, and not before", async () => {
+  jest.useFakeTimers();
+  try {
+    let end: string | undefined;
+    void waitWithin(() => new Promise(() => {}), 110, unexpected).then((e) => {
+      end = e;
+    });
+    await jest.advanceTimersByTimeAsync(109);
+    expect(end).toBeUndefined();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(end).toBe("deadline");
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test("a rejection inside the time is the wait's", async () => {
   await expect(
     waitWithin(() => Promise.reject(new Error("bug")), 1000, unexpected),

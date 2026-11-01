@@ -129,8 +129,9 @@ describe("a daemon in this worker", () => {
 
   // [LAW:one-source-of-truth] A request's budget is its deadline less its
   // arrival, so a held daemon's client states the deadline on the daemon's clock.
-  // 100 ms is under the backstop the wait clamps to, so the event's figure is
-  // that deadline's and nothing else's.
+  // 120 ms is under the backstop the wait clamps to, and less the reserve it
+  // is not the figure an unstated deadline gets, so the event's figure is that
+  // deadline's and nothing else's.
   test("a client of a held daemon states its deadline on that daemon's clock", async () => {
     const sid = "in-worker-held";
     const clock = heldClock(new Date(Date.now() - 60_000));
@@ -138,10 +139,10 @@ describe("a daemon in this worker", () => {
     clock.advance(5_000);
     await renderRequest(daemon, {
       ...renderBody(sid, projectDir),
-      deadline: daemon.now() + 100,
+      deadline: daemon.now() + 120,
     });
     const [event] = await renderLines(env, sid);
-    expect(event).toContain(" deadline=stated:60ms ");
+    expect(event).toContain(" deadline=stated:80ms ");
   });
 
   test("a start refused beside a live daemon leaves it the env it reads", () => {

@@ -917,12 +917,9 @@ export function laneClicked(
 }
 
 // A request's wait, fixed at its arrival: whether its client stated its
-// deadline, the milliseconds the wait had then, and when it ends, on the
-// monotonic clock. Both, because the render notes the first on its event
-// after the session's id leads it, and has no arrival instant to derive it.
+// deadline, and when the wait ends, on the monotonic clock.
 export interface RequestWait {
   readonly stated: ClientDeadline["kind"];
-  readonly ms: number;
   readonly endsAt: number;
 }
 
@@ -940,7 +937,6 @@ async function drawAnswer(
     req,
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
   );
-  noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
   // every keyed lane its view declared, and every run of its view's or its
@@ -948,6 +944,11 @@ async function drawAnswer(
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = clock.monotonic();
+  // [LAW:one-source-of-truth] The event's figure is the wait as armed, read
+  // once, so the two cannot disagree. Setup has spent part of what the
+  // request arrived with.
+  const budget = wait.endsAt - waitFrom;
+  noteFacts(facts, { deadline: `${wait.stated}:${Math.round(budget)}ms` });
   const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
@@ -955,7 +956,7 @@ async function drawAnswer(
         settlePayload(setup.payloadInputs, at, refreshed),
         setup.view.registry.inFlight(signal),
       ]),
-    wait.endsAt - waitFrom,
+    budget,
     // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
     // it is a bug, said against the session, never one that ends the daemon.
     (e) =>

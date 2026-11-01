@@ -332,13 +332,15 @@ export async function replyTo(
     // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
     // at its arrival: early enough before its client hangs up to draw
     // (src/daemon/request-deadline.ts).
-    const waitFor = (req: CheckedRenderRequest): RequestWait => {
-      const ms = waitBudgetMs(req.deadline, accepted, {
-        epochMs: started.getTime(),
-        monoMs: t0,
-      });
-      return { stated: req.deadline.kind, ms, endsAt: t0 + ms };
-    };
+    const waitFor = (req: CheckedRenderRequest): RequestWait => ({
+      stated: req.deadline.kind,
+      endsAt:
+        t0 +
+        waitBudgetMs(req.deadline, accepted, {
+          epochMs: started.getTime(),
+          monoMs: t0,
+        }),
+    });
     const rendered: {
       outcome: RequestOutcome;
       resp: Response;
