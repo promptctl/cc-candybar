@@ -878,8 +878,11 @@ describe("launch input a child does not read", () => {
       stdinInput: unread,
       timeoutMs: 100,
     });
-    expect(r).toMatchObject({ ok: false, reason: "timeout" });
-    expect(r).not.toHaveProperty("error");
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "timeout",
+      error: expect.stringMatching(/^timeout after \d+ms$/u),
+    });
   });
 
   it("gives the blocking launch the same verdicts", () => {
