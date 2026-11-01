@@ -6602,7 +6602,7 @@ var require_Superblock = __commonJS({
         return json2;
       }
       toJSON(paths, json2 = {}, isRelative = false, asBuffer = false) {
-        const links3 = [];
+        const links2 = [];
         if (paths) {
           if (!Array.isArray(paths))
             paths = [paths];
@@ -6611,14 +6611,14 @@ var require_Superblock = __commonJS({
             const link = this.getResolvedLink(filename);
             if (!link)
               continue;
-            links3.push(link);
+            links2.push(link);
           }
         } else {
-          links3.push(this.root);
+          links2.push(this.root);
         }
-        if (!links3.length)
+        if (!links2.length)
           return json2;
-        for (const link of links3)
+        for (const link of links2)
           this._toJSON(link, json2, isRelative ? link.getPath() : "", asBuffer);
         return json2;
       }
@@ -22777,6 +22777,2805 @@ function splitVerb(s) {
 // src/click/read.ts
 init_globals();
 
+// src/install/index.ts
+init_globals();
+
+// src/attach-launcher.ts
+init_globals();
+var import_node_path = __toESM(require_path_browserify(), 1);
+
+// src/claude-command-line.ts
+init_globals();
+
+// src/shell-word.ts
+init_globals();
+var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
+function singleQuoted(s) {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
+function shellWord(s) {
+  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
+}
+
+// src/claude-command-line.ts
+function claudeCommandLine(command) {
+  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
+  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
+  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
+}
+
+// src/attach-launcher.ts
+var ATTACH_DIR = "cc-extra";
+function attachLauncherOf(bundle) {
+  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+}
+function moduleGraphReaderOf(launcher) {
+  return import_node_path.default.join(import_node_path.default.dirname(launcher), "bun-graph.js");
+}
+var ATTACH_PRELOAD = "attach-preload.cjs";
+function attachPreloadOf(bundle) {
+  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_PRELOAD);
+}
+var PRELOAD_VARIABLE = "BUN_OPTIONS";
+function attachCommandLine(preload, command) {
+  return claudeCommandLine({
+    ...command,
+    env: [
+      ...command.env,
+      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
+    ]
+  });
+}
+
+// src/daemon/build-currency.ts
+init_globals();
+
+// site/shims/fs.ts
+init_globals();
+var import_memfs = __toESM(require_lib8(), 1);
+var fs_default = import_memfs.fs;
+var {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+  lstatSync,
+  readdirSync,
+  mkdirSync,
+  rmSync,
+  unlinkSync,
+  renameSync,
+  openSync,
+  readSync,
+  closeSync,
+  fstatSync,
+  writeSync,
+  appendFileSync,
+  realpathSync,
+  readlinkSync,
+  mkdtempSync,
+  copyFileSync,
+  watch,
+  watchFile,
+  unwatchFile,
+  constants,
+  promises,
+  accessSync,
+  createReadStream,
+  createWriteStream,
+  chmodSync,
+  utimesSync,
+  symlinkSync,
+  linkSync,
+  rmdirSync,
+  ftruncateSync,
+  fsyncSync,
+  Stats
+} = import_memfs.fs;
+
+// src/daemon/build-currency.ts
+var import_node_path3 = __toESM(require_path_browserify(), 1);
+init_url();
+
+// src/source-digest.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer2.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/source-digest.ts
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
+function entryBytes(p2, st) {
+  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
+}
+function sourceEntries(root, dir, keep2 = isSourceEntry) {
+  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
+    const p2 = import_node_path2.default.join(dir, name);
+    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
+    if (st === void 0) return [];
+    if (st.isDirectory()) return sourceEntries(root, p2);
+    const rel = import_node_path2.default.relative(root, p2).split(import_node_path2.default.sep).join("/");
+    return [[rel, entryBytes(p2, st)]];
+  });
+}
+function digestOf(entries) {
+  const h = crypto_default.createHash("sha256");
+  for (const [rel, bytes] of entries) {
+    h.update(rel).update("\0").update(bytes).update("\0");
+  }
+  return h.digest("hex");
+}
+function sourceDigest(srcDir) {
+  return digestOf(sourceEntries(srcDir, srcDir));
+}
+var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
+function crateDigest(crateDir) {
+  return digestOf(
+    sourceEntries(
+      crateDir,
+      crateDir,
+      (name) => CRATE_SOURCE.includes(name)
+    )
+  );
+}
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+
+// src/version.ts
+init_globals();
+if (false) {
+  throw new Error(
+    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
+  );
+}
+var PACKAGE_VERSION = "1.177.2";
+
+// src/daemon/build-currency.ts
+function sourceCheckoutOf(bundlePath) {
+  const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
+}
+function bundleStamp(digest2) {
+  if (digest2 === null) {
+    throw new Error(
+      "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
+    );
+  }
+  return { version: PACKAGE_VERSION, digest: digest2 };
+}
+function checkoutVersion(root) {
+  const raw = JSON.parse(
+    fs_default.readFileSync(import_node_path3.default.join(root, "package.json"), "utf8")
+  );
+  const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
+  if (typeof version !== "string") {
+    throw new Error(`${import_node_path3.default.join(root, "package.json")} has no version string`);
+  }
+  return version;
+}
+function assessBuild(entryUrl, runningStamp) {
+  try {
+    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
+    if (root === null) return { kind: "not-source-checkout" };
+    const running = runningStamp();
+    const digest2 = sourceDigest(import_node_path3.default.join(root, "src"));
+    if (digest2 === running.digest)
+      return { kind: "current", root, stamp: running };
+    return {
+      kind: "stale",
+      root,
+      source: { version: checkoutVersion(root), digest: digest2 },
+      running
+    };
+  } catch (e) {
+    return { kind: "unchecked", reason: e.message };
+  }
+}
+
+// src/install/index.ts
+var import_node_path11 = __toESM(require_path_browserify(), 1);
+init_os();
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path4 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped: stopped2 } = walkLinks(at);
+  if (stopped2 !== null) throw stopped2;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
+  }
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path4.default.resolve(
+      fs_default.realpathSync(import_node_path4.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
+
+// src/daemon/client.ts
+init_globals();
+
+// src/daemon/client-transport.ts
+init_globals();
+
+// src/daemon/paths.ts
+init_globals();
+init_os();
+var import_node_path5 = __toESM(require_path_browserify(), 1);
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function stateDir(env2 = process_default.env) {
+  const base = xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".local", "state");
+  return import_node_path5.default.join(base, "cc-candybar");
+}
+function cacheDir() {
+  const base = xdgEnv(process_default.env, "XDG_CACHE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".cache");
+  return import_node_path5.default.join(base, "cc-candybar");
+}
+function daemonDir() {
+  return stateDir();
+}
+function socketPath() {
+  return process_default.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+function defaultSocketPath() {
+  const uid = os_default.userInfo().uid;
+  return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+function watchProbeDir() {
+  return import_node_path5.default.join(stateDir(), "watch-probe");
+}
+function logPath(env2 = process_default.env) {
+  return import_node_path5.default.join(stateDir(env2), "daemon.log");
+}
+
+// src/daemon/protocol.ts
+init_globals();
+var import_node_path6 = __toESM(require_path_browserify(), 1);
+
+// src/terminal-hint.ts
+init_globals();
+var TERMINAL_ENV_VARS = [
+  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
+  // version beside it. Inside tmux it is tmux's own `tmux`.
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
+  "TERM",
+  // The iTerm2 profile the session's window was opened with.
+  "ITERM_PROFILE",
+  // Where a terminal that reads a config file (Alacritty) finds it.
+  "XDG_CONFIG_HOME"
+];
+
+// src/client-hint.ts
+init_globals();
+var CLIENT_KINDS = ["native", "node", "frames"];
+
+// src/daemon/protocol.ts
+var PROTOCOL_VERSION = 3;
+var CONNECT_TIMEOUT_MS = 50;
+var TOTAL_BUDGET_MS = 150;
+var RENDER_ENCODINGS = ["ansi", "frame"];
+var CLIENT_HINT_FIELDS = Object.keys({
+  termCols: true,
+  termRows: true,
+  ssh: true,
+  tmux: true,
+  configEnv: true,
+  claudeConfigDir: true,
+  terminalEnv: true,
+  client: true
+});
+function parseClientHints(req) {
+  const termCols = sanitizeTermExtent(req.termCols);
+  const termRows = sanitizeTermExtent(req.termRows);
+  const ssh = sanitizeSsh(req.ssh);
+  const tmux3 = sanitizeTmux(req.tmux);
+  const configEnv = sanitizeAbsolutePath(req.configEnv);
+  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
+  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const client = sanitizeClient(req.client);
+  return {
+    ...termCols !== void 0 && { termCols },
+    ...termRows !== void 0 && { termRows },
+    ...ssh !== void 0 && { ssh },
+    ...tmux3 !== void 0 && { tmux: tmux3 },
+    ...configEnv !== void 0 && { configEnv },
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
+    ...terminalEnv !== void 0 && { terminalEnv },
+    ...client !== void 0 && { client }
+  };
+}
+function refusedHints(req, hints) {
+  return CLIENT_HINT_FIELDS.filter(
+    (k) => req[k] !== void 0 && hints[k] === void 0
+  ).map((hint) => ({ hint, sent: req[hint] }));
+}
+function refusedHintsError(refused) {
+  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+    ", "
+  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
+}
+var REFUSAL_LINES = {
+  unknown: (args) => `Unknown flags: ${args}`,
+  // Only the last `--config` can lack a file, and it wins, so an earlier one
+  // that named a file is not applied either.
+  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
+  positional: (args) => `Unexpected arguments: ${args}`
+};
+function refusedArgsError(refused) {
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
+    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
+  });
+  return lines2.length === 0 ? null : lines2.join("\n");
+}
+function sanitizeTerminalEnv(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const o = v;
+  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
+  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
+}
+function sanitizeAbsolutePath(v) {
+  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
+}
+function sanitizeTmux(v) {
+  if (v === null) return null;
+  if (typeof v !== "object") return void 0;
+  const o = v;
+  const { socket, pane, truecolor } = o;
+  if (typeof socket !== "string" || socket === "") return void 0;
+  if (typeof pane !== "string" || pane === "") return void 0;
+  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
+    return void 0;
+  return { socket, pane, truecolor };
+}
+var MAX_TERM_EXTENT = 1e4;
+function sanitizeTermExtent(v) {
+  if (typeof v !== "number") return void 0;
+  if (!Number.isFinite(v)) return void 0;
+  const n = Math.floor(v);
+  if (n <= 0) return void 0;
+  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
+}
+function sanitizeSsh(v) {
+  return typeof v === "boolean" ? v : void 0;
+}
+function sanitizeClientVersion(v) {
+  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
+}
+var MAX_FRAME_BYTES = 16 * 1024 * 1024;
+function sanitizeClient(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
+  const { kind, bundle, source } = v;
+  const path40 = sanitizeAbsolutePath(bundle);
+  return CLIENT_KINDS.includes(kind) && path40 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path40, source } : void 0;
+}
+
+// src/daemon/acquire.ts
+init_globals();
+var import_node_path9 = __toESM(require_path_browserify(), 1);
+
+// src/proc/launch.ts
+init_globals();
+
+// site/shims/child_process.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
+var programs = /* @__PURE__ */ new Map();
+var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
+var Stream = class extends import_events2.EventEmitter {
+  encoding = null;
+  setEncoding(encoding) {
+    this.encoding = encoding;
+    return this;
+  }
+  chunk(text4) {
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
+  }
+  pipe() {
+    return this;
+  }
+  destroy() {
+  }
+  end() {
+  }
+  write() {
+    return true;
+  }
+  resume() {
+    return this;
+  }
+  unref() {
+    return this;
+  }
+};
+var nextPid = 5e3;
+function spawn(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  const child = Object.assign(new import_events2.EventEmitter(), {
+    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
+    pid: program === void 0 ? void 0 : nextPid++,
+    stdout: new Stream(),
+    stderr: new Stream(),
+    stdin: new Stream(),
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    kill: () => true,
+    unref: () => {
+    },
+    ref: () => {
+    }
+  });
+  setTimeout(() => {
+    if (program === void 0) {
+      child.emit("error", enoent(cmd));
+      return;
+    }
+    const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
+    if (run3.stdout) child.stdout.chunk(run3.stdout);
+    if (run3.stderr) child.stderr.chunk(run3.stderr);
+    child.exitCode = run3.code;
+    child.stdout.emit("end");
+    child.stderr.emit("end");
+    child.emit("exit", run3.code, null);
+    child.emit("close", run3.code, null);
+  }, 0);
+  return child;
+}
+function spawnSync(cmd, args = [], opts = {}) {
+  const program = programs.get(cmd.split("/").pop());
+  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
+  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
+}
+
+// src/proc/launch.ts
+var import_node_string_decoder = __toESM(require_string_decoder(), 1);
+
+// site/shims/util.ts
+init_globals();
+var import_parseargs = __toESM(require_parseargs(), 1);
+var types = { isNativeError: (e) => e instanceof Error };
+var inspect = (v) => {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+};
+
+// src/proc/launch.ts
+init_timers();
+function spawnErrorText(err, cwd2) {
+  if (!types.isNativeError(err)) return String(err);
+  const code = err.code;
+  return code === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
+}
+var RATE_LIMITS = {
+  // Click verbs: a misbehaving template emitting many clickable links + a
+  // user rapid-clicking = unbounded helpers. One spawn per second is enough
+  // for any human click cadence.
+  "click.pbcopy": 1e3,
+  "click.open": 1e3,
+  // A click's probe, run ahead of its turn for up to its 2 s timeout.
+  "doctor.tmux": 1e3,
+  "doctor.font": 1e3,
+  "doctor.process": 1e3,
+  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
+  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
+  // `ps` over this user's processes.
+  // A double-click is refused rather than typing and submitting its command
+  // twice. Daemon-wide, so two sessions typing in one second collide. Only
+  // the typing is limited: a click the pane refused typed
+  // nothing, so clicking again once the dialog is closed goes through.
+  "claude-input.type": 1e3
+};
+function checkRateLimit(lastStartAt, category) {
+  const minIntervalMs = RATE_LIMITS[category];
+  if (minIntervalMs === void 0) return { allowed: true };
+  const last2 = lastStartAt.get(category);
+  if (last2 === void 0) return { allowed: true };
+  const sinceLastMs = Date.now() - last2;
+  if (sinceLastMs >= minIntervalMs) return { allowed: true };
+  return { allowed: false, minIntervalMs, sinceLastMs };
+}
+function childEnv(opts) {
+  return opts.env ?? process_default.env;
+}
+var refusedAsAborted = ({ reason }) => ({
+  ok: false,
+  reason: "aborted",
+  stdout: "",
+  stderr: "",
+  exitCode: null,
+  signal: null,
+  error: reason instanceof Error ? reason.message : String(reason)
+});
+function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
+  return {
+    ok: false,
+    reason: "rate-limited",
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    signal: null,
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
+  };
+}
+function track(state, work) {
+  const entry = work.finally(() => state.ending.delete(entry));
+  state.ending.add(entry);
+  return entry;
+}
+function admit(state, category, signal) {
+  const refusal = refusalOf(state, category, signal);
+  if (refusal !== null) {
+    state.scope.stats?.onRefused(category);
+    return refusal;
+  }
+  state.lastStartAt.set(category, Date.now());
+  return null;
+}
+function refusalOf(state, category, signal) {
+  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
+  if (signal?.aborted) return refusedAsAborted(signal);
+  const gate2 = checkRateLimit(state.lastStartAt, category);
+  return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
+}
+var TIMEOUT_KILL_GRACE_MS = 250;
+var GROUP_END_POLL_MIN_MS = 25;
+var GROUP_END_POLL_MAX_MS = 1e3;
+var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
+function setFault(state, next) {
+  if (next === state.fault) return;
+  state.fault = next;
+  state.scope.observeLifeline(next);
+}
+function lose(state, line, reason) {
+  if (state.lifeline?.process !== line) return;
+  state.lifeline = null;
+  line.ref();
+  setFault(state, reason);
+}
+function lifelineWarnings(state) {
+  return state.fault === null ? [] : [
+    {
+      kind: "lifeline",
+      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`
+    }
+  ];
+}
+function spawnLifeline(state) {
+  const { stats } = state.scope;
+  stats?.onStart("lifeline");
+  const t0 = Date.now();
+  let line;
+  try {
+    line = spawn("awk", [LIFELINE_PROGRAM], {
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true
+    });
+  } catch (err) {
+    stats?.onEnd("lifeline", Date.now() - t0);
+    setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
+    return null;
+  }
+  stats?.onEnd("lifeline", Date.now() - t0);
+  const pipe = line.stdin;
+  if (pipe === null || pipe === void 0) {
+    line.once(
+      "error",
+      (err) => setFault(state, `did not start: ${err.message}`)
+    );
+    return null;
+  }
+  line.once("spawn", () => {
+    if (state.lifeline?.process === line) setFault(state, null);
+  });
+  line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  void track(state, new Promise((closed) => line.once("close", closed)));
+  line.unref();
+  pipe.unref();
+  for (const group of state.liveGroups) pipe.write(`+ ${group}
+`);
+  return { process: line, pipe };
+}
+function guard(state, group) {
+  state.liveGroups.add(group);
+  state.lifeline ??= spawnLifeline(state);
+  state.lifeline?.pipe.write(`+ ${group}
+`);
+}
+function unguard(state, group) {
+  state.liveGroups.delete(group);
+  state.lifeline?.pipe.write(`- ${group}
+`);
+}
+function endLifeline(state) {
+  const line = state.lifeline;
+  state.lifeline = null;
+  line?.process.ref();
+  line?.pipe.end();
+}
+function signalGroup(pid2, sig) {
+  try {
+    process_default.kill(-pid2, sig);
+  } catch (err) {
+    const code = err.code;
+    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
+      throw err;
+    }
+  }
+}
+function leaderRefuses(pid2) {
+  try {
+    process_default.kill(pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+function capture(stream) {
+  const decoder = new import_node_string_decoder.StringDecoder("utf8");
+  let text4 = "";
+  const read2 = (chunk3) => {
+    text4 += decoder.write(chunk3);
+  };
+  stream?.on("data", read2);
+  return () => {
+    stream?.off("data", read2);
+    const whole = text4 + decoder.end();
+    text4 = "";
+    return whole;
+  };
+}
+async function launchWaited(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category, opts.signal);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(opts.bin, opts.args ?? [], {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        stdio: ["pipe", "pipe", "pipe"],
+        detached: true
+      });
+    } catch (err) {
+      stats?.onEnd(opts.category, Date.now() - t0);
+      resolve({
+        ok: false,
+        reason: "spawn-error",
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        signal: null,
+        error: spawnErrorText(err, opts.cwd)
+      });
+      return;
+    }
+    const group = child.pid;
+    if (group !== void 0) guard(state, group);
+    const exited = new Promise((end) => child.once("exit", end));
+    const stdout2 = capture(child.stdout);
+    const stderr2 = capture(child.stderr);
+    const output = () => ({ stdout: stdout2(), stderr: stderr2() });
+    let settled3 = false;
+    let timer = null;
+    let killTimer = null;
+    let groupEndTimer = null;
+    let terminated = null;
+    const onAbort = () => terminate("aborted");
+    const unlisten = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      state.inFlight.delete(onAbort);
+    };
+    const finish = (deliver) => {
+      if (settled3) return;
+      settled3 = true;
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (groupEndTimer) clearTimeout(groupEndTimer);
+      unlisten();
+      if (group !== void 0) unguard(state, group);
+      stats?.onEnd(opts.category, Date.now() - t0);
+      for (const pipe of [child.stdout, child.stderr]) {
+        pipe?.unref();
+      }
+      deliver();
+    };
+    const settle3 = (r) => finish(() => resolve(r));
+    const signal = (pid2, sig) => {
+      try {
+        signalGroup(pid2, sig);
+      } catch (err) {
+        state.unreaped.set(child, opts.category);
+        void exited.then(() => state.unreaped.delete(child));
+        settle3({
+          ok: false,
+          reason: "signal-refused",
+          ...output(),
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    };
+    const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
+    if (group !== void 0) {
+      const awaitGroupEnd = (delayMs) => {
+        if (settled3) return;
+        if (groupGone(group)) {
+          setImmediate(concludeWithGroup);
+          return;
+        }
+        groupEndTimer = setTimeout(
+          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
+          delayMs
+        );
+      };
+      void exited.then(
+        () => setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
+      );
+    }
+    const terminate = (cause) => {
+      const ended = child.exitCode !== null || child.signalCode !== null;
+      if (ended && group !== void 0 && groupGone(group)) {
+        terminated = cause === "aborted" ? cause : null;
+        setImmediate(concludeWithGroup);
+        return;
+      }
+      terminated = cause;
+      if (timer) clearTimeout(timer);
+      unlisten();
+      const pid2 = child.pid;
+      if (pid2 !== void 0) {
+        killTimer = setTimeout(() => {
+          signal(pid2, "SIGKILL");
+          void exited.then(() => setImmediate(concludeWithGroup));
+        }, TIMEOUT_KILL_GRACE_MS);
+        signal(pid2, "SIGTERM");
+      }
+    };
+    child.on("error", (err) => {
+      settle3({
+        ok: false,
+        reason: "spawn-error",
+        ...output(),
+        exitCode: null,
+        signal: null,
+        error: spawnErrorText(err, opts.cwd)
+      });
+    });
+    const conclude = (code, signal2) => {
+      if (terminated !== null) {
+        settle3({
+          ok: false,
+          reason: terminated,
+          ...output(),
+          exitCode: code,
+          signal: signal2
+        });
+        return;
+      }
+      if (code === 0) {
+        settle3({ ok: true, ...output(), exitCode: code });
+        return;
+      }
+      const reason = signal2 ? "signal" : "non-zero";
+      settle3({
+        ok: false,
+        reason,
+        ...output(),
+        exitCode: code,
+        signal: signal2
+      });
+    };
+    child.on("close", conclude);
+    if (opts.timeoutMs && opts.timeoutMs > 0) {
+      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
+    }
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    state.inFlight.add(onAbort);
+    child.stdin?.on("error", () => {
+    });
+    child.stdin?.end(opts.stdinInput);
+  });
+}
+function launchBlocking(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  const stdio = ["pipe", "pipe", "pipe"];
+  try {
+    const result = spawnSync(opts.bin, opts.args ?? [], {
+      cwd: opts.cwd,
+      env: childEnv(opts),
+      input: opts.stdinInput,
+      timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
+      stdio,
+      encoding: "utf8"
+    });
+    stats?.onEnd(opts.category, Date.now() - t0);
+    const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
+    const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
+    const code = result.error?.code;
+    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
+      const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
+      return {
+        ok: false,
+        reason: reason2,
+        stdout: stdout2,
+        stderr: stderr2,
+        exitCode: null,
+        signal: result.signal ?? null,
+        error: spawnErrorText(result.error, opts.cwd)
+      };
+    }
+    if (result.status === 0) {
+      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
+    }
+    const reason = result.signal ? "signal" : "non-zero";
+    return {
+      ok: false,
+      reason,
+      stdout: stdout2,
+      stderr: stderr2,
+      exitCode: result.status,
+      signal: result.signal ?? null
+    };
+  } catch (err) {
+    stats?.onEnd(opts.category, Date.now() - t0);
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: spawnErrorText(err, opts.cwd)
+    };
+  }
+}
+function launchOrphan(state, opts) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  const result = launchDetachedSyncInner(opts);
+  stats?.onEnd(opts.category, Date.now() - t0);
+  return result;
+}
+function launchDetachedSyncInner(opts) {
+  let child;
+  try {
+    child = spawn(opts.bin, opts.args ?? [], {
+      cwd: opts.cwd,
+      env: childEnv(opts),
+      detached: true,
+      stdio: "ignore"
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: spawnErrorText(err, opts.cwd)
+    };
+  }
+  child.once("error", () => {
+  });
+  if (child.pid === void 0) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: `spawn(${opts.bin}): no pid (binary not found or unexecutable)`
+    };
+  }
+  child.unref();
+  return { ok: true, stdout: "", stderr: "", exitCode: null };
+}
+var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
+var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
+function launchJob(state, opts, files) {
+  const { stats } = state.scope;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return { ok: false, error: refused.error };
+  const t0 = Date.now();
+  stats?.onStart(opts.category);
+  let child;
+  try {
+    child = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        JOB_SCRIPT,
+        "sh",
+        files.stdout,
+        files.stderr,
+        files.status,
+        opts.bin,
+        ...opts.args ?? []
+      ],
+      {
+        cwd: opts.cwd,
+        env: childEnv(opts),
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"]
+      }
+    );
+  } catch (err) {
+    stats?.onEnd(opts.category, Date.now() - t0);
+    return { ok: false, error: spawnErrorText(err, opts.cwd) };
+  }
+  stats?.onEnd(opts.category, Date.now() - t0);
+  child.once("error", () => {
+  });
+  const pid2 = child.pid;
+  const gate2 = child.stdin;
+  gate2.on("error", () => {
+  });
+  if (pid2 === void 0) {
+    gate2.destroy();
+    return {
+      ok: false,
+      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
+    };
+  }
+  child.unref();
+  gate2.unref();
+  return {
+    ok: true,
+    pid: pid2,
+    release: () => gate2.end("go\n"),
+    withdraw: () => gate2.end()
+  };
+}
+function readJobEnd(status) {
+  let text4;
+  try {
+    text4 = readFileSync(status, "utf8").trim();
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  const exit2 = /^exit (\d+)$/.exec(text4);
+  if (exit2) return { kind: "exit", code: Number(exit2[1]) };
+  if (text4 === "timeout") return { kind: "timeout" };
+  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
+}
+function signalJob(pid2, sig) {
+  try {
+    process_default.kill(-pid2, sig);
+    return true;
+  } catch (err) {
+    const code = err.code;
+    if (code === "ESRCH" || code === "EPERM") return false;
+    throw err;
+  }
+}
+function jobGroupAlive(pid2) {
+  return signalJob(pid2, 0);
+}
+function groupGone(pid2) {
+  try {
+    process_default.kill(-pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "ESRCH";
+  }
+}
+function endJob(pid2, status, end) {
+  const staged = `${status}.${process_default.pid}`;
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}
+`);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return { stands: false, signalled: false };
+    }
+    throw err;
+  }
+  let stands = true;
+  try {
+    linkSync(staged, status);
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+    stands = false;
+  } finally {
+    rmSync(staged, { force: true });
+  }
+  const signalled = signalJob(pid2, "SIGTERM");
+  if (signalled) {
+    setTimeout(() => signalJob(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  }
+  return { stands, signalled };
+}
+function createLauncher(owner) {
+  const launcher = {
+    launch: (opts) => track(state, launchWaited(state, opts)),
+    launchSync: (opts) => launchBlocking(state, opts),
+    launchDetachedSync: (opts) => launchOrphan(state, opts),
+    launchJobSync: (opts, files) => launchJob(state, opts, files),
+    lifelineWarnings: () => lifelineWarnings(state),
+    settled: async () => {
+      await Promise.all(state.ending);
+      return { unreaped: [...state.unreaped.values()] };
+    },
+    __lifelineForTest: () => {
+      const line = state.lifeline;
+      return {
+        pid: line?.process.pid,
+        cut: () => {
+          line?.pipe.end();
+          if (line) lose(state, line.process, "cut by a test");
+        }
+      };
+    }
+  };
+  const state = {
+    scope: {
+      stats: null,
+      // A launcher with nobody to tell says the warning on stderr.
+      observeLifeline: () => launcher.lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
+      signal: new AbortController().signal,
+      ...owner
+    },
+    lastStartAt: /* @__PURE__ */ new Map(),
+    inFlight: /* @__PURE__ */ new Set(),
+    liveGroups: /* @__PURE__ */ new Set(),
+    lifeline: null,
+    fault: null,
+    ending: /* @__PURE__ */ new Set(),
+    unreaped: /* @__PURE__ */ new Map()
+  };
+  state.scope.signal.addEventListener(
+    "abort",
+    () => {
+      state.inFlight.forEach((end) => end());
+      endLifeline(state);
+    },
+    { once: true }
+  );
+  return launcher;
+}
+var processLauncher = createLauncher({});
+
+// src/daemon/limits.ts
+init_globals();
+var import_node_path8 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/log.ts
+init_globals();
+var import_node_path7 = __toESM(require_path_browserify(), 1);
+var MAX_BYTES = 5 * 1024 * 1024;
+var KEEP_GENERATIONS = 3;
+var MAX_WAITING_BYTES = 4 * 1024 * 1024;
+var sink = null;
+function close() {
+  if (sink === null) return;
+  try {
+    fs_default.closeSync(sink.fd);
+  } catch {
+  }
+  sink = null;
+}
+async function sinkAt(filePath2) {
+  const st = await fs_default.promises.stat(filePath2).catch(() => null);
+  if (sink !== null && sink.path === filePath2 && st !== null && sink.id === idOf2(st)) {
+    return { held: sink, size: st.size };
+  }
+  close();
+  await fs_default.promises.mkdir(import_node_path7.default.dirname(filePath2), { recursive: true });
+  const fd = await new Promise(
+    (resolve, reject2) => fs_default.open(
+      filePath2,
+      "a",
+      (err, opened2) => err === null ? resolve(opened2) : reject2(err)
+    )
+  );
+  const opened = await new Promise(
+    (resolve, reject2) => fs_default.fstat(fd, (err, stats) => err === null ? resolve(stats) : reject2(err))
+  );
+  sink = { path: filePath2, fd, id: idOf2(opened) };
+  return { held: sink, size: opened.size };
+}
+function idOf2(st) {
+  return `${st.dev}:${st.ino}`;
+}
+function writeAt(fd, bytes) {
+  return new Promise(
+    (resolve, reject2) => fs_default.write(
+      fd,
+      bytes,
+      (err, written2) => err === null ? resolve(written2) : reject2(err)
+    )
+  );
+}
+async function rotate(filePath2) {
+  for (let i = KEEP_GENERATIONS - 1; i >= 1; i--) {
+    await fs_default.promises.rename(`${filePath2}.${i}`, `${filePath2}.${i + 1}`).catch(() => {
+    });
+  }
+  await fs_default.promises.rename(filePath2, `${filePath2}.1`).catch(() => {
+  });
+}
+var waiting = [];
+var waitingBytes = 0;
+var dropped = 0;
+var droppedBytes = 0;
+var onItsWay = null;
+var flushing = false;
+var drainedWaiters = [];
+var exiting = false;
+var exitArmed = false;
+function logLine(level, msg) {
+  return `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
+`;
+}
+function dlog(level, msg) {
+  const line = logLine(level, msg);
+  if (!exitArmed) {
+    exitArmed = true;
+    process_default.on("exit", () => {
+      exiting = true;
+      writeWaitingSync(true, EXIT_WAIT_MS);
+    });
+  }
+  waiting.push(line);
+  waitingBytes += import_buffer.Buffer.byteLength(line);
+  if (waitingBytes > MAX_WAITING_BYTES) {
+    let cut = 0;
+    while (waitingBytes > MAX_WAITING_BYTES / 2 && cut < waiting.length - 1) {
+      const bytes = import_buffer.Buffer.byteLength(waiting[cut]);
+      waitingBytes -= bytes;
+      droppedBytes += bytes;
+      cut++;
+    }
+    waiting.splice(0, cut);
+    dropped += cut;
+  }
+  if (exiting) writeWaitingSync(true, EXIT_WAIT_MS);
+  else if (!flushing) void flush();
+}
+function writeWaitingNow() {
+  writeWaitingSync(false, BREACH_WAIT_MS);
+}
+async function flush() {
+  flushing = true;
+  try {
+    while (waiting.length > 0) {
+      const lines2 = take();
+      onItsWay = { bytes: import_buffer.Buffer.from(lines2), state: { kind: "taken" } };
+      try {
+        await append(logPath(), onItsWay);
+      } catch (e) {
+        close();
+        if (onItsWay.state.kind !== "landed") unwritable(lines2, e);
+      } finally {
+        onItsWay = null;
+      }
+    }
+  } finally {
+    flushing = false;
+    for (const resolve of drainedWaiters.splice(0)) resolve();
+  }
+}
+function take() {
+  const lost = dropped === 0 ? "" : logLine(
+    "warn",
+    `log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`
+  );
+  const lines2 = lost + waiting.join("");
+  waiting = [];
+  waitingBytes = 0;
+  dropped = 0;
+  droppedBytes = 0;
+  return lines2;
+}
+async function append(filePath2, batch) {
+  const { held, size } = await sinkAt(filePath2);
+  if (batch.state.kind === "landed") return;
+  const { bytes } = batch;
+  const endsAt = size + bytes.length;
+  batch.state = { kind: "issued", fd: held.fd, endsAt };
+  for (let done2 = 0; done2 < bytes.length; ) {
+    const written2 = await writeAt(held.fd, bytes.subarray(done2));
+    if (written2 === 0) throw new Error("the disk took 0 bytes of a write");
+    done2 += written2;
+  }
+  batch.state = { kind: "landed" };
+  if (endsAt >= MAX_BYTES) {
+    close();
+    const now2 = await fs_default.promises.stat(held.path).catch(() => null);
+    if (now2 !== null && idOf2(now2) === held.id) await rotate(held.path);
+  }
+}
+var EXIT_WAIT_MS = 1e3;
+var BREACH_WAIT_MS = 2e3;
+function writeWaitingSync(finishing, waitMs) {
+  const out = onItsWay;
+  let first2 = import_buffer.Buffer.alloc(0);
+  if (out !== null && out.state.kind === "taken") {
+    first2 = out.bytes;
+    out.state = { kind: "landed" };
+  }
+  let stillOut = null;
+  if (out !== null && out.state.kind === "issued") {
+    const { fd, endsAt } = out.state;
+    try {
+      const size = sizeOnceLanded(fd, endsAt, waitMs);
+      if (size < endsAt && finishing) {
+        first2 = out.bytes.subarray(
+          Math.max(0, size - (endsAt - out.bytes.length))
+        );
+        out.state = { kind: "landed" };
+      } else if (size < endsAt) {
+        stillOut = { fd, endsAt };
+      }
+    } catch (e) {
+      if (finishing) {
+        first2 = out.bytes;
+        out.state = { kind: "landed" };
+      }
+      unwritable(out.bytes.toString(), e);
+    }
+  }
+  if (first2.length === 0 && waiting.length === 0) return;
+  const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(take())]);
+  try {
+    const filePath2 = logPath();
+    fs_default.mkdirSync(import_node_path7.default.dirname(filePath2), { recursive: true });
+    fs_default.appendFileSync(filePath2, lines2);
+    if (stillOut !== null && out !== null && idOf2(fs_default.fstatSync(stillOut.fd)) === idOf2(fs_default.statSync(filePath2))) {
+      out.state = {
+        kind: "issued",
+        fd: stillOut.fd,
+        endsAt: stillOut.endsAt + lines2.length
+      };
+    }
+  } catch (e) {
+    unwritable(lines2.toString(), e);
+  }
+}
+function sizeOnceLanded(fd, endsAt, waitMs) {
+  const until2 = performance.now() + waitMs;
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  for (; ; ) {
+    const { size } = fs_default.fstatSync(fd);
+    if (size >= endsAt || performance.now() >= until2) return size;
+    Atomics.wait(nap, 0, 0, 1);
+  }
+}
+function unwritable(lines2, e) {
+  try {
+    process_default.stderr.write(
+      `${lines2}cc-candybar: daemon.log unwritable: ${e.message}
+`
+    );
+  } catch {
+  }
+}
+
+// src/daemon/memory-report.ts
+init_globals();
+var PROBE_TIMEOUT_MS = 5e3;
+async function memoryReport(probes) {
+  const refusals = [];
+  for (const probe2 of probes) {
+    const outcome = await probe2.read();
+    if (outcome.kind === "text") {
+      return `# memory report from: ${probe2.name}
+${outcome.text}`;
+    }
+    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
+  }
+  return [
+    "# memory report: no probe answered",
+    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
+  ].join("\n");
+}
+var FOOTPRINT = "/usr/bin/footprint";
+var VMMAP = "/usr/bin/vmmap";
+function platformProbes(launcher, platform3, pid2) {
+  if (platform3 === "darwin") {
+    return [
+      // The whole-process category table: V8's mappings, the MALLOC_* regions
+      // with their reclaimable share, and page tables, each with a size.
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
+      // Same mappings, coarser, but present on hosts where `footprint` is not.
+      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
+    ];
+  }
+  if (platform3 === "linux") {
+    return [
+      // One line per accounting class for the whole address space — Linux's
+      // answer to `footprint`, and free (no subprocess).
+      fileProbe("/proc/self/smaps_rollup"),
+      // Always present, coarser: VmRSS and friends, so Linux never falls all
+      // the way through to "no probe answered".
+      fileProbe("/proc/self/status")
+    ];
+  }
+  return [];
+}
+function chargeProbe(launcher, platform3, pid2) {
+  return platform3 === "darwin" ? footprintCharge(
+    pid2,
+    (args) => launcher.launch({
+      bin: FOOTPRINT,
+      args,
+      timeoutMs: PROBE_TIMEOUT_MS,
+      category: "limits.charge"
+    })
+  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+}
+function footprintCharge(pid2, run3) {
+  return async (rss) => {
+    const result = await run3([
+      "-p",
+      String(pid2),
+      "--noCategories",
+      "-f",
+      "bytes"
+    ]);
+    if (!result.ok) {
+      return {
+        kind: "stand-in",
+        bytes: rss,
+        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+      };
+    }
+    const bytes = physFootprintOf(result.stdout);
+    return bytes === null ? {
+      kind: "stand-in",
+      bytes: rss,
+      unread: "footprint printed no phys_footprint line"
+    } : { kind: "charged", measure: "phys_footprint", bytes };
+  };
+}
+function physFootprintOf(text4) {
+  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
+  return m === null ? null : Number(m[1]);
+}
+function commandProbe(launcher, bin, args) {
+  return {
+    name: `${bin} ${args.join(" ")}`,
+    read: async () => {
+      const result = await launcher.launch({
+        bin,
+        args: [...args],
+        timeoutMs: PROBE_TIMEOUT_MS,
+        category: "limits.memory-report"
+      });
+      if (!result.ok) {
+        return {
+          kind: "unavailable",
+          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
+        };
+      }
+      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
+    }
+  };
+}
+function fileProbe(path40) {
+  return {
+    name: path40,
+    read: async () => {
+      try {
+        const text4 = fs_default.readFileSync(path40, "utf8");
+        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
+      } catch (e) {
+        return { kind: "unavailable", reason: e.message };
+      }
+    }
+  };
+}
+function firstLine(stderr2) {
+  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
+  return line === void 0 ? "" : ` (${line})`;
+}
+
+// src/daemon/limits.ts
+var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
+var DEFAULT_RSS_LIMIT_MB = 1024;
+function memoryLimitMb(env2) {
+  const raw = env2[RSS_LIMIT_ENV];
+  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
+  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
+    throw new Error(
+      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
+    );
+  }
+  return mb2;
+}
+var BYTES_PER_MB = 1024 * 1024;
+var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
+function memoryLimitBytes(env2) {
+  return memoryLimitMb(env2) * BYTES_PER_MB;
+}
+var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
+var HEAP_SNAPSHOT_KEEP = 3;
+var BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+};
+function laterIdentity(a, b) {
+  return a > b;
+}
+function readCharge(probed, previous) {
+  if (probed.kind === "charged") return probed;
+  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
+  return { ...probed, bytes: probed.bytes - gap, gap };
+}
+var NEAR_LIMIT = 0.75;
+function approachingLimit(bytes, limit) {
+  return bytes > limit * NEAR_LIMIT;
+}
+function artifactFile(dir, kind, identity2) {
+  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+  return import_node_path8.default.join(dir, `${prefix}${identity2}${suffix}`);
+}
+function breachArtifactOf(base) {
+  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
+  }
+  return null;
+}
+function makeLimits(deps) {
+  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
+  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
+  let triggered = false;
+  let latest = { kind: "unmeasured" };
+  let inFlight = null;
+  let disarmed = false;
+  let timer;
+  function check() {
+    inFlight ??= measure3().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+  async function measure3() {
+    if (triggered) return true;
+    const { rss, heapTotal } = deps.memoryBytes();
+    const charge = readCharge(await deps.memoryCharge(rss), latest);
+    const reading = { kind: "measured", charge, rss, heapTotal };
+    latest = reading;
+    deps.log("info", `memory ${readingFields(reading, limit)}`);
+    if (disarmed || charge.bytes <= limit) return false;
+    triggered = true;
+    deps.log(
+      "warn",
+      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
+    );
+    const stamp2 = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
+    const identity2 = `${stamp2}-${deps.pid}`;
+    await attempt(deps.log, "memory report", async () => {
+      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
+      const report2 = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report2);
+      deps.log("info", `memory report written: ${file}`);
+    });
+    if (disarmed) {
+      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
+      return false;
+    }
+    await attempt(deps.log, "heap snapshot", () => {
+      deps.writeLogNow();
+      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
+      deps.log(
+        "info",
+        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
+      );
+    });
+    await attempt(deps.log, "artifact rotation", async () => {
+      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
+        keep2
+      )) {
+        for (const file of Object.values(artifacts)) {
+          await attempt(
+            deps.log,
+            `evicting ${file}`,
+            () => deps.removeFile(file)
+          );
+        }
+      }
+    });
+    deps.shutdown(0);
+    return true;
+  }
+  function describeNextRestart() {
+    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
+  }
+  function serving() {
+    let postMortems;
+    try {
+      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
+    } catch (e) {
+      postMortems = { kind: "failed", reason: e.message };
+    }
+    return { pid: deps.pid, memory: latest, limit, postMortems };
+  }
+  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
+    const tick = async () => {
+      try {
+        if (await check()) return;
+      } catch (e) {
+        deps.log("warn", `memory check failed: ${e.message}`);
+      }
+      if (disarmed) return;
+      timer = setTimeout(() => void tick(), intervalMs);
+      timer.unref();
+    };
+    void tick();
+  }
+  function disarm() {
+    disarmed = true;
+    clearTimeout(timer);
+  }
+  return { check, describeNextRestart, serving, arm: arm2, disarm };
+}
+function chargeWords(charge) {
+  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+}
+function measureOf(charge) {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+function readingFields({ charge, rss, heapTotal }, limit) {
+  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
+}
+async function attempt(log, what, body) {
+  try {
+    await body();
+  } catch (e) {
+    log("warn", `${what} failed: ${e.message}`);
+  }
+}
+function postMortemsOf(files) {
+  const byIdentity = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const base = import_node_path8.default.basename(file);
+    const kind = breachArtifactOf(base);
+    if (kind === null) continue;
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    const identity2 = base.slice(prefix.length, base.length - suffix.length);
+    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
+  }
+  const kinds = Object.keys(BREACH_ARTIFACTS);
+  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found]) => ({
+    identity: identity2,
+    artifacts: Object.fromEntries(
+      kinds.flatMap((k) => found[k] === void 0 ? [] : [[k, found[k]]])
+    )
+  }));
+}
+function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
+  const dir = daemonDir();
+  return {
+    now: () => Date.now(),
+    pid: process_default.pid,
+    snapshotDir: dir,
+    log: owner.log,
+    memoryBytes: () => {
+      const mem = process_default.memoryUsage();
+      return { rss: mem.rss, heapTotal: mem.heapTotal };
+    },
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
+    captureMemoryReport: () => memoryReport(
+      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    ),
+    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
+    // identity, so it shares a permission — a post-mortem pair where one half is
+    // world-readable and the other is not invites exactly the "is this
+    // sensitive?" question at the worst moment to be asking it.
+    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
+    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
+    writeLogNow: writeWaitingNow,
+    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
+    // one that cannot be read is said so — never read as "none".
+    listArtifacts: () => {
+      let names;
+      try {
+        names = fs_default.readdirSync(dir);
+      } catch (e) {
+        if (e.code === "ENOENT") return [];
+        throw e;
+      }
+      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path8.default.join(dir, f));
+    },
+    removeFile: (file) => fs_default.unlinkSync(file),
+    shutdown,
+    startedAtMs,
+    ...overrides
+  };
+}
+
+// src/daemon/acquire.ts
+init_process();
+
+// src/claude-settings.ts
+init_globals();
+init_os();
+var import_node_path10 = __toESM(require_path_browserify(), 1);
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text4) {
+    this.text = text4;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message) {
+    throw new Json5EditError(message, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close2 = this.text.indexOf("*/", this.pos + 2);
+        if (close2 === -1) this.fail("unterminated block comment");
+        this.pos = close2 + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text4) {
+  const s = new Scanner(text4);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path40) {
+  let node = root;
+  for (const key of path40) {
+    node = node === void 0 ? void 0 : entryOf(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text4, node).split("\n").map((line, i) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text4) => import_json5.default.parse(text4)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text4) => JSON.parse(text4)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries.length === 0) return "{}";
+    const items = entries.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path40, valueText, dialect) {
+  const [head, ...rest2] = path40;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
+}
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
+}
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text4, end) {
+  let i = end;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  const commaEnd = text4[i] === "," ? i + 1 : -1;
+  if (commaEnd !== -1) i = commaEnd;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  LINE_TRAILER.lastIndex = i;
+  const m = LINE_TRAILER.exec(text4);
+  if (m === null) return { commaEnd, line: null };
+  const next = i + m[0].length;
+  return { commaEnd, line: { at: next - m[1].length, next } };
+}
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
+    start--;
+  }
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
+}
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text4);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text4, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text4, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text4);
+    return splice(
+      text4,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text4,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text4, path40, valueText, dialect) {
+  if (path40.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
+    return `{${eol}  ${reindent(entryText(path40, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text4, parseDocument(text4), path40, valueText, dialect);
+}
+function setBelow(text4, start, path40, valueText, dialect) {
+  let node = start;
+  for (let i = 0; i < path40.length; i++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path40.join(".")}: ${path40.slice(0, i).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf(node, path40[i]);
+    if (entry === void 0) {
+      return appendMember(
+        text4,
+        node,
+        entryText(path40.slice(i), valueText, dialect),
+        dialect
+      );
+    }
+    if (i === path40.length - 1) {
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
+      return splice(
+        text4,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text4))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text4, path40, keep2 = 0) {
+  if (path40.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) return text4;
+  const parentPath = path40.slice(0, -1);
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf(parent, path40[path40.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
+  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf(node, "seg")?.value;
+  const kind = entryOf(node, "kind")?.value;
+  const name = entryOf(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row2 of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row2.value,
+      bareAt === null ? null : [...bareAt, "rows", row2.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text4, ref: node };
+    const wrapped = setValue(
+      text4,
+      bareAt,
+      `{ h: [${textOf(text4, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/utils/transcript-fs.ts
+init_globals();
+
+// site/shims/fs-promises.ts
+init_globals();
+var import_memfs2 = __toESM(require_lib8(), 1);
+var p = import_memfs2.fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/utils/outcome.ts
+init_globals();
+function ok(value) {
+  return { kind: "ok", value };
+}
+var ABSENT = { kind: "absent" };
+function failed(reason) {
+  return { kind: "failed", reason };
+}
+function orElse(outcome, fallback) {
+  return outcome?.kind === "ok" ? outcome.value : fallback;
+}
+var PENDING = { kind: "pending" };
+function isPending(value) {
+  return value === PENDING;
+}
+
+// src/utils/logger.ts
+init_globals();
+var debugOn = () => Boolean(process_default.env.CC_CANDYBAR_DEBUG);
+function debug(message, ...args) {
+  if (debugOn()) {
+    console.error(`[DEBUG] ${message}`, ...args);
+  }
+}
+function changeLogger(log) {
+  let last2 = null;
+  return ([level, msg]) => {
+    if (msg === last2) return;
+    last2 = msg;
+    log(level, msg);
+  };
+}
+var quietLogger = (_level, message) => debug(message);
+
+// src/utils/transcript-fs.ts
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    return stampOf(statSync(filePath2));
+  } catch {
+    return "";
+  }
+}
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
+var Limiter = class {
+  slots;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  head = null;
+  tail = null;
+  constructor(max2) {
+    this.slots = max2;
+  }
+  async run(task) {
+    await this.acquire();
+    try {
+      return await task();
+    } finally {
+      this.release();
+    }
+  }
+  async acquire() {
+    if (this.slots > 0) {
+      this.slots--;
+      return;
+    }
+    await new Promise((wake) => {
+      const node = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
+  }
+  release() {
+    const node = this.head;
+    if (!node) {
+      this.slots++;
+      return;
+    }
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
+  }
+};
+var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
+function gated(fn) {
+  return ((...args) => gate.run(() => fn(...args)));
+}
+var readdir2 = gated(readdir);
+var stat2 = gated(stat);
+var FOLD_WINDOW_BYTES = 512 * 1024;
+var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
+function transcriptReads() {
+  return { ...totals };
+}
+var windows = [];
+function giveBack(window2) {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
+}
+async function readAppended(path40, prior, until2) {
+  return gate.run(async () => {
+    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+    const read2 = await readWholeLines(path40, prior, until2, window2);
+    if (read2.kind !== "ok") {
+      giveBack(window2);
+      return read2;
+    }
+    let lent = window2;
+    return ok({
+      ...read2.value,
+      [Symbol.dispose]: () => {
+        if (lent !== void 0) giveBack(lent);
+        lent = void 0;
+      }
+    });
+  });
+}
+function decodeLines(read2, decode) {
+  var _stack = [];
+  try {
+    const lent = __using(_stack, read2);
+    return decode(lent.lines);
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+async function readWholeLines(path40, prior, until2, window2) {
+  let fh = null;
+  try {
+    fh = await open(path40, "r");
+    const st = await fh.stat();
+    const { size, ino } = st;
+    const stamp2 = stampOf(st);
+    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === void 0 ? 0 : prior.offset;
+    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
+    let bytesRead = 0;
+    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
+    bytesRead += first2.length;
+    let lastNl = first2.lastIndexOf(10);
+    let reached = start + first2.length;
+    let shortRead = first2.length < Math.min(window2.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next = await readInto(
+        fh,
+        window2.subarray(0, end - reached),
+        reached
+      );
+      bytesRead += next.length;
+      const nl = next.indexOf(10);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next.length < Math.min(window2.length, end - reached);
+      reached += next.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window2.length ? bytes : 0;
+    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    const complete = wholeLines.length === bytes;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
+      size,
+      stamp: stamp2,
+      ino,
+      reset,
+      longLine
+    });
+  } catch (e) {
+    if (e.code === "ENOENT") return ABSENT;
+    return failed(
+      `readAppended ${path40}: ${e instanceof Error ? e.message : String(e)}`
+    );
+  } finally {
+    await fh?.close().catch((e) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    });
+  }
+}
+async function readInto(fh, buf, position) {
+  let off = 0;
+  while (off < buf.length) {
+    const { bytesRead } = await fh.read(
+      buf,
+      off,
+      buf.length - off,
+      position + off
+    );
+    if (bytesRead === 0) break;
+    off += bytesRead;
+  }
+  return buf.subarray(0, off);
+}
+async function readTail(path40, maxBytes) {
+  return gate.run(async () => {
+    let fh = null;
+    try {
+      fh = await open(path40, "r");
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      return ok({
+        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
+        fromStart: start === 0
+      });
+    } catch (e) {
+      if (e.code === "ENOENT") return ABSENT;
+      return failed(
+        `readTail ${path40}: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      await fh?.close().catch((e) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      });
+    }
+  });
+}
+function readTailSync(path40, maxBytes) {
+  let fd;
+  try {
+    fd = openSync(path40, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
+    return failed(e instanceof Error ? e.message : String(e));
+  }
+  try {
+    const stat3 = fstatSync(fd, { bigint: true });
+    if (!stat3.isFile()) return failed("not a regular file");
+    const size = Number(stat3.size);
+    const start = Math.max(0, size - maxBytes);
+    const buf = import_buffer.Buffer.alloc(size - start);
+    let off = 0;
+    while (off < buf.length) {
+      const n = readSync(fd, buf, off, buf.length - off, start + off);
+      if (n === 0) break;
+      off += n;
+    }
+    return ok({
+      buf: buf.subarray(0, off),
+      fromStart: start === 0,
+      file: `${stat3.dev}:${stat3.ino}`
+    });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e));
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (e) {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+}
+
+// src/claude-settings.ts
+var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function claudeConfigDir(detected) {
+  return detected ?? import_node_path10.default.join(os_default.homedir(), ".claude");
+}
+function claudeSettingsPath(configDir) {
+  return import_node_path10.default.join(configDir, "settings.json");
+}
+function readSettingsFile(settingsPath) {
+  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read2.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
+    case "ok":
+      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
+  }
+}
+var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+function readClaudeSettingsText(settingsPath) {
+  return readSettingsFile(settingsPath)?.text ?? "";
+}
+function readClaudeSettings(settingsPath) {
+  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
+}
+function parseSettings(settingsPath, text4) {
+  let parsed2;
+  try {
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed2;
+}
+function claudeManagedSettingsDir(platform3) {
+  switch (platform3) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+var projectLocalSettingsFile = (projectDir) => import_node_path10.default.join(projectDir, ".claude", "settings.local.json");
+function readSettingsChain(at) {
+  const dropIns = import_node_path10.default.join(at.managedDir, "managed-settings.d");
+  const located = [
+    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
+      scope: "managed",
+      path: import_node_path10.default.join(dropIns, name)
+    })),
+    {
+      scope: "managed",
+      path: import_node_path10.default.join(at.managedDir, "managed-settings.json")
+    },
+    {
+      scope: "project-local",
+      path: projectLocalSettingsFile(at.projectDir)
+    },
+    {
+      scope: "project",
+      path: import_node_path10.default.join(at.projectDir, ".claude", "settings.json")
+    },
+    { scope: "user", path: at.userFile }
+  ];
+  const read2 = located.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
+    const { env: env2 = {} } = settings;
+    if (!isJsonObject(env2)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
+  });
+  const user = read2.find((r) => r.source.scope === "user");
+  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
+}
+function visibleJsonFiles(dir) {
+  try {
+    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
+}
+var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
+
+// src/install/currency.ts
+init_globals();
+var RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+function parseReleaseVersion(text4) {
+  const m = RELEASE_VERSION.exec(text4);
+  return m ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] } : {
+    kind: "failed",
+    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`
+  };
+}
+function formatVersion(v) {
+  return v.join(".");
+}
+function compareVersions([aMajor, aMinor, aPatch], [bMajor, bMinor, bPatch]) {
+  return aMajor - bMajor || aMinor - bMinor || aPatch - bPatch;
+}
+var REGISTRY_URL = "https://registry.npmjs.org";
+var PACKAGE_NAME = "@promptctl/cc-candybar";
+var REGISTRY_TIMEOUT_MS = 5e3;
+async function fetchLatestVersion(packageName, fetchImpl, registryUrl) {
+  const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
+  try {
+    const res = await fetchImpl(url, {
+      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS)
+    });
+    if (!res.ok) {
+      return failed(`registry responded ${res.status} for ${url}`);
+    }
+    const tags = await res.json();
+    if (typeof tags.latest !== "string") {
+      return ABSENT;
+    }
+    return parseReleaseVersion(tags.latest);
+  } catch (err) {
+    return failed(err instanceof Error ? err.message : String(err));
+  }
+}
+function assessCurrency(stamp2, latest) {
+  const installed = parseReleaseVersion(stamp2);
+  if (installed.kind === "failed") {
+    return { kind: "unchecked", installed: stamp2, reason: installed.reason };
+  }
+  switch (latest.kind) {
+    case "failed":
+      return { kind: "unchecked", installed: stamp2, reason: latest.reason };
+    case "absent":
+      return {
+        kind: "unchecked",
+        installed: stamp2,
+        reason: "the registry lists no `latest` dist-tag"
+      };
+    case "ok": {
+      const order2 = compareVersions(installed.value, latest.value);
+      if (order2 < 0) {
+        return {
+          kind: "stale",
+          installed: installed.value,
+          latest: latest.value
+        };
+      }
+      if (order2 > 0) {
+        return {
+          kind: "ahead",
+          installed: installed.value,
+          latest: latest.value
+        };
+      }
+      return { kind: "current", installed: installed.value };
+    }
+  }
+}
+
+// src/install/platforms.ts
+init_globals();
+var PLATFORM_PACKAGES = {
+  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
+  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
+  "linux-x64": "@promptctl/cc-candybar-linux-x64",
+  "linux-arm64": "@promptctl/cc-candybar-linux-arm64"
+};
+function shipsNative(platform3, arch2) {
+  return `${platform3}-${arch2}` in PLATFORM_PACKAGES;
+}
+
+// src/install/index.ts
+function supportDir() {
+  if (process_default.platform === "darwin") {
+    return import_node_path11.default.join(
+      os_default.homedir(),
+      "Library",
+      "Application Support",
+      "CCCandybar"
+    );
+  }
+  const xdgData = process_default.env.XDG_DATA_HOME ?? import_node_path11.default.join(os_default.homedir(), ".local", "share");
+  return import_node_path11.default.join(xdgData, "cc-candybar");
+}
+function stagedDistPath(dir = supportDir()) {
+  return import_node_path11.default.join(dir, "dist", "index.mjs");
+}
+function stableAttachPreload(runningBundle) {
+  const checkout = sourceCheckoutOf(runningBundle);
+  return attachPreloadOf(
+    checkout === null ? stagedDistPath() : import_node_path11.default.join(checkout, "dist", "index.mjs")
+  );
+}
+function parseHandlerUrl(rawUrl, scheme = URL_SCHEME) {
+  const prefix = `${scheme}://`;
+  if (!rawUrl.startsWith(prefix)) {
+    throw new Error(`expected ${prefix} scheme, got: ${rawUrl}`);
+  }
+  const rest2 = rawUrl.slice(prefix.length);
+  const slash2 = rest2.indexOf("/");
+  if (slash2 === -1) {
+    return { verb: VERB_COPY, value: rest2 };
+  }
+  return {
+    verb: decodeURIComponent(rest2.slice(0, slash2)),
+    value: rest2.slice(slash2 + 1)
+  };
+}
+
+// src/daemon/verbs/index.ts
+init_globals();
+
+// src/daemon/click-error.ts
+init_globals();
+var KEY = "click.error";
+var CLICK_ERROR_HOLD_S = 5;
+function holdClickError(state, sessionId2, text4, at) {
+  const record2 = { text: text4, at, answered: false };
+  state.set(sessionId2, KEY, JSON.stringify(record2));
+}
+function answeredClickError(state, sessionId2, error) {
+  const last2 = lastClickError(state, sessionId2);
+  const same2 = last2?.at === error.at && last2.text === error.text;
+  if (!same2 || last2.answered) return;
+  state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
+}
+function lastClickError(state, sessionId2) {
+  const raw = state.get(sessionId2, KEY);
+  return raw === null ? null : recordOf(raw);
+}
+function clickErrorAt(state, sessionId2, at, render3) {
+  const last2 = lastClickError(state, sessionId2);
+  if (last2 === null) return { kind: "none" };
+  if (at < last2.at + CLICK_ERROR_HOLD_S) return { kind: "held", error: last2 };
+  return render3 === "request" && !last2.answered ? { kind: "owed", error: last2 } : { kind: "over" };
+}
+function recordOf(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { text: text4, at, answered: answered2 } = value;
+  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
+}
+
+// src/daemon/verbs/state-validators.ts
+init_globals();
+
+// src/themes/policy.ts
+init_globals();
+
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
 init_globals();
 
@@ -31940,14 +34739,6 @@ function osc8Open(url) {
 }
 var OSC8_CLOSE = "\x1B]8;;\x1B\\";
 var OSC8 = pattern(new RegExp(`\\x1b\\]8;([^;${TERMINATORS}]*);([^${TERMINATORS}]*)(?:\\x1b\\\\|\\x07|\\x9c)`));
-function osc8Sequences(text4) {
-  return [...text4.matchAll(new RegExp(OSC8.source, "g"))].map((m) => ({
-    index: m.index,
-    length: m[0].length,
-    params: m[1],
-    uri: m[2]
-  }));
-}
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/state.js
 init_globals();
@@ -32950,7 +35741,7 @@ function parsePaint(raw, absent, refuse4) {
   return refuse4(`has a colour that is not a Paint: ${JSON.stringify(raw)}`);
 }
 var parseColor = (raw, absent, refuse4) => raw === "ground" ? raw : parsePaint(raw, absent, refuse4);
-var ABSENT = { seam: void 0, lead: "left", tail: "right" };
+var ABSENT2 = { seam: void 0, lead: "left", tail: "right" };
 var AUTHORED_IN = { seam: "seam", lead: "caps", tail: "caps" };
 function parseCell(cell3, form, part, refuse4) {
   const glyph = cell3.glyph;
@@ -32969,8 +35760,8 @@ function parseCell(cell3, form, part, refuse4) {
     refuse4("is not ASCII");
   return Object.freeze({
     glyph: typeof cell3.glyph === "string" ? cell3.glyph : Object.freeze({ oneOf: Object.freeze([...glyphs]) }),
-    fg: parseColor(cell3.fg, ABSENT[part], refuse4),
-    bg: parseColor(cell3.bg, ABSENT[part], refuse4)
+    fg: parseColor(cell3.fg, ABSENT2[part], refuse4),
+    bg: parseColor(cell3.bg, ABSENT2[part], refuse4)
   });
 }
 function parseCells(raw, form, part, parseOne) {
@@ -34565,7 +37356,7 @@ init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
 }
-function text(cells) {
+function text2(cells) {
   const ends = /* @__PURE__ */ new Map();
   for (const cell3 of cells.filter((c) => inked(c.glyph)))
     ends.set(cell3.row, { first: ends.get(cell3.row)?.first ?? cell3.index, last: cell3.index });
@@ -34594,7 +37385,7 @@ function typewriter(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const typed = arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < typed ? cell3.glyph : blank(cell3.glyph);
@@ -34609,7 +37400,7 @@ function scramble(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const resolved = arrived(length, ease(phase(t2)));
       const step4 = flicker.at(t2);
@@ -34625,7 +37416,7 @@ function backspace(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const kept = length - arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
@@ -34639,7 +37430,7 @@ function scrambleOut(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const p2 = ease(phase(t2));
       const churning = arrived(length, p2 / (1 - CHURN));
@@ -34942,2808 +37733,6 @@ var FlexStrip = class {
     return { minimum, maximum };
   }
 };
-
-// src/render/ansi.ts
-init_globals();
-var INVISIBLE = new RegExp(`\\x1b\\[[0-9;]*m|${OSC8.source}`, "g");
-
-// src/install/index.ts
-init_globals();
-
-// src/attach-launcher.ts
-init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
-
-// src/claude-command-line.ts
-init_globals();
-
-// src/shell-word.ts
-init_globals();
-var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
-function singleQuoted(s) {
-  return `'${s.replaceAll("'", `'\\''`)}'`;
-}
-function shellWord(s) {
-  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
-}
-
-// src/claude-command-line.ts
-function claudeCommandLine(command) {
-  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
-  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
-  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
-}
-
-// src/attach-launcher.ts
-var ATTACH_DIR = "cc-extra";
-function attachLauncherOf(bundle) {
-  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
-}
-function moduleGraphReaderOf(launcher) {
-  return import_node_path.default.join(import_node_path.default.dirname(launcher), "bun-graph.js");
-}
-var ATTACH_PRELOAD = "attach-preload.cjs";
-function attachPreloadOf(bundle) {
-  return import_node_path.default.join(import_node_path.default.dirname(bundle), ATTACH_PRELOAD);
-}
-var PRELOAD_VARIABLE = "BUN_OPTIONS";
-function attachCommandLine(preload, command) {
-  return claudeCommandLine({
-    ...command,
-    env: [
-      ...command.env,
-      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
-    ]
-  });
-}
-
-// src/daemon/build-currency.ts
-init_globals();
-
-// site/shims/fs.ts
-init_globals();
-var import_memfs = __toESM(require_lib8(), 1);
-var fs_default = import_memfs.fs;
-var {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  statSync,
-  lstatSync,
-  readdirSync,
-  mkdirSync,
-  rmSync,
-  unlinkSync,
-  renameSync,
-  openSync,
-  readSync,
-  closeSync,
-  fstatSync,
-  writeSync,
-  appendFileSync,
-  realpathSync,
-  readlinkSync,
-  mkdtempSync,
-  copyFileSync,
-  watch,
-  watchFile,
-  unwatchFile,
-  constants,
-  promises,
-  accessSync,
-  createReadStream,
-  createWriteStream,
-  chmodSync,
-  utimesSync,
-  symlinkSync,
-  linkSync,
-  rmdirSync,
-  ftruncateSync,
-  fsyncSync,
-  Stats
-} = import_memfs.fs;
-
-// src/daemon/build-currency.ts
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-init_url();
-
-// src/source-digest.ts
-init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer2.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer2.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/source-digest.ts
-var import_node_path2 = __toESM(require_path_browserify(), 1);
-var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
-function entryBytes(p2, st) {
-  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
-}
-function sourceEntries(root, dir, keep2 = isSourceEntry) {
-  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path2.default.join(dir, name);
-    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
-    if (st === void 0) return [];
-    if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path2.default.relative(root, p2).split(import_node_path2.default.sep).join("/");
-    return [[rel, entryBytes(p2, st)]];
-  });
-}
-function digestOf(entries) {
-  const h = crypto_default.createHash("sha256");
-  for (const [rel, bytes] of entries) {
-    h.update(rel).update("\0").update(bytes).update("\0");
-  }
-  return h.digest("hex");
-}
-function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
-}
-var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
-function crateDigest(crateDir) {
-  return digestOf(
-    sourceEntries(
-      crateDir,
-      crateDir,
-      (name) => CRATE_SOURCE.includes(name)
-    )
-  );
-}
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
-// src/version.ts
-init_globals();
-if (false) {
-  throw new Error(
-    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
-  );
-}
-var PACKAGE_VERSION = "1.177.2";
-
-// src/daemon/build-currency.ts
-function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path3.default.dirname(import_node_path3.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path3.default.join(root, "src")) ? root : null;
-}
-function bundleStamp(digest2) {
-  if (digest2 === null) {
-    throw new Error(
-      "this bundle carries no source digest (build via `pnpm build`, which stamps it)"
-    );
-  }
-  return { version: PACKAGE_VERSION, digest: digest2 };
-}
-function checkoutVersion(root) {
-  const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path3.default.join(root, "package.json"), "utf8")
-  );
-  const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
-  if (typeof version !== "string") {
-    throw new Error(`${import_node_path3.default.join(root, "package.json")} has no version string`);
-  }
-  return version;
-}
-function assessBuild(entryUrl, runningStamp) {
-  try {
-    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
-    if (root === null) return { kind: "not-source-checkout" };
-    const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path3.default.join(root, "src"));
-    if (digest2 === running.digest)
-      return { kind: "current", root, stamp: running };
-    return {
-      kind: "stale",
-      root,
-      source: { version: checkoutVersion(root), digest: digest2 },
-      running
-    };
-  } catch (e) {
-    return { kind: "unchecked", reason: e.message };
-  }
-}
-
-// src/install/index.ts
-var import_node_path11 = __toESM(require_path_browserify(), 1);
-init_os();
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse("net.connect");
-var createServer = refuse("net.createServer");
-var createConnection = refuse("net.createConnection");
-var get = refuse("https.get");
-var request = refuse("https.request");
-var createInterface = refuse("readline.createInterface");
-var createRequire = refuse("module.createRequire");
-var json = refuse("stream/consumers.json");
-var text2 = refuse("stream/consumers.text");
-var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text: text2, writeHeapSnapshot, getHeapStatistics };
-
-// src/utils/atomic-write.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped: stopped2 } = walkLinks(at);
-  if (stopped2 !== null) throw stopped2;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
-    }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
-    };
-  } catch (e) {
-    return { hops, stopped: e };
-  }
-}
-function linkTarget(file) {
-  try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path4.default.resolve(
-      fs_default.realpathSync(import_node_path4.default.dirname(file)),
-      fs_default.readlinkSync(file)
-    );
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw e;
-  }
-}
-var MAX_LINK_HOPS = 40;
-
-// src/daemon/client.ts
-init_globals();
-
-// src/daemon/client-transport.ts
-init_globals();
-
-// src/daemon/paths.ts
-init_globals();
-init_os();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function stateDir(env2 = process_default.env) {
-  const base = xdgEnv(env2, "XDG_STATE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".local", "state");
-  return import_node_path5.default.join(base, "cc-candybar");
-}
-function cacheDir() {
-  const base = xdgEnv(process_default.env, "XDG_CACHE_HOME") ?? import_node_path5.default.join(os_default.homedir(), ".cache");
-  return import_node_path5.default.join(base, "cc-candybar");
-}
-function daemonDir() {
-  return stateDir();
-}
-function socketPath() {
-  return process_default.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
-}
-function defaultSocketPath() {
-  const uid = os_default.userInfo().uid;
-  return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
-}
-function watchProbeDir() {
-  return import_node_path5.default.join(stateDir(), "watch-probe");
-}
-function logPath(env2 = process_default.env) {
-  return import_node_path5.default.join(stateDir(env2), "daemon.log");
-}
-
-// src/daemon/protocol.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
-
-// src/terminal-hint.ts
-init_globals();
-var TERMINAL_ENV_VARS = [
-  // iTerm2 (`iTerm.app`), Ghostty (`ghostty`), WezTerm (`WezTerm`), and the
-  // version beside it. Inside tmux it is tmux's own `tmux`.
-  "TERM_PROGRAM",
-  "TERM_PROGRAM_VERSION",
-  // kitty (`xterm-kitty`) and Alacritty (`alacritty`) name themselves here.
-  "TERM",
-  // The iTerm2 profile the session's window was opened with.
-  "ITERM_PROFILE",
-  // Where a terminal that reads a config file (Alacritty) finds it.
-  "XDG_CONFIG_HOME"
-];
-
-// src/client-hint.ts
-init_globals();
-var CLIENT_KINDS = ["native", "node", "frames"];
-
-// src/daemon/protocol.ts
-var PROTOCOL_VERSION = 3;
-var CONNECT_TIMEOUT_MS = 50;
-var TOTAL_BUDGET_MS = 150;
-var CLIENT_HINT_FIELDS = Object.keys({
-  termCols: true,
-  termRows: true,
-  ssh: true,
-  tmux: true,
-  configEnv: true,
-  claudeConfigDir: true,
-  terminalEnv: true,
-  client: true
-});
-function parseClientHints(req) {
-  const termCols = sanitizeTermExtent(req.termCols);
-  const termRows = sanitizeTermExtent(req.termRows);
-  const ssh = sanitizeSsh(req.ssh);
-  const tmux3 = sanitizeTmux(req.tmux);
-  const configEnv = sanitizeAbsolutePath(req.configEnv);
-  const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
-  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
-  const client = sanitizeClient(req.client);
-  return {
-    ...termCols !== void 0 && { termCols },
-    ...termRows !== void 0 && { termRows },
-    ...ssh !== void 0 && { ssh },
-    ...tmux3 !== void 0 && { tmux: tmux3 },
-    ...configEnv !== void 0 && { configEnv },
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
-    ...terminalEnv !== void 0 && { terminalEnv },
-    ...client !== void 0 && { client }
-  };
-}
-function refusedHints(req, hints) {
-  return CLIENT_HINT_FIELDS.filter(
-    (k) => req[k] !== void 0 && hints[k] === void 0
-  ).map((hint) => ({ hint, sent: req[hint] }));
-}
-function refusedHintsError(refused) {
-  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
-    ", "
-  )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
-}
-var REFUSAL_LINES = {
-  unknown: (args) => `Unknown flags: ${args}`,
-  // Only the last `--config` can lack a file, and it wins, so an earlier one
-  // that named a file is not applied either.
-  "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
-  positional: (args) => `Unexpected arguments: ${args}`
-};
-function refusedArgsError(refused) {
-  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
-    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
-  });
-  return lines2.length === 0 ? null : lines2.join("\n");
-}
-function sanitizeTerminalEnv(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const o = v;
-  const set2 = TERMINAL_ENV_VARS.filter((name) => o[name] !== void 0);
-  return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
-}
-function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
-}
-function sanitizeTmux(v) {
-  if (v === null) return null;
-  if (typeof v !== "object") return void 0;
-  const o = v;
-  const { socket, pane, truecolor } = o;
-  if (typeof socket !== "string" || socket === "") return void 0;
-  if (typeof pane !== "string" || pane === "") return void 0;
-  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
-    return void 0;
-  return { socket, pane, truecolor };
-}
-var MAX_TERM_EXTENT = 1e4;
-function sanitizeTermExtent(v) {
-  if (typeof v !== "number") return void 0;
-  if (!Number.isFinite(v)) return void 0;
-  const n = Math.floor(v);
-  if (n <= 0) return void 0;
-  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
-}
-function sanitizeSsh(v) {
-  return typeof v === "boolean" ? v : void 0;
-}
-function sanitizeClientVersion(v) {
-  return typeof v === "string" && v !== "" && v.length <= 64 ? v : null;
-}
-var MAX_FRAME_BYTES = 16 * 1024 * 1024;
-function sanitizeClient(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
-  const { kind, bundle, source } = v;
-  const path40 = sanitizeAbsolutePath(bundle);
-  return CLIENT_KINDS.includes(kind) && path40 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path40, source } : void 0;
-}
-
-// src/daemon/acquire.ts
-init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
-
-// src/proc/launch.ts
-init_globals();
-
-// site/shims/child_process.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-var import_events2 = __toESM(require_events(), 1);
-var RESIDENT = "resident";
-var programs = /* @__PURE__ */ new Map();
-var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
-var Stream = class extends import_events2.EventEmitter {
-  encoding = null;
-  setEncoding(encoding) {
-    this.encoding = encoding;
-    return this;
-  }
-  chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
-  }
-  pipe() {
-    return this;
-  }
-  destroy() {
-  }
-  end() {
-  }
-  write() {
-    return true;
-  }
-  resume() {
-    return this;
-  }
-  unref() {
-    return this;
-  }
-};
-var nextPid = 5e3;
-function spawn(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  const child = Object.assign(new import_events2.EventEmitter(), {
-    // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 ? void 0 : nextPid++,
-    stdout: new Stream(),
-    stderr: new Stream(),
-    stdin: new Stream(),
-    exitCode: null,
-    signalCode: null,
-    killed: false,
-    kill: () => true,
-    unref: () => {
-    },
-    ref: () => {
-    }
-  });
-  setTimeout(() => {
-    if (program === void 0) {
-      child.emit("error", enoent(cmd));
-      return;
-    }
-    const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
-    if (run3.stdout) child.stdout.chunk(run3.stdout);
-    if (run3.stderr) child.stderr.chunk(run3.stderr);
-    child.exitCode = run3.code;
-    child.stdout.emit("end");
-    child.stderr.emit("end");
-    child.emit("exit", run3.code, null);
-    child.emit("close", run3.code, null);
-  }, 0);
-  return child;
-}
-function spawnSync(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
-}
-
-// src/proc/launch.ts
-var import_node_string_decoder = __toESM(require_string_decoder(), 1);
-
-// site/shims/util.ts
-init_globals();
-var import_parseargs = __toESM(require_parseargs(), 1);
-var types = { isNativeError: (e) => e instanceof Error };
-var inspect = (v) => {
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-};
-
-// src/proc/launch.ts
-init_timers();
-function spawnErrorText(err, cwd2) {
-  if (!types.isNativeError(err)) return String(err);
-  const code = err.code;
-  return code === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
-}
-var RATE_LIMITS = {
-  // Click verbs: a misbehaving template emitting many clickable links + a
-  // user rapid-clicking = unbounded helpers. One spawn per second is enough
-  // for any human click cadence.
-  "click.pbcopy": 1e3,
-  "click.open": 1e3,
-  // A click's probe, run ahead of its turn for up to its 2 s timeout.
-  "doctor.tmux": 1e3,
-  "doctor.font": 1e3,
-  "doctor.process": 1e3,
-  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
-  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
-  // `ps` over this user's processes.
-  // A double-click is refused rather than typing and submitting its command
-  // twice. Daemon-wide, so two sessions typing in one second collide. Only
-  // the typing is limited: a click the pane refused typed
-  // nothing, so clicking again once the dialog is closed goes through.
-  "claude-input.type": 1e3
-};
-function checkRateLimit(lastStartAt, category) {
-  const minIntervalMs = RATE_LIMITS[category];
-  if (minIntervalMs === void 0) return { allowed: true };
-  const last2 = lastStartAt.get(category);
-  if (last2 === void 0) return { allowed: true };
-  const sinceLastMs = Date.now() - last2;
-  if (sinceLastMs >= minIntervalMs) return { allowed: true };
-  return { allowed: false, minIntervalMs, sinceLastMs };
-}
-function childEnv(opts) {
-  return opts.env ?? process_default.env;
-}
-var refusedAsAborted = ({ reason }) => ({
-  ok: false,
-  reason: "aborted",
-  stdout: "",
-  stderr: "",
-  exitCode: null,
-  signal: null,
-  error: reason instanceof Error ? reason.message : String(reason)
-});
-function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
-  return {
-    ok: false,
-    reason: "rate-limited",
-    stdout: "",
-    stderr: "",
-    exitCode: null,
-    signal: null,
-    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
-  };
-}
-function track(state, work) {
-  const entry = work.finally(() => state.ending.delete(entry));
-  state.ending.add(entry);
-  return entry;
-}
-function admit(state, category, signal) {
-  const refusal = refusalOf(state, category, signal);
-  if (refusal !== null) {
-    state.scope.stats?.onRefused(category);
-    return refusal;
-  }
-  state.lastStartAt.set(category, Date.now());
-  return null;
-}
-function refusalOf(state, category, signal) {
-  if (state.scope.signal.aborted) return refusedAsAborted(state.scope.signal);
-  if (signal?.aborted) return refusedAsAborted(signal);
-  const gate2 = checkRateLimit(state.lastStartAt, category);
-  return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
-}
-var TIMEOUT_KILL_GRACE_MS = 250;
-var GROUP_END_POLL_MIN_MS = 25;
-var GROUP_END_POLL_MAX_MS = 1e3;
-var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
-function setFault(state, next) {
-  if (next === state.fault) return;
-  state.fault = next;
-  state.scope.observeLifeline(next);
-}
-function lose(state, line, reason) {
-  if (state.lifeline?.process !== line) return;
-  state.lifeline = null;
-  line.ref();
-  setFault(state, reason);
-}
-function lifelineWarnings(state) {
-  return state.fault === null ? [] : [
-    {
-      kind: "lifeline",
-      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${state.fault}, and the next launch starts another`
-    }
-  ];
-}
-function spawnLifeline(state) {
-  const { stats } = state.scope;
-  stats?.onStart("lifeline");
-  const t0 = Date.now();
-  let line;
-  try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
-      stdio: ["pipe", "ignore", "ignore"],
-      detached: true
-    });
-  } catch (err) {
-    stats?.onEnd("lifeline", Date.now() - t0);
-    setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
-    return null;
-  }
-  stats?.onEnd("lifeline", Date.now() - t0);
-  const pipe = line.stdin;
-  if (pipe === null || pipe === void 0) {
-    line.once(
-      "error",
-      (err) => setFault(state, `did not start: ${err.message}`)
-    );
-    return null;
-  }
-  line.once("spawn", () => {
-    if (state.lifeline?.process === line) setFault(state, null);
-  });
-  line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
-  line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
-  void track(state, new Promise((closed) => line.once("close", closed)));
-  line.unref();
-  pipe.unref();
-  for (const group of state.liveGroups) pipe.write(`+ ${group}
-`);
-  return { process: line, pipe };
-}
-function guard(state, group) {
-  state.liveGroups.add(group);
-  state.lifeline ??= spawnLifeline(state);
-  state.lifeline?.pipe.write(`+ ${group}
-`);
-}
-function unguard(state, group) {
-  state.liveGroups.delete(group);
-  state.lifeline?.pipe.write(`- ${group}
-`);
-}
-function endLifeline(state) {
-  const line = state.lifeline;
-  state.lifeline = null;
-  line?.process.ref();
-  line?.pipe.end();
-}
-function signalGroup(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-  } catch (err) {
-    const code = err.code;
-    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
-      throw err;
-    }
-  }
-}
-function leaderRefuses(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return false;
-  } catch (err) {
-    return err.code === "EPERM";
-  }
-}
-function capture(stream) {
-  const decoder = new import_node_string_decoder.StringDecoder("utf8");
-  let text4 = "";
-  const read2 = (chunk3) => {
-    text4 += decoder.write(chunk3);
-  };
-  stream?.on("data", read2);
-  return () => {
-    stream?.off("data", read2);
-    const whole = text4 + decoder.end();
-    text4 = "";
-    return whole;
-  };
-}
-async function launchWaited(state, opts) {
-  const { stats } = state.scope;
-  const refused = admit(state, opts.category, opts.signal);
-  if (refused !== null) return refused;
-  const t0 = Date.now();
-  stats?.onStart(opts.category);
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(opts.bin, opts.args ?? [], {
-        cwd: opts.cwd,
-        env: childEnv(opts),
-        stdio: ["pipe", "pipe", "pipe"],
-        detached: true
-      });
-    } catch (err) {
-      stats?.onEnd(opts.category, Date.now() - t0);
-      resolve({
-        ok: false,
-        reason: "spawn-error",
-        stdout: "",
-        stderr: "",
-        exitCode: null,
-        signal: null,
-        error: spawnErrorText(err, opts.cwd)
-      });
-      return;
-    }
-    const group = child.pid;
-    if (group !== void 0) guard(state, group);
-    const exited = new Promise((end) => child.once("exit", end));
-    const stdout2 = capture(child.stdout);
-    const stderr2 = capture(child.stderr);
-    const output = () => ({ stdout: stdout2(), stderr: stderr2() });
-    let settled3 = false;
-    let timer = null;
-    let killTimer = null;
-    let groupEndTimer = null;
-    let terminated = null;
-    const onAbort = () => terminate("aborted");
-    const unlisten = () => {
-      opts.signal?.removeEventListener("abort", onAbort);
-      state.inFlight.delete(onAbort);
-    };
-    const finish = (deliver) => {
-      if (settled3) return;
-      settled3 = true;
-      if (timer) clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      if (groupEndTimer) clearTimeout(groupEndTimer);
-      unlisten();
-      if (group !== void 0) unguard(state, group);
-      stats?.onEnd(opts.category, Date.now() - t0);
-      for (const pipe of [child.stdout, child.stderr]) {
-        pipe?.unref();
-      }
-      deliver();
-    };
-    const settle3 = (r) => finish(() => resolve(r));
-    const signal = (pid2, sig) => {
-      try {
-        signalGroup(pid2, sig);
-      } catch (err) {
-        state.unreaped.set(child, opts.category);
-        void exited.then(() => state.unreaped.delete(child));
-        settle3({
-          ok: false,
-          reason: "signal-refused",
-          ...output(),
-          exitCode: null,
-          signal: null,
-          error: err instanceof Error ? err.message : String(err)
-        });
-      }
-    };
-    const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
-    if (group !== void 0) {
-      const awaitGroupEnd = (delayMs) => {
-        if (settled3) return;
-        if (groupGone(group)) {
-          setImmediate(concludeWithGroup);
-          return;
-        }
-        groupEndTimer = setTimeout(
-          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
-          delayMs
-        );
-      };
-      void exited.then(
-        () => setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
-      );
-    }
-    const terminate = (cause) => {
-      const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== void 0 && groupGone(group)) {
-        terminated = cause === "aborted" ? cause : null;
-        setImmediate(concludeWithGroup);
-        return;
-      }
-      terminated = cause;
-      if (timer) clearTimeout(timer);
-      unlisten();
-      const pid2 = child.pid;
-      if (pid2 !== void 0) {
-        killTimer = setTimeout(() => {
-          signal(pid2, "SIGKILL");
-          void exited.then(() => setImmediate(concludeWithGroup));
-        }, TIMEOUT_KILL_GRACE_MS);
-        signal(pid2, "SIGTERM");
-      }
-    };
-    child.on("error", (err) => {
-      settle3({
-        ok: false,
-        reason: "spawn-error",
-        ...output(),
-        exitCode: null,
-        signal: null,
-        error: spawnErrorText(err, opts.cwd)
-      });
-    });
-    const conclude = (code, signal2) => {
-      if (terminated !== null) {
-        settle3({
-          ok: false,
-          reason: terminated,
-          ...output(),
-          exitCode: code,
-          signal: signal2
-        });
-        return;
-      }
-      if (code === 0) {
-        settle3({ ok: true, ...output(), exitCode: code });
-        return;
-      }
-      const reason = signal2 ? "signal" : "non-zero";
-      settle3({
-        ok: false,
-        reason,
-        ...output(),
-        exitCode: code,
-        signal: signal2
-      });
-    };
-    child.on("close", conclude);
-    if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
-    }
-    opts.signal?.addEventListener("abort", onAbort, { once: true });
-    state.inFlight.add(onAbort);
-    child.stdin?.on("error", () => {
-    });
-    child.stdin?.end(opts.stdinInput);
-  });
-}
-function launchBlocking(state, opts) {
-  const { stats } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
-  const t0 = Date.now();
-  stats?.onStart(opts.category);
-  const stdio = ["pipe", "pipe", "pipe"];
-  try {
-    const result = spawnSync(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
-      env: childEnv(opts),
-      input: opts.stdinInput,
-      timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
-      stdio,
-      encoding: "utf8"
-    });
-    stats?.onEnd(opts.category, Date.now() - t0);
-    const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
-    const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
-    const code = result.error?.code;
-    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
-      const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
-      return {
-        ok: false,
-        reason: reason2,
-        stdout: stdout2,
-        stderr: stderr2,
-        exitCode: null,
-        signal: result.signal ?? null,
-        error: spawnErrorText(result.error, opts.cwd)
-      };
-    }
-    if (result.status === 0) {
-      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
-    }
-    const reason = result.signal ? "signal" : "non-zero";
-    return {
-      ok: false,
-      reason,
-      stdout: stdout2,
-      stderr: stderr2,
-      exitCode: result.status,
-      signal: result.signal ?? null
-    };
-  } catch (err) {
-    stats?.onEnd(opts.category, Date.now() - t0);
-    return {
-      ok: false,
-      reason: "spawn-error",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null,
-      error: spawnErrorText(err, opts.cwd)
-    };
-  }
-}
-function launchOrphan(state, opts) {
-  const { stats } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return refused;
-  const t0 = Date.now();
-  stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(opts);
-  stats?.onEnd(opts.category, Date.now() - t0);
-  return result;
-}
-function launchDetachedSyncInner(opts) {
-  let child;
-  try {
-    child = spawn(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
-      env: childEnv(opts),
-      detached: true,
-      stdio: "ignore"
-    });
-  } catch (err) {
-    return {
-      ok: false,
-      reason: "spawn-error",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null,
-      error: spawnErrorText(err, opts.cwd)
-    };
-  }
-  child.once("error", () => {
-  });
-  if (child.pid === void 0) {
-    return {
-      ok: false,
-      reason: "spawn-error",
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      signal: null,
-      error: `spawn(${opts.bin}): no pid (binary not found or unexecutable)`
-    };
-  }
-  child.unref();
-  return { ok: true, stdout: "", stderr: "", exitCode: null };
-}
-var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout";
-var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
-function launchJob(state, opts, files) {
-  const { stats } = state.scope;
-  const refused = admit(state, opts.category);
-  if (refused !== null) return { ok: false, error: refused.error };
-  const t0 = Date.now();
-  stats?.onStart(opts.category);
-  let child;
-  try {
-    child = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        JOB_SCRIPT,
-        "sh",
-        files.stdout,
-        files.stderr,
-        files.status,
-        opts.bin,
-        ...opts.args ?? []
-      ],
-      {
-        cwd: opts.cwd,
-        env: childEnv(opts),
-        detached: true,
-        stdio: ["pipe", "ignore", "ignore"]
-      }
-    );
-  } catch (err) {
-    stats?.onEnd(opts.category, Date.now() - t0);
-    return { ok: false, error: spawnErrorText(err, opts.cwd) };
-  }
-  stats?.onEnd(opts.category, Date.now() - t0);
-  child.once("error", () => {
-  });
-  const pid2 = child.pid;
-  const gate2 = child.stdin;
-  gate2.on("error", () => {
-  });
-  if (pid2 === void 0) {
-    gate2.destroy();
-    return {
-      ok: false,
-      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
-    };
-  }
-  child.unref();
-  gate2.unref();
-  return {
-    ok: true,
-    pid: pid2,
-    release: () => gate2.end("go\n"),
-    withdraw: () => gate2.end()
-  };
-}
-function readJobEnd(status) {
-  let text4;
-  try {
-    text4 = readFileSync(status, "utf8").trim();
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-  const exit2 = /^exit (\d+)$/.exec(text4);
-  if (exit2) return { kind: "exit", code: Number(exit2[1]) };
-  if (text4 === "timeout") return { kind: "timeout" };
-  throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
-}
-function signalJob(pid2, sig) {
-  try {
-    process_default.kill(-pid2, sig);
-    return true;
-  } catch (err) {
-    const code = err.code;
-    if (code === "ESRCH" || code === "EPERM") return false;
-    throw err;
-  }
-}
-function jobGroupAlive(pid2) {
-  return signalJob(pid2, 0);
-}
-function groupGone(pid2) {
-  try {
-    process_default.kill(-pid2, 0);
-    return false;
-  } catch (err) {
-    return err.code === "ESRCH";
-  }
-}
-function endJob(pid2, status, end) {
-  const staged = `${status}.${process_default.pid}`;
-  try {
-    writeFileSync(staged, `${formatJobEnd(end)}
-`);
-  } catch (err) {
-    if (err.code === "ENOENT") {
-      return { stands: false, signalled: false };
-    }
-    throw err;
-  }
-  let stands = true;
-  try {
-    linkSync(staged, status);
-  } catch (err) {
-    if (err.code !== "EEXIST") throw err;
-    stands = false;
-  } finally {
-    rmSync(staged, { force: true });
-  }
-  const signalled = signalJob(pid2, "SIGTERM");
-  if (signalled) {
-    setTimeout(() => signalJob(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  }
-  return { stands, signalled };
-}
-function createLauncher(owner) {
-  const launcher = {
-    launch: (opts) => track(state, launchWaited(state, opts)),
-    launchSync: (opts) => launchBlocking(state, opts),
-    launchDetachedSync: (opts) => launchOrphan(state, opts),
-    launchJobSync: (opts, files) => launchJob(state, opts, files),
-    lifelineWarnings: () => lifelineWarnings(state),
-    settled: async () => {
-      await Promise.all(state.ending);
-      return { unreaped: [...state.unreaped.values()] };
-    },
-    __lifelineForTest: () => {
-      const line = state.lifeline;
-      return {
-        pid: line?.process.pid,
-        cut: () => {
-          line?.pipe.end();
-          if (line) lose(state, line.process, "cut by a test");
-        }
-      };
-    }
-  };
-  const state = {
-    scope: {
-      stats: null,
-      // A launcher with nobody to tell says the warning on stderr.
-      observeLifeline: () => launcher.lifelineWarnings().forEach((w) => process_default.emitWarning(w.message)),
-      signal: new AbortController().signal,
-      ...owner
-    },
-    lastStartAt: /* @__PURE__ */ new Map(),
-    inFlight: /* @__PURE__ */ new Set(),
-    liveGroups: /* @__PURE__ */ new Set(),
-    lifeline: null,
-    fault: null,
-    ending: /* @__PURE__ */ new Set(),
-    unreaped: /* @__PURE__ */ new Map()
-  };
-  state.scope.signal.addEventListener(
-    "abort",
-    () => {
-      state.inFlight.forEach((end) => end());
-      endLifeline(state);
-    },
-    { once: true }
-  );
-  return launcher;
-}
-var processLauncher = createLauncher({});
-
-// src/daemon/limits.ts
-init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/log.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-var MAX_BYTES = 5 * 1024 * 1024;
-var KEEP_GENERATIONS = 3;
-var MAX_WAITING_BYTES = 4 * 1024 * 1024;
-var sink = null;
-function close() {
-  if (sink === null) return;
-  try {
-    fs_default.closeSync(sink.fd);
-  } catch {
-  }
-  sink = null;
-}
-async function sinkAt(filePath2) {
-  const st = await fs_default.promises.stat(filePath2).catch(() => null);
-  if (sink !== null && sink.path === filePath2 && st !== null && sink.id === idOf2(st)) {
-    return { held: sink, size: st.size };
-  }
-  close();
-  await fs_default.promises.mkdir(import_node_path7.default.dirname(filePath2), { recursive: true });
-  const fd = await new Promise(
-    (resolve, reject2) => fs_default.open(
-      filePath2,
-      "a",
-      (err, opened2) => err === null ? resolve(opened2) : reject2(err)
-    )
-  );
-  const opened = await new Promise(
-    (resolve, reject2) => fs_default.fstat(fd, (err, stats) => err === null ? resolve(stats) : reject2(err))
-  );
-  sink = { path: filePath2, fd, id: idOf2(opened) };
-  return { held: sink, size: opened.size };
-}
-function idOf2(st) {
-  return `${st.dev}:${st.ino}`;
-}
-function writeAt(fd, bytes) {
-  return new Promise(
-    (resolve, reject2) => fs_default.write(
-      fd,
-      bytes,
-      (err, written2) => err === null ? resolve(written2) : reject2(err)
-    )
-  );
-}
-async function rotate(filePath2) {
-  for (let i = KEEP_GENERATIONS - 1; i >= 1; i--) {
-    await fs_default.promises.rename(`${filePath2}.${i}`, `${filePath2}.${i + 1}`).catch(() => {
-    });
-  }
-  await fs_default.promises.rename(filePath2, `${filePath2}.1`).catch(() => {
-  });
-}
-var waiting = [];
-var waitingBytes = 0;
-var dropped = 0;
-var droppedBytes = 0;
-var onItsWay = null;
-var flushing = false;
-var drainedWaiters = [];
-var exiting = false;
-var exitArmed = false;
-function logLine(level, msg) {
-  return `${(/* @__PURE__ */ new Date()).toISOString()} [${level}] ${msg}
-`;
-}
-function dlog(level, msg) {
-  const line = logLine(level, msg);
-  if (!exitArmed) {
-    exitArmed = true;
-    process_default.on("exit", () => {
-      exiting = true;
-      writeWaitingSync(true, EXIT_WAIT_MS);
-    });
-  }
-  waiting.push(line);
-  waitingBytes += import_buffer.Buffer.byteLength(line);
-  if (waitingBytes > MAX_WAITING_BYTES) {
-    let cut = 0;
-    while (waitingBytes > MAX_WAITING_BYTES / 2 && cut < waiting.length - 1) {
-      const bytes = import_buffer.Buffer.byteLength(waiting[cut]);
-      waitingBytes -= bytes;
-      droppedBytes += bytes;
-      cut++;
-    }
-    waiting.splice(0, cut);
-    dropped += cut;
-  }
-  if (exiting) writeWaitingSync(true, EXIT_WAIT_MS);
-  else if (!flushing) void flush();
-}
-function writeWaitingNow() {
-  writeWaitingSync(false, BREACH_WAIT_MS);
-}
-async function flush() {
-  flushing = true;
-  try {
-    while (waiting.length > 0) {
-      const lines2 = take();
-      onItsWay = { bytes: import_buffer.Buffer.from(lines2), state: { kind: "taken" } };
-      try {
-        await append(logPath(), onItsWay);
-      } catch (e) {
-        close();
-        if (onItsWay.state.kind !== "landed") unwritable(lines2, e);
-      } finally {
-        onItsWay = null;
-      }
-    }
-  } finally {
-    flushing = false;
-    for (const resolve of drainedWaiters.splice(0)) resolve();
-  }
-}
-function take() {
-  const lost = dropped === 0 ? "" : logLine(
-    "warn",
-    `log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`
-  );
-  const lines2 = lost + waiting.join("");
-  waiting = [];
-  waitingBytes = 0;
-  dropped = 0;
-  droppedBytes = 0;
-  return lines2;
-}
-async function append(filePath2, batch) {
-  const { held, size } = await sinkAt(filePath2);
-  if (batch.state.kind === "landed") return;
-  const { bytes } = batch;
-  const endsAt = size + bytes.length;
-  batch.state = { kind: "issued", fd: held.fd, endsAt };
-  for (let done2 = 0; done2 < bytes.length; ) {
-    const written2 = await writeAt(held.fd, bytes.subarray(done2));
-    if (written2 === 0) throw new Error("the disk took 0 bytes of a write");
-    done2 += written2;
-  }
-  batch.state = { kind: "landed" };
-  if (endsAt >= MAX_BYTES) {
-    close();
-    const now2 = await fs_default.promises.stat(held.path).catch(() => null);
-    if (now2 !== null && idOf2(now2) === held.id) await rotate(held.path);
-  }
-}
-var EXIT_WAIT_MS = 1e3;
-var BREACH_WAIT_MS = 2e3;
-function writeWaitingSync(finishing, waitMs) {
-  const out = onItsWay;
-  let first2 = import_buffer.Buffer.alloc(0);
-  if (out !== null && out.state.kind === "taken") {
-    first2 = out.bytes;
-    out.state = { kind: "landed" };
-  }
-  let stillOut = null;
-  if (out !== null && out.state.kind === "issued") {
-    const { fd, endsAt } = out.state;
-    try {
-      const size = sizeOnceLanded(fd, endsAt, waitMs);
-      if (size < endsAt && finishing) {
-        first2 = out.bytes.subarray(
-          Math.max(0, size - (endsAt - out.bytes.length))
-        );
-        out.state = { kind: "landed" };
-      } else if (size < endsAt) {
-        stillOut = { fd, endsAt };
-      }
-    } catch (e) {
-      if (finishing) {
-        first2 = out.bytes;
-        out.state = { kind: "landed" };
-      }
-      unwritable(out.bytes.toString(), e);
-    }
-  }
-  if (first2.length === 0 && waiting.length === 0) return;
-  const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(take())]);
-  try {
-    const filePath2 = logPath();
-    fs_default.mkdirSync(import_node_path7.default.dirname(filePath2), { recursive: true });
-    fs_default.appendFileSync(filePath2, lines2);
-    if (stillOut !== null && out !== null && idOf2(fs_default.fstatSync(stillOut.fd)) === idOf2(fs_default.statSync(filePath2))) {
-      out.state = {
-        kind: "issued",
-        fd: stillOut.fd,
-        endsAt: stillOut.endsAt + lines2.length
-      };
-    }
-  } catch (e) {
-    unwritable(lines2.toString(), e);
-  }
-}
-function sizeOnceLanded(fd, endsAt, waitMs) {
-  const until2 = performance.now() + waitMs;
-  const nap = new Int32Array(new SharedArrayBuffer(4));
-  for (; ; ) {
-    const { size } = fs_default.fstatSync(fd);
-    if (size >= endsAt || performance.now() >= until2) return size;
-    Atomics.wait(nap, 0, 0, 1);
-  }
-}
-function unwritable(lines2, e) {
-  try {
-    process_default.stderr.write(
-      `${lines2}cc-candybar: daemon.log unwritable: ${e.message}
-`
-    );
-  } catch {
-  }
-}
-
-// src/daemon/memory-report.ts
-init_globals();
-var PROBE_TIMEOUT_MS = 5e3;
-async function memoryReport(probes) {
-  const refusals = [];
-  for (const probe2 of probes) {
-    const outcome = await probe2.read();
-    if (outcome.kind === "text") {
-      return `# memory report from: ${probe2.name}
-${outcome.text}`;
-    }
-    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
-  }
-  return [
-    "# memory report: no probe answered",
-    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
-  ].join("\n");
-}
-var FOOTPRINT = "/usr/bin/footprint";
-var VMMAP = "/usr/bin/vmmap";
-function platformProbes(launcher, platform3, pid2) {
-  if (platform3 === "darwin") {
-    return [
-      // The whole-process category table: V8's mappings, the MALLOC_* regions
-      // with their reclaimable share, and page tables, each with a size.
-      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
-      // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
-    ];
-  }
-  if (platform3 === "linux") {
-    return [
-      // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess).
-      fileProbe("/proc/self/smaps_rollup"),
-      // Always present, coarser: VmRSS and friends, so Linux never falls all
-      // the way through to "no probe answered".
-      fileProbe("/proc/self/status")
-    ];
-  }
-  return [];
-}
-function chargeProbe(launcher, platform3, pid2) {
-  return platform3 === "darwin" ? footprintCharge(
-    pid2,
-    (args) => launcher.launch({
-      bin: FOOTPRINT,
-      args,
-      timeoutMs: PROBE_TIMEOUT_MS,
-      category: "limits.charge"
-    })
-  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
-}
-function footprintCharge(pid2, run3) {
-  return async (rss) => {
-    const result = await run3([
-      "-p",
-      String(pid2),
-      "--noCategories",
-      "-f",
-      "bytes"
-    ]);
-    if (!result.ok) {
-      return {
-        kind: "stand-in",
-        bytes: rss,
-        unread: `footprint ${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
-      };
-    }
-    const bytes = physFootprintOf(result.stdout);
-    return bytes === null ? {
-      kind: "stand-in",
-      bytes: rss,
-      unread: "footprint printed no phys_footprint line"
-    } : { kind: "charged", measure: "phys_footprint", bytes };
-  };
-}
-function physFootprintOf(text4) {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
-  return m === null ? null : Number(m[1]);
-}
-function commandProbe(launcher, bin, args) {
-  return {
-    name: `${bin} ${args.join(" ")}`,
-    read: async () => {
-      const result = await launcher.launch({
-        bin,
-        args: [...args],
-        timeoutMs: PROBE_TIMEOUT_MS,
-        category: "limits.memory-report"
-      });
-      if (!result.ok) {
-        return {
-          kind: "unavailable",
-          reason: `${result.reason}${result.error !== void 0 ? `: ${result.error}` : ""}${firstLine(result.stderr)}`
-        };
-      }
-      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
-    }
-  };
-}
-function fileProbe(path40) {
-  return {
-    name: path40,
-    read: async () => {
-      try {
-        const text4 = fs_default.readFileSync(path40, "utf8");
-        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
-      } catch (e) {
-        return { kind: "unavailable", reason: e.message };
-      }
-    }
-  };
-}
-function firstLine(stderr2) {
-  const line = stderr2.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-  return line === void 0 ? "" : ` (${line})`;
-}
-
-// src/daemon/limits.ts
-var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-var DEFAULT_RSS_LIMIT_MB = 1024;
-function memoryLimitMb(env2) {
-  const raw = env2[RSS_LIMIT_ENV];
-  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
-  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
-  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
-    throw new Error(
-      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
-    );
-  }
-  return mb2;
-}
-var BYTES_PER_MB = 1024 * 1024;
-var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
-function memoryLimitBytes(env2) {
-  return memoryLimitMb(env2) * BYTES_PER_MB;
-}
-var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
-var HEAP_SNAPSHOT_KEEP = 3;
-var BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
-};
-function laterIdentity(a, b) {
-  return a > b;
-}
-function readCharge(probed, previous) {
-  if (probed.kind === "charged") return probed;
-  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
-  return { ...probed, bytes: probed.bytes - gap, gap };
-}
-var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
-function artifactFile(dir, kind, identity2) {
-  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path8.default.join(dir, `${prefix}${identity2}${suffix}`);
-}
-function breachArtifactOf(base) {
-  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
-  }
-  return null;
-}
-function makeLimits(deps) {
-  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
-  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
-  let triggered = false;
-  let latest = { kind: "unmeasured" };
-  let inFlight = null;
-  let disarmed = false;
-  let timer;
-  function check() {
-    inFlight ??= measure3().finally(() => {
-      inFlight = null;
-    });
-    return inFlight;
-  }
-  async function measure3() {
-    if (triggered) return true;
-    const { rss, heapTotal } = deps.memoryBytes();
-    const charge = readCharge(await deps.memoryCharge(rss), latest);
-    const reading = { kind: "measured", charge, rss, heapTotal };
-    latest = reading;
-    deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (disarmed || charge.bytes <= limit) return false;
-    triggered = true;
-    deps.log(
-      "warn",
-      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
-    );
-    const stamp2 = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
-    const identity2 = `${stamp2}-${deps.pid}`;
-    await attempt(deps.log, "memory report", async () => {
-      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
-      const report2 = await deps.captureMemoryReport();
-      if (disarmed) return;
-      deps.writeMemoryReport(file, report2);
-      deps.log("info", `memory report written: ${file}`);
-    });
-    if (disarmed) {
-      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
-      return false;
-    }
-    await attempt(deps.log, "heap snapshot", () => {
-      deps.writeLogNow();
-      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
-      deps.log(
-        "info",
-        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
-      );
-    });
-    await attempt(deps.log, "artifact rotation", async () => {
-      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
-        keep2
-      )) {
-        for (const file of Object.values(artifacts)) {
-          await attempt(
-            deps.log,
-            `evicting ${file}`,
-            () => deps.removeFile(file)
-          );
-        }
-      }
-    });
-    deps.shutdown(0);
-    return true;
-  }
-  function describeNextRestart() {
-    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
-  }
-  function serving() {
-    let postMortems;
-    try {
-      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
-    } catch (e) {
-      postMortems = { kind: "failed", reason: e.message };
-    }
-    return { pid: deps.pid, memory: latest, limit, postMortems };
-  }
-  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
-    const tick = async () => {
-      try {
-        if (await check()) return;
-      } catch (e) {
-        deps.log("warn", `memory check failed: ${e.message}`);
-      }
-      if (disarmed) return;
-      timer = setTimeout(() => void tick(), intervalMs);
-      timer.unref();
-    };
-    void tick();
-  }
-  function disarm() {
-    disarmed = true;
-    clearTimeout(timer);
-  }
-  return { check, describeNextRestart, serving, arm: arm2, disarm };
-}
-function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
-}
-function readingFields({ charge, rss, heapTotal }, limit) {
-  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
-}
-async function attempt(log, what, body) {
-  try {
-    await body();
-  } catch (e) {
-    log("warn", `${what} failed: ${e.message}`);
-  }
-}
-function postMortemsOf(files) {
-  const byIdentity = /* @__PURE__ */ new Map();
-  for (const file of files) {
-    const base = import_node_path8.default.basename(file);
-    const kind = breachArtifactOf(base);
-    if (kind === null) continue;
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    const identity2 = base.slice(prefix.length, base.length - suffix.length);
-    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
-  }
-  const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found]) => ({
-    identity: identity2,
-    artifacts: Object.fromEntries(
-      kinds.flatMap((k) => found[k] === void 0 ? [] : [[k, found[k]]])
-    )
-  }));
-}
-function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
-  const dir = daemonDir();
-  return {
-    now: () => Date.now(),
-    pid: process_default.pid,
-    snapshotDir: dir,
-    log: owner.log,
-    memoryBytes: () => {
-      const mem = process_default.memoryUsage();
-      return { rss: mem.rss, heapTotal: mem.heapTotal };
-    },
-    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(
-      platformProbes(owner.launcher, process_default.platform, process_default.pid)
-    ),
-    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
-    // identity, so it shares a permission — a post-mortem pair where one half is
-    // world-readable and the other is not invites exactly the "is this
-    // sensitive?" question at the worst moment to be asking it.
-    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
-    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
-    writeLogNow: writeWaitingNow,
-    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
-    // one that cannot be read is said so — never read as "none".
-    listArtifacts: () => {
-      let names;
-      try {
-        names = fs_default.readdirSync(dir);
-      } catch (e) {
-        if (e.code === "ENOENT") return [];
-        throw e;
-      }
-      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path8.default.join(dir, f));
-    },
-    removeFile: (file) => fs_default.unlinkSync(file),
-    shutdown,
-    startedAtMs,
-    ...overrides
-  };
-}
-
-// src/daemon/acquire.ts
-init_process();
-
-// src/claude-settings.ts
-init_globals();
-init_os();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
-
-// src/config/json5-edit.ts
-init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
-};
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text4) {
-    this.text = text4;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close2 = this.text.indexOf("*/", this.pos + 2);
-        if (close2 === -1) this.fail("unterminated block comment");
-        this.pos = close2 + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
-  }
-};
-function parseDocument(text4) {
-  const s = new Scanner(text4);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text4.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path40) {
-  let node = root;
-  for (const key of path40) {
-    node = node === void 0 ? void 0 : entryOf(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text4, node) {
-  return text4.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text4, node) {
-  const indent2 = indentOfLine(text4, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line, i) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text4) => import_json5.default.parse(text4)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text4) => JSON.parse(text4)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries.length === 0) return "{}";
-    const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text4) {
-  return text4.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path40, valueText, dialect) {
-  const [head, ...rest2] = path40;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text4, start, end, insert) {
-  return text4.slice(0, start) + insert + text4.slice(end);
-}
-function lineStartOf(text4, offset) {
-  return text4.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text4, offset) {
-  const ls = lineStartOf(text4, offset);
-  return /^[ \t]*/.exec(text4.slice(ls))[0];
-}
-function startsLine(text4, offset) {
-  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text4, end) {
-  let i = end;
-  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
-  const commaEnd = text4[i] === "," ? i + 1 : -1;
-  if (commaEnd !== -1) i = commaEnd;
-  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
-  LINE_TRAILER.lastIndex = i;
-  const m = LINE_TRAILER.exec(text4);
-  if (m === null) return { commaEnd, line: null };
-  const next = i + m[0].length;
-  return { commaEnd, line: { at: next - m[1].length, next } };
-}
-function removeMember(text4, span) {
-  const { commaEnd, line } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text4.length && text4[end] === " ") end++;
-    return splice(text4, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
-    start--;
-  }
-  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
-  return splice(text4, span.start, span.end, "");
-}
-function insertLineAfter(text4, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text4);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text4, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text4, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text4);
-    return splice(
-      text4,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line !== null) {
-    const indent2 = text4.slice(
-      lineStartOf(text4, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text4,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text4, path40, valueText, dialect) {
-  if (path40.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) {
-    const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path40, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text4, parseDocument(text4), path40, valueText, dialect);
-}
-function setBelow(text4, start, path40, valueText, dialect) {
-  let node = start;
-  for (let i = 0; i < path40.length; i++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path40.join(".")}: ${path40.slice(0, i).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf(node, path40[i]);
-    if (entry === void 0) {
-      return appendMember(
-        text4,
-        node,
-        entryText(path40.slice(i), valueText, dialect),
-        dialect
-      );
-    }
-    if (i === path40.length - 1) {
-      const indent2 = indentOfLine(text4, entry.keySpan.start);
-      return splice(
-        text4,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text4))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text4, path40, keep2 = 0) {
-  if (path40.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path40.slice(0, -1);
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf(parent, path40[path40.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text4;
-  const pruned = removeMember(text4, entry.span);
-  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf(node, "seg")?.value;
-  const kind = entryOf(node, "kind")?.value;
-  const name = entryOf(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf(node, k)?.value).filter(
-    (v) => v?.kind === "array"
-  );
-}
-function rowEntriesOf(node) {
-  const rows = entryOf(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
-}
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row2 of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row2.value,
-      bareAt === null ? null : [...bareAt, "rows", row2.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text4, rootPath, id2) {
-  const root = nodeAt(parseDocument(text4), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text4, ref: node };
-    const wrapped = setValue(
-      text4,
-      bareAt,
-      `{ h: [${textOf(text4, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text4, rootPath, target) {
-  const hit = refAt(text4, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
-  const hit = refAt(text4, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
-  const hit = refAt(text4, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/utils/transcript-fs.ts
-init_globals();
-
-// site/shims/fs-promises.ts
-init_globals();
-var import_memfs2 = __toESM(require_lib8(), 1);
-var p = import_memfs2.fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/utils/outcome.ts
-init_globals();
-function ok(value) {
-  return { kind: "ok", value };
-}
-var ABSENT2 = { kind: "absent" };
-function failed(reason) {
-  return { kind: "failed", reason };
-}
-function orElse(outcome, fallback) {
-  return outcome?.kind === "ok" ? outcome.value : fallback;
-}
-var PENDING = { kind: "pending" };
-function isPending(value) {
-  return value === PENDING;
-}
-
-// src/utils/logger.ts
-init_globals();
-var debugOn = () => Boolean(process_default.env.CC_CANDYBAR_DEBUG);
-function debug(message, ...args) {
-  if (debugOn()) {
-    console.error(`[DEBUG] ${message}`, ...args);
-  }
-}
-function changeLogger(log) {
-  let last2 = null;
-  return ([level, msg]) => {
-    if (msg === last2) return;
-    last2 = msg;
-    log(level, msg);
-  };
-}
-var quietLogger = (_level, message) => debug(message);
-
-// src/utils/transcript-fs.ts
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    return stampOf(statSync(filePath2));
-  } catch {
-    return "";
-  }
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
-var Limiter = class {
-  slots;
-  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
-  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
-  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
-  // would be O(n²) on the render hot path). A dequeued node is immediately
-  // unreferenced, so a continuously-saturated queue retains only the waiters
-  // currently parked — no consumed-prefix accumulates, unlike a head-index
-  // array that only reclaims on full drain.
-  head = null;
-  tail = null;
-  constructor(max2) {
-    this.slots = max2;
-  }
-  async run(task) {
-    await this.acquire();
-    try {
-      return await task();
-    } finally {
-      this.release();
-    }
-  }
-  async acquire() {
-    if (this.slots > 0) {
-      this.slots--;
-      return;
-    }
-    await new Promise((wake) => {
-      const node = { wake, next: null };
-      if (this.tail) this.tail.next = node;
-      else this.head = node;
-      this.tail = node;
-    });
-  }
-  release() {
-    const node = this.head;
-    if (!node) {
-      this.slots++;
-      return;
-    }
-    this.head = node.next;
-    if (!this.head) this.tail = null;
-    node.wake();
-  }
-};
-var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
-function gated(fn) {
-  return ((...args) => gate.run(() => fn(...args)));
-}
-var readdir2 = gated(readdir);
-var stat2 = gated(stat);
-var FOLD_WINDOW_BYTES = 512 * 1024;
-var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
-function transcriptReads() {
-  return { ...totals };
-}
-var windows = [];
-function giveBack(window2) {
-  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
-}
-async function readAppended(path40, prior, until2) {
-  return gate.run(async () => {
-    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path40, prior, until2, window2);
-    if (read2.kind !== "ok") {
-      giveBack(window2);
-      return read2;
-    }
-    let lent = window2;
-    return ok({
-      ...read2.value,
-      [Symbol.dispose]: () => {
-        if (lent !== void 0) giveBack(lent);
-        lent = void 0;
-      }
-    });
-  });
-}
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-async function readWholeLines(path40, prior, until2, window2) {
-  let fh = null;
-  try {
-    fh = await open(path40, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
-    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
-    const start = reset || prior === void 0 ? 0 : prior.offset;
-    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
-    let bytesRead = 0;
-    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
-    bytesRead += first2.length;
-    let lastNl = first2.lastIndexOf(10);
-    let reached = start + first2.length;
-    let shortRead = first2.length < Math.min(window2.length, end - start);
-    while (lastNl < 0 && reached < end && !shortRead) {
-      const next = await readInto(
-        fh,
-        window2.subarray(0, end - reached),
-        reached
-      );
-      bytesRead += next.length;
-      const nl = next.indexOf(10);
-      if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next.length < Math.min(window2.length, end - reached);
-      reached += next.length;
-    }
-    const bytes = lastNl + 1;
-    const longLine = bytes > window2.length ? bytes : 0;
-    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
-    bytesRead += longLine > 0 ? wholeLines.length : 0;
-    const complete = wholeLines.length === bytes;
-    totals.reads++;
-    totals.bytes += bytesRead;
-    totals.longLines += longLine > 0 ? 1 : 0;
-    totals.largestLine = Math.max(totals.largestLine, longLine);
-    return ok({
-      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
-      start,
-      // A long line was found by its newline alone, so lines after it may
-      // still be unread; otherwise the read saw everything up to its end.
-      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
-      size,
-      stamp: stamp2,
-      ino,
-      reset,
-      longLine
-    });
-  } catch (e) {
-    if (e.code === "ENOENT") return ABSENT2;
-    return failed(
-      `readAppended ${path40}: ${e instanceof Error ? e.message : String(e)}`
-    );
-  } finally {
-    await fh?.close().catch((e) => {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    });
-  }
-}
-async function readInto(fh, buf, position) {
-  let off = 0;
-  while (off < buf.length) {
-    const { bytesRead } = await fh.read(
-      buf,
-      off,
-      buf.length - off,
-      position + off
-    );
-    if (bytesRead === 0) break;
-    off += bytesRead;
-  }
-  return buf.subarray(0, off);
-}
-async function readTail(path40, maxBytes) {
-  return gate.run(async () => {
-    let fh = null;
-    try {
-      fh = await open(path40, "r");
-      const { size } = await fh.stat();
-      const start = Math.max(0, size - maxBytes);
-      return ok({
-        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
-      });
-    } catch (e) {
-      if (e.code === "ENOENT") return ABSENT2;
-      return failed(
-        `readTail ${path40}: ${e instanceof Error ? e.message : String(e)}`
-      );
-    } finally {
-      await fh?.close().catch((e) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-        );
-      });
-    }
-  });
-}
-function readTailSync(path40, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path40, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT2;
-    return failed(e instanceof Error ? e.message : String(e));
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
-
-// src/claude-settings.ts
-var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected) {
-  return detected ?? import_node_path10.default.join(os_default.homedir(), ".claude");
-}
-function claudeSettingsPath(configDir) {
-  return import_node_path10.default.join(configDir, "settings.json");
-}
-function readSettingsFile(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
-  }
-}
-var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
-function readClaudeSettingsText(settingsPath) {
-  return readSettingsFile(settingsPath)?.text ?? "";
-}
-function readClaudeSettings(settingsPath) {
-  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
-}
-function parseSettings(settingsPath, text4) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text4)) return {};
-    parsed2 = JSON_DIALECT.parse(text4);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
-}
-function claudeManagedSettingsDir(platform3) {
-  switch (platform3) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-var projectLocalSettingsFile = (projectDir) => import_node_path10.default.join(projectDir, ".claude", "settings.local.json");
-function readSettingsChain(at) {
-  const dropIns = import_node_path10.default.join(at.managedDir, "managed-settings.d");
-  const located = [
-    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
-      scope: "managed",
-      path: import_node_path10.default.join(dropIns, name)
-    })),
-    {
-      scope: "managed",
-      path: import_node_path10.default.join(at.managedDir, "managed-settings.json")
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir)
-    },
-    {
-      scope: "project",
-      path: import_node_path10.default.join(at.projectDir, ".claude", "settings.json")
-    },
-    { scope: "user", path: at.userFile }
-  ];
-  const read2 = located.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env: env2 = {} } = settings;
-    if (!isJsonObject(env2)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
-  });
-  const user = read2.find((r) => r.source.scope === "user");
-  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
-}
-function visibleJsonFiles(dir) {
-  try {
-    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
-}
-var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-
-// src/install/currency.ts
-init_globals();
-var RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-function parseReleaseVersion(text4) {
-  const m = RELEASE_VERSION.exec(text4);
-  return m ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] } : {
-    kind: "failed",
-    reason: `"${text4}" is not a release version (expected MAJOR.MINOR.PATCH)`
-  };
-}
-function formatVersion(v) {
-  return v.join(".");
-}
-function compareVersions([aMajor, aMinor, aPatch], [bMajor, bMinor, bPatch]) {
-  return aMajor - bMajor || aMinor - bMinor || aPatch - bPatch;
-}
-var REGISTRY_URL = "https://registry.npmjs.org";
-var PACKAGE_NAME = "@promptctl/cc-candybar";
-var REGISTRY_TIMEOUT_MS = 5e3;
-async function fetchLatestVersion(packageName, fetchImpl, registryUrl) {
-  const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
-  try {
-    const res = await fetchImpl(url, {
-      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS)
-    });
-    if (!res.ok) {
-      return failed(`registry responded ${res.status} for ${url}`);
-    }
-    const tags = await res.json();
-    if (typeof tags.latest !== "string") {
-      return ABSENT2;
-    }
-    return parseReleaseVersion(tags.latest);
-  } catch (err) {
-    return failed(err instanceof Error ? err.message : String(err));
-  }
-}
-function assessCurrency(stamp2, latest) {
-  const installed = parseReleaseVersion(stamp2);
-  if (installed.kind === "failed") {
-    return { kind: "unchecked", installed: stamp2, reason: installed.reason };
-  }
-  switch (latest.kind) {
-    case "failed":
-      return { kind: "unchecked", installed: stamp2, reason: latest.reason };
-    case "absent":
-      return {
-        kind: "unchecked",
-        installed: stamp2,
-        reason: "the registry lists no `latest` dist-tag"
-      };
-    case "ok": {
-      const order2 = compareVersions(installed.value, latest.value);
-      if (order2 < 0) {
-        return {
-          kind: "stale",
-          installed: installed.value,
-          latest: latest.value
-        };
-      }
-      if (order2 > 0) {
-        return {
-          kind: "ahead",
-          installed: installed.value,
-          latest: latest.value
-        };
-      }
-      return { kind: "current", installed: installed.value };
-    }
-  }
-}
-
-// src/install/platforms.ts
-init_globals();
-var PLATFORM_PACKAGES = {
-  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
-  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
-  "linux-x64": "@promptctl/cc-candybar-linux-x64",
-  "linux-arm64": "@promptctl/cc-candybar-linux-arm64"
-};
-function shipsNative(platform3, arch2) {
-  return `${platform3}-${arch2}` in PLATFORM_PACKAGES;
-}
-
-// src/install/index.ts
-function supportDir() {
-  if (process_default.platform === "darwin") {
-    return import_node_path11.default.join(
-      os_default.homedir(),
-      "Library",
-      "Application Support",
-      "CCCandybar"
-    );
-  }
-  const xdgData = process_default.env.XDG_DATA_HOME ?? import_node_path11.default.join(os_default.homedir(), ".local", "share");
-  return import_node_path11.default.join(xdgData, "cc-candybar");
-}
-function stagedDistPath(dir = supportDir()) {
-  return import_node_path11.default.join(dir, "dist", "index.mjs");
-}
-function stableAttachPreload(runningBundle) {
-  const checkout = sourceCheckoutOf(runningBundle);
-  return attachPreloadOf(
-    checkout === null ? stagedDistPath() : import_node_path11.default.join(checkout, "dist", "index.mjs")
-  );
-}
-function parseHandlerUrl(rawUrl, scheme = URL_SCHEME) {
-  const prefix = `${scheme}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    throw new Error(`expected ${prefix} scheme, got: ${rawUrl}`);
-  }
-  const rest2 = rawUrl.slice(prefix.length);
-  const slash2 = rest2.indexOf("/");
-  if (slash2 === -1) {
-    return { verb: VERB_COPY, value: rest2 };
-  }
-  return {
-    verb: decodeURIComponent(rest2.slice(0, slash2)),
-    value: rest2.slice(slash2 + 1)
-  };
-}
-
-// src/daemon/verbs/index.ts
-init_globals();
-
-// src/daemon/click-error.ts
-init_globals();
-var KEY = "click.error";
-var CLICK_ERROR_HOLD_S = 5;
-function holdClickError(state, sessionId2, text4, at) {
-  const record2 = { text: text4, at, answered: false };
-  state.set(sessionId2, KEY, JSON.stringify(record2));
-}
-function answeredClickError(state, sessionId2, error) {
-  const last2 = lastClickError(state, sessionId2);
-  const same2 = last2?.at === error.at && last2.text === error.text;
-  if (!same2 || last2.answered) return;
-  state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
-}
-function lastClickError(state, sessionId2) {
-  const raw = state.get(sessionId2, KEY);
-  return raw === null ? null : recordOf(raw);
-}
-function clickErrorAt(state, sessionId2, at, render3) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null) return { kind: "none" };
-  if (at < last2.at + CLICK_ERROR_HOLD_S) return { kind: "held", error: last2 };
-  return render3 === "request" && !last2.answered ? { kind: "owed", error: last2 } : { kind: "over" };
-}
-function recordOf(raw) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const { text: text4, at, answered: answered2 } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
-}
-
-// src/daemon/verbs/state-validators.ts
-init_globals();
-
-// src/themes/policy.ts
-init_globals();
 
 // src/themes/decor.ts
 init_globals();
@@ -50642,7 +50631,7 @@ var SourceRegistry = class _SourceRegistry {
     this.cleanups.push(() => clearTimeout(settling));
     return (raw) => {
       clearTimeout(settling);
-      const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT2 : raw;
+      const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT : raw;
       const outcome = parsed(read2, jsonParser, where);
       this.noteOutcome(name, outcome);
       const next = outcome.kind === "ok" || read2.kind === "ok" || varDefault === void 0 ? outcome : fallback;
@@ -53976,6 +53965,18 @@ function describe2(outcome) {
 }
 
 // src/render/frame.ts
+function parseFrame(wire) {
+  return { ...wire, nextChange: wire.nextChange ?? Infinity };
+}
+function standIn(frame, rows) {
+  return {
+    depth: frame.depth,
+    rows,
+    nextChange: Infinity,
+    motion: frame.motion === "still" ? "still" : "can-move",
+    pending: []
+  };
+}
 function diagnosticFrame(text4, colors) {
   return {
     depth: "truecolor",
@@ -54050,6 +54051,9 @@ function ansiOf(frame) {
     frame.rows.map((row2) => row2.runs),
     frame.depth
   );
+}
+function composeBar(frame) {
+  return ansiOf(frame) + "\n";
 }
 var sameLook = (a, b) => a.fg === b.fg && a.bg === b.bg && a.link === b.link && a.attrs?.join() === b.attrs?.join();
 function mergedRuns({ runs }) {
@@ -54399,12 +54403,12 @@ function identifiedAs(identified) {
   }
 }
 function linkSupport({ name, version }) {
-  const links3 = row(name).links;
-  if (links3 === null) return { kind: "none" };
-  if (links3.since === null) return { kind: "draws" };
-  if (version === null) return { kind: "unsaid", since: links3.since };
-  const drawn = releasedSince(version, links3.since);
-  return drawn === null ? { kind: "unsaid", since: links3.since } : drawn ? { kind: "draws" } : { kind: "older", since: links3.since, version };
+  const links2 = row(name).links;
+  if (links2 === null) return { kind: "none" };
+  if (links2.since === null) return { kind: "draws" };
+  if (version === null) return { kind: "unsaid", since: links2.since };
+  const drawn = releasedSince(version, links2.since);
+  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
 }
 var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
 
@@ -60441,7 +60445,7 @@ function withDroppedPlacements(config2, owning, inserted) {
   const standIns = Object.fromEntries(
     caused.map(({ name, cause }) => [
       name,
-      standIn(
+      standIn2(
         name,
         cause.map((c) => c.notice),
         placements.filter((n) => n.name === name)
@@ -60527,7 +60531,7 @@ function withDroppedPlacements(config2, owning, inserted) {
     reached
   };
 }
-function standIn(name, cause, placements) {
+function standIn2(name, cause, placements) {
   const text4 = `\u26A0 ${name}: ${cause.join("; ")}`;
   const values2 = /* @__PURE__ */ new Map();
   for (const n of placements) {
@@ -61048,7 +61052,7 @@ function probe(read2) {
   try {
     return ok(read2());
   } catch (e) {
-    return e.code === "ENOENT" ? ABSENT2 : failed(e.message);
+    return e.code === "ENOENT" ? ABSENT : failed(e.message);
   }
 }
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
@@ -65867,9 +65871,9 @@ function gitInfoFailures(info) {
 }
 function classify(label2, result, nonZero) {
   if (result.ok) return ok(result.stdout);
-  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT2;
+  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
   if (result.reason === "non-zero" && nonZero === result.exitCode)
-    return ABSENT2;
+    return ABSENT;
   return failed(launchFailure(label2, result));
 }
 function launchFailure(label2, result) {
@@ -65886,12 +65890,12 @@ function firstLine2(s) {
 function derived2(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
-  return value === null ? ABSENT2 : ok(value);
+  return value === null ? ABSENT : ok(value);
 }
 function nonEmpty(o) {
   if (o.kind !== "ok") return o;
   const v = o.value.trim();
-  return v ? ok(v) : ABSENT2;
+  return v ? ok(v) : ABSENT;
 }
 var FORGE_CLI = {
   github: "gh",
@@ -65994,9 +65998,9 @@ function repoWebUrl(remotes) {
 }
 function classifyForgePr(label2, result, noPrPattern, parse3) {
   if (result.ok) return parse3(result.stdout);
-  if (isMissingCommand(result)) return ABSENT2;
+  if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
-    return ABSENT2;
+    return ABSENT;
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
@@ -66009,9 +66013,9 @@ function isRecord2(v) {
 }
 function parseStatusV2(stdout2) {
   let branch = "detached";
-  let oid = ABSENT2;
-  let upstream = ABSENT2;
-  let aheadBehind = ABSENT2;
+  let oid = ABSENT;
+  let upstream = ABSENT;
+  let aheadBehind = ABSENT;
   let staged = 0;
   let unstaged = 0;
   let untracked2 = 0;
@@ -66022,7 +66026,7 @@ function parseStatusV2(stdout2) {
       const rest2 = line.slice(2);
       if (rest2.startsWith("branch.oid ")) {
         const v = rest2.slice("branch.oid ".length).trim();
-        oid = v === "(initial)" ? ABSENT2 : ok(v);
+        oid = v === "(initial)" ? ABSENT : ok(v);
       } else if (rest2.startsWith("branch.head ")) {
         const v = rest2.slice("branch.head ".length).trim();
         branch = v === "(detached)" ? "detached" : v;
@@ -66197,7 +66201,7 @@ var GitService = class {
   // one here would be a new answer for an unchanged question.
   findGitRoot(workingDir) {
     const root = gitRootOf(workingDir);
-    return root === void 0 ? ABSENT2 : ok(root);
+    return root === void 0 ? ABSENT : ok(root);
   }
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
   // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
@@ -66285,7 +66289,7 @@ var GitService = class {
       if (fs_default.existsSync(import_node_path26.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
       if (fs_default.existsSync(import_node_path26.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path26.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
-      return ABSENT2;
+      return ABSENT;
     } catch (e) {
       return failed(
         `git operation probe: ${e instanceof Error ? e.message : String(e)}`
@@ -66554,7 +66558,7 @@ var GitService = class {
     const remotes = await this.getRemotesAsync(workingDir);
     if (remotes.kind !== "ok") return remotes;
     const url = forgeRemoteUrl(remotes.value);
-    return url === null ? ABSENT2 : ok(url);
+    return url === null ? ABSENT : ok(url);
   }
   // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors
   // execGitAsync but carries the "forge" launch category and a longer timeout
@@ -66607,7 +66611,7 @@ var GitService = class {
         parseGitlabMr
       );
     }
-    return ABSENT2;
+    return ABSENT;
   }
   isWorktree(workingDir) {
     try {
@@ -67052,7 +67056,7 @@ function declareLanes(owners, holds2, facts, closure, sources) {
   const pane = facts.hints.tmux ?? null;
   const faults = [];
   const declare = (lane, needed, take2) => {
-    if (!needed) return settledLane(ABSENT2);
+    if (!needed) return settledLane(ABSENT);
     try {
       return take2();
     } catch (e) {
@@ -67111,7 +67115,7 @@ function readLanes(inputs) {
   const sessionId2 = hookData2.session_id;
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
-    if (!needed) return ABSENT2;
+    if (!needed) return ABSENT;
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
     try {
@@ -67368,7 +67372,7 @@ function todayOf({
       return usageStore.todayAt(set2.value, hookData2, at);
     } catch (e) {
       log("error", `today read threw: ${inspect(e)}`);
-      return ABSENT2;
+      return ABSENT;
     }
   };
   const today = read2();
@@ -71059,51 +71063,18 @@ function closeIdleMenus(sid, idle, ctx) {
 }
 
 // src/click/read.ts
-var stripAnsi = (s) => s.replace(INVISIBLE, "");
-function links2(rendered) {
-  const out = [];
-  let open2;
-  for (const seq2 of osc8Sequences(rendered)) {
-    if (seq2.uri !== "") {
-      if (open2 !== void 0)
-        throw new Error(
-          `OSC 8 open at ${seq2.index} while ${open2.uri} is still open`
-        );
-      open2 = seq2;
-      continue;
+function linksOf({ rows }) {
+  return rows.flatMap(({ runs }) => {
+    const stretches = [];
+    for (const { link, text: text4 } of runs.filter((run3) => run3.text !== "")) {
+      const last2 = stretches.at(-1);
+      if (last2 !== void 0 && last2.url === link) last2.text += text4;
+      else stretches.push({ url: link, text: text4 });
     }
-    if (open2 === void 0)
-      throw new Error(`OSC 8 close at ${seq2.index} with no open link`);
-    const from = open2.index + open2.length;
-    const last2 = out.at(-1);
-    if (last2 !== void 0 && last2.url === open2.uri && stripAnsi(rendered.slice(last2.end, open2.index)) === "") {
-      out[out.length - 1] = {
-        url: last2.url,
-        text: rendered.slice(last2.from, seq2.index),
-        from: last2.from,
-        end: seq2.index + seq2.length
-      };
-    } else {
-      out.push({
-        url: open2.uri,
-        text: rendered.slice(from, seq2.index),
-        from,
-        end: seq2.index + seq2.length
-      });
-    }
-    open2 = void 0;
-  }
-  if (open2 !== void 0)
-    throw new Error(
-      `OSC 8 open at ${open2.index} (${open2.uri}) is never closed`
+    return stretches.flatMap(
+      ({ url, text: text4 }) => url === void 0 ? [] : [{ url, text: text4.trim() }]
     );
-  return out.map(({ url, text: text4 }) => ({ url, text: text4 }));
-}
-function drawnLinks(rendered) {
-  return links2(rendered).map((l) => ({
-    text: stripAnsi(l.text).trim(),
-    url: l.url
-  }));
+  });
 }
 var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 function decodeArgs(verb, value) {
@@ -76016,6 +75987,10 @@ var renderFailed = (err) => ({
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
+var RENDER_ANSWERS = {
+  ansi: (frame) => ({ ok: true, output: composeBar(frame) }),
+  frame: (frame) => ({ ok: true, frame })
+};
 function renderFrame(parts, sessionId2, fps, at) {
   const { clock, frameFeeds } = parts;
   const started2 = clock.date().getTime();
@@ -76029,19 +76004,17 @@ function renderFrame(parts, sessionId2, fps, at) {
         by: "feed",
         fps
       });
-      const output = composeBar(drawn.body);
+      const answer2 = RENDER_ANSWERS.ansi(drawn.body);
+      const statusline = statuslineOf(
+        sessionId2,
+        drawn,
+        handedOffTo(lanes, frameFeeds.following(sessionId2))
+      );
       return {
         bar: drawn.body,
-        resp: { ok: true, output },
-        statusline: {
-          ok: true,
-          output: statuslineOf(
-            sessionId2,
-            drawn,
-            output,
-            handedOffTo(lanes, frameFeeds.following(sessionId2))
-          )
-        },
+        resp: answer2,
+        // Mostly the bar itself, and one frame encodes once.
+        statusline: statusline === drawn.body ? answer2 : RENDER_ANSWERS.ansi(statusline),
         evaluated: evaluated2,
         delivered,
         failure: null
@@ -76147,6 +76120,7 @@ function setUpRender(parts, arrived3, at, facts) {
   };
   const sessionId2 = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
+  noteFacts(facts, { encoding: req.encoding });
   const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
   const hold = renderCache.holdSession(
     origin.projectDir,
@@ -76371,19 +76345,10 @@ function drawRender(parts, setup, drawing2) {
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
-  const body = viewing === null ? frame : {
-    depth: frame.depth,
-    rows: viewerRows(
-      diagnostics,
-      viewing,
-      sessionId2,
-      drawing2.by,
-      geometry
-    ),
-    nextChange: Infinity,
-    motion: frame.motion === "still" ? "still" : "can-move",
-    pending: []
-  };
+  const body = viewing === null ? frame : standIn(
+    frame,
+    viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
+  );
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
   const fx = effects.lastFrame();
@@ -76453,9 +76418,6 @@ function drawRender(parts, setup, drawing2) {
     delivered,
     lanes
   };
-}
-function composeBar(body) {
-  return ansiOf(body) + "\n";
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
@@ -76547,17 +76509,18 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       setup,
       ANSWERING
     );
-    const output = composeBar(drawn.body);
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
-    const statusline = statuslineOf(sessionId2, drawn, output, elsewhere);
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
+    const resp = RENDER_ANSWERS[req.encoding](
+      toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body
+    );
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
       drew: `${Math.round(clock.monotonic() - drawFrom)}ms`
     });
     return {
-      answer: toStatusline ? statusline : output,
+      resp,
       motion: drawn.body.motion,
       clickShown,
       delivered
@@ -76568,17 +76531,17 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function statuslineOf(sessionId2, drawn, output, elsewhere) {
+function statuslineOf(sessionId2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
-  return first2 === void 0 || drawn.viewerOpen ? output : composeBar({
-    depth: drawn.body.depth,
-    rows: handoffRows(
+  return first2 === void 0 || drawn.viewerOpen ? drawn.body : standIn(
+    drawn.body,
+    handoffRows(
       laneHandoff(sessionId2, [first2, ...rest2]),
       drawn.diagnostics,
       sessionId2,
       drawn.geometry
     )
-  });
+  );
 }
 
 // src/daemon/reply.ts
@@ -76727,6 +76690,14 @@ function parseRenderArgs(args, cwd2) {
     )
   };
 }
+function parseRenderEncoding(raw) {
+  if (raw === void 0) return { ok: true, encoding: "ansi" };
+  const encoding = RENDER_ENCODINGS.find((name) => name === raw);
+  return encoding !== void 0 ? { ok: true, encoding } : {
+    ok: false,
+    problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`
+  };
+}
 function checkRenderRequest(req, stats, log) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
@@ -76750,12 +76721,14 @@ function checkRenderRequest(req, stats, log) {
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
     );
   }
+  const encoding = parseRenderEncoding(req.encoding);
+  if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
     req.deadline
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId2.ok)
+  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok)
     return { ok: false, problems: wireProblems };
   for (const field of report2.unknownTopLevelFields) {
     if (stats.firstSightOfUnknownHookField(field)) {
@@ -76772,6 +76745,7 @@ function checkRenderRequest(req, stats, log) {
     req: {
       ...req,
       deadline,
+      encoding: encoding.encoding,
       sessionId: sessionId2.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
@@ -77128,11 +77102,11 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       }),
       facts
     ).then(
-      ({ answer: answer2, motion, clickShown, delivered }) => {
+      ({ resp, motion, clickShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
-          resp: { ok: true, output: answer2 },
+          resp,
           // [LAW:single-enforcer] An answer carrying the click error that
           // reaches its client is the one that delivered it
           // (src/daemon/click-error.ts).
@@ -77424,7 +77398,7 @@ function mtimeOf(path40, stat3) {
     return ok(stat3(path40).mtimeMs);
   } catch (e) {
     const code = e.code;
-    return code === "ENOENT" || code === "ENOTDIR" ? ABSENT2 : failed(e.message);
+    return code === "ENOENT" || code === "ENOTDIR" ? ABSENT : failed(e.message);
   }
 }
 function sameStamp(a, b) {
@@ -77587,7 +77561,7 @@ function owe(pr) {
 }
 function unkeyedPr(pr, failures) {
   if (pr.missed && pr.reading.get().kind === "pending") {
-    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT2);
+    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT);
   }
   return "unkeyed";
 }
@@ -77945,7 +77919,7 @@ var GitDataProvider = class {
       // Its key is the first pass's to set.
       missed: true,
       key: "",
-      remote: ABSENT2,
+      remote: ABSENT,
       reading: unread(),
       inFlight: null
     };
@@ -77994,7 +77968,7 @@ var GitDataProvider = class {
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
     const startedAt = Date.now();
-    const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
+    const lookup = remote.kind === "ok" ? this.inner.resolvePullRequest(state.root, remote.value).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done2 = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
@@ -79212,7 +79186,7 @@ var SessionUsageStore = class {
     if (inSet !== void 0) addDay(total, inSet);
     const own2 = under(active2?.record?.transcriptPath, set2.roots) ? void 0 : active2?.record?.days.get(today);
     if (own2 !== void 0) addDay(total, own2);
-    if (inSet === void 0 && own2 === void 0) return ABSENT2;
+    if (inSet === void 0 && own2 === void 0) return ABSENT;
     return ok({
       cost: total.cost,
       tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
@@ -79237,7 +79211,7 @@ var SessionUsageStore = class {
   }
   // A request's speed sample, over the request's one refresh of the session.
   async observed(sessionId2, refresh, nowMs) {
-    if (!sessionId2) return ABSENT2;
+    if (!sessionId2) return ABSENT;
     const { stamp: stamp2, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const record2 = await refreshed;
@@ -79269,7 +79243,7 @@ var SessionUsageStore = class {
   // The session's speed as its last request observed it, for a draw: a frame
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId2) {
-    if (!sessionId2) return ABSENT2;
+    if (!sessionId2) return ABSENT;
     return this.sessions.get(sessionId2)?.speed.get() ?? PENDING;
   }
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
@@ -79278,13 +79252,13 @@ var SessionUsageStore = class {
   // records are stored; the next render retries, same rule as the git
   // cache). This is the single write-path of a slot's record.
   async ingest(sessionId2, transcriptPath, tally, stamp2) {
-    if (!sessionId2) return ABSENT2;
+    if (!sessionId2) return ABSENT;
     const existing = this.see(sessionId2)?.record;
     if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
       tally.hits++;
       return ok(existing);
     }
-    if (!transcriptPath) return existing ? ok(existing) : ABSENT2;
+    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
     tally.misses++;
     let refolded;
     try {
@@ -79722,7 +79696,7 @@ var ContextProvider = class {
     const totalTokens = read2.value;
     if (totalTokens === void 0) {
       debug("No main chain entries with usage data found");
-      return ABSENT2;
+      return ABSENT;
     }
     debug(
       `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`
@@ -79796,7 +79770,7 @@ var MetricsProvider = class {
   async getMetricsInfo(sessionId2, hookData2) {
     debug(`Getting metrics from hook data for session: ${sessionId2}`);
     const cost = hookData2.cost;
-    if (!cost) return ABSENT2;
+    if (!cost) return ABSENT;
     return metricsFrom(
       sessionId2,
       cost,
@@ -79806,7 +79780,7 @@ var MetricsProvider = class {
   // The session's metrics as its last refresh left them, for a draw.
   metricsOf(sessionId2, hookData2) {
     const cost = hookData2.cost;
-    if (!cost) return ABSENT2;
+    if (!cost) return ABSENT;
     const answer2 = this.fold.answer(sessionId2);
     return answer2.kind === "pending" ? answer2 : metricsFrom(sessionId2, cost, answer2);
   }
@@ -79980,7 +79954,7 @@ async function askSessionName(launcher, hint) {
   ]);
   if (run3.kind !== "ok") return failed(run3.reason);
   const name = run3.stdout.trim();
-  return name ? ok(name) : ABSENT2;
+  return name ? ok(name) : ABSENT;
 }
 
 // src/segments/host.ts
@@ -79995,7 +79969,7 @@ function shortHostname(hostname2) {
 function syscall(field, read2) {
   try {
     const value = read2();
-    return Promise.resolve(value === "" ? ABSENT2 : ok(value));
+    return Promise.resolve(value === "" ? ABSENT : ok(value));
   } catch (e) {
     return Promise.resolve(failed(`host.${field}: ${String(e)}`));
   }
@@ -80171,9 +80145,9 @@ async function findLastCacheActivityTs(transcriptPath) {
     if (tail.kind !== "ok") return tail;
     const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
     if (ts != null) return ok(ts);
-    if (tail.value.fromStart) return ABSENT2;
+    if (tail.value.fromStart) return ABSENT;
   }
-  return ABSENT2;
+  return ABSENT;
 }
 function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
   const text4 = buf.toString("utf8");
@@ -80510,9 +80484,9 @@ var ManagedStorage = class {
       text4 = await fs_default.promises.readFile(file, "utf8");
     } catch (e) {
       const err = e;
-      return err.code === "ENOENT" ? ABSENT2 : failed(`${file}: ${err.message}`);
+      return err.code === "ENOENT" ? ABSENT : failed(`${file}: ${err.message}`);
     }
-    if (text4.trim() === "") return ABSENT2;
+    if (text4.trim() === "") return ABSENT;
     const parsed2 = jsonParser(text4);
     return parsed2.kind === "failed" ? failed(`${file}: ${parsed2.reason}`) : parsed2;
   }
@@ -82181,16 +82155,16 @@ function directive({ fg, bg, attrs = [] }) {
   return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
 function encode(frame) {
-  const links3 = {};
+  const links2 = {};
   const drawn = (run3) => {
     const text4 = directive(run3) + escaped(run3.text);
     if (run3.link === void 0) return text4;
     const range = rangeOf2(run3.link);
-    links3[range] = run3.link;
+    links2[range] = run3.link;
     return `#[range=user|${range}]${text4}#[norange]`;
   };
   const rows = frame.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
-  return { rows, links: links3 };
+  return { rows, links: links2 };
 }
 function tmuxStatusFrame(frame) {
   return laneEncoded(encode, frame);
@@ -84943,12 +84917,13 @@ async function daemon2(request2) {
   const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic(), () => false);
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
-  return "output" in resp ? resp.output : "";
+  return resp;
 }
 async function render2(size) {
-  const ansi = await daemon2({
+  const resp = await daemon2({
     v: PROTOCOL_VERSION,
     kind: "render",
+    encoding: "frame",
     hookData: hookData(),
     args: ["cc-candybar"],
     cwd: REPO,
@@ -84957,7 +84932,9 @@ async function render2(size) {
     ssh: false,
     claudeConfigDir: CLAUDE_DIR
   });
-  return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
+  if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  const frame = parseFrame(resp.frame);
+  return { ansi: composeBar(frame), links: linksOf(frame).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text4) {
   let writing;
