@@ -4,15 +4,22 @@
     {
       "version": "pr-553",
       "ref": "refs/pull/553/merge",
-      "sha": "ca7a66548c0798d1efe331716353b70180a6651d",
-      "timestamp": "2026-11-01T15:52:18.741Z",
+      "sha": "3fda6172b21504d042cfd3b4b485415339194569",
+      "timestamp": "2026-11-01T15:58:50.191Z",
       "commits": [
         {
-          "sha": "ca7a66548c0798d1efe331716353b70180a6651d",
+          "sha": "3fda6172b21504d042cfd3b4b485415339194569",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T08:51:25-07:00",
-          "message": "Merge 9ac76da1f36f5113bad9bc4a05e60c004ec97666 into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+          "timestamp": "2026-11-01T15:57:57Z",
+          "message": "Merge f412a67ad38954342384f8745956bd7a1bb13823 into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+        },
+        {
+          "sha": "f412a67ad38954342384f8745956bd7a1bb13823",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T08:57:40-07:00",
+          "message": "test(daemon): a handoff over a moving bar can move, and comments say what a feed answers (candybar-isolated-daemon-bfab.dnr)\n\nAnswers the plan review of #553. A reader's `encoding: \"frame\"` request on a\nfollowed session is the request the feed draws by, and nothing on the feed path\nreads `encoding`, so three comments claiming a feed frame is that request's\nanswer go. The handoff's stand-in was shown only on a still bar, where a literal\n`still` reads the same, so a case runs it over a moving one. The encoding e2e\nnow asserts backgrounds and attributes crossed the wire, and that depth `none`\ncarries neither.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
           "sha": "9ac76da1f36f5113bad9bc4a05e60c004ec97666",
