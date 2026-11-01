@@ -53423,14 +53423,17 @@ function editModeArtifacts() {
 // src/config/help.ts
 init_globals();
 var HELP_GLYPH_CLOSED = "(?)";
-var HELP_OPEN = DISCLOSURE_OPEN;
 function declareHelp(name, lines2, within4, out) {
-  const self2 = { variable: name, key: name, member: HELP_OPEN };
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
   out.variables[name] = {
     ...disclosureStateVar(name, DISCLOSURE_CLOSED),
     ...within4.length > 0 && { within: within4 }
   };
-  out.actions[name] = disclosureCycleAction(name, HELP_OPEN);
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
   out.segments[name] = {
     template: disclosureTrigger(
       name,
@@ -65566,11 +65569,11 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg
   });
-  const go = (key, says) => viewerLink(sessionId2, key, says);
   const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
   const step4 = (glyph, to) => to === null ? button(" ", null) : button(
     glyph,
-    go(
+    viewerLink(
+      sessionId2,
       viewerKey(list2, to.index - 1, to.page),
       `show diagnostic ${to.index} of ${list2.length} page ${to.page + 1}`
     )
