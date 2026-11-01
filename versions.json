@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-546",
+      "ref": "refs/pull/546/merge",
+      "sha": "4ba1d44a5e87a5b65d10dd3135a680150658a6ba",
+      "timestamp": "2026-11-01T09:52:16.108Z",
+      "commits": [
+        {
+          "sha": "4ba1d44a5e87a5b65d10dd3135a680150658a6ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:51:36-07:00",
+          "message": "Merge 2ec68a934e001b94ffedbc97d14e065a9d1c3507 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
+        },
+        {
+          "sha": "2ec68a934e001b94ffedbc97d14e065a9d1c3507",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:48:01-07:00",
+          "message": "feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2)\n\nA dispatch link leads with a `does` param, derived from the effects the\nclick fires, so a hover reads `does=set+preset+to+compact` before the\npercent-encoded payload. parseEffects reads only `e`, so drawn links and\nolder daemons are unaffected.\n\nA click's non-session effect is its face, so a confirm reads as what it\nfires rather than the disarm that precedes it. `does` is form-encoded and\nloses no character; only copied text is shortened. The diagnostics viewer\npasses its words, because the position it shows exists only at draw.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0",
