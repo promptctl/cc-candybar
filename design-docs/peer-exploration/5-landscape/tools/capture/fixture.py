@@ -11,8 +11,7 @@ not on a clock, so the hook data only changes at those events; the ticks between
 script with its own refresh timer sees.
 
 Paths inside the hook JSON and the transcript are written with the token __RUN__, which the runner
-replaces with the run copy's real path, and the transcript's project folder with __SLUG__, which it
-replaces with Claude Code's name for the project directory. One timeline for every project [LAW:one-source-of-truth]:
+replaces with the run copy's real path. One timeline for every project [LAW:one-source-of-truth]:
 what differs between captures is the statusline, never the session it sees.
 """
 import json, os, shutil, stat, subprocess, sys, time
@@ -22,7 +21,7 @@ TICK, TICKS = 2, 60  # seconds per tick, ticks per loop
 SESSION = '7f3a9c2e-5b1d-4e8a-9f6c-2d4b8a1e3c5f'
 PROJECT = '__RUN__/work/candybar-demo'
 HOME = '__RUN__/home'
-TRANSCRIPT = HOME + '/.claude/projects/__SLUG__/' + SESSION + '.jsonl'
+TRANSCRIPT = HOME + '/.claude/projects/-__RUN__-work-candybar-demo/' + SESSION + '.jsonl'
 WINDOW = 200_000
 AGE = 40 * 60  # seconds the session has been running when the window opens
 

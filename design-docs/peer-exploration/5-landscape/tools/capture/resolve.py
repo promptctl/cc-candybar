@@ -10,12 +10,6 @@ way the safe tier does. The risky tier is not resolved here: its code was not re
 An entry is one of two shapes, never both [LAW:parse-dont-validate]:
   {"cmd": "<shell>", "file": "<repo-relative>", "source": "declared" | "guessed"}
   {"reason": "needs-network" | "no-runtime" | "no-file" | "placeholder-only"}
-  {"reason": "unscanned", "files": [<repo-relative>, ...]}
-
-Nothing runs that triage did not read [LAW:single-enforcer]: triage's verdict covers only the
-statusline files it scanned, so a command whose project files (the declared target, any other
-project path it names, a manifest's bin) fall outside them is not an entry. When no candidate is
-covered, the project's entry is the unscanned reason with the files that would have run.
 
 The command text uses the token __PROJ__ for the project copy; the runner substitutes it.
 
@@ -185,15 +179,6 @@ def manifest_entries(root, file):
     return out
 
 
-PROJ_PATH = re.compile(r'"__PROJ__/([^"]+)"')
-
-
-def project_files(cmd, file):
-    """The project files a command would execute or read: the target and every other project path it
-    names. The venv deps.py built is the fetched packages, not the project's code."""
-    return {file} | {f for f in PROJ_PATH.findall(cmd) if not f.startswith('.ccland-venv/')}
-
-
 def guess(root, files):
     """The survey's files for a project, ranked by how much each looks like the entry: the one that
     reads stdin and is named like one, not a types or helpers module. The survey's own order breaks ties.
@@ -222,24 +207,20 @@ for slug, t in tiers.items():
     by_base = tree(root)
     preferred = set(t['files'])
     reasons = []
-    unscanned = set()
     chosen = None
     for cmd in declared(root):
         r = resolve_cmd(root, cmd, by_base, preferred)
-        if not isinstance(r, tuple):
+        if isinstance(r, tuple):
+            if chosen is None or (r[1] in preferred and chosen[1] not in preferred):
+                chosen = r
+        else:
             reasons.append(r)
-        elif not project_files(*r) <= preferred:
-            unscanned |= project_files(*r) - preferred
-        elif chosen is None:
-            chosen = r
     if chosen:
         entries[slug] = {'cmd': chosen[0], 'file': chosen[1], 'source': 'declared'}
         continue
     g = guess(root, t["files"])
-    if g and project_files(*g) <= preferred:
+    if g:
         entries[slug] = {'cmd': g[0], 'file': g[1], 'source': 'guessed'}
-    elif g or unscanned:
-        entries[slug] = {'reason': 'unscanned', 'files': sorted(unscanned | (project_files(*g) - preferred if g else set()))}
     else:
         entries[slug] = {'reason': reasons[0] if reasons else 'no-file'}
 
@@ -249,7 +230,3 @@ for e in entries.values():
     k = e.get('source') or e['reason']
     counts[k] = counts.get(k, 0) + 1
 print('entries:', counts)
-# [LAW:no-silent-failure] every project held back for running code triage never read is named
-for slug, e in entries.items():
-    if e.get('reason') == 'unscanned':
-        print('unscanned, not run: %s: %s' % (slug, ', '.join(e['files'][:3])), file=sys.stderr)

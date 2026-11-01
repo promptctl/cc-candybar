@@ -22,12 +22,8 @@ export class Explorer {
     return this.barsOnly ? ps.filter((p) => p.live) : ps;
   }
 
-  // Every characteristic's pool, filtered once when the filter changes, not on each read: the graph,
-  // the panel and every edge pass ask for pools many times a frame.
-  private pools = $derived(new Map([...members].map(([t, ps]) => [t, this.keep(ps)])));
-
   pool(t: string): Project[] {
-    return this.pools.get(t)!;
+    return this.keep(members.get(t)!);
   }
 
   constructor() {
@@ -64,13 +60,6 @@ export class Explorer {
       p.traits.forEach((t) => this.show(traitNode(t), id));
       cloneLinks(p).forEach((c) => this.show(c.other.id as NodeId, id));
     }
-  }
-
-  // Shows a node and selects it without pulling anything more in, when it is already on screen:
-  // walking history back to a characteristic must restore the graph, not page it again.
-  reveal(id: NodeId): void {
-    if (this.shown.has(id)) this.selected = id;
-    else this.open(id);
   }
 
   nodes = $derived.by((): GraphNode[] => {

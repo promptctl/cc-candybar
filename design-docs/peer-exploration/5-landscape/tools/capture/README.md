@@ -32,10 +32,8 @@ Survey data lives outside the repo in `/tmp/ccland`: `src/<slug>/` holds every c
    at each tick swaps in that tick's working tree and transcript and runs the command under
    `sandbox-exec` with the tick's hook JSON on stdin. A frame is kept at every tick the output
    changed. `scrub.py` rewrites the host's user, host and run path out of every frame.
-6. **Export** — `tools/export.py` stamps each project `live` and writes its frames into script
-   bundles of ten projects (gzip, base64) under the explorer's `public/bars/`; the page loads a
-   bundle when one of its projects is shown. Before writing, `tools/credentials.py` checks every
-   frame for credential shapes and stops the export, naming each project, on any hit.
+6. **Export** — the explorer's `tools/export.py` stamps each project `live` and writes the frames
+   as a gzip blob the page inflates at load.
 
 The commands, as last run (the runs directory must be a real path, not through the `/tmp` symlink):
 
@@ -54,13 +52,10 @@ rerun goes to its own file and is merged into `captures.json` by hand.
 
 ## The sandbox
 
-`sandbox.sb` denies network, app launches, the keychain services, reads of `/Users`, `/Volumes`,
-`/tmp`, `/private/tmp` and the user's temp directory, and every write but the run copy and
-`/dev/null`; then allows reads of the run copy, the project copy and the bun runtime, and metadata
-reads on the ancestors of the runs directory so node can `lstat` its way down. Reads elsewhere (the
-system, `/opt/homebrew`, `/etc`) stay open. It does not stop a script asking the logged-in GUI
-session to act for it (Apple Events reach Finder and Terminal under it), so a run is only as
-contained as that session. Traps met on the way, each costing hours:
+`sandbox.sb` denies network, all of `/Users`, `/Volumes`, `/tmp`, `/private/tmp` and the user's
+temp directory, and every write; then allows reads of the run copy, the project copy and the bun
+runtime, writes inside the run copy, and metadata reads on the ancestors of the runs directory so
+node can `lstat` its way down. Traps met on the way, each costing hours:
 
 - A write under `/tmp` fails because `/tmp` is a symlink; every path handed to the profile is a
   `realpath`.

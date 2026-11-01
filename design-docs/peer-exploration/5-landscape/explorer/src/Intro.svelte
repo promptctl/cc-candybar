@@ -1,8 +1,8 @@
 <script lang="ts">
   import { liveTraits, plain, projects, withIdeas } from './model';
-  import type { Explorer } from './explorer.svelte';
   import { SECTIONS, type Section } from './traits';
   import Ref from './Ref.svelte';
+  import type { Explorer } from './explorer.svelte';
 
   let { go, explorer }: { go: (id: string) => void; explorer: Explorer } = $props();
   const sections = Object.keys(SECTIONS) as Section[];

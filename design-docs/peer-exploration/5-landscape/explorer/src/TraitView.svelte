@@ -2,18 +2,17 @@
   import { BANDS, bandSize, members, plainMembers, traitById, traitLinks } from './model';
   import { SECTIONS } from './traits';
   import Ref from './Ref.svelte';
-
   import type { Explorer } from './explorer.svelte';
 
   let { id, go, explorer }: { id: string; go: (id: string) => void; explorer: Explorer } = $props();
   const t = $derived(traitById.get(id)!);
   // [LAW:one-source-of-truth] the projects listed are the pool the graph pages through.
   const ps = $derived(explorer.pool(id));
-  const plainAll = $derived(plainMembers.get(id)!);
-  const plain = $derived(explorer.keep(plainAll));
+  const plain = $derived(explorer.keep(plainMembers.get(id)!));
   // The band shares describe the characteristic, so they count every member, not the filtered pool.
   const all = $derived(members.get(id)!);
-  const share = (b: string) => (all.filter((p) => p.band === b).length + plainAll.filter((p) => p.band === b).length) / bandSize[b];
+  const allPlain = $derived(plainMembers.get(id)!);
+  const share = (b: string) => (all.filter((p) => p.band === b).length + allPlain.filter((p) => p.band === b).length) / bandSize[b];
   // Bars scale to the band where this characteristic is commonest, so small shares still read.
   const top = $derived(Math.max(...BANDS.map(share)));
   const related = $derived(traitLinks.filter((l) => l.a === id || l.b === id).map((l) => (l.a === id ? l.b : l.a)));

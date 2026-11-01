@@ -10,24 +10,12 @@
   // The long text arrives with its bundle, once this project is opened; until then the page shows
   // what the graph already has.
   let detail = $state<Partial<RawProject>>({});
-  let detailError = $state<string | null>(null);
-  let attempt = $state(0);
   $effect(() => {
     const b = base;
-    attempt;
     detail = {};
-    detailError = null;
-    if (b.detail === undefined) return;
+    if (b.detail === null) return;
     let current = true;
-    bundle<Partial<RawProject>>('detail', b.detail).then(
-      (g) => {
-        if (!current) return;
-        // [LAW:no-silent-failure] a bundle without the project it was opened for is a broken export
-        if (g[b.repo] === undefined) detailError = `detail bundle ${b.detail} holds nothing for ${b.repo}`;
-        else detail = g[b.repo];
-      },
-      (e: Error) => { if (current) detailError = e.message; },
-    );
+    bundle<Partial<RawProject>>('detail', b.detail).then((g) => { if (current) detail = g[b.repo] ?? {}; });
     return () => { current = false; };
   });
   const p = $derived({ ...base, ...detail });
@@ -37,11 +25,10 @@
   const family = $derived(p.fam === null ? null : families[p.fam]);
 </script>
 
-<div class="kind">{p.kind}</div>
+<div class="kind">{p.what.split(/[(:;,]/)[0]}</div>
 <h2>{p.repo}</h2>
 <p><a class="repo" href={p.url} target="_blank" rel="noopener">{p.url.replace('https://', '')} ↗</a></p>
 <p>{p.what}</p>
-{#if detailError}<p class="error small">The rest of this page did not load: {detailError}. <button class="retry" onclick={() => attempt++}>retry</button></p>{/if}
 {#if p.live}<p class="muted small">Its bar plays along the bottom of the graph, as it printed in a sandbox through a two-minute mock conversation: a feature branch, edits, a commit, a push.</p>{/if}
 <p class="muted small">{p.loc} statusline lines{p.lang ? ` · ${p.lang}` : ''} · {p.commits} commits · last {p.last}{p.created ? ` · created ${p.created}` : ''}</p>
 
@@ -85,8 +72,6 @@
 
 <style>
   .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
-  .error { color: #e06c6c; }
-  .retry { background: none; border: 0; color: var(--fg); font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
   .repo { font-size: 13px; }
   .idea { border-left: 3px solid var(--idea); padding: 2px 10px; margin: 8px 0; }
 </style>

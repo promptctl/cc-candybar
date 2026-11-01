@@ -12,8 +12,6 @@ export interface RawProject {
   last: string;
   lang: string;
   what: string;
-  // what the project is: the description up to its first punctuation, stored by export
-  kind: string;
   shape: string;
   motive: string;
   fams: string[];
@@ -23,13 +21,12 @@ export interface RawProject {
   boring: boolean;
   copy: [repo: string, percent: number][];
   // The risk tier the capture triage stamped (tools/capture/triage.py), and whether its bar was
-  // captured: ran in the sandbox and printed something. The frames themselves arrive in a bars bundle.
+  // captured: ran in the sandbox and printed something. The frames themselves live in bars.ts.
   tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
   live: boolean;
   // The bundles holding this project's frames and its long text, or null when it has neither.
-  // the bundles holding its bar and its long text; absent when it has none
-  bar?: number;
-  detail?: number;
+  bar: number | null;
+  detail: number | null;
   created?: string;
   size?: string;
   sources?: string;

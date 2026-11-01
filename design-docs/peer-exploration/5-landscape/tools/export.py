@@ -9,10 +9,6 @@ literal so an item lands in the same group the README counts.
 import ast, base64, gzip, json, glob, os, re, sys
 from collections import defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I leaves the script's own directory off the path
-import credentials
-from kind import kind_of
-
 DEST, PUBLIC = sys.argv[1], sys.argv[2]
 BARS_DIR, DETAIL_DIR = os.path.join(PUBLIC, 'bars'), os.path.join(PUBLIC, 'detail')
 meas = json.load(open('/tmp/ccland/t2/measure.json'))
@@ -81,14 +77,14 @@ for run, is_top, ranked in runs:
         nov = novel.get(k, [])
         shape = (r.get('shape') or '').split()[0] if r.get('shape') else ''
         loc = m.get('sl_loc', 0)
-        kind = kind_of(r.get('what', ''))
+        kind = re.split(r'[(:;,]', r.get('what', ''))[0].strip()
         # a project that only prints Claude Code's input fields gets no drill-down; one that is not a statusline still does
         boring = not nov and kind != 'not a statusline' and (shape == 'field' or loc < 50)
         # the link is written only when it is not the repository's GitHub page; the page derives that one
         url = q['url'] if q['url'] != 'https://github.com/' + q['repo'] else None
         p = {'rank': rank, 'band': '45+' if is_top else next(b for lo, b in BANDS if q['own_commits'] >= lo),
              'repo': q['repo'], 'url': url, 'commits': q['own_commits'],
-             'last': (q.get('last') or '')[:10], 'lang': md.get('lang') or '', 'what': r.get('what', ''), 'kind': kind,
+             'last': (q.get('last') or '')[:10], 'lang': md.get('lang') or '', 'what': r.get('what', ''),
              'shape': shape, 'motive': motive.get(k, ''), 'fams': sorted(fams.get(k, [])), 'loc': loc,
              'fam': family_of.get(k), 'novel': nov, 'boring': boring,
              'copy': [[o.replace('__', '/', 1), round(100 * a)] for o, n, a, _ in m.get('shares', [])[:3]]}
@@ -127,17 +123,11 @@ def bundle(kind, folder, by_repo, per):
     return where
 
 
-# [LAW:no-silent-failure] a credential shape in any published bundle stops the export before anything is written.
-credentials.check(bars)
-credentials.check(details)
 bar_at = bundle('bars', BARS_DIR, bars, 10)
 detail_at = bundle('detail', DETAIL_DIR, details, 50)
-# A project with no bundle of a kind has no key for it, as every absent link is written.
 for p in projects:
-    if p['repo'] in bar_at:
-        p['bar'] = bar_at[p['repo']]
-    if p['repo'] in detail_at:
-        p['detail'] = detail_at[p['repo']]
+    p['bar'] = bar_at.get(p['repo'])
+    p['detail'] = detail_at.get(p['repo'])
 data = {'projects': projects, 'families': families, 'fnames': fnames, 'motives': motives, 'groups': groups}
 json.dump(data, open(DEST, 'w'), separators=(',', ':'))
 print(len(projects), 'projects;', sum(p['boring'] for p in projects), 'just print fields;',

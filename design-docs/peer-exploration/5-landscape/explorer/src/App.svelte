@@ -14,46 +14,17 @@
   // open can be shared, and opening a node writes the hash. The hash is derived from the
   // selection, never a second record of it. [LAW:one-source-of-truth] Each opened node is a
   // history entry, so the back button walks back through what was opened.
-  // A link someone typed or pasted may differ in case from the ids (repos are matched lowercase, as
-  // GitHub matches them), or name nothing here; what it named is shown, never silently dropped.
-  let notFound = $state<string | null>(null);
-  const resolve = (raw: string): NodeId | null => {
-    const lower = raw.toLowerCase();
-    if (projectById.has(lower)) return lower as NodeId;
-    const t = liveTraits.find((t) => `t:${t.id}`.toLowerCase() === lower);
-    return t ? (`t:${t.id}` as NodeId) : null;
-  };
-  const hashId = () => {
-    const raw = location.hash.slice(1);
-    try {
-      return decodeURIComponent(raw);
-    } catch {
-      return raw;
-    }
-  };
   const fromHash = () => {
-    const id = hashId();
-    if (!id) {
-      explorer.selected = null;
-      return;
-    }
-    const node = resolve(id);
-    notFound = node === null ? id : null;
-    if (node !== null && node !== explorer.selected) explorer.reveal(node);
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (id === explorer.selected) return;
+    if (id && (projectById.has(id) || liveTraits.some((t) => `t:${t.id}` === id))) explorer.open(id as NodeId);
+    else if (!id) explorer.selected = null;
   };
   fromHash();
   $effect(() => {
-    const selected = explorer.selected;
-    const want = selected ? '#' + selected : '';
-    if (location.hash === want) return;
-    const named = hashId() ? resolve(hashId()) : null;
-    // A link that names nothing stays in the address bar beside its notice until something is opened.
-    if (hashId() && named === null && selected === null) return;
-    // The same node spelled differently is the same history entry: its spelling is corrected in place.
-    // Otherwise opening a node is a new entry. Both go through location, not the history API: Safari
-    // refuses history.pushState on file: URLs.
-    if (named !== null && named === selected) location.replace(want);
-    else location.hash = want;
+    const want = explorer.selected ? '#' + explorer.selected : '';
+    // Assigning the hash rather than history.pushState: Safari refuses the latter on file: URLs.
+    if (location.hash !== want) location.hash = want;
   });
   $effect(() => {
     addEventListener('hashchange', fromHash);
@@ -130,7 +101,6 @@
   {#if barsError !== null}<div class="strip error" style:right="{panelOpen ? PANEL : 0}px">{shown.repo}: {barsError} <button class="caption retry" onclick={() => barsAttempt++}>retry</button></div>{/if}
   {#if bars !== null}<div class="strip" style:right="{panelOpen ? PANEL : 0}px">{#key shown.id}<Bar {bars} />{/key}<button class="caption" onclick={() => explorer.open(shown.id as NodeId)}>{shown.repo}</button></div>{/if}
   {#if panelOpen}<Panel {explorer} />{/if}
-  {#if notFound !== null}<div class="notice">The link names <b>{notFound}</b>, which is not in this survey. <button onclick={() => (notFound = null)}>dismiss</button></div>{/if}
 </main>
 
 <style>
@@ -146,8 +116,6 @@
   .strip { position: absolute; left: 0; bottom: 0; z-index: 3; padding: 0 14px 12px; pointer-events: none; }
   .strip.error { color: #e06c6c; font-size: 12px; }
   .retry { display: inline; text-decoration: underline; }
-  .notice { position: absolute; left: 14px; top: 56px; z-index: 4; background: var(--panel); border: 1px solid #e06c6c; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--fg); }
-  .notice button { background: none; border: 0; color: var(--dim); font: inherit; text-decoration: underline; cursor: pointer; }
   .caption { display: block; margin-top: 4px; background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; pointer-events: auto; }
   .caption:hover { color: var(--fg); }
   input { width: 320px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: inherit; }
