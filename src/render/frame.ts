@@ -49,7 +49,7 @@ export interface Row {
 // or a placement wearing its own effect that is not drawn now (hidden by its
 // `when`, or in a closed body) — which no still cell can say.
 export interface Frame {
-  // The depth the colours were drawn at: the view's.
+  // The depth the colours were drawn at.
   readonly depth: ColorCompatibility;
   readonly rows: readonly Row[];
   // The moment, in wall seconds, the frame next changes without new data, or
