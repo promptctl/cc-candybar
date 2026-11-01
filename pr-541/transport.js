@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.5";
+var PACKAGE_VERSION = "1.174.6";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -36137,10 +36137,7 @@ function createLauncher(owner) {
     lifelineWarnings: () => lifelineWarnings(state),
     settled: async () => {
       await Promise.all(state.ending);
-      const running = [...state.unreaped].filter(
-        ([child]) => child.exitCode === null && child.signalCode === null
-      );
-      return { unreaped: running.map(([, category]) => category) };
+      return { unreaped: [...state.unreaped.values()] };
     },
     __lifelineForTest: () => {
       const line = state.lifeline;

@@ -4,15 +4,22 @@
     {
       "version": "pr-541",
       "ref": "refs/pull/541/merge",
-      "sha": "199300524fb4a7f15ca1796e52e7d26cfe2dd563",
-      "timestamp": "2026-11-01T06:11:02.061Z",
+      "sha": "c050ab0bbc3e26d0d2c54472be3fb33f199509f4",
+      "timestamp": "2026-11-01T06:16:16.181Z",
       "commits": [
         {
-          "sha": "199300524fb4a7f15ca1796e52e7d26cfe2dd563",
+          "sha": "c050ab0bbc3e26d0d2c54472be3fb33f199509f4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:10:17Z",
-          "message": "Merge abbcde6e09d239b61a111e4febaf68e0ec305d1c into 62bc62daea77f6e6c8b7543db42bf9736245ebaa\n"
+          "timestamp": "2026-11-01T06:15:32Z",
+          "message": "Merge 4c745295fd9b2d8c56113e56bfdc67cdbb86192b into 86e9a73e4a4b54ee92437eaa6e42305f677421a5\n"
+        },
+        {
+          "sha": "4c745295fd9b2d8c56113e56bfdc67cdbb86192b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T00:15:22-06:00",
+          "message": "fix(proc): settled reads unreaped directly; tests pin exit removal (candybar-testing-0x6u.v5t)\n"
         },
         {
           "sha": "abbcde6e09d239b61a111e4febaf68e0ec305d1c",
