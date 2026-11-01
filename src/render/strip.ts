@@ -81,7 +81,7 @@ function draw(
     }),
   ];
   return {
-    lines: runLines(segments, destination),
+    lines: runLines(segments, destination.colorSystem),
     nextChange: Math.min(Segment.nextChange(segments), told),
   };
 }
@@ -274,9 +274,7 @@ function toCell(seg: RenderedSegmentLike, padding: number): RichText {
  * width acts as a break limit. An infinite width has nothing to break at,
  * so it renders unbounded regardless of `wrap`.
  *
- * Strip and FlexStrip each end their own last line, which `runLines` reads as
- * that line's end, so a row is its lines' content and no more. A row of no
- * cells draws nothing and is still a row: one line of no runs.
+ * A row of no cells draws nothing and is still a row: one line of no runs.
  */
 export function drawStripCells(
   cells: readonly RichText[],
@@ -296,9 +294,18 @@ export function drawStripCells(
   // [LAW:single-enforcer] An effect wraps the whole composed strip, here, so a
   // powerline seam's ink — its left cell's fill — moves with that cell. The
   // effect reads the row's width off the frame it draws.
-  return motion.kind === "still"
-    ? draw(strip, drawn)
-    : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  const row =
+    motion.kind === "still"
+      ? draw(strip, drawn)
+      : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
+  // block renderable's contract in rich-js), which `runLines` reads as that
+  // line's end, so a row is its lines' content and no more. A strip that drew
+  // no line broke that contract, and would drop its row from the frame.
+  if (row.lines.length === 0) {
+    throw new Error("drawStripCells: rich-js strip drew no line");
+  }
+  return row;
 }
 
 // A row's bytes alone, for a caller that draws no motion.

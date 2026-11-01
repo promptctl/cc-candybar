@@ -1,6 +1,6 @@
 // What a draw produces: a frame of rows of styled runs, in the colours drawn at
-// its depth. A bar exists as this structure, and every byte a terminal receives
-// is encoded from it here.
+// its depth. A bar exists as this structure, and every byte of a draw is encoded
+// from it here.
 
 import {
   ColorDepth,
@@ -10,7 +10,6 @@ import {
   segmentsToString,
   type Attributes,
   type ColorSpec,
-  type Destination,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility } from "../themes/policy.js";
 import type { DrawnMotion } from "./drawn-motion.js";
@@ -19,10 +18,11 @@ import type { RowKind } from "./effect.js";
 export type Attribute = keyof Attributes;
 
 // [LAW:types-are-the-program] Text in one look. `fg` and `bg` are the colours
-// drawn at the frame's depth, not the ones a config asked for: a hex at
-// truecolor, else what rich-js names the colour (`red`, `color(17)`). `attrs`
-// holds only the attributes that are on. At depth `none` a run has no look and
-// keeps its link, which is what the encoder writes there.
+// drawn at the frame's depth, not the ones a config asked for: a hex for a
+// drawn truecolor colour, else what rich-js names it (`red`, `color(17)`), so a
+// standard colour keeps its name at truecolor too. `attrs` holds only the
+// attributes that are on. At depth `none` a run has no look and keeps its link,
+// which is what the encoder writes there.
 export interface Run {
   readonly text: string;
   readonly fg?: string;
@@ -80,12 +80,10 @@ function lookOf(style: Style, depth: ColorDepth): Omit<Run, "text" | "link"> {
   };
 }
 
-function runOf({ text, style }: Segment, { colorSystem }: Destination): Run {
+function runOf({ text, style }: Segment, depth: ColorDepth | null): Run {
   return {
     text,
-    ...(style !== undefined &&
-      colorSystem !== null &&
-      lookOf(style, colorSystem)),
+    ...(style !== undefined && depth !== null && lookOf(style, depth)),
     ...(style?.link !== undefined && { link: style.link }),
   };
 }
@@ -96,11 +94,11 @@ function runOf({ text, style }: Segment, { colorSystem }: Destination): Run {
 // line of its own. A line ended by a newline is one line: nothing follows it.
 export function runLines(
   segments: readonly Segment[],
-  destination: Destination,
+  depth: ColorDepth | null,
 ): Run[][] {
   const written = segments.filter((s) => !s.isControl && s.text.length > 0);
   return Segment.splitLines(written).map((line) =>
-    line.map((segment) => runOf(segment, destination)),
+    line.map((segment) => runOf(segment, depth)),
   );
 }
 

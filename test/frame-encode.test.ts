@@ -18,6 +18,7 @@ import {
   EFFECT_CATALOGUE,
   Effected,
   FlexStrip,
+  Group,
   JOINERS,
   RichText,
   Segment,
@@ -216,7 +217,7 @@ describe("encodeAnsi over runLines writes what rich-js's encoder writes", () => 
       const segments = grid();
       const ansi = segmentsToString(segments, destination);
       expect(ansi.endsWith("\n")).toBe(true);
-      const lines = runLines(segments, destination);
+      const lines = runLines(segments, destination.colorSystem);
       expect(encodeAnsi(lines, depth)).toBe(ansi.slice(0, -1));
       expectDrawnAt(lines, depth);
       expect(
@@ -227,7 +228,7 @@ describe("encodeAnsi over runLines writes what rich-js's encoder writes", () => 
     test.each(LOOPS)("every moment of %s over a wrapped strip", (loop) => {
       for (const { segments, ansi } of underMotion(loop, depth)) {
         expect(ansi.endsWith("\n")).toBe(true);
-        const lines = runLines(segments, destination);
+        const lines = runLines(segments, destination.colorSystem);
         expect(encodeAnsi(lines, depth)).toBe(ansi.slice(0, -1));
         expectDrawnAt(lines, depth);
       }
@@ -251,15 +252,15 @@ describe("the reach of those comparisons", () => {
   });
 
   test("a wrapped strip is several lines", () => {
-    const destination = resolveDestination("truecolor");
+    const { colorSystem } = resolveDestination("truecolor");
     for (const { segments } of underMotion("wheel", "truecolor")) {
-      expect(runLines(segments, destination).length).toBeGreaterThan(1);
+      expect(runLines(segments, colorSystem).length).toBeGreaterThan(1);
     }
   });
 });
 
 describe("a run", () => {
-  const truecolor = resolveDestination("truecolor");
+  const { colorSystem: truecolor } = resolveDestination("truecolor");
 
   test("holds a flattened translucent colour as the hex it draws", () => {
     const ink = new Segment("x", new Style({ color: "#ffffff80" }));
@@ -291,7 +292,7 @@ describe("a run", () => {
 
   test("keeps its link and no look at depth none", () => {
     const style = new Style({ color: "red", bold: true, link: LINK });
-    const none = resolveDestination("none");
+    const { colorSystem: none } = resolveDestination("none");
     expect(runLines([new Segment("x", style)], none)).toEqual([
       [{ text: "x", link: LINK }],
     ]);
@@ -311,6 +312,21 @@ describe("a row of no cells", () => {
     const stacked = [[{ text: "a" }], ...lines, [{ text: "b" }]];
     expect(encodeAnsi(stacked, colorCompatibility)).toBe("a\n\nb");
   });
+});
+
+test("a strip that draws no line is loud, not a row gone from the frame", () => {
+  const cell = new RichText("x", { end: "" });
+  const nothing = { kind: "moving", time: 0, wrap: () => new Group() } as const;
+  const options = {
+    endcaps: "powerline",
+    colorCompatibility: "truecolor",
+    wrap: true,
+    padding: 0,
+    width: 80,
+  } as const;
+  expect(() => drawStripCells([cell], options, nothing)).toThrow(
+    "drew no line",
+  );
 });
 
 test("plainOf is a line's text", () => {
