@@ -239,9 +239,12 @@ describe("a connection over a stream", () => {
 
   test("an answered request is not timed out by a client slow to close", async () => {
     const daemon = standIn();
-    const { send } = open(daemon);
+    const { client, send, received } = open(daemon);
+    client.allowHalfOpen = true;
     send(STATS);
     await settled();
+    expect(received).toHaveLength(1);
+    expect(client.destroyed).toBe(false);
 
     jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
     expect(daemon.stats.requestsTimedOut).toBe(0);
