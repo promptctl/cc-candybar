@@ -4,15 +4,22 @@
     {
       "version": "pr-545",
       "ref": "refs/pull/545/merge",
-      "sha": "557508c37208204f9213341d345d9319aee744c5",
-      "timestamp": "2026-11-01T09:12:17.043Z",
+      "sha": "76d98b5b8dd55762e7c5888b696212e2d3bd80c0",
+      "timestamp": "2026-11-01T09:22:11.576Z",
       "commits": [
         {
-          "sha": "557508c37208204f9213341d345d9319aee744c5",
+          "sha": "76d98b5b8dd55762e7c5888b696212e2d3bd80c0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T09:11:23Z",
-          "message": "Merge 09a7fcb5eac51f12ff5a9e4f7cd58f827a32975c into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
+          "timestamp": "2026-11-01T09:21:19Z",
+          "message": "Merge 9f43015f530a251bc42bcb1929b9afff998f601a into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
+        },
+        {
+          "sha": "9f43015f530a251bc42bcb1929b9afff998f601a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:21:08-07:00",
+          "message": "fix(daemon): a launch keeps the program's own words, clickLaunch's bound cannot be passed (candybar-launch-q7o7.gp7)\n"
         },
         {
           "sha": "09a7fcb5eac51f12ff5a9e4f7cd58f827a32975c",

@@ -35881,8 +35881,7 @@ async function launchWaited(state, opts) {
           reason: terminated,
           ...output(),
           exitCode: code,
-          signal: signal2,
-          error: `${terminated} after ${Date.now() - t0}ms`
+          signal: signal2
         });
         return;
       }
