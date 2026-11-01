@@ -2161,10 +2161,14 @@ async function journaled<C extends DaemonContext>(
     journal,
     navigating: closing(navigation.sessionState),
   };
-  const launches: Pick<Journaled<DaemonContext>, "launch" | "typing"> = {
+  const launches: Pick<
+    Journaled<DaemonContext>,
+    "launch" | "typing" | "applyUpdate"
+  > = {
     launch: (opts, what) =>
       turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
     typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
+    applyUpdate: () => turn.landed(ctx.applyUpdate()),
   };
   try {
     await handler({

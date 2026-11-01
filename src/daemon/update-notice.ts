@@ -283,8 +283,8 @@ export interface UpdateWatch {
   close(): void;
   notice(ctx: NoticeContext): DiagnosticMessage[];
   // The apply-update verb's effect. Rejects with BadVerbArgs when there is
-  // nothing to apply, an act is already running on this bundle, or the daemon
-  // closed under the claim.
+  // nothing to apply or an act is already running on this bundle, and with
+  // DaemonClosing when the daemon closed before the claim stood.
   act(): Promise<void>;
   // Whether an act may be rewriting this bundle now, whichever daemon started
   // it. False while its files can't be read: the error says so, and holding
@@ -547,6 +547,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     error: () => unreadable,
     act: () =>
       actTurn(async () => {
+        if (closed) throw new DaemonClosing("apply-update");
         const update = current();
         if (update === null) {
           throw new BadVerbArgs(
