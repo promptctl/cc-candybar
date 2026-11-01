@@ -4,46 +4,46 @@
     {
       "version": "pr-533",
       "ref": "refs/pull/533/merge",
-      "sha": "a3da5f9cb4bdb7aa335ba3cedc3c7a049a4a7725",
-      "timestamp": "2026-11-01T03:13:44.530Z",
+      "sha": "c327bd2c4698b27ad34c32605f14ddce5d16476c",
+      "timestamp": "2026-11-01T03:22:45.177Z",
       "commits": [
         {
-          "sha": "a3da5f9cb4bdb7aa335ba3cedc3c7a049a4a7725",
+          "sha": "c327bd2c4698b27ad34c32605f14ddce5d16476c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:12:58Z",
-          "message": "Merge fa9dd4015c0f2dd06e8071f5cd85f9a880231df2 into 96f1881bee934f602971a13dea41977a614a98e3\n"
+          "timestamp": "2026-11-01T03:21:57Z",
+          "message": "Merge 951bf27a2cb073c1c31b5f5eac06c2a8b3e6d17a into 0db1339f6615f78932dd846c241ea893c99a82fc\n"
         },
         {
-          "sha": "fa9dd4015c0f2dd06e8071f5cd85f9a880231df2",
+          "sha": "951bf27a2cb073c1c31b5f5eac06c2a8b3e6d17a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T21:11:53-06:00",
           "message": "fix(test): the claims about a held clock say what it holds, and the case drops what it cannot show (brandon-unfiled-3248.a5k3)\n"
         },
         {
-          "sha": "bf08910f853acaca500f93419be56e07657d6e96",
+          "sha": "2cfdf2e1ea322aaae72ac289a4b625fcd8c12f22",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T21:03:18-06:00",
           "message": "test(daemon): the answered-request case holds its client open, so it can fail (brandon-unfiled-3248.a5k3)\n"
         },
         {
-          "sha": "df9af9de63a3bf5e95c2c9eef5682c5c66bbc332",
+          "sha": "b323f2d666b338ea1ee10a7059fdedd4f618d2f9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T21:01:07-06:00",
           "message": "fix(daemon): a held clock fires as a real one does, and an answered request's backstop is cleared (brandon-unfiled-3248.a5k3)\n"
         },
         {
-          "sha": "2791950c058de5742cb7660f9aee48b8ae546849",
+          "sha": "303b1704cefaf588f820d831d862164ebdb068bb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:30:38-06:00",
           "message": "fix(daemon): a request's timers run on its clock, so a held daemon holds them (brandon-unfiled-3248.a5k3)\n\nA budget was figured from DaemonClock while the wait and the backstop ran on\nreal setTimeout, so a held clock could not own a request's time. `after` on the\nclock gives both one owner: the deadline case holds its daemon and advances to\nexact figures, a stall in the worker can no longer reach the backstop first, and\narming the wait with anything but its budget fails the case.\n\nFrom the high review: RequestWait goes, since `stated` was req.deadline.kind, and\nthe process file's one case stops carrying shared fixtures.\n"
         },
         {
-          "sha": "5e1d81cc6ff89cc89ddf85cc9a19b2c401fa443d",
+          "sha": "e572296888ab703788b7625aeb79c17ccf649bcd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:19:01-06:00",
