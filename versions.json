@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-550",
+      "ref": "refs/pull/550/merge",
+      "sha": "69ae81603727565cb868cf62b01217e12c9c3425",
+      "timestamp": "2026-11-01T12:30:34.875Z",
+      "commits": [
+        {
+          "sha": "69ae81603727565cb868cf62b01217e12c9c3425",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:29:50-07:00",
+          "message": "Merge 6d562fd02afb2a026bffc3ef2a5d1834e1886406 into 722b6fe4c0d62887ce180576956933793a7e8d12\n"
+        },
+        {
+          "sha": "6d562fd02afb2a026bffc3ef2a5d1834e1886406",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:17:58-07:00",
+          "message": "test(render): encodeAnsi writes what rich-js writes, and is the one path to bytes (candybar-isolated-daemon-bfab.abb)\n\nCompares encodeAnsi over runLines with segmentsToString at all four depths, over\na grid of named, indexed, hex, translucent and blended colours and over every\nloop effect at advancing times, and asserts its own reach. Asserts a run's colours\nwere drawn, not copied from the spec, and that src holds no second path to bytes.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "4faac454a0759521f803e68673dfedebe5307cec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:17:55-07:00",
+          "message": "feat(render): the draw's output is a Frame, and every byte derives from it (candybar-isolated-daemon-bfab.abb)\n\ndraw() held rich-js segments and threw them away, so a bar existed only as\nbytes. It now returns lines of runs in the colours drawn at the frame's depth;\ndrawDsl stamps each line's kind into a Row and DrawnFrame holds the Frame.\nencodeAnsi is the one path from a draw to bytes. Callers holding no Frame hand\nit their depth, and strip geometry reads plainOf without encoding.\n\nNo byte moves: test/frame-bytes.test.ts.snap and the default menu snapshot are\nuntouched. Readers move off the bytes in later tickets.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "add8f319c7f894ca7e067215749e5caf0da1f69e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:10:14-07:00",
+          "message": "test(render): every terminal lane's bytes, pinned before the draw keeps its structure (candybar-isolated-daemon-bfab.abb)\n\nCommitted against unchanged source, so the snapshot is evidence the change\nmoves no byte: the ANSI and the band and tmux status lanes, at all four depths,\nmenus closed and open, from the bundled default and a config using the supported\nAPI's reach, plus a RENDER_FAILED response through both lanes. The reach is\nasserted, so a config that stops drawing a blank row, a wrapped row, a ColorBlend,\na moving effect or a fade fails.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "722b6fe4c0d62887ce180576956933793a7e8d12",
