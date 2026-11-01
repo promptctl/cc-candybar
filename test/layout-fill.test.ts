@@ -253,8 +253,11 @@ describe("a cell wider than a line wraps across lines", () => {
     expect(squeezed(lines.join(""))).toBe(squeezed(text));
   });
 
-  test("a full-width space left hanging at a break costs no text", () => {
-    const text = "日本語の説明\u3000次の見出し\u3000最後の行まで続く文章 ▸";
+  test.each([
+    ["a full-width space", "日本語の説明\u3000次の見出し\u3000最後の行まで続く文章 ▸"],
+    ["a no-break space", "alpha\u00A0bravo\u00A0charlie\u00A0delta\u00A0echo ▸"],
+    ["a wide space", "alpha\u2003bravo\u2003charlie\u2003delta\u2003echo ▸"],
+  ])("%s left hanging at a break costs no text", (_, text) => {
     for (const width of [9, 10, 11, 12, 13, 20, 30]) {
       for (const endcaps of ENDCAPS_SHAPES) {
         const lines = serialize([painted(text)], opts({ endcaps, width }));
@@ -262,6 +265,39 @@ describe("a cell wider than a line wraps across lines", () => {
         expect(squeezed(lines.join(""))).toBe(squeezed(text));
       }
     }
+  });
+
+  test("it starts on the line the cell before it left open", () => {
+    const text = " the quick brown fox jumps over the lazy dog again and again ";
+    const lines = serialize(
+      [painted("   "), painted(text)],
+      opts({ width: 30 }),
+    );
+    expect(lines.filter((line) => squeezed(line) === "")).toEqual([]);
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(squeezed(lines.join(""))).toBe(squeezed(text));
+  });
+
+  test("a first word too long to join the line moves to the next whole", () => {
+    const word = "x".repeat(25);
+    const lines = serialize(
+      [painted("lead"), painted(`${word} tail tail tail tail tail tail`)],
+      opts({ width: 30 }),
+    );
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(lines.some((line) => squeezed(line).startsWith(word))).toBe(true);
+  });
+
+  test("a line a piece opens wears the cell's padding", () => {
+    const text = " alpha bravo charlie delta echo foxtrot golf hotel india ";
+    const items = fitRow(
+      [painted(text)],
+      opts({ width: 30, padding: 1 }),
+    );
+    expect(items.length).toBeGreaterThan(1);
+    items.forEach(({ owner }) => expect(owner.plain.startsWith(" ")).toBe(true));
+    const lines = serialize([painted(text)], opts({ width: 30, padding: 1 }));
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
   });
 
   test("a word wider than a line folds through it", () => {

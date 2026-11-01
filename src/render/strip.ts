@@ -241,6 +241,10 @@ export function stripPrivateGlyphs(options: StripShape): string {
   return privateGlyphsIn(plainOf(lines.flat()));
 }
 
+// The widest a glyph draws. A row narrower than this holds no glyph at all, so a
+// fold stops here rather than at nothing.
+export const WIDEST_GLYPH_COLS = 2;
+
 // [LAW:single-enforcer] The width a line breaks at, the one reading of the
 // `wrap` policy over the `width` fact: unbounded where a row may not break.
 export function lineWidth(

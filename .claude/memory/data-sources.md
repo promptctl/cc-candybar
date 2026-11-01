@@ -30,7 +30,7 @@ The forge lookup is a separate source on the repo, and a git refresh never await
 
 ## Not answered yet is its own state
 
-A value is pending (not answered yet), absent (the domain has nothing), failed, or ok. Reading a pending value throws a pending signal. Every place that evaluates a template treats that signal as its own outcome, never as a failure. No error is recorded and no default is used, since a default stands in for a failure, not a wait. A pending placement draws loading cells laid out like the last frame drawn from the same source, so the bar doesn't reflow when the answer lands. A pending globals rule keeps the name it last settled on.
+A value is pending (not answered yet), absent (the domain has nothing), failed, or ok. Reading a pending value throws a pending signal. Every place that evaluates a template treats that signal as its own outcome, never as a failure. No error is recorded and no default is used, since a default stands in for a failure, not a wait. A pending placement draws loading cells laid out like the last frame drawn from the same source, so the bar doesn't reflow when the answer lands. A cell wider than its line is the exception: a placeholder's blanks hang at a break, so it draws one line and the bar shrinks until the answer lands. A pending globals rule keeps the name it last settled on.
 
 An input variable stays pending until its view's source is bound and answers its path. Its default answers only a payload that lacks the path, not a missing payload. A cache policy reads its source when the value it keys on first answers, not at declaration, so a view's source reads once when the view opens.
 
