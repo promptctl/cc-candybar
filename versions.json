@@ -4,15 +4,22 @@
     {
       "version": "pr-534",
       "ref": "refs/pull/534/merge",
-      "sha": "54d49c19bf2b133d891cdf88048dec50d6b772d7",
-      "timestamp": "2026-11-01T02:23:42.187Z",
+      "sha": "4bd435b6705a064f2857042bfe2b971e3795e234",
+      "timestamp": "2026-11-01T02:31:28.835Z",
       "commits": [
         {
-          "sha": "54d49c19bf2b133d891cdf88048dec50d6b772d7",
+          "sha": "4bd435b6705a064f2857042bfe2b971e3795e234",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:22:45-06:00",
-          "message": "Merge adfc75a8721a472f4c733033e023605d542515e2 into d189b5c56cbf38da7151f2400b2ae226f8331328\n"
+          "timestamp": "2026-11-01T02:30:40Z",
+          "message": "Merge ee4b6c831cdcd5f29125b1de9eb9987f8c3200c1 into d189b5c56cbf38da7151f2400b2ae226f8331328\n"
+        },
+        {
+          "sha": "ee4b6c831cdcd5f29125b1de9eb9987f8c3200c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:30:29-06:00",
+          "message": "fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n"
         },
         {
           "sha": "adfc75a8721a472f4c733033e023605d542515e2",

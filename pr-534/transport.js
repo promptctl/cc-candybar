@@ -35720,16 +35720,7 @@ function signalGroup(pid2, sig) {
   try {
     process_default.kill(-pid2, sig);
   } catch (err) {
-    const code = err.code;
-    if (code !== "ESRCH" && !(code === "EPERM" && leaderIsOurs(pid2))) throw err;
-  }
-}
-function leaderIsOurs(pid2) {
-  try {
-    process_default.kill(pid2, 0);
-    return true;
-  } catch {
-    return false;
+    if (err.code !== "ESRCH") throw err;
   }
 }
 async function launchWaited(state, opts) {
@@ -35785,10 +35776,11 @@ async function launchWaited(state, opts) {
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
-    const signal = (pid2, sig) => {
+    const escalate = (pid2) => {
       try {
-        signalGroup(pid2, sig);
+        signalGroup(pid2, "SIGKILL");
       } catch (err) {
+        if (child.exitCode !== null || child.signalCode !== null) return;
         state.unreaped.set(child, opts.category);
         settle3({
           ok: false,
@@ -35808,7 +35800,7 @@ async function launchWaited(state, opts) {
       const pid2 = child.pid;
       if (pid2 !== void 0) {
         killTimer = setTimeout(() => {
-          signal(pid2, "SIGKILL");
+          escalate(pid2);
           void exited.then(
             () => setImmediate(() => {
               child.stdout?.destroy();
@@ -35816,7 +35808,10 @@ async function launchWaited(state, opts) {
             })
           );
         }, TIMEOUT_KILL_GRACE_MS);
-        signal(pid2, "SIGTERM");
+        try {
+          signalGroup(pid2, "SIGTERM");
+        } catch {
+        }
       }
     };
     child.stdout?.on("data", (chunk3) => {
@@ -35836,7 +35831,7 @@ async function launchWaited(state, opts) {
         error: spawnErrorText(err, opts.cwd)
       });
     });
-    child.on("close", (code, signal2) => {
+    child.on("close", (code, signal) => {
       state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
@@ -35845,7 +35840,7 @@ async function launchWaited(state, opts) {
           stdout: stdout2,
           stderr: stderr2,
           exitCode: code,
-          signal: signal2
+          signal
         });
         return;
       }
@@ -35853,14 +35848,14 @@ async function launchWaited(state, opts) {
         settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
         return;
       }
-      const reason = signal2 ? "signal" : "non-zero";
+      const reason = signal ? "signal" : "non-zero";
       settle3({
         ok: false,
         reason,
         stdout: stdout2,
         stderr: stderr2,
         exitCode: code,
-        signal: signal2
+        signal
       });
     });
     if (opts.timeoutMs && opts.timeoutMs > 0) {
