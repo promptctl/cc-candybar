@@ -42,7 +42,7 @@ CI's latest full run (41336423169) ran 6,486 tests in about 8 minutes: 377 s of 
 | Real filesystem, git or `fs.watch` | 73 | 1,410 | 30% |
 | In process, an upper bound | 175 | 2,281 | 49% |
 
-The 45 files are 31 that use the in-worker harness and 14 in the process tier. Of their 292 cases, about 170 reach a boot; the rest share a file with one. `plugins.test.ts` shows the difference: 101 cases, 3 of which boot. Ticket 2 replaces this estimate with an exact count.
+The 45 files are 31 that use the in-worker harness and 14 in the process tier. Of their 292 cases, about 170 reach a boot; the rest share a file with one. `plugins.test.ts` shows the difference: 101 cases, 3 of which boot. Ticket 2 counts all 292, because a case that does not boot has to leave those files too.
 
 What shapes the plan:
 
@@ -95,7 +95,7 @@ This table is the target, read from `DaemonParts`, `verbCtx` and the imports on 
 | Requests | `handleRequest`, `replyTo`, `handleConnection`, `RuntimeStats`, the order of a render | Client connection, clock |
 | Lifetime | Socket lease, boot refusal, parent watchdog, shutdown order | Clock, process table |
 
-Three knots need more than a move.
+Four knots need more than a move.
 
 **Drawing and Feeds call each other.** A feed calls the draw, while a request's render tells `laneSetups` and `tmuxStatusLines` at arrival and reads `frameFeeds.following` after its wait. So the render is cut at its wait. Drawing offers setup, which returns the view and the session's lane switches, and draw, which takes feed facts. Requests owns the order: setup, tell Feeds, wait, read the feed facts, draw. That is today's order, so lanes still start in the arrival turn, even when the draw later throws, and feed facts are read as late as they are now. A frame has its own setup, which opens no view, and the same draw. [LAW:no-ambient-temporal-coupling]
 
@@ -141,8 +141,8 @@ Each row is tested once, at its adapter.
 **1. Every CI run stores one record per test file.** A record holds file, layer, count, duration and outcome, and is kept as a run artifact. The shape report, the flake rate and the budget checks are all views over it, so each fact has one home. Every file in a project emits a record, so a file that ran zero tests and a file that never ran read differently. The report also tracks time-to-diagnose, from a red run to the ticket naming its cause. [LAW:nothing-unseen] [LAW:one-source-of-truth]
 Done when a CI run shows count and time per layer, covering every file, plus pre-merge wall time.
 
-**2. Every test that boots the daemon is counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route and records the test that booted, so it counts tests, which is what the cap is about. It is also the one list of what still boots, so each piece ticket takes its cases from it, because the unit that moves is a case and not a file. `HELPER_START_CEILING` becomes a transitional ratchet over this count outside `test/e2e/`, set to today's number, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts the tests still being moved, a different fact from the cap in ticket 3, and ticket 35 deletes it. This lands first because it stops new boots while the cutting runs. [LAW:single-enforcer]
-Done when a new test that boots through the harness fails CI, a raised ratchet fails CI, and every later ticket lowers the number.
+**2. The cases in `test/daemon-boots/` are counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route, so a boot from any other file fails, as a real daemon outside the process tier does today. `HELPER_START_CEILING` becomes a transitional ratchet on the number of cases in `test/daemon-boots/`, read from ticket 1's record, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts cases, not starts, because most booting cases share a start in a `beforeAll`, and a partial move has to lower it. It is a different fact from the cap in ticket 3, and ticket 35 deletes it. This follows tickets 1 and 4 at once, because it stops new boots while the cutting runs. [LAW:single-enforcer]
+Done when a boot outside the allowed directories, a new case in `test/daemon-boots/` and a raised ratchet each fail CI.
 
 **3. The cap and the assertion limit are enforced.** Creates `test/e2e/`, the sign-off file and the run-time assertion check from "The five end-to-end tests". The cap counts the tests in `test/e2e/`. The refusal is a new hook of its own that also refuses edits to itself, because `.claude/hooks/release-pin.mjs` says every refusal is about the 1.x pin. Hooks are wired in `.claude/settings.json`, which that pin refuses agents, so Brandon adds that one entry.
 Done when break 6 of the checkpoint fails as written.
@@ -161,7 +161,7 @@ Done when a test can be quarantined by one line and an expired line fails CI. `l
 ### Stage 2: the composition root
 
 **8. `createDaemon` takes every adapter and every path as an input.** `DaemonInputs` gains a paths value and the adapters it builds today: launcher, stores, edges, the logger, the link key, `fetch` and the file stat. Entry points read `paths.ts` once and pass the value down. That settles the conflict with the comment on `DaemonInputs`, which goes. The keyspaces become one value here. The Foundations row moves out of `verbs` and the other rows so every piece can reach it, and the import rule starts with it. `site/transport.ts` is the other caller and supplies the same inputs. It keeps the real adapters, because its `node:fs` and `node:child_process` are already the simulated machine under `site/`. [LAW:effects-at-boundaries] [LAW:escape-local-minima]
-Done when nothing `createDaemon` reaches constructs an adapter or reads `paths.ts`, fake ports leave the real state directory untouched, and `pnpm site:build` still passes.
+Done when `createDaemon`'s body constructs no adapter, `server.ts` is the daemon process's one reader of `paths.ts`, fake ports leave the real state directory untouched, and `pnpm site:build` still passes.
 
 **9. Configuration is parsed once at the root and passed down as a value.** `src` reads the environment only at entry points (45 reads today), and tests stop writing `process.env` (187 writes today). Daemon-side facts about a session keep arriving as hints from the client. Depends on 8.
 Done when no test writes `process.env` and a lint rule keeps env reads at entry points.
@@ -213,7 +213,7 @@ Done when literal sleeps are gone and `until`, `renderUntil`, `untilHeard` and l
 
 ### Stage 4: the pieces
 
-Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need not land in table order, because most lower pieces are already classes a test can assemble over fake ports. The draw and the verbs are functions over `DaemonParts` and `VerbContext`, which only `createDaemon` builds, so anything that needs them waits for tickets 22 and 25. Among the tickets that are ready, take the one that lowers the ratchet most, as ticket 2's list reads then.
+Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need not land in table order, because most lower pieces are already classes a test can assemble over fake ports. The draw and the verbs are functions over `DaemonParts` and `VerbContext`, which only `createDaemon` builds, so anything that needs them waits for tickets 22 and 25. Among the tickets that are ready, take the one that lowers the ratchet most, as `test/daemon-boots/` reads then.
 
 **21. Feeds.** `daemon-frame-feed-e2e` is the largest booting file, with 27 cases. `FrameFeeds` already takes its draw as an input, so the fake draw needs no other piece. Depends on 11, 12, 14 and 17.
 
@@ -252,7 +252,7 @@ Done when the decisions have unit tests with no process, and the shell has no br
 Done when random order is the default in CI and the suite passes on repeated seeds.
 
 **35. The five end-to-end tests run on the packed artifact.** Each runs from `pnpm pack` installed into a temp prefix, with the native binary from `release.yml`'s `build-rust` job. `test/helpers/in-worker-daemon.ts` goes. The ratchet reaches zero and is deleted, which leaves the sign-off cap as the only number. Depends on 21 to 30 and 36.
-Done when ticket 2's count reads 5, all of them in `test/e2e/`, break 7 holds, and `test/daemon-boots/` is empty because its cases moved. A case is deleted only with the lower test that now proves its behaviour named on the ticket.
+Done when `test/e2e/` holds the five, break 7 holds, and `test/daemon-boots/` is empty because its cases moved. A case is deleted only with the lower test that now proves its behaviour named on the ticket, or because it proved only the harness that goes here. `drive-bar` and `bar-web` prove tools under `scripts/` that are no piece, so their cases move to those tools over a fake client connection.
 
 **36. Measurements stop booting the daemon where they can.** `draw-reserve` measures the drawing piece in a small process of its own, and moves to the scheduled tier. Takes `tl8u`, and depends on `candybar-launch-q7o7.qjw` and 22. The Load gate and the Feed criterion are measured on the built daemon by their nature, and they are covered under Decisions.
 Done when no jest test outside `test/e2e/` boots the daemon.
@@ -279,7 +279,7 @@ Done when the file is shorter and the hand-faking advice is gone.
 
 ## Order
 
-The epic ranks directly below `candybar-launch-q7o7`. Tickets 1, 2, 3, 4 and 7 are ready at once, and 5 and 6 once the records exist. Stage 2 comes before any port, because a port with no root to plug into frees no test. Stage 3 and Stage 4 interleave by the dependencies named on each piece, and Stage 5 can run beside them. Stage 6 comes last.
+The epic ranks directly below `candybar-launch-q7o7`. Tickets 1, 3, 4 and 7 are ready at once, ticket 2 once 1 and 4 land, and 5 and 6 once the records exist. Stage 2 comes before any port, because a port with no root to plug into frees no test. Stage 3 and Stage 4 interleave by the dependencies named on each piece, and Stage 5 can run beside them. Stage 6 comes last.
 
 ## Decisions
 
