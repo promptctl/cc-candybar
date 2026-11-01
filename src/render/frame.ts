@@ -12,6 +12,8 @@ import {
   type ColorSpec,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility } from "../themes/policy.js";
+import type { DiagnosticColors } from "./diagnostic-style.js";
+import { sanitizeText } from "./diagnostic-text.js";
 import type { DrawnMotion } from "./drawn-motion.js";
 import type { RowKind } from "./effect.js";
 
@@ -33,7 +35,8 @@ export interface Run {
 
 // One line on screen. A row FlexStrip wrapped is one Row per line.
 export interface Row {
-  readonly kind: RowKind;
+  // A row of the bar, or of what stands in its place, which no motion reaches.
+  readonly kind: RowKind | "diagnostic";
   readonly runs: readonly Run[];
 }
 
@@ -46,7 +49,7 @@ export interface Row {
 // or a placement wearing its own effect that is not drawn now (hidden by its
 // `when`, or in a closed body) — which no still cell can say.
 export interface Frame {
-  // The depth the colours were drawn at: the view's.
+  // The depth the colours were drawn at.
   readonly depth: ColorCompatibility;
   readonly rows: readonly Row[];
   // The moment, in wall seconds, the frame next changes without new data, or
@@ -55,6 +58,22 @@ export interface Frame {
   readonly motion: DrawnMotion;
   // The sources whose values this frame drew as not answered yet, by name.
   readonly pending: readonly string[];
+}
+
+// [LAW:types-are-the-program] A frame saying one thing, with no draw behind it.
+// Its colours are hex, so it is truecolor whatever the view's depth, and it has
+// no attributes, so no lane encoder can refuse it. The text is sanitized here,
+// so its one run holds no newline or escape, whoever built the text.
+export function diagnosticFrame(text: string, colors: DiagnosticColors): Frame {
+  return {
+    depth: "truecolor",
+    rows: [
+      { kind: "diagnostic", runs: [{ text: sanitizeText(text), ...colors }] },
+    ],
+    nextChange: Infinity,
+    motion: "still",
+    pending: [],
+  };
 }
 
 // [LAW:one-source-of-truth] A drawn colour is concrete by its type: a TRUECOLOR
@@ -129,7 +148,7 @@ export function encodeAnsi(
     .join("\n");
 }
 
-export function ansiOf(frame: Frame): string {
+export function ansiOf(frame: Pick<Frame, "depth" | "rows">): string {
   return encodeAnsi(
     frame.rows.map((row) => row.runs),
     frame.depth,

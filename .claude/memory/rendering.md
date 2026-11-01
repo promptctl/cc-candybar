@@ -30,7 +30,7 @@ A session view's payload is derived from its declaration, the session's picks an
 ## Layout
 
 - Padding is structural. Templates emit content only. Padding is applied where the cell is laid out, before sizing, so it fits inside a declared width.
-- A fill cell can't be sized where it's authored, because the leftover width is a fact about the whole row. Instead, the cell declares its demand, and one place settles every demand. It measures the row through the same serializer that will draw it, rather than modelling the chrome. A row that already overflows hands out nothing. The demand is a typed field of the cell, so any code that rebuilds a cell carries it or fails to typecheck.
+- A fill cell can't be sized where it's authored, because the leftover width is a fact about the whole row. Instead, the cell declares its demand, and one place settles every demand. It measures the row through the same draw that will write it, rather than modelling the chrome. A row that already overflows hands out nothing. The demand is a typed field of the cell, so any code that rebuilds a cell carries it or fails to typecheck.
 - Endcap shapes are rich-js's joiners. Chrome widths are measured through the joiner, never kept in a table.
 - Colour depth has no "auto" setting. The daemon is detached, so detection would read the daemon's terminal, not the user's. A real auto would need a client hint.
 

@@ -49,6 +49,7 @@ const inFile =
     reader(read(relPath), ...anchors);
 const num = inFile(reads.num);
 const lit = inFile(reads.lit);
+const sgrOfHex = inFile(reads.sgrOfHex);
 const memberSet = inFile(reads.memberSet);
 const codeRanges = inFile(reads.codeRanges);
 const markers = inFile(reads.markers);
@@ -416,12 +417,12 @@ const CHECKS = [
   },
   {
     label: "glyph FG",
-    ts: lit(TS_STYLE, /const DIAGNOSTIC_ERROR_FG = "((?:[^"\\]|\\.)*)";/),
+    ts: sgrOfHex(TS_STYLE, /const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = \{[^}]*\bfg: "(#[0-9a-f]{6})"/, 38),
     rust: lit(RS_GLYPH, /const FG: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
     label: "glyph BG",
-    ts: lit(TS_STYLE, /const DIAGNOSTIC_ERROR_BG = "((?:[^"\\]|\\.)*)";/),
+    ts: sgrOfHex(TS_STYLE, /const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = \{[^}]*\bbg: "(#[0-9a-f]{6})"/, 48),
     rust: lit(RS_GLYPH, /const BG: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {

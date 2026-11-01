@@ -50,6 +50,17 @@ export const lit = overCode((code, regex) => {
   return JSON.stringify(decoded);
 });
 
+// A colour as the 24-bit SGR the TS source derives from it: group 1 of `regex`
+// is its `#rrggbb`, `layer` is 38 or 48. One runtime states the hex and the
+// other the escape, so the row still compares the bytes a terminal receives.
+// test/protocol-source.test.ts holds this spelling to the TS derivation.
+export const sgrOfHex = overCode((code, regex, layer) => {
+  const m = code.match(regex);
+  if (!m) return null;
+  const channels = [1, 3, 5].map((at) => parseInt(m[1].slice(at, at + 2), 16));
+  return JSON.stringify(`\x1b[${layer};2;${channels.join(";")}m`);
+});
+
 // Set of string members: collect every capture of a global regex within the
 // slice matched by blockRegex, canonicalized as a sorted joined list. A member
 // is its capture groups joined by a fixed separator, so a multi-group regex

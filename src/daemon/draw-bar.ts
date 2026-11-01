@@ -37,7 +37,7 @@ import {
 import { roleOf, answeredOf } from "./render-sightings";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
-import { ansiOf } from "../render/frame.js";
+import { ansiOf, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
   renderWidth,
@@ -135,7 +135,7 @@ export function renderFrame(
         fps,
       },
     );
-    const output = composeBar(drawn);
+    const output = composeBar(drawn.body);
     return {
       resp: { ok: true, output },
       statusline: {
@@ -668,7 +668,9 @@ export function drawRender(
           })
         : [],
     ),
-    colorCompatibility: effective.colorCompatibility,
+    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
+    // the depth the frame is encoded at.
+    colorCompatibility: frame.depth,
   };
   // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
   // place: open only while the message it was opened on is in this list.
@@ -679,15 +681,13 @@ export function drawRender(
   // [LAW:one-source-of-truth] The body says when it next changes. The viewer
   // in the bar's place is still text, so a feed drawing it waits a still
   // period, not the hidden bar's beat; that bar can move again once it closes.
-  const body: { text: string; nextChange: number; motion: DrawnMotion } =
+  // It drew none of that bar's sources, so none of them are pending in it.
+  const body: Frame =
     viewing === null
-      ? {
-          text: ansiOf(frame),
-          nextChange: frame.nextChange,
-          motion: frame.motion,
-        }
+      ? frame
       : {
-          text: viewerRows(
+          depth: frame.depth,
+          rows: viewerRows(
             diagnostics,
             viewing,
             sessionId,
@@ -696,6 +696,7 @@ export function drawRender(
           ),
           nextChange: Infinity,
           motion: frame.motion === "still" ? "still" : "can-move",
+          pending: [],
         };
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -750,7 +751,7 @@ export function drawRender(
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(evaluated),
     // The sources it drew as not answered yet; `-` for none.
-    pending: frame.pending.join(",") || "-",
+    pending: body.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
@@ -772,7 +773,7 @@ export function drawRender(
   });
   return {
     drawn: {
-      body: body.text,
+      body,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
@@ -809,15 +810,15 @@ type StandingWarning =
 // what the statusline's handoff line is drawn from: whether the body is the
 // viewer, the draw's one diagnostic list, and the geometry.
 interface DrawnBar {
-  readonly body: string;
+  readonly body: Frame;
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
 }
 
 // The response's bar.
-function composeBar(drawn: DrawnBar): string {
-  return drawn.body + "\n";
+function composeBar(body: Pick<Frame, "depth" | "rows">): string {
+  return ansiOf(body) + "\n";
 }
 
 // [LAW:effects-at-boundaries] What a render request said, recorded where the
@@ -996,7 +997,7 @@ async function drawAnswer(
     setup,
     ANSWERING,
   );
-  const output = composeBar(drawn);
+  const output = composeBar(drawn.body);
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   const statusline = statuslineOf(sessionId, drawn, output, elsewhere);
@@ -1032,10 +1033,13 @@ function statuslineOf(
   const [first, ...rest] = elsewhere;
   return first === undefined || drawn.viewerOpen
     ? output
-    : handoffRows(
-        laneHandoff(sessionId, [first, ...rest]),
-        drawn.diagnostics,
-        sessionId,
-        drawn.geometry,
-      ) + "\n";
+    : composeBar({
+        depth: drawn.body.depth,
+        rows: handoffRows(
+          laneHandoff(sessionId, [first, ...rest]),
+          drawn.diagnostics,
+          sessionId,
+          drawn.geometry,
+        ),
+      });
 }

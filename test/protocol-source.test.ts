@@ -9,11 +9,33 @@ import {
   memberSet,
   num,
   rangeSpans,
+  sgrOfHex,
   uncommented,
   union,
   within,
   without,
 } from "../scripts/protocol-source";
+import {
+  DIAGNOSTIC_ERROR_BG,
+  DIAGNOSTIC_ERROR_COLORS,
+  DIAGNOSTIC_ERROR_FG,
+} from "../src/render/diagnostic-style";
+
+// The row reads the hex and the runtime derives the escape, so the two
+// spellings of that derivation agree on the colours the glyph writes.
+describe("sgrOfHex spells what diagnostic-style derives", () => {
+  const read = (hex: string, layer: number): string | null =>
+    sgrOfHex(`colour: "${hex}"`, /colour: "(#[0-9a-f]{6})"/, layer);
+
+  it("for the glyph's colours", () => {
+    expect(read(DIAGNOSTIC_ERROR_COLORS.fg, 38)).toBe(
+      JSON.stringify(DIAGNOSTIC_ERROR_FG),
+    );
+    expect(read(DIAGNOSTIC_ERROR_COLORS.bg, 48)).toBe(
+      JSON.stringify(DIAGNOSTIC_ERROR_BG),
+    );
+  });
+});
 
 const SANITIZER = "U+0000-U+001F, U+007F-U+009F, U+202A-U+202E, U+2066-U+206F";
 
@@ -30,6 +52,14 @@ describe("readers take no value from a comment line", () => {
       "16384",
     );
     expect(num("// const N = 1;\n", /const N = ([\d\s*]+);/)).toBeNull();
+  });
+
+  it("sgrOfHex", () => {
+    const src = '// fg: "#000000"\nfg: "#c82828"\n';
+    expect(sgrOfHex(src, /fg: "(#[0-9a-f]{6})"/, 38)).toBe(
+      JSON.stringify("\x1b[38;2;200;40;40m"),
+    );
+    expect(sgrOfHex("// fg: \"#000000\"\n", /fg: "(#[0-9a-f]{6})"/, 38)).toBeNull();
   });
 
   it("lit", () => {

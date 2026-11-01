@@ -16,12 +16,8 @@ import type { ColorSpec, StyleOptions } from "@promptctl/rich-js";
 import type { BandBar, BandRun, RunColor } from "../../mod/types";
 import { renderOutcomeOf } from "../daemon/client";
 import type { Response } from "../daemon/protocol";
-import {
-  ANSI_RESET,
-  DIAGNOSTIC_ERROR_BG,
-  DIAGNOSTIC_ERROR_FG,
-} from "../render/diagnostic-style";
-import { sanitizeText } from "../render/diagnostic-text";
+import { DIAGNOSTIC_ERROR_COLORS } from "../render/diagnostic-style";
+import { ansiOf, diagnosticFrame } from "../render/frame";
 import { planOutcome } from "../render/outcome-plan";
 
 // The sixteen colours a terminal's theme draws, by the names the mod's `Text`
@@ -161,11 +157,9 @@ export function bandResponse(resp: Response): BandBar {
   try {
     return bandFrame(ansi);
   } catch (error) {
-    const why = sanitizeText(
-      error instanceof Error ? error.message : String(error),
-    );
+    const why = error instanceof Error ? error.message : String(error);
     return bandFrame(
-      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}⚠ cc-candybar ${why}${ANSI_RESET}\n`,
+      ansiOf(diagnosticFrame(`⚠ cc-candybar ${why}`, DIAGNOSTIC_ERROR_COLORS)),
     );
   }
 }
