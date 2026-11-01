@@ -28,8 +28,8 @@ export const nameOf = (what: What): string =>
 // honoured whichever settled first, and a probe still in flight at expiry
 // is left behind, its late answer unread.
 // [LAW:one-source-of-truth] THE poll loop: both named waits below, and the
-// watch-liveness retry's rounds, are one loop with the two outcomes named, so
-// no test file keeps a copy that answers false at its deadline.
+// watch-liveness retry's rounds, are one loop, so no test
+// file keeps a copy that answers false at its deadline.
 export async function holdsWithin(
   reached: Condition,
   budgetMs: number,
@@ -65,6 +65,8 @@ export async function holdsWithin(
 // A named condition, polled until it holds or loudly failed at its budget —
 // never a sleep standing in for it, and never a silent give-up that leaves
 // the next assertion to fail without the cause.
+// [LAW:no-silent-failure] exception: a probe's throw after this wait failed by
+// name goes unread; the failure is already loud and names what was waited on.
 export async function until(
   reached: Condition,
   what: What,

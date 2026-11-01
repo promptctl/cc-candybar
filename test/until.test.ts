@@ -40,7 +40,13 @@ describe("a probe that outlives its round", () => {
     expect(probes).toBe(1);
   });
 
-  it("does not hold a wait that a later round's mutation failed", async () => {
+  it("is asked again once it answers false", async () => {
+    let probes = 0;
+    await untilHeard(() => {}, async () => ++probes === 2, "heard");
+    expect(probes).toBe(2);
+  });
+
+  it("does not hold a wait whose mutation threw", async () => {
     let round = 0;
     const never = new Promise<boolean>(() => {});
     await expect(

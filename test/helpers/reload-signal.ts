@@ -106,8 +106,8 @@ const MAX_ROUNDS = 48;
 // [LAW:no-ambient-temporal-coupling] One probe runs at a time: a probe still
 // in flight when its round expires is carried into the next round, so its
 // late answer counts and its late throw ends the wait, while the test that
-// made it and its daemon are alive. `after`'s never settles when no reload
-// came, and the wait still ends at MAX_ROUNDS.
+// made it and its daemon are alive. A probe that outlasts every round leaves
+// the wait to fail by name; `after`'s never settles when no reload came.
 export async function untilHeard(
   mutate: () => void,
   heard: Condition,
@@ -115,7 +115,10 @@ export async function untilHeard(
 ): Promise<void> {
   let asked: Promise<boolean> | null = null;
   const answer: Condition = () => {
-    asked ??= Promise.resolve(heard()).then((held) => {
+    if (asked) return asked;
+    const result = heard();
+    if (typeof result === "boolean") return result;
+    asked = result.then((held) => {
       if (!held) asked = null;
       return held;
     });
