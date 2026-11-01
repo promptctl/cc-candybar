@@ -54118,17 +54118,17 @@ function lookOf(style, depth) {
     ...attrs.length > 0 && { attrs }
   };
 }
-function runOf({ text: text4, style }, { colorSystem }) {
+function runOf({ text: text4, style }, depth) {
   return {
     text: text4,
-    ...style !== void 0 && colorSystem !== null && lookOf(style, colorSystem),
+    ...style !== void 0 && depth !== null && lookOf(style, depth),
     ...style?.link !== void 0 && { link: style.link }
   };
 }
-function runLines(segments, destination) {
+function runLines(segments, depth) {
   const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
   return Segment.splitLines(written2).map(
-    (line) => line.map((segment) => runOf(segment, destination))
+    (line) => line.map((segment) => runOf(segment, depth))
   );
 }
 function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
@@ -54183,7 +54183,7 @@ function draw(renderable, options) {
     })
   ];
   return {
-    lines: runLines(segments, destination),
+    lines: runLines(segments, destination.colorSystem),
     nextChange: Math.min(Segment.nextChange(segments), told)
   };
 }
@@ -54261,7 +54261,11 @@ function drawStripCells(cells, options, motion = STILL3) {
     ...flex ? { width: options.width } : {}
   };
   const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
-  return motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  if (row2.lines.length === 0) {
+    throw new Error("drawStripCells: rich-js strip drew no line");
+  }
+  return row2;
 }
 function renderStripCells(cells, options) {
   return encodeAnsi(

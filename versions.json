@@ -4,15 +4,22 @@
     {
       "version": "pr-550",
       "ref": "refs/pull/550/merge",
-      "sha": "69ae81603727565cb868cf62b01217e12c9c3425",
-      "timestamp": "2026-11-01T12:30:34.875Z",
+      "sha": "4083f946c227a370ae973a63a7af23055eb2dc8d",
+      "timestamp": "2026-11-01T12:42:40.498Z",
       "commits": [
         {
-          "sha": "69ae81603727565cb868cf62b01217e12c9c3425",
+          "sha": "4083f946c227a370ae973a63a7af23055eb2dc8d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:29:50-07:00",
-          "message": "Merge 6d562fd02afb2a026bffc3ef2a5d1834e1886406 into 722b6fe4c0d62887ce180576956933793a7e8d12\n"
+          "timestamp": "2026-11-01T12:41:48Z",
+          "message": "Merge 8300b4423ab6f964d1c15f102b930a4cee2da9b8 into 722b6fe4c0d62887ce180576956933793a7e8d12\n"
+        },
+        {
+          "sha": "8300b4423ab6f964d1c15f102b930a4cee2da9b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:41:38-07:00",
+          "message": "fix(render): a strip that draws no line stays loud, and runLines takes only the depth it reads (candybar-isolated-daemon-bfab.abb)\n\nA row vanished silently when rich-js drew no line, where the earlier check threw, so the check returns over lines and carries the single-enforcer marker it lost. runLines took a whole Destination and read one field, so a caller's hyperlinks or reducedMotion were ignored here and honoured nowhere; it takes the depth. Two comments overclaimed: a truecolor run can hold a standard colour's name, and bytes outside a draw are hand-written today.\n"
         },
         {
           "sha": "6d562fd02afb2a026bffc3ef2a5d1834e1886406",
