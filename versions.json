@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-548",
+      "ref": "refs/pull/548/merge",
+      "sha": "b0a67c7f2ad8392eae57b128fd5f01767442ca2f",
+      "timestamp": "2026-11-01T10:16:30.891Z",
+      "commits": [
+        {
+          "sha": "b0a67c7f2ad8392eae57b128fd5f01767442ca2f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:15:34-07:00",
+          "message": "Merge 31e1f435e34fbe04cf5c72fa45e46bc81379dfa9 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
+        },
+        {
+          "sha": "31e1f435e34fbe04cf5c72fa45e46bc81379dfa9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:15:15-07:00",
+          "message": "gitaculous already shows the location, so the default layout drops directory\n\nThe default identity row and five bundled presets (compact, verbose, zen,\ngit, dense) still placed `directory` beside `gitaculous`, which now draws\nthe checkout path itself. Every default user saw the path twice. The\ndirectory segment stays defined in the library; only its placement goes.\n\nTests that read the bundled layout now name a segment the bar still places,\nand the doc fence shows the one path it renders.\n\nKnown consequence: `zen` now holds only `context`, so it no longer shows\nwhere you are. Its comment still describes the old intent.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-546",
       "ref": "refs/pull/546/merge",
       "sha": "219a6ec80f06e5a53061cd9d6fa7b6d3ba8f97da",
