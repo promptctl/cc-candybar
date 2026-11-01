@@ -35752,6 +35752,7 @@ async function launchWaited(state, opts) {
     }
     const group = child.pid;
     if (group !== void 0) guard(state, group);
+    const exited = new Promise((end) => child.once("exit", end));
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
@@ -35798,8 +35799,12 @@ async function launchWaited(state, opts) {
       if (pid2 !== void 0) {
         killTimer = setTimeout(() => {
           signal(pid2, "SIGKILL");
-          child.stdout?.destroy();
-          child.stderr?.destroy();
+          void exited.then(
+            () => setImmediate(() => {
+              child.stdout?.destroy();
+              child.stderr?.destroy();
+            })
+          );
         }, TIMEOUT_KILL_GRACE_MS);
         signal(pid2, "SIGTERM");
       }
