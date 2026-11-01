@@ -54169,9 +54169,8 @@ function stripPrivateGlyphs(options) {
 function lineWidth(options) {
   return options.wrap ? options.width : Infinity;
 }
-function wrappedLines(text4, width) {
-  const wrapping = text4.copy();
-  wrapping.overflow = "fold";
+function wrappedLines(plain, width) {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
   return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
 }
 function drawStripCells(cells, options, motion = STILL3) {
@@ -71958,28 +71957,35 @@ function applySegmentLayout(cells, options) {
 }
 
 // src/render/fill.ts
-function wrapOffsets(text4, line) {
-  const { plain } = text4;
+function wrapOffsets(plain, line) {
   const offsets = [];
   let at = 0;
-  wrappedLines(text4, line).forEach((wrapped, i) => {
-    const start = plain.indexOf(wrapped, at);
-    if (i > 0 && wrapped !== "") offsets.push(start);
-    at = start + wrapped.length;
+  wrappedLines(plain, line).forEach((wrapped, i) => {
+    const content = wrapped.trimEnd();
+    const start = plain.indexOf(content, at);
+    if (i > 0 && content !== "") offsets.push(start);
+    at = start + content.length;
   });
   return offsets;
 }
-function dividedToLine(item, line) {
-  if (item.owner.cellLength <= line) return [item];
+function fits(cell3, line, options) {
+  if (cell3.cellLength <= line) return true;
+  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
+  return cellLen(plainOf2(lines2.flat())) <= options.width;
+}
+function dividedToLine(item, line, options) {
+  if (fits(item.owner, line, options)) return [item];
   const text4 = item.owner.copy().expandTabs();
-  return text4.divide(wrapOffsets(text4, line)).map((piece) => ({
+  return text4.divide(wrapOffsets(text4.plain, line)).filter(({ plain }, _, { length }) => length === 1 || plain.trim() !== "").map((piece) => ({
     ...item,
     owner: piece.truncate(line, { marker: "" })
   }));
 }
 function fitRow(row2, options) {
   const line = Math.max(2, lineWidth(options) - stripChromeCols(options));
-  return filled(row2, options).flatMap((item) => dividedToLine(item, line));
+  return filled(row2, options).flatMap(
+    (item) => dividedToLine(item, line, options)
+  );
 }
 function filled(row2, options) {
   const items = () => row2.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
@@ -73482,11 +73488,11 @@ function labelBudget(rows, available) {
   const widths = rows.map(
     (row2) => row2.map(({ name }) => cellWidth2(blockLabel(name)))
   );
-  const fits = (most2) => widths.every(
+  const fits2 = (most2) => widths.every(
     (row2) => row2.reduce((sum, w) => sum + Math.min(w, most2) + 2, 0) <= available
   );
   let most = Math.max(1, ...widths.flat());
-  while (most > 1 && !fits(most)) most -= 1;
+  while (most > 1 && !fits2(most)) most -= 1;
   return most;
 }
 function renderLayoutPreview(rows, decor, drawnAt, available) {
@@ -81602,7 +81608,7 @@ var RenderCache = class {
   // — never `served`, the entry the change was for, which a render is about
   // to draw.
   fit(served) {
-    const fits = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
+    const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
     const pinned = new Set(
       [...this.pins.keys()].flatMap((sessionId2) => {
         const view = this.views.get(sessionId2);
@@ -81610,11 +81616,11 @@ var RenderCache = class {
       })
     );
     for (const [key, evicted] of this.entries) {
-      if (fits()) return;
+      if (fits2()) return;
       if (evicted === served || pinned.has(evicted.state)) continue;
       this.drop(key, evicted, "evict");
     }
-    if (!fits())
+    if (!fits2())
       this.log(
         "warn",
         `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`

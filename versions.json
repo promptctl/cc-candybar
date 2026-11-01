@@ -4,15 +4,22 @@
     {
       "version": "pr-555",
       "ref": "refs/pull/555/merge",
-      "sha": "3eee710060ee4ccd38f33781613ad915ce5324fa",
-      "timestamp": "2026-11-01T19:52:52.223Z",
+      "sha": "512800858070b30496894bb2949e4a7c532360df",
+      "timestamp": "2026-11-01T20:11:46.530Z",
       "commits": [
         {
-          "sha": "3eee710060ee4ccd38f33781613ad915ce5324fa",
+          "sha": "512800858070b30496894bb2949e4a7c532360df",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T12:52:02-07:00",
-          "message": "Merge aa59fdeaf3e9a00182487831e8a6d9cf679e7c15 into 0f7fe27408eeb8aff9fb34f60ac781cd84668866\n"
+          "timestamp": "2026-11-01T20:10:57Z",
+          "message": "Merge 9332ee162d09fd1b3ff06a4cb2515c1aba861466 into 0f7fe27408eeb8aff9fb34f60ac781cd84668866\n"
+        },
+        {
+          "sha": "9332ee162d09fd1b3ff06a4cb2515c1aba861466",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T13:10:46-07:00",
+          "message": "fix(render): a cell divides only when it overflows as drawn, and loses no text (candybar-isolated-daemon-bfab.pe6)\n\nA full-width space hanging at a break lost text: rich-js crops it in half at\nthe edge, so the drawn line was no slice of the text and its search missed. The\nsearch now looks for a line's content, less the whitespace hanging off it.\n\nEvery cell was charged a painted cell's caps, so an unpainted spacer came up\nshort of the edge and a cell that fit broke across lines. Whether a cell\ndivides is now measured through the draw; a piece still wraps at the painted\nline, so it fits however it is painted.\n\nA justified cell's padding no longer spends rows on nothing, and the wrap draws\nplain text, which keeps a cell's styles and justification out of it.\n"
         },
         {
           "sha": "aa59fdeaf3e9a00182487831e8a6d9cf679e7c15",
