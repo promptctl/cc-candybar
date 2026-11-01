@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-535",
+      "ref": "refs/pull/535/merge",
+      "sha": "0511c4852b188df687b9fb593f002e5db7429f8c",
+      "timestamp": "2026-11-01T03:36:13.745Z",
+      "commits": [
+        {
+          "sha": "0511c4852b188df687b9fb593f002e5db7429f8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:35:28-06:00",
+          "message": "Merge 6d1c712e7a50ed409f91153c0b957e7b11cb6453 into 4814ee778a28c55a7193789772cc2d681d409ab0\n"
+        },
+        {
+          "sha": "6d1c712e7a50ed409f91153c0b957e7b11cb6453",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:35:11-06:00",
+          "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4814ee778a28c55a7193789772cc2d681d409ab0",
