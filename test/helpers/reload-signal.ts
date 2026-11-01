@@ -103,17 +103,27 @@ const MAX_ROUNDS = 48;
 // condition over something a later event can move (a count) must be
 // at-least, never exactly. [LAW:no-silent-failure] A throw from `mutate`
 // lands on the caller's own await, not in a detached timer callback, and a
-// probe still in flight when its round expires is not swallowed: the loop
-// goes on, so its late throw stays unhandled and loud rather than hidden
-// under a later round's pass.
+// probe still in flight when its round expires is awaited once a later round
+// holds, so its late throw lands there too, while the test that made it and
+// its daemon are alive. A wait that fails has already failed by name, so its
+// leftovers are dropped; `after`'s never settles when no reload came.
 export async function untilHeard(
   mutate: () => void,
   heard: Condition,
   what: What,
 ): Promise<void> {
+  const leftovers: Promise<void>[] = [];
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     mutate();
-    if ((await holdsWithin(heard, RETRY_MS)).kind === "held") return;
+    const ending = await holdsWithin(heard, RETRY_MS);
+    if (ending.kind === "held") {
+      await Promise.all(leftovers);
+      return;
+    }
+    if (ending.inFlight) {
+      ending.inFlight.catch(() => undefined);
+      leftovers.push(ending.inFlight);
+    }
   }
   throw new Error(
     `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations ${RETRY_MS} ms apart`,

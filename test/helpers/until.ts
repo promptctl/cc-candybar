@@ -94,8 +94,8 @@ export async function until(
 // budget. "It never happened within the budget" is a real answer a test
 // asserts (a blocked spawn stays blocked), so it has its own loud name
 // rather than a false read out of `until`. Expiry is the pass here, so a
-// probe left in flight is not swallowed: its late throw stays unhandled and
-// loud rather than hidden under a pass. [LAW:no-silent-failure]
+// probe left in flight is awaited: its late throw lands on the caller's own
+// await, not in whichever test file is running by then. [LAW:no-silent-failure]
 export async function throughout(
   holds: Condition,
   what: What,
@@ -104,4 +104,5 @@ export async function throughout(
   const ending = await holdsWithin(async () => !(await holds()), budgetMs);
   if (ending.kind === "held")
     throw new Error(`${nameOf(what)} stopped holding within ${budgetMs}ms`);
+  await ending.inFlight;
 }
