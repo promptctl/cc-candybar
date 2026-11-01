@@ -46,7 +46,7 @@ import {
 } from "../src/config/menu-timeout";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import { selectionFor } from "./helpers/selection";
-import { textOf, ansiOf, type Frame, type Row } from "../src/render/frame";
+import { textOf, type Frame, type Row } from "../src/render/frame";
 
 const at = (s: number): Instant => s as Instant;
 
@@ -461,9 +461,9 @@ describe("the flash on the bar", () => {
   test("dark between flashes, and before the flash begins, the bar is as it was", async () => {
     const rt = buildRuntime(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    expect(ansiOf(rt.draw(DARK, SINCE))).toBe(ansiOf(rt.draw(DARK)));
+    expect(rt.draw(DARK, SINCE).rows).toEqual(rt.draw(DARK).rows);
     const waiting = rt.draw(BEFORE, SINCE);
-    expect(ansiOf(waiting)).toBe(ansiOf(rt.draw(BEFORE)));
+    expect(waiting.rows).toEqual(rt.draw(BEFORE).rows);
     // Drawn as it was, yet it says when it changes: the flash's first lit hold
     // (candybar-animation-wbxz.014), so a feed drawing it is drawn then.
     expect(waiting.motion).toBe("moves");
@@ -500,7 +500,7 @@ describe("the flash on the bar", () => {
     const rt = buildRuntime(BUNDLED);
     const frame = rt.draw(LIT, SINCE);
     expect(menuRows(frame)).toBe(0);
-    expect(ansiOf(frame)).toBe(ansiOf(rt.draw(LIT)));
+    expect(frame.rows).toEqual(rt.draw(LIT).rows);
     expect(frame.motion).toBe("still");
   });
 });

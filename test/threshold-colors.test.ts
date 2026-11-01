@@ -19,6 +19,7 @@ import { textOf } from "../src/render/frame";
 // value, whichever spelling computes it.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -239,10 +240,10 @@ function renderOne(
 
 // The fg/bg pair of the run that paints the cell's glyph.
 function cellColors(
-  { rows }: Frame,
+  frame: Frame,
   glyph: string,
 ): { fg: string; bg: string } {
-  const run = rows.flatMap(({ runs }) => runs).find(({ text }) => text.includes(glyph));
+  const run = runUnder(frame, glyph);
   expect(run?.fg).toBeDefined();
   expect(run?.bg).toBeDefined();
   return { fg: run!.fg!, bg: run!.bg! };

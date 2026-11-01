@@ -1,4 +1,5 @@
-import { ansiOf, plainOf, textOf, type Frame, type Run } from "../src/render/frame";
+import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
+import { sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.bm1: a placement can carry its own
 // effect. Its `effect` setting moves that placement's cells and the seams that
 // show its colour, on a clock of its own, and every other cell of the row is
@@ -205,7 +206,7 @@ describe("a placement's effect setting", () => {
       });
       for (const cells of middle) expect(cells).toBe(middle[0]);
       // [LAW:verifiable-goals] The bar around it did move.
-      expect(frames.some((frame) => ansiOf(frame) !== ansiOf(frames[0]!))).toBe(true);
+      expect(frames.some((frame) => !sameDraw(frame, frames[0]!))).toBe(true);
     } finally {
       still.dispose();
     }
@@ -223,8 +224,7 @@ describe("a placement's effect setting", () => {
       const namedFx = new SessionEffects<RenderedLine>("s");
       const differs = INSTANTS.some(
         (s) =>
-          ansiOf(named.render("shimmer", at(s), namedFx)) !==
-          ansiOf(plain.render("shimmer", at(s), plainFx)),
+          !sameDraw(named.render("shimmer", at(s), namedFx), plain.render("shimmer", at(s), plainFx)),
       );
       expect(differs).toBe(true);
       expect(namedFx.lastFrame().own).toEqual([
@@ -262,8 +262,8 @@ describe("a placement's effect setting", () => {
       expect(band[0]).toBeDefined();
       for (const row of band) expect(row).toEqual(band[0]);
       // [LAW:verifiable-goals] The bar above it did move.
-      const top = ({ depth, rows }: Frame) => ansiOf({ depth, rows: rows.slice(0, 1) });
-      expect(frames.some((frame) => top(frame) !== top(frames[0]!))).toBe(true);
+      const top = ({ rows }: Frame) => ({ rows: rows.slice(0, 1) });
+      expect(frames.some((frame) => !sameDraw(top(frame), top(frames[0]!)))).toBe(true);
     } finally {
       open.dispose();
     }

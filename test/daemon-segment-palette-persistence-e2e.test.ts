@@ -18,7 +18,8 @@ import path from "node:path";
 import JSON5 from "json5";
 import { effectsOf } from "./helpers/click";
 import { linkUrls } from "./helpers/frame";
-import { ansiOf, plainOf, type Frame, type Run } from "../src/render/frame";
+import { plainOf, type Frame, type Run } from "../src/render/frame";
+import { sameDraw } from "./helpers/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { startDaemon } from "./helpers/in-worker-daemon";
 import {
@@ -154,7 +155,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
         daemon,
         SID,
         projectDir,
-        (b) => ansiOf(b) !== ansiOf(opened),
+        (b) => !sameDraw(b, opened),
         "a change from the opened render",
         10_000,
       );

@@ -13,7 +13,7 @@
 // joiner.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { ansiOf, textOf } from "../src/render/frame";
+import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -113,7 +113,7 @@ describe("DSL style picker — live reshape", () => {
       await clickEndcaps(rt, style);
       const out = render();
       expect(textOf(out).length).toBeGreaterThan(0);
-      seen.set(style, ansiOf(out));
+      seen.set(style, JSON.stringify(out.rows));
     }
     // The render for each style is unique — the domain offered by the picker
     // maps one-to-one onto a distinct rendered shape (no dead options).

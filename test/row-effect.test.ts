@@ -1,4 +1,5 @@
-import { ansiOf, plainOf, textOf, type Frame, type Run } from "../src/render/frame";
+import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
+import { runUnder, sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.d2i: the whole bar wears a looping
 // effect chosen by `globals.effect`. An effect changes colours and nothing else,
 // starts calm when it comes into force, and `none` draws exactly what the bar
@@ -35,7 +36,6 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { drawnChars, shown } from "./helpers/seams";
 
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
@@ -150,7 +150,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
           expect(linkUrls(frame)).toEqual(linkUrls(still[i]!));
         });
         // [LAW:verifiable-goals] Otherwise the equalities above prove nothing.
-        expect(drawn.some((frame, i) => ansiOf(frame) !== ansiOf(still[i]!))).toBe(true);
+        expect(drawn.some((frame, i) => !sameDraw(frame, still[i]!))).toBe(true);
       } finally {
         dispose();
       }
@@ -179,7 +179,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
       const early = new SessionEffects<RenderedLine>("s");
       render("pulse", at(0), early);
       const moved = [100, 200, 300].some(
-        (s) => ansiOf(render("pulse", at(s), early)) !== ansiOf(render("none", at(s))),
+        (s) => !sameDraw(render("pulse", at(s), early), render("none", at(s))),
       );
       expect(moved).toBe(true);
     } finally {
@@ -187,12 +187,12 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     }
   });
 
-  test.each(LOOPS)("under colorCompatibility none, %s draws none's bytes", (loop) => {
+  test.each(LOOPS)("under colorCompatibility none, %s draws what none draws", (loop) => {
     const { render, dispose } = renderer(BAR, "none");
     try {
       const effects = new SessionEffects<RenderedLine>("s");
       for (const s of [0, 30, 200]) {
-        expect(ansiOf(render(loop, at(s), effects))).toBe(ansiOf(render("none", at(s))));
+        expect(render(loop, at(s), effects).rows).toEqual(render("none", at(s)).rows);
       }
     } finally {
       dispose();
@@ -215,7 +215,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
         expect(textOf(frame)).toBe(textOf(frames[0]!));
       }
       expect(textOf(frames[0]!)).toContain("fx=shimmer");
-      expect(frames.some((frame) => ansiOf(frame) !== ansiOf(frames[0]!))).toBe(true);
+      expect(frames.some((frame) => !sameDraw(frame, frames[0]!))).toBe(true);
       // The tool finishes: still again, cell for cell.
       const after = render(undefined, at(200), effects);
       expect(textOf(after)).toContain("fx=none");
@@ -325,10 +325,7 @@ describe("the wheel paces each segment by where it sits", () => {
   );
 
   const fillOf = (rendered: Frame, word: string): string => {
-    const chars = drawnChars(rendered);
-    const at = chars.findIndex((_, i) => [...word].every((ch, j) => chars[i + j]?.ch === ch));
-    if (at === -1) throw new Error(`no line draws ${word}`);
-    const ground = shown(chars[at]!.bg);
+    const ground = runUnder(rendered, word)?.bg;
     if (ground === undefined) throw new Error(`${word} is drawn without its own ground`);
     return ground;
   };

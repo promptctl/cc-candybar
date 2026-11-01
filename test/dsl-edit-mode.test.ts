@@ -31,7 +31,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { linkUrls, truecolorOf } from "./helpers/frame";
+import { linkUrls, runUnder, truecolorOf } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
@@ -63,7 +63,6 @@ import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-gly
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { drawnChars, shown } from "./helpers/seams";
 import { contrastRatio } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
@@ -75,12 +74,9 @@ function paintAt(
   rendered: Frame,
   text: string,
 ): { fg: string | undefined; bg: string | undefined } {
-  const chars = drawnChars(rendered);
-  const drawn = chars.map(({ ch }) => ch).join("");
-  const at = drawn.indexOf(text);
-  expect(at).toBeGreaterThanOrEqual(0);
-  const { fg, bg } = chars[[...drawn.slice(0, at)].length]!;
-  return { fg: shown(fg), bg: shown(bg) };
+  const run = runUnder(rendered, text);
+  expect(run).toBeDefined();
+  return { fg: run!.fg, bg: run!.bg };
 }
 
 function colorsAt(rendered: Frame, text: string): { fg: string; bg: string } {

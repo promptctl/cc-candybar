@@ -97,7 +97,7 @@ const CONFIGS = {
   // Still, and its palette rule names no theme for two seconds of every four:
   // a render warning that comes and goes while nothing else moves.
   clock: `{ globals: { experimentalBand: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
-  toggle: `{ globals: { experimentalBand: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  toggle: `{ globals: { experimentalBand: true, experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -1074,9 +1074,19 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-click-error-bar";
     await render(sockPath, sid, projectDir, {}, args("toggle"));
     const bad = effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]);
-    expect((await sendClick(sockPath, bad)).ok).toBe(false);
-    // No lane follows this session, so the render answers the bar itself.
-    expect(textOf(await render(sockPath, sid, projectDir, {}, args("toggle")))).toContain("⚠ 1");
+    // The statusline lane draws the bar where Claude Code does, so with it
+    // followed a render answers the bar, where a lane that draws it elsewhere
+    // would answer the handoff row.
+    await framesOf(
+      sid,
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length > 0, "the bar before the click");
+        expect((await sendClick(sockPath, bad)).ok).toBe(false);
+        const bar = await render(sockPath, sid, projectDir, {}, args("toggle"));
+        expect(textOf(bar)).toContain("⚠ 1");
+      },
+      "statusline",
+    );
   });
 
   test("a failed click's error shows on the pushed frames for the hold, and leaves by time alone", async () => {

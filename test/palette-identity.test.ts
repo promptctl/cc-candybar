@@ -20,8 +20,8 @@ import {
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { plainOf, type Frame } from "../src/render/frame";
-import { runAt } from "./helpers/frame";
+import type { Frame } from "../src/render/frame";
+import { runUnder } from "./helpers/frame";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
@@ -220,11 +220,8 @@ describe("the settings door and its frame-rate cell take two places of the first
   const THEME = "textual-dark";
   const palette = getThemePalette(THEME)!;
   // The background under the first character of `text` on the bar's first line.
-  const groundUnder = ({ rows }: Frame, text: string): string | undefined => {
-    const { runs } = rows[0]!;
-    const at = plainOf(runs).indexOf(text);
-    return at === -1 ? undefined : runAt(runs, at)?.bg;
-  };
+  const groundUnder = ({ rows }: Frame, text: string): string | undefined =>
+    runUnder({ rows: rows.slice(0, 1) }, text)?.bg;
 
   test("under every dial position, they wear two", () => {
     const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);

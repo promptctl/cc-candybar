@@ -11,7 +11,8 @@
 // the real spine (registerDslConfig + drawDsl) and the real strip serializer.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { ansiOf, plainOf, textOf } from "../src/render/frame";
+import { plainOf, textOf } from "../src/render/frame";
+import { sameDraw } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -201,7 +202,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
         const unwrapped = renderPage(width, p, false);
         expect(unwrapped.rows).toEqual(wrapped.rows);
         // Stop after the cursor clamps to the last page.
-        if (p > 0 && ansiOf(wrapped) === ansiOf(renderPage(width, p - 1, true))) break;
+        if (p > 0 && sameDraw(wrapped, renderPage(width, p - 1, true))) break;
       }
     }
   });

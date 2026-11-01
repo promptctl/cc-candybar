@@ -10,7 +10,7 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
-import { linkUrls, runAt, truecolorOf } from "./helpers/frame";
+import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -1247,9 +1247,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       text: string,
       slot: "fg" | "bg",
     ): string | undefined {
-      const runs = runsOf(line);
-      const at = plainOf(runs).indexOf(text);
-      return at === -1 ? undefined : runAt(runs, at)?.[slot];
+      return runUnder(line, text)?.[slot];
     }
     const fgOfText = (line: Frame, text: string) =>
       colorOfText(line, text, "fg");

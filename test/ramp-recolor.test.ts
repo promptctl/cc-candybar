@@ -13,6 +13,7 @@
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -107,8 +108,8 @@ function buildRuntime() {
 }
 
 // The bg of the run that paints a cell's text.
-function bgOf({ rows }: Frame, cell: string): string {
-  const run = rows.flatMap(({ runs }) => runs).find(({ text }) => text.includes(cell));
+function bgOf(frame: Frame, cell: string): string {
+  const run = runUnder(frame, cell);
   expect(run?.bg).toBeDefined();
   return run!.bg!;
 }
