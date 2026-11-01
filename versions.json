@@ -4,39 +4,39 @@
     {
       "version": "pr-549",
       "ref": "refs/pull/549/merge",
-      "sha": "d2a952d67d5bf9e8b17f0c4e6bc2c4df3da3c6e4",
-      "timestamp": "2026-11-01T12:09:27.939Z",
+      "sha": "b5080a71c5f9450a29637a8ba595b2ba3dc24e84",
+      "timestamp": "2026-11-01T12:18:14.461Z",
       "commits": [
         {
-          "sha": "d2a952d67d5bf9e8b17f0c4e6bc2c4df3da3c6e4",
+          "sha": "b5080a71c5f9450a29637a8ba595b2ba3dc24e84",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T12:08:34Z",
-          "message": "Merge 173a6386ea7f1843260f87033da5bb23eba5fec2 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
+          "timestamp": "2026-11-01T12:17:27Z",
+          "message": "Merge 09596d4b0bdfae1b5d529f7e7bb537a9b9df23d9 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
         },
         {
-          "sha": "173a6386ea7f1843260f87033da5bb23eba5fec2",
+          "sha": "09596d4b0bdfae1b5d529f7e7bb537a9b9df23d9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T05:08:25-07:00",
           "message": "fix(daemon): a lifeline out of descriptors stays fail-open, and apply-update reads the update after its wait (candybar-launch-q7o7.jqq)\n"
         },
         {
-          "sha": "65acb4dea0bfddb498855925ad19fa65b0a91d29",
+          "sha": "12fae1225a627d1abdc0faa6a7fea147e37c0eac",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T04:49:08-07:00",
           "message": "fix(daemon): apply-update stops at its turn's landing, and a queued close answers closing (candybar-launch-q7o7.jqq)\n"
         },
         {
-          "sha": "a13e1f82fbb3c28544392dca3b1889cd976ef310",
+          "sha": "2898a7bbbc9d6149ff325cac26a5f1b0dfdbd105",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T04:37:21-07:00",
           "message": "fix(daemon): a close reads as DaemonClosing, and claims and watches judge nothing after it (candybar-launch-q7o7.jqq)\n"
         },
         {
-          "sha": "2123273a75b78eaead7ff83ef026b56d5f5d8316",
+          "sha": "d11c0c650920726e2841f7de0ea142674b0949c7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T04:20:18-07:00",
