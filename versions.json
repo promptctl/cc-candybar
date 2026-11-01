@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "96f1881bee934f602971a13dea41977a614a98e3",
+      "timestamp": "2026-11-01T03:07:36.561Z",
+      "commits": [
+        {
+          "sha": "96f1881bee934f602971a13dea41977a614a98e3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:06:33-06:00",
+          "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz) (#534)\n\n* fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n\n* fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n\n* fix(proc): the refusal verdict follows the poll that delivers the child's end (candybar-testing-0x6u.0mz)\n\n* test(proc): the stalled-loop case keeps its child alive past the abort (candybar-testing-0x6u.0mz)\n\n* fix(proc): a group's EPERM is a refusal only when its leader backs it (candybar-testing-0x6u.0mz)\n\nWaiting for Node's exit state cannot work: a child in teardown answers EPERM\nbefore its end can be delivered. The leader's answer to signal 0 is immediate\nand exact, so the grace, the deferred verdict and both try blocks go."
+        },
+        {
+          "sha": "53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T02:31:01Z",
+          "message": "chore(release): set `package.json` to 1.174.0 [skip ci]\n\n## [1.174.0](https://github.com/promptctl/cc-candybar/compare/v1.173.1...v1.174.0) (2026-11-01)\n\n### Features\n\n* **daemon:** close says when the launches it ended have ended (candybar-testing-0x6u.keo) ([#532](https://github.com/promptctl/cc-candybar/issues/532)) ([d189b5c](https://github.com/promptctl/cc-candybar/commit/d189b5c56cbf38da7151f2400b2ae226f8331328))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-533",
       "ref": "refs/pull/533/merge",
       "sha": "92fab17a446ce6ae524d6ee2082fdd8e2c4e0445",
@@ -41,78 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:19:01-06:00",
           "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-534",
-      "ref": "refs/pull/534/merge",
-      "sha": "e4de1469335144d2ad65fcafbf63c545d44976ca",
-      "timestamp": "2026-11-01T03:01:07.092Z",
-      "commits": [
-        {
-          "sha": "e4de1469335144d2ad65fcafbf63c545d44976ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:00:04Z",
-          "message": "Merge eb11491715f0c2c84a49b62b332675e3b07f8e49 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
-        },
-        {
-          "sha": "eb11491715f0c2c84a49b62b332675e3b07f8e49",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:59:19-06:00",
-          "message": "fix(proc): a group's EPERM is a refusal only when its leader backs it (candybar-testing-0x6u.0mz)\n\nWaiting for Node's exit state cannot work: a child in teardown answers EPERM\nbefore its end can be delivered. The leader's answer to signal 0 is immediate\nand exact, so the grace, the deferred verdict and both try blocks go.\n"
-        },
-        {
-          "sha": "7a9227c9df0ec3d499ce55dc89c822b2c163ee6b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:52:12-06:00",
-          "message": "test(proc): the stalled-loop case keeps its child alive past the abort (candybar-testing-0x6u.0mz)\n"
-        },
-        {
-          "sha": "755b4b2921db6b6adfa871c57fd9b82a142559e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:50:33-06:00",
-          "message": "fix(proc): the refusal verdict follows the poll that delivers the child's end (candybar-testing-0x6u.0mz)\n"
-        },
-        {
-          "sha": "580af4ecf94fc02c706bc47da5f5495e7f29d3ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:30:29-06:00",
-          "message": "fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n"
-        },
-        {
-          "sha": "180e9024aa8603aba2d3ee7d049eda5662a81782",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:22:35-06:00",
-          "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "d189b5c56cbf38da7151f2400b2ae226f8331328",
-      "timestamp": "2026-11-01T02:21:06.619Z",
-      "commits": [
-        {
-          "sha": "d189b5c56cbf38da7151f2400b2ae226f8331328",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:20:16-06:00",
-          "message": "feat(daemon): close says when the launches it ended have ended (candybar-testing-0x6u.keo) (#532)\n\n* feat(daemon): close says when the launches it ended have ended (candybar-testing-0x6u.keo)\n\n* fix(daemon): settled holds the loop, and its tests wait on the child they mean (candybar-testing-0x6u.keo)\n\n* fix(proc): unreaped reads the child's own end, and a lost lifeline holds the loop too (candybar-testing-0x6u.keo)\n\n* fix(proc): the pipes of a killed launch go after its end, with its output read (candybar-testing-0x6u.keo)\n\n* test(proc): the busy-loop case blocks where timers run next (candybar-testing-0x6u.keo)\n\n* fix(proc): setImmediate comes from node:timers (candybar-testing-0x6u.keo)"
-        },
-        {
-          "sha": "4586d75e3c1833a97abca0a05d27d96b736553e7",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T01:51:46Z",
-          "message": "chore(release): set `package.json` to 1.173.1 [skip ci]\n\n## [1.173.1](https://github.com/promptctl/cc-candybar/compare/v1.173.0...v1.173.1) (2026-11-01)\n\n### Bug Fixes\n\n* **test:** a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj) ([#531](https://github.com/promptctl/cc-candybar/issues/531)) ([7b77d5f](https://github.com/promptctl/cc-candybar/commit/7b77d5fab04cc3822fa430e086169ef7f984b873))\n"
         }
       ]
     },
