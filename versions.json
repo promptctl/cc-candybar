@@ -4,15 +4,22 @@
     {
       "version": "pr-549",
       "ref": "refs/pull/549/merge",
-      "sha": "a3e2e1029e2f3ca41d15f5c04b0307cf07cde2b8",
-      "timestamp": "2026-11-01T11:38:10.866Z",
+      "sha": "3e9c75cfb529b6a4a0e45b99dbe0ec28bd1510e3",
+      "timestamp": "2026-11-01T11:50:19.079Z",
       "commits": [
         {
-          "sha": "a3e2e1029e2f3ca41d15f5c04b0307cf07cde2b8",
+          "sha": "3e9c75cfb529b6a4a0e45b99dbe0ec28bd1510e3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T11:37:30Z",
-          "message": "Merge a13e1f82fbb3c28544392dca3b1889cd976ef310 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
+          "timestamp": "2026-11-01T11:49:21Z",
+          "message": "Merge 65acb4dea0bfddb498855925ad19fa65b0a91d29 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
+        },
+        {
+          "sha": "65acb4dea0bfddb498855925ad19fa65b0a91d29",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T04:49:08-07:00",
+          "message": "fix(daemon): apply-update stops at its turn's landing, and a queued close answers closing (candybar-launch-q7o7.jqq)\n"
         },
         {
           "sha": "a13e1f82fbb3c28544392dca3b1889cd976ef310",

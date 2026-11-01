@@ -71029,7 +71029,8 @@ async function journaled(sid, ctx, turn, handler) {
   };
   const launches = {
     launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line))
+    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
+    applyUpdate: () => turn.landed(ctx.applyUpdate())
   };
   try {
     await handler({
@@ -71924,6 +71925,7 @@ function makeUpdateWatch(opts) {
     }),
     error: () => unreadable,
     act: () => actTurn(async () => {
+      if (closed) throw new DaemonClosing("apply-update");
       const update = current();
       if (update === null) {
         throw new BadVerbArgs(
