@@ -21,7 +21,7 @@ import type { Frame } from "../src/render/frame";
 // of it.
 
 import { drawPayload } from "./helpers/draw-payload";
-import { boldUrls } from "./helpers/frame";
+import { backgroundsOf, boldUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -133,12 +133,8 @@ function buildRuntime() {
 
 // Every truecolor background a frame draws. The set of these is the bar's
 // palette footprint; a recolor changes it.
-function bgColors({ rows }: Frame): Set<string> {
-  return new Set(
-    rows.flatMap(({ runs }) =>
-      runs.flatMap(({ bg }) => (bg?.startsWith("#") ? [bg] : [])),
-    ),
-  );
+function bgColors(frame: Frame): Set<string> {
+  return new Set(backgroundsOf(frame).flatMap((bg) => (bg?.startsWith("#") ? [bg] : [])));
 }
 
 async function clickTheme(

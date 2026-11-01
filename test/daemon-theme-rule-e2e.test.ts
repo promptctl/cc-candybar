@@ -14,7 +14,8 @@
 // live data reached a branch with a typo. That is why this is a warning over a
 // rendered bar rather than an error instead of one.
 
-import { textOf, type Frame } from "../src/render/frame";
+import { textOf } from "../src/render/frame";
+import { backgroundsOf } from "./helpers/frame";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,9 +37,6 @@ jest.setTimeout(30_000);
 // config merges over.
 const BAD_SESSION = "theme-rule-bad";
 const RULE = `{{ if eq .session.id "${BAD_SESSION}" }}no-such-theme{{ else }}dracula{{ end }}`;
-
-const grounds = ({ rows }: Frame): (string | undefined)[] =>
-  rows.flatMap(({ runs }) => runs.map(({ bg }) => bg));
 
 function configFor(env: NodeJS.ProcessEnv): string {
   const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
@@ -88,7 +86,7 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the daemon", ()
       // The label is drawDsl's own publication of what the rule chose.
       expect(goodText).toContain("T=dracula");
       // dracula's `surface` — the bar is wearing the theme the label names.
-      expect(grounds(good)).toContain("#2b2e3b");
+      expect(backgroundsOf(good)).toContain("#2b2e3b");
       // Nothing to warn about, so no indicator at all.
       expect(goodText).not.toContain("⚠");
 
@@ -99,7 +97,7 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the daemon", ()
       expect(badText).toContain("◆ mark");
       // In the floor theme (textual-dark's `surface`), and labelled as such.
       expect(badText).toContain("T=textual-dark");
-      expect(grounds(bad)).toContain("#1e1e1e");
+      expect(backgroundsOf(bad)).toContain("#1e1e1e");
       // And the reason is the bar's message, from the frame after the one that
       // met it, naming the slot, the value the rule produced, and what was
       // rendered instead.

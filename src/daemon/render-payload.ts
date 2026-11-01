@@ -190,10 +190,9 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
   // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
-  // brandon-effects-2gka.d2i), so each fold finishes inside drawDsl — which
-  // therefore injects `theme`, `style` and `effect: { effective }` into the
-  // payload it pushes, exactly as it injects
-  // `term: { cols }`. ONE producer per field, so the name a label displays and
+  // brandon-effects-2gka.d2i), so each fold finishes in the view, whose slots
+  // answer `theme`, `style` and `effect: { effective }` from the selections
+  // it was bound with. ONE producer per field, so the name a label displays and
   // the palette the bar actually wears cannot disagree
   // [LAW:one-source-of-truth]. `EffectiveGlobals` above carries the SELECTIONS
   // that render resolves.

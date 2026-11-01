@@ -90,7 +90,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   config_path: { kind: "input", path: "configPath", default: "" },
   // [LAW:one-source-of-truth] The value every setting and config-only global
   // renders with, whichever rung produced it — the theme, style and effect as
-  // drawDsl settles them, every other one as the daemon resolved it. A
+  // the view settles them, every other one as the daemon resolved it. A
   // trigger's label and a picker's current-selection mark read it back, so
   // the label and the bar trace to one resolution. The daemon always provides
   // each; the default is the unreachable-absence floor.
@@ -159,12 +159,12 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   ),
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
-  // the exact post-reserve cell count FlexStrip wraps to. drawDsl injects
-  // it into the payload from its own `opts.width`, the value a row fits to
-  // (RenderBinding.width) and the strip wraps to, so a template reading it
-  // and the wrap algebra can never disagree. Never cached: a resize is just a
-  // new value on the same path, re-read every render. The default only
-  // applies to compile-only callers that render without injecting a width.
+  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
+  // carries it, the same width a draw's `opts.width` holds: the value a row
+  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
+  // it and the wrap algebra can never disagree. Never cached: a resize is just
+  // a new value on the same path, re-read every render. The default only
+  // applies to compile-only callers that render without a bound width.
   "term.cols": {
     kind: "input",
     path: "term.cols",

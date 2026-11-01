@@ -4,12 +4,14 @@
 // durable one included; a durable click writes the harness's copy of the
 // config, never the file it was started from; a click that would act on the
 // developer's machine is not sent; a click on text the bar did not draw fails, naming what
-// it did draw. These cases are about the bar, and draw on a daemon in this worker;
+// it did draw; a render fits the size it was asked for. These cases are about the bar, and draw on a daemon in this worker;
 // what `pnpm bar` itself runs is in test/drive-bar.process.test.ts.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { cellLen } from "@promptctl/rich-js";
 
 import { describeLink, linksOf, startBar, type Bar } from "./helpers/drive-bar";
 import { DOOR_GLYPH } from "../src/config/disclosure";
@@ -67,6 +69,16 @@ describe("drive-bar", () => {
     expect(textOf(rendered)).toContain("✖ directory");
   });
 
+
+  test("a render fits the size it was asked for", async () => {
+    bar = await startBar(
+      { width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
+    bar.resize({ width: 80, rows: 40 });
+    const lines = textOf(await bar.render()).split("\n");
+    expect(lines.filter((line) => cellLen(line) > 80)).toEqual([]);
+  });
 
   test("a click on text the bar did not draw names what it drew", async () => {
     bar = await startBar(

@@ -19,12 +19,12 @@
 // buildState, then the per-request render in draw-bar.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateRenderable → registerDslConfig →
 // deriveActionValidators → drawDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path as far as the Frame: encoding
-// it is the print's, so a verdict with no `--render` encodes nothing. Check
-// additionally waits,
-// before each pass, for the shell/file runs that pass's payload started, under
-// one bounded settle window for the whole verdict; the daemon's first cold
-// render does not (its next render shows what check showed).
+// cannot diverge, because they are one code path as far as the Frame, and
+// encoding a Frame refuses nothing: it is the print's, so a verdict with no
+// `--render` encodes nothing. Check additionally waits, before each pass, for
+// the shell/file runs that pass's payload started, under one bounded settle
+// window for the whole verdict; the daemon's first cold render does not (its
+// next render shows what check showed).
 
 import { linkSignerFromKeyFile } from "./daemon/link-key.js";
 import { repoConfigs } from "./daemon/repo-configs.js";

@@ -291,7 +291,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     );
     expect(seen.size).toBe(forms.size);
     expect(forms.size).toBeGreaterThanOrEqual(6);
-    // An omitting caller renders the default: secondary on row 1, accent on row 2.
+    // A session with no picks renders the default: secondary on row 1, accent on row 2.
     rt.render();
     for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "accent"));
     rt.dispose();
@@ -312,13 +312,13 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     }
     // Every position of the dial paints this bar differently.
     expect(seen.size).toBe(Object.keys(SHADES).length);
-    // An omitting caller renders the default: the window around each role.
+    // A session with no picks renders the default: the window around each role.
     rt.render();
     for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, undefined, "middle"));
     rt.dispose();
   });
 
-  test("globals.variation is the config's default under an omitting caller", () => {
+  test("globals.variation is the config's default for a session with no picks", () => {
     const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', variation: 'mono' }`));
     rt.render();
     for (const name of ["a", "b", "c", "echo"]) {
@@ -327,7 +327,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     rt.dispose();
   });
 
-  test("globals.shade is the config's default under an omitting caller", () => {
+  test("globals.shade is the config's default for a session with no picks", () => {
     const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', shade: 'muted' }`));
     rt.render();
     for (const name of ["a", "b", "c", "echo"]) {

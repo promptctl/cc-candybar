@@ -1070,7 +1070,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(after).toBe(before);
   });
 
-  test("a failed click's error shows on the pushed frames and Claude Code's bar for the hold, and leaves by time alone", async () => {
+  test("a failed click's error shows on Claude Code's bar", async () => {
+    const sid = "feed-click-error-bar";
+    await render(sockPath, sid, projectDir, {}, args("toggle"));
+    const bad = effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]);
+    expect((await sendClick(sockPath, bad)).ok).toBe(false);
+    // No lane follows this session, so the render answers the bar itself.
+    expect(textOf(await render(sockPath, sid, projectDir, {}, args("toggle")))).toContain("⚠ 1");
+  });
+
+  test("a failed click's error shows on the pushed frames for the hold, and leaves by time alone", async () => {
     await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
     const bad = effectsUrl([
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
@@ -1085,7 +1094,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       const clearAt = shown.findIndex((text, i) => i > errorAt && !shows(text));
       return { shown, errorAt, clearAt };
     };
-    let inside!: Frame;
     let clickedAt = 0;
     const frames = await framesOf(
       "feed-click-error",
@@ -1093,13 +1101,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         await waitFor(() => received.length > 0, "the bar before the click");
         clickedAt = elapsed();
         expect((await sendClick(sockPath, bad)).ok).toBe(false);
-        inside = await render(
-          sockPath,
-          "feed-click-error",
-          projectDir,
-          {},
-          args("toggle"),
-        );
         await waitFor(
           () => hold(received).errorAt > 0,
           "a frame showing the error",
@@ -1116,7 +1117,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         );
       },
     );
-    expect(shows(textOf(inside))).toBe(true);
     const { shown, errorAt, clearAt } = hold(frames);
     expect(shows(shown[0]!)).toBe(false);
     expect(errorAt).toBeGreaterThan(0);

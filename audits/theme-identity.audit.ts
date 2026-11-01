@@ -22,12 +22,12 @@
 
 import { drawPayload } from "../test/helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
+import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
 import { TEST_SIGNER } from "../test/helpers/link-signer";
 import { DIVIDER, drawnChars, isRgb, seams, type Drawn } from "../test/helpers/seams";
 import {
   ColorDepth,
   ColorRgba,
-  ColorSpec,
   drawnColour,
   getThemePalette,
   listThemePalettes,
@@ -197,12 +197,8 @@ const seamsOf = (theme: string, calm: boolean, variant: Variant): Seam[] =>
   seamsIn(bar(theme, calm, variant));
 
 // Every truecolor background a drawn bar holds, in order.
-function backgrounds({ rows }: Frame): ColorRgba[] {
-  return rows.flatMap(({ runs }) =>
-    runs.flatMap(({ bg }) =>
-      bg?.startsWith("#") === true ? [ColorSpec.parse(bg).getTruecolor()] : [],
-    ),
-  );
+function backgrounds(frame: Frame): ColorRgba[] {
+  return backgroundsOf(frame).flatMap((bg) => (bg?.startsWith("#") === true ? [truecolorOf(bg)] : []));
 }
 
 describe("done-when: every background the closed bar draws is a colour its theme names", () => {

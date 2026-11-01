@@ -357,7 +357,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     }
   });
 
-  test("an omitted selection evaluates a RULE too, rather than falling to the floor", () => {
+  test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore();
     const registry = new SourceRegistry(

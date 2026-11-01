@@ -12,7 +12,7 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { linkUrls } from "./helpers/frame";
+import { backgroundsOf, linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
@@ -115,20 +115,17 @@ function buildRuntime(src: string, utilization: number) {
 
 // The background a palette role is drawn with.
 const roleBg = (role: string): string => getThemePalette(THEME)!.get(role)!.hex;
-// Every background a frame draws.
-const backgrounds = ({ rows }: Frame): (string | undefined)[] =>
-  rows.flatMap(({ runs }) => runs.map(({ bg }) => bg));
 
 describe("block's thresholds are settings configure mode steps", () => {
   test("lowering the warning threshold from the bar recolours the cell on the next render", async () => {
     const rt = buildRuntime(BLOCK_ONLY, 45);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
-    expect(backgrounds(rt.render())).not.toContain(roleBg("warning"));
+    expect(backgroundsOf(rt.render())).not.toContain(roleBg("warning"));
     // The stepper strides by the declared step, 5: one click lands on 45.
     await rt.click(rt.stepper("block", "warnAt", -5));
     expect(rt.pick("block", "warnAt")).toBe("45");
-    expect(backgrounds(rt.render())).toContain(roleBg("warning"));
+    expect(backgroundsOf(rt.render())).toContain(roleBg("warning"));
   });
 
   test("a step that would drop errorAt below warnAt is refused, naming both", async () => {

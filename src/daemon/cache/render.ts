@@ -962,7 +962,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // serves many sessions, but the effective theme is per-session SessionState;
   // freezing the palette per entry would let the rendered colors diverge from
   // the session's chosen theme. The server resolves basePalette per render
-  // from the effective theme (resolveThemeSelection, settled by drawDsl).
+  // from the effective theme (resolveThemeSelection, settled by the view).
   return {
     kind: "built",
     state: {
@@ -1264,7 +1264,7 @@ export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
 
 // A source answering nothing yet: every input of the view pending, and the
 // selections the config declares — what a test's views draw from until it
-// draws them through drawDsl, which binds a payload of its own.
+// binds a payload of its own.
 export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
   fixedSource(
     PENDING,

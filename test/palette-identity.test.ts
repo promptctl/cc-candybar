@@ -21,6 +21,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { plainOf, type Frame } from "../src/render/frame";
+import { runAt } from "./helpers/frame";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
@@ -222,8 +223,7 @@ describe("the settings door and its frame-rate cell take two places of the first
   const groundUnder = ({ rows }: Frame, text: string): string | undefined => {
     const { runs } = rows[0]!;
     const at = plainOf(runs).indexOf(text);
-    let end = 0;
-    return at === -1 ? undefined : runs.find((run) => (end += run.text.length) > at)?.bg;
+    return at === -1 ? undefined : runAt(runs, at)?.bg;
   };
 
   test("under every dial position, they wear two", () => {

@@ -18,7 +18,8 @@ import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
 import { cellWidth as cellLength } from "../src/render/picker";
 import { instantOf } from "../src/utils/instant";
-import { ColorSpec, contrastRatio } from "@promptctl/rich-js";
+import { contrastRatio } from "@promptctl/rich-js";
+import { truecolorOf } from "./helpers/frame";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 
 const OPTS = {
@@ -153,14 +154,7 @@ describe("{{ picker }} over a catalogue", () => {
       .find(({ text }) => text === DISCLOSURE_GLYPH_CLOSE);
     expect(close).toBeDefined();
     const { fg, bg } = close!;
-    expect(fg).toBeDefined();
-    expect(bg).toBeDefined();
-    expect(
-      contrastRatio(
-        ColorSpec.parse(fg!).getTruecolor(),
-        ColorSpec.parse(bg!).getTruecolor(),
-      ),
-    ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+    expect(contrastRatio(truecolorOf(fg), truecolorOf(bg))).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 });
 

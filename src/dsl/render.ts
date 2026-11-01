@@ -867,7 +867,7 @@ export function compileDslConfig(
   // naming the path it was written at, not a per-render throw. Membership is
   // decided by SHAPE (`isExpression`), the same way a template is told from a
   // literal everywhere else here, so an entry exists iff the resolution can hand
-  // drawDsl an `expression` arm carrying that source — one predicate, every
+  // the view an `expression` arm carrying that source — one predicate, every
   // reader. [LAW:dataflow-not-control-flow] One fold over every fragment × every
   // slot: adding a slot or a preset never adds a branch here.
   // Keyed by slot, then source: one text written in both slots is two rules, and
@@ -1070,19 +1070,19 @@ function segmentsUnder(node: CompiledNode): CompiledSegmentNode[] {
 // ─── drawDsl ───────────────────────────────────────────────────────────────
 
 /**
- * Render the DSL config to a (possibly multi-line) ANSI string.
+ * Draw the bound view to a Frame, the rows a terminal's bytes and every lane
+ * derive from.
  *
  * Pipeline:
- *   1. Push payload (+ injected `term.cols`) into input boxes — once per render.
- *   2. Build the scope proxy — once per render.
- *   3. Walk the compiled layout tree (renderNode) in pre-order, producing a list
+ *   1. Build the scope proxy — once per render.
+ *   2. Walk the compiled layout tree (renderNode) in pre-order, producing a list
  *      of LINES OF CELLS (not yet serialized). A `container` composes its
  *      children's blocks by its `direction` (vertical stacks, horizontal zips
  *      cells per row); a `segment` leaf evaluates into cell lines. A node whose
  *      `when` (or an ancestor's) is false contributes no line; its ADDRESS — the
  *      position its colours derive from — is unchanged by being hidden, so
  *      visible siblings keep their colours.
- *   4. Serialize each composed line through the ONE strip joiner and join "\n".
+ *   3. Draw each composed line through the ONE strip joiner into Rows.
  *
  * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
  * path. ONE walk renders every layout, flat or nested. The test and the daemon
@@ -1190,7 +1190,7 @@ export type RenderWarning =
 // [LAW:one-source-of-truth] Each field IS the field `resolveEffectiveGlobals`
 // resolves (see EffectiveGlobals for how): a Pick, not a restatement, so the
 // selection cannot hold a field the resolution does not, and every one is
-// required — a caller hands over the whole resolution or none of it.
+// required — a caller hands over the whole resolution.
 export type DrawSelection = Pick<
   EffectiveGlobals,
   | "preset"

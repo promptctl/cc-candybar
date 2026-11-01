@@ -30,7 +30,7 @@ Current categories (13):
 
 ### drawDsl itself does not spawn
 
-`src/dsl/render.ts:drawDsl` is pure CPU: reads from MobX store, evaluates pre-compiled templates, builds strip cells, assembles ANSI. It does not import `launch` and does not transitively call any subprocess-spawning code.
+`src/dsl/render.ts:drawDsl` is pure CPU: reads from MobX store, evaluates pre-compiled templates, builds strip cells, assembles the Frame. It does not import `launch` and does not transitively call any subprocess-spawning code.
 
 The render-hot-path call chain (daemon side, per request):
 ```

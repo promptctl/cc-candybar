@@ -25,7 +25,7 @@ export function drawPayload(
   at: Instant,
   opts: BuildLineOptions,
   observers?: RenderObservers,
-  // [LAW:one-source-of-truth] An omitting caller renders as a session that has
+  // [LAW:one-source-of-truth] A caller naming no selection renders as a session that has
   // never clicked: the daemon's own resolution with no picks, so a config
   // declaring globals.preset or globals.style draws the preset, theme and look
   // the bar does.

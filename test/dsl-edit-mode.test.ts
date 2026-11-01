@@ -31,7 +31,7 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { linkUrls } from "./helpers/frame";
+import { linkUrls, truecolorOf } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
@@ -64,7 +64,7 @@ import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { drawnChars, shown } from "./helpers/seams";
-import { ColorSpec, contrastRatio } from "@promptctl/rich-js";
+import { contrastRatio } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
@@ -499,12 +499,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     await click(open(EDIT_LIVE_KEY, "open"));
     await click(open(menuStateKey("picky", "pick", undefined), menuMember("pick")));
     const { fg, bg } = colorsAt(render(), `${REMOVE_GLYPH}m`);
-    expect(
-      contrastRatio(
-        ColorSpec.parse(fg).getTruecolor(),
-        ColorSpec.parse(bg).getTruecolor(),
-      ),
-    ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+    expect(contrastRatio(truecolorOf(fg), truecolorOf(bg))).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 
   // An insertion point is drawn on no fill: its `✚` is green text on the

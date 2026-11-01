@@ -22,7 +22,7 @@ const NO_THEME_DEFAULT: ThemeDefault = Object.freeze({});
 
 // [LAW:types-are-the-program] Total over the theme selection's two arms. A
 // theme chosen by NAME has its entry (or none). A theme chosen by a RULE
-// (`globals.palette` holding a template) is known only inside drawDsl, once
+// (`globals.palette` holding a template) is known only to the view, once
 // the store holds this render's values — after every other field has
 // resolved — so under a rule the theme rung contributes nothing: the look
 // resolves exactly as it would for a theme with no entry. That is a stated

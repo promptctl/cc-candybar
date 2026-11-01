@@ -10,7 +10,7 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
-import { linkUrls } from "./helpers/frame";
+import { linkUrls, runAt, truecolorOf } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -38,8 +38,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import {
   getThemePalette,
-  ColorRgba,
-  ColorSpec,
   contrastRatio,
 } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -68,12 +66,6 @@ import { type Instant, instantOf } from "../src/utils/instant";
 
 // The powerline cap glyphs, which visible segment text is read without.
 const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
-
-// The run that draws the character at `at` of a line.
-const runAt = (runs: readonly Run[], at: number): Run | undefined => {
-  let end = 0;
-  return runs.find(({ text }) => (end += text.length) > at);
-};
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -324,18 +316,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       return { row, dispose: () => registry.dispose() };
     }
 
-    // [LAW:parse-dont-validate] A colour the terminal draws, or a loud
-    // failure naming what was not one.
-    const drawn = (
-      color: string | undefined,
-      what: string,
-    ): ColorRgba => {
-      if (color === undefined) {
-        throw new Error(`the rung's ${what} is not a drawn colour`);
-      }
-      return ColorSpec.parse(color).getTruecolor();
-    };
-
     // The rung after the model's name (past `skip` characters: max's cap) — its
     // glyph, its colour, and the contrast it is drawn at on its ground — read
     // off the run that draws it.
@@ -352,8 +332,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const start = text.indexOf(NAME) + NAME.length + skip;
       const run = runAt(runs, start);
       if (run === undefined) throw new Error(`no run draws the rung: ${text}`);
-      const fg = drawn(run.fg, "colour");
-      const ground = drawn(run.bg, "ground");
+      const fg = truecolorOf(run.fg);
+      const ground = truecolorOf(run.bg);
       return {
         glyph: String.fromCodePoint(text.codePointAt(start)!),
         colour: fg.hex,
@@ -489,16 +469,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
               .filter(({ contrast }) => contrast < TEXT_MIN_CONTRAST)
               .map(({ glyph, contrast }) => `${glyph}: ${contrast.toFixed(2)}`),
           ).toEqual([]);
-          const cell = drawn(
-            rungOf(row({ level: "xhigh" })).ground,
-            "cell",
-          );
+          const cell = truecolorOf(rungOf(row({ level: "xhigh" })).ground);
           expect(new Set(frames.map(({ ground }) => ground))).toEqual(
             new Set([frames[0]!.ground]),
           );
           expect(
             contrastRatio(
-              drawn(frames[0]!.ground, "bubble"),
+              truecolorOf(frames[0]!.ground),
               cell,
             ),
           ).toBeGreaterThanOrEqual(EFFORT_BUBBLE_CONTRAST);
@@ -1381,15 +1358,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
             EXPANDED(),
           );
           const quiet = fgOfText(line, "abc1234");
-          expect(quiet).toBeDefined();
           const bg = bgOfText(line, "abc1234");
-          expect(bg).toBeDefined();
           // 2.99 not 3: ensureContrast bisects to the threshold, and the 8-bit
           // quantization of the result can land a hair under the exact target.
           expect(
             contrastRatio(
-              ColorSpec.parse(quiet!).getTruecolor(),
-              ColorSpec.parse(bg!).getTruecolor(),
+              truecolorOf(quiet),
+              truecolorOf(bg),
             ),
           ).toBeGreaterThan(2.99);
         },

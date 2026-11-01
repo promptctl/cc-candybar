@@ -1,6 +1,7 @@
-import { ColorSpec, type ColorRgba } from "@promptctl/rich-js";
+import type { ColorRgba } from "@promptctl/rich-js";
 import { DOOR_CLOSE_GLYPH } from "../../src/config/disclosure";
 import type { Frame } from "../../src/render/frame";
+import { truecolorOf } from "./frame";
 
 // The settings door's open ✖ as a frame draws it, and the reds a theme names
 // for its error role: what the door's tests read the ✖ by and hold it to,
@@ -28,10 +29,5 @@ export function doorClose({ rows }: Pick<Frame, "rows">): { readonly ink: ColorR
   const found = rows.flatMap(({ runs }) => runs.filter(({ text }) => text.includes(DOOR_CLOSE_GLYPH)));
   if (found.length !== 1) throw new Error(`expected one ${DOOR_CLOSE_GLYPH} in the frame, found ${found.length}`);
   const { fg, bg } = found[0]!;
-  // [LAW:no-silent-failure] An unset colour would be measured as the terminal's
-  // own, which no theme names.
-  if (fg === undefined || bg === undefined) {
-    throw new Error(`the door's ✖ is drawn without its own ${fg === undefined ? "ink" : "ground"}`);
-  }
-  return { ink: ColorSpec.parse(fg).getTruecolor(), ground: ColorSpec.parse(bg).getTruecolor() };
+  return { ink: truecolorOf(fg), ground: truecolorOf(bg) };
 }
