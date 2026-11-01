@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-540",
-      "ref": "refs/pull/540/merge",
-      "sha": "1f1b00a07f4735aef4c24e2b6d5e7b1efff1bc72",
-      "timestamp": "2026-11-01T05:55:31.613Z",
-      "commits": [
-        {
-          "sha": "1f1b00a07f4735aef4c24e2b6d5e7b1efff1bc72",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:54:40Z",
-          "message": "Merge 7559a7bc7a2c22db1ec63954f02963deb399426d into 929674d3e264f536f5eb210476d4bed167c5ebd1\n"
-        },
-        {
-          "sha": "7559a7bc7a2c22db1ec63954f02963deb399426d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:54:27-06:00",
-          "message": "fix(site): the page bundles string_decoder (candybar-testing-0x6u.71b)\n"
-        },
-        {
-          "sha": "a79630995be07a76520842737286970232b0dd71",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:46:46-06:00",
-          "message": "docs(proc): capture's read flushes once (candybar-testing-0x6u.71b)\n"
-        },
-        {
-          "sha": "626a57e7b3d056df5d78d2ad6886798f613ff39f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:40:47-06:00",
-          "message": "fix(proc): each stream decodes as it reads, flushed at settle (candybar-testing-0x6u.71b)\n"
-        },
-        {
-          "sha": "b89089cacce6c7d233df4ca5101493661de48f4e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:38:00-06:00",
-          "message": "fix(proc): a launch decodes its output once, at settle (candybar-testing-0x6u.71b)\n"
-        },
-        {
-          "sha": "6ec16690bec83f528f5906a81e08f2c595bdf8aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:33:20-06:00",
-          "message": "fix(proc): a character split across two reads stays whole (candybar-testing-0x6u.71b)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "691727676169eed0e0826fea6dee07d1d902077d",
-      "timestamp": "2026-11-01T05:31:27.616Z",
+      "sha": "62bc62daea77f6e6c8b7543db42bf9736245ebaa",
+      "timestamp": "2026-11-01T06:02:16.504Z",
       "commits": [
         {
-          "sha": "691727676169eed0e0826fea6dee07d1d902077d",
+          "sha": "62bc62daea77f6e6c8b7543db42bf9736245ebaa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:30:26-06:00",
-          "message": "fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb) (#538)\n\n* fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb)\n\n* fix(proc): a refused job signal is reported to the caller, and only a delivered SIGTERM arms the SIGKILL (candybar-testing-0x6u.zrb)\n\n* test(update-act): restore formatting of unrelated lines (candybar-testing-0x6u.zrb)\n\n* test(update-act): keep the diff to this change (candybar-testing-0x6u.zrb)\n\n* test(update-act): a SIGKILL refused in the grace timer does not throw (candybar-testing-0x6u.zrb)\n\n* docs(proc): jobGroupAlive states the limit of its read (candybar-testing-0x6u.zrb)"
+          "timestamp": "2026-11-01T00:01:23-06:00",
+          "message": "fix(proc): a character split across two reads stays whole (candybar-testing-0x6u.71b) (#540)\n\n* fix(proc): a character split across two reads stays whole (candybar-testing-0x6u.71b)\n\n* fix(proc): a launch decodes its output once, at settle (candybar-testing-0x6u.71b)\n\n* fix(proc): each stream decodes as it reads, flushed at settle (candybar-testing-0x6u.71b)\n\n* docs(proc): capture's read flushes once (candybar-testing-0x6u.71b)\n\n* fix(site): the page bundles string_decoder (candybar-testing-0x6u.71b)"
+        },
+        {
+          "sha": "929674d3e264f536f5eb210476d4bed167c5ebd1",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T05:38:32Z",
+          "message": "chore(release): set `package.json` to 1.174.5 [skip ci]\n\n## [1.174.5](https://github.com/promptctl/cc-candybar/compare/v1.174.4...v1.174.5) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb) ([#538](https://github.com/promptctl/cc-candybar/issues/538)) ([6917276](https://github.com/promptctl/cc-candybar/commit/691727676169eed0e0826fea6dee07d1d902077d))\n* **var-sources:** a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8) ([#539](https://github.com/promptctl/cc-candybar/issues/539)) ([1435f5c](https://github.com/promptctl/cc-candybar/commit/1435f5c909561280b02fc77cc21e462541e582fb))\n"
         }
       ]
     },
