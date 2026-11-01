@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-539",
+      "ref": "refs/pull/539/merge",
+      "sha": "e3ebc2f00dcc0b39bf7ad177d82cd8f847065df7",
+      "timestamp": "2026-11-01T05:08:28.456Z",
+      "commits": [
+        {
+          "sha": "e3ebc2f00dcc0b39bf7ad177d82cd8f847065df7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:07:35-06:00",
+          "message": "Merge 57eb87d11724497118c8230214ab54e51f4636d2 into 47f89057d4df0fa92b35e70ce11e0149b138bb7d\n"
+        },
+        {
+          "sha": "57eb87d11724497118c8230214ab54e51f4636d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:07:23-06:00",
+          "message": "fix(var-sources): a stall is one publish, and PathWatches owns what it hears (brandon-unfiled-3248.fme8)\n\nAnswers the first review of #539.\n\n- One change of delivery is one action, so a stall that faults every\n  `watch_file` variable publishes once, not once per variable.\n- `PathWatches` subscribes to the delivery owner and releases it itself, as\n  ManagedStorage does, so the registry no longer forwards notices.\n- `watchFault`'s `beyond` is required, so a consumer leaving out the stall says\n  so at its call site.\n- The unmeasured row leads with `since`, so a reason ending in \"restart the\n  daemon\" ends the sentence.\n- The claim is that a variable reads again when it drops the fault: the read\n  it starts is in flight like any refresh's.\n- Every terminal reason is tested, and a failed probe write says no restart.\n- The `[LAW:single-enforcer]` marker returns at the wire in daemon.ts.\n"
+        },
+        {
+          "sha": "fddf6eaf5537684a04db07485ade81b6ed291d8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:57:18-06:00",
+          "message": "fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8)\n\nWhile the OS isn't delivering file events, a watch_file variable showed its\nold value as current. It now carries the stall as its standing fault, read\nfrom the delivery owner, and drops the fault only by re-reading.\n\n`SourceRegistry` takes `FileEvents`, the type ManagedStorage already reads,\nin place of the one-caller `CatchUps` adapter. `RenderDeps.fileEvents` is\nrequired, so a daemon that doesn't wire it doesn't compile. `stallReason`\nholds the rule and the wording for every consumer, and `end()` says\n\"restart the daemon\" once for all of its reasons.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-538",
       "ref": "refs/pull/538/merge",
       "sha": "1a5ed485f5f51368150fab02ae74b92c13bbc911",
@@ -48,28 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T22:56:55-06:00",
           "message": "fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-539",
-      "ref": "refs/pull/539/merge",
-      "sha": "192580f7f7fd7aed88eceb77c4a836b7a8837c83",
-      "timestamp": "2026-11-01T04:58:23.260Z",
-      "commits": [
-        {
-          "sha": "192580f7f7fd7aed88eceb77c4a836b7a8837c83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:57:30-06:00",
-          "message": "Merge fddf6eaf5537684a04db07485ade81b6ed291d8c into e98fef8ecc1558cc8cdf59993c8534b6d584d2fd\n"
-        },
-        {
-          "sha": "fddf6eaf5537684a04db07485ade81b6ed291d8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:57:18-06:00",
-          "message": "fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8)\n\nWhile the OS isn't delivering file events, a watch_file variable showed its\nold value as current. It now carries the stall as its standing fault, read\nfrom the delivery owner, and drops the fault only by re-reading.\n\n`SourceRegistry` takes `FileEvents`, the type ManagedStorage already reads,\nin place of the one-caller `CatchUps` adapter. `RenderDeps.fileEvents` is\nrequired, so a daemon that doesn't wire it doesn't compile. `stallReason`\nholds the rule and the wording for every consumer, and `end()` says\n\"restart the daemon\" once for all of its reasons.\n"
         }
       ]
     },

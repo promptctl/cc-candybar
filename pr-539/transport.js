@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.3";
+var PACKAGE_VERSION = "1.174.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -39164,7 +39164,7 @@ function watchTargetsOf(paths) {
     unresolved
   };
 }
-function watchFault(label2, watch2, beyond = null) {
+function watchFault(label2, watch2, beyond) {
   const reasons = [
     ...watch2.derived.unresolved.map(
       // Every reason names the path it stopped at, the kernel's and the loop's.
@@ -39714,7 +39714,7 @@ var FileEventDelivery = class {
     this.notify({ kind: "caught-up", since: d.missedSince });
   }
   // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, restarting is the way out.
+  // measures again, so whatever ended it, only a restart can.
   end(period, reason) {
     const inst = this.instrument;
     if (inst.kind === "probing") inst.handle.release();
@@ -39767,7 +39767,7 @@ function fileEventsWarnings(d) {
       case "stalled":
         return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
       case "unmeasured":
-        return `the daemon cannot check whether file events are arriving: ${d.reason}, since ${since}`;
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
   };
   return [{ kind: "file-events", state: d.kind, message: message() }];
@@ -50224,14 +50224,18 @@ var PathWatches = class {
   constructor(watchers, fileEvents) {
     this.watchers = watchers;
     this.fileEvents = fileEvents;
+    this.releaseDelivery = fileEvents.subscribe(
+      (notice) => this.noticed(notice)
+    );
   }
   watchers;
   fileEvents;
   entries = /* @__PURE__ */ new Map();
+  releaseDelivery;
   subscribe(filePath2, callback, onFault) {
     const entry = this.entries.get(filePath2) ?? this.arm(filePath2);
     entry.subscribers.set(callback, onFault);
-    onFault(faultOf(filePath2, entry, this.fileEvents.delivery()));
+    onFault(this.faultOf(filePath2, entry));
     return () => this.unsubscribe(filePath2, callback);
   }
   arm(filePath2) {
@@ -50271,24 +50275,37 @@ var PathWatches = class {
     for (const cb of entry.subscribers.keys()) cb();
   }
   report(filePath2, entry) {
-    const fault = faultOf(filePath2, entry, this.fileEvents.delivery());
+    const fault = this.faultOf(filePath2, entry);
     for (const onFault of entry.subscribers.values()) onFault(fault);
+  }
+  // The watch's fault, derived from what it holds now and whether the OS is
+  // delivering what it would hear. A stall is every watch's: it rides the
+  // delivery owner's one stream.
+  faultOf(filePath2, entry) {
+    return watchFault(
+      `watch_file ${filePath2}`,
+      entry.bound,
+      stallReason(this.fileEvents.delivery())
+    );
   }
   // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
   // may have missed events: each watch re-derives where its path can change,
   // since a directory may have appeared unheard, which says its fault, and
   // every subscriber re-reads as if its own watch had reported. Both together,
-  // so no variable drops a stall's fault still holding a value from before it.
+  // so no variable drops a stall's fault without reading again, and in one
+  // action, so one change of delivery is one publish.
   noticed(notice) {
     switch (notice.kind) {
       case "period":
         return;
       case "moved":
       case "caught-up":
-        for (const [filePath2, entry] of this.entries) {
-          this.rederive(filePath2, entry);
-          for (const cb of entry.subscribers.keys()) cb();
-        }
+        runInAction(() => {
+          for (const [filePath2, entry] of this.entries) {
+            this.rederive(filePath2, entry);
+            for (const cb of entry.subscribers.keys()) cb();
+          }
+        });
         return;
     }
   }
@@ -50302,6 +50319,7 @@ var PathWatches = class {
     }
   }
   dispose() {
+    this.releaseDelivery();
     for (const entry of this.entries.values())
       entry.bound.held.handle.release();
     this.entries.clear();
@@ -50311,7 +50329,6 @@ var PathWatches = class {
   }
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-var faultOf = (filePath2, entry, delivery) => watchFault(`watch_file ${filePath2}`, entry.bound, stallReason(delivery));
 var TtlBucketManager = class {
   buckets = /* @__PURE__ */ new Map();
   subscribe(durationMs, callback) {
@@ -50413,9 +50430,6 @@ var SourceRegistry = class _SourceRegistry {
     this.watchers = watchers;
     this.sessionState = sessionState;
     this.watchMgr = new PathWatches(watchers, fileEvents);
-    this.cleanups.push(
-      fileEvents.subscribe((notice) => this.watchMgr.noticed(notice))
-    );
   }
   launcher;
   store;
@@ -75923,7 +75937,7 @@ function drawRender(parts, setup, drawing2) {
   ].flatMap(
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
-  const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch);
+  const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch, null);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launcher.lifelineWarnings(),
@@ -83827,6 +83841,8 @@ function createDaemon(inputs) {
       storage: managedStorage,
       signer: linkSigner2,
       ledger: refreshLedger,
+      // [LAW:single-enforcer] The one delivery owner, whose OS stream a
+      // `watch_file` source's watch rides.
       fileEvents,
       declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
