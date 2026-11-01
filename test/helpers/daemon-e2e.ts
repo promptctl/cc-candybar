@@ -95,18 +95,15 @@ export function hookData(sessionId: string, cwd: string): ClaudeHookData {
   };
 }
 
-// A render's output and the render event of the same answer.
-export type RenderAnswer = { output: string; event: string };
-
 // One render request, retried on TIMEOUT and on an answer that drew a
-// source pending, within the budgets above. The one spelling of the transient
-// contract: `renderRequest` below is its output, and a case that reads how an
-// answer was drawn takes the event that came with it.
-export async function renderAnswer(
+// source pending, within the budgets above, its output returned. The one
+// spelling of the transient contract: `render` below and
+// test/helpers/drive-bar.ts both send through it.
+export async function renderRequest(
   target: DaemonTarget,
   request: Record<string, unknown>,
   replyBudgetMs = REPLY_BUDGET_MS,
-): Promise<RenderAnswer> {
+): Promise<string> {
   const { log, now } = endpointOf(target);
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
@@ -141,11 +138,10 @@ export async function renderAnswer(
       () => (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
-    const answer = { output: resp.output, event };
-    if (/ pending=-(?: |$)/.test(event)) return answer;
+    if (/ pending=-(?: |$)/.test(event)) return resp.output;
     // A source a run superseded is drawn pending by design: no request waits
     // on it (the run may outlast the deadline), so this answer is the one.
-    if (drewOnlySuperseded(event)) return answer;
+    if (drewOnlySuperseded(event)) return resp.output;
     // [LAW:no-silent-failure] Only a wait its deadline ended may draw
     // pending: one that answered yet drew a value not answered means the wait
     // left out something the request started (rule 1), and asking again would
@@ -159,16 +155,6 @@ export async function renderAnswer(
         `render still drew pending after ${attempt} asks: ${event}`,
       );
   }
-}
-
-// `renderAnswer`'s output: `render` below and test/helpers/drive-bar.ts both
-// send through it.
-export async function renderRequest(
-  target: DaemonTarget,
-  request: Record<string, unknown>,
-  replyBudgetMs = REPLY_BUDGET_MS,
-): Promise<string> {
-  return (await renderAnswer(target, request, replyBudgetMs)).output;
 }
 
 // Whether every value a render event drew pending is a plugin source a run
