@@ -2,45 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-536",
-      "ref": "refs/pull/536/merge",
-      "sha": "40e8267b2cda22e7788274df7e9475bce29aed9a",
-      "timestamp": "2026-11-01T04:07:24.034Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "136fdd87d04c0ab9b35e07bf9b15f497cb1e29a3",
+      "timestamp": "2026-11-01T04:13:24.053Z",
       "commits": [
         {
-          "sha": "40e8267b2cda22e7788274df7e9475bce29aed9a",
+          "sha": "136fdd87d04c0ab9b35e07bf9b15f497cb1e29a3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:06:30Z",
-          "message": "Merge 42b21ce6796e78821e289bc9f34fff72a07c4d03 into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
+          "timestamp": "2026-10-31T22:12:28-06:00",
+          "message": "test(diagnostics): a config folder the OS refuses shows on every bar drawn from its entry (brandon-unfiled-3248.fyvh) (#536)\n\n* test(diagnostics): a config folder the OS refuses shows on every bar drawn from its entry (brandon-unfiled-3248.fyvh)\n\ncandybar-plugins-vf6g.8uk (#507) carried a refused config directory to the\nindicator, but only the link-chain half was proven at a drawn bar. This\ndrives a refusal through the daemon's own render to the ⚠, the viewer and\nthe render event, over a failed load too.\n\n* test(diagnostics): a refused watch's event holds on every attempt of every bar, and a refused retry stays deaf (brandon-unfiled-3248.fyvh)\n\n* test(diagnostics): the refused watch clears at a drawn bar, and its failed-load event counts the load error (brandon-unfiled-3248.fyvh)"
         },
         {
-          "sha": "42b21ce6796e78821e289bc9f34fff72a07c4d03",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:06:26-06:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.fyvh"
-        },
-        {
-          "sha": "bab29ae2ba49c3d565203aa537195b0edf049b8a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:59:35-06:00",
-          "message": "test(diagnostics): the refused watch clears at a drawn bar, and its failed-load event counts the load error (brandon-unfiled-3248.fyvh)\n"
-        },
-        {
-          "sha": "1c08e3be0ea4bda04f9e1459834bf83bdbdbabe8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:49:17-06:00",
-          "message": "test(diagnostics): a refused watch's event holds on every attempt of every bar, and a refused retry stays deaf (brandon-unfiled-3248.fyvh)\n"
-        },
-        {
-          "sha": "c3416f26e9bec9e36cb50c9974fe3fee347703a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:36:53-06:00",
-          "message": "test(diagnostics): a config folder the OS refuses shows on every bar drawn from its entry (brandon-unfiled-3248.fyvh)\n\ncandybar-plugins-vf6g.8uk (#507) carried a refused config directory to the\nindicator, but only the link-chain half was proven at a drawn bar. This\ndrives a refusal through the daemon's own render to the ⚠, the viewer and\nthe render event, over a failed load too.\n"
+          "sha": "4d4639cbd084a07eec9bca7f571f170bf9fa8fd5",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T03:37:44Z",
+          "message": "chore(release): set `package.json` to 1.174.2 [skip ci]\n\n## [1.174.2](https://github.com/promptctl/cc-candybar/compare/v1.174.1...v1.174.2) (2026-11-01)\n\n### Bug Fixes\n\n* **daemon:** a request's timers run on its clock, and the deadline case holds them (brandon-unfiled-3248.a5k3) ([#533](https://github.com/promptctl/cc-candybar/issues/533)) ([4814ee7](https://github.com/promptctl/cc-candybar/commit/4814ee778a28c55a7193789772cc2d681d409ab0))\n"
         }
       ]
     },
@@ -91,28 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T21:35:11-06:00",
           "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "4814ee778a28c55a7193789772cc2d681d409ab0",
-      "timestamp": "2026-11-01T03:31:11.011Z",
-      "commits": [
-        {
-          "sha": "4814ee778a28c55a7193789772cc2d681d409ab0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:30:24-06:00",
-          "message": "fix(daemon): a request's timers run on its clock, and the deadline case holds them (brandon-unfiled-3248.a5k3) (#533)\n\n* fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n\n* fix(daemon): a request's timers run on its clock, so a held daemon holds them (brandon-unfiled-3248.a5k3)\n\nA budget was figured from DaemonClock while the wait and the backstop ran on\nreal setTimeout, so a held clock could not own a request's time. `after` on the\nclock gives both one owner: the deadline case holds its daemon and advances to\nexact figures, a stall in the worker can no longer reach the backstop first, and\narming the wait with anything but its budget fails the case.\n\nFrom the high review: RequestWait goes, since `stated` was req.deadline.kind, and\nthe process file's one case stops carrying shared fixtures.\n\n* fix(daemon): a held clock fires as a real one does, and an answered request's backstop is cleared (brandon-unfiled-3248.a5k3)\n\n* test(daemon): the answered-request case holds its client open, so it can fail (brandon-unfiled-3248.a5k3)\n\n* fix(test): the claims about a held clock say what it holds, and the case drops what it cannot show (brandon-unfiled-3248.a5k3)"
-        },
-        {
-          "sha": "0db1339f6615f78932dd846c241ea893c99a82fc",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T03:13:35Z",
-          "message": "chore(release): set `package.json` to 1.174.1 [skip ci]\n\n## [1.174.1](https://github.com/promptctl/cc-candybar/compare/v1.174.0...v1.174.1) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz) ([#534](https://github.com/promptctl/cc-candybar/issues/534)) ([96f1881](https://github.com/promptctl/cc-candybar/commit/96f1881bee934f602971a13dea41977a614a98e3))\n"
         }
       ]
     },
