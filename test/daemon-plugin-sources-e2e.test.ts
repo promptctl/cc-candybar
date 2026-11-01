@@ -1,9 +1,9 @@
 // [LAW:nothing-unseen] A plugin's session source and its `run` action,
 // measured on a daemon: the bar a request draws before and after the
 // plugin's program writes the session's file, a clicked program's write in the
-// bar, a forged link's refusal in the bar, the daemon's run and supersede
-// counts, the config-load event's `sources=`, and the render event's
-// `sources=`/`sourcesPending=` — the daemon's own wiring of the storage owner
+// bar, a forged link's refusal in the bar, the daemon's run counts, the
+// supersede's refresh event, the config-load event's `sources=`, and the render
+// event's `sources=`/`sourcesPending=` — the daemon's own wiring of the storage owner
 // into the render states and the views' declarations, and of the run owner into
 // the click. What a run does to a bar while it runs is test/run-action.test.ts's,
 // over a launch the test holds.
@@ -15,15 +15,13 @@ import path from "node:path";
 import { click, hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
-import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import { startDaemon, statsOf, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
 } from "./helpers/spawn-isolated-daemon";
 import { loggedWhen, renderLines } from "./helpers/daemon-log";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_RUN } from "../src/click/wire";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import type { StatsSnapshot } from "../src/daemon/stats";
 
 import { viewerLink } from "./helpers/diagnostics-viewer";
 
@@ -101,20 +99,6 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   const renderRaw = (): Promise<string> => renderRequest(daemon, body());
   const render = async (): Promise<string> => stripAnsi(await renderRaw());
 
-  // The counts from the daemon's request handling, past the connection: the
-  // 200 ms guard is the connection's, and a busy machine is no fact about them.
-  const stats = async (): Promise<StatsSnapshot> => {
-    const handled = await daemon.daemon.handle(
-      { v: PROTOCOL_VERSION, kind: "stats" },
-      () => false,
-      daemon.daemon.clock.monotonic(),
-    );
-    if (handled.kind !== "reply" || !handled.resp.ok || !("stats" in handled.resp)) {
-      throw new Error(`stats failed: ${JSON.stringify(handled)}`);
-    }
-    return handled.resp.stats as StatsSnapshot;
-  };
-
   // Renders until the bar (escapes stripped) shows what is waited for; the
   // bytes of that render.
   const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<string> => {
@@ -126,11 +110,6 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     );
     return raw;
   };
-
-  // The reads a supersede's resume started across plugin storage. The ledger
-  // lists only the triggers that have fired.
-  const supersedes = (snapshot: StatsSnapshot): number =>
-    snapshot.sources.records.find((r) => r.name === "plugin storage")!.refreshes.supersede ?? 0;
 
   // The run link the bar drew, read out of its bytes.
   const runLink = (rendered: string): string => {
@@ -175,18 +154,20 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
 
   test("a click runs the drawn program through the storage owner's supersede; then its write", async () => {
     const link = runLink(await renderUntil((b) => b.includes("home=/h/before"), "the value before the click"));
-    const before = await stats();
+    const before = await statsOf(daemon.daemon);
 
     await click(daemon, link);
 
     await renderUntil((b) => b.includes("home=/h/ran"), "the program's write");
-    const after = await stats();
+    const after = await statsOf(daemon.daemon);
     expect(after.runs).toMatchObject({ started: before.runs.started + 1, running: 0, failed: 0, timedOut: 0 });
-    expect(supersedes(after)).toBe(supersedes(before) + 1);
+    const file = path.join(storage, `${SESSION}.json`);
     await loggedWhen(
       env,
-      (lines) => lines.some((l) => l.includes(`run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `)),
-      "the run's event",
+      (lines) =>
+        lines.some((l) => l.includes(`run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `)) &&
+        lines.some((l) => l.includes(`plugin storage refresh file=${file} `) && l.includes(" stored=Y by=supersede outcome=ok ")),
+      "the run's event, and the read its resume started of this session's file",
     );
   });
 
@@ -197,11 +178,11 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const forged = effectsUrl([
       { verb: VERB_RUN, args: [sid, action, evaluated.replace("/h/ran", "/h/forged"), run.args[3]!] },
     ]);
-    const before = await stats();
+    const before = await statsOf(daemon.daemon);
 
     const refused = await sendClick(daemon, forged);
     expect(refused).toMatchObject({ ok: false });
-    expect((await stats()).runs).toMatchObject({ started: before.runs.started, refused: before.runs.refused + 1 });
+    expect((await statsOf(daemon.daemon)).runs).toMatchObject({ started: before.runs.started, refused: before.runs.refused + 1 });
     // The refusal is the bar's one message: the indicator counts it, and the
     // viewer it opens shows it.
     const bar = await renderUntil((b) => b.includes("⚠ 1"), "the forged link's refusal");

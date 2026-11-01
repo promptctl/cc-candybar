@@ -66,7 +66,7 @@ import {
   VERB_LOAD_CONFIG,
   VERB_SET_STATE,
 } from "../src/click/wire";
-import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import { startDaemon, statsOf, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
 } from "./helpers/spawn-isolated-daemon";
@@ -187,17 +187,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     return frames;
   }
 
-  const stats = async (): Promise<StatsSnapshot> => {
-    const resp = await sendDaemonRequest(
-      sockPath,
-      { v: PROTOCOL_VERSION, kind: "stats" },
-      5000,
-    );
-    if (!resp.ok || !("stats" in resp)) throw new Error(JSON.stringify(resp));
-    return resp.stats;
-  };
   const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> =>
-    (await stats()).frameFeeds;
+    (await statsOf(daemon.daemon)).frameFeeds;
 
   // A band-lane frame's text: its rows of runs (src/daemon/lane-frames.ts).
   const barText = (resp: Response): unknown =>
@@ -918,7 +909,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   }, 20_000);
 
   test("a render request whose cwd is not a string is refused and counted, not thrown", async () => {
-    const before = (await stats()).requests.errored;
+    const before = (await statsOf(daemon.daemon)).requests.errored;
     const resp = await sendDaemonRequest(
       sockPath,
       {
@@ -936,7 +927,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         "request 'cwd' is not an absolute path: 42",
       ),
     });
-    expect((await stats()).requests.errored).toBe(before + 1);
+    expect((await statsOf(daemon.daemon)).requests.errored).toBe(before + 1);
   });
 
   test("a subscriber that hangs up before its subscribe is handled leaves no feed behind", async () => {
@@ -991,7 +982,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a frame records nothing: no session-state write", async () => {
     const sid = "feed-frame-records-nothing";
     const revision = async (): Promise<number> =>
-      (await stats()).sessionState.revision;
+      (await statsOf(daemon.daemon)).sessionState.revision;
     await render(sockPath, sid, projectDir, {}, args("still"));
     // The pick lands before anyone subscribes, so no frame draws until the
     // revision is read: every frame after it draws the warned config.

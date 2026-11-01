@@ -27,7 +27,7 @@ import type { SessionStorage } from "../src/daemon/session-state";
 import { parseHandlerUrl } from "../src/install/index";
 import { PACKAGE_VERSION } from "../src/version";
 import { hookData, linkUrls, stripAnsi } from "./helpers/daemon-e2e";
-import { buildDaemon, bundleAt } from "./helpers/in-worker-daemon";
+import { buildDaemon, bundleAt, statsOf } from "./helpers/in-worker-daemon";
 import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
@@ -259,15 +259,7 @@ describe("the daemon is a value", () => {
 
   test("the bundle it is given is the build its stats name", async () => {
     const daemon = construct({ digest: "the-given-digest" });
-    await expect(
-      daemon.handle(
-        { v: PROTOCOL_VERSION, kind: "stats" },
-        () => false,
-        daemon.clock.monotonic(),
-      ),
-    ).resolves.toMatchObject({
-      resp: { ok: true, stats: { sourceDigest: "the-given-digest" } },
-    });
+    expect((await statsOf(daemon)).sourceDigest).toBe("the-given-digest");
     close(daemon);
   });
 

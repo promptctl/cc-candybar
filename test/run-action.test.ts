@@ -51,7 +51,7 @@ import { linkUrls } from "./helpers/ansi";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
-import { until } from "./helpers/until";
+import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
@@ -585,7 +585,11 @@ describe("a click on a run link", () => {
     expect(during).toContain(LOADING_GLYPH);
     expect(during).not.toContain("home=/h/old");
 
+    // Through real turns with its write on disk, whatever the watch hears. A
+    // slow machine shortens this hold and cannot fail it.
     programWrites(SID, { home: "/h/new" });
+    await throughout(() => draw(view).text.includes(LOADING_GLYPH), "the loading cell while the program runs", 200);
+
     program.exit();
     await until(() => draw(view).text.includes("home=/h/new"), "the program's write");
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
