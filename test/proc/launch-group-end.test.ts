@@ -44,6 +44,19 @@ describe("a launch whose child ends with a descendant outside its group", () => 
     },
   );
 
+  it("shows a character cut short at the end of its output as U+FFFD", async () => {
+    const r = await launch(
+      python(
+        `${SET}os.write(1,b'ok \\xe2')\nos.write(2,b'no \\xe2')\n${FORK_HOLDER}os._exit(0)\n`,
+      ),
+    );
+    expect(r).toMatchObject({
+      ok: true,
+      stdout: "ok \ufffd",
+      stderr: "no \ufffd",
+    });
+  });
+
   it("leaves the descendant its pipes, so a later write does not kill it", async () => {
     const dir = mkdtempSync(join(tmpdir(), "launch-group-end-"));
     const marker = join(dir, "wrote");

@@ -594,8 +594,14 @@ async function launchWaited(
     if (group !== undefined) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
 
-    let stdout = "";
-    let stderr = "";
+    // Raw bytes, decoded once at settle: a stream's own decoder keeps a split
+    // character from a launch that ends before EOF, and nothing can flush it.
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    const output = () => ({
+      stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+      stderr: Buffer.concat(stderrChunks).toString("utf8"),
+    });
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
@@ -637,8 +643,7 @@ async function launchWaited(
         settle({
           ok: false,
           reason: "signal-refused",
-          stdout,
-          stderr,
+          ...output(),
           exitCode: null,
           signal: null,
           error: err instanceof Error ? err.message : String(err),
@@ -714,20 +719,14 @@ async function launchWaited(
       }
     };
 
-    // The stream's decoder holds a character split across two reads.
-    child.stdout?.setEncoding("utf8").on("data", (text: string) => {
-      stdout += text;
-    });
-    child.stderr?.setEncoding("utf8").on("data", (text: string) => {
-      stderr += text;
-    });
+    child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
     child.on("error", (err) => {
       settle({
         ok: false,
         reason: "spawn-error",
-        stdout,
-        stderr,
+        ...output(),
         exitCode: null,
         signal: null,
         error: spawnErrorText(err, opts.cwd),
@@ -744,23 +743,21 @@ async function launchWaited(
         settle({
           ok: false,
           reason: terminated,
-          stdout,
-          stderr,
+          ...output(),
           exitCode: code,
           signal,
         });
         return;
       }
       if (code === 0) {
-        settle({ ok: true, stdout, stderr, exitCode: code });
+        settle({ ok: true, ...output(), exitCode: code });
         return;
       }
       const reason: "signal" | "non-zero" = signal ? "signal" : "non-zero";
       settle({
         ok: false,
         reason,
-        stdout,
-        stderr,
+        ...output(),
         exitCode: code,
         signal,
       });
