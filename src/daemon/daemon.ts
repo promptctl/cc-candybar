@@ -92,8 +92,8 @@ export interface RunningBundle {
 // [LAW:effects-at-boundaries] The two clocks a daemon draws and times requests
 // by, as values, so a test can hold the instant a bar is drawn at. Its counters
 // keep their own wall clock (RuntimeStats).
-// [LAW:one-source-of-truth] `after` is a request's timers, on the same clock
-// its budget is figured from, so a held clock holds both.
+// [LAW:one-source-of-truth] `after` runs a request's wait and its backstop, on
+// the same clock its budget is figured from, so a held clock holds all three.
 export interface DaemonClock {
   date(): Date;
   monotonic(): number;

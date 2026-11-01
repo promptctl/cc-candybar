@@ -121,7 +121,9 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
 // How a bounded wait ended: what it waited on answered, or its time ran out.
 export type WaitEnd = "answered" | "deadline";
 
-// Runs `fire` once `ms` have passed, unless what it returns clears it first.
+// Runs `fire` on a later turn, once `ms` have passed, unless what it returns
+// clears it first. Never before it returns: its callers arm it before they are
+// ready to be fired at.
 export type After = (ms: number, fire: () => void) => () => void;
 
 export const afterRealTime: After = (ms, fire) => {

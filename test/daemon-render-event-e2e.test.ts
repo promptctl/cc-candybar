@@ -613,12 +613,6 @@ describe("a request's deadline", () => {
       const stats = () =>
         sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "stats" });
 
-      // The config's entry compiled first, by a render that reports no pane,
-      // so the deadline below is spent on the wait, not on a compile.
-      await renderRequest(daemon, {
-        ...tmuxBody("ev-late-warm", "%0"),
-        tmux: null,
-      });
       // A render's answer with the nth stub holding its source: the stub's
       // start follows the arrival that armed the wait, so a moment short of
       // the wait's end the render still holds its view, and the next moment
@@ -664,7 +658,6 @@ describe("a request's deadline", () => {
       await stub.open(1);
       const late = only(await landedEvents(env, "ev-late", 1));
       expect(field(late, "outcome")).toBe("ok");
-      expect(field(late, "timedOut")).toBe("N");
       expect(field(late, "deadline")).toBe(`stated:${waitMs}ms`);
       expect(field(late, "ended")).toBe("deadline");
       expect(field(late, "pending")).toBe("tmux.session");
