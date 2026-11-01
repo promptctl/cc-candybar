@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-543",
+      "ref": "refs/pull/543/merge",
+      "sha": "f6a7f1e38f2dc892e6a515999d8c701e7cedc7ee",
+      "timestamp": "2026-11-01T08:17:03.645Z",
+      "commits": [
+        {
+          "sha": "f6a7f1e38f2dc892e6a515999d8c701e7cedc7ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T08:16:12Z",
+          "message": "Merge bf2078c67f4c4d0e9f328d22a5d6b99d862a7229 into e7c7caacfb9c807a1424dde9d75a66559451e5ed\n"
+        },
+        {
+          "sha": "bf2078c67f4c4d0e9f328d22a5d6b99d862a7229",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:15:54-07:00",
+          "message": "fix(git): an armed init stays shown, and a relative directory reads no location\n"
+        },
+        {
+          "sha": "ac305a8bee1db35670c918b9e25a71487a206f23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:06:48-07:00",
+          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e7c7caacfb9c807a1424dde9d75a66559451e5ed",
@@ -20,28 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-01T06:41:59Z",
           "message": "chore(release): set `package.json` to 1.174.7 [skip ci]\n\n## [1.174.7](https://github.com/promptctl/cc-candybar/compare/v1.174.6...v1.174.7) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) ([#541](https://github.com/promptctl/cc-candybar/issues/541)) ([63c79c5](https://github.com/promptctl/cc-candybar/commit/63c79c571fe30da5a6ba1df1c66e3c0610a95c03))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-543",
-      "ref": "refs/pull/543/merge",
-      "sha": "981836e48bea9359c13081b9050c03e776a30d0f",
-      "timestamp": "2026-11-01T08:07:53.232Z",
-      "commits": [
-        {
-          "sha": "981836e48bea9359c13081b9050c03e776a30d0f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:06:56-07:00",
-          "message": "Merge ac305a8bee1db35670c918b9e25a71487a206f23 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
-        },
-        {
-          "sha": "ac305a8bee1db35670c918b9e25a71487a206f23",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:06:48-07:00",
-          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n"
         }
       ]
     },
