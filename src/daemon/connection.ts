@@ -128,7 +128,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const reader = makeFrameReader(
     (frame) => {
       void daemon
-        .handle(frame as Request, () => timedOut, accepted)
+        .handle(frame as Request, () => timedOut || sock.destroyed, accepted)
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush, r.delivered)

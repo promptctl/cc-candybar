@@ -6,19 +6,20 @@ import { clickLaunch } from "../src/daemon/verbs";
 import { processLauncher } from "../src/proc/launch";
 
 describe("clickLaunch", () => {
-  test("a program that cannot start is a throw naming the spawn's own error", () => {
-    expect(() =>
+  test("a program that cannot start is a throw naming the spawn's own error", async () => {
+    await expect(
       clickLaunch(
         processLauncher,
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],
+          timeoutMs: 1000,
           category: "click.open",
         },
         "opening https://example.com",
         () => {},
       ),
-    ).toThrow(
+    ).rejects.toThrow(
       /^opening https:\/\/example\.com failed \(spawn-error, exit null\): .*ENOENT/,
     );
   });

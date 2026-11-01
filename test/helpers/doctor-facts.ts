@@ -51,7 +51,7 @@ export const HEALTHY_PROCESS: DaemonProcess = {
 
 // The edge's reads of that daemon: the one process.
 export const healthyDaemonEdge = (): Pick<DoctorEdge, "daemons"> => ({
-  daemons: () => ({ kind: "ok", value: [HEALTHY_PROCESS] }),
+  daemons: async () => ({ kind: "ok", value: [HEALTHY_PROCESS] }),
 });
 
 // The doctor's stores on a machine it has never filed anything on.
@@ -144,7 +144,7 @@ export const healthyDataEdge = (): Pick<
     kind: "ok",
     value: { lines: 3, unparsed: 0, whole: true },
   }),
-  forge: () => ({
+  forge: async () => ({
     kind: "ok",
     value: { cli: "gh", host: "github.com", status: "ready" },
   }),

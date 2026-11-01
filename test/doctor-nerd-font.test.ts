@@ -92,11 +92,11 @@ function expectFailedWithSighting(v: Verdict, terminal: TerminalFacts): string {
 }
 
 describe("nerdFont probe", () => {
-  test("a bar that draws no private-use glyph needs no Nerd Font", () => {
+  test("a bar that draws no private-use glyph needs no Nerd Font", async () => {
     expect(probe(facts({ kind: "none" }))).toEqual({ ok: true });
   });
 
-  test("a bundling terminal at or past the release that ships its symbols is ok", () => {
+  test("a bundling terminal at or past the release that ships its symbols is ok", async () => {
     expect(verdictIn({ kind: "bundling", name: "ghostty", version: null })).toEqual({ ok: true });
     expect(verdictIn({ kind: "bundling", name: "kitty", version: "0.45.0" })).toEqual({ ok: true });
     expect(
@@ -104,14 +104,14 @@ describe("nerdFont probe", () => {
     ).toEqual({ ok: true });
   });
 
-  test("an older bundling terminal says the release its symbols came in", () => {
+  test("an older bundling terminal says the release its symbols came in", async () => {
     const t: TerminalFacts = { kind: "bundling", name: "kitty", version: "0.35.2" };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
       'kitty 0.35.2 ships no Nerd Font symbols (they came in 0.36.0) — update kitty, or set a Nerd Font as its font',
     );
   });
 
-  test("a WezTerm bundling Nerd Fonts v2, without the gauge's nf-md icons, is not ok", () => {
+  test("a WezTerm bundling Nerd Fonts v2, without the gauge's nf-md icons, is not ok", async () => {
     const t: TerminalFacts = { kind: "bundling", name: "wezterm", version: "20230408-112425-69ae8472" };
     expect(expectFailedWithSighting(verdictIn(t), t)).toContain("(they came in 20230712)");
     expect(
@@ -119,14 +119,14 @@ describe("nerdFont probe", () => {
     ).toEqual({ ok: true });
   });
 
-  test("a bundling terminal that did not say its release asks the user to look", () => {
+  test("a bundling terminal that did not say its release asks the user to look", async () => {
     const t: TerminalFacts = { kind: "bundling", name: "kitty", version: null };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
       "kitty ships Nerd Font symbols since 0.36.0, and did not say which release this is",
     );
   });
 
-  test("a configured terminal whose font has every glyph is ok", () => {
+  test("a configured terminal whose font has every glyph is ok", async () => {
     const covered = ITERM({
       kind: "ok",
       value: { font: "JetBrainsMonoNF-Regular", from: 'iTerm2 profile "Default"', lacks: [] },
@@ -134,13 +134,13 @@ describe("nerdFont probe", () => {
     expect(verdictIn(covered)).toEqual({ ok: true });
   });
 
-  test("a configured terminal whose font lacks glyphs names the font, where it was read, and what it lacks", () => {
+  test("a configured terminal whose font lacks glyphs names the font, where it was read, and what it lacks", async () => {
     expect(expectFailedWithSighting(verdictIn(MENLO), MENLO)).toBe(
       'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B2 — set a Nerd Font as its font',
     );
   });
 
-  test("a font no installed font goes by is named as not installed", () => {
+  test("a font no installed font goes by is named as not installed", async () => {
     const t: TerminalFacts = {
       kind: "configured",
       name: "alacritty",
@@ -155,21 +155,21 @@ describe("nerdFont probe", () => {
     );
   });
 
-  test("a font that could not be read is the reason, and the user is asked to look", () => {
+  test("a font that could not be read is the reason, and the user is asked to look", async () => {
     const t = ITERM({ kind: "failed", reason: 'iTerm2 has no profile named "Nope"' });
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
       `the doctor cannot read iTerm2 3.7.2's font: iTerm2 has no profile named "Nope"`,
     );
   });
 
-  test("a terminal the doctor does not know, but a name, asks the user to look", () => {
+  test("a terminal the doctor does not know, but a name, asks the user to look", async () => {
     const t: TerminalFacts = { kind: "unknown", called: "Hyper" };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read Hyper's font");
   });
 
   // Known by name, its font unread: the sighting is the name a sentence calls
   // it, never its release, as for every terminal the doctor knows.
-  test("a terminal the doctor knows but reads no font for asks the user to look, under its label", () => {
+  test("a terminal the doctor knows but reads no font for asks the user to look, under its label", async () => {
     const t: TerminalFacts = { kind: "unread", name: "apple-terminal", version: "455.1" };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read Terminal 455.1's font");
     expect(idIn(t)).toMatch(/^Terminal\|/);
@@ -177,14 +177,14 @@ describe("nerdFont probe", () => {
 
   // Apple's Terminal inside tmux answers no XTVERSION: its TERM is all that is
   // said of it, shared only by this machine's terminals under that TERM.
-  test("a terminal nothing names but its TERM asks the user to look, under that TERM", () => {
+  test("a terminal nothing names but its TERM asks the user to look, under that TERM", async () => {
     const t: TerminalFacts = { kind: "unnamed", term: "xterm-256color" };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe("the doctor cannot read xterm-256color's font");
     expect(idIn(t)).toMatch(/^xterm-256color\|/);
   });
 
   // A mark there would answer for whichever terminal next goes unnamed.
-  test("where nothing names the terminal, there is nothing to mark", () => {
+  test("where nothing names the terminal, there is nothing to mark", async () => {
     const cases: Array<[TerminalFacts, string]> = [
       [{ kind: "unnamed", term: "" }, "the doctor cannot read this terminal's font"],
       [
@@ -202,7 +202,7 @@ describe("nerdFont probe", () => {
     }
   });
 
-  test("a sighting names the terminal, never its release, and what its font reading was", () => {
+  test("a sighting names the terminal, never its release, and what its font reading was", async () => {
     const kitty = (version: string | null): TerminalFacts => ({ kind: "bundling", name: "kitty", version });
     expect(idIn(kitty("0.45.0"))).toBe(idIn(kitty(null)));
     expect(idIn(kitty(null))).toBe("kitty|U+E0B0 U+E0B2");
@@ -215,7 +215,7 @@ describe("nerdFont probe", () => {
     expect(idIn(builtIn)).not.toBe(idIn(MENLO));
   });
 
-  test("a mark book that cannot be read is told beside a failure a mark could settle, which offers no mark; a pass needs no book", () => {
+  test("a mark book that cannot be read is told beside a failure a mark could settle, which offers no mark; a pass needs no book", async () => {
     const broken: DoctorFacts["marks"] = { kind: "failed", reason: "/s/doctor-marks.json is not JSON" };
     const f = facts({ kind: "glyphs", glyphs: GLYPHS, terminal: MENLO }, null, broken);
     expect(probe(f)).toEqual({
@@ -235,7 +235,7 @@ describe("nerdFont probe", () => {
     expect(probe(facts({ kind: "none" }, null, broken))).toEqual({ ok: true });
   });
 
-  test("the user's mark settles it — but only on the sighting it was made on", () => {
+  test("the user's mark settles it — but only on the sighting it was made on", async () => {
     const sighting = idIn(MENLO);
     expect(verdictIn(MENLO, { mark: "drawn", sighting })).toEqual({ ok: true });
     expect(expectFailedWithSighting(verdictIn(MENLO, { mark: "boxes", sighting }), MENLO)).toBe(
@@ -248,7 +248,7 @@ describe("nerdFont probe", () => {
     expect(verdictIn(MENLO, { mark: "drawn", sighting: otherGlyphs })).toEqual(verdictIn(MENLO));
   });
 
-  test("a mark made under one font answers nothing once the terminal draws with another", () => {
+  test("a mark made under one font answers nothing once the terminal draws with another", async () => {
     const boxes = { mark: "boxes" as const, sighting: idIn(MENLO) };
     const nerd = ITERM({
       kind: "ok",
@@ -263,13 +263,13 @@ describe("nerdFont probe", () => {
 });
 
 describe("the glyphs the bar draws", () => {
-  test("are measured through the joiner", () => {
+  test("are measured through the joiner", async () => {
     expect(stripPrivateGlyphs({ endcaps: "powerline" })).toBe("");
     expect(stripPrivateGlyphs({ endcaps: "capsule" })).toBe("");
     expect(stripPrivateGlyphs({ endcaps: "stitch" })).toBe("");
   });
 
-  test("include a private-use separator the author chose for plain", () => {
+  test("include a private-use separator the author chose for plain", async () => {
     expect(
       stripPrivateGlyphs({ endcaps: "plain", separator: "" }),
     ).toBe("");
@@ -280,7 +280,7 @@ describe("the glyphs the bar draws", () => {
 describe("the mark book", () => {
   const ID = "iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B2";
 
-  test("files each mark under its check and sighting; the latest mark on a sighting answers", () => {
+  test("files each mark under its check and sighting; the latest mark on a sighting answers", async () => {
     const once = withMark({}, "nerdFont", ID, "boxes");
     expect(once).toEqual({ nerdFont: { [ID]: "boxes" } });
     expect(withMark(once, "nerdFont", "other", "drawn")).toEqual({
@@ -289,7 +289,7 @@ describe("the mark book", () => {
     expect(withMark(once, "nerdFont", ID, "drawn")).toEqual({ nerdFont: { [ID]: "drawn" } });
   });
 
-  test("a document that is not a mark book fails saying how", () => {
+  test("a document that is not a mark book fails saying how", async () => {
     expect(parseMarkBook({ nerdFont: { [ID]: "drawn" } })).toEqual({
       kind: "ok",
       value: { nerdFont: { [ID]: "drawn" } },
@@ -306,7 +306,7 @@ describe("the mark book", () => {
 });
 
 describe("the doctor event's Nerd Font fields", () => {
-  test("say the glyphs, the terminal, the font and the mark honoured", () => {
+  test("say the glyphs, the terminal, the font and the mark honoured", async () => {
     const menlo = { kind: "glyphs" as const, glyphs: GLYPHS, terminal: MENLO };
     expect(nerdFontFields(menlo, { kind: "ok", value: {} })).toBe(
       'glyphs=e0b0,e0b2 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=-',
@@ -329,7 +329,7 @@ describe("the doctor event's Nerd Font fields", () => {
 });
 
 describe("parseTmuxClient", () => {
-  test("reads the five fields asked for", () => {
+  test("reads the five fields asked for", async () => {
     expect(parseTmuxClient("osc7,RGB\tiTerm2 3.7.2\txterm-256color\t84566\t1\n")).toEqual({
       kind: "ok",
       value: {
@@ -348,7 +348,7 @@ describe("parseTmuxClient", () => {
     expect(parseTmuxClient("\t\t\t\t\n")).toEqual({ kind: "ok", value: null });
   });
 
-  test("anything else is a failure naming what came back", () => {
+  test("anything else is a failure naming what came back", async () => {
     for (const out of [
       "osc7,RGB\n",
       "osc7\tiTerm2\txterm\tx1\t1\n",
@@ -385,16 +385,16 @@ describe("descendsFromRemoteLogin", () => {
     "50003 50002 tmux",
   ].join("\n");
 
-  test("a client under sshd, sshd-session or mosh-server came over a remote login", () => {
+  test("a client under sshd, sshd-session or mosh-server came over a remote login", async () => {
     expect(descendsFromRemoteLogin(TABLE, 45022)).toEqual({ kind: "ok", value: true });
     expect(descendsFromRemoteLogin(TABLE, 50003)).toEqual({ kind: "ok", value: true });
   });
 
-  test("a client under a local terminal did not", () => {
+  test("a client under a local terminal did not", async () => {
     expect(descendsFromRemoteLogin(TABLE, 84566)).toEqual({ kind: "ok", value: false });
   });
 
-  test("a pid the table does not hold is a failure, never local", () => {
+  test("a pid the table does not hold is a failure, never local", async () => {
     expect(descendsFromRemoteLogin(TABLE, 999)).toEqual({
       kind: "failed",
       reason: "process 999 is not running",
@@ -403,7 +403,7 @@ describe("descendsFromRemoteLogin", () => {
 });
 
 describe("the font edge's readers", () => {
-  test("fcMatchCoverage: the family fontconfig matched, and the glyphs its ranges miss", () => {
+  test("fcMatchCoverage: the family fontconfig matched, and the glyphs its ranges miss", async () => {
     expect(fcMatchCoverage("Hack Nerd Font\t20-7e a0-17f e0b0-e0b3\n", GLYPHS)).toEqual({
       kind: "ok",
       value: { font: "Hack Nerd Font", lacks: [] },
@@ -414,13 +414,13 @@ describe("the font edge's readers", () => {
     });
   });
 
-  test("fcMatchCoverage: a glyph a fallback font covers is drawn, the font is still the first", () => {
+  test("fcMatchCoverage: a glyph a fallback font covers is drawn, the font is still the first", async () => {
     expect(
       fcMatchCoverage("DejaVu Sans Mono\t20-7e\nSymbols Nerd Font Mono\te0a0-e0d4\n", GLYPHS),
     ).toEqual({ kind: "ok", value: { font: "DejaVu Sans Mono", lacks: [] } });
   });
 
-  test("fcMatchCoverage: anything but families and their charsets is a failure naming it", () => {
+  test("fcMatchCoverage: anything but families and their charsets is a failure naming it", async () => {
     for (const out of ["", "no tab here\n", "\t20-7e\n", "A\t20-7e\nno tab\n"]) {
       expect(fcMatchCoverage(out, GLYPHS)).toEqual({
         kind: "failed",
@@ -429,7 +429,7 @@ describe("the font edge's readers", () => {
     }
   });
 
-  test("alacrittyFile reads font.normal.family and both import spellings", () => {
+  test("alacrittyFile reads font.normal.family and both import spellings", async () => {
     expect(alacrittyFile({ font: { normal: { family: "Hack Nerd Font" } } })).toEqual({
       family: "Hack Nerd Font",
       imports: [],
@@ -441,7 +441,7 @@ describe("the font edge's readers", () => {
     expect(alacrittyFile({ import: ["b.toml", 3] })).toEqual({ family: null, imports: ["b.toml"] });
   });
 
-  test("Alacritty's config locations and default family", () => {
+  test("Alacritty's config locations and default family", async () => {
     expect(alacrittyConfigPaths("/h", undefined)).toEqual([
       "/h/.config/alacritty/alacritty.toml",
       "/h/.config/alacritty.toml",
@@ -487,11 +487,11 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       ...healthyDataEdge(),
       ...noManagedSettings(),
       probeTmux: client,
-      remoteLogin: (pid) => {
+      remoteLogin: async (pid) => {
         pids.push(pid);
         return remote;
       },
-      fontInUse: (...args) => {
+      fontInUse: async (...args) => {
         asked.push(args);
         return COVERED;
       },
@@ -499,11 +499,11 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     };
     return { e, asked, pids };
   };
-  const tmuxSays = (termtype: string): DoctorEdge["probeTmux"] => () => ({
+  const tmuxSays = (termtype: string): DoctorEdge["probeTmux"] => async () => ({
     kind: "ok",
     value: { features: [], termtype, termname: "xterm-256color", pid: 4242, utf8: true },
   });
-  const gathered = (
+  const gathered = async (
     e: DoctorEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,
     pick: (key: string) => string | null = () => null,
@@ -522,21 +522,21 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       HEALTHY_FACTS.width,
       stores,
     );
-  const drawn = (
+  const drawn = async (
     e: DoctorEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,
   ) => {
-    const f = gathered(e, hints).nerdFont;
+    const f = ((await gathered(e, hints))).nerdFont;
     if (f.kind !== "glyphs") throw new Error(`the bar drew no glyphs: ${JSON.stringify(f)}`);
     return f;
   };
 
-  test("inside tmux, tmux's attached client names the terminal over the session's env", () => {
+  test("inside tmux, tmux's attached client names the terminal over the session's env", async () => {
     const { e, asked, pids } = edge(tmuxSays("iTerm2 3.7.2"));
     const env = { TERM_PROGRAM: "tmux", ITERM_PROFILE: "Work", XDG_CONFIG_HOME: "/x" };
     // The session's ssh hint is the server's first window's, as stale as its
     // profile: the attached client's own process answers instead.
-    expect(drawn(e, { tmux: HINT, ssh: true, terminalEnv: env })).toEqual({
+    expect(await drawn(e, { tmux: HINT, ssh: true, terminalEnv: env })).toEqual({
       kind: "glyphs",
       glyphs: BUNDLED_GLYPHS,
       terminal: { kind: "configured", name: "iterm2", version: "3.7.2", font: COVERED },
@@ -549,11 +549,11 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     expect(pids).toEqual([4242]);
   });
 
-  test("inside tmux, a client attached over a remote login reads no font on this machine", () => {
+  test("inside tmux, a client attached over a remote login reads no font on this machine", async () => {
     const FAR =
       "the terminal is on the far side of a remote login, so its font is on the machine it runs on";
     const remote = edge(tmuxSays("iTerm2 3.7.4"), DEFAULT_DSL_CONFIG, { kind: "ok", value: true });
-    expect(drawn(remote.e, { tmux: HINT, terminalEnv: {} }).terminal).toEqual({
+    expect((await drawn(remote.e, { tmux: HINT, terminalEnv: {} })).terminal).toEqual({
       kind: "configured",
       name: "iterm2",
       version: "3.7.4",
@@ -564,7 +564,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       kind: "failed",
       reason: "ps failed (rate-limited)",
     });
-    expect(drawn(unknowable.e, { tmux: HINT, terminalEnv: {} }).terminal).toMatchObject({
+    expect((await drawn(unknowable.e, { tmux: HINT, terminalEnv: {} })).terminal).toMatchObject({
       font: {
         kind: "failed",
         reason: "whether the terminal is remote could not be asked: ps failed (rate-limited)",
@@ -573,20 +573,20 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     expect(unknowable.asked).toEqual([]);
   });
 
-  test("outside tmux, the font is read with the session's env as it is", () => {
+  test("outside tmux, the font is read with the session's env as it is", async () => {
     const { e, asked } = edge(() => {
       throw new Error("tmux must not be asked outside it");
     });
     const env = { TERM_PROGRAM: "iTerm.app", TERM_PROGRAM_VERSION: "3.7.2", ITERM_PROFILE: "Work" };
-    drawn(e, { tmux: null, terminalEnv: env });
+    await drawn(e, { tmux: null, terminalEnv: env });
     expect(asked).toEqual([[{ name: "iterm2", version: "3.7.2" }, env, BUNDLED_GLYPHS]]);
   });
 
-  test("outside tmux over ssh, no font on this machine is read: the terminal is on the other one", () => {
+  test("outside tmux over ssh, no font on this machine is read: the terminal is on the other one", async () => {
     const { e, asked, pids } = edge(() => {
       throw new Error("tmux must not be asked outside it");
     });
-    expect(drawn(e, { tmux: null, ssh: true, terminalEnv: { TERM: "alacritty" } }).terminal).toEqual({
+    expect((await drawn(e, { tmux: null, ssh: true, terminalEnv: { TERM: "alacritty" } })).terminal).toEqual({
       kind: "configured",
       name: "alacritty",
       version: null,
@@ -600,9 +600,9 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     expect(pids).toEqual([]);
   });
 
-  test("a bundling terminal reads no font", () => {
+  test("a bundling terminal reads no font", async () => {
     const { e, asked } = edge(tmuxSays("kitty(0.45.0)"));
-    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).terminal).toEqual({
+    expect((await drawn(e, { tmux: HINT, terminalEnv: {} })).terminal).toEqual({
       kind: "bundling",
       name: "kitty",
       version: "0.45.0",
@@ -610,34 +610,34 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     expect(asked).toEqual([]);
   });
 
-  test("a tmux that could not be asked is unasked; a client too old to report is unreported", () => {
-    const { e, asked } = edge(() => ({ kind: "failed", reason: "no server" }));
-    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).terminal).toEqual({
+  test("a tmux that could not be asked is unasked; a client too old to report is unreported", async () => {
+    const { e, asked } = edge(async () => ({ kind: "failed", reason: "no server" }));
+    expect((await drawn(e, { tmux: HINT, terminalEnv: {} })).terminal).toEqual({
       kind: "unasked",
       reason: "no server",
     });
-    expect(drawn(e, { tmux: null }).terminal).toEqual({ kind: "unreported" });
-    expect(drawn(e, {}).terminal).toEqual({ kind: "unreported" });
+    expect((await drawn(e, { tmux: null })).terminal).toEqual({ kind: "unreported" });
+    expect((await drawn(e, {})).terminal).toEqual({ kind: "unreported" });
     expect(asked).toEqual([]);
   });
 
-  test("outside tmux, the session's env names the terminal", () => {
+  test("outside tmux, the session's env names the terminal", async () => {
     const { e } = edge(() => {
       throw new Error("tmux must not be asked outside it");
     });
-    expect(drawn(e, { tmux: null, terminalEnv: { TERM: "xterm-kitty" } }).terminal).toEqual({
+    expect((await drawn(e, { tmux: null, terminalEnv: { TERM: "xterm-kitty" } })).terminal).toEqual({
       kind: "bundling",
       name: "kitty",
       version: null,
     });
   });
 
-  test("the glyphs are the ones the session's bar draws", () => {
+  test("the glyphs are the ones the session's bar draws", async () => {
     const { e } = edge(tmuxSays("ghostty 1.3.1"));
-    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs).toBe(BUNDLED_GLYPHS);
+    expect((await drawn(e, { tmux: HINT, terminalEnv: {} })).glyphs).toBe(BUNDLED_GLYPHS);
   });
 
-  test("a private-use glyph the config writes is drawn as surely as a cap", () => {
+  test("a private-use glyph the config writes is drawn as surely as a cap", async () => {
     const icon: DslConfig = {
       ...DEFAULT_DSL_CONFIG,
       segments: {
@@ -646,21 +646,21 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       },
     };
     const { e } = edge(tmuxSays("ghostty 1.3.1"), icon);
-    expect(new Set(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs)).toEqual(
+    expect(new Set((await drawn(e, { tmux: HINT, terminalEnv: {} })).glyphs)).toEqual(
       new Set(`${BUNDLED_GLYPHS}\uf418`),
     );
   });
 
-  test("a pane whose session no client is attached to names no terminal", () => {
-    const { e, asked, pids } = edge(() => ({ kind: "ok", value: null }));
-    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).terminal).toEqual({
+  test("a pane whose session no client is attached to names no terminal", async () => {
+    const { e, asked, pids } = edge(async () => ({ kind: "ok", value: null }));
+    expect((await drawn(e, { tmux: HINT, terminalEnv: {} })).terminal).toEqual({
       kind: "unasked",
       reason: "tmux has no client attached to the pane's session",
     });
     expect([asked, pids]).toEqual([[], []]);
   });
 
-  test("a bar that draws none asks nothing of tmux's terminal or its font", () => {
+  test("a bar that draws none asks nothing of tmux's terminal or its font", async () => {
     // plain joiners with an ASCII separator, and the effort gauge written
     // without its Nerd icons: its ladder and the helper that draws max's
     // bubble caps.
@@ -677,15 +677,15 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       },
     };
     const { e, asked } = edge(tmuxSays("iTerm2 3.7.2"), ascii);
-    expect(gathered(e, { tmux: HINT, terminalEnv: {} }).nerdFont).toEqual({ kind: "none" });
+    expect((await gathered(e, { tmux: HINT, terminalEnv: {} })).nerdFont).toEqual({ kind: "none" });
     expect(asked).toEqual([]);
   });
 
-  test("the marks are the mark book's, whichever session made them", () => {
+  test("the marks are the mark book's, whichever session made them", async () => {
     const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B2", "drawn");
     const { e } = edge(tmuxSays("ghostty 1.3.1"));
     const marks = { kind: "ok", value: book } as const;
-    expect(gathered(e, { tmux: HINT }, undefined, { ...EMPTY_STORES, marks }).marks).toEqual(marks);
+    expect((await gathered(e, { tmux: HINT }, undefined, { ...EMPTY_STORES, marks })).marks).toEqual(marks);
   });
 });
 
@@ -699,14 +699,14 @@ describe("iTerm2's profiles, as the doctor reads them", () => {
     ...over,
   });
 
-  test("a named profile is the one read, its non-ASCII font named as such", () => {
+  test("a named profile is the one read, its non-ASCII font named as such", async () => {
     expect(itermFontInUse([profile({ nonAscii: true, lacks: [] })], "Default", "3.7.2")).toEqual({
       kind: "ok",
       value: { font: "Menlo-Regular", from: 'iTerm2 profile "Default", its non-ASCII font', lacks: [] },
     });
   });
 
-  test("built-in Powerline glyphs take what iTerm2 draws itself off what the font lacks", () => {
+  test("built-in Powerline glyphs take what iTerm2 draws itself off what the font lacks", async () => {
     expect(itermFontInUse([profile({ powerline: true })], "Default", "3.7.2")).toEqual({
       kind: "ok",
       value: {
@@ -728,7 +728,7 @@ describe("iTerm2's profiles, as the doctor reads them", () => {
     }
   });
 
-  test("with no profile named, the first that falls short is the answer", () => {
+  test("with no profile named, the first that falls short is the answer", async () => {
     const covered = profile({ name: "Nerd", font: "JetBrainsMonoNF-Regular", lacks: [] });
     expect(itermFontInUse([covered, profile({ name: "Plain" })], null, "3.7.2")).toEqual({
       kind: "ok",
@@ -740,7 +740,7 @@ describe("iTerm2's profiles, as the doctor reads them", () => {
     });
   });
 
-  test("with no profile named, every profile drawing the glyphs is the answer", () => {
+  test("with no profile named, every profile drawing the glyphs is the answer", async () => {
     const a = profile({ name: "A", font: "JetBrainsMonoNF-Regular", lacks: [] });
     const b = profile({ name: "B", font: "JetBrainsMonoNF-Regular", lacks: [] });
     const c = profile({ name: "C", powerline: true });
@@ -754,7 +754,7 @@ describe("iTerm2's profiles, as the doctor reads them", () => {
     });
   });
 
-  test("a profile that is not there, or names no font, is a failure saying so", () => {
+  test("a profile that is not there, or names no font, is a failure saying so", async () => {
     expect(itermFontInUse([], "Nope", "3.7.2")).toEqual({
       kind: "failed",
       reason: 'iTerm2 has no profile named "Nope"',
@@ -769,7 +769,7 @@ describe("iTerm2's profiles, as the doctor reads them", () => {
     });
   });
 
-  test("the glyphs iTerm2 draws itself, by release", () => {
+  test("the glyphs iTerm2 draws itself, by release", async () => {
     const at = (point: number) => String.fromCodePoint(point);
     expect(itermDrawsItself("3.5.0", at(0xe0b0))).toBe(true);
     expect(itermDrawsItself("3.5.0", at(0xe0d2))).toBe(true);

@@ -102,7 +102,7 @@ interface TerminalFixture {
 }
 const GHOSTTY: TerminalFixture = {
   env: { TERM_PROGRAM: "ghostty" },
-  fontInUse: () => {
+  fontInUse: async () => {
     throw new Error("fontInUse must not run in this case");
   },
 };
@@ -160,7 +160,7 @@ function buildRuntime(
     ...healthyDaemonEdge(),
     ...healthyDataEdge(),
     ...noManagedSettings(),
-    probeTmux: () => {
+    probeTmux: async () => {
       probes += 1;
       return {
         kind: "ok",
@@ -173,7 +173,7 @@ function buildRuntime(
         },
       };
     },
-    remoteLogin: () => {
+    remoteLogin: async () => {
       throw new Error("remoteLogin must not run in this case");
     },
     fontInUse: terminal.fontInUse,
@@ -491,7 +491,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const fontCalls: unknown[][] = [];
     const ITERM_MENLO: TerminalFixture = {
       env: { TERM_PROGRAM: "iTerm.app", TERM_PROGRAM_VERSION: "3.7.2" },
-      fontInUse: (...args) => {
+      fontInUse: async (...args) => {
         fontCalls.push(args);
         return {
           kind: "ok",
@@ -598,7 +598,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     test("a probe the rate limit refused refuses the click, and the report stands", async () => {
       const busy: TerminalFixture = {
         ...ITERM_MENLO,
-        fontInUse: () => {
+        fontInUse: async () => {
           throw new DoctorBusy("the font");
         },
       };
@@ -610,7 +610,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.render()).not.toContain("Nerd Font");
     });
 
-    test("only a check that takes a mark is given the actions that make one", () => {
+    test("only a check that takes a mark is given the actions that make one", async () => {
       const { actions } = parseAndValidate(
         "<user>",
         `{ globals: {} }`,

@@ -235,7 +235,7 @@ export async function doctorPlan(
     // [LAW:single-enforcer] Whose bars this run judges, decided once: the
     // session it runs in, else every session that drew one recently.
     const scope = scopeOf(env.CLAUDE_CODE_SESSION_ID);
-    const gathered = gatherFacts(
+    const gathered = await gatherFacts(
       edge,
       hints,
       // The config the daemon would load for a session started here: this

@@ -17,7 +17,14 @@ import type {
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
-import { VERBS, clickLaunch, clickSessionOf, BadVerbArgs } from "./verbs";
+import {
+  VERBS,
+  CLICK_PROGRAM_TIMEOUT_MS,
+  clickLaunch,
+  clickSessionOf,
+  BadVerbArgs,
+} from "./verbs";
+import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
 import type { ClickArrival } from "../doctor/sightings";
@@ -199,6 +206,7 @@ export async function replyTo(
     runs,
     effectSessions,
     menuIdle,
+    journalTurns,
     sessionState,
     tmuxStatusLines,
     watcherRegistry,
@@ -254,6 +262,7 @@ export async function replyTo(
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
         menuIdle: menuIdle.getStats(),
+        journalTurns: journalTurns.getStats(),
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),
@@ -404,7 +413,7 @@ export async function replyTo(
     // stopped before it.
     const t0 = clock.monotonic();
     const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(parts, req, facts);
+    const outcome = await clickOutcome(parts, req, facts, timedOut);
     // Whether the client was already told TIMEOUT while the click waited or
     // ran: its effect still lands, and the client reported a failure.
     noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
@@ -576,6 +585,7 @@ async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
   facts: RequestFacts,
+  clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { verb, value } = req as { verb: unknown; value: unknown };
   if (typeof verb !== "string" || typeof value !== "string") {
@@ -593,11 +603,14 @@ async function clickOutcome(
       value,
       { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
       facts,
+      clientGone,
     );
   } catch (error) {
-    return error instanceof BadVerbArgs
-      ? { kind: "bad-request", problems: [error.message] }
-      : { kind: "threw", error };
+    if (error instanceof BadVerbArgs)
+      return { kind: "bad-request", problems: [error.message] };
+    if (error instanceof DaemonClosing) return { kind: "closing", error };
+    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
+    return { kind: "threw", error };
   }
 }
 
@@ -623,11 +636,12 @@ async function handleClick(
   value: string,
   arrival: ClickArrival,
   facts: RequestFacts,
+  clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { clock, menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
-    return statusLineClick(parts, value, facts);
+    return statusLineClick(parts, value, facts, clientGone);
   }
   const handler = VERBS.get(verb);
   if (!handler) {
@@ -647,6 +661,7 @@ async function handleClick(
     ...verbCtx,
     arrival,
     turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+    clientGone,
   });
   return { kind: "ok" };
 }
@@ -664,6 +679,8 @@ function clickReply(outcome: RequestOutcome): Response {
         daemonV: PROTOCOL_VERSION,
       };
     case "threw":
+    case "closing":
+    case "abandoned":
       return renderFailed(outcome.error);
   }
 }
@@ -676,6 +693,7 @@ async function statusLineClick(
   parts: DaemonParts,
   value: string,
   facts: RequestFacts,
+  clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { tmuxStatusLines } = parts;
   const refused = (problem: string): RequestOutcome => ({
@@ -699,13 +717,15 @@ async function statusLineClick(
       parsed.value,
       { via: "tmux-status" },
       facts,
+      clientGone,
     );
   }
-  clickLaunch(
+  await clickLaunch(
     parts.launcher,
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
       args: [click.url],
+      timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
       category: "click.open",
     },
     `opening ${click.url}`,

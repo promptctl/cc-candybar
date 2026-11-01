@@ -157,6 +157,33 @@ export default [
   },
   prettierConfig,
   ...ownedImportBlocks(),
+  // [LAW:verifiable-goals] A click-rooted path holds the daemon's loop if it
+  // launches synchronously, so these cannot name the way to. Goes with the
+  // launchSync half when `Launcher` drops it (candybar-launch-q7o7.4em).
+  {
+    files: [
+      "src/daemon/verbs/**/*.ts",
+      "src/daemon/reply.ts",
+      "src/daemon/lane-edge.ts",
+      "src/daemon/lane-setup.ts",
+      "src/claude-input/**/*.ts",
+      "src/doctor/edge.ts",
+      "src/doctor/font-edge.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[property.name='launchSync']",
+          message: "A click-rooted path awaits `launch`.",
+        },
+        {
+          selector: "Identifier[name='runTmux']",
+          message: "A click-rooted path awaits `runTmuxAsync`.",
+        },
+      ],
+    },
+  },
   {
     ignores: [
       "node_modules/",

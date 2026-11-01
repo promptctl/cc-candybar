@@ -11,6 +11,23 @@ export class BadVerbArgs extends Error {
   }
 }
 
+// The daemon closed while this click waited or ran. No failure of the click's
+// own: its own outcome at the reply, and nothing more of it runs.
+export class DaemonClosing extends Error {
+  constructor(verb: string) {
+    super(`the daemon closed: ${verb} refused`);
+    this.name = "DaemonClosing";
+  }
+}
+
+// The client left before this click's turn came, so it never ran.
+export class ClickAbandoned extends Error {
+  constructor(verb: string) {
+    super(`the client left: ${verb} not run`);
+    this.name = "ClickAbandoned";
+  }
+}
+
 // [LAW:single-enforcer] One boundary reclassifies malformed wire encoding.
 // percent-decoding untrusted wire input throws a raw URIError on a bad escape
 // (`%ZZ`, a lone `%`); that is an argument-shape failure, not an operational

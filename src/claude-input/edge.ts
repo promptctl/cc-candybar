@@ -11,7 +11,7 @@
 
 import type { ClientHints } from "../daemon/protocol.js";
 import type { LaunchCategory, Launcher } from "../proc/launch.js";
-import { runTmux, type TmuxRun } from "../proc/tmux.js";
+import { runTmuxAsync, type TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { promptState, REFUSALS, type PaneSnapshot } from "./prompt-screen.js";
 import type { SlashLine } from "./slash-line.js";
@@ -19,8 +19,8 @@ import type { SlashLine } from "./slash-line.js";
 export interface ClaudeInputEdge {
   // Both throw naming tmux's own failure. `type` answers with the refusal
   // when a line was typed into the session too recently to type another.
-  readonly read: (hint: TmuxHint) => PaneSnapshot;
-  readonly type: (hint: TmuxHint, line: SlashLine) => Typed;
+  readonly read: (hint: TmuxHint) => Promise<PaneSnapshot>;
+  readonly type: (hint: TmuxHint, line: SlashLine) => Promise<Typed>;
 }
 
 export type Typed =
@@ -56,19 +56,19 @@ export function tmuxPaneOf(
   return { kind: "pane", hint: tmux };
 }
 
-export function typeSlash(
+export async function typeSlash(
   edge: ClaudeInputEdge,
   hint: ClientHints["tmux"],
   line: SlashLine,
-): TypeResult {
+): Promise<TypeResult> {
   const pane = tmuxPaneOf(hint);
   if (pane.kind === "refused") return pane;
   const tmux = pane.hint;
-  const state = promptState(edge.read(tmux));
+  const state = promptState(await edge.read(tmux));
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };
   }
-  const typed = edge.type(tmux, line);
+  const typed = await edge.type(tmux, line);
   return typed.kind === "typed" ? { kind: "typed", pane: tmux.pane } : typed;
 }
 
@@ -77,20 +77,20 @@ export function typeSlash(
 const THEN = ";";
 const BUFFER = "cc-candybar-slash";
 
-function tmux(
+async function tmux(
   launcher: Launcher,
   hint: TmuxHint,
   category: LaunchCategory,
   args: string[],
   stdinInput?: string,
-): Exclude<TmuxRun, { kind: "failed" }> {
-  const run = runTmux(launcher, hint, category, args, stdinInput);
+): Promise<Exclude<TmuxRun, { kind: "failed" }>> {
+  const run = await runTmuxAsync(launcher, hint, category, args, stdinInput);
   if (run.kind === "failed") throw new Error(run.reason);
   return run;
 }
 
-function read(launcher: Launcher, hint: TmuxHint): PaneSnapshot {
-  const run = tmux(launcher, hint, "claude-input.read", [
+async function read(launcher: Launcher, hint: TmuxHint): Promise<PaneSnapshot> {
+  const run = await tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -144,8 +144,12 @@ export function pasteLineArgs(
 
 // ctrl+s stashes a draft (a no-op on an empty input) and Claude Code restores
 // it after the submit.
-function type(launcher: Launcher, hint: TmuxHint, line: SlashLine): Typed {
-  const run = tmux(
+async function type(
+  launcher: Launcher,
+  hint: TmuxHint,
+  line: SlashLine,
+): Promise<Typed> {
+  const run = await tmux(
     launcher,
     hint,
     "claude-input.type",

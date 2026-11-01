@@ -57,6 +57,7 @@ import {
   PaneVisibility,
 } from "./pane-visibility.js";
 import { runTmux, runTmuxAsync } from "../proc/tmux.js";
+import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
@@ -296,7 +297,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
     failed: (sessionId, error) =>
       log(
-        "error",
+        error instanceof DaemonClosing ? "info" : "error",
         `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
       ),
   });
@@ -367,8 +368,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     render: (sessionId, fps, at) => renderFrame(parts, sessionId, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn, so a click's whole run of writes and its
-    // journal commit land before a frame of it is drawn.
+    // which fires in a later turn. A click that awaits gives up the loop, so a
+    // frame may show its writes ahead of its commit; the step stays whole.
     watch: (sessionId, onChange) =>
       reaction(() => sessionState.revision(sessionId), onChange),
     lanes: (sessionId) => viewLanes(parts, sessionId),
@@ -631,6 +632,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     sessionState,
     effectSessions,
     menuIdle,
+    journalTurns,
     linkSigner,
     runs,
     laneSetups,

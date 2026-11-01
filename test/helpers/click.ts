@@ -70,6 +70,7 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
+    clientGone: () => false,
     journalTurns: new JournalTurns({
       log: () => {},
       monotonic: () => performance.now(),
@@ -87,22 +88,22 @@ export function testVerbContext(
     doctor: {
       install: HEALTHY_INSTALL_EDGE,
       ...noManagedSettings(),
-      probeTmux: () => {
+      probeTmux: async () => {
         throw new Error("doctor: no tmux edge in this test");
       },
-      remoteLogin: () => {
+      remoteLogin: async () => {
         throw new Error("doctor: no process edge in this test");
       },
-      fontInUse: () => {
+      fontInUse: async () => {
         throw new Error("doctor: no font edge in this test");
       },
       loadConfig: () => {
         throw new Error("doctor: no config edge in this test");
       },
-      daemons: () => {
+      daemons: async () => {
         throw new Error("doctor: no process table in this test");
       },
-      forge: () => {
+      forge: async () => {
         throw new Error("doctor: no forge edge in this test");
       },
       transcript: () => {
@@ -145,10 +146,10 @@ export function testVerbContext(
     // And for the Claude Code pane: a test that drives a slash click hands in
     // its own edge.
     claudeInput: {
-      read: () => {
+      read: async () => {
         throw new Error("slash: no claude-input edge in this test");
       },
-      type: () => {
+      type: async () => {
         throw new Error("slash: no claude-input edge in this test");
       },
     },

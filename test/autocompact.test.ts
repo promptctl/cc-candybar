@@ -80,8 +80,8 @@ function runtime(
   const raw = renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
   const typed: string[] = [];
   const claudeInput: ClaudeInputEdge = {
-    read: () => ({ inMode: false, screen: ["─".repeat(30), "❯ ", "─".repeat(30)] }),
-    type: (_hint, line) => {
+    read: async () => ({ inMode: false, screen: ["─".repeat(30), "❯ ", "─".repeat(30)] }),
+    type: async (_hint, line) => {
       typed.push(line);
       return { kind: "typed" };
     },
@@ -96,23 +96,23 @@ function runtime(
 }
 
 describe("the autocompact segment", () => {
-  test("not read: no cell", () => {
+  test("not read: no cell", async () => {
     expect(runtime(ABSENT).text).not.toContain("⇲");
   });
 
-  test("auto on a 1M model: steps down from the window, nothing above it, no ↺", () => {
+  test("auto on a 1M model: steps down from the window, nothing above it, no ↺", async () => {
     const rt = runtime(ok("auto"));
     expect(rt.text).toContain("⇲ auto −");
     expect(rt.text).not.toContain("+");
     expect(rt.lines).toEqual(["/autocompact 900000"]);
   });
 
-  test("auto on a 200K model: steps down to 100K only", () => {
+  test("auto on a 200K model: steps down to 100K only", async () => {
     const rt = runtime(ok("auto"), 200_000);
     expect(rt.lines).toEqual(["/autocompact 100000"]);
   });
 
-  test("a set window: −, + and ↺ type the neighbouring windows and auto", () => {
+  test("a set window: −, + and ↺ type the neighbouring windows and auto", async () => {
     const rt = runtime(ok(400_000));
     expect(rt.text).toContain("⇲ 400.0K − + ↺");
     expect(rt.lines).toEqual([
@@ -122,7 +122,7 @@ describe("the autocompact segment", () => {
     ]);
   });
 
-  test("a window typed off the 100K grid steps onto it, both ways", () => {
+  test("a window typed off the 100K grid steps onto it, both ways", async () => {
     expect(runtime(ok(450_000)).lines).toEqual([
       "/autocompact 400000",
       "/autocompact 500000",
@@ -130,7 +130,7 @@ describe("the autocompact segment", () => {
     ]);
   });
 
-  test("the ends of the range: no − at 100K, no + at the model's window", () => {
+  test("the ends of the range: no − at 100K, no + at the model's window", async () => {
     expect(runtime(ok(100_000)).lines).toEqual([
       "/autocompact 200000",
       "/autocompact auto",
@@ -144,13 +144,13 @@ describe("the autocompact segment", () => {
   // Claude Code caps a window above the model's context window to it, and the
   // setting is user-global, so a 1M model's window meets a 200K model: the
   // cell shows what applies, and − steps down from there.
-  test("a window above the model's context window: the cap, and − steps from it", () => {
+  test("a window above the model's context window: the cap, and − steps from it", async () => {
     const rt = runtime(ok(800_000), 200_000);
     expect(rt.text).toContain("⇲ 200.0K − ↺");
     expect(rt.lines).toEqual(["/autocompact 100000", "/autocompact auto"]);
   });
 
-  test("an unreadable settings file is shown in the cell, with no controls", () => {
+  test("an unreadable settings file is shown in the cell, with no controls", async () => {
     const rt = runtime(failed("cannot read /x/settings.json: not a JSON object"));
     expect(rt.text).toContain("⇲ ⚠ cannot read /x/settings.json: not a JSON object");
     expect(rt.lines).toEqual([]);
@@ -162,7 +162,7 @@ describe("the autocompact segment", () => {
     expect(rt.typed).toEqual(["/autocompact 500000"]);
   });
 
-  test("every offered window is a declared line: auto, then 100K to 1M", () => {
+  test("every offered window is a declared line: auto, then 100K to 1M", async () => {
     const declared = Object.entries(DEFAULT_DSL_CONFIG.actions)
       .filter(([name]) => name.startsWith("autocompact."))
       .map(([, a]) => ("slash" in a ? a.slash : undefined));
@@ -187,13 +187,13 @@ describe("readAutoCompactWindow", () => {
     return file;
   };
 
-  test("no settings file, a blank one, or no key: auto", () => {
+  test("no settings file, a blank one, or no key: auto", async () => {
     expect(readAutoCompactWindow(path.join(dir, "missing.json"))).toEqual(ok("auto"));
     expect(readAutoCompactWindow(settings(" \n"))).toEqual(ok("auto"));
     expect(readAutoCompactWindow(settings(`{ "model": "opus" }`))).toEqual(ok("auto"));
   });
 
-  test("the window /autocompact wrote, on the grid or off it", () => {
+  test("the window /autocompact wrote, on the grid or off it", async () => {
     expect(readAutoCompactWindow(settings(`{ "autoCompactWindow": 400000 }`))).toEqual(
       ok(400_000),
     );
@@ -202,7 +202,7 @@ describe("readAutoCompactWindow", () => {
     );
   });
 
-  test("an unparseable file fails, naming the file", () => {
+  test("an unparseable file fails, naming the file", async () => {
     const bad = settings("{ not json");
     const r = readAutoCompactWindow(bad);
     expect(r.kind === "failed" && r.reason).toContain(`cannot read ${bad}`);
@@ -223,7 +223,7 @@ describe("readAutoCompactWindow", () => {
 });
 
 describe("autoCompactControls / projectAutoCompact", () => {
-  test("auto is window 0 and applies nothing the bar knows; it steps from the cap", () => {
+  test("auto is window 0 and applies nothing the bar knows; it steps from the cap", async () => {
     expect(autoCompactControls("auto", 200_000)).toEqual({
       window: 0,
       applied: 0,
@@ -232,7 +232,7 @@ describe("autoCompactControls / projectAutoCompact", () => {
     });
   });
 
-  test("an unknown context window caps at the range's top", () => {
+  test("an unknown context window caps at the range's top", async () => {
     expect(autoCompactControls(1_000_000, undefined)).toEqual({
       window: 1_000_000,
       applied: 1_000_000,
@@ -241,7 +241,7 @@ describe("autoCompactControls / projectAutoCompact", () => {
     });
   });
 
-  test("every − and + lands on a declared window", () => {
+  test("every − and + lands on a declared window", async () => {
     for (const w of [100_000, 150_000, 450_000, 1_000_000]) {
       for (const cap of [200_000, 500_000, 1_000_000, undefined]) {
         const c = autoCompactControls(w, cap);
@@ -252,7 +252,7 @@ describe("autoCompactControls / projectAutoCompact", () => {
     }
   });
 
-  test("failed carries the reason; absent drops the family", () => {
+  test("failed carries the reason; absent drops the family", async () => {
     expect(projectAutoCompact(failed("nope"), 200_000)).toEqual({ error: "nope" });
     expect(projectAutoCompact(ABSENT, 200_000)).toBeUndefined();
   });

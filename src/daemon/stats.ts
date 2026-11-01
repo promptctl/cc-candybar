@@ -12,6 +12,7 @@ import type { GitCacheStats } from "./cache/git";
 import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { FileEventsStats } from "./cache/file-events";
+import type { JournalTurnStats } from "./journal-turns";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -121,6 +122,7 @@ export interface StatsSnapshot {
   // Sessions whose idle clock is kept, and those with a timer armed to close
   // their menus (src/daemon/menu-idle.ts).
   menuIdle: MenuIdleStats;
+  journalTurns: JournalTurnStats;
   // `run` clicks (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, links refused before anything
   // ran, and runs in flight now.
@@ -379,6 +381,7 @@ export class RuntimeStats {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -420,6 +423,7 @@ export class RuntimeStats {
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
     menuIdle: StatsSnapshot["menuIdle"];
+    journalTurns: StatsSnapshot["journalTurns"];
     runs: RunStats;
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
@@ -462,6 +466,7 @@ export class RuntimeStats {
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
+      journalTurns: extras.journalTurns,
       runs: extras.runs,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,

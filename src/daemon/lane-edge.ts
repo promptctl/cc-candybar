@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { LaunchResult, Launcher } from "../proc/launch.js";
-import { runTmux, runTmuxAsync } from "../proc/tmux.js";
+import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
 import {
@@ -36,13 +36,13 @@ const EXIT_POLL_MS = 100;
 // How long a shell has to take its terminal back once Claude Code exited.
 const SHELL_PATIENCE_MS = 2000;
 
-function tmux(
+async function tmux(
   launcher: Launcher,
   hint: TmuxHint,
   args: string[],
   stdinInput?: string,
-): string {
-  const run = runTmux(launcher, hint, "lane.tmux", args, stdinInput);
+): Promise<string> {
+  const run = await runTmuxAsync(launcher, hint, "lane.tmux", args, stdinInput);
   if (run.kind !== "ok") throw new Error(run.reason);
   return run.stdout;
 }
@@ -268,15 +268,20 @@ export function productionLaneEdge(
     sleep(ms, undefined, { signal: closing });
   return {
     claudeInput: productionClaudeInputEdge(launcher),
-    barPanes: (hint) =>
+    barPanes: async (hint) =>
       taggedBarPanes(
-        tmux(launcher, hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
+        await tmux(launcher, hint, [
+          "list-panes",
+          "-a",
+          "-F",
+          PANE_TAGS_FORMAT,
+        ]),
         hint.pane,
       ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
-    openBarPane: (hint, argv, env) => {
-      const opened = tmux(launcher, hint, [
+    openBarPane: async (hint, argv, env) => {
+      const split = await tmux(launcher, hint, [
         "split-window",
         "-d",
         "-v",
@@ -289,8 +294,9 @@ export function productionLaneEdge(
         "#{pane_id}",
         ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
         ...argv,
-      ]).trim();
-      tmux(launcher, hint, [
+      ]);
+      const opened = split.trim();
+      await tmux(launcher, hint, [
         "set-option",
         "-p",
         "-t",
@@ -300,8 +306,8 @@ export function productionLaneEdge(
       ]);
       return opened;
     },
-    closePane: (hint, pane) =>
-      void tmux(launcher, hint, ["kill-pane", "-t", pane]),
+    closePane: async (hint, pane) =>
+      void (await tmux(launcher, hint, ["kill-pane", "-t", pane])),
     // [LAW:single-enforcer] The session's process environment: the
     // session's facts, never those of whichever shell spawned this detached
     // daemon.
@@ -405,12 +411,12 @@ export function productionLaneEdge(
     },
     // Typed as a slash command is, but with no ctrl+s first: in a shell that
     // stops the terminal's output.
-    typeShellLine: (hint, line) =>
-      void tmux(
+    typeShellLine: async (hint, line) =>
+      void (await tmux(
         launcher,
         hint,
         pasteLineArgs(hint.pane, SHELL_BUFFER, []),
         line,
-      ),
+      )),
   };
 }

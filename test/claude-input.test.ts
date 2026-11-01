@@ -98,25 +98,25 @@ describe("promptState: typing lands only in Claude Code's bare input box", () =>
     expect(promptState({ inMode: false, screen })).toEqual({ kind: "ready" });
   });
 
-  test("a stash the user holds is refused: ctrl+s would pop it into the input", () => {
+  test("a stash the user holds is refused: ctrl+s would pop it into the input", async () => {
     expect(promptState({ inMode: false, screen: SCREENS.stashed })).toEqual({
       kind: "stashed",
     });
   });
 
-  test("a permission dialog is refused: the Enter would approve the tool call", () => {
+  test("a permission dialog is refused: the Enter would approve the tool call", async () => {
     expect(promptState({ inMode: false, screen: SCREENS.permission })).toEqual({
       kind: "no-prompt",
     });
   });
 
-  test("a screen with no input box is refused, never typed into blind", () => {
+  test("a screen with no input box is refused, never typed into blind", async () => {
     expect(promptState({ inMode: false, screen: ["$ ", ""] })).toEqual({
       kind: "no-prompt",
     });
   });
 
-  test("a pane in tmux copy mode is refused, whatever it shows", () => {
+  test("a pane in tmux copy mode is refused, whatever it shows", async () => {
     expect(promptState({ inMode: true, screen: SCREENS.idle })).toEqual({
       kind: "in-mode",
     });
@@ -141,7 +141,7 @@ describe("parseSlashLine: a line is one slash command, and only text", () => {
     expect(parseSlashLine(raw).kind).toBe("refused");
   });
 
-  test("the loader refuses a bad line and a stray key, naming both", () => {
+  test("the loader refuses a bad line and a stray key, naming both", async () => {
     expect(() =>
       parseAndValidate(
         "<user>",
@@ -240,7 +240,7 @@ function runtime(tmux: TmuxHint | null) {
 }
 
 describe("a slash click", () => {
-  test("renders one effect per action carrying the declared line", () => {
+  test("renders one effect per action carrying the declared line", async () => {
     const rt = runtime(HINT);
     expect(rt.urls.map((u) => effectsOf(u))).toEqual([
       [{ verb: VERB_SLASH, args: ["s1", "/compact"] }],
@@ -423,7 +423,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
   });
 
-  test("outside tmux the tray is not drawn", () => {
+  test("outside tmux the tray is not drawn", async () => {
     expect(tray(null).links().flatMap((l) => typedLines(l.effects))).toEqual([]);
     expect(
       tray(null).links().filter((l) => l.effects.some((e) => e.args[1] === "commands.clear.armed")),
@@ -447,7 +447,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     expect(invocations()).toEqual([]);
   });
 
-  test("the settings door and every tab disarm the menu's /clear, so a confirm is never clicked in a view it was not armed in", () => {
+  test("the settings door and every tab disarm the menu's /clear, so a confirm is never clicked in a view it was not armed in", async () => {
     const rt = tray(HINT);
     const door = rt.config.actions["candybar.menu"];
     expect(door !== undefined && "do" in door ? door.do.slice(0, 3) : door).toEqual([
