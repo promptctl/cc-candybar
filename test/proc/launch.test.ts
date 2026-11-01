@@ -799,8 +799,7 @@ describe("launch input a child does not read", () => {
   const unread = "x".repeat(10 * 1024 * 1024);
 
   it("leaves a child's success standing", async () => {
-    const launcher = createLauncher({});
-    const r = await launcher.launch({
+    const r = await launch({
       category: "user-shell",
       bin: "sh",
       args: ["-c", "exit 0"],
@@ -809,19 +808,21 @@ describe("launch input a child does not read", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("reports the failed write beside a child's failure", async () => {
-    const launcher = createLauncher({});
-    const r = await launcher.launch({
+  it("leaves a child's failure its own explanation", async () => {
+    const r = await launch({
       category: "user-shell",
       bin: "sh",
-      args: ["-c", "exit 1"],
+      args: ["-c", "echo refused >&2; exit 1"],
       stdinInput: unread,
     });
-    expect(r).toMatchObject({
-      ok: false,
-      reason: "non-zero",
-      exitCode: 1,
-      error: expect.stringMatching(/^stdin: /),
-    });
+    expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1, stderr: "refused\n" });
+    expect(r).not.toHaveProperty("error");
+  });
+
+  it("gives the blocking launch the same verdicts", () => {
+    const run = (script: string) =>
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
+    expect(run("exit 0").ok).toBe(true);
+    expect(run("exit 1")).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1 });
   });
 });

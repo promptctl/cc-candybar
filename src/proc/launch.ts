@@ -606,9 +606,6 @@ async function launchWaited(
     // SIGINT propagated through the tty, SIGPIPE on a closed pipe, etc. would
     // all be misreported as "timeout" or "aborted".
     let terminated: Terminated | null = null;
-    // A child may stop reading and still succeed (`head -1`), so its exit stays
-    // the verdict; a failed write only explains a launch that failed anyway.
-    const failure: { error?: string } = {};
 
     const onAbort = () => terminate("aborted");
     const unlisten = () => {
@@ -750,7 +747,6 @@ async function launchWaited(
           stderr,
           exitCode: code,
           signal,
-          ...failure,
         });
         return;
       }
@@ -766,7 +762,6 @@ async function launchWaited(
         stderr,
         exitCode: code,
         signal,
-        ...failure,
       });
     };
 
@@ -778,9 +773,10 @@ async function launchWaited(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
 
-    child.stdin?.on("error", (err) => {
-      failure.error = `stdin: ${err.message}`;
-    });
+    // [LAW:no-silent-failure] exception: a child may stop reading and still
+    // succeed (`head -1`), so its exit is the verdict and its stderr the
+    // explanation; the failed write is only a consequence of either.
+    child.stdin?.on("error", () => {});
     child.stdin?.end(opts.stdinInput);
   });
 }
@@ -811,9 +807,10 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
     const stdout = typeof result.stdout === "string" ? result.stdout : "";
     const stderr = typeof result.stderr === "string" ? result.stderr : "";
 
-    if (result.error) {
-      // Node sets `error` for ETIMEDOUT and ENOENT; distinguish by code.
-      const code = (result.error as NodeJS.ErrnoException).code;
+    // Node sets `error` for ETIMEDOUT and ENOENT; distinguish by code. EPIPE is
+    // input the child left unread, and its exit stays the verdict as in `launch`.
+    const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
+    if (result.error && code !== "EPIPE") {
       const reason: "timeout" | "spawn-error" =
         code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
