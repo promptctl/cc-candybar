@@ -10,6 +10,7 @@ import { SessionState } from "../src/daemon/session-state";
 import {
   closeIdleMenus,
   journaled,
+  VERBS,
   type VerbContext,
 } from "../src/daemon/verbs";
 import {
@@ -210,6 +211,19 @@ test("a navigation commit that throws leaves the settings journal committed", as
   expect(undoDepth(ctx)).toBe(1);
   ctx.history.undo(SID);
   expect(sessionState.get(SID, "theme")).toBeNull();
+});
+
+test("a verb stamps its session's landing, though its handler threw", async () => {
+  const { ctx } = setup();
+  const landed: string[] = [];
+  const verb = VERBS.get(VERB_UNDO)!;
+  await expect(
+    verb(encodeSegments([SID]), {
+      ...ctx,
+      clickLanded: (sid) => landed.push(sid),
+    }),
+  ).rejects.toThrow("nothing to undo");
+  expect(landed).toEqual([SID]);
 });
 
 describe("close", () => {
