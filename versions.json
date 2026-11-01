@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "52c69beb5b01d9c842ae7f38fbb59f0c64086cb1",
-      "timestamp": "2026-11-01T08:30:19.192Z",
-      "commits": [
-        {
-          "sha": "52c69beb5b01d9c842ae7f38fbb59f0c64086cb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:29:32-07:00",
-          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (#543)\n\n* feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n\n* fix(git): an armed init stays shown, and a relative directory reads no location"
-        }
-      ]
-    },
-    {
       "version": "pr-544",
       "ref": "refs/pull/544/merge",
-      "sha": "0840797cfd5e62053eeeb3a82e312f320a9dd675",
-      "timestamp": "2026-11-01T08:29:15.893Z",
+      "sha": "56b203ee982c67d05faf981d53aa25af4be8b25d",
+      "timestamp": "2026-11-01T08:30:36.337Z",
       "commits": [
         {
-          "sha": "0840797cfd5e62053eeeb3a82e312f320a9dd675",
+          "sha": "56b203ee982c67d05faf981d53aa25af4be8b25d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T08:28:25Z",
-          "message": "Merge 44a74f60ea9525b12fdd2fd671562a806d3a5cf8 into e7c7caacfb9c807a1424dde9d75a66559451e5ed\n"
+          "timestamp": "2026-11-01T08:29:38Z",
+          "message": "Merge d0016c66047ee23381ff8ef4615db14fddcad9ec into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
+        },
+        {
+          "sha": "d0016c66047ee23381ff8ef4615db14fddcad9ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:29:28-07:00",
+          "message": "fix(landscape): the graph's trait counts and +N more labels count the pool it pages through\n\nUnder only-with-bars these read the unfiltered members, so the label promised projects the graph never shows.\n"
         },
         {
           "sha": "44a74f60ea9525b12fdd2fd671562a806d3a5cf8",
@@ -196,6 +188,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-25T22:31:20-06:00",
           "message": "Survey: the 1,000 most-committed Claude Code statuslines — clones, new ideas, why so many\n\nRanks the styling survey's 9,558 projects by commits, reads the top 1,000\nfrom source with haiku agents, fingerprints their code for copies, and\nanswers whether they are clones, what is new in them, and why there are\nso many. README.md has the answers; projects.md and projects.tsv hold one\nentry per project; tools/ holds the scripts and agent briefs.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "52c69beb5b01d9c842ae7f38fbb59f0c64086cb1",
+      "timestamp": "2026-11-01T08:30:19.192Z",
+      "commits": [
+        {
+          "sha": "52c69beb5b01d9c842ae7f38fbb59f0c64086cb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:29:32-07:00",
+          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (#543)\n\n* feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n\n* fix(git): an armed init stays shown, and a relative directory reads no location"
         }
       ]
     },
