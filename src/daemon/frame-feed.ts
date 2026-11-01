@@ -51,6 +51,8 @@ export interface FeedFrame {
   readonly statusline: Response;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
+  // How many strip items dividing cells too wide for a line added.
+  readonly cellBreaks: number;
   // Records what the frame's copy clicks copy, once it went out to a follower.
   readonly delivered: () => void;
   readonly failure: LogLine | null;
@@ -217,6 +219,9 @@ interface Feed {
   drawMs: number;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
+  // Strip items its frames' divided cells added: the feed is what shows how a
+  // lane's width treats its bar, since that lane's requests draw a handoff row.
+  cellBreaks: number;
   // The wakes of each cause, and how many of them found the next frame
   // already as early as the feed's spacing allows.
   readonly woke: Record<WakeCause, number>;
@@ -480,6 +485,7 @@ export class FrameFeeds<Req> {
       pushed: 0,
       drawMs: 0,
       evaluated: 0,
+      cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
       coalesced: 0,
       summarizedAt: now,
@@ -574,6 +580,7 @@ export class FrameFeeds<Req> {
     feed.drawn++;
     feed.drawMs += finished - started;
     feed.evaluated += frame.evaluated;
+    feed.cellBreaks += frame.cellBreaks;
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
@@ -741,7 +748,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

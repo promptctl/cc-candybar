@@ -304,8 +304,11 @@ describe("the carousel rotates by applying", () => {
       segments: { ring: { template: '{{ carousel "choose" "list" "l" }}' } },
       root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
     }`);
-    expect(textOf(rt.render())).toContain(
-      `declare { kind: "state", key: "unread" }`,
+    // The message wraps at the bar's width, and a strip cap closes each line.
+    const squeezed = (s: string): string =>
+      s.replace(/[\s\uE000-\uF8FF]/gu, "");
+    expect(squeezed(textOf(rt.render()))).toContain(
+      squeezed(`declare { kind: "state", key: "unread" }`),
     );
     rt.dispose();
   });

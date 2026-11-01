@@ -31,6 +31,7 @@ import {
 import type { Row } from "./frame.js";
 import {
   drawStripCells,
+  WIDEST_GLYPH_COLS,
   type BuildLineOptions,
   type ColorCompatibility,
 } from "./strip.js";
@@ -533,7 +534,7 @@ function channelRows(
   // A cell plus its trailing space must fit one row, so words fold at width−1
   // — never below the widest glyph (2 cells): a fold narrower than one glyph
   // is not a fold, and a 1–2 cell terminal simply cannot hold one.
-  const fold = asCellCol(Math.max(2, opts.width - 1));
+  const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message.lines.flatMap((line, i) => {
     const prefix = cell(i === 0 ? message.severity.glyph : ISSUE_INDENT, base);
     const cells = line.flatMap((span) =>

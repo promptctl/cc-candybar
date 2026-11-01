@@ -241,6 +241,28 @@ export function stripPrivateGlyphs(options: StripShape): string {
   return privateGlyphsIn(plainOf(lines.flat()));
 }
 
+// The widest a glyph draws. A row narrower than this holds no glyph at all, so a
+// fold stops here rather than at nothing.
+export const WIDEST_GLYPH_COLS = 2;
+
+// [LAW:single-enforcer] The width a line breaks at, the one reading of the
+// `wrap` policy over the `width` fact: unbounded where a row may not break.
+export function lineWidth(
+  options: Pick<BuildLineOptions, "wrap" | "width">,
+): number {
+  return options.wrap ? options.width : Infinity;
+}
+
+// [LAW:one-source-of-truth] rich-js's own word wrap of a cell's text, as the text
+// of its lines: a folding text drawn through the one `draw`. rich-js keeps its
+// line breaker private, and this is what spares the project a second theory of
+// where a line may break. A break is a fact about the characters, so the cell's
+// styles and justification stay out of the draw.
+export function wrappedLines(plain: string, width: number): readonly string[] {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
+  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf);
+}
+
 /**
  * [LAW:single-enforcer] The one place RichText cells become lines of runs.
  * Every render path (DSL RichText[] via the template-engine pipeline, debug
@@ -262,7 +284,7 @@ export function drawStripCells(
 ): DrawnRow {
   if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
-  const flex = options.wrap && Number.isFinite(options.width);
+  const flex = Number.isFinite(lineWidth(options));
   const drawn = {
     colorSystem: options.colorCompatibility,
     ...(flex ? { width: options.width } : {}),

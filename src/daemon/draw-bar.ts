@@ -144,10 +144,11 @@ export function renderFrame(
   try {
     using setup = setUpFrame(parts, sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, delivered, lanes } = drawRender(parts, setup, {
-      by: "feed",
-      fps,
-    });
+    const { drawn, evaluated, cellBreaks, delivered, lanes } = drawRender(
+      parts,
+      setup,
+      { by: "feed", fps },
+    );
     const answer = RENDER_ANSWERS.ansi(drawn.body);
     const statusline = statuslineOf(
       sessionId,
@@ -161,6 +162,7 @@ export function renderFrame(
       statusline:
         statusline === drawn.body ? answer : RENDER_ANSWERS.ansi(statusline),
       evaluated,
+      cellBreaks,
       delivered,
       failure: null,
     };
@@ -178,6 +180,7 @@ export function renderFrame(
       resp: failed,
       statusline: failed,
       evaluated: 0,
+      cellBreaks: 0,
       delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` },
     };
@@ -440,6 +443,7 @@ export function drawRender(
 ): {
   drawn: DrawnBar;
   evaluated: number;
+  cellBreaks: number;
   clickShown: ClickErrorRecord | null;
   // Records what the frame's copy clicks copy, once it reached its client.
   delivered: () => void;
@@ -607,7 +611,7 @@ export function drawRender(
   const idleSince = menuIdle.since(sessionId, at);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts.
-  const { frame, evaluated, rules } = drawDsl(
+  const { frame, evaluated, cellBreaks, rules } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -746,6 +750,8 @@ export function drawRender(
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(evaluated),
+    // How many strip items dividing cells too wide for a line added.
+    cellBreaks: String(cellBreaks),
     // The sources it drew as not answered yet; `-` for none.
     pending: body.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
@@ -775,6 +781,7 @@ export function drawRender(
       geometry,
     },
     evaluated,
+    cellBreaks,
     clickShown,
     delivered,
     lanes,

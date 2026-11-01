@@ -22,9 +22,14 @@ import { drawPayload } from "./helpers/draw-payload";
 import { plainOf, textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { DEFAULT_TERMINAL_THEME, cellLen, RichText } from "@promptctl/rich-js";
+import {
+  DEFAULT_TERMINAL_THEME,
+  cellLen,
+  RichText,
+  Style,
+} from "@promptctl/rich-js";
 
-import { resolveFill } from "../src/render/fill";
+import { fitRow } from "../src/render/fill";
 import { drawStripCells } from "../src/render/strip";
 import type { CellSizing, LaidCell } from "../src/template-engine/layout";
 import type { BuildLineOptions } from "../src/render/strip";
@@ -72,7 +77,7 @@ function serialize(
   options: BuildLineOptions,
 ): string[] {
   return drawStripCells(
-    resolveFill(cells, options).map((item) => item.owner),
+    fitRow(cells, options).map((item) => item.owner),
     options,
   ).lines.map(plainOf);
 }
@@ -167,7 +172,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
   test("an unbounded width leaves the cell content-sized", () => {
     const cell = fill("mid");
     const natural = cell.text.cellLength;
-    resolveFill(
+    fitRow(
       [fixed("left"), cell],
       opts({ width: Number.POSITIVE_INFINITY }),
     );
@@ -176,8 +181,202 @@ describe("a fill segment absorbs the row's leftover width", () => {
 
   test("a row with no fill serializes its cells untouched", () => {
     const cells = [fixed("left"), fixed("right")];
-    const out = resolveFill(cells, opts());
+    const out = fitRow(cells, opts());
     cells.forEach((c, i) => expect(out[i]!.owner).toBe(c.text));
+  });
+});
+
+// A row breaks only between strip items, so a cell wider than a line reaches the
+// strip as several. Everything here is read off the drawn lines: no line past
+// the width, and no text of the cell gone, whitespace and strip caps aside.
+describe("a cell wider than a line wraps across lines", () => {
+  const SENTENCE =
+    " alpha bravo bravo charlie 日本語のテキスト 🍫🍫 delta-echo-foxtrot-golf-hotel-india-juliet-kilo ▸ ";
+  const squeezed = (s: string): string => s.replace(/[\s\uE000-\uF8FF]/gu, "");
+  const painted = (text: string): LaidCell => ({
+    ...fixed(text),
+    text: new RichText(text, {
+      end: "",
+      overflow: "ignore",
+      style: new Style({ bgcolor: "#445566", color: "#ffffff" }),
+    }),
+  });
+
+  describe.each(ENDCAPS_SHAPES.map((style) => [style] as const))("%s", (endcaps) => {
+    test.each([[10], [20], [30], [67]])("draws within width %i", (width) => {
+      for (const cell of [painted(SENTENCE), fixed(SENTENCE)]) {
+        const lines = serialize([cell], opts({ endcaps, width }));
+        expect(lines.length).toBeGreaterThan(1);
+        expect(lines.filter((line) => cellLen(line) > width)).toEqual([]);
+        expect(squeezed(lines.join(""))).toBe(squeezed(SENTENCE));
+      }
+    });
+  });
+
+  test("its lead and trail wrap with it", () => {
+    const lines = serialize(
+      [
+        {
+          ...painted(SENTENCE),
+          lead: new RichText(" ✕", { end: "" }),
+          trail: new RichText("🔧 ", { end: "" }),
+        },
+      ],
+      opts({ width: 30 }),
+    );
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(squeezed(lines.join(""))).toBe(squeezed(`✕${SENTENCE}🔧`));
+  });
+
+  test("a control's link stays on the control, and every piece keeps the cell's ground", () => {
+    const cell = painted(SENTENCE);
+    const at = SENTENCE.indexOf("▸");
+    const link = new Style({ link: "cc-candybar://arrow" });
+    cell.text.stylize(link, at, at + 1);
+    const items = fitRow([cell], opts({ width: 30 }));
+    const holding = items.filter(({ owner }) =>
+      owner.spans.some(({ style }) => style === link),
+    );
+    expect(holding.map(({ owner }) => owner.plain)).toEqual([
+      expect.stringContaining("▸"),
+    ]);
+    items.forEach(({ owner, placement }) => {
+      expect(owner.style).toBe(cell.text.style);
+      expect(placement).toBe(cell.placement);
+    });
+  });
+
+  test("a tab's words survive: rich-js expands it before it wraps", () => {
+    const text = " one two\tthree four five six seven eight nine ten ";
+    const lines = serialize([painted(text)], opts({ width: 30 }));
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(squeezed(lines.join(""))).toBe(squeezed(text));
+  });
+
+  test.each([
+    ["a full-width space", "日本語の説明\u3000次の見出し\u3000最後の行まで続く文章 ▸"],
+    ["a no-break space", "alpha\u00A0bravo\u00A0charlie\u00A0delta\u00A0echo ▸"],
+    ["a wide space", "alpha\u2003bravo\u2003charlie\u2003delta\u2003echo ▸"],
+  ])("%s left hanging at a break costs no text", (_, text) => {
+    for (const width of [9, 10, 11, 12, 13, 20, 30]) {
+      for (const endcaps of ENDCAPS_SHAPES) {
+        const lines = serialize([painted(text)], opts({ endcaps, width }));
+        expect(lines.filter((line) => cellLen(line) > width)).toEqual([]);
+        expect(squeezed(lines.join(""))).toBe(squeezed(text));
+      }
+    }
+  });
+
+  test("it starts on the line the cell before it left open", () => {
+    const text = " the quick brown fox jumps over the lazy dog again and again ";
+    const lines = serialize(
+      [painted("   "), painted(text)],
+      opts({ width: 30 }),
+    );
+    expect(lines.filter((line) => squeezed(line) === "")).toEqual([]);
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(squeezed(lines.join(""))).toBe(squeezed(text));
+  });
+
+  test("a first word too long to join the line moves to the next whole", () => {
+    const word = "x".repeat(25);
+    const lines = serialize(
+      [painted("lead"), painted(`${word} tail tail tail tail tail tail`)],
+      opts({ width: 30 }),
+    );
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(lines.some((line) => squeezed(line).startsWith(word))).toBe(true);
+  });
+
+  test("a piece that moves past the open line keeps the cell's padding", () => {
+    const items = fitRow(
+      [painted(" dir "), painted(` feature/${"y".repeat(48)} `)],
+      opts({ width: 30, padding: 1 }),
+    );
+    expect(items.length).toBeGreaterThan(2);
+    items.forEach(({ owner }) => expect(owner.plain.startsWith(" ")).toBe(true));
+  });
+
+  test("a line a piece opens wears the cell's padding", () => {
+    const text = " alpha bravo charlie delta echo foxtrot golf hotel india ";
+    const items = fitRow(
+      [painted(text)],
+      opts({ width: 30, padding: 1 }),
+    );
+    expect(items.length).toBeGreaterThan(1);
+    items.forEach(({ owner }) => expect(owner.plain.startsWith(" ")).toBe(true));
+    const lines = serialize([painted(text)], opts({ width: 30, padding: 1 }));
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+  });
+
+  test("a word wider than a line folds through it", () => {
+    const word = "x".repeat(100);
+    const lines = serialize([painted(word)], opts({ width: 30 }));
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+    expect(squeezed(lines.join(""))).toBe(word);
+  });
+
+  test("a cell of spaces draws a line of them, never a zero-width item", () => {
+    const items = fitRow([painted(" ".repeat(100))], opts({ width: 30 }));
+    expect(items.map(({ owner }) => owner.cellLength)).toEqual([28]);
+  });
+
+  test("an unpainted cell that fits as drawn stays whole", () => {
+    const cell = fixed("x".repeat(29));
+    const [only, ...rest] = fitRow([cell], opts({ width: 30 }));
+    expect(only!.owner).toBe(cell.text);
+    expect(rest).toEqual([]);
+  });
+
+  test("a spacer pushes its neighbour flush to an unpainted row's edge", () => {
+    const lines = serialize(
+      [{ ...fixed(" "), fill: SIZING }, fixed("▸")],
+      opts({ width: 30 }),
+    );
+    expect(lines.map((line) => cellLen(line))).toEqual([30]);
+  });
+
+  test("a cell painted only at its head keeps the line it fits", () => {
+    const cell = fixed(`z yyyyyyy ${"x".repeat(19)}`);
+    cell.text.stylize(new Style({ bgcolor: "#445566" }), 0, 1);
+    const [only, ...rest] = fitRow([cell], opts({ width: 30 }));
+    expect(only!.owner).toBe(cell.text);
+    expect(rest).toEqual([]);
+  });
+
+  test.each([["right"], ["center"]] as const)(
+    "padding %s of a cell spends no row on itself",
+    (justify) => {
+      const cell = painted("abc");
+      cell.text.align(justify, 100);
+      const lines = serialize([cell], opts({ width: 30 }));
+      expect(lines.map(squeezed)).toEqual(["abc"]);
+    },
+  );
+
+  test("a fill cell too wide for a line divides and is given nothing", () => {
+    const cell = { ...painted(SENTENCE), fill: SIZING };
+    const natural = cell.text.cellLength;
+    const lines = serialize([cell], opts({ width: 30 }));
+    expect(cell.text.cellLength).toBe(natural);
+    expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
+  });
+
+  test("a row that may not wrap keeps the cell whole", () => {
+    const cell = painted(SENTENCE);
+    const [only, ...rest] = fitRow([cell], opts({ width: 30, wrap: false }));
+    expect(only!.owner).toBe(cell.text);
+    expect(rest).toEqual([]);
+  });
+
+  test("an unbounded width keeps the cell whole", () => {
+    const cell = painted(SENTENCE);
+    const [only, ...rest] = fitRow(
+      [cell],
+      opts({ width: Number.POSITIVE_INFINITY }),
+    );
+    expect(only!.owner).toBe(cell.text);
+    expect(rest).toEqual([]);
   });
 });
 

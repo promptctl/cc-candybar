@@ -998,7 +998,8 @@ function drawnRows(
   // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
   // lines BEFORE per-segment layout — width/justify/truncate then measure each
   // line cleanly. A newline-free segment is the degenerate one-line case. Each
-  // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
+  // laid line is ONE strip item, until its row divides one wider than a line:
+  // applySegmentLayout collapses a line's cells to
   // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
   // at the segment's edges, never inside it.
   // Each inline line is a ROW of the band this segment sits on.
@@ -1121,8 +1122,8 @@ function brokenSegment(
   // inline line — a broken segment inside an open body still gets its ✕.
   // A cell is one line: the message's own line breaks (a parse error's
   // excerpt, a source's stderr) fold to spaces here — the full text went
-  // to onSegmentError above — and the cell is placed whole, never wrapped
-  // inside itself, like every other cell.
+  // to onSegmentError above — and the cell is one item, which its row divides
+  // like every other cell.
   const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
     {

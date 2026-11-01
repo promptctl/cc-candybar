@@ -5,6 +5,8 @@
 // daemon's own is exercised — a project config found first, a user config
 // unread behind it, and a declaration the project config never uses.
 
+import { cellLen } from "@promptctl/rich-js";
+
 import { textOf, type Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
@@ -42,6 +44,8 @@ import {
   probeUrlHandler,
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
+import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
+import { applyClaudeCodeReserve } from "../src/utils/terminal-width";
 import { PACKAGE_VERSION } from "../src/version";
 import { loggedLines, renderLines } from "./helpers/daemon-log";
 import { crateDigest } from "../src/source-digest";
@@ -57,9 +61,18 @@ import { answerRepo } from "./helpers/repo-approval";
 
 jest.setTimeout(30_000);
 
-// The report row wraps at the client's width; its text is what is asserted.
-const flat = (rendered: Frame): string =>
-  textOf(rendered).replace(/\s+/g, " ");
+// A report row wraps at the client's width, through a path or a word, and a
+// strip cap closes each line it breaks at, so whitespace and caps are no part of
+// what is read. Removing them would read an over-wide row whole too, and Claude
+// Code cuts that row's right end past the frame, so every row is held to the
+// width it was drawn at: that is what makes the reason readable.
+const WIDTH = applyClaudeCodeReserve(DEFAULT_TERMINAL_WIDTH);
+const squeezed = (s: string): string => s.replace(/[\s\uE000-\uF8FF]/gu, "");
+const flat = (rendered: Frame): string => {
+  const text = textOf(rendered);
+  expect(text.split("\n").filter((row) => cellLen(row) > WIDTH)).toEqual([]);
+  return squeezed(text);
+};
 
 test("the doctor's config row reports the session's own config load", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
@@ -96,7 +109,7 @@ test("the doctor's config row reports the session's own config load", async () =
 
     // The project layer's unused helper, read over the user's file.
     expect(flat(await render(daemon, SID, projectDir))).toContain(
-      `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
+      squeezed(`✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`),
     );
 
     // Fixing it turns the row over on the very next run: the click reloads
@@ -104,7 +117,7 @@ test("the doctor's config row reports the session's own config load", async () =
     // the fs watcher catches up.
     writeFileSync(projectConfig, `{}`);
     await click(daemon, run!);
-    expect(flat(await render(daemon, SID, projectDir))).toContain("✓ config");
+    expect(flat(await render(daemon, SID, projectDir))).toContain(squeezed("✓ config"));
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -125,8 +138,6 @@ test("the doctor's config row says what named the session's file", async () => {
   const picked = path.join(projectDir, "picked.json5");
   writeFileSync(named, "{}");
   writeFileSync(picked, "{}");
-  // Wrapping may fall inside a path, so spaces are no part of what is read.
-  const squeezed = (s: string): string => s.replace(/\s+/g, "");
 
   const daemon = startDaemon(env);
   try {
@@ -142,7 +153,7 @@ test("the doctor's config row says what named the session's file", async () => {
         effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
       );
       await click(daemon, run!);
-      return squeezed(textOf(await draw()));
+      return flat(await draw());
     };
     const flag = ["cc-candybar", "--config", named];
 
@@ -229,7 +240,7 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
       ),
     );
     expect(flat(await render(daemon, SID, projectDir))).toContain(
-      "✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs",
+      squeezed("✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs"),
     );
   } finally {
     await daemon.stop();
@@ -446,12 +457,12 @@ test("the session data row reads the transcript the session's render named", asy
     expect(run).toBeDefined();
     await click(daemon, run!);
     expect(flat(await renderT())).toContain(
-      `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
+      squeezed(`✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`),
     );
 
     writeFileSync(transcript, `{"type":"user"}\n`);
     await click(daemon, run!);
-    expect(flat(await renderT())).toContain("✓ session data");
+    expect(flat(await renderT())).toContain(squeezed("✓ session data"));
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -506,7 +517,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(run).toBeDefined();
     await click(daemon, run!);
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
+      squeezed("✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval"),
     );
 
     writeFileSync(projectConfig, barOf("still"));
@@ -517,7 +528,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
+      squeezed("✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"),
     );
 
     // The same bar with its menu closed is still, and passes.
@@ -535,7 +546,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       daemon,
       urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
     );
-    expect(flat(await draw())).toContain("✓ effect refresh");
+    expect(flat(await draw())).toContain(squeezed("✓ effect refresh"));
 
     const events = await renderLines(env, SID, drawn);
     const motion = events.map((l) => l.match(/ motion=(\S+) /)?.[1]);

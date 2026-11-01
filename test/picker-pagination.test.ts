@@ -169,6 +169,19 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     },
   );
 
+  // A page wider than its line, past the floor every page above is held to,
+  // wraps: each control stays drawn, with no line past the width.
+  test.each(SHAPES)("a page wider than its line keeps every control (%s)", (style) => {
+    const { renderPage } = buildRuntime(style, 1);
+    for (let width = 16; width < FLOOR; width++) {
+      const lines = textOf(renderPage(width, 1)).split("\n");
+      expect(lines.filter((line) => cw(line) > width)).toEqual([]);
+      for (const control of ["✕", "←", "→"]) {
+        expect(lines.join("\n")).toContain(control);
+      }
+    }
+  });
+
   // Every theme is reachable across the pages (none silently dropped by overflow).
   test.each(SHAPES)("all options are reachable across pages (%s)", (style) => {
     const { renderPage } = buildRuntime(style);

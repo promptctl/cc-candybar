@@ -1,5 +1,6 @@
-// A row's leftover width, given to the segments that asked for it
-// (brandon-layout-0c2).
+// A row's cells fitted to the width it is drawn at: the leftover given to the
+// segments that asked for it (brandon-layout-0c2), and a cell wider than a line
+// divided across lines.
 //
 // `width: "fill"` cannot be resolved where it is authored: a segment knows its own
 // content and nothing about its siblings, and the leftover is a fact about the ROW.
@@ -7,8 +8,13 @@
 // template-engine/layout.ts) and this module resolves every demand in one place,
 // immediately before the row is drawn — the one seam where the cells and the
 // width are both in hand [LAW:single-enforcer].
+//
+// A row breaks only between strip items, and FlexStrip draws an item as one
+// block, so a cell wider than a line has to reach it as several items. Claude
+// Code draws each line of the bar truncated, so a line left over-wide loses its
+// right end where the bar cannot see it.
 
-import { cellLen } from "@promptctl/rich-js";
+import { cellLen, type RichText } from "@promptctl/rich-js";
 
 import {
   sizeCell,
@@ -16,13 +22,137 @@ import {
   type CellSizing,
   type LaidCell,
 } from "../template-engine/layout.js";
-import { drawStripCells, type BuildLineOptions } from "./strip.js";
+import {
+  drawStripCells,
+  lineWidth,
+  stripChromeCols,
+  stripSeamCols,
+  WIDEST_GLYPH_COLS,
+  wrappedLines,
+  type BuildLineOptions,
+} from "./strip.js";
 import { plainOf } from "./frame.js";
 import type { RowItem } from "./effect.js";
 
+// The offsets `plain` wraps to `line` at, its first line starting `indent` cells
+// in. The indent is wrapped as a word ahead of the text, so a first word that
+// doesn't fit beside it moves to the next line whole, and no offset falls inside
+// it. Each wrapped line is found by searching forward for its content, the line
+// less the whitespace hanging off its end: rich-js crops that whitespace at the
+// edge, and half of a full-width space draws as a narrow one, so it is neither
+// countable nor a slice of the text. A line of nothing but that whitespace
+// starts nothing.
+function wrapOffsets(plain: string, line: number, indent: number): number[] {
+  const held = "x".repeat(Math.min(indent, line)).replace(/x$/, " ");
+  const wrapping = held + plain;
+  const offsets: number[] = [];
+  let at = 0;
+  wrappedLines(wrapping, line).forEach((wrapped) => {
+    const content = wrapped.trimEnd();
+    const start = wrapping.indexOf(content, at);
+    if (content !== "" && start > held.length)
+      offsets.push(start - held.length);
+    at = start + content.length;
+  });
+  return offsets;
+}
+
+// The cells an item joining `before` finds taken on its line. Measured through
+// the draw that will write them, as a fill's leftover is. An unpainted line draws
+// no caps to take back, so this reads two short of it, and a piece that doesn't
+// fit there takes the next line as any strip item does.
+function takenOnLine(
+  before: readonly RowItem[],
+  options: BuildLineOptions,
+): number {
+  if (before.length === 0) return 0;
+  const { lines } = drawStripCells(
+    before.map(({ owner }) => owner),
+    options,
+  );
+  const last = cellLen(plainOf(lines[lines.length - 1]!));
+  return Math.max(0, last - stripChromeCols(options) + stripSeamCols(options));
+}
+
+// Whether a cell stands as it is. One that clears a line does, however it is
+// painted. Past that, the caps are drawn only where the cell is painted, so what
+// decides is the cell measured through the draw that will write it.
+function fits(
+  cell: RichText,
+  line: number,
+  options: BuildLineOptions,
+): boolean {
+  if (cell.cellLength <= line) return true;
+  const { lines } = drawStripCells([cell], { ...options, width: Infinity });
+  return cellLen(plainOf(lines.flat())) <= options.width;
+}
+
+// A strip item as the items it takes to fit `line`, each keeping the item's
+// placement. Tabs expand first because rich-js expands them before it wraps, so
+// a line holding one has no offset in the unexpanded text. The crop removes only
+// whitespace left hanging past a break. A blank piece is a justified cell's
+// padding and spends a row on nothing, so it goes, unless the cell is only that:
+// an all-space cell keeps a line of its spaces, since FlexStrip folds the line at
+// a zero-width item. The first piece starts on the line `before` left open, or a
+// short cell ahead of it stands alone on a row. A piece is a cell, so one that
+// opens a line wears the cell's padding; `line` holds the room for it.
+function dividedToLine(
+  item: RowItem,
+  line: number,
+  before: readonly RowItem[],
+  options: BuildLineOptions,
+): readonly RowItem[] {
+  if (fits(item.owner, line, options)) return [item];
+  const text = item.owner.copy().expandTabs();
+  const indent = takenOnLine(before, options);
+  return text
+    .divide(wrapOffsets(text.plain, line, indent))
+    .map((piece, i) => ({
+      ...item,
+      owner: piece
+        .truncate(line, { marker: "" })
+        .padLeft(i > 0 ? options.padding : 0),
+    }))
+    .filter(
+      ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== "",
+    );
+}
+
+/**
+ * Fit one row to the width it is drawn at, returning the strip items it draws,
+ * each beside the effect its cell demands. Fill settles first, because a fill
+ * grows only a row that fits; then any item still wider than a line is divided.
+ *
+ * [LAW:dataflow-not-control-flow] A line is the width less the strip's caps and
+ * a piece's padding, floored at the widest glyph: below that nothing fits and the
+ * fold has to stay finite. `autoWrap` off or an unbounded width make it Infinity,
+ * a value under which no item divides.
+ *
+ * `stripChromeCols` is a painted cell's caps, the most a cell costs, so a piece
+ * fits however it is painted. An unpainted cell that does divide wraps two
+ * columns early and its pieces can share a line with no seam between them, so
+ * a piece cropped of its word gap can touch the next.
+ */
+export function fitRow(
+  row: readonly LaidCell[],
+  options: BuildLineOptions,
+): readonly RowItem[] {
+  const line = Math.max(
+    WIDEST_GLYPH_COLS,
+    lineWidth(options) - stripChromeCols(options) - options.padding,
+  );
+  return filled(row, options).reduce<readonly RowItem[]>(
+    (fitted, item) => [
+      ...fitted,
+      ...dividedToLine(item, line, fitted, options),
+    ],
+    [],
+  );
+}
+
 /**
  * Give every fill-demanding cell in one row its share of the leftover width, and
- * return the row as the strip items it draws, each beside the effect
+ * return the row as strip items, each beside the effect
  * its cell demands — the cell's other demand, settled where its row is drawn,
  * so it travels with the item it was laid as rather than by position.
  *
@@ -39,7 +169,7 @@ import type { RowItem } from "./effect.js";
  * capsule, a cost per seam for every shape) and for `plain` depend on the author's
  * own separator text, so the theory would have to track user data to stay true.
  */
-export function resolveFill(
+function filled(
   row: readonly LaidCell[],
   options: BuildLineOptions,
 ): readonly RowItem[] {

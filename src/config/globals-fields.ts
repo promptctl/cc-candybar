@@ -499,9 +499,9 @@ export const GLOBAL_FIELDS = {
     "1x",
     control("speed", "look"),
   ),
-  // Whether FlexStrip soft-wraps a root row that exceeds the usable width
-  // (the legacy display.autoWrap). False renders each row as one unbounded
-  // line, overflow off-screen.
+  // Whether a root row that exceeds the usable width soft-wraps, between
+  // cells and through a cell wider than a line (the legacy display.autoWrap).
+  // False renders each row as one unbounded line, overflow off-screen.
   autoWrap: boolSetting(true, control("wrap", "config")),
   // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
   // the bg fill — the legacy display.padding). Templates author content; this
