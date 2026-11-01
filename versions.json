@@ -4,15 +4,22 @@
     {
       "version": "pr-553",
       "ref": "refs/pull/553/merge",
-      "sha": "45622d70ea6e1f73366d4da744419b172fe72152",
-      "timestamp": "2026-11-01T16:14:17.220Z",
+      "sha": "87f02f4aab825bdc379f26b32e3bd4b1225b2351",
+      "timestamp": "2026-11-01T16:22:10.449Z",
       "commits": [
         {
-          "sha": "45622d70ea6e1f73366d4da744419b172fe72152",
+          "sha": "87f02f4aab825bdc379f26b32e3bd4b1225b2351",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T16:13:25Z",
-          "message": "Merge 6985de4d793fa8bbc5bfadd3f4eceeaf85bb2239 into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+          "timestamp": "2026-11-01T16:21:19Z",
+          "message": "Merge 9ade327bc70d2ef442cebc8b87ea194d1fa607cc into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+        },
+        {
+          "sha": "9ade327bc70d2ef442cebc8b87ea194d1fa607cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T09:21:08-07:00",
+          "message": "test(daemon): the setting bench reads link and baseline from one Frame, and the event test sends each render once (candybar-isolated-daemon-bfab.dnr)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "6985de4d793fa8bbc5bfadd3f4eceeaf85bb2239",
