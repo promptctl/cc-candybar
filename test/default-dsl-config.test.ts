@@ -163,9 +163,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       [
         // Leads the identity row and is when-gated on `.host.ssh`, so it is
         // invisible on every local session — the row still opens with
-        // `directory` unless you are SSH'd in (candybar-segments-e7u).
+        // `gitaculous` unless you are SSH'd in (candybar-segments-e7u).
         "host",
-        "directory",
         "gitaculous",
         "model",
         "context",
@@ -697,7 +696,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["host","directory","gitaculous"] },
+      { h: ["host","gitaculous"] },
       { h: ["model","context","cacheTimer","block","weekly","activity"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);

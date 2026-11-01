@@ -473,7 +473,7 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
   test("every other bundled cell wears its address's tint", () => {
     const rt = build(BUNDLED, undefined, DEFAULT_DSL_CONFIG);
     rt.render(HOT);
-    for (const name of ["directory", "model", "gitaculous", SETTINGS_ANCHOR]) {
+    for (const name of ["model", "gitaculous", SETTINGS_ANCHOR]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
     }
     rt.dispose();

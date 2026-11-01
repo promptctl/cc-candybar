@@ -509,7 +509,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "theme");
     const next = THEMES[(THEMES.indexOf("nord") + 1) % THEMES.length]!;
-    const before = rt.sink.get("directory")![0]!.style;
+    const before = rt.sink.get("gitaculous")![0]!.style;
     const step = rt.linkOn("theme", CAROUSEL_NEXT);
     const [apply, turn] = writesOf(step.url);
     expect(apply).toEqual(["theme", next]);
@@ -520,7 +520,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     expect(rt.sessionState.get(SID, "theme")).toBe(next);
     expect(stripAnsi(rt.render())).toContain(`${next} ▀▀▀`);
     expect(swatchLinks(rt.render()).find((c) => c.writes === next)?.text).toBe("[▀▀▀]");
-    expect(rt.sink.get("directory")![0]!.style).not.toEqual(before);
+    expect(rt.sink.get("gitaculous")![0]!.style).not.toEqual(before);
     await rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
     expect(rt.sessionState.get(SID, "theme")).toBe("nord");
     rt.dispose();
@@ -633,15 +633,15 @@ describe("the variation control", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "variation");
     expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🎼 variation ${CAROUSEL_NEXT}`);
-    // Row 1 (directory) and row 2 (model) under the default.
-    const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    // Row 1 (gitaculous) and row 2 (model) under the default.
+    const before = ["gitaculous", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("variation", CAROUSEL_NEXT).url);
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
       ["set-state", "variation", "duo"],
     ]);
     await rt.click(rt.linkOn("variation", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "variation")).toBe("duo");
-    const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    const after = ["gitaculous", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
     expect(after[1]).not.toEqual(before[1]);
     rt.dispose();
@@ -655,14 +655,14 @@ describe("the shade control", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "shade");
     expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🔆 shade ${CAROUSEL_NEXT}`);
-    const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    const before = ["gitaculous", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
       ["set-state", "shade", "brighter"],
     ]);
     await rt.click(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "shade")).toBe("brighter");
-    const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
+    const after = ["gitaculous", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
     expect(after[1]).not.toEqual(before[1]);
     rt.dispose();
@@ -721,18 +721,18 @@ describe("the preset control's list carries the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous"],
+        ["candybar.menu", "candybar.fps", "host", "gitaculous"],
         ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "activity"],
       ],
-      compact: [["candybar.menu", "candybar.fps", "directory", "gitaculous", "context"]],
+      compact: [["candybar.menu", "candybar.fps", "gitaculous", "context"]],
       verbose: [
-        ["candybar.menu", "candybar.fps", "directory", "gitaculous", "gitPr"],
+        ["candybar.menu", "candybar.fps", "gitaculous", "gitPr"],
         ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "burnrate"],
         ["speed", "tokenSparkline"],
       ],
-      zen: [["candybar.menu", "candybar.fps", "directory", "context"]],
+      zen: [["candybar.menu", "candybar.fps", "context"]],
       git: [
-        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous", "gitPr"],
+        ["candybar.menu", "candybar.fps", "host", "gitaculous", "gitPr"],
         ["model", "context", "activity"],
       ],
       usage: [
@@ -745,7 +745,6 @@ describe("the preset control's list carries the layout beneath it", () => {
           "candybar.menu",
           "candybar.fps",
           "host",
-          "directory",
           "gitaculous",
           "model",
           "context",
@@ -824,7 +823,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
     const placed = [
-      ["menu", "fps", "host", "directory", "gitaculous"],
+      ["menu", "fps", "host", "gitaculous"],
       ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "activity"],
     ];
     expect(previewLabels(rt.render())).toEqual(placed);
@@ -947,7 +946,7 @@ describe("the preview is the bar's own colours", () => {
       // Its open swatch is the colour the open door is drawn in.
       expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
       // Every closed bar cell that authors no meaning wears a preview tint.
-      for (const name of ["directory", "model", "gitaculous"]) {
+      for (const name of ["model", "gitaculous"]) {
         const cells = rt.sink.get(name);
         if (cells === undefined) continue;
         expect([name, drawn.has(bgHex(cells[0]!.style)!)]).toEqual([name, true]);
@@ -998,7 +997,7 @@ describe("the preview is the bar's own colours", () => {
     const preview = rt.sink.get("candybar.list.style.1")!;
     const drawn = backgrounds(preview);
     expect(closedColours(palette, ColorDepth.TRUECOLOR).filter((hex) => !drawn.has(hex))).toEqual([]);
-    expect(drawn.has(bgHex(rt.sink.get("directory")![0]!.style)!)).toBe(true);
+    expect(drawn.has(bgHex(rt.sink.get("gitaculous")![0]!.style)!)).toBe(true);
     expect(bgUnder(preview, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
     rt.dispose();
   });

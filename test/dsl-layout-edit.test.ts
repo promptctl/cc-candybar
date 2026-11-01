@@ -1399,12 +1399,12 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 
   // [LAW:one-source-of-truth] The cascade resolves a click to the ONE row
   // holding the placement — a bundled row or the file's own — and the splice
-  // edits THAT row. Here the segment `directory` is placed in the bundled
+  // edits THAT row. Here the segment `gitaculous` is placed in the bundled
   // identity row AND, as `dir2`, in the file's own `extra` row, which the
   // file authors first: each id's removal lands on its own row.
   test("one segment placed in an inherited row and a file row: each removal lands on the row holding that id", async () => {
     durable.write(
-      `{ globals: {}, segments: {}, root: { rows: { extra: { h: [{ seg: 'directory', id: 'dir2' }] } } } }`,
+      `{ globals: {}, segments: {}, root: { rows: { extra: { h: [{ seg: 'gitaculous', id: 'dir2' }] } } } }`,
     );
     const { cache, sessionState, cleanups } = makeCache();
     try {
@@ -1419,16 +1419,16 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         originCtx(cache, sessionState),
         "s1",
         "presets.default.root",
-        encodeLayoutOp({ op: "remove", target: "directory" }),
+        encodeLayoutOp({ op: "remove", target: "gitaculous" }),
       );
       const parsed = durable.parsed() as {
         root: { rows: Record<string, { h: unknown[] }> };
       };
       expect(Object.keys(parsed.root.rows)).toEqual(["extra", "identity"]);
       expect(parsed.root.rows.extra!.h).toEqual([
-        { seg: "directory", id: "dir2" },
+        { seg: "gitaculous", id: "dir2" },
       ]);
-      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      expect(parsed.root.rows.identity!.h).not.toContain("gitaculous");
       await fireVerb(
         "apply-layout-op",
         originCtx(cache, sessionState),
@@ -1449,12 +1449,12 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // merge identity: presetRoot reports the preset authored at `root`, so the
   // store must edit `root` too — and name it when the click is stale. The
   // file declares the removal as an action of its own, so the reloaded
-  // config's gate still admits the token once `directory` is gone (edit
+  // config's gate still admits the token once `gitaculous` is gone (edit
   // chrome mints one only per placement still in the tree) and the stale
   // click reaches the store.
   test("a preset declaring the identity fragment stages the config's root: the edit and the stale error both name `root`", async () => {
     durable.write(
-      `{ globals: {}, segments: {}, actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } }, presets: { default: { root: { rows: {} } } } }`,
+      `{ globals: {}, segments: {}, actions: { rm: { persist: 'presets.default.root', removeSegment: 'gitaculous' } }, presets: { default: { root: { rows: {} } } } }`,
     );
     const { cache, sessionState, cleanups } = makeCache();
     try {
@@ -1471,7 +1471,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           originCtx(cache, sessionState),
           "s1",
           "presets.default.root",
-          encodeLayoutOp({ op: "remove", target: "directory" }),
+          encodeLayoutOp({ op: "remove", target: "gitaculous" }),
         );
       await removeDirectory();
       const parsed = durable.parsed() as {
@@ -1479,10 +1479,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         presets: { default: { root: unknown } };
       };
       expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
-      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      expect(parsed.root.rows.identity!.h).not.toContain("gitaculous");
       expect(parsed.presets.default.root).toEqual({ rows: {} });
       // The same click again is stale, and names the root it stages.
-      await expect(removeDirectory).rejects.toThrow(/^root holds no placement "directory"/);
+      await expect(removeDirectory).rejects.toThrow(/^root holds no placement "gitaculous"/);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1525,8 +1525,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         segments: unknown;
       };
       expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
-      expect(parsed.root.rows.identity!.h).not.toContain("gitaculous");
-      expect(parsed.root.rows.identity!.h).toContain("directory");
+      expect(parsed.root.rows.identity!.h).toEqual(["host"]);
       expect(parsed.globals).toEqual({});
       expect(parsed.segments).toEqual({});
 
@@ -1578,7 +1577,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           encodeLayoutOp({
             op: "insert",
             segment: "gitaculous",
-            anchor: "directory",
+            anchor: "host",
             relation: "after",
           }),
         );
@@ -1628,14 +1627,14 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(before.lastError).toBeNull();
       expect(before.state.authoredRoots.has("default")).toBe(false);
       const namesBefore = presetNamesOf(before, "default");
-      expect(namesBefore).toContain("directory");
+      expect(namesBefore).toContain("gitaculous");
 
       await fireVerb(
         "apply-layout-op",
         originCtx(cache, sessionState),
         "s1",
         "presets.default.root",
-        REMOVE_DIRECTORY,
+        encodeLayoutOp({ op: "remove", target: "gitaculous" }),
       );
 
       const {
@@ -1652,7 +1651,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         expect(customized.lastError).toBeNull();
         expect(customized.state.authoredRoots.has("default")).toBe(true);
         expect(presetNamesOf(customized, "default")).toEqual(
-          namesBefore.filter((n) => n !== "directory"),
+          namesBefore.filter((n) => n !== "gitaculous"),
         );
         // The synthesized reset action targets the SAME key the +/-
         // affordances already write — no second gate to derive.
@@ -1697,10 +1696,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   });
 
   // brandon-layout-edit-2gc.5 PR review: the bundled default's OWN
-  // "compact" preset has exactly 3 non-exempt segments (directory/git/
-  // context — candybar-settings-ui-aok.3 dropped its standalone preset
-  // control, since the settings menu is spliced into every preset root and
-  // carries one) — removing all 3 via the synthesized `-` chrome
+  // "compact" preset has exactly 2 non-exempt segments (gitaculous/context —
+  // candybar-settings-ui-aok.3 dropped its standalone preset control, since
+  // the settings menu is spliced into every preset root and carries one) —
+  // removing both via the synthesized `-` chrome
   // leaves spliceContainer with zero children, so removeTerm/insertTerm
   // contribute NOTHING for "compact" on the next reload. Proves the reset
   // banner's own click still works in exactly that state, through the REAL
@@ -1726,7 +1725,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "compact")).toEqual([
-        "directory",
         "gitaculous",
         "context",
       ]);
@@ -1741,11 +1739,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "presets.compact.root",
           encodeLayoutOp({ op: "remove", target }),
         );
-      await compactRemove("directory");
-      expect(durable.parsed().presets).toEqual({
-        compact: { root: { h: ["gitaculous", "context"] } },
-      });
       await compactRemove("gitaculous");
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: ["context"] } },
+      });
       await compactRemove("context");
       expect(durable.parsed().presets).toEqual({
         compact: { root: { h: [] } },
@@ -1795,7 +1792,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(restored.lastError).toBeNull();
       expect(restored.state.authoredRoots.has("compact")).toBe(false);
       expect(presetNamesOf(restored, "compact")).toEqual([
-        "directory",
         "gitaculous",
         "context",
       ]);
