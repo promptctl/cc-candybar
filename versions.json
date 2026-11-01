@@ -4,15 +4,22 @@
     {
       "version": "pr-532",
       "ref": "refs/pull/532/merge",
-      "sha": "6b3ec647bc0f9329d68c36bd58b27ffba54069e2",
-      "timestamp": "2026-11-01T02:09:23.119Z",
+      "sha": "462f0f81cd9596f18124a9bc4967369e2320c08c",
+      "timestamp": "2026-11-01T02:10:06.579Z",
       "commits": [
         {
-          "sha": "6b3ec647bc0f9329d68c36bd58b27ffba54069e2",
+          "sha": "462f0f81cd9596f18124a9bc4967369e2320c08c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:08:37Z",
-          "message": "Merge b3eec2baeb509984be1806524f8649d02334da21 into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
+          "timestamp": "2026-11-01T02:09:04Z",
+          "message": "Merge 72a819c5867c1c0d2ae0bfb57c408403298df3da into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
+        },
+        {
+          "sha": "72a819c5867c1c0d2ae0bfb57c408403298df3da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:08:54-06:00",
+          "message": "test(proc): the busy-loop case blocks where timers run next (candybar-testing-0x6u.keo)\n"
         },
         {
           "sha": "b3eec2baeb509984be1806524f8649d02334da21",
