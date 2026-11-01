@@ -4,15 +4,22 @@
     {
       "version": "pr-556",
       "ref": "refs/pull/556/merge",
-      "sha": "019435c30aec22d208b1f0a7d16ebd0fb3d37f4f",
-      "timestamp": "2026-11-01T21:06:31.207Z",
+      "sha": "ec7e4ed1a48e60c464cfd9e2d69be8c1fc8aaae2",
+      "timestamp": "2026-11-01T21:16:02.897Z",
       "commits": [
         {
-          "sha": "019435c30aec22d208b1f0a7d16ebd0fb3d37f4f",
+          "sha": "ec7e4ed1a48e60c464cfd9e2d69be8c1fc8aaae2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:05:32-07:00",
-          "message": "Merge 015d83257fb4fb46dfb754a5fe6ebc82a42fb301 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+          "timestamp": "2026-11-01T14:15:19-07:00",
+          "message": "Merge 0a6899b39f30c43ec6269657cace6e69464f9c85 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "0a6899b39f30c43ec6269657cace6e69464f9c85",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:15:09-07:00",
+          "message": "docs(testing): the pieces depend one way, and one number holds the cap (candybar-testing-ihvy.43x)\n"
         },
         {
           "sha": "015d83257fb4fb46dfb754a5fe6ebc82a42fb301",
