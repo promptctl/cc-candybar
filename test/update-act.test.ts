@@ -242,6 +242,26 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     }
   });
 
+  test("a group that takes SIGTERM and refuses the SIGKILL does not throw from the timer", () => {
+    const files = jobFiles();
+    const kill = jest.spyOn(process, "kill").mockImplementation((_, sig) => {
+      if (sig === "SIGTERM") return true;
+      throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+    });
+    jest.useFakeTimers();
+    try {
+      expect(endJob(424242, files.status, { kind: "timeout" })).toEqual({
+        stands: true,
+        signalled: true,
+      });
+      expect(() => jest.runOnlyPendingTimers()).not.toThrow();
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
+  });
+
   test("ending a job whose files are gone is a no-op, not an error", () => {
     const status = path.join(scratch, "gone", "status");
     expect(endJob(process.pid, status, { kind: "timeout" })).toEqual({

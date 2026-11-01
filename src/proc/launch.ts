@@ -1060,8 +1060,9 @@ export function readJobEnd(status: string): JobEnd | null {
 // launcher's user, so a group the launcher may not signal (EPERM) is someone
 // else's under a recycled id, on darwin holds nothing left running, or holds
 // only a member that changed its uid, which no signal of ours could reach.
-// [LAW:no-silent-failure] exception: the false is the report; `endJob` hands
-// it to its caller, and like ESRCH it leaves nothing for the launcher to do.
+// [LAW:no-silent-failure] exception: the false is the whole report. `endJob`
+// hands SIGTERM's to its caller; the SIGKILL's lands in a timer with no caller,
+// and the launcher has nothing further to try either way.
 function signalJob(pid: number, sig: NodeJS.Signals | 0): boolean {
   try {
     process.kill(-pid, sig);
