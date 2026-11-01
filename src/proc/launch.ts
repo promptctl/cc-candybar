@@ -1058,8 +1058,10 @@ export function readJobEnd(status: string): JobEnd | null {
 
 // Signals a job's process group; true when the group took it. A job runs as its
 // launcher's user, so a group the launcher may not signal (EPERM) is someone
-// else's under a recycled id, or on darwin holds nothing left running; neither
-// is the job, so like ESRCH it answers false rather than throwing.
+// else's under a recycled id, on darwin holds nothing left running, or holds
+// only a member that changed its uid, which no signal of ours could reach.
+// [LAW:no-silent-failure] exception: the false is the report; `endJob` hands
+// it to its caller, and like ESRCH it leaves nothing for the launcher to do.
 function signalJob(pid: number, sig: NodeJS.Signals | 0): boolean {
   try {
     process.kill(-pid, sig);
@@ -1091,18 +1093,27 @@ function groupGone(pid: number): boolean {
   }
 }
 
+// What `endJob` did: whether the launcher's verdict is the one that stands, and
+// whether the group took the SIGTERM. Only a group that took it gets the SIGKILL,
+// since an id that answered nothing may no longer be the job's by the grace's end.
+export interface JobEnding {
+  readonly stands: boolean;
+  readonly signalled: boolean;
+}
+
 // Ends a job's group with the timeout's own escalation, and gives it a verdict
 // of the launcher's unless its own landed first: the first verdict stands, and
 // a group that outlives its verdict (a child the program left) is ended all the
-// same. True when the launcher's verdict is the one that stands. A status
-// whose directory is gone belongs to a job whose files were removed once it
-// had ended, so there is nothing left to end.
-export function endJob(pid: number, status: string, end: JobEnd): boolean {
+// same. A status whose directory is gone belongs to a job whose files were
+// removed once it had ended, so there is nothing left to end.
+export function endJob(pid: number, status: string, end: JobEnd): JobEnding {
   const staged = `${status}.${process.pid}`;
   try {
     writeFileSync(staged, `${formatJobEnd(end)}\n`);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { stands: false, signalled: false };
+    }
     throw err;
   }
   let stands = true;
@@ -1114,9 +1125,11 @@ export function endJob(pid: number, status: string, end: JobEnd): boolean {
   } finally {
     rmSync(staged, { force: true });
   }
-  signalJob(pid, "SIGTERM");
-  setTimeout(() => signalJob(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return stands;
+  const signalled = signalJob(pid, "SIGTERM");
+  if (signalled) {
+    setTimeout(() => signalJob(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  }
+  return { stands, signalled };
 }
 
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
