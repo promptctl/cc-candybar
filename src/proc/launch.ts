@@ -48,6 +48,7 @@ import {
 import type { Socket } from "node:net";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
+import { setImmediate } from "node:timers";
 
 import type { LaunchStatsHandle } from "./stats-handle";
 
@@ -346,6 +347,19 @@ interface LaunchState {
   // lifeline runs, or before one is needed. Its observer hears each change, and
   // the daemon shows it as a standing warning.
   fault: string | null;
+  // What has not ended: each launch in flight and each lifeline.
+  readonly ending: Set<Promise<unknown>>;
+  // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
+  // while their children live: a result was delivered, and they still run.
+  readonly unreaped: Map<ChildProcess, LaunchCategory>;
+}
+
+// [LAW:no-ambient-temporal-coupling] `ending` is the one record of whether what
+// a launcher started has ended.
+function track<T>(state: LaunchState, work: Promise<T>): Promise<T> {
+  const entry = work.finally(() => state.ending.delete(entry));
+  state.ending.add(entry);
+  return entry;
 }
 
 // The one gate each launch form crosses: closed, aborted by its caller, or
@@ -424,6 +438,8 @@ function setFault(state: LaunchState, next: string | null): void {
 function lose(state: LaunchState, line: ChildProcess, reason: string): void {
   if (state.lifeline?.process !== line) return;
   state.lifeline = null;
+  // `settled` waits on this end too.
+  line.ref();
   setFault(state, reason);
 }
 
@@ -444,7 +460,8 @@ function lifelineWarnings(state: LaunchState): LifelineWarning[] {
 }
 
 // Leads its own group, so nothing aimed at the launcher's group reaches it, and
-// is unref'd with its pipe, so it never holds a process open. `awk` is found
+// is unref'd with its pipe, so it holds a process open only once it is ending.
+// `awk` is found
 // on the launcher's PATH, as every launched program is: where a machine keeps
 // it is the machine's fact (NixOS has no /usr/bin/awk).
 function spawnLifeline(state: LaunchState): Lifeline | null {
@@ -471,6 +488,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  void track(state, new Promise((closed) => line.once("close", closed)));
   line.unref();
   pipe.unref();
   for (const group of state.liveGroups) pipe.write(`+ ${group}\n`);
@@ -492,10 +510,12 @@ function unguard(state: LaunchState, group: number): void {
 
 // A closed owner's lifeline goes with it: the EOF a dying launcher gives it, on
 // purpose, so no fault is recorded. Nothing launches after the abort that runs
-// this, so nothing starts another.
+// this, so nothing starts another. It holds the loop from here: `settled` waits
+// on its end, and an unref'd end never comes in a process with nothing else open.
 function endLifeline(state: LaunchState): void {
   const line = state.lifeline;
   state.lifeline = null;
+  line?.process.ref();
   line?.pipe.end();
 }
 
@@ -550,6 +570,7 @@ async function launchWaited(
     // group to guard: its `error` event settles it.
     const group = child.pid;
     if (group !== undefined) guard(state, group);
+    const exited = new Promise((end) => child.once("exit", end));
 
     let stdout = "";
     let stderr = "";
@@ -588,6 +609,7 @@ async function launchWaited(
       try {
         signalGroup(pid, sig);
       } catch (err) {
+        state.unreaped.set(child, opts.category);
         settle({
           ok: false,
           reason: "signal-refused",
@@ -618,10 +640,19 @@ async function launchWaited(
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
-        killTimer = setTimeout(
-          () => signal(pid, "SIGKILL"),
-          TIMEOUT_KILL_GRACE_MS,
-        );
+        // [LAW:no-ambient-temporal-coupling] The pipes go a turn after the
+        // child's end, once what it wrote is read: a descendant that left the
+        // group could otherwise hold them open, and keep this launch from ever
+        // resolving.
+        killTimer = setTimeout(() => {
+          signal(pid, "SIGKILL");
+          void exited.then(() =>
+            setImmediate(() => {
+              child.stdout?.destroy();
+              child.stderr?.destroy();
+            }),
+          );
+        }, TIMEOUT_KILL_GRACE_MS);
         signal(pid, "SIGTERM");
       }
     };
@@ -646,6 +677,7 @@ async function launchWaited(
     });
 
     child.on("close", (code, signal) => {
+      state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
@@ -1026,9 +1058,17 @@ export interface Launcher {
   lifelineWarnings(): LifelineWarning[];
 }
 
+export interface Settled {
+  // Launches the OS refused to end, whose children still run.
+  readonly unreaped: readonly LaunchCategory[];
+}
+
 // What `createLauncher` returns, and not what a launcher is handed around as, so
 // nothing holding a `Launcher` can reach this.
 export interface TestableLauncher extends Launcher {
+  // Settles once every waited launch and lifeline has ended: for the owner
+  // that holds the abort, since a lifeline ends only with it.
+  settled(): Promise<Settled>;
   // Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
   // death gives it — and names its pid. A cut lifeline is lost at once, so the
   // test's next launch starts another rather than writing to a closed pipe.
@@ -1039,11 +1079,19 @@ export interface TestableLauncher extends Launcher {
 // and refuses what comes after, for good, whichever other launchers run.
 export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
   const launcher: TestableLauncher = {
-    launch: (opts) => launchWaited(state, opts),
+    launch: (opts) => track(state, launchWaited(state, opts)),
     launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
+    settled: async () => {
+      await Promise.all(state.ending);
+      // The child's own end, not `close`: a descendant can hold the pipes past it.
+      const running = [...state.unreaped].filter(
+        ([child]) => child.exitCode === null && child.signalCode === null,
+      );
+      return { unreaped: running.map(([, category]) => category) };
+    },
     __lifelineForTest: () => {
       const line = state.lifeline;
       return {
@@ -1071,6 +1119,8 @@ export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
     liveGroups: new Set(),
     lifeline: null,
     fault: null,
+    ending: new Set(),
+    unreaped: new Map(),
   };
   state.scope.signal.addEventListener(
     "abort",
