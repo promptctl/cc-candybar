@@ -61,8 +61,10 @@ describe("a launcher settles", () => {
       category: "user-shell",
     });
     await until(() => existsSync(up), "the child trapping SIGTERM");
+    // From the check phase timers run next: past the grace, the kill comes
+    // before any read.
+    await new Promise((turn) => setImmediate(turn));
     closing.abort(new Error("closed"));
-    // Past the grace with no poll turn, so the kill runs before any read.
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
     await expect(run).resolves.toMatchObject({
       reason: "aborted",
