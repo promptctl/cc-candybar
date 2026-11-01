@@ -58,7 +58,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { picked, selectionFor } from "./helpers/selection";
-import { MENU_PAGE_NS } from "../src/config/loader/reserved-namespace";
+import { MENU_PAGE_NS } from "../src/config/reserved-names";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";

@@ -5,7 +5,7 @@
 
 import { DISCLOSURE_OPEN } from "./disclosure.js";
 import type { DisclosureRef } from "./dsl-types.js";
-import { SETTINGS_NS } from "./loader/reserved-namespace.js";
+import { SETTINGS_NS } from "./reserved-names.js";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
 // segment name an author places in `root` to choose the menu's position, the
@@ -36,3 +36,5 @@ export const SETTINGS_REF: DisclosureRef = {
 // message and page it shows (viewerKey), closed at any value no message in the
 // draw's list has — ✕'s, or the key absent (src/render/diagnostics.ts).
 export const DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
+// What the viewer's ✕ writes: no message has it as its key.
+export const DIAGNOSTICS_CLOSED = "0";

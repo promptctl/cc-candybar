@@ -50,11 +50,8 @@ import {
   disclosureTrigger,
 } from "../disclosure.js";
 import { findKeyLine } from "./diagnostics.js";
-import {
-  GROUP_NS,
-  isReservedName,
-  reservedNamespaceCollisions,
-} from "./reserved-namespace.js";
+import { reservedNamespaceCollisions } from "./reserved-namespace.js";
+import { GROUP_NS, isReservedName } from "../reserved-names.js";
 import {
   describeType,
   describeValue,

@@ -56,7 +56,7 @@ import {
   EDIT_TOGGLE_ACTION,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
-import { EDIT_NS, isReservedName } from "./loader/reserved-namespace.js";
+import { EDIT_NS, isReservedName } from "./reserved-names.js";
 import { declareHelp } from "./help.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";

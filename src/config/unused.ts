@@ -21,7 +21,7 @@ import {
   type RawDslConfig,
   type VariableDecl,
 } from "./dsl-types.js";
-import { isReservedName } from "./loader/reserved-namespace.js";
+import { isReservedName } from "./reserved-names.js";
 import { templateActionRefs, templateHelperRefs } from "./loader/refs.js";
 import { valueReadsOf } from "./loader/value-reads.js";
 import { actionTemplates } from "./action.js";

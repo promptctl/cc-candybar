@@ -20,7 +20,7 @@ import {
   VERB_COPY_DIAGNOSTIC,
   VERB_SET_STATE,
 } from "../click/wire.js";
-import { DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import type { Drawing } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
@@ -303,12 +303,9 @@ export function diagnosticsProjection(
       level === null ? "" : `⚠ ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
-    open: list.length === 0 ? VIEWER_CLOSED : viewerKey(list, 0, 0),
+    open: list.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list, 0, 0),
   };
 }
-
-// What the viewer's ✕ writes: no message has it as its key.
-const VIEWER_CLOSED = "0";
 
 // [LAW:dataflow-not-control-flow] Where the stored key `raw` stands in this
 // draw's list; none while closed, and none once its message is no longer in
@@ -402,7 +399,7 @@ export function viewerRows(
         : `[${index}/${list.length}]`;
     return renderStripCells(
       [
-        button("✕", go(VIEWER_CLOSED, "close diagnostics")),
+        button("✕", viewerLink(sessionId, DIAGNOSTICS_CLOSED)),
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
@@ -477,7 +474,7 @@ export function handoffRows(
           cell(
             label,
             new Style({ bgcolor: bg, color: fg }).withLink(
-              viewerLink(sessionId, open, "open diagnostics"),
+              viewerLink(sessionId, open),
             ),
           ),
         ];
@@ -485,7 +482,7 @@ export function handoffRows(
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
-function viewerLink(sessionId: string, key: string, says: string): string {
+function viewerLink(sessionId: string, key: string, says?: string): string {
   return effectsUrl(
     [{ verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] }],
     says,

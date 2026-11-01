@@ -5,7 +5,7 @@
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { resolveOptionDomain } from "../src/config/option-domain";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf } from "./helpers/click";

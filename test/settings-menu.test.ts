@@ -43,10 +43,7 @@ import {
   POLLED,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
-import {
-  isReservedName,
-  SETTINGS_NS,
-} from "../src/config/loader/reserved-namespace";
+import { isReservedName, SETTINGS_NS } from "../src/config/reserved-names";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";

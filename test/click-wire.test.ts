@@ -137,8 +137,20 @@ describe("a link says in words what its click does", () => {
       "open candybar.menu",
     ],
     [
-      { verb: VERB_SET_STATE, args: [SID, "my.menus.x", "closed"] },
-      "close my.menus.x",
+      { verb: VERB_SET_STATE, args: [SID, "edit.menus.x", "closed"] },
+      "close edit.menus.x",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "prFilter", "closed"] },
+      "set prFilter to closed",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "prFilter", "open"] },
+      "set prFilter to open",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "candybar.diagnostics", "0"] },
+      "close diagnostics",
     ],
     [
       { verb: VERB_SET_STATE, args: [SID, "menupages.menus.pickers", "2"] },

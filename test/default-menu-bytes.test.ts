@@ -36,7 +36,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { ADD_GLYPH } from "../src/config/edit-glyphs";
 import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { EDIT_NS } from "../src/config/loader/reserved-namespace";
+import { EDIT_NS } from "../src/config/reserved-names";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSED,

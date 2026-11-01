@@ -22,7 +22,7 @@ import {
   type DslConfig,
   type ValidatedConfig,
 } from "../src/config/dsl-types";
-import { isReservedName } from "../src/config/loader/reserved-namespace";
+import { isReservedName } from "../src/config/reserved-names";
 import { rootNode } from "../src/config/root";
 import {
   parseDslConfig,

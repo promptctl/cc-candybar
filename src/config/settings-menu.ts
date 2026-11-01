@@ -75,7 +75,7 @@ import { commandTray } from "./command-tray.js";
 import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
-import { SETTINGS_NS } from "./loader/reserved-namespace.js";
+import { SETTINGS_NS } from "./reserved-names.js";
 import {
   DIAGNOSTICS_VIEWING,
   SETTINGS_ANCHOR,

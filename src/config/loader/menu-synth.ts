@@ -62,11 +62,10 @@ import { presetNames, presetRoot } from "../presets.js";
 import type { ConfigIssue } from "./diagnostics.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
-  MENU_NS,
-  MENU_PAGE_NS,
   reservedNamespaceCollisions,
   reservedNamespaceOf,
 } from "./reserved-namespace.js";
+import { MENU_NS, MENU_PAGE_NS } from "../reserved-names.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template

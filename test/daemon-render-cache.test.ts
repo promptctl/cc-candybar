@@ -58,7 +58,7 @@ import {
   type LiteralVarDecl,
 } from "../src/config/dsl-types";
 import { rootNode, rootOf } from "../src/config/root";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";

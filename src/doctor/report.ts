@@ -37,7 +37,7 @@ import {
   type TerminalIdentity,
 } from "./checks.js";
 import type { SettingsSource } from "../claude-settings.js";
-import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
+import { SETTINGS_NS } from "../config/reserved-names.js";
 import { mb, measureOf } from "../daemon/limits.js";
 import { valueOf } from "../utils/logfmt.js";
 import { FRAMES_SEEN, type FrameSeen } from "../daemon/render-sightings.js";

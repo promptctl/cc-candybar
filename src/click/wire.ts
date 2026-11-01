@@ -31,8 +31,12 @@
 import { URLSearchParams } from "node:url";
 
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
-import { DIAGNOSTICS_VIEWING } from "../config/door.js";
-import { MENU_NS, MENU_PAGE_NS } from "../config/loader/reserved-namespace.js";
+import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
+import {
+  isReservedName,
+  MENU_NS,
+  MENU_PAGE_NS,
+} from "../config/reserved-names.js";
 
 // [LAW:one-source-of-truth] The scheme string lives here, with the codec that
 // emits it; install/ (Launch Services registration) imports it.
@@ -205,22 +209,26 @@ const withoutNs = (key: string, ns: string): string =>
 
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar
-// numbers from 1; the rest read as the key they set. The viewer's key holds a
-// message's identity, which no reader can use, so its write says what it opens.
+// numbers from 1; the rest read as the key they set. Disclosures are synthesized,
+// so an authored key's `closed` is its own data. The viewer's key holds a
+// message's identity, which no reader can use, so its write says what it does.
 function sayWrite(key: string, value: string): string {
-  if (key === DIAGNOSTICS_VIEWING) return "open diagnostics";
+  if (key === DIAGNOSTICS_VIEWING)
+    return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
+  const set = `set ${key} to ${value}`;
+  if (!isReservedName(key)) return set;
   const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
   if (key.startsWith(MENU_PAGE_NS))
     return `turn ${menu} to page ${Number(value) + 1}`;
   if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
   if (value === DISCLOSURE_OPEN) return `open ${menu}`;
-  return key.startsWith(MENU_NS) ? `open ${value}` : `set ${key} to ${value}`;
+  return key.startsWith(MENU_NS) ? `open ${value}` : set;
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Copied
-// text is the one free text a click carries; the rest are names and paths. Both
-// ends stay, by code point: a path differs at its end, and half a surrogate pair
-// cannot be encoded.
+// text is the one free text a click evaluates; the rest are names, paths and
+// what an author wrote. Both ends stay, by code point: a path differs at its end,
+// and half a surrogate pair cannot be encoded.
 const COPIED_LENGTH = 60;
 const ELISION = "...";
 function saidCopy(text: string): string {

@@ -24,7 +24,7 @@ import {
   MENU_NS,
   MENU_PAGE_NS,
   SETTINGS_NS,
-} from "../../src/config/loader/reserved-namespace";
+} from "../../src/config/reserved-names";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { SETTINGS_WRITTEN_KEYS } from "../../src/config/settings-menu";
 import {

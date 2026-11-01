@@ -12,7 +12,7 @@
 import { listThemePalettes } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { instantOf } from "../src/utils/instant";
 import { stripAnsi } from "./helpers/ansi";
 import { POWERLINE } from "./helpers/powerline";

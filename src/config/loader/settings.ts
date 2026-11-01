@@ -16,7 +16,7 @@ import {
   type SettingValue,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
-import { isReservedName, RESERVED_NAMESPACES } from "./reserved-namespace.js";
+import { isReservedName, RESERVED_NAMESPACES } from "../reserved-names.js";
 import {
   describeType,
   describeValue,

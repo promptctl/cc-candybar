@@ -10,7 +10,7 @@ import {
   EDIT_UNCONFIGURE_ACTION,
   EDIT_TOGGLE_ACTION,
 } from "../../src/config/loader/edit-mode";
-import { EDIT_NS } from "../../src/config/loader/reserved-namespace";
+import { EDIT_NS } from "../../src/config/reserved-names";
 
 // A canonical one-leaf vertical root — narrows a spread config to a single
 // segment so the rendered line is exactly that segment's text.
