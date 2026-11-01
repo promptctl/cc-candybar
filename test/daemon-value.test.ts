@@ -363,12 +363,11 @@ describe("the daemon is a value", () => {
 
     // A launch's handles close after its result lands, so its end is read off
     // the ledger itself.
+    const launches = () =>
+      leftover().filter((held) => CHILD.has(held.message) && !isLifeline(held));
     await until(
-      () =>
-        !leftover().some(
-          (held) => CHILD.has(held.message) && !isLifeline(held),
-        ),
-      () => `the launches ended: ${origins(leftover()).join("\n")}`,
+      () => launches().length === 0,
+      () => `the launches ended: ${origins(launches()).join("\n")}`,
     );
     // Only what is live at this read shows: a timer that already fired is gone.
     await turn();
@@ -377,7 +376,8 @@ describe("the daemon is a value", () => {
     // reaps the process group, then exits.
     await until(
       () => !leftover().some(isLifeline),
-      () => `the lifeline ended: ${origins(leftover()).join("\n")}`,
+      () =>
+        `the lifeline ended: ${origins(leftover().filter(isLifeline)).join("\n")}`,
     );
     await turn();
     expect(origins(leftover())).toEqual([]);
