@@ -4,15 +4,22 @@
     {
       "version": "pr-529",
       "ref": "refs/pull/529/merge",
-      "sha": "40f0821e23d78551cab6e8c562f80990e92a4969",
-      "timestamp": "2026-11-01T00:22:14.745Z",
+      "sha": "9639ec3b10dc5df575bc3463dee5edea622354e5",
+      "timestamp": "2026-11-01T00:27:16.205Z",
       "commits": [
         {
-          "sha": "40f0821e23d78551cab6e8c562f80990e92a4969",
+          "sha": "9639ec3b10dc5df575bc3463dee5edea622354e5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:21:23-06:00",
-          "message": "Merge fad31f1ac326cdfd0ba82e199f6ed19f3cbffc39 into f5a917eecd0f8034a952dd73b375161230378ad2\n"
+          "timestamp": "2026-11-01T00:26:22Z",
+          "message": "Merge b56a8ceca4c00fb9f153fe70c18940b7c6ff1179 into f5a917eecd0f8034a952dd73b375161230378ad2\n"
+        },
+        {
+          "sha": "b56a8ceca4c00fb9f153fe70c18940b7c6ff1179",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:26:12-06:00",
+          "message": "test(reload-signal): the carried probe's tests derive from the round, and the unread answer is a named exception (candybar-testing-0x6u.6el)\n"
         },
         {
           "sha": "fad31f1ac326cdfd0ba82e199f6ed19f3cbffc39",
