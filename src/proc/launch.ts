@@ -46,6 +46,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Socket } from "node:net";
+import type { Readable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 import { setImmediate } from "node:timers";
@@ -556,6 +558,18 @@ function leaderRefuses(pid: number): boolean {
   }
 }
 
+// Decodes a stream as it reads and answers with the text so far. An owned
+// decoder, not setEncoding: a launch can end before EOF, and only this one can
+// be flushed then, so a character cut short still shows as U+FFFD.
+function capture(stream: Readable | null): () => string {
+  const decoder = new StringDecoder("utf8");
+  let text = "";
+  stream?.on("data", (chunk: Buffer) => {
+    text += decoder.write(chunk);
+  });
+  return () => text + decoder.end();
+}
+
 async function launchWaited(
   state: LaunchState,
   opts: AsyncLaunchOpts,
@@ -594,14 +608,9 @@ async function launchWaited(
     if (group !== undefined) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
 
-    // Raw bytes, decoded once at settle: a stream's own decoder keeps a split
-    // character from a launch that ends before EOF, and nothing can flush it.
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    const output = () => ({
-      stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-      stderr: Buffer.concat(stderrChunks).toString("utf8"),
-    });
+    const stdout = capture(child.stdout);
+    const stderr = capture(child.stderr);
+    const output = () => ({ stdout: stdout(), stderr: stderr() });
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
@@ -718,9 +727,6 @@ async function launchWaited(
         signal(pid, "SIGTERM");
       }
     };
-
-    child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
     child.on("error", (err) => {
       settle({
