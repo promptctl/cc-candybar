@@ -35848,6 +35848,13 @@ function spawnLifeline(state) {
   }
   stats?.onEnd("lifeline", Date.now() - t0);
   const pipe = line.stdin;
+  if (pipe === null || pipe === void 0) {
+    line.once(
+      "error",
+      (err) => setFault(state, `did not start: ${err.message}`)
+    );
+    return null;
+  }
   line.once("spawn", () => {
     if (state.lifeline?.process === line) setFault(state, null);
   });
@@ -71926,6 +71933,9 @@ function makeUpdateWatch(opts) {
     error: () => unreadable,
     act: () => actTurn(async () => {
       if (closed) throw new DaemonClosing("apply-update");
+      const read2 = await touchActs(() => acts.read());
+      if (closed) throw new DaemonClosing("apply-update");
+      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
       const update = current();
       if (update === null) {
         throw new BadVerbArgs(
@@ -71933,9 +71943,6 @@ function makeUpdateWatch(opts) {
         );
       }
       const facts = factsOf(update);
-      const read2 = await touchActs(() => acts.read());
-      if (closed) throw new DaemonClosing("apply-update");
-      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
       const newest = read2.value;
       if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);

@@ -4,15 +4,22 @@
     {
       "version": "pr-549",
       "ref": "refs/pull/549/merge",
-      "sha": "3e9c75cfb529b6a4a0e45b99dbe0ec28bd1510e3",
-      "timestamp": "2026-11-01T11:50:19.079Z",
+      "sha": "d2a952d67d5bf9e8b17f0c4e6bc2c4df3da3c6e4",
+      "timestamp": "2026-11-01T12:09:27.939Z",
       "commits": [
         {
-          "sha": "3e9c75cfb529b6a4a0e45b99dbe0ec28bd1510e3",
+          "sha": "d2a952d67d5bf9e8b17f0c4e6bc2c4df3da3c6e4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T11:49:21Z",
-          "message": "Merge 65acb4dea0bfddb498855925ad19fa65b0a91d29 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
+          "timestamp": "2026-11-01T12:08:34Z",
+          "message": "Merge 173a6386ea7f1843260f87033da5bb23eba5fec2 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
+        },
+        {
+          "sha": "173a6386ea7f1843260f87033da5bb23eba5fec2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:08:25-07:00",
+          "message": "fix(daemon): a lifeline out of descriptors stays fail-open, and apply-update reads the update after its wait (candybar-launch-q7o7.jqq)\n"
         },
         {
           "sha": "65acb4dea0bfddb498855925ad19fa65b0a91d29",
