@@ -100,7 +100,7 @@ export function runDaemon(): void {
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
   // [LAW:single-enforcer] Registered FIRST, before any of the startup calls
-  // below that can throw synchronously (admitDaemon's ensureDirSafe/writeEntry,
+  // below that can throw (admitDaemon's ensureDirSafe/writeEntry,
   // ensureSocketParentSafe) — otherwise an early throw is a raw unhandled
   // exception (stack trace to stderr, bypassing the clean shutdown(1) log +
   // SIGKILL backstop) rather than funneling through the same death path as
@@ -121,10 +121,8 @@ export function runDaemon(): void {
   }
 
   // [LAW:single-enforcer] Refused through the same death funnel as every other
-  // boot failure. A synchronous throw in the boot is NOT uncaught — it lands in
-  // index.ts's catch, whose stderr the detached spawn discards — so the one
-  // line that says why the daemon never came up would go nowhere. The arbitration
-  // that finishes the boot is async too, and lands here the same way.
+  // boot failure: the detached spawn discards stderr, so the one line that says
+  // why the daemon never came up would otherwise go nowhere.
   boot().catch(refuseBoot);
 }
 

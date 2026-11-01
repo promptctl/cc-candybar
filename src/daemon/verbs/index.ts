@@ -285,9 +285,9 @@ export interface VerbContext extends DaemonContext {
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
-// `typing` or `gather`, each bound to the turn, so it cannot await one the
+// `typing`, `gather` or `applyUpdate`, each bound to the turn, so it cannot await one the
 // daemon's close would not stop it after.
-type TurnBound = "launcher" | "doctor" | "claudeInput";
+type TurnBound = "launcher" | "doctor" | "claudeInput" | "applyUpdate";
 
 // What a helper reads, from either side of the turn.
 type Unbound = Omit<VerbContext, TurnBound>;
@@ -296,7 +296,7 @@ type Unbound = Omit<VerbContext, TurnBound>;
 export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
-  // [LAW:single-enforcer] Every await of a handler is one of these three: the
+  // [LAW:single-enforcer] Every await of a handler is one of these four: the
   // click's turn answers whether it may go on (JournalTurn.landed).
   readonly launch: (
     opts: Omit<LaunchOpts, "timeoutMs">,
@@ -306,6 +306,7 @@ export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
     hint: ClientHints["tmux"],
     line: SlashLine,
   ) => ReturnType<typeof typeSlash>;
+  readonly applyUpdate: () => Promise<void>;
   // Read-only work in the turn, over what the click has written so far.
   readonly gather: <T>(work: (ctx: C) => Promise<T>) => Promise<T>;
 };

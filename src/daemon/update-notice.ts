@@ -548,6 +548,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     act: () =>
       actTurn(async () => {
         if (closed) throw new DaemonClosing("apply-update");
+        const read = await touchActs(() => acts.read());
+        if (closed) throw new DaemonClosing("apply-update");
+        if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
+        // [LAW:no-ambient-temporal-coupling] Read past the await: the sampler
+        // moves the build on timers of its own.
         const update = current();
         if (update === null) {
           throw new BadVerbArgs(
@@ -555,9 +560,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           );
         }
         const facts = factsOf(update);
-        const read = await touchActs(() => acts.read());
-        if (closed) throw new DaemonClosing("apply-update");
-        if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
         const newest = read.value;
         if (judgeAct(newest).kind === "running") {
           throw new BadVerbArgs(`apply-update: already ${facts.busy}`);

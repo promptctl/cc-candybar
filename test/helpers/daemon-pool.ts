@@ -95,7 +95,8 @@ function readSlot(p: string): SlotRecord | null {
     }
     return {
       pid,
-      startTime: typeof parsed?.startTime === "string" ? parsed.startTime : null,
+      startTime:
+        typeof parsed?.startTime === "string" ? parsed.startTime : null,
     };
   } catch {
     return null;
@@ -149,6 +150,9 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     }
     const existing = readSlot(p);
     if (existing !== null && (await isSlotLive(existing))) return false;
+    // Another acquire of this worker may have reclaimed it during that await,
+    // and the read-back below can't tell it from this one: same pid.
+    if (JSON.stringify(readSlot(p)) !== JSON.stringify(existing)) return false;
     const tmp = `${p}.${myPid}.tmp`;
     fs.writeFileSync(tmp, payload, { mode: 0o600 });
     fs.renameSync(tmp, p);
