@@ -33,7 +33,7 @@ They then read a CI run's shape report and see the pyramid hold by count and by 
 
 ## Where the suite stands
 
-CI's latest full run (41336423169) ran 6,486 tests in about 8 minutes: 377 s of jest wall before the build, 44 s after it. 22 of the last 100 Release runs on `main` failed. The newest failure, at 0f7fe274, is `draw-reserve`'s p99, a wall-clock assertion on a shared runner, and it held that release back.
+CI's latest full run (41336423169) ran 6,486 tests in about 8 minutes: 377 s of jest wall before the build, 44 s after it. About a fifth of the last 100 Release runs on `main` failed. The newest failure, at 0f7fe274, is `draw-reserve`'s p99, a wall-clock assertion on a shared runner, and it held that release back.
 
 | Layer under this plan, by what each file touches | Files | Cases | Share of cases |
 |---|---:|---:|---:|
@@ -77,27 +77,37 @@ Only Brandon raises the cap or allows another assertion. Both live in one sign-o
 
 ## Cutting the daemon
 
-`createDaemon` ends as wiring with no logic, no test calls it, and the harness is gone. The pieces follow capabilities, and each one takes narrow inputs, so a test builds it alone. Dependencies run one way: a piece uses only the pieces above it in this table. Where a lower piece has to start something higher, it takes a callback the root wires, so no arrow points up. The link signer is an input that the root builds from the key, because both Drawing and Actions use it.
+`createDaemon` ends as wiring with no logic, no test calls it, and the harness is gone. The pieces follow capabilities, and each one takes narrow inputs, so a test builds it alone.
 
-| Piece | What moves into it | Its inputs, faked in tests | Boot tests that move down |
+This table is the target, read from `DaemonParts`, `verbCtx` and the imports on `main`. Dependencies run one way: a piece uses only the rows above it, and where a lower piece has to start something higher, it takes a callback the root wires. No table can stay true by being reviewed, so each piece ticket adds an import rule that enforces its row, and a ticket that finds an edge the table missed corrects the table in the same change. [LAW:one-way-deps]
+
+| Piece | What moves into it | Ports its tests fake | Boot tests that move down |
 |---|---|---|---|
-| Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle` | Session store, clock, a callback for an idle close | `daemon-prompt-count-e2e`, `daemon-session-globals-e2e` |
+| Foundations | Session keys, the gates (`stateGate`, `configGate`), `encodeRenderOrigin`, `roleOf`, `answeredOf`, `RuntimeStats` | None | None |
+| Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle` | Session store, clock | `daemon-prompt-count-e2e`, `daemon-session-globals-e2e` |
+| Config | Resolving and parsing a load | Watched store | `daemon-broken-config-e2e`, `repo-configs-e2e`, `daemon-config-env-e2e`, `daemon-config-persistence-e2e`, `daemon-settings-menu-e2e`, `daemon-theme-rule-e2e`, `daemon-segment-palette-persistence-e2e` |
 | Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data | `daemon-plugin-sources-e2e`, `daemon-plugin-fit-e2e`, `daemon-pr-state-e2e`, 3 cases of `plugins` |
-| Config | Load, reload and the config state now held in `RenderCache` entries | Watched store | `daemon-broken-config-e2e`, `repo-configs-e2e`, `daemon-config-env-e2e`, `daemon-config-persistence-e2e`, `daemon-settings-menu-e2e`, `daemon-theme-rule-e2e`, `daemon-segment-palette-persistence-e2e` |
-| Watchdogs | `updateWatch`, `binaryWatch`, `limits` | Launcher, clock, a file stat, the release port, the exit funnel | `daemon-build-currency-e2e` |
-| Drawing | `RenderCache`, `sessionSource`, `draw-bar`, `RenderWarningRecords`, `EffectSessions` | Sessions, sources, config, the update notice from Watchdogs, the link signer, feed facts as a value | `daemon-render-event-e2e`, `daemon-render-warnings-e2e`, `daemon-render-encoding-e2e`, `daemon-effect-e2e`, `daemon-render-instant-e2e`, `daemon-frame-reads-only-e2e`, `bar-web`, `drive-bar` |
-| Feeds | `FrameFeeds`, `PaneVisibility`, `TmuxStatusLines`, `LaneSetups` | Drawing's draw function, sessions, tmux, clock | `daemon-frame-feed-e2e`, `daemon-lane-setup-e2e`, `daemon-tmux-restore` |
-| Doctor | Doctor edge, stores, `ProbeArrivals`, `RenderSightings` | Launcher, Config's reader | `daemon-doctor-e2e` |
-| Actions | Verbs, `Runs`, `closeIdleMenus`, Claude input | Launcher, the link signer, sessions, config, drawing, Feeds' lanes, Doctor, Watchdogs | `click-does`, `daemon-restart-launch` |
-| Requests | `handleRequest`, `replyTo`, `handleConnection` | The interfaces of the pieces above | `daemon-connection`, `session-id`, `daemon-request-limits` |
-| Lifetime | Socket lease, boot refusal, parent watchdog, shutdown order | Requests, clock, a process table | `daemon-value`, `daemon-socket-lease`, `daemon-boot-refusal`, `daemon-parent-watchdog`, `daemon-shutdown`, `daemon-fork-bomb-ceiling`, `daemon-launch-lifeline-e2e`, `daemon-acquire`, `spawn-isolated-daemon`, `in-worker-daemon` |
+| Watchdogs | `updateWatch`, `binaryWatch`, `limits` | Launcher, clock, a file stat, the release port | `daemon-build-currency-e2e` |
+| Drawing | `RenderCache` with its entries, state, reload and eviction, `sessionSource`, `draw-bar`, `RenderWarningRecords`, `EffectSessions` | Launcher, clock, watched store | `daemon-render-event-e2e`, `daemon-render-warnings-e2e`, `daemon-render-encoding-e2e`, `daemon-effect-e2e`, `daemon-render-instant-e2e`, `daemon-frame-reads-only-e2e`, `bar-web`, `drive-bar` |
+| Feeds | `FrameFeeds`, `renderFrame`, `PaneVisibility`, `TmuxStatusLines`, `LaneSetups` | tmux, Claude input, launcher, process table, watched store, clock | `daemon-frame-feed-e2e`, `daemon-lane-setup-e2e`, `daemon-tmux-restore` |
+| Doctor | Doctor edge, stores, `ProbeArrivals`, `RenderSightings` | Launcher, watched store | `daemon-doctor-e2e` |
+| Actions | Verbs, `Runs`, `closeIdleMenus` | Launcher, Claude input | `click-does`, `daemon-restart-launch` |
+| Requests | `handleRequest`, `replyTo`, `handleConnection`, the order of a render | Client connection, clock | `daemon-connection`, `session-id`, `daemon-request-limits` |
+| Lifetime | Socket lease, boot refusal, parent watchdog, shutdown order | Clock, process table | `daemon-value`, `daemon-socket-lease`, `daemon-boot-refusal`, `daemon-parent-watchdog`, `daemon-shutdown`, `daemon-fork-bomb-ceiling`, `daemon-launch-lifeline-e2e`, `daemon-acquire`, `spawn-isolated-daemon`, `in-worker-daemon` |
 
-The hardest knot is Drawing and Feeds, which call each other today: a feed calls the draw, and the draw reads `frameFeeds` and tells `laneSetups` and `tmuxStatusLines` what it drew. After the cut, the caller passes feed facts into the draw as a value. The draw returns the lanes it drew, which it already computes, and the caller tells Feeds. That is the document's "return commands instead of performing them".
+Three knots need more than a move.
+
+**Drawing and Feeds call each other.** A feed calls the draw, while a request's render tells `laneSetups` and `tmuxStatusLines` at arrival and reads `frameFeeds.following` after its wait. So the render is cut at its wait. Drawing offers setup, which returns the view and the session's lane switches, and draw, which takes feed facts. Requests owns the order: setup, tell Feeds, wait, read the feed facts, draw. That is today's order, so lanes still start in the arrival turn, even when the draw later throws, and feed facts are read as late as they are now. A frame uses the same two calls. [LAW:no-ambient-temporal-coupling]
+
+**Config and Drawing share entries.** An entry's state is a compile plus a `SourceRegistry`, a reload opens each view's successor over the new state, and eviction reads pins and views. Views are children of a state, so these stay together in Drawing. Config stops at a parsed load, and Doctor and Actions read a session's config through Drawing.
+
+**The gates sit on module state.** `keyspace` in `state-validators.ts` is module-level and Watchdogs writes it at run time, so it changes what a load accepts with no input showing that, and pieces built in one jest worker share it. It becomes a value the root builds and passes in, in ticket 8.
 
 Every piece ticket delivers the same things in one change:
 
-- One constructor whose purpose fits one sentence, taking typed inputs and importing no other piece's class.
-- A fake of the piece's own interface where a piece above would otherwise pull in real ports, kept in `src` with a contract suite like any port's.
+- One constructor whose purpose fits one sentence, taking typed inputs.
+- A new entry in the import rule, so the piece reaches only the rows above it.
+- A fake of the piece's own interface where the piece below it would otherwise pull in real ports, kept in `src` with a contract suite like any port's.
 - Its boot tests moved onto the piece and its fakes. Each behaviour they protected still fails a test when deliberately broken.
 - The closures that reached past it replaced by a value or an event that flows one way.
 - The ratchet from ticket 2 lowered by what moved, in the same change.
@@ -112,6 +122,7 @@ Each row is tested once, at its adapter.
 |---|---|---|---|
 | Time and timers | `Date.now` 88, timers 38, `DaemonClock` in the daemon, `RuntimeStats` keeps its own | 11 | Real clock |
 | Child processes | `src/proc/launch.ts`, imported directly | 12 | Real child process |
+| Process table | `pidAlive` and `readStartTime`, imported directly | 12 | Real processes |
 | Files and file change events | `fs` at 173 sites, `DaemonStorage` for two families, `fs.watch` direct | 14 | Temp directory, real `fs.watch` |
 | git | Concrete `GitService`, `fakeGit`, `StubGitService` | 15 | Real repository |
 | gh and glab | Same class, `stubPr`, PATH script | 16 | Recordings, refreshed on schedule |
@@ -128,10 +139,10 @@ Each row is tested once, at its adapter.
 **1. Every CI run stores one record per test file.** A record holds file, layer, count, duration and outcome, and is kept as a run artifact. The shape report, the flake rate and the budget checks are all views over it, so each fact has one home. Every file in a project emits a record, so a file that ran zero tests and a file that never ran read differently. The report also tracks time-to-diagnose, from a red run to the ticket naming its cause. [LAW:nothing-unseen] [LAW:one-source-of-truth]
 Done when a CI run shows count and time per layer, covering every file, plus pre-merge wall time.
 
-**2. Every test that boots the daemon is counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route and records the test that booted, so it counts tests, which is what the cap is about. `HELPER_START_CEILING` becomes a transitional ratchet over this count, set to today's number, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts the tests still being moved, a different fact from the cap in ticket 3, and ticket 35 deletes it. This lands first because it stops new boots while the cutting runs. [LAW:single-enforcer]
+**2. Every test that boots the daemon is counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route and records the test that booted, so it counts tests, which is what the cap is about. `HELPER_START_CEILING` becomes a transitional ratchet over this count outside `test/e2e/`, set to today's number, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts the tests still being moved, a different fact from the cap in ticket 3, and ticket 35 deletes it. This lands first because it stops new boots while the cutting runs. [LAW:single-enforcer]
 Done when a new test that boots through the harness fails CI, a raised ratchet fails CI, and every later ticket lowers the number.
 
-**3. The cap and the assertion limit are enforced.** Creates `test/e2e/`, the sign-off file and the run-time assertion check from "The five end-to-end tests". The cap counts the tests in `test/e2e/`. The refusal is a new hook of its own, because `.claude/hooks/release-pin.mjs` says every refusal is about the 1.x pin. Hooks are wired in `.claude/settings.json`, which that pin refuses agents, so Brandon adds that one entry.
+**3. The cap and the assertion limit are enforced.** Creates `test/e2e/`, the sign-off file and the run-time assertion check from "The five end-to-end tests". The cap counts the tests in `test/e2e/`. The refusal is a new hook of its own that also refuses edits to itself, because `.claude/hooks/release-pin.mjs` says every refusal is about the 1.x pin. Hooks are wired in `.claude/settings.json`, which that pin refuses agents, so Brandon adds that one entry.
 Done when break 6 of the checkpoint fails as written.
 
 **4. Each layer is a directory, and each tier is its own jest run.** A file's layer is one fact, read from where it lives. `test/unit`, `test/integration`, `test/contract` and `test/e2e` are the layers. The 45 booting files move to `test/daemon-boots/`, the judge reads that directory in place of the `*.process.test.ts` suffix, and the suffix goes. Everything else stays at the `test/` root, a transitional location that must be empty when the epic ends, so nothing has to pretend to a layer it does not fit.
@@ -147,7 +158,7 @@ Done when a test can be quarantined by one line and an expired line fails CI. `l
 
 ### Stage 2: the composition root
 
-**8. `createDaemon` takes every adapter and every path as an input.** `DaemonInputs` gains a paths value and the adapters it builds today: launcher, stores, edges, the logger, the link key, `fetch` and the file stat. Entry points read `paths.ts` once and pass the value down. That settles the conflict with the comment on `DaemonInputs`, which goes. `site/transport.ts` is the other caller and supplies the same inputs. It keeps the real adapters, because its `node:fs` and `node:child_process` are already the simulated machine under `site/`. [LAW:effects-at-boundaries] [LAW:escape-local-minima]
+**8. `createDaemon` takes every adapter and every path as an input.** `DaemonInputs` gains a paths value and the adapters it builds today: launcher, stores, edges, the logger, the link key, `fetch` and the file stat. Entry points read `paths.ts` once and pass the value down. That settles the conflict with the comment on `DaemonInputs`, which goes. The keyspace becomes a value here, and the Foundations row moves out of `verbs` and the other rows so every piece can reach it. `site/transport.ts` is the other caller and supplies the same inputs. It keeps the real adapters, because its `node:fs` and `node:child_process` are already the simulated machine under `site/`. [LAW:effects-at-boundaries] [LAW:escape-local-minima]
 Done when nothing under `src/daemon` constructs its own adapter or reads `paths.ts`, fake ports leave the real state directory untouched, and `pnpm site:build` still passes.
 
 **9. Configuration is parsed once at the root and passed down as a value.** `src` reads the environment only at entry points (45 reads today), and tests stop writing `process.env` (187 writes today). Daemon-side facts about a session keep arriving as hints from the client. Depends on 8.
@@ -172,7 +183,7 @@ Ticket 11 builds the contract pattern and the rest reuse it. Order follows how m
 **11. The daemon reads time and schedules work through one clock.** `DaemonClock` already carries `after`, so it grows into the port. `RuntimeStats` gives up its own wall clock, and the shared poll helper waits through `after`, so it is not the one real sleep the refusal has to exempt. Depends on 8.
 Done when `Date.now` and timers appear only in the clock adapter, and the fake runs due timers when advanced.
 
-**12. Sources spawn through an injected launcher.** Depends on `candybar-launch-q7o7`. The fake launcher serves shell sources and the launcher's own contract only. git, forge and tmux logic use their own fakes, because canned stdout beside a git fake is a second route to faking git.
+**12. Sources spawn through an injected launcher.** Depends on `candybar-launch-q7o7`. Liveness and start-time reads go through a process table port beside it. The fake launcher serves shell sources and the launcher's own contract only. git, forge and tmux logic use their own fakes, because canned stdout beside a git fake is a second route to faking git.
 Done when `pending-draw`'s real `/bin/sh` and the other child-spawning files either use the fake or test the adapter.
 
 **13. Question: which of the 73 filesystem, git and watcher test files are testing logic?** Class each as logic that only needs storage or as adapter behaviour. Builds nothing. Sets the scope of 14.
@@ -186,7 +197,7 @@ Done when `StubGitService` is gone and `GitService` is the adapter.
 **16. The forge goes through its own port.** `git.ts` already calls this the forge CLI, and it handles gh and glab, so both are adapters of one port. The contract runs on recordings, refreshed on schedule.
 Done when `stubPr` and the PATH script are gone and neither CLI is reached outside the port.
 
-**17. tmux goes through a port.** Real side is a real tmux server started once per worker.
+**17. tmux goes through a port.** Real side is a real tmux server started once per worker. `ClaudeInputEdge` and the lane edge sit over it as adapters the root builds, so Feeds and Actions both take them as inputs.
 Done when the PATH stubs are gone.
 
 **18. The client connection goes through a port.** The fake is the in-process stream `memoryConnection` already provides and the real side a unix socket. This proves the TypeScript client; the Rust side is ticket 32 and the first end-to-end test.
@@ -200,25 +211,25 @@ Done when literal sleeps are gone and `until`, `renderUntil`, `untilHeard` and l
 
 ### Stage 4: the pieces
 
-Tickets 21 to 30 are the ten pieces, each with the deliverables above, in the order that lowers the boot count fastest and needs the fewest ports first. A piece takes its neighbours' interfaces as inputs, so the cut can start at the top of the graph.
+Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need not land in table order: a test can assemble a lower piece's existing class over fake ports, so each ticket depends on the ports it fakes. Among those whose ports have landed, take the one that lowers the boot count most.
 
-**21. Feeds.** The most booting cases of any piece: `daemon-frame-feed-e2e` alone has 27. Undoes the cycle with Drawing described above. Depends on 11 and 17.
+**21. Feeds.** The most booting cases of any piece: `daemon-frame-feed-e2e` alone has 27. `FrameFeeds` already takes its draw as an input, so the fake draw needs no other piece. Depends on 11, 12 and 17.
 
-**22. Drawing.** `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects, unit-test it, and delete the file. Depends on 8.
+**22. Drawing.** Offers setup and draw as above. `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects, unit-test it, and delete the file. Depends on 8 and 11 to 19.
 
-**23. Config.** Reload stops being a method of the render cache. Depends on 14.
+**23. Config.** A load resolves and parses to a plain value that `RenderCache` takes, and reload stays in the cache. Depends on 14.
 
 **24. Sources.** Depends on 12, 14, 15, 16, 17 and 19.
 
-**25. Actions.** `verbCtx` splits by verb, each taking only what it uses. Depends on 12, 22, 23, 26 and 27.
+**25. Actions.** `verbCtx` splits by verb, each taking only what it uses. Depends on 12, 21, 22, 24, 26, 27 and 28.
 
-**26. Doctor.** Depends on 12.
+**26. Doctor.** Depends on 12, 14 and 22.
 
 **27. Watchdogs.** Depends on 11, 12 and 19.
 
 **28. Sessions.** Depends on 11 and 14.
 
-**29. Requests.** `DaemonParts` goes. The wire contract in ticket 32 runs here, with no daemon booted. Depends on 21 to 28.
+**29. Requests.** `DaemonParts` goes, and the order of a render lives here. The wire contract in ticket 32 runs here, with no daemon booted. Depends on 21 to 28.
 
 **30. Lifetime.** `daemon-fork-bomb-ceiling`'s wiring proof moves to the boot gate in a small child program. Depends on 29.
 
@@ -278,7 +289,7 @@ The epic ranks directly below `candybar-launch-q7o7`. Tickets 1, 2, 3, 4 and 7 a
 - **The Load gate and the Feed criterion stay required, and they need Brandon's sign-off.** A loop-blocking regression ships to every statusline on the next tick, and no lower test catches it; the launch epic exists because of one. They boot the built daemon, so by the rule above they are end-to-end and sit outside the five. They stay as they are until Brandon rules on an entry in the sign-off file. Nothing before ticket 37 depends on the answer.
 - **The refusal lands early, on a transitional location.** The document adds the dependency rule after the pattern exists. Here it applies only inside `test/unit`, and the `test/` root holds what has no seam yet, so the rule never has to lie about a file. The epic does not close until that root is empty.
 - **The layer lives in the directory.** It replaces the `*.process.test.ts` suffix in one change, so there is one spelling of the fact and one judge.
-- **The port rule grows with each port.** Adding it per port leaves no window in which new code can reach around a finished port.
+- **The port and import rules grow ticket by ticket.** Each lands with the port or piece it guards, which leaves no window in which new code can reach around it.
 - **Sweeps sit outside the document's migration order.** The document does not cover CPU-heavy in-process files, and they are the largest time cost here.
 - **Time and child processes come before files.** The document usually starts with the database. Here the criterion is tests freed.
 - **gh, glab and remote data use recordings.** The suite stays hermetic and never calls a production API.
