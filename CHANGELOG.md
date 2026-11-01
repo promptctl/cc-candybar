@@ -1,3 +1,13 @@
+## [1.173.0](https://github.com/promptctl/cc-candybar/compare/v1.172.0...v1.173.0) (2026-11-01)
+
+### Features
+
+* **effect:** the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8) ([#528](https://github.com/promptctl/cc-candybar/issues/528)) ([8169390](https://github.com/promptctl/cc-candybar/commit/8169390eb96da95acccf40e944cb0c61f88a1f39))
+
+### Bug Fixes
+
+* **test:** a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el) ([#529](https://github.com/promptctl/cc-candybar/issues/529)) ([516c3eb](https://github.com/promptctl/cc-candybar/commit/516c3eb319a548c706d04da1795e462774d057a7))
+
 ## [1.172.0](https://github.com/promptctl/cc-candybar/compare/v1.171.0...v1.172.0) (2026-11-01)
 
 ### Features
