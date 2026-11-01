@@ -4,15 +4,22 @@
     {
       "version": "pr-547",
       "ref": "refs/pull/547/merge",
-      "sha": "e70b8d96fee7a8fbf6daee90f00d391c5bae3f01",
-      "timestamp": "2026-11-01T10:38:04.842Z",
+      "sha": "307fc4a7df453c7f28d6ea5cbc01d7a0b083e2bb",
+      "timestamp": "2026-11-01T10:40:23.434Z",
       "commits": [
         {
-          "sha": "e70b8d96fee7a8fbf6daee90f00d391c5bae3f01",
+          "sha": "307fc4a7df453c7f28d6ea5cbc01d7a0b083e2bb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T10:37:11Z",
-          "message": "Merge 616cd04a9b7742918379419c8fcdcc89c93ab824 into 1270b544662cfb3f1acdc49573860e38b9c3f14a\n"
+          "timestamp": "2026-11-01T10:39:28Z",
+          "message": "Merge b098f598183ee9415bdf1b9b427e59e680f05e17 into 1270b544662cfb3f1acdc49573860e38b9c3f14a\n"
+        },
+        {
+          "sha": "b098f598183ee9415bdf1b9b427e59e680f05e17",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:39:19-07:00",
+          "message": "fix(daemon): the stats report prints gathers (candybar-launch-q7o7.fqw)\n"
         },
         {
           "sha": "616cd04a9b7742918379419c8fcdcc89c93ab824",
