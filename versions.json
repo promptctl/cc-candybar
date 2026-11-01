@@ -2,74 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-530",
-      "ref": "refs/pull/530/merge",
-      "sha": "4c76c1fb450c017e66caee4a2dba4dbaf212b0cf",
-      "timestamp": "2026-11-01T01:19:45.592Z",
-      "commits": [
-        {
-          "sha": "4c76c1fb450c017e66caee4a2dba4dbaf212b0cf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:18:53Z",
-          "message": "Merge 5ba235b50647c0b554d3f8b9de4e067540e7e788 into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
-        },
-        {
-          "sha": "5ba235b50647c0b554d3f8b9de4e067540e7e788",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:18:49-06:00",
-          "message": "Merge branch 'main' into candybar-testing-0x6u.945"
-        },
-        {
-          "sha": "57a25d416e270de75ca9505042d7212b8a78a429",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:10:48-06:00",
-          "message": "test(daemon-value): a wait's failure names only what it waited on (candybar-testing-0x6u.945)\n"
-        },
-        {
-          "sha": "121ff7f274fa4f5640153abf950b5706a8738200",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:03:34-06:00",
-          "message": "test(daemon-value): the launches' end is read off the ledger, not a counter (candybar-testing-0x6u.945)\n"
-        },
-        {
-          "sha": "71915a891dc26e2c789c41d9acd3eb10e300390f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:56:25-06:00",
-          "message": "test(daemon-value): the first read waits for the launches to end, and exempts only the lifeline (candybar-testing-0x6u.945)\n"
-        },
-        {
-          "sha": "63ae89e6662f33fbf01895fe2e0796cc96ffad53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:48:35-06:00",
-          "message": "style(test): format daemon-value test (candybar-testing-0x6u.945)\n"
-        },
-        {
-          "sha": "7a59ead583ed04ad13db6329cf2a2aed06888b4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:47:46-06:00",
-          "message": "test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-531",
       "ref": "refs/pull/531/merge",
-      "sha": "09400a453a503ab5955d47818d9eba0e4b06d36e",
-      "timestamp": "2026-11-01T01:15:09.067Z",
+      "sha": "d3cf032328c152793b93f61ce33c92847cfb8073",
+      "timestamp": "2026-11-01T01:27:34.429Z",
       "commits": [
         {
-          "sha": "09400a453a503ab5955d47818d9eba0e4b06d36e",
+          "sha": "d3cf032328c152793b93f61ce33c92847cfb8073",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:14:18Z",
-          "message": "Merge 150559f367bf055280749b16cad0e1394e076b82 into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+          "timestamp": "2026-10-31T19:26:48-06:00",
+          "message": "Merge 12e09f84aa5fe4545397a8e99ad064a37b40f9c8 into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+        },
+        {
+          "sha": "12e09f84aa5fe4545397a8e99ad064a37b40f9c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T19:26:35-06:00",
+          "message": "fix(test): a held run is observed across real turns, and a supersede is read by its file (brandon-unfiled-3248.2ywj)\n\nThe held test looked at the bar in the click's own tick, so a source resumed\nearly passed. It now holds through real turns with the program's write on\ndisk.\n\nThe e2e counted supersede refreshes across all of plugin storage, so a\nsupersede of another session's key passed. It now reads the refresh event of\nthis session's file, which removes the ledger helper.\n\nEvery in-worker stats read goes through statsOf, past the connection's 200 ms\nguard, so these files no longer fail on a slow stats reply.\n"
         },
         {
           "sha": "150559f367bf055280749b16cad0e1394e076b82",
