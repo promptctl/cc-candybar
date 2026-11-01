@@ -4,15 +4,22 @@
     {
       "version": "pr-537",
       "ref": "refs/pull/537/merge",
-      "sha": "f4b2ceb6eb4df029d314e9af871a8704dbb65099",
-      "timestamp": "2026-11-01T04:31:51.697Z",
+      "sha": "ce37314863fcd7cb270f406dc4a31a95d65edd87",
+      "timestamp": "2026-11-01T04:35:12.710Z",
       "commits": [
         {
-          "sha": "f4b2ceb6eb4df029d314e9af871a8704dbb65099",
+          "sha": "ce37314863fcd7cb270f406dc4a31a95d65edd87",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:30:58Z",
-          "message": "Merge f6d01470926a643e4589ed9f7fa4191f949fa166 into 043f44379d2c1a27622f7b48535a323be7a59242\n"
+          "timestamp": "2026-11-01T04:34:20Z",
+          "message": "Merge 16c457beda7796008f9d986f96b0c278fd5099b2 into ab694786f5e409c493d08be50100cc1251f6ff70\n"
+        },
+        {
+          "sha": "16c457beda7796008f9d986f96b0c278fd5099b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:34:10-06:00",
+          "message": "test(proc): unread input keeps the signal, timeout and partial-read verdicts (candybar-testing-0x6u.47e)\n"
         },
         {
           "sha": "f6d01470926a643e4589ed9f7fa4191f949fa166",

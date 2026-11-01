@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.2";
+var PACKAGE_VERSION = "1.174.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35924,7 +35924,7 @@ function launchBlocking(state, opts) {
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
     const code = result.error?.code;
-    if (result.error && code !== "EPIPE") {
+    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
       const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
         ok: false,
