@@ -402,7 +402,8 @@ const TIMEOUT_KILL_GRACE_MS = 250;
 
 // The OS has no event for a process group's end, so a launch whose child has
 // ended samples for it.
-const GROUP_END_POLL_MS = 25;
+const GROUP_END_POLL_MIN_MS = 25;
+const GROUP_END_POLL_MAX_MS = 1000;
 
 // --- the lifeline ---
 //
@@ -596,6 +597,7 @@ async function launchWaited(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let closed = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
     let groupEndTimer: NodeJS.Timeout | null = null;
@@ -617,7 +619,6 @@ async function launchWaited(
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
-      if (groupEndTimer) clearTimeout(groupEndTimer);
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
@@ -654,20 +655,37 @@ async function launchWaited(
         child.stdout?.destroy();
         child.stderr?.destroy();
       });
-    // While a member of the group lives the launch waits for it, guarded, so
-    // SIGKILL still reaches it. Once none does, only a descendant that left the
-    // group can be holding the pipes.
-    const awaitGroupEnd = (pid: number) => {
-      if (settled) return;
-      if (groupGone(pid)) {
-        release();
-        return;
+    // Nothing of the launch is left once its group has ended, so it concludes
+    // on the child's exit. A descendant that left the group keeps its pipes,
+    // drained, since a destroyed one would kill it with SIGPIPE at its next write.
+    const concludeWithGroup = () => {
+      for (const pipe of [child.stdout, child.stderr]) {
+        pipe?.removeAllListeners("data").resume();
+        (pipe as Socket | null)?.unref();
       }
-      groupEndTimer = setTimeout(() => awaitGroupEnd(pid), GROUP_END_POLL_MS);
-      groupEndTimer.unref();
+      state.unreaped.delete(child);
+      conclude(child.exitCode, child.signalCode);
     };
+    // While a member of the group lives the launch waits for it, guarded, so
+    // SIGKILL still reaches it. The OS has no event for a group's end, so it is
+    // polled, with exponential backoff, until `close`: a launch settled by a
+    // refused signal still owns its pipes. The timer never holds the process.
     if (group !== undefined) {
-      void exited.then(() => setImmediate(() => awaitGroupEnd(group)));
+      const awaitGroupEnd = (delayMs: number) => {
+        if (closed) return;
+        if (groupGone(group)) {
+          setImmediate(concludeWithGroup);
+          return;
+        }
+        groupEndTimer = setTimeout(
+          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
+          delayMs,
+        );
+        groupEndTimer.unref();
+      };
+      void exited.then(() =>
+        setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
+      );
     }
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let the
@@ -717,8 +735,7 @@ async function launchWaited(
       });
     });
 
-    child.on("close", (code, signal) => {
-      state.unreaped.delete(child);
+    const conclude = (code: number | null, signal: NodeJS.Signals | null) => {
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
@@ -747,6 +764,13 @@ async function launchWaited(
         exitCode: code,
         signal,
       });
+    };
+
+    child.on("close", (code, signal) => {
+      closed = true;
+      if (groupEndTimer) clearTimeout(groupEndTimer);
+      state.unreaped.delete(child);
+      conclude(code, signal);
     });
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
@@ -1062,7 +1086,8 @@ export function jobGroupAlive(pid: number): boolean {
 
 // Whether a group has no member left, zombies included. Unlike `jobGroupAlive`,
 // EPERM is not an end here: it is also the answer for a live member that changed
-// its uid, whose pipes a launch must keep reading.
+// its uid, whose pipes a launch must keep reading. Signal 0 to a valid group has
+// no other errors, so anything but ESRCH is that "not gone".
 function groupGone(pid: number): boolean {
   try {
     process.kill(-pid, 0);

@@ -1,3 +1,7 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { createLauncher, type Launcher } from "../../src/proc/launch";
 
 // What these cases launch leaves its process group with setsid, which only
@@ -38,6 +42,20 @@ describe("a launch whose child ends with a descendant outside its group", () => 
       expect(Date.now() - t0).toBeLessThan(2000);
     },
   );
+
+  it("leaves the descendant its pipes, so a later write does not kill it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "launch-group-end-"));
+    const marker = join(dir, "wrote");
+    const r = await launch(
+      python(
+        `${SET}if os.fork()==0:\n  os.setsid()\n  time.sleep(0.3)\n  print('late',flush=True)\n  open(${JSON.stringify(marker)},'w').close()\n  os._exit(0)\nos._exit(0)\n`,
+      ),
+    );
+    expect(r).toMatchObject({ ok: true, stdout: "" });
+    await new Promise((end) => setTimeout(end, 600));
+    expect(existsSync(marker)).toBe(true);
+    rmSync(dir, { recursive: true });
+  });
 
   it("reports a non-zero exit as one", async () => {
     const r = await launch(python(`${SET}${FORK_HOLDER}os._exit(3)\n`));
