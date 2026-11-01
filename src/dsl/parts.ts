@@ -914,7 +914,7 @@ function affixesOf(
 const NO_AFFIXES: Affixes = { lead: [], trail: [], drops: [] };
 
 // Every Style a placement coloured `colours` can wear. A band is read only
-// where one is worn.
+// where one is worn, so a closed cell pays nothing for one.
 function stylesOf(colours: Colours): SegmentStyles {
   const { palette, drawnAt, disclosure } = colours;
   return {

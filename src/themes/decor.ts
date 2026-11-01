@@ -1139,7 +1139,7 @@ const KEYSTONE_AT: Record<
  * The ground an open menu's rows sit on, at every depth of nesting: Textual's
  * `surface`, the theme's own colour for the panels its widgets are laid on.
  */
-export const PLANE_ROLE = "surface";
+const PLANE_ROLE = "surface";
 
 /**
  * The colour of one vocabulary entry in `palette`: the palette's own entry for
