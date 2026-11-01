@@ -11,7 +11,6 @@
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
-import { stripAnsi } from "./helpers/ansi";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -61,7 +60,7 @@ import { resolveEffectiveGlobals, type EffectiveGlobals } from "../src/config/ef
 import { resolvedStyle } from "../src/render/rich-theme";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
-import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { INVISIBLE, linkUrls, stripAnsi } from "./helpers/ansi";
 import { POLLED } from "../src/config/settings-menu";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";

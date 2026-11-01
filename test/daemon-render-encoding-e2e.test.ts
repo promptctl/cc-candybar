@@ -68,6 +68,15 @@ describe("a render answers in the encoding it asks for", () => {
     removeTmpDirs();
   });
 
+  // One render sent once, where a retrying helper logs an event per attempt.
+  const send = (request: Record<string, unknown>): Promise<Response> =>
+    sendDaemonRequest(daemon, {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      deadline: daemon.now() + 5000,
+      ...request,
+    });
+
   test.each(COLOR_COMPATIBILITIES)(
     "at %s, a Frame's bytes are the reply's, closed and open",
     async (depth: ColorCompatibility) => {
@@ -98,11 +107,8 @@ describe("a render answers in the encoding it asks for", () => {
   );
 
   test("a still bar's nextChange crosses the wire as null and reads back as Infinity", async () => {
-    const resp = await sendDaemonRequest(daemon, {
-      v: PROTOCOL_VERSION,
-      kind: "render",
+    const resp = await send({
       encoding: "frame",
-      deadline: daemon.now() + 5000,
       ...renderBody("still", projectDir, HINTS, configAt("still", STILL)),
     });
     const { frame } = resp as Extract<Response, { frame: unknown }>;
@@ -111,11 +117,8 @@ describe("a render answers in the encoding it asks for", () => {
   });
 
   test("a value that is not an encoding is refused, never read as ansi", async () => {
-    const resp = await sendDaemonRequest(daemon, {
-      v: PROTOCOL_VERSION,
-      kind: "render",
+    const resp = await send({
       encoding: "yaml",
-      deadline: daemon.now() + 5000,
       ...renderBody("refused", projectDir, HINTS),
     });
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
@@ -130,9 +133,9 @@ describe("a render answers in the encoding it asks for", () => {
   test("the render event names the encoding each answer took, an unstated one reading ansi", async () => {
     const sid = "named";
     const body = renderBody(sid, projectDir, HINTS, configAt("named", STILL));
-    await renderRequest(daemon, body);
-    await renderRequest(daemon, { ...body, encoding: "ansi" });
-    await frameRequest(daemon, body);
+    await send(body);
+    await send({ ...body, encoding: "ansi" });
+    await send({ ...body, encoding: "frame" });
     const events = await landedEvents(env, sid, 3);
     expect(events.map((e) => field(e, "encoding"))).toEqual([
       "ansi",

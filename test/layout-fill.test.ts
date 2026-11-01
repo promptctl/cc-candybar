@@ -35,8 +35,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { stripAnsi } from "./helpers/ansi";
-import { INVISIBLE } from "./helpers/ansi";
+import { INVISIBLE, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const cols = (line: string): number => cellLen(line.replace(INVISIBLE, ""));

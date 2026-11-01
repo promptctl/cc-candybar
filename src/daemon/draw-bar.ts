@@ -996,8 +996,8 @@ async function drawAnswer(
   );
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
   // how long the turn after the wait took to make the answer — what the
-  // draw's reserve is held to (DRAW_RESERVE_MS), so the answer is encoded
-  // before this is read.
+  // draw's reserve is held to (DRAW_RESERVE_MS), so an `ansi` answer's bytes
+  // are encoded before this is read.
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
     drew: `${Math.round(clock.monotonic() - drawFrom)}ms`,
