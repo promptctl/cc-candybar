@@ -1,3 +1,9 @@
+## [1.174.0](https://github.com/promptctl/cc-candybar/compare/v1.173.1...v1.174.0) (2026-11-01)
+
+### Features
+
+* **daemon:** close says when the launches it ended have ended (candybar-testing-0x6u.keo) ([#532](https://github.com/promptctl/cc-candybar/issues/532)) ([d189b5c](https://github.com/promptctl/cc-candybar/commit/d189b5c56cbf38da7151f2400b2ae226f8331328))
+
 ## [1.173.1](https://github.com/promptctl/cc-candybar/compare/v1.173.0...v1.173.1) (2026-11-01)
 
 ### Bug Fixes
