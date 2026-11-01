@@ -1,3 +1,10 @@
+## [1.175.0](https://github.com/promptctl/cc-candybar/compare/v1.174.7...v1.175.0) (2026-11-01)
+
+### Features
+
+* **daemon:** journals take turns so click handlers can await (candybar-launch-q7o7.rs0) ([#542](https://github.com/promptctl/cc-candybar/issues/542)) ([e7c7caa](https://github.com/promptctl/cc-candybar/commit/e7c7caacfb9c807a1424dde9d75a66559451e5ed))
+* **git:** gitaculous shows a worktree-aware location, and offers init outside a repo ([#543](https://github.com/promptctl/cc-candybar/issues/543)) ([52c69be](https://github.com/promptctl/cc-candybar/commit/52c69beb5b01d9c842ae7f38fbb59f0c64086cb1))
+
 ## [1.174.7](https://github.com/promptctl/cc-candybar/compare/v1.174.6...v1.174.7) (2026-11-01)
 
 ### Bug Fixes
