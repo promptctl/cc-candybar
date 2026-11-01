@@ -4,39 +4,39 @@
     {
       "version": "pr-537",
       "ref": "refs/pull/537/merge",
-      "sha": "35e08d38e7a3a00660ed67679928cbb7b58ac930",
-      "timestamp": "2026-11-01T04:40:07.147Z",
+      "sha": "bc4348cef2dea7b577e8b93d73b8af17c510d2e3",
+      "timestamp": "2026-11-01T04:46:16.959Z",
       "commits": [
         {
-          "sha": "35e08d38e7a3a00660ed67679928cbb7b58ac930",
+          "sha": "bc4348cef2dea7b577e8b93d73b8af17c510d2e3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:39:17Z",
-          "message": "Merge af6fd01854287a14bf9ab710f4dfc54425fcb6ed into ab694786f5e409c493d08be50100cc1251f6ff70\n"
+          "timestamp": "2026-10-31T22:45:32-06:00",
+          "message": "Merge 95433059a77334f9e61385554ddb657f03ace02c into ab694786f5e409c493d08be50100cc1251f6ff70\n"
         },
         {
-          "sha": "af6fd01854287a14bf9ab710f4dfc54425fcb6ed",
+          "sha": "95433059a77334f9e61385554ddb657f03ace02c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T22:39:08-06:00",
           "message": "fix(proc): a blocking launch calls only its own timeout a timeout (candybar-testing-0x6u.47e)\n"
         },
         {
-          "sha": "16c457beda7796008f9d986f96b0c278fd5099b2",
+          "sha": "cfde81f72971492e47f19daf0d06f81fc537d59b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T22:34:10-06:00",
           "message": "test(proc): unread input keeps the signal, timeout and partial-read verdicts (candybar-testing-0x6u.47e)\n"
         },
         {
-          "sha": "f6d01470926a643e4589ed9f7fa4191f949fa166",
+          "sha": "0a906049d79c3366f72296dd394b7a8fbb185f7b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T22:30:49-06:00",
           "message": "fix(proc): a child's exit explains itself, and the blocking launch agrees (candybar-testing-0x6u.47e)\n"
         },
         {
-          "sha": "4539776e68fb70bf1557e75266a1decaee71d063",
+          "sha": "233009e646c445c77f75798a1970ce3a2e78d24c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T22:25:25-06:00",
