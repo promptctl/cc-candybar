@@ -85,6 +85,18 @@ describe("a daemon render's event names every warning, and the indicator offers 
     path.join(projectDir, `${config}.json5`),
   ];
 
+  // A request the helper retried after a reply timeout is logged once per
+  // attempt, and every attempt met the same warnings.
+  const everyAttemptReads = async (
+    sessionId: string,
+    answers: number,
+    field: string,
+    value: string,
+  ) => {
+    for (const line of await renderLines(env, sessionId, answers))
+      expect(fieldOf(field)(line)).toBe(value);
+  };
+
   test.each([
     { config: "clean", sessionId: "clean-good", warn: "-", shown: [] },
     {
@@ -142,12 +154,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       expect(pages).toHaveLength(shown.length);
       shown.forEach((word, i) => expect(pages[i]!.text).toContain(word));
 
-      // A request the helper retried after a reply timeout is logged once per
-      // attempt, and every attempt met the same warnings.
-      const events = (await renderLines(env, sessionId, 2)).map(
-        fieldOf("warn"),
-      );
-      for (const event of events) expect(event).toBe(warn);
+      await everyAttemptReads(sessionId, 2, "warn", warn);
     },
   );
 
@@ -227,26 +234,24 @@ describe("a daemon render's event names every warning, and the indicator offers 
   });
 
   // No edit in a folder the OS refuses reloads, so the fact stands on every bar
-  // drawn from an entry that watches it, a bar drawn over a failed load too.
-  test("a config folder the OS refuses shows in the indicator on every bar drawn from its entry", async () => {
+  // drawn from an entry that watches it, a bar drawn over a failed load too,
+  // and each bar reads it at its draw, so the next one after the OS listens
+  // says nothing.
+  test("a config folder the OS refuses shows in the indicator on every bar drawn from its entry until the OS listens", async () => {
     const dir = realpathSync(
       mkdtempSync(path.join(os.tmpdir(), "cc-candybar-refused-e2e-")),
     );
     const broken = path.join(dir, "broken.json5");
     writeFileSync(broken, "{ nope");
     const refusal = `config watch: cannot watch ${dir} — EMFILE`;
-    // Every attempt the helper retried met the same warning.
-    const everyEventNamesTheWatch = async (sid: string, answers: number) => {
-      for (const line of await renderLines(env, sid, answers))
-        expect(fieldOf("warn")(line)).toBe("config-watch");
-    };
-    fakeWatches(new Set([dir]));
+    const refused = new Set([dir]);
+    fakeWatches(refused);
     try {
       const sid = "refused";
       const bar = await render(daemon, sid, dir);
       expect(indicatorOf(bar)).toBe("⚠ 1");
       expect(indicatorOf(await render(daemon, sid, dir))).toBe("⚠ 1");
-      await everyEventNamesTheWatch(sid, 2);
+      await everyAttemptReads(sid, 2, "warn", "config-watch");
       const pages = await readDiagnostics(daemon, sid, dir, bar);
       expect(pages.map((p) => p.text)).toEqual([
         expect.stringContaining(refusal),
@@ -254,18 +259,32 @@ describe("a daemon render's event names every warning, and the indicator offers 
 
       const another = "refused-too";
       expect(indicatorOf(await render(daemon, another, dir))).toBe("⚠ 1");
-      await everyEventNamesTheWatch(another, 1);
+      await everyAttemptReads(another, 1, "warn", "config-watch");
 
       const failedSid = "refused-broken";
       const args = ["cc-candybar", "--config", broken];
       const failed = await render(daemon, failedSid, dir, {}, args);
       expect(indicatorOf(failed)).toBe("⚠ 2");
-      await everyEventNamesTheWatch(failedSid, 1);
+      await everyAttemptReads(failedSid, 1, "warn", "config-watch");
+      await everyAttemptReads(failedSid, 1, "err", "Y");
+      await everyAttemptReads(failedSid, 1, "diag", "2");
       const both = await readDiagnostics(daemon, failedSid, dir, failed, {}, args);
       expect(both.map((p) => p.text)).toEqual([
         expect.stringContaining(`Invalid config in ${broken}`),
         expect.stringContaining(refusal),
       ]);
+
+      // The OS listens again. No period runs here; a new slot on the folder
+      // retries it as the period would.
+      refused.delete(dir);
+      const heard = path.join(dir, "heard.json5");
+      writeFileSync(heard, "{ segments: {} }");
+      await render(daemon, "refused-heard", dir, {}, [
+        "cc-candybar",
+        "--config",
+        heard,
+      ]);
+      expect(indicatorOf(await render(daemon, sid, dir))).toBeNull();
     } finally {
       jest.restoreAllMocks();
       rmSync(dir, { recursive: true, force: true });
