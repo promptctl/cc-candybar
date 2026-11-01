@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-554",
+      "ref": "refs/pull/554/merge",
+      "sha": "cae2c5758ea8b243e92517326a6a9a8860399216",
+      "timestamp": "2026-11-01T17:50:47.888Z",
+      "commits": [
+        {
+          "sha": "cae2c5758ea8b243e92517326a6a9a8860399216",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T10:49:56-07:00",
+          "message": "Merge 8aebbd0a1d6f8bbcc77ca1651d80cc66add37bd8 into 7636ce26043a3cb0640f9fa33ff75084e9b1af7a\n"
+        },
+        {
+          "sha": "8aebbd0a1d6f8bbcc77ca1651d80cc66add37bd8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T10:49:15-07:00",
+          "message": "refactor(test): tests read the Frame, and nothing decodes rendered ANSI (candybar-isolated-daemon-bfab.bzq)\n\nThe epic's last slice. A reader outside src now holds the Frame a draw\nreturned, so ANSI is written once, for terminals, and never read back.\n\ntest/helpers/ansi.ts is gone, with the SGR state machines in\ntest/helpers/seams.ts and proto-looks/build.mjs and about twenty local\ndecoders. Colour reads Run.fg, Run.bg and attrs. renderDsl, buildLineStrip\nand toCell leave src, since only tests called them, and drawPayload moves\nto a test helper. check's outcome holds the Frame; encoding sits at what\nprints or weighs it.\n\nComparing draws is by value on rows, because two draws are two objects and\neach frame carries its own wall-clock moment. A byte test keeps ansiOf;\nonly the files that pin an encoder hold escapes.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f41741ee3454a3f31d5d7a2e4dc195a17c786319",
