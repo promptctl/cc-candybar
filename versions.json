@@ -4,46 +4,46 @@
     {
       "version": "pr-534",
       "ref": "refs/pull/534/merge",
-      "sha": "6a092e888562733af86c3be056ed2ab56518d51a",
-      "timestamp": "2026-11-01T03:00:18.607Z",
+      "sha": "e4de1469335144d2ad65fcafbf63c545d44976ca",
+      "timestamp": "2026-11-01T03:01:07.092Z",
       "commits": [
         {
-          "sha": "6a092e888562733af86c3be056ed2ab56518d51a",
+          "sha": "e4de1469335144d2ad65fcafbf63c545d44976ca",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:59:28-06:00",
-          "message": "Merge ee3bae7ad56c04f2a2ea05ba0116722d10ee314a into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+          "timestamp": "2026-11-01T03:00:04Z",
+          "message": "Merge eb11491715f0c2c84a49b62b332675e3b07f8e49 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
         },
         {
-          "sha": "ee3bae7ad56c04f2a2ea05ba0116722d10ee314a",
+          "sha": "eb11491715f0c2c84a49b62b332675e3b07f8e49",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:59:19-06:00",
           "message": "fix(proc): a group's EPERM is a refusal only when its leader backs it (candybar-testing-0x6u.0mz)\n\nWaiting for Node's exit state cannot work: a child in teardown answers EPERM\nbefore its end can be delivered. The leader's answer to signal 0 is immediate\nand exact, so the grace, the deferred verdict and both try blocks go.\n"
         },
         {
-          "sha": "2b28a87f53bbb5da70fd74b44eb78e09d499bfc3",
+          "sha": "7a9227c9df0ec3d499ce55dc89c822b2c163ee6b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:52:12-06:00",
           "message": "test(proc): the stalled-loop case keeps its child alive past the abort (candybar-testing-0x6u.0mz)\n"
         },
         {
-          "sha": "c5c1210d82b42147b829986bdea718c32626c474",
+          "sha": "755b4b2921db6b6adfa871c57fd9b82a142559e9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:50:33-06:00",
           "message": "fix(proc): the refusal verdict follows the poll that delivers the child's end (candybar-testing-0x6u.0mz)\n"
         },
         {
-          "sha": "ee4b6c831cdcd5f29125b1de9eb9987f8c3200c1",
+          "sha": "580af4ecf94fc02c706bc47da5f5495e7f29d3ba",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:30:29-06:00",
           "message": "fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n"
         },
         {
-          "sha": "adfc75a8721a472f4c733033e023605d542515e2",
+          "sha": "180e9024aa8603aba2d3ee7d049eda5662a81782",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:22:35-06:00",
