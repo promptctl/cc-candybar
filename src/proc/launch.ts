@@ -459,7 +459,8 @@ function lifelineWarnings(state: LaunchState): LifelineWarning[] {
 }
 
 // Leads its own group, so nothing aimed at the launcher's group reaches it, and
-// is unref'd with its pipe, so it never holds a process open. `awk` is found
+// is unref'd with its pipe, so it holds a process open only once it is ending.
+// `awk` is found
 // on the launcher's PATH, as every launched program is: where a machine keeps
 // it is the machine's fact (NixOS has no /usr/bin/awk).
 function spawnLifeline(state: LaunchState): Lifeline | null {
@@ -568,6 +569,7 @@ async function launchWaited(
     // group to guard: its `error` event settles it.
     const group = child.pid;
     if (group !== undefined) guard(state, group);
+    const exited = new Promise((end) => child.once("exit", end));
 
     let stdout = "";
     let stderr = "";
@@ -637,13 +639,18 @@ async function launchWaited(
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
-        // [LAW:no-ambient-temporal-coupling] The pipes go with the SIGKILL: a
-        // descendant that left the group could otherwise hold them open, and
-        // keep this launch from ever resolving.
+        // [LAW:no-ambient-temporal-coupling] The pipes go a turn after the
+        // child's end, once what it wrote is read: a descendant that left the
+        // group could otherwise hold them open, and keep this launch from ever
+        // resolving.
         killTimer = setTimeout(() => {
           signal(pid, "SIGKILL");
-          child.stdout?.destroy();
-          child.stderr?.destroy();
+          void exited.then(() =>
+            setImmediate(() => {
+              child.stdout?.destroy();
+              child.stderr?.destroy();
+            }),
+          );
         }, TIMEOUT_KILL_GRACE_MS);
         signal(pid, "SIGTERM");
       }

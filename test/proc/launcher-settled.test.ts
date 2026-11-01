@@ -49,6 +49,27 @@ describe("a launcher settles", () => {
     expect(pidAlive(lifeline)).toBe(false);
   });
 
+  test("with what a killed child wrote while the loop was busy", async () => {
+    const { closing, launcher } = scope();
+    const up = path.join(dir, "up");
+    const run = launcher.launch({
+      bin: "/bin/sh",
+      args: [
+        "-c",
+        `trap 'echo LAST >&2' TERM; touch '${up}'; while :; do sleep 0.05; done`,
+      ],
+      category: "user-shell",
+    });
+    await until(() => existsSync(up), "the child trapping SIGTERM");
+    closing.abort(new Error("closed"));
+    // Past the grace with no poll turn, so the kill runs before any read.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    await expect(run).resolves.toMatchObject({
+      reason: "aborted",
+      stderr: expect.stringContaining("LAST"),
+    });
+  });
+
   test("past a descendant that left the group holding the launch's stdout", async () => {
     const { closing, launcher } = scope();
     const pidFile = path.join(dir, "escaped");
