@@ -22620,13 +22620,13 @@ function splitVerb(s) {
 // src/click/read.ts
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cell-widths.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cell-widths.js
 init_globals();
 var RANGES = [
   [0, 0, 0],
@@ -23330,7 +23330,7 @@ function widensToEmoji(codePoint) {
   return NARROW_TO_WIDE.has(codePoint);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/memo.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/memo.js
 init_globals();
 var MEMO_MAX = 4096;
 var Memo = class {
@@ -23361,7 +23361,7 @@ var WeakMemo = class {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/pattern.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/pattern.js
 init_globals();
 function pattern(re) {
   if (re.global || re.sticky) {
@@ -23370,7 +23370,7 @@ function pattern(re) {
   return re;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/cells.js
 var cellLenMemo = new Memo();
 var ZWJ = 8205;
 var VS16 = 65039;
@@ -23565,42 +23565,8 @@ function expandTabs(text4, tabSize) {
   return { text: expanded, offsetOf };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
 init_globals();
-
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/palette.js
-init_globals();
-var Palette = class {
-  name;
-  dark;
-  vars;
-  constructor(name, dark, vars) {
-    this.name = name;
-    this.dark = dark;
-    const background = vars.get("background");
-    const draw2 = background === void 0 ? opaqueOnly(name) : drawnOn(name, background);
-    this.vars = new Map([...vars].map(([key, colour]) => [key, draw2(colour, key)]));
-  }
-  get(key) {
-    return this.vars.get(key);
-  }
-};
-function drawnOn(name, background) {
-  if (background.alpha !== 1) {
-    throw new RangeError(`palette ${JSON.stringify(name)}: background is the surface its translucent colours are drawn on, so it must be opaque; got ${background.hex}`);
-  }
-  return (colour) => colour.alpha === 0 ? colour : colour.compositeOver(background);
-}
-function opaqueOnly(name) {
-  return (colour, key) => {
-    if (colour.alpha !== 1 && colour.alpha !== 0) {
-      throw new RangeError(`palette ${JSON.stringify(name)}: ${key} is translucent (${colour.hex}) but the palette has no "background" to draw it on`);
-    }
-    return colour;
-  };
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/color.js
 function hex2(byte) {
   return byte.toString(16).padStart(2, "0");
 }
@@ -24266,19 +24232,24 @@ function parseHexColor(literal) {
 function blendRgb(color1, color2, crossFade = 0.5) {
   return new ColorRgba(Math.round(color1.red + (color2.red - color1.red) * crossFade), Math.round(color1.green + (color2.green - color1.green) * crossFade), Math.round(color1.blue + (color2.blue - color1.blue) * crossFade), color1.alpha + (color2.alpha - color1.alpha) * crossFade);
 }
-var TerminalTheme = class {
+var TerminalColors = class {
   backgroundColor;
   foregroundColor;
   ansiColors;
-  palette;
-  constructor(backgroundColor, foregroundColor, ansiColors, palette) {
+  constructor(backgroundColor, foregroundColor, ansiColors) {
     this.backgroundColor = backgroundColor;
     this.foregroundColor = foregroundColor;
     this.ansiColors = ansiColors;
-    this.palette = palette;
     if (ansiColors.firstIndex !== 0 || ansiColors.size !== 16) {
       throw new RangeError(`a TerminalTheme's ansiColors are the sixteen ANSI colours, indices 0\u201315; got ${ansiColors.size} from index ${ansiColors.firstIndex}`);
     }
+  }
+};
+var TerminalTheme = class extends TerminalColors {
+  palette;
+  constructor(backgroundColor, foregroundColor, ansiColors, palette) {
+    super(backgroundColor, foregroundColor, ansiColors);
+    this.palette = palette;
   }
 };
 function buildStandard16() {
@@ -24373,10 +24344,10 @@ var STANDARD_TABLE = new ColorTable(buildStandard16());
 var EIGHT_BIT_TABLE = new ColorTable(build256Table());
 var EIGHT_BIT_DOWNGRADE_TABLE = new ColorTable(build256Table().slice(16), 16);
 var WINDOWS_TABLE = new ColorTable(buildWindowsTable());
-var INTERNAL_DEFAULT_THEME = new TerminalTheme(new ColorRgba(0, 0, 0), new ColorRgba(255, 255, 255), STANDARD_TABLE, new Palette("default", true, /* @__PURE__ */ new Map()));
-var WINDOWS_CONSOLE_THEME = new TerminalTheme(WINDOWS_TABLE.get(0), WINDOWS_TABLE.get(7), WINDOWS_TABLE, new Palette("windows", true, /* @__PURE__ */ new Map()));
+var INTERNAL_DEFAULT_TERMINAL = new TerminalColors(new ColorRgba(0, 0, 0), new ColorRgba(255, 255, 255), STANDARD_TABLE);
+var WINDOWS_CONSOLE_TERMINAL = new TerminalColors(WINDOWS_TABLE.get(0), WINDOWS_TABLE.get(7), WINDOWS_TABLE);
 function resolveTerminal(theme24, depth) {
-  return theme24 ?? (depth === ColorDepth.WINDOWS ? WINDOWS_CONSOLE_THEME : INTERNAL_DEFAULT_THEME);
+  return theme24 ?? (depth === ColorDepth.WINDOWS ? WINDOWS_CONSOLE_TERMINAL : INTERNAL_DEFAULT_TERMINAL);
 }
 function downgradeTable(depth) {
   switch (depth) {
@@ -24655,7 +24626,7 @@ var ANSI_COLOR_NAMES = withGrayAliases({
 });
 var COLOR_NAMES = ["default", ...Object.keys(ANSI_COLOR_NAMES)];
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/oklch.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/oklch.js
 init_globals();
 var _a;
 var OKLCH_AXES = ["l", "c", "h", "alpha"];
@@ -24896,7 +24867,34 @@ var Oklch = class {
 };
 _a = Oklch;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorRef.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/palette.js
+init_globals();
+var Palette = class {
+  name;
+  dark;
+  vars;
+  constructor(name, dark, roles) {
+    this.name = name;
+    this.dark = dark;
+    const draw2 = drawnOn(name, roles.background);
+    this.vars = new Map(Object.entries(roles).map(([role, colour]) => [role, draw2(colour)]));
+  }
+  get(role) {
+    return this.vars.get(role);
+  }
+  /** This palette's roles, each put through `colour`: what a new palette is built from. */
+  mapRoles(colour) {
+    return Object.fromEntries([...this.vars].map(([role, was]) => [role, colour(was, role)]));
+  }
+};
+function drawnOn(name, background) {
+  if (background.alpha !== 1) {
+    throw new RangeError(`palette ${JSON.stringify(name)}: background is the surface its translucent colours are drawn on, so it must be opaque; got ${background.hex}`);
+  }
+  return (colour) => colour.alpha === 0 ? colour : colour.compositeOver(background);
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorRef.js
 init_globals();
 var ColorRefError = class extends Error {
   ref;
@@ -24931,10 +24929,10 @@ function suggest(palette, miss) {
   return near.length === 0 ? "" : `; did you mean: ${near.join(", ")}`;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorMath.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/colorMath.js
 init_globals();
 var LEVEL_STEP = 0.1;
 function rgbToHsl(c) {
@@ -24994,6 +24992,32 @@ function darken(color, levels) {
   const hsl = rgbToHsl(color);
   hsl.l = clamp012(hsl.l - LEVEL_STEP * levels);
   return hslToRgb(hsl);
+}
+function rgbToLab(c) {
+  const [r, g, b] = [c.red, c.green, c.blue].map((v) => srgbToLinear(v / 255));
+  const [x, y, z] = [
+    (r * 41.24 + g * 35.76 + b * 18.05) / 95.047,
+    (r * 21.26 + g * 71.52 + b * 7.22) / 100,
+    (r * 1.93 + g * 11.92 + b * 95.05) / 108.883
+  ].map((v) => v > 8856e-6 ? Math.cbrt(v) : 7.787 * v + 16 / 116);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+function labToRgb(l, a, b, alpha) {
+  const cube = (v) => v > 0.2068930344 ? v ** 3 : (v - 16 / 116) / 7.787;
+  const fy = (l + 16) / 116;
+  const y = cube(fy);
+  const x = 0.95047 * cube(a / 500 + fy);
+  const z = 1.08883 * cube(fy - b / 200);
+  const [red, green, blue] = [
+    x * 3.2406 + y * -1.5372 + z * -0.4986,
+    x * -0.9689 + y * 1.8758 + z * 0.0415,
+    x * 0.0557 + y * -0.204 + z * 1.057
+  ].map((v) => clampChannel(255 * linearToSrgb(v)));
+  return new ColorRgba(red, green, blue, alpha);
+}
+function shiftLightness(color, amount) {
+  const [l, a, b] = rgbToLab(color);
+  return labToRgb(l + amount * 100, a, b, color.alpha);
 }
 function alphaBlend(fg, bg, alpha) {
   return blendRgb(bg, fg, clamp012(alpha));
@@ -25070,64 +25094,170 @@ function ensureContrastToward(fg, bg, minRatio, toward) {
   return new Oklch(pass, lab.c, lab.h, lab.alpha).toRgba();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/buildPalette.js
 var MUTED_BLEND = 0.7;
 var TEXT_ALPHA = 0.66;
 var SURFACE_LIFT = 0.05;
+var LADDER_STEP = 0.075;
+var SURFACE_ACTIVE_LIFT = 0.06;
+var BORDER_BLUR_DROP = 0.025;
+var PANEL_TINT = 0.1;
+var BACKGROUND_TINT = 0.15;
+var BACKGROUND_TINT_LIFT = 0.15;
+var BOOST_ALPHA = 0.04;
+var TEXT_FULL_ALPHA = 0.87;
+var TEXT_MUTED_ALPHA = 0.6;
+var DISABLED_ALPHA = 0.38;
+var BLURRED_CURSOR_ALPHA = 0.3;
+var HOVER_ALPHA = 0.1;
+var SELECTION_ALPHA = 0.4;
+var SCROLLBAR_ALPHA = 0.4;
+var SCROLLBAR_HOVER_ALPHA = 0.5;
 var TEXT_ON_MUTED = 4.5;
 var ACCENT_KEYS = ["primary", "secondary", "accent", "success", "warning", "error"];
+var TRANSPARENT = new ColorRgba(0, 0, 0, 0);
+var WHITE = new ColorRgba(255, 255, 255);
+var withAlpha = (colour, alpha) => new ColorRgba(colour.red, colour.green, colour.blue, alpha);
+var textOn = (alpha) => (at) => withAlpha(contrastFor(at("background")), alpha);
+var same = (role) => (at) => at(role);
+var none = () => TRANSPARENT;
+function ladder(root, rung) {
+  const rungs = ["darken", "lighten"].flatMap((direction) => [1, 2, 3].map((n) => {
+    return [`${root}-${direction}-${n}`, rung((direction === "darken" ? -n : n) * LADDER_STEP)];
+  }));
+  return Object.fromEntries(rungs);
+}
+var lightness = (root) => ladder(root, (step4) => (at) => shiftLightness(at(root), step4));
+var accentBackground = (accent, step4) => (at, dark) => dark ? blendRgb(blendRgb(at("background"), at(accent), BACKGROUND_TINT), WHITE, Math.max(0, BACKGROUND_TINT_LIFT + step4)) : shiftLightness(at(accent), step4);
+function accentRules(accent) {
+  return {
+    ...lightness(accent),
+    [`${accent}-muted`]: ((at) => blendRgb(at(accent), at("background"), MUTED_BLEND)),
+    [`on-${accent}`]: ((at) => contrastFor(at(accent))),
+    [`text-${accent}`]: ((at) => alphaBlend(at(accent), contrastFor(at("background")), TEXT_ALPHA))
+  };
+}
+var RULES = {
+  ...accentRules("primary"),
+  ...accentRules("secondary"),
+  ...accentRules("accent"),
+  ...accentRules("success"),
+  ...accentRules("warning"),
+  ...accentRules("error"),
+  ...lightness("background"),
+  ...lightness("foreground"),
+  ...lightness("panel"),
+  ...lightness("boost"),
+  ...lightness("surface"),
+  ...ladder("primary-background", (step4) => accentBackground("primary", step4)),
+  ...ladder("secondary-background", (step4) => accentBackground("secondary", step4)),
+  "background-muted": (at) => blendRgb(at("background"), at("foreground"), MUTED_BLEND),
+  "foreground-muted": (at) => blendRgb(at("foreground"), at("background"), MUTED_BLEND),
+  "foreground-disabled": (at) => withAlpha(at("foreground"), DISABLED_ALPHA),
+  surface: (at) => blendRgb(at("background"), at("foreground"), SURFACE_LIFT),
+  "surface-active": (at) => shiftLightness(at("surface"), SURFACE_ACTIVE_LIFT),
+  boost: textOn(BOOST_ALPHA),
+  panel: (at, dark) => {
+    const tinted = blendRgb(at("surface"), at("primary"), PANEL_TINT);
+    return dark ? at("boost").compositeOver(tinted) : tinted;
+  },
+  "primary-background": accentBackground("primary", 0),
+  "secondary-background": accentBackground("secondary", 0),
+  text: textOn(TEXT_FULL_ALPHA),
+  "text-muted": textOn(TEXT_MUTED_ALPHA),
+  "text-disabled": textOn(DISABLED_ALPHA),
+  border: same("primary"),
+  "border-blurred": (at) => shiftLightness(at("surface"), -BORDER_BLUR_DROP),
+  "block-cursor-background": same("primary"),
+  "block-cursor-foreground": same("on-primary"),
+  "block-cursor-blurred-background": (at) => withAlpha(at("primary"), BLURRED_CURSOR_ALPHA),
+  "block-cursor-blurred-foreground": same("foreground"),
+  "block-hover-background": (at) => withAlpha(at("boost"), HOVER_ALPHA),
+  "button-foreground": same("foreground"),
+  "button-color-foreground": same("on-primary"),
+  "footer-background": same("panel"),
+  "footer-foreground": same("foreground"),
+  "footer-description-background": none,
+  "footer-description-foreground": same("foreground"),
+  "footer-item-background": none,
+  "footer-key-background": none,
+  "footer-key-foreground": same("accent"),
+  "input-cursor-background": same("foreground"),
+  "input-cursor-foreground": same("background"),
+  "input-selection-background": (at) => withAlpha(at("primary-lighten-1"), SELECTION_ALPHA),
+  "link-background": none,
+  "link-background-hover": same("primary"),
+  "link-color": same("text"),
+  "link-color-hover": same("on-primary"),
+  "markdown-h1-background": none,
+  "markdown-h1-color": same("primary"),
+  "markdown-h2-background": none,
+  "markdown-h2-color": same("primary"),
+  "markdown-h3-background": none,
+  "markdown-h3-color": same("primary"),
+  "markdown-h4-background": none,
+  "markdown-h4-color": same("foreground"),
+  "markdown-h5-background": none,
+  "markdown-h5-color": same("foreground"),
+  "markdown-h6-background": none,
+  "markdown-h6-color": same("text-muted"),
+  scrollbar: (at) => alphaBlend(at("primary"), at("background-darken-1"), SCROLLBAR_ALPHA),
+  "scrollbar-active": same("primary"),
+  "scrollbar-hover": (at) => alphaBlend(at("primary"), at("background-darken-1"), SCROLLBAR_HOVER_ALPHA),
+  "scrollbar-background": same("background-darken-1"),
+  "scrollbar-background-active": same("scrollbar-background"),
+  "scrollbar-background-hover": same("scrollbar-background"),
+  "scrollbar-corner-color": same("scrollbar-background")
+};
+var BASE_KEYS = [...ACCENT_KEYS, "background", "foreground"];
+var PALETTE_ROLES = [...BASE_KEYS, ...Object.keys(RULES)];
+var ROLE_NAMES = new Set(PALETTE_ROLES);
 function buildPalette(name, dark, given2) {
+  const known = statedRoles(name, given2);
+  const at = (role) => {
+    const colour = known.get(role) ?? RULES[role](at, dark);
+    known.set(role, colour);
+    return colour;
+  };
+  for (const key of ACCENT_KEYS) {
+    const ground = at(`${key}-muted`).compositeOver(at("background"));
+    known.set(`text-${key}`, accentText(given2[`text-${key}`] ?? at(`text-${key}`), ground, at("background")));
+  }
+  return new Palette(name, dark, Object.fromEntries(PALETTE_ROLES.map((role) => [role, at(role)])));
+}
+function statedRoles(name, given2) {
   const drawn = drawnOn(name, given2.background);
-  const draw2 = (key) => {
+  const stated = Object.entries(given2).flatMap(([role, colour]) => {
+    if (!ROLE_NAMES.has(role))
+      throw new RangeError(`palette ${JSON.stringify(name)}: ${JSON.stringify(role)} is not a role`);
+    if (colour === void 0)
+      return [];
+    return [[role, role === "boost" ? colour : drawn(colour)]];
+  });
+  const known = new Map(stated);
+  for (const key of BASE_KEYS) {
     const colour = given2[key];
     if (colour.alpha === 0) {
       throw new RangeError(`palette ${JSON.stringify(name)}: ${key} is fully transparent (${colour.hex}), so there is no colour to derive the palette from`);
     }
-    return drawn(colour);
-  };
-  const base = {
-    primary: draw2("primary"),
-    secondary: draw2("secondary"),
-    accent: draw2("accent"),
-    success: draw2("success"),
-    warning: draw2("warning"),
-    error: draw2("error"),
-    background: given2.background,
-    foreground: draw2("foreground")
-  };
-  const vars = /* @__PURE__ */ new Map();
-  vars.set("background", base.background);
-  vars.set("foreground", base.foreground);
-  for (const key of ACCENT_KEYS) {
-    vars.set(key, base[key]);
+    known.set(key, drawn(colour));
   }
-  vars.set("foreground-muted", blendRgb(base.foreground, base.background, MUTED_BLEND));
-  vars.set("background-muted", blendRgb(base.background, base.foreground, MUTED_BLEND));
-  vars.set("surface", blendRgb(base.background, base.foreground, SURFACE_LIFT));
-  const contrastText = contrastFor(base.background);
-  for (const key of ACCENT_KEYS) {
-    const color = base[key];
-    const muted = blendRgb(color, base.background, MUTED_BLEND);
-    vars.set(`${key}-muted`, muted);
-    vars.set(`text-${key}`, accentText(alphaBlend(color, contrastText, TEXT_ALPHA), muted, base.background));
-    vars.set(`on-${key}`, contrastFor(color));
-  }
-  return new Palette(name, dark, vars);
+  return known;
 }
 function accentText(tint, muted, background) {
   return ensureContrastToward(tint, muted, TEXT_ON_MUTED, contrastFor(background));
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-dark.js
 init_globals();
 var theme = {
   name: "atom-one-dark",
@@ -25307,7 +25437,7 @@ var theme = {
 };
 var atom_one_dark_default = theme;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/atom-one-light.js
 init_globals();
 var theme2 = {
   name: "atom-one-light",
@@ -25487,7 +25617,7 @@ var theme2 = {
 };
 var atom_one_light_default = theme2;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-frappe.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-frappe.js
 init_globals();
 var theme3 = {
   name: "catppuccin-frappe",
@@ -25667,7 +25797,7 @@ var theme3 = {
 };
 var catppuccin_frappe_default = theme3;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-latte.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-latte.js
 init_globals();
 var theme4 = {
   name: "catppuccin-latte",
@@ -25847,7 +25977,7 @@ var theme4 = {
 };
 var catppuccin_latte_default = theme4;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-macchiato.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-macchiato.js
 init_globals();
 var theme5 = {
   name: "catppuccin-macchiato",
@@ -26027,7 +26157,7 @@ var theme5 = {
 };
 var catppuccin_macchiato_default = theme5;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-mocha.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/catppuccin-mocha.js
 init_globals();
 var theme6 = {
   name: "catppuccin-mocha",
@@ -26207,13 +26337,13 @@ var theme6 = {
 };
 var catppuccin_mocha_default = theme6;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/types.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/types.js
 init_globals();
 var ANSI_SLOTS = [
   "black",
@@ -26234,7 +26364,7 @@ var ANSI_SLOTS = [
   "brightWhite"
 ];
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/ansi-tables.js
 var VGA_ANSI = Object.fromEntries(ANSI_SLOTS.map((slot, n) => [slot, STANDARD_TABLE.get(n).hex]));
 var TEXTUAL_DARK_ANSI = {
   black: "#1A1A1A",
@@ -26273,7 +26403,7 @@ var TEXTUAL_LIGHT_ANSI = {
   brightWhite: "#F7F7F7"
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/cyberpunk.js
 var theme7 = {
   name: "cyberpunk",
   dark: true,
@@ -26453,7 +26583,7 @@ var theme7 = {
 };
 var cyberpunk_default = theme7;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/default.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/default.js
 init_globals();
 var theme8 = {
   name: "default",
@@ -26615,7 +26745,7 @@ var theme8 = {
 };
 var default_default = theme8;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/dracula.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/dracula.js
 init_globals();
 var theme9 = {
   name: "dracula",
@@ -26795,7 +26925,7 @@ var theme9 = {
 };
 var dracula_default = theme9;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/flexoki.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/flexoki.js
 init_globals();
 var theme10 = {
   name: "flexoki",
@@ -26975,7 +27105,7 @@ var theme10 = {
 };
 var flexoki_default = theme10;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/gruvbox.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/gruvbox.js
 init_globals();
 var theme11 = {
   name: "gruvbox",
@@ -27155,7 +27285,7 @@ var theme11 = {
 };
 var gruvbox_default = theme11;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/monokai.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/monokai.js
 init_globals();
 var theme12 = {
   name: "monokai",
@@ -27335,7 +27465,7 @@ var theme12 = {
 };
 var monokai_default = theme12;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/nord.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/nord.js
 init_globals();
 var theme13 = {
   name: "nord",
@@ -27515,7 +27645,7 @@ var theme13 = {
 };
 var nord_default = theme13;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine.js
 init_globals();
 var theme14 = {
   name: "rose-pine",
@@ -27695,7 +27825,7 @@ var theme14 = {
 };
 var rose_pine_default = theme14;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-dawn.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-dawn.js
 init_globals();
 var theme15 = {
   name: "rose-pine-dawn",
@@ -27875,7 +28005,7 @@ var theme15 = {
 };
 var rose_pine_dawn_default = theme15;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-moon.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/rose-pine-moon.js
 init_globals();
 var theme16 = {
   name: "rose-pine-moon",
@@ -28055,7 +28185,7 @@ var theme16 = {
 };
 var rose_pine_moon_default = theme16;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-dark.js
 init_globals();
 var theme17 = {
   name: "solarized-dark",
@@ -28235,7 +28365,7 @@ var theme17 = {
 };
 var solarized_dark_default = theme17;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/solarized-light.js
 init_globals();
 var theme18 = {
   name: "solarized-light",
@@ -28415,7 +28545,7 @@ var theme18 = {
 };
 var solarized_light_default = theme18;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/svg-export.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/svg-export.js
 init_globals();
 var theme19 = {
   name: "svg-export",
@@ -28595,7 +28725,7 @@ var theme19 = {
 };
 var svg_export_default = theme19;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-ansi.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-ansi.js
 init_globals();
 var theme20 = {
   name: "textual-ansi",
@@ -28757,7 +28887,7 @@ var theme20 = {
 };
 var textual_ansi_default = theme20;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-dark.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-dark.js
 init_globals();
 var theme21 = {
   name: "textual-dark",
@@ -28919,7 +29049,7 @@ var theme21 = {
 };
 var textual_dark_default = theme21;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-light.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/textual-light.js
 init_globals();
 var theme22 = {
   name: "textual-light",
@@ -29081,7 +29211,7 @@ var theme22 = {
 };
 var textual_light_default = theme22;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/tokyo-night.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/tokyo-night.js
 init_globals();
 var theme23 = {
   name: "tokyo-night",
@@ -29261,7 +29391,7 @@ var theme23 = {
 };
 var tokyo_night_default = theme23;
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/data/index.js
 var THEMES = {
   "atom-one-dark": atom_one_dark_default,
   "atom-one-light": atom_one_light_default,
@@ -29288,7 +29418,7 @@ var THEMES = {
   "tokyo-night": tokyo_night_default
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/registry.js
 var THEME_NAMES = Object.freeze(Object.keys(THEMES).sort());
 var cache = new Memo();
 function listThemePalettes() {
@@ -29304,9 +29434,9 @@ function isThemeName(name) {
 }
 function getThemeBaseColors(name) {
   const data = THEMES[name];
-  const bg = requireBaseVar(data, "background");
+  const bg = parseHex(data.vars.background, data.name, "background");
   const draw2 = drawnOn(data.name, bg);
-  const base = (key) => draw2(requireBaseVar(data, key));
+  const base = (key) => draw2(parseHex(data.vars[key], data.name, key));
   return {
     name: data.name,
     dark: data.dark,
@@ -29321,23 +29451,9 @@ function getThemeBaseColors(name) {
     ansi: new ColorTable(ANSI_SLOTS.map((slot) => parseOpaqueHex(data.ansi[slot], data.name, `ansi.${slot}`)))
   };
 }
-function requireBaseVar(data, key) {
-  const v = data.vars[key];
-  if (v === void 0) {
-    throw new Error(`Theme ${data.name}: required base var "${key}" missing from data file`);
-  }
-  return parseHex(v, data.name, key);
-}
 function hydrate(data) {
-  const map = /* @__PURE__ */ new Map();
-  for (const [k, v] of Object.entries(data.vars)) {
-    map.set(k, parseHex(v, data.name, `var ${k}`));
-  }
-  for (const key of ACCENT_KEYS) {
-    const text4 = requireBaseVar(data, `text-${key}`);
-    map.set(`text-${key}`, accentText(text4, requireBaseVar(data, `${key}-muted`), requireBaseVar(data, "background")));
-  }
-  return new Palette(data.name, data.dark, map);
+  const stated = Object.entries(data.vars).map(([role, hex3]) => [role, parseHex(hex3, data.name, `var ${role}`)]);
+  return buildPalette(data.name, data.dark, Object.fromEntries(stated));
 }
 function parseHex(value, theme24, key) {
   try {
@@ -29356,7 +29472,7 @@ function parseOpaqueHex(value, theme24, key) {
   return color;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/terminalThemes.js
 function defineTheme(d) {
   return new TerminalTheme(d.bg, d.fg, d.ansi, buildPalette(d.name, d.dark, {
     primary: d.primary,
@@ -29393,45 +29509,39 @@ var TEXTUAL_DARK = defineTheme(getThemeBaseColors("textual-dark"));
 var TEXTUAL_LIGHT = defineTheme(getThemeBaseColors("textual-light"));
 var TEXTUAL_ANSI = defineTheme(getThemeBaseColors("textual-ansi"));
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/transpose.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/transpose.js
 init_globals();
 var ANCHORED_ROOTS = /* @__PURE__ */ new Set([
   "error",
   "success",
   "warning"
 ]);
+var DRAWN_ON = pattern(/^(?:text|on)-/);
 function rootOf(varName) {
-  const dash = varName.indexOf("-");
-  return dash === -1 ? varName : varName.slice(0, dash);
+  const role = varName.replace(DRAWN_ON, "");
+  const dash = role.indexOf("-");
+  return dash === -1 ? role : role.slice(0, dash);
 }
 function isAnchored(varName) {
   return ANCHORED_ROOTS.has(rootOf(varName));
 }
 function transposePalette(palette, key, name) {
   if (isIdentityKey(key)) {
-    return new Palette(name ?? palette.name, palette.dark, palette.vars);
+    return new Palette(name ?? palette.name, palette.dark, palette.mapRoles((colour) => colour));
   }
   const anchorKey = { ...key, hueShift: 0 };
-  const next2 = /* @__PURE__ */ new Map();
-  for (const [varName, color] of palette.vars) {
-    const effective = isAnchored(varName) ? anchorKey : key;
-    next2.set(varName, Oklch.fromRgba(color).applyKey(effective).toRgba());
-  }
-  const newBackground = next2.get("background");
-  if (newBackground === void 0) {
-    throw new Error(`transposePalette: palette "${palette.name}" has no "background" var; cannot derive the dark flag without a background color.`);
-  }
-  const newDark = Oklch.fromRgba(newBackground).l < 0.5;
+  const next2 = palette.mapRoles((colour, role) => Oklch.fromRgba(colour).applyKey(isAnchored(role) ? anchorKey : key).toRgba());
+  const newDark = Oklch.fromRgba(next2.background).l < 0.5;
   return new Palette(name ?? palette.name, newDark, next2);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/easing.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/easing.js
 init_globals();
 function cubicBezier(x1, y1, x2, y2) {
   for (const [name, v] of [["x1", x1], ["y1", y1], ["x2", x2], ["y2", y2]]) {
@@ -29618,7 +29728,10 @@ function wrapSeconds(what, t2, period) {
 }
 function passAt(what, t2, period) {
   const into = wrapSeconds(what, t2, period);
-  return { pass: Math.round((t2 - into) / period) + 0, into };
+  const pass = Math.round((t2 - into) / period) + 0;
+  if (!Number.isFinite(pass))
+    throw new RangeError(`${what}: a period of ${period} s is finer than time resolves near t = ${t2}`);
+  return { pass, into };
 }
 var MIN_NORMAL = 2 ** -1022;
 function nextUp(x) {
@@ -29735,16 +29848,16 @@ var Phase = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/anchor.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/anchor.js
 init_globals();
 function shiftAnchor(anchor, cells) {
   return {
@@ -29764,7 +29877,7 @@ function levelOf(anchor, owner) {
   return level;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/style.js
 var ATTRIBUTE_NAMES = [
   "bold",
   "dim",
@@ -30427,7 +30540,7 @@ function anchorsEqual(a, b) {
   return a.owner === b.owner && a.row === b.row && a.col === b.col && anchorsEqual(a.inner, b.inner);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
 var isAscii = (text4) => /^[\x00-\x7F]*$/.test(text4);
 function drawable(options, chosen, ascii, glyphs = String) {
   return options.asciiOnly === true && !isAscii(glyphs(chosen)) ? ascii : chosen;
@@ -30538,7 +30651,7 @@ function isMeasurable(obj) {
   return typeof obj === "object" && obj !== null && "measure" in obj && typeof obj.measure === "function";
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/measure.js
 var Measurement = class _Measurement {
   minimum;
   maximum;
@@ -30591,7 +30704,7 @@ var Measurement = class _Measurement {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/segment.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/segment.js
 init_globals();
 var ControlType;
 (function(ControlType2) {
@@ -31090,7 +31203,7 @@ function stylesEqual(a, b) {
   return a.equals(b);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/animation.js
 function shownAt(animation, t2, motion) {
   const reduced = motion.reducedMotion === true;
   const drawn = reduced ? animation.reduced() : animation;
@@ -31113,13 +31226,15 @@ function drawable2(value) {
     throw new TypeError("an Animation is drawn only when its values are renderables; place what it maps to (Animation.map)");
   return value;
 }
-function* placedRender(animation, options) {
+function* placed(animation, options, draw2) {
   const t2 = frameTimeOf(options);
   const shown = shownAt(animation, t2, options);
-  const value = drawable2(shown.value);
   const hold = holdOf(shown, t2);
   options.onHold?.(hold);
-  yield* stampFrame(render(value, options), hold);
+  yield* stampFrame(draw2(shown.value), hold);
+}
+function placedRender(animation, options) {
+  return placed(animation, options, (value) => render(drawable2(value), options));
 }
 function placedMeasure(animation, options) {
   const t2 = frameTimeOf(options);
@@ -31155,6 +31270,17 @@ var Animation = {
       measure: (options) => placedMeasure(faced, options)
     });
     return faced;
+  },
+  /**
+   * Whether `animation` never changes again from `t`: a one-shot that has
+   * run, a loop at a depth that shows no motion. [LAW:single-enforcer] The
+   * one reading of "never": a `Transition`'s `done` and a lifecycle's
+   * arrived and gone moments are this, so what ends a one-shot is written
+   * once. An early answer the contract allows is a finite one, so `Infinity`
+   * is only ever a true never.
+   */
+  done(animation, t2) {
+    return animation.nextChange(t2) === Number.POSITIVE_INFINITY;
   },
   /** `value` at every time, never changing. */
   constant(value) {
@@ -31323,7 +31449,7 @@ var Animation = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/tween.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/tween.js
 init_globals();
 function tween(from, to, timing) {
   for (const [name, v] of [["from", from], ["to", to]]) {
@@ -31349,7 +31475,7 @@ function tween(from, to, timing) {
   });
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
 var ColorRamp = class _ColorRamp {
   ease;
   stops;
@@ -31468,7 +31594,7 @@ function turnOf(what, v) {
   return into < 1 ? into : 0;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/timeline.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/timeline.js
 init_globals();
 function finiteSeconds(what, seconds) {
   if (!Number.isFinite(seconds))
@@ -31577,10 +31703,10 @@ var Timeline = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
 init_globals();
 function* words(text4) {
   const re = /\s*\S+\s*/y;
@@ -31632,10 +31758,10 @@ function divideLine(text4, width, options) {
   return cuts;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
 init_globals();
 var utf8 = new TextEncoder();
 function fnv1a(text4) {
@@ -31646,7 +31772,7 @@ function fnv1a(text4) {
   return (hash2 >>> 0).toString(16).padStart(8, "0");
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/osc8.js
 var TERMINATORS = "\\x1b\\x07\\x9c";
 function stripOscTerminators(url) {
   return url.replace(new RegExp(`[${TERMINATORS}]`, "g"), "");
@@ -31666,7 +31792,7 @@ function osc8Sequences(text4) {
   }));
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/state.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/state.js
 init_globals();
 var RenderWriteError = class extends Error {
   constructor() {
@@ -31713,7 +31839,7 @@ function refuseRenderWrite(owner) {
     throw new RenderWriteError();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
 function stripControlChars(text4) {
   return text4.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g, "");
 }
@@ -32327,13 +32453,13 @@ var RichText = class _RichText {
       const terminateLine = index < logicalLines.length - 1;
       const cuts = divideLine(plainOf(line), wrapAt, { fold: overflow === "fold" });
       const wrapped = Segment.divide(line, cuts);
-      const placed = this._justifyLines(wrapped.map((piece, at) => ({
+      const placed2 = this._justifyLines(wrapped.map((piece, at) => ({
         segments: [...this._fitLine(piece, edge, overflow, ellipsis)],
         free: (cell3) => free(at === 0 ? cell3 : cuts[at - 1] + cell3)
       })), maxWidth, base, justify);
-      for (let piece = 0; piece < placed.length; piece += 1) {
-        yield* placed[piece];
-        if (piece < placed.length - 1 || terminateLine) {
+      for (let piece = 0; piece < placed2.length; piece += 1) {
+        yield* placed2[piece];
+        if (piece < placed2.length - 1 || terminateLine) {
           yield Segment.line();
         }
       }
@@ -32587,7 +32713,7 @@ function* padded(drawn, free, left, right, style) {
     yield new Segment((tail ? line[last2].text : "") + pad(right), style);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
 init_globals();
 var JOIN = Object.freeze({ name: "join" });
 function drawJoin(joiner, left, right, context) {
@@ -32975,7 +33101,7 @@ var JOINERS2 = Object.freeze({
   plain: new CellJoiner(SEAMS.plain, CAPS.flat)
 });
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/render.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/render.js
 init_globals();
 function shownOn(segment, destination) {
   const style = destination.reducedMotion ? segment.style?.reduced() : segment.style;
@@ -32999,7 +33125,7 @@ function segmentsToString(segments, destination) {
   return parts.join("");
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
 init_globals();
 var escapes = () => /\r|\x1b\[([0-9;:]*)m|\x1b\[([012]?)K|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|\x9c|$)|\x1b[ -/]*[0-~]/g;
 function* escapeTokens(bytes) {
@@ -33140,7 +33266,7 @@ var AnsiDecoder = class {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
 init_globals();
 function setIntoLine(text4) {
   text4.end = "";
@@ -33148,7 +33274,7 @@ function setIntoLine(text4) {
   return text4.expandTabs();
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
 init_globals();
 var UNMOVED = { lastChange: Number.NEGATIVE_INFINITY, nextChange: Number.POSITIVE_INFINITY };
 var Recolored = class {
@@ -33224,8 +33350,8 @@ var Recolored = class {
     }
     let offset = 0;
     for (const run3 of runs) {
-      const placed = base.shiftedBy(offset);
-      const shifted = sameAttributes(run3.attributes, attributes) ? placed : placed.withAttributes(cellAttributes(run3.attributes));
+      const placed2 = base.shiftedBy(offset);
+      const shifted = sameAttributes(run3.attributes, attributes) ? placed2 : placed2.withAttributes(cellAttributes(run3.attributes));
       const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
       yield new Segment(run3.text, style);
       offset += run3.cells;
@@ -33363,7 +33489,7 @@ function looks(segments, depth, theme24) {
     const slots = { fg: (wire.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
     const reverse2 = style.reverse === true;
     const terminal = onScreen({ fg: wire.color?.isDefault ?? true, bg: wire.bgcolor?.isDefault ?? true }, reverse2);
-    return { segment, look: { style, wire, slots, pair: { ...onScreen(slots, reverse2), terminal, reverse: reverse2 }, attributes: cellAttributes(style) } };
+    return { segment, look: { style, wire, slots, pair: { ...onScreen(slots, reverse2), terminal, reverse: reverse2 }, attributes: cellAttributes(style), seam: drawnBy(style.anchor, JOIN) } };
   });
 }
 function walkGlyphs(segments) {
@@ -33376,9 +33502,10 @@ function walkGlyphs(segments) {
     let into = 0;
     return [...graphemes(segment.text)].map((glyph) => {
       const cell3 = glyph === "\n" ? void 0 : { row: row2, col, anchor: anchor && shiftAnchor(anchor, into) };
-      [row2, col] = glyph === "\n" ? [row2 + 1, 0] : [row2, col + cellLen(glyph)];
-      into += cellLen(glyph);
-      return { glyph, cell: cell3 };
+      const width = cellLen(glyph);
+      [row2, col] = glyph === "\n" ? [row2 + 1, 0] : [row2, col + width];
+      into += width;
+      return { glyph, cell: cell3, width };
     });
   });
 }
@@ -33386,8 +33513,8 @@ function inked(text4) {
   return text4.trim() !== "";
 }
 function walk(looked) {
-  const placed = walkGlyphs(looked.map(({ segment }) => segment));
-  return looked.map((item, i) => ({ ...item, glyphs: placed[i] }));
+  const placed2 = walkGlyphs(looked.map(({ segment }) => segment));
+  return looked.map((item, i) => ({ ...item, glyphs: placed2[i] }));
 }
 function edgesBeside(walked, drawings) {
   let rows;
@@ -33427,18 +33554,22 @@ function drawsLines(style) {
 }
 function measured(looked, walked, depth, theme24) {
   const ground = theme24.backgroundColor.hex;
-  let listed;
+  let everything;
   const list2 = () => walked().flatMap(({ look, glyphs }) => {
     if (look === void 0)
       return [];
     const blankShows = look.pair.bg.hex !== ground || drawsLines(look.style);
-    return glyphs.flatMap(({ glyph, cell: cell3 }) => cell3 !== void 0 && (inked(glyph) || blankShows) ? [cell3] : []);
+    return glyphs.flatMap(({ glyph, cell: cell3, width }) => cell3 === void 0 ? [] : [{ cell: { ...cell3, width, pair: look.pair, seam: look.seam }, shows: inked(glyph) || blankShows }]);
   });
-  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !drawnBy(look.style.anchor, JOIN) ? [look.pair] : []);
+  const listed = () => everything ??= list2();
+  let all2;
+  let shown;
+  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
   const pairs2 = [...new Map(words2.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
   const own2 = (slot) => pairs2.flatMap((pair) => pair.terminal[slot] ? [] : [pair[slot].hex]);
   return {
-    cells: () => listed ??= list2(),
+    all: () => all2 ??= listed().map(({ cell: cell3 }) => cell3),
+    cells: () => shown ??= listed().flatMap(({ cell: cell3, shows: shows2 }) => shows2 ? [cell3] : []),
     pairs: pairs2,
     colors: /* @__PURE__ */ new Set([...own2("fg"), ...own2("bg")]),
     fills: new Set(own2("bg")),
@@ -33454,7 +33585,7 @@ function confined(effect, ...owners) {
         return true;
     return false;
   };
-  const narrowed = (drawn) => ({ ...drawn, cells: () => drawn.cells().filter(owned) });
+  const narrowed = (drawn) => ({ ...drawn, all: () => drawn.all().filter(owned), cells: () => drawn.cells().filter(owned) });
   return (drawn) => Animation.map(effect(narrowed(drawn)), (frame) => (look, cell3) => owned(cell3) ? frame(look, cell3) : look);
 }
 function onScreen(slots, reverse2) {
@@ -33497,10 +33628,10 @@ function sameColor(a, b) {
   return a.red === b.red && a.green === b.green && a.blue === b.blue && a.alpha === b.alpha;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/noise.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/noise.js
 init_globals();
 var P = (() => {
   const base = [
@@ -33813,7 +33944,7 @@ function smoothstep(a, b, x) {
   return t2 * t2 * (3 - 2 * t2);
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effects.js
 var LEGIBLE = 4.5;
 var LEVELS = 48;
 var STRENGTHS = Array.from({ length: LEVELS }, (_, i) => (i + 1) / LEVELS);
@@ -33829,8 +33960,8 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
     return hex3 === void 0 ? [] : [[hex3, pair[side]]];
   })));
   const settled3 = new Map([...colors].filter((hex3) => !rgba.has(hex3)).map((hex3) => [hex3, 1]));
-  const lightness = (hex3) => Oklch.fromRgba(rgba.get(hex3)).l;
-  for (const hex3 of [...colors].filter((hex4) => rgba.has(hex4)).sort((a, b) => lightness(b) - lightness(a))) {
+  const lightness2 = (hex3) => Oklch.fromRgba(rgba.get(hex3)).l;
+  for (const hex3 of [...colors].filter((hex4) => rgba.has(hex4)).sort((a, b) => lightness2(b) - lightness2(a))) {
     const facing = pairs2.flatMap((pair) => {
       const mine = SIDES.find((side) => own2(pair, side) === hex3);
       if (mine === void 0)
@@ -34096,11 +34227,14 @@ var Transition = class {
     this.schedule = schedule;
   }
   done(t2) {
-    return this.schedule.nextChange(t2) === Number.POSITIVE_INFINITY;
+    return Animation.done(this.schedule, t2);
   }
 };
 function transition(seconds, effect) {
-  const schedule = Animation.sequence(Animation.continuous(() => void 0), seconds, Animation.constant(void 0));
+  const schedule = Animation.of({
+    ...Animation.sequence(Animation.continuous(() => void 0), seconds, Animation.constant(void 0)),
+    reduced: () => Animation.cut(void 0, void 0)
+  });
   const ran2 = new Transition((drawn) => {
     const moving = effect(drawn);
     return Animation.of({
@@ -34164,41 +34298,111 @@ function dissolveOut(curve, z) {
 }
 var STRAY_PERIODS = [211, 337];
 var STRAY = 180;
+var STRAY_SPREAD = 24;
+var ownPlace = (cell3, width) => ({ row: cell3.row, centre: cell3.col + width / 2 });
+function segmentsOf(drawn) {
+  const { colors } = drawn;
+  const at = (row2, col) => `${row2}:${col}`;
+  const listed = /* @__PURE__ */ new Map();
+  const seams = /* @__PURE__ */ new Set();
+  const regionColour = (cell3) => {
+    if (cell3.seam)
+      return void 0;
+    const own2 = (terminal, hex3) => !terminal && colors.has(hex3) ? hex3 : void 0;
+    return own2(cell3.pair.terminal.bg, cell3.pair.bg.hex) ?? own2(cell3.pair.terminal.fg, cell3.pair.fg.hex);
+  };
+  const covered = [];
+  const index = /* @__PURE__ */ new Map();
+  for (const cell3 of drawn.all()) {
+    listed.set(at(cell3.row, cell3.col), cell3);
+    const hex3 = regionColour(cell3);
+    for (let col = cell3.col; col < cell3.col + cell3.width; col++) {
+      if (cell3.seam)
+        seams.add(at(cell3.row, col));
+      if (hex3 === void 0)
+        continue;
+      index.set(at(cell3.row, col), covered.length);
+      covered.push({ row: cell3.row, col, hex: hex3 });
+    }
+  }
+  const parent = covered.map((_, i) => i);
+  const find = (i) => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const joinWith = (i, row2, col) => {
+    const j = index.get(at(row2, col));
+    if (j !== void 0 && covered[j].hex === covered[i].hex)
+      parent[find(i)] = find(j);
+  };
+  covered.forEach(({ row: row2, col }, i) => {
+    joinWith(i, row2, col - 1);
+    joinWith(i, row2 - 1, col);
+  });
+  const regions = /* @__PURE__ */ new Map();
+  covered.forEach(({ row: row2, col, hex: hex3 }, i) => {
+    const root = find(i);
+    const region = regions.get(root);
+    if (region === void 0)
+      regions.set(root, { hex: hex3, top: row2, bottom: row2, left: col, right: col });
+    else
+      [region.top, region.bottom, region.left, region.right] = [Math.min(region.top, row2), Math.max(region.bottom, row2), Math.min(region.left, col), Math.max(region.right, col)];
+  });
+  const regionAt = (row2, col) => {
+    const i = index.get(at(row2, col));
+    return i === void 0 ? void 0 : regions.get(find(i));
+  };
+  const placeOf2 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
+  const pastSeam = (row2, col, step4) => {
+    let past = col;
+    while (seams.has(at(row2, past)))
+      past += step4;
+    return regionAt(row2, past);
+  };
+  return (cell3, hex3) => {
+    const own2 = listed.get(at(cell3.row, cell3.col));
+    const width = own2?.width ?? 1;
+    const beside2 = (own2?.seam === true ? [pastSeam(cell3.row, cell3.col - 1, -1), pastSeam(cell3.row, cell3.col + width, 1)] : []).find((region2) => region2?.hex === hex3);
+    const region = beside2 ?? regionAt(cell3.row, cell3.col);
+    return region === void 0 ? ownPlace(cell3, width) : placeOf2(region);
+  };
+}
 function wheel(curve, z) {
   requireCurve(curve);
   requireZ("wheel", z);
   const P2 = curve.seconds;
-  const seed = (hex3) => hash(Number.parseInt(hex3.slice(1), 16) * 1e-4, 17.3 + z);
-  const stray = (s, t2) => noise(t2 / STRAY_PERIODS[0], 5.9 + 97 * s, z) + 0.5 * noise(t2 / STRAY_PERIODS[1], 2.3 + 89 * s, z + 7.1);
-  const turned = (hex3, t2) => {
-    const s = seed(hex3);
-    return 360 * t2 / P2 + curve.swing * STRAY * ((stray(s, t2) - stray(s, 0)) / 1.5);
-  };
+  const stray = ({ row: row2, centre }, t2) => noise(t2 / STRAY_PERIODS[0], centre / STRAY_SPREAD + 5.9, z + row2 / STRAY_SPREAD + 2.3) + 0.5 * noise(t2 / STRAY_PERIODS[1], centre / STRAY_SPREAD + 97.3, z + row2 / STRAY_SPREAD + 7.1);
+  const turned = (place, t2) => 360 * t2 / P2 + curve.swing * STRAY * ((stray(place, t2) - stray(place, 0)) / 1.5);
   const settled3 = new WeakMemo();
   return stillOnSlots((drawn) => {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
-    const segmentOf = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
-    const keyOf2 = (color, segment) => `${color.hex} ${segment}`;
+    const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
+    const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
     const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
-      return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], segmentOf(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
+      return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
+    const placeOf2 = segmentsOf(drawn);
     return Animation.continuous((t2) => {
       const written2 = /* @__PURE__ */ new Map();
-      const choose = (color, segment) => {
-        const turn = hueTurned(color, turned(segment, t2));
-        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, segment)) ?? UNBOUNDED);
+      const choose = (color, bound, place) => {
+        const turn = hueTurned(color, turned(place, t2));
+        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
       };
-      const write = (color, segment) => {
-        const found = written2.get(keyOf2(color, segment)) ?? choose(color, segment);
-        written2.set(keyOf2(color, segment), found);
+      const write = (color, bound, place) => {
+        const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
+        const found = written2.get(key) ?? choose(color, bound, place);
+        written2.set(key, found);
         return found;
       };
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
-        const turn = (color, ours, other, theirs) => ours ? write(color, segmentOf(color, other, theirs)) : color;
+        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf2(cell3, color.hex)) : color;
         return { ...shown, fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
       };
     });
@@ -34281,21 +34485,21 @@ var EFFECT_CATALOGUE = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effect.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effect.js
 init_globals();
 function placeGlyphs(segments, key) {
   let index = 0;
-  const placed = walkGlyphs(segments).map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => ({ glyph, cell: cell3 && { ...cell3, glyph, index: index++, seed: cellSeed(key, cell3.row, cell3.col) } })));
-  return { placed, cells: placed.flatMap((glyphs) => glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3])) };
+  const placed2 = walkGlyphs(segments).map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => ({ glyph, cell: cell3 && { ...cell3, glyph, index: index++, seed: cellSeed(key, cell3.row, cell3.col) } })));
+  return { placed: placed2, cells: placed2.flatMap((glyphs) => glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3])) };
 }
-function showGlyphs(placed, frame) {
-  const shown = placed.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame, cell3)));
-  standsApart(placed.flat(), shown.flat());
+function showGlyphs(placed2, frame) {
+  const shown = placed2.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame, cell3)));
+  standsApart(placed2.flat(), shown.flat());
   return shown;
 }
 function reglyphText(text4, effect, options) {
-  const { placed, cells } = placeGlyphs([new Segment(text4.plain)], options.key);
-  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame) => rewritten(text4, placed[0], showGlyphs(placed, frame)[0]));
+  const { placed: placed2, cells } = placeGlyphs([new Segment(text4.plain)], options.key);
+  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame) => rewritten(text4, placed2[0], showGlyphs(placed2, frame)[0]));
 }
 function rewritten(text4, glyphs, shown) {
   if (shown.every((s, i) => s === glyphs[i].glyph))
@@ -34327,10 +34531,10 @@ function shows(frame, cell3) {
   }
   return text4;
 }
-function standsApart(placed, shown) {
-  const beside2 = (j) => placed[j]?.cell === void 0 ? "" : shown[j];
+function standsApart(placed2, shown) {
+  const beside2 = (j) => placed2[j]?.cell === void 0 ? "" : shown[j];
   shown.forEach((text4, i) => {
-    const { glyph, cell: cell3 } = placed[i];
+    const { glyph, cell: cell3 } = placed2[i];
     if (cell3 === void 0 || text4 === glyph)
       return;
     const [before, after] = [beside2(i - 1), beside2(i + 1)];
@@ -34340,7 +34544,7 @@ function standsApart(placed, shown) {
   });
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effects.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/glyph-effects.js
 init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
@@ -34511,7 +34715,7 @@ var GLYPH_EFFECT_CATALOGUE = {
   }
 };
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/frames.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/frames.js
 init_globals();
 var FrameSequence = class {
   /** Which frame is in progress when: the holds are the frames' seconds, in order. */
@@ -34571,7 +34775,7 @@ function textFrameAt(animation, t2, motion) {
   return stamped;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
 init_globals();
 function renderToBlock(r, options) {
   const segments = [...render(r, options)];
@@ -34918,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.171.0";
+var PACKAGE_VERSION = "1.172.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -37523,8 +37727,8 @@ function holdClickError(state, sessionId2, text4, at) {
 }
 function answeredClickError(state, sessionId2, error) {
   const last2 = lastClickError(state, sessionId2);
-  const same = last2?.at === error.at && last2.text === error.text;
-  if (!same || last2.answered) return;
+  const same2 = last2?.at === error.at && last2.text === error.text;
+  if (!same2 || last2.answered) return;
   state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
 }
 function lastClickError(state, sessionId2) {
@@ -37583,7 +37787,7 @@ function sameBy(fields2) {
   const keys2 = Object.keys(fields2);
   return (a, b) => keys2.every((key) => fields2[key](a[key], b[key]));
 }
-var sameEach = (same) => (a, b) => a.length === b.length && a.every((item, i) => same(item, b[i]));
+var sameEach = (same2) => (a, b) => a.length === b.length && a.every((item, i) => same2(item, b[i]));
 
 // src/themes/decor.ts
 var DECOR_HUES = ["primary", "secondary", "accent"];
@@ -37607,8 +37811,8 @@ var SHADE_SUFFIX = {
   muted: "-muted"
 };
 var shadeRole = (hue, shade) => `${hue}${SHADE_SUFFIX[shade]}`;
-var poleText = (palette, _hue, background, drawnAt) => textOn(palette, background, drawnAt);
-var roleText = (palette, hue, background, drawnAt) => legibleOn(palette, paletteRole(palette, `text-${hue}`), background, drawnAt);
+var poleText = (palette, _hue, background, drawnAt) => textOn2(palette, background, drawnAt);
+var roleText = (palette, hue, background, drawnAt) => legibleOn(palette, palette.get(`text-${hue}`), background, drawnAt);
 var ladderWindow = (from) => ({
   // [LAW:no-defensive-null-guards] Every position below starts at most four
   // rungs up a ladder of seven; the `!`s state that, they do not guard it.
@@ -37737,15 +37941,15 @@ function windowAt(palette, hue, shade, drawnAt) {
 }
 var inWalkOrder = (window2) => {
   if (window2.length < 3) return window2;
-  const ladder = LADDER;
+  const ladder2 = LADDER;
   const [low, ...above] = [...window2].sort(
-    (a, b) => ladder.indexOf(a) - ladder.indexOf(b)
+    (a, b) => ladder2.indexOf(a) - ladder2.indexOf(b)
   );
   return [low, above.at(-1), ...above.slice(0, -1)];
 };
 var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
 var WINDOWS = memoPerPalette();
-var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;
+var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex;
 function widen(palette, hue, from, taken, drawnAt) {
   const drawn = drawnIn(palette, hue, drawnAt);
   return ladderFrom(from, palette.dark).find(
@@ -37753,8 +37957,8 @@ function widen(palette, hue, from, taken, drawnAt) {
   );
 }
 function ladderFrom(from, dark) {
-  const ladder = LADDER;
-  const place = (shade) => shade === "muted" ? dark ? -1 : ladder.length : ladder.indexOf(shade);
+  const ladder2 = LADDER;
+  const place = (shade) => shade === "muted" ? dark ? -1 : ladder2.length : ladder2.indexOf(shade);
   const away = dark ? 1 : -1;
   return LADDER.map((rung, at) => ({
     rung,
@@ -37880,8 +38084,8 @@ function stepKey({
   lineEnd,
   ...unkeyed
 }, at = index) {
-  const none = unkeyed;
-  void none;
+  const none2 = unkeyed;
+  void none2;
   return `${axis},${at},${count},${distributionName(distribution)},${lineStart},${lineEnd}`;
 }
 function distributionName(distribution) {
@@ -37930,21 +38134,12 @@ var KEYSTONE_AT = {
   "line-end": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineEnd
 };
 var PLANE_ROLE = "surface";
-function paletteRole(palette, role) {
-  const colour = palette.get(role);
-  if (colour === void 0) {
-    throw new Error(
-      `palette "${palette.name}" has no "${role}" role; decoration needs it`
-    );
-  }
-  return colour;
-}
-var decorEntryColour = (palette, entry) => paletteRole(palette, shadeRole(entry.hue, entry.shade));
+var decorEntryColour = (palette, entry) => palette.get(shadeRole(entry.hue, entry.shade));
 var TEXT_MIN_CONTRAST = 4.5;
-function textOn(palette, background, drawnAt) {
+function textOn2(palette, background, drawnAt) {
   return POLE_TEXT(palette, `${background.hex}|${drawnAt}`, () => {
     const side = contrastFor(background);
-    const pole = ["background", "foreground"].map((role) => paletteRole(palette, role)).reduce(
+    const pole = ["background", "foreground"].map((role) => palette.get(role)).reduce(
       (best, pole2) => contrastRatio(side, pole2) < contrastRatio(side, best) ? pole2 : best
     );
     return legibleOn(palette, pole, background, drawnAt);
@@ -38002,11 +38197,10 @@ var nestedIn = (disclosure) => ({
 });
 function bandFor(palette, disclosure, drawnAt) {
   return {
-    state: paletteRole(
-      palette,
+    state: palette.get(
       shadeRole(hueOf2(disclosure), pressedAt(palette, disclosure, drawnAt))
     ),
-    plane: paletteRole(palette, PLANE_ROLE),
+    plane: palette.get(PLANE_ROLE),
     items: bandEntries(palette, disclosure, drawnAt).map(
       (entry) => decorEntryColour(palette, entry)
     )
@@ -39109,8 +39303,8 @@ var WatcherRegistry = class {
       return { kind: "listening", handle, bound };
     } catch (e) {
       const reason = e.message;
-      const same = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
-      if (!same) this.logger("warn", `watch failed ${at}: ${reason}`);
+      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
+      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
       return {
         kind: "deaf",
         deafness: { kind: "refused", path: at, reason }
@@ -48585,13 +48779,13 @@ function sprigStrings() {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
 init_globals();
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
 init_globals();
 function applyStyleToFragment(child, style) {
   const fragment = asFragment(child);
@@ -48606,7 +48800,7 @@ function asFragment(child) {
   return child;
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
 function attrFunc(style) {
   return {
     fn: ((child) => applyStyleToFragment(child, style)),
@@ -48663,7 +48857,7 @@ function richTextStyleFuncs() {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
 init_globals();
 function asColor(value, func) {
   let colour;
@@ -48740,7 +48934,7 @@ function colorFuncs(drawnAt = () => TRUECOLOR) {
   };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
 init_globals();
 function colorStops(tail, palette) {
   if (tail.length % 2 !== 0) {
@@ -48771,7 +48965,7 @@ function paletteFuncs(getPalette) {
   return { color: colorFunc2, ramp: rampFunc };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
 init_globals();
 var HOST_CLOCK = Timeline.play(0);
 function pairs(what, tail, value) {
@@ -48859,7 +49053,7 @@ function animationFuncs(frame, options = {}) {
   return { frames: framesFunc, stepped: steppedFunc, tween: tweenFunc, loop: loopFunc, glyphs: glyphsFunc };
 }
 
-// node_modules/.pnpm/@promptctl+rich-js@0.25.1_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 function richTextFuncs(drawnAt) {
   return { ...richTextStyleFuncs(), ...colorFuncs(drawnAt) };
 }
@@ -51780,14 +51974,14 @@ function insertCells(root, cells) {
   return cells.reduce(
     (acc, cell3) => {
       const id2 = cell3.id ?? cell3.seg;
-      const placed = [...walkNodes(rootNode(acc.root))].flatMap(
+      const placed2 = [...walkNodes(rootNode(acc.root))].flatMap(
         (node2) => node2.kind === "segment" ? [node2] : []
       );
-      if (placed.some(
+      if (placed2.some(
         (node2) => node2.name === cell3.seg && (cell3.id === void 0 || placementId(node2) === cell3.id)
       ))
         return acc;
-      const held = placed.find((node2) => placementId(node2) === id2);
+      const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
         return refuse2(
           acc,
@@ -51807,12 +52001,12 @@ function insertCells(root, cells) {
           besideRow(row2, cell3.anchor, node, cell3.relation)
         ]
       );
-      return rows.some(([, , placed2]) => placed2 !== null) ? {
+      return rows.some(([, , placed3]) => placed3 !== null) ? {
         ...acc,
         root: {
           ...acc.root,
           rows: Object.fromEntries(
-            rows.map(([name, row2, placed2]) => [name, placed2 ?? row2])
+            rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
           )
         }
       } : refuse2(
@@ -51869,9 +52063,9 @@ function beside(node, anchor, cell3, relation) {
 function besideInBody(node, anchor, cell3, relation) {
   let found = false;
   const next2 = mapOpens(node, (body) => {
-    const placed = beside(body, anchor, cell3, relation);
-    found = placed !== null;
-    return placed ?? body;
+    const placed2 = beside(body, anchor, cell3, relation);
+    found = placed2 !== null;
+    return placed2 ?? body;
   });
   return found ? next2 : null;
 }
@@ -52805,7 +52999,7 @@ function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
   const bgColor = !filled ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
   active2.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn(palette, ground, drawnAt);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
   const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled ? chosen(bgColor) : void 0;
   return new Style({
     ...filled && { bgcolor: ColorSpec.fromRgba(bgColor) },
@@ -53036,8 +53230,8 @@ function requestedConfigTarget(argument, environment) {
   }
   return { source: "search" };
 }
-function chainName(paths, none = "bundled default (no config file loaded)") {
-  return paths.join(" < ") || none;
+function chainName(paths, none2 = "bundled default (no config file loaded)") {
+  return paths.join(" < ") || none2;
 }
 
 // src/render/strip.ts
@@ -53412,6 +53606,7 @@ var EffectSessions = class {
 
 // src/render/strip.ts
 var UNBOUNDED_DRAW_WIDTH = 80;
+var ROW_HOST = {};
 function draw(renderable, options) {
   const destination = resolveDestination(options.colorSystem);
   const { time } = options;
@@ -53423,7 +53618,7 @@ function draw(renderable, options) {
       asciiOnly: false,
       theme: RENDER_THEME,
       colorSystem: destination.colorSystem,
-      ...time === void 0 ? {} : { frame: { time, host: { frameTime: time } } },
+      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
       // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
       // as no style at all; a name the theme lacks is a broken config, so it
       // throws here exactly as the cell splitter throws on it.
@@ -55108,8 +55303,8 @@ function prependAnchor(node) {
   };
 }
 function withAnchor(node) {
-  const placed = countAnchors(node) > 0 ? node : prependAnchor(node);
-  return placed;
+  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
+  return placed2;
 }
 function countAnchors(node) {
   let n = 0;
@@ -58451,9 +58646,9 @@ function reportable(presence2) {
   return presence2.kind === "plugin" || presence2.kind === "missing";
 }
 function absentPlacement(config2, cells, presence2) {
-  const placed = /* @__PURE__ */ new Map();
+  const placed2 = /* @__PURE__ */ new Map();
   const add2 = (id2, at) => {
-    placed.set(id2, [...placed.get(id2) ?? [], at]);
+    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
   };
   const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
   const fragments = [
@@ -58471,7 +58666,7 @@ function absentPlacement(config2, cells, presence2) {
   const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
   for (let grew = true; grew; ) {
     grew = false;
-    for (const [id2, at] of placed)
+    for (const [id2, at] of placed2)
       if (!absent.has(id2) && at.every(standsOnAbsent)) {
         absent.add(id2);
         grew = true;
@@ -58482,7 +58677,7 @@ function absentPlacement(config2, cells, presence2) {
 function withoutUnplaced(config2) {
   let removed = 0;
   const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
-  const placed = (name) => {
+  const placed2 = (name) => {
     const keep2 = declared(name).kind === "declared";
     if (!keep2) removed += 1;
     return keep2;
@@ -58491,7 +58686,7 @@ function withoutUnplaced(config2) {
     ...node,
     children: node.children.flatMap((child) => nodes(child))
   });
-  const nodes = (node) => node.kind === "container" ? [container(node)] : placed(node.name) ? [mapOpens(node, container)] : [];
+  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
   const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
   const root = (r) => ({
     ...r,
@@ -58880,12 +59075,12 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
         }
         continue;
       }
-      const placed = presence2(node.name);
-      if (reportable(placed)) {
+      const placed2 = presence2(node.name);
+      if (reportable(placed2)) {
         reported.add(node.name);
         ctx.unplaced.push({
           path: path39,
-          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
           line
         });
       }
@@ -58909,8 +59104,8 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
       if (node.kind !== "segment" || reported.has(node.name)) continue;
-      const placed = presence2(node.name);
-      if (!reportable(placed)) continue;
+      const placed2 = presence2(node.name);
+      if (!reportable(placed2)) continue;
       reported.add(node.name);
       ctx.inherited.push({
         name: node.name,
@@ -58919,7 +59114,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
           `${key} inherits from a config layer below whose`,
           node.name,
           cfg.segments,
-          placed
+          placed2
         ),
         line: findKeyLine(ctx.source, key.split("."))
       });
@@ -58963,9 +59158,9 @@ function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a
       line
     });
   };
-  const placed = new Set(placementIds(presetRoot(cfg, presetName).node));
+  const placed2 = new Set(placementIds(presetRoot(cfg, presetName).node));
   const checkRetired = (role, id2) => {
-    if (!RENAMED_SEGMENTS.has(id2) || placed.has(id2) || Object.prototype.hasOwnProperty.call(cfg.segments, id2)) {
+    if (!RENAMED_SEGMENTS.has(id2) || placed2.has(id2) || Object.prototype.hasOwnProperty.call(cfg.segments, id2)) {
       return;
     }
     ctx.issues.push({
@@ -59513,14 +59708,14 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
 init_globals();
 function validateNoCycles(ctx, cfg, within4 = () => true) {
   const { graph, nodeInfo } = buildTemplateGraph(cfg);
-  const WHITE = 0;
+  const WHITE2 = 0;
   const GRAY = 1;
   const BLACK = 2;
   const color = /* @__PURE__ */ new Map();
   const stack = [];
-  for (const node of graph.keys()) color.set(node, WHITE);
+  for (const node of graph.keys()) color.set(node, WHITE2);
   for (const start of graph.keys()) {
-    if (!within4(start) || color.get(start) !== WHITE) continue;
+    if (!within4(start) || color.get(start) !== WHITE2) continue;
     if (dfs(start)) return;
   }
   function dfs(node) {
@@ -59544,7 +59739,7 @@ function validateNoCycles(ctx, cfg, within4 = () => true) {
         });
         return true;
       }
-      if (c === WHITE && dfs(next2)) return true;
+      if (c === WHITE2 && dfs(next2)) return true;
     }
     color.set(node, BLACK);
     stack.pop();
@@ -63959,7 +64154,7 @@ function writePreset(store, home, from, globals, picks, placements) {
     (text4, [at, value]) => setValue(text4, at, value, JSON5_DIALECT),
     setValue(before ?? "", own2, "{}", JSON5_DIALECT)
   );
-  const placed = homeOnly(
+  const placed2 = homeOnly(
     home,
     () => withPlacements(
       after,
@@ -63968,7 +64163,7 @@ function writePreset(store, home, from, globals, picks, placements) {
       ownRow
     )
   );
-  commit2(store, home, before, placed, refuseHidden);
+  commit2(store, home, before, placed2, refuseHidden);
   return name;
 }
 function writeThemeDefault(store, home, theme24, look) {
@@ -64020,7 +64215,7 @@ function applyLayoutOp(store, home, key, op) {
     () => layoutPlacementOf(docOf(before ?? ""), target.preset, subject)
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed } = spliceOp(authored, placement.path, op, () => {
+  const { after, placed: placed2 } = spliceOp(authored, placement.path, op, () => {
     const config2 = loadOrRefuse(home, authored).config;
     return presetNames(config2.presets).map(
       (preset) => presetRoot(config2, preset).node
@@ -64032,17 +64227,17 @@ function applyLayoutOp(store, home, key, op) {
     );
   }
   commit2(store, home, before, after, refuseHidden);
-  return placed;
+  return placed2;
 }
 function spliceOp(text4, path39, op, rendered) {
   switch (op.op) {
     case "remove":
       return { after: removeSegmentRef(text4, path39, op.target), placed: null };
     case "insert": {
-      const placed = mintPlacement(op.segment, op.anchor, rendered());
+      const placed2 = mintPlacement(op.segment, op.anchor, rendered());
       return {
-        after: insertSegmentRef(text4, path39, placed, op.anchor, op.relation),
-        placed
+        after: insertSegmentRef(text4, path39, placed2, op.anchor, op.relation),
+        placed: placed2
       };
     }
   }
@@ -66838,20 +67033,20 @@ var READS = {
   rateLimits: (paths) => anyPathStartsWith(paths, "block") || anyPathStartsWith(paths, "weekly")
 };
 function dataNeeds(config2, preset) {
-  const placed = /* @__PURE__ */ new Map();
+  const placed2 = /* @__PURE__ */ new Map();
   for (const node of walkNodes(presetRoot(config2, preset).node)) {
     if (node.kind !== "segment") continue;
-    const whens = placed.get(node.name) ?? [];
+    const whens = placed2.get(node.name) ?? [];
     if (node.when) whens.push(node.when);
-    placed.set(node.name, whens);
+    placed2.set(node.name, whens);
   }
-  const failing = [...placed.keys()].filter(
+  const failing = [...placed2.keys()].filter(
     (name) => missingDataOf(config2.segments[name]) === "fail"
   );
   const paths = new Map(
     failing.map((name) => [
       name,
-      segmentInputPaths(config2, name, placed.get(name))
+      segmentInputPaths(config2, name, placed2.get(name))
     ])
   );
   const needs = (source) => failing.filter((name) => READS[source](paths.get(name)));
@@ -69884,18 +70079,18 @@ var resetConfig = (value, ctx) => {
   );
 };
 function endedPlacements(before, after) {
-  const placed = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
+  const placed2 = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
     (n) => n.kind === "segment"
   );
   const survivors = new Set(
     presetNames(after.presets).flatMap(
-      (preset) => placed(after, preset).map(
+      (preset) => placed2(after, preset).map(
         (n) => configureMember(ident(preset), placementId(n))
       )
     )
   );
   return presetNames(before.presets).flatMap(
-    (preset) => placed(before, preset).map((node) => ({
+    (preset) => placed2(before, preset).map((node) => ({
       member: configureMember(ident(preset), placementId(node)),
       node
     })).filter(({ member }) => !survivors.has(member))
@@ -69929,7 +70124,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     );
   }
   const home = originHome(origin);
-  const placed = applyLayoutOp(editStore(ctx, sid), home, key, op);
+  const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
   const released = endedSessionKeys(
     endedPlacements(before, ctx.configFor(origin)),
@@ -69938,7 +70133,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`
+    `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
 var undo = (value, ctx) => {
@@ -72079,7 +72274,7 @@ init_globals();
 function stateCell(palette, background, drawnAt) {
   return new Style({
     bgcolor: ColorSpec.fromRgba(background),
-    color: ColorSpec.fromRgba(textOn(palette, background, drawnAt))
+    color: ColorSpec.fromRgba(textOn2(palette, background, drawnAt))
   });
 }
 function decoratedCell({
@@ -72095,7 +72290,7 @@ function closeOn(palette, ground, drawnAt) {
   return new Style({
     color: ColorSpec.fromRgba(
       ensureContrast(
-        paletteRole(palette, DISCLOSURE_CLOSE_ROLE),
+        palette.get(DISCLOSURE_CLOSE_ROLE),
         ground,
         TEXT_MIN_CONTRAST,
         drawnAt
@@ -72122,12 +72317,12 @@ init_globals();
 init_globals();
 var SWATCH_GLYPH = "\u2580";
 function swatch(palette) {
-  const ground = ColorSpec.fromRgba(paletteRole(palette, "background"));
+  const ground = ColorSpec.fromRgba(palette.get("background"));
   const drawn = RichText.fromFragments(
     DECOR_HUES.map(
       (role) => new RichText(SWATCH_GLYPH, {
         style: new Style({
-          color: ColorSpec.fromRgba(paletteRole(palette, role)),
+          color: ColorSpec.fromRgba(palette.get(role)),
           bgcolor: ground
         })
       })
@@ -72194,8 +72389,8 @@ function libraryLayout(entries, groups, paged) {
       (entry, i) => entry.group === group.id ? [i] : []
     )
   })).filter((section) => section.indices.length > 0);
-  const placed = sections.reduce((n, s) => n + s.indices.length, 0);
-  if (placed !== entries.length) {
+  const placed2 = sections.reduce((n, s) => n + s.indices.length, 0);
+  if (placed2 !== entries.length) {
     const known = new Set(groups.map((g) => g.id));
     const stray = entries.flatMap(
       (entry, i) => known.has(entry.group) ? [] : [`#${i} (group "${entry.group}")`]
@@ -72766,7 +72961,7 @@ function previewRows(palette, decor, opens, drawnAt) {
   const chosen = (text4, colour) => ({
     text: text4,
     colour,
-    ink: textOn(palette, colour, drawnAt)
+    ink: textOn2(palette, colour, drawnAt)
   });
   return [
     [
@@ -72782,8 +72977,8 @@ function previewRows(palette, decor, opens, drawnAt) {
     [
       [chosen("\u25BE open", band.state), chosen("menu", band.plane)],
       [
-        chosen("warn", paletteRole(palette, "warning")),
-        chosen("error", paletteRole(palette, "error"))
+        chosen("warn", palette.get("warning")),
+        chosen("error", palette.get("error"))
       ]
     ]
   ];
@@ -74179,10 +74374,10 @@ var Placement = class {
     return evaluated(colours, body, this.affixes.read());
   }
 };
-function inlet(same) {
+function inlet(same2) {
   const box = observable.box(void 0, {
     deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && same(a, b)
+    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
   });
   return {
     set: (value) => runInAction(() => box.set(value)),
@@ -74787,12 +74982,12 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     const basePalette = theme24.value;
     const palette = transposedPalette(basePalette, style.value);
     parts.publishLook({ basePalette, palette, decor });
-    const flashFill = paletteRole(palette, "warning");
+    const flashFill = palette.get("warning");
     const flash = selection2.idleSince === void 0 ? null : {
       idleSince: selection2.idleSince,
       timeoutS: selection2.menuTimeout,
       fill: flashFill,
-      text: textOn(palette, flashFill, registry.drawnAt())
+      text: textOn2(palette, flashFill, registry.drawnAt())
     };
     const motion = effects.motion(
       effect.value,
@@ -76224,7 +76419,7 @@ function introspectSegments(state) {
   const { store, config: config2, lastRenderBySegment } = state;
   const declaredNames = new Set(store.names());
   const segNames = orderedSegmentNames(config2);
-  const placed = placementsBySegment(config2);
+  const placed2 = placementsBySegment(config2);
   const out = [];
   for (const name of segNames) {
     const seg2 = config2.segments[name];
@@ -76240,7 +76435,7 @@ function introspectSegments(state) {
       ),
       // The render sink is keyed by placement id, so each placement reads
       // its own.
-      placements: (placed.get(name) ?? []).map((id2) => ({
+      placements: (placed2.get(name) ?? []).map((id2) => ({
         id: id2,
         lastRender: lastRenderBySegment.get(id2) ?? null
       }))
@@ -79963,18 +80158,18 @@ function unusedDeclarations(raw, config2, inserted) {
     }
   }
   const writtenKeys = /* @__PURE__ */ new Set();
-  const placed = new Set(inserted);
+  const placed2 = new Set(inserted);
   for (const name of clicked) {
     const action2 = config2.actions[name];
     if (action2 === void 0) continue;
     if ("set" in action2) writtenKeys.add(action2.set);
-    if ("insertSegment" in action2) placed.add(action2.insertSegment);
+    if ("insertSegment" in action2) placed2.add(action2.insertSegment);
     if ("insertSegmentFrom" in action2 && Array.isArray(action2.insertSegmentFrom))
-      for (const seg2 of action2.insertSegmentFrom) placed.add(seg2);
+      for (const seg2 of action2.insertSegmentFrom) placed2.add(seg2);
   }
   for (const preset of presetNames(config2.presets)) {
     for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.kind === "segment") placed.add(node.name);
+      if (node.kind === "segment") placed2.add(node.name);
     }
   }
   const variableUsed = (name, v) => read2.has(name) || v.kind === "state" && writtenKeys.has(v.key);
@@ -80000,7 +80195,7 @@ function unusedDeclarations(raw, config2, inserted) {
     ...unusedOf(
       "segment",
       Object.keys(raw.segments ?? {}),
-      (name) => placed.has(name)
+      (name) => placed2.has(name)
     )
   ];
 }
@@ -81918,7 +82113,7 @@ var TmuxStatusLines = class {
   // (segments, as the binding's URL carries them): the link the frame the
   // daemon drew there marks it with.
   linkAt(value) {
-    const segments = segmentsOf(value);
+    const segments = segmentsOf2(value);
     const [socket, pane, range, ...extra] = segments ?? [];
     if (segments === null || socket === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
       return {
@@ -82275,7 +82470,7 @@ var TmuxStatusLines = class {
     );
   }
 };
-function segmentsOf(value) {
+function segmentsOf2(value) {
   try {
     return decodeSegments(value);
   } catch (err) {
