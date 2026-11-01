@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-549",
+      "ref": "refs/pull/549/merge",
+      "sha": "279d4289274f49f067e5edc18a7e3277f7a46853",
+      "timestamp": "2026-11-01T11:21:16.618Z",
+      "commits": [
+        {
+          "sha": "279d4289274f49f067e5edc18a7e3277f7a46853",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T04:20:27-07:00",
+          "message": "Merge 2123273a75b78eaead7ff83ef026b56d5f5d8316 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
+        },
+        {
+          "sha": "2123273a75b78eaead7ff83ef026b56d5f5d8316",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T04:20:18-07:00",
+          "message": "fix(daemon): background and lifecycle launches go async (candybar-launch-q7o7.jqq)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7b70464dd074c6775e2cbd7ba963e3ad790cb484",
