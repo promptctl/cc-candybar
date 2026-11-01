@@ -32,33 +32,57 @@ import {
 import { plainOf } from "./frame.js";
 import type { RowItem } from "./effect.js";
 
-// The offsets `text` wraps to `line` at. Each wrapped line is found by searching
-// forward: rich-js drops the whitespace a break leaves hanging, so summed line
-// lengths would drift from the text.
-function wrapOffsets(text: RichText, line: number): number[] {
-  const { plain } = text;
+// The offsets `plain` wraps to `line` at. Each wrapped line is found by searching
+// forward for its content, the line less the whitespace hanging off its end:
+// rich-js crops that whitespace at the edge, and half of a full-width space
+// draws as a narrow one, so it is neither countable nor a slice of the text. A
+// line of nothing but that whitespace starts nothing.
+function wrapOffsets(plain: string, line: number): number[] {
   const offsets: number[] = [];
   let at = 0;
-  wrappedLines(text, line).forEach((wrapped, i) => {
-    const start = plain.indexOf(wrapped, at);
-    if (i > 0 && wrapped !== "") offsets.push(start);
-    at = start + wrapped.length;
+  wrappedLines(plain, line).forEach((wrapped, i) => {
+    const content = wrapped.trimEnd();
+    const start = plain.indexOf(content, at);
+    if (i > 0 && content !== "") offsets.push(start);
+    at = start + content.length;
   });
   return offsets;
+}
+
+// Whether a cell stands as it is. One that clears a line does, however it is
+// painted. Past that, the caps are drawn only where the cell is painted, so what
+// decides is the cell measured through the draw that will write it.
+function fits(
+  cell: RichText,
+  line: number,
+  options: BuildLineOptions,
+): boolean {
+  if (cell.cellLength <= line) return true;
+  const { lines } = drawStripCells([cell], { ...options, width: Infinity });
+  return cellLen(plainOf(lines.flat())) <= options.width;
 }
 
 // A strip item as the items it takes to fit `line`, each keeping the item's
 // placement. Tabs expand first because rich-js expands them before it wraps, so
 // a line holding one has no offset in the unexpanded text. The crop removes only
-// whitespace left hanging past a break, and an all-space cell keeps a line of
-// its spaces: FlexStrip folds the line at a zero-width item.
-function dividedToLine(item: RowItem, line: number): readonly RowItem[] {
-  if (item.owner.cellLength <= line) return [item];
+// whitespace left hanging past a break. A blank piece is a justified cell's
+// padding and spends a row on nothing, so it goes, unless the cell is only that:
+// an all-space cell keeps a line of its spaces, since FlexStrip folds the line at
+// a zero-width item.
+function dividedToLine(
+  item: RowItem,
+  line: number,
+  options: BuildLineOptions,
+): readonly RowItem[] {
+  if (fits(item.owner, line, options)) return [item];
   const text = item.owner.copy().expandTabs();
-  return text.divide(wrapOffsets(text, line)).map((piece) => ({
-    ...item,
-    owner: piece.truncate(line, { marker: "" }),
-  }));
+  return text
+    .divide(wrapOffsets(text.plain, line))
+    .filter(({ plain }, _, { length }) => length === 1 || plain.trim() !== "")
+    .map((piece) => ({
+      ...item,
+      owner: piece.truncate(line, { marker: "" }),
+    }));
 }
 
 /**
@@ -71,16 +95,18 @@ function dividedToLine(item: RowItem, line: number): readonly RowItem[] {
  * finite. `autoWrap` off or an unbounded width make it Infinity, a value under
  * which no item divides.
  *
- * `stripChromeCols` is a painted cell's caps, measured through the strip. An
- * unpainted cell draws none, so one within two columns of the width divides
- * early and its pieces share a line with no seam between them.
+ * `stripChromeCols` is a painted cell's caps, the most a cell costs, so a piece
+ * fits however it is painted. An unpainted cell that does divide wraps two
+ * columns early and its pieces can share a line with no seam between them.
  */
 export function fitRow(
   row: readonly LaidCell[],
   options: BuildLineOptions,
 ): readonly RowItem[] {
   const line = Math.max(2, lineWidth(options) - stripChromeCols(options));
-  return filled(row, options).flatMap((item) => dividedToLine(item, line));
+  return filled(row, options).flatMap((item) =>
+    dividedToLine(item, line, options),
+  );
 }
 
 /**

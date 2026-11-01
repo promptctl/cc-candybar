@@ -253,6 +253,17 @@ describe("a cell wider than a line wraps across lines", () => {
     expect(squeezed(lines.join(""))).toBe(squeezed(text));
   });
 
+  test("a full-width space left hanging at a break costs no text", () => {
+    const text = "日本語の説明\u3000次の見出し\u3000最後の行まで続く文章 ▸";
+    for (const width of [9, 10, 11, 12, 13, 20, 30]) {
+      for (const endcaps of ENDCAPS_SHAPES) {
+        const lines = serialize([painted(text)], opts({ endcaps, width }));
+        expect(lines.filter((line) => cellLen(line) > width)).toEqual([]);
+        expect(squeezed(lines.join(""))).toBe(squeezed(text));
+      }
+    }
+  });
+
   test("a word wider than a line folds through it", () => {
     const word = "x".repeat(100);
     const lines = serialize([painted(word)], opts({ width: 30 }));
@@ -264,6 +275,39 @@ describe("a cell wider than a line wraps across lines", () => {
     const items = fitRow([painted(" ".repeat(100))], opts({ width: 30 }));
     expect(items.map(({ owner }) => owner.cellLength)).toEqual([28]);
   });
+
+  test("an unpainted cell that fits as drawn stays whole", () => {
+    const cell = fixed("x".repeat(29));
+    const [only, ...rest] = fitRow([cell], opts({ width: 30 }));
+    expect(only!.owner).toBe(cell.text);
+    expect(rest).toEqual([]);
+  });
+
+  test("a spacer pushes its neighbour flush to an unpainted row's edge", () => {
+    const lines = serialize(
+      [{ ...fixed(" "), fill: SIZING }, fixed("▸")],
+      opts({ width: 30 }),
+    );
+    expect(lines.map((line) => cellLen(line))).toEqual([30]);
+  });
+
+  test("a cell painted only at its head keeps the line it fits", () => {
+    const cell = fixed(`z yyyyyyy ${"x".repeat(19)}`);
+    cell.text.stylize(new Style({ bgcolor: "#445566" }), 0, 1);
+    const [only, ...rest] = fitRow([cell], opts({ width: 30 }));
+    expect(only!.owner).toBe(cell.text);
+    expect(rest).toEqual([]);
+  });
+
+  test.each([["right"], ["center"]] as const)(
+    "padding %s of a cell spends no row on itself",
+    (justify) => {
+      const cell = painted("abc");
+      cell.text.align(justify, 100);
+      const lines = serialize([cell], opts({ width: 30 }));
+      expect(lines.map(squeezed)).toEqual(["abc"]);
+    },
+  );
 
   test("a fill cell too wide for a line divides and is given nothing", () => {
     const cell = { ...painted(SENTENCE), fill: SIZING };

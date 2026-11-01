@@ -249,13 +249,13 @@ export function lineWidth(
   return options.wrap ? options.width : Infinity;
 }
 
-// [LAW:one-source-of-truth] rich-js's own word wrap of one cell, as the text of
-// its lines: a folding copy drawn through the one `draw`. rich-js keeps its line
-// breaker private, and this is what spares the project a second theory of where
-// a line may break.
-export function wrappedLines(text: RichText, width: number): readonly string[] {
-  const wrapping = text.copy();
-  wrapping.overflow = "fold";
+// [LAW:one-source-of-truth] rich-js's own word wrap of a cell's text, as the text
+// of its lines: a folding text drawn through the one `draw`. rich-js keeps its
+// line breaker private, and this is what spares the project a second theory of
+// where a line may break. A break is a fact about the characters, so the cell's
+// styles and justification stay out of the draw.
+export function wrappedLines(plain: string, width: number): readonly string[] {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
   return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf);
 }
 
