@@ -1,5 +1,6 @@
 // One render of a session, a request's or a frame's, and what it records.
 
+import { checkoutLocation } from "../utils/git-root.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import {
@@ -292,11 +293,21 @@ function requestFacts(
 
 export function setUpRender(
   parts: DaemonParts,
-  req: CheckedRenderRequest,
+  arrived: CheckedRenderRequest,
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
   const { sessionState, renderCache } = parts;
+  // [LAW:effects-at-boundaries] Read here, on arrival, because a payload does
+  // no I/O and a frame draws what the request stored.
+  const dir = arrived.hookData.workspace?.current_dir ?? arrived.cwd;
+  const req: CheckedRenderRequest = {
+    ...arrived,
+    hookData: {
+      ...arrived.hookData,
+      ...(dir !== undefined && { location: checkoutLocation(dir) }),
+    },
+  };
   const sessionId = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
   // [LAW:one-source-of-truth] The explicit config path has three

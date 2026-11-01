@@ -18,6 +18,7 @@
 // `set` and `persist` share one field-map definition) and this file owns only the
 // thin total present-key dispatch — the irreducible union eliminator.
 
+import os from "node:os";
 import {
   ACTION_KEYS,
   type ActionDecl,
@@ -150,6 +151,7 @@ export type ActionHome = { readonly dir: string } | { readonly text: string };
 // The home of a table parsed from `filePath`: a file's directory when it is
 // one, else the text's name (a label in angle brackets names no file).
 export function actionHomeOf(filePath: string): ActionHome {
+  if (filePath === "<default>") return { dir: os.homedir() };
   return nodePath.isAbsolute(filePath)
     ? { dir: nodePath.dirname(filePath) }
     : { text: filePath };

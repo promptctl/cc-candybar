@@ -29,6 +29,8 @@
 // the same effective shape every user config resolves to.
 
 import type { DslConfig, SegmentDecl, SettingDecl } from "./dsl-types.js";
+import type { ActionDecl } from "./action.js";
+import { confirmStep } from "./confirm-step.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { BUNDLED_THEME_DEFAULTS } from "./bundled-theme-defaults.js";
@@ -55,6 +57,7 @@ const AUTOCOMPACT = autocompactControl(
 // Factored out of the segments' `template` fields where a TypeScript value is
 // the only way to share one string between several fields.
 
+// (`directory` is unaware of worktrees; `gitPath` is the worktree-aware location.)
 // Directory: ~ collapse under $HOME, project-relative under workspace.project_dir,
 // else raw. Inline-recomputes the project-relative path because the DSL has no
 // template-level `:=` (a `kind: "template"` var would express it once, but adds
@@ -73,7 +76,8 @@ const AUTOCOMPACT = autocompactControl(
 // full absolute path. Same logic handles equal home & current_dir → just "~".
 const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 // [LAW:decomposition] Two separable concerns: (1) COLLAPSE the absolute cwd to a
-// short display form (`~`-relative, else project-relative, else absolute) and
+// short display form (`~`-relative first, project-relative only outside home,
+// else absolute) and
 // (2) ABBREVIATE fish-style. Collapse stays in the template (its inputs are the
 // payload's home/project_dir/current_dir); abbreviation is a single helper
 // applied to the collapsed result. `$dir` carries the collapsed path between the
@@ -84,6 +88,12 @@ const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 // (3) The abbreviation hides the full path, so the cell is one `copyDir` link:
 // clicking it copies `.current_dir` whole. The click lives in this template,
 // so an override keeps the `action "copyDir"` wrap or loses the click.
+const GIT_INIT = confirmStep(
+  "gitInit",
+  { arm: "init", confirm: "init ✓ confirm" },
+  [{ action: "gitInit.run", when: "true" }],
+);
+
 const DIR_TEMPLATE =
   "{{ $dir := .current_dir }}" +
   '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}' +
@@ -226,6 +236,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       kind: "literal",
       value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}",
     },
+    // What marks a linked worktree in `gitPath`'s parenthetical.
+    "glyph.worktree": { kind: "literal", value: "⊫" },
+    ...GIT_INIT.variables,
     version: { kind: "input", path: "version", default: "" },
 
     // home flows through the augmented payload (payloadOf reads
@@ -359,6 +372,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // arrow at its right edge (the `gitDetail` action). The default is the form
     // every session starts in: redeclare this variable with
     // `default: "expanded"` to start with the full line.
+    // What names the checkout: "path" for the location, "repo" for the repo
+    // name. A variable, so a segment calling a form needs no new setting.
+    "git.location": { kind: "literal", value: "path" },
     "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
 
     // Forge PR/MR — the daemon's git provider resolves the branch's newest PR
@@ -712,12 +728,17 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       group: "git",
       description:
         "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact — repo, in-progress operation, sha, upstream ±, stash count, time since the last commit.",
+      // [LAW:dataflow-not-control-flow] The location is a request fact and git
+      // a lane, so the first arm draws the path alone until git answers rather
+      // than letting a pending read blank the whole cell.
       template:
-        '{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}' +
+        '{{ if and (eq .git.location "path") .location.gitPending }}{{ template "gitPath" . }}' +
+        '{{ else if eq .git.branch "" }}{{ template "gitPath" . }}' +
+        `{{ if .location.noRepo }} ${GIT_INIT.template}{{ end }}` +
+        '{{ else }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}' +
         '{{ else }}{{ template "gitCollapsed" . }}{{ end }}' +
-        ' {{ action "gitDetail" "▸" "◂" }}',
+        ' {{ action "gitDetail" "▸" "◂" }}{{ end }}',
       fg: GIT_QUIET_FG,
-      when: '{{ ne .git.branch "" }}',
       // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
       // (brandon-segment-settings-i4n.u36): each is read by its own piece
       // below, so a fact leaves both forms at once, the same as overriding
@@ -1089,6 +1110,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     ...COMMAND_TRAY.actions,
     // The `directory` cell's click: the full path its abbreviation hides.
     copyDir: { copy: "{{ .current_dir }}" },
+    // Runs where the session is, whatever directory the action's home names.
+    // The loader fills in the rest of a run; this table is what it parses.
+    "gitInit.run": {
+      run: ["git", "-C", "{{ .current_dir }}", "init"],
+    } as unknown as ActionDecl,
+    ...GIT_INIT.actions,
     // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
     gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
     ...AUTOCOMPACT.actions,
@@ -1483,10 +1510,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // The two forms `gitaculous` switches between, each composed of the pieces
     // below. Override one to change what that form shows.
     gitCollapsed:
+      '{{ if eq .git.location "path" }}{{ template "gitPath" . }} {{ end }}' +
       '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
     gitExpanded:
       "(git)" +
-      '{{ template "gitRepo" . }}' +
+      '{{ if eq .git.location "path" }} {{ template "gitPath" . }}{{ else }}{{ template "gitRepo" . }}{{ end }}' +
       '{{ template "gitOperation" . }}' +
       '{{ template "gitSha" . }}' +
       '{{ template "gitFlags" . }}' +
@@ -1505,6 +1533,18 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // names that segment, the setting, and the helper when it does not).
     gitBranch:
       '⎇ {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
+    // Worktree-aware location: the main checkout's path, abbreviated, with the
+    // subpath kept whole and the linked worktree named after it. Outside a repo
+    // `.location.main` is "" and the session's directory stands in. It draws
+    // with no leading space, because it starts the bar's form, and reads no
+    // `.git`, so it draws while git is still pending.
+    gitPath:
+      '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}' +
+      '{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}' +
+      '{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}' +
+      '{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}' +
+      '{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}' +
+      '{{ action "copyDir" $text }}',
     gitRepo:
       '{{ if and .settings.repo (ne .git.repoName "") }} {{ .git.repoName }}{{ end }}',
     gitOperation:
