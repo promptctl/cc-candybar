@@ -54166,6 +54166,7 @@ function stripPrivateGlyphs(options) {
   const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
   return privateGlyphsIn(plainOf2(lines2.flat()));
 }
+var WIDEST_GLYPH_COLS = 2;
 function lineWidth(options) {
   return options.wrap ? options.width : Infinity;
 }
@@ -65603,7 +65604,7 @@ function channelRows(message, opts, trailing) {
     color: message.severity.colors.fg
   });
   const styled = (link) => link === null ? base : base.withLink(link);
-  const fold = asCellCol(Math.max(2, opts.width - 1));
+  const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message.lines.flatMap((line, i) => {
     const prefix = cell(i === 0 ? message.severity.glyph : ISSUE_INDENT, base);
     const cells = line.flatMap(
@@ -71957,34 +71958,54 @@ function applySegmentLayout(cells, options) {
 }
 
 // src/render/fill.ts
-function wrapOffsets(plain, line) {
+function wrapOffsets(plain, line, indent2) {
+  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
+  const wrapping = held + plain;
   const offsets = [];
   let at = 0;
-  wrappedLines(plain, line).forEach((wrapped, i) => {
+  wrappedLines(wrapping, line).forEach((wrapped) => {
     const content = wrapped.trimEnd();
-    const start = plain.indexOf(content, at);
-    if (i > 0 && content !== "") offsets.push(start);
+    const start = wrapping.indexOf(content, at);
+    if (content !== "" && start > held.length)
+      offsets.push(start - held.length);
     at = start + content.length;
   });
   return offsets;
+}
+function takenOnLine(before, options) {
+  if (before.length === 0) return 0;
+  const { lines: lines2 } = drawStripCells(
+    before.map(({ owner }) => owner),
+    options
+  );
+  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
+  return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
 }
 function fits(cell3, line, options) {
   if (cell3.cellLength <= line) return true;
   const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
   return cellLen(plainOf2(lines2.flat())) <= options.width;
 }
-function dividedToLine(item, line, options) {
+function dividedToLine(item, line, before, options) {
   if (fits(item.owner, line, options)) return [item];
   const text4 = item.owner.copy().expandTabs();
-  return text4.divide(wrapOffsets(text4.plain, line)).filter(({ plain }, _, { length }) => length === 1 || plain.trim() !== "").map((piece) => ({
+  const indent2 = takenOnLine(before, options);
+  return text4.divide(wrapOffsets(text4.plain, line, indent2)).filter(({ plain }, _, { length }) => length === 1 || plain.trim() !== "").map((piece, i) => ({
     ...item,
-    owner: piece.truncate(line, { marker: "" })
+    owner: piece.truncate(line, { marker: "" }).padLeft(i > 0 ? options.padding : 0)
   }));
 }
 function fitRow(row2, options) {
-  const line = Math.max(2, lineWidth(options) - stripChromeCols(options));
-  return filled(row2, options).flatMap(
-    (item) => dividedToLine(item, line, options)
+  const line = Math.max(
+    WIDEST_GLYPH_COLS,
+    lineWidth(options) - stripChromeCols(options) - options.padding
+  );
+  return filled(row2, options).reduce(
+    (fitted, item) => [
+      ...fitted,
+      ...dividedToLine(item, line, fitted, options)
+    ],
+    []
   );
 }
 function filled(row2, options) {
