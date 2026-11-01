@@ -12,10 +12,14 @@ import {
   type ColorSpec,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility } from "../themes/policy.js";
-import type { DiagnosticColors } from "./diagnostic-style.js";
+import {
+  DIAGNOSTIC_ERROR_COLORS,
+  type DiagnosticColors,
+} from "./diagnostic-style.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import type { DrawnMotion } from "./drawn-motion.js";
 import type { RowKind } from "./effect.js";
+import { permanentGlyphText } from "./error-glyph.js";
 
 export type Attribute = keyof Attributes;
 
@@ -74,6 +78,35 @@ export function diagnosticFrame(text: string, colors: DiagnosticColors): Frame {
     motion: "still",
     pending: [],
   };
+}
+
+// [LAW:one-source-of-truth] A render that failed, in the words of the glyph the
+// statusline's client draws for it, so every lane says what the statusline says.
+export function renderFailedFrame(message: string): Frame {
+  return diagnosticFrame(
+    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
+    DIAGNOSTIC_ERROR_COLORS,
+  );
+}
+
+// [LAW:single-enforcer] The one place a lane refuses a frame: an attribute its
+// encoder cannot draw throws.
+// [LAW:no-silent-failure] The lane draws a frame saying why instead, in the
+// diagnostics' colours. The stream goes on, so the next frame it can draw takes
+// its place, as the statusline's next render replaces its error glyph: a config
+// fixed brings the lane back.
+export function laneEncoded<Encoded>(
+  encode: (frame: Frame) => Encoded,
+  frame: Frame,
+): Encoded {
+  try {
+    return encode(frame);
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    return encode(
+      diagnosticFrame(`⚠ cc-candybar ${why}`, DIAGNOSTIC_ERROR_COLORS),
+    );
+  }
 }
 
 // [LAW:one-source-of-truth] A drawn colour is concrete by its type: a TRUECOLOR
@@ -153,6 +186,27 @@ export function ansiOf(frame: Pick<Frame, "depth" | "rows">): string {
     frame.rows.map((row) => row.runs),
     frame.depth,
   );
+}
+
+const sameLook = (a: Run, b: Run): boolean =>
+  a.fg === b.fg &&
+  a.bg === b.bg &&
+  a.link === b.link &&
+  a.attrs?.join() === b.attrs?.join();
+
+// A row with neighbouring runs of one look joined, for a lane that draws runs
+// rather than cells: an effect's row is a run per cell, and one link split
+// across runs is one tmux range per run. ANSI never merges: `encodeAnsi` writes
+// each run alone.
+export function mergedRuns({ runs }: Row): Run[] {
+  const merged: Run[] = [];
+  for (const run of runs) {
+    const last = merged.at(-1);
+    if (last !== undefined && sameLook(last, run))
+      merged[merged.length - 1] = { ...last, text: last.text + run.text };
+    else merged.push(run);
+  }
+  return merged;
 }
 
 // A line's text.

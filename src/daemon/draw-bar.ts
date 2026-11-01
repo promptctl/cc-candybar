@@ -18,7 +18,6 @@ import {
   refusedArgsError,
   refusedHintsError,
 } from "./protocol";
-import type { Response } from "./protocol";
 import { type SessionId } from "./session-id";
 import { repoQuestions } from "./repo-configs";
 import {
@@ -37,7 +36,7 @@ import {
 import { roleOf, answeredOf } from "./render-sightings";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
-import { ansiOf, type Frame } from "../render/frame.js";
+import { ansiOf, renderFailedFrame, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
   renderWidth,
@@ -58,7 +57,7 @@ import {
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
 import { type PassageFrame } from "../render/effect.js";
-import { feedsFact, type FeedFrame } from "./frame-feed.js";
+import { feedsFact, type FeedFrame, type Refusal } from "./frame-feed.js";
 import {
   LANE_NAMES,
   LANES,
@@ -95,7 +94,7 @@ export const NOTHING_DELIVERED = (): void => {};
 
 // [LAW:single-enforcer] The one reply to a request whose handler threw — a
 // render's own throw, or any other handler's that reached the connection.
-export const renderFailed = (err: unknown): Response => ({
+export const renderFailed = (err: unknown): Refusal => ({
   ok: false,
   error: err instanceof Error ? err.message : inspect(err),
   code: "RENDER_FAILED",
@@ -127,16 +126,13 @@ export function renderFrame(
   try {
     using setup = setUpFrame(parts, sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, nextChange, evaluated, delivered, lanes } = drawRender(
-      parts,
-      setup,
-      {
-        by: "feed",
-        fps,
-      },
-    );
+    const { drawn, evaluated, delivered, lanes } = drawRender(parts, setup, {
+      by: "feed",
+      fps,
+    });
     const output = composeBar(drawn.body);
     return {
+      bar: drawn.body,
       resp: { ok: true, output },
       statusline: {
         ok: true,
@@ -147,7 +143,6 @@ export function renderFrame(
           handedOffTo(lanes, frameFeeds.following(sessionId)),
         ),
       },
-      nextChange,
       evaluated,
       delivered,
       failure: null,
@@ -162,9 +157,9 @@ export function renderFrame(
     );
     const failed = renderFailed(error);
     return {
+      bar: renderFailedFrame(failed.error),
       resp: failed,
       statusline: failed,
-      nextChange: Infinity,
       evaluated: 0,
       delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` },
@@ -418,18 +413,14 @@ function setUpDraw(
 
 // [LAW:one-source-of-truth] The one draw of a render, a request's or a
 // frame's: synchronous, so between its payload's values and its bytes nothing
-// is awaited and nothing refreshed. Returns the bar at the setup's instant and
-// its motion (`DrawnMotion`, read off the frame this render drew). A throw is
-// the caller's to record.
+// is awaited and nothing refreshed. Returns the bar at the setup's instant. A
+// throw is the caller's to record.
 export function drawRender(
   parts: DaemonParts,
   setup: RenderSetup,
   drawing: Drawing,
 ): {
   drawn: DrawnBar;
-  motion: DrawnMotion;
-  // When the drawn frame next changes without new data, in wall seconds.
-  nextChange: number;
   evaluated: number;
   clickShown: ClickErrorRecord | null;
   // Records what the frame's copy clicks copy, once it reached its client.
@@ -778,8 +769,6 @@ export function drawRender(
       diagnostics,
       geometry,
     },
-    motion: body.motion,
-    nextChange: body.nextChange,
     evaluated,
     clickShown,
     delivered,
@@ -992,7 +981,7 @@ async function drawAnswer(
     ended,
     refreshed: refreshedFact(refreshed),
   });
-  const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+  const { drawn, clickShown, delivered, lanes } = drawRender(
     parts,
     setup,
     ANSWERING,
@@ -1013,7 +1002,7 @@ async function drawAnswer(
   });
   return {
     answer: toStatusline ? statusline : output,
-    motion,
+    motion: drawn.body.motion,
     clickShown,
     delivered,
   };

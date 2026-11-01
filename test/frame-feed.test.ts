@@ -6,6 +6,8 @@
 
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { ok } from "../src/utils/outcome";
+import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { renderFrame } from "../src/daemon/draw-bar";
 import {
   feedsFact,
   FrameFeeds,
@@ -15,6 +17,8 @@ import {
   type Subscriber,
 } from "../src/daemon/frame-feed";
 import type { Response } from "../src/daemon/protocol";
+import { plainOf, renderFailedFrame, type Frame } from "../src/render/frame";
+import { barOf } from "./helpers/drawn-frame";
 import {
   UNFOLLOWED,
   UNFOLLOWED_FEEDS,
@@ -179,9 +183,9 @@ function barFrame(
   handoff: string | null = null,
 ): FeedFrame {
   return {
+    bar: { ...barOf([{ text: output }]), nextChange },
     resp: { ok: true, output },
     statusline: { ok: true, output: handoff ?? output },
-    nextChange,
     evaluated: EVALUATED,
     delivered: () => {},
     failure: null,
@@ -195,9 +199,9 @@ function failedFrame(req: string): FeedFrame {
     code: "RENDER_FAILED",
   };
   return {
+    bar: renderFailedFrame(`${req} threw`),
     resp,
     statusline: resp,
-    nextChange: Infinity,
     evaluated: 0,
     delivered: () => {},
     failure: { level: "error", line: `frame ${req} threw` },
@@ -210,7 +214,12 @@ const sub = (
   frame: (resp: Response) => unknown,
   lane: Lane = "band",
   refused: (resp: Refusal) => unknown = () => {},
-): Subscriber => ({ lane, frame, refused, drawing: () => true });
+): Subscriber => ({
+  lane,
+  frame: (_bar, json) => frame(JSON.parse(json) as Response),
+  refused,
+  drawing: () => true,
+});
 
 const outputOf = (resp: Response): string =>
   resp.ok && "output" in resp ? resp.output : JSON.stringify(resp);
@@ -461,6 +470,33 @@ test("a watched session's request outlives the eviction of the least recently no
   await sleep(20);
   close();
   expect(state.renders).toBe(drawn + 1);
+});
+
+test("every subscriber is handed the bar with its lane's answer, and one joining later the bar as it stands", async () => {
+  const { feeds, note, state } = harness({ motion: "still" });
+  state.handoff = "the bar is drawn in the band";
+  note("s", "bar");
+  const barText = (bar: Frame): string => plainOf(bar.rows[0]!.runs);
+  const seen: Array<[string, string]> = [];
+  const follow = (lane: Lane): (() => void) =>
+    feeds.subscribe("s", {
+      lane,
+      frame: (bar, json) => seen.push([barText(bar), json]),
+      refused: () => {},
+      drawing: () => true,
+    });
+  const closeBand = follow("band");
+  await sleep(PERIODS.moving * 3);
+  expect(seen).toEqual([
+    ["bar#0", JSON.stringify({ ok: true, output: "bar#0" })],
+  ]);
+  const closeLate = follow("statusline");
+  expect(seen[1]).toEqual([
+    "bar#0",
+    JSON.stringify({ ok: true, output: state.handoff }),
+  ]);
+  closeBand();
+  closeLate();
 });
 
 test("a frame that keeps failing the same way is logged once, and counted every time", async () => {
@@ -1228,5 +1264,27 @@ describe("a feed draws when its bar next changes", () => {
     // ahead of it.
     for (const at of after)
       expect(at - (Date.now() / 1000 - 10)).toBeLessThan(0.01);
+  });
+});
+
+// [LAW:no-silent-failure] A feed's render that threw reaches a lane as a Frame
+// saying so, with no failure branch in the lane.
+test("a frame whose render threw is the failure's Frame, a still bar in the error glyph's words", () => {
+  const parts = {
+    clock: { date: () => new Date(0) },
+    renderCache: {
+      holdView: () => null,
+      openFailure: () => ({ error: new Error("the view would not open") }),
+    },
+  } as unknown as DaemonParts;
+  const frame = renderFrame(parts, "s", 30, nowAt())!;
+  expect(frame.bar).toEqual(
+    renderFailedFrame("the view would not open"),
+  );
+  expect(frame.bar.nextChange).toBe(Infinity);
+  expect(frame.resp).toMatchObject({
+    ok: false,
+    code: "RENDER_FAILED",
+    error: "the view would not open",
   });
 });

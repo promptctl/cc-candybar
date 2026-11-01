@@ -15,6 +15,7 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { inspect } from "node:util";
+import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Response } from "./protocol";
 import {
@@ -30,23 +31,23 @@ import {
 } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 
-// What one frame of the feed drew: the response its subscribers receive,
-// when the bar it drew next changes, and — for a render that threw — the render
-// event describing it, logged when that failure is first pushed. It is drawn
-// for the feed (`drawing.by` "feed"), so it shows the feed's ceiling where a
-// render request's answer shows that it is polled.
+// What one frame of the feed drew: the bar, the responses its subscribers
+// receive, and — for a render that threw — the render event describing it,
+// logged when that failure is first pushed. It is drawn for the feed
+// (`drawing.by` "feed"), so it shows the feed's ceiling where a render
+// request's answer shows that it is polled.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
 // A frame's two answers: the bar, which a lane drawing it elsewhere draws,
 // and what Claude Code's statusline shows — the bar, or the handoff line in
 // its place while a lane draws it elsewhere (src/daemon/lane-handoff.ts).
 export interface FeedFrame {
+  // [LAW:types-are-the-program] Every frame has a bar: one that failed draws
+  // its diagnostic Frame, so a lane holds no failure branch. Its `nextChange`
+  // is when the feed draws next, within its spacing.
+  readonly bar: Frame;
   readonly resp: Response;
   readonly statusline: Response;
-  // The moment, in wall seconds, the drawn bar next changes without new data
-  // (an effect's next step, a template's next frame, the closing flash's next
-  // turn), or Infinity: when the feed draws it next, within its spacing.
-  readonly nextChange: number;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
   // Records what the frame's copy clicks copy, once it went out to a follower.
@@ -93,9 +94,10 @@ const RATE_WINDOW_S = 1;
 // timer fires, and a wall clock stepped back is followed at the next draw.
 const TIMER_RESOLUTION_S = 0.002;
 
-// A subscriber: its lane's answer to each frame, and its JSON as the feed
-// serialized it once for every subscriber of that lane.
-export type Sink = (resp: Response, json: string) => void;
+// A subscriber: each frame's bar, which a lane drawing it elsewhere encodes,
+// and its lane's answer as the feed serialized it once for every subscriber of
+// that lane.
+export type Sink = (bar: Frame, json: string) => void;
 
 export type Refusal = Extract<Response, { ok: false }>;
 
@@ -192,9 +194,10 @@ interface Feed {
   // The moment the last frame was drawn for, on the monotonic clock: what a
   // wake's next frame is spaced from.
   lastStart: number;
-  // The last frame pushed, as serialized, so an unchanged frame is never
-  // pushed twice and a new subscriber gets the bar at once.
+  // The last frame pushed: its answers as serialized, so an unchanged frame is
+  // never pushed twice, and its bar, so a new subscriber gets the bar at once.
   last: {
+    readonly bar: Frame;
     readonly answers: Answers;
   } | null;
   readonly since: number;
@@ -244,22 +247,14 @@ export function noteSent(rate: Instant[], at: Instant): void {
   rate.splice(0, rate.length, ...kept, at);
 }
 
-interface Sent {
-  readonly resp: Response;
-  readonly bytes: string;
-}
 interface Answers {
-  readonly bar: Sent;
-  readonly statusline: Sent;
+  readonly bar: string;
+  readonly statusline: string;
 }
-const sentOf = (resp: Response): Sent => ({
-  resp,
-  bytes: JSON.stringify(resp),
-});
 
 // [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
 // the one drawing it in the statusline draws what the statusline shows.
-const answerOf = (answers: Answers, lane: Lane): Sent =>
+const answerOf = (answers: Answers, lane: Lane): string =>
   LANES[lane].handsOff ? answers.bar : answers.statusline;
 
 // [LAW:one-source-of-truth] The frames a second a spacing allows: the most a
@@ -600,7 +595,7 @@ export class FrameFeeds<Req> {
   // next change is Infinity, and an unseen bar's spacing is the still period.
   private schedule(feed: Feed, frame: FeedFrame | null, at: Instant): void {
     const { moving, still } = this.deps.periods;
-    const until = ((frame?.nextChange ?? Infinity) - at) * 1000;
+    const until = ((frame?.bar.nextChange ?? Infinity) - at) * 1000;
     const shownPeriod = Math.min(Math.max(until, moving), still);
     const shown = this.shown(feed);
     if (shownPeriod < still && shown) feed.moving++;
@@ -677,16 +672,16 @@ export class FrameFeeds<Req> {
     // the same links, so what they copy is this frame's, pushed or not.
     frame.delivered();
     const answers = {
-      bar: sentOf(frame.resp),
-      statusline: sentOf(frame.statusline),
+      bar: JSON.stringify(frame.resp),
+      statusline: JSON.stringify(frame.statusline),
     };
     if (
-      feed.last?.answers.bar.bytes === answers.bar.bytes &&
-      feed.last.answers.statusline.bytes === answers.statusline.bytes
+      feed.last?.answers.bar === answers.bar &&
+      feed.last.answers.statusline === answers.statusline
     )
       return;
     const before = feed.last?.answers ?? null;
-    feed.last = { answers };
+    feed.last = { bar: frame.bar, answers };
     this.pushed++;
     feed.pushed++;
     // [LAW:nothing-unseen] A failing frame's render event is logged when that
@@ -695,10 +690,7 @@ export class FrameFeeds<Req> {
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
     for (const [lane, rate] of feed.rates)
-      if (
-        before === null ||
-        answerOf(before, lane).bytes !== answerOf(answers, lane).bytes
-      )
+      if (before === null || answerOf(before, lane) !== answerOf(answers, lane))
         noteSent(rate, at);
     for (const sub of feed.followers.keys()) this.send(feed, sub);
   }
@@ -706,10 +698,10 @@ export class FrameFeeds<Req> {
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
   private send(feed: Feed, sub: Subscriber): void {
     if (feed.last === null) return;
-    const { resp, bytes } = answerOf(feed.last.answers, sub.lane);
-    if (feed.followers.get(sub) === bytes) return;
-    sub.frame(resp, bytes);
-    feed.followers.set(sub, bytes);
+    const json = answerOf(feed.last.answers, sub.lane);
+    if (feed.followers.get(sub) === json) return;
+    sub.frame(feed.last.bar, json);
+    feed.followers.set(sub, json);
   }
 
   // A subscription its lane's toggle refuses, told why.

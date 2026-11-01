@@ -15,6 +15,7 @@ import type { Subscriber } from "../src/daemon/frame-feed";
 import type { StatusLines } from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
 import { rangeOf } from "../src/tmux-status/frames";
+import { barOf } from "./helpers/drawn-frame";
 
 const SOCKET = "/tmp/tmux-test/default";
 const OWNER = "/tmp/cc-candybar-test/socket";
@@ -153,14 +154,12 @@ class FakeTmux implements TmuxStatusEdge {
   }
 }
 
-const ESC = "\x1b";
-const frameOf = (text: string, url?: string) => ({
-  ok: true as const,
-  output:
-    url === undefined
-      ? `${text}\n`
-      : `${ESC}]8;;${url}${ESC}\\${text}${ESC}]8;;${ESC}\\\n`,
-});
+const frameOf = (text: string, link?: string) =>
+  barOf(
+    ...text
+      .split("\n")
+      .map((line) => [{ text: line, ...(link !== undefined && { link }) }]),
+  );
 
 function harness(ids: readonly string[] = ["$1"]) {
   const tmux = new FakeTmux(ids);
@@ -191,8 +190,8 @@ function harness(ids: readonly string[] = ["$1"]) {
     owner.answered(SOCKET, view);
     await owner.settled();
   };
-  const frame = async (sessionId: string, resp: ReturnType<typeof frameOf>) => {
-    subs.get(sessionId)!.frame(resp, "");
+  const frame = async (sessionId: string, bar: ReturnType<typeof frameOf>) => {
+    subs.get(sessionId)!.frame(bar, "");
     await owner.settled();
   };
   return { tmux, owner, subs, unsubscribed, newest, logs, hold, answer, frame };

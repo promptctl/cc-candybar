@@ -1,7 +1,8 @@
 // One-line styled diagnostic glyph emitted on permanent daemon failures.
 //
 // [LAW:single-enforcer] One formatter per runtime. The Node entry in
-// src/index.ts calls formatPermanentGlyph; nothing else builds this string.
+// src/index.ts calls formatPermanentGlyph, a failed feed frame takes its words
+// (src/render/frame.ts); nothing else builds this string.
 //
 // [LAW:one-type-per-behavior] The Rust mirror at rust-client/src/error_glyph.rs
 // must produce byte-identical output for the same logical cause — both
@@ -34,8 +35,13 @@ const PREFIX = "⚠ cc-candybar: ";
 // truncate to a budget that leaves room for the prefix at typical widths.
 const MAX_MESSAGE_LEN = 60;
 
+// The glyph's words, which a Frame carries where the daemon draws a failure.
+export function permanentGlyphText(outcome: PermanentOutcome): string {
+  return `${PREFIX}${describe(outcome)}`;
+}
+
 export function formatPermanentGlyph(outcome: PermanentOutcome): string {
-  return `${OPEN}${PREFIX}${describe(outcome)}${ANSI_RESET}\n`;
+  return `${OPEN}${permanentGlyphText(outcome)}${ANSI_RESET}\n`;
 }
 
 function describe(outcome: PermanentOutcome): string {

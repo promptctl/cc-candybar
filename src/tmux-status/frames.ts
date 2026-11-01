@@ -1,24 +1,23 @@
 // The tmux status line lane's encoding of a session's frames (lane C,
-// candybar-animation-wbxz.oy3.w5t): each pushed render response as the rows a
-// tmux status line draws — tmux style directives (`#[fg=…]`), not SGR, since
-// a status line takes a format, not terminal output — and the links its
-// clickable ranges stand for. The daemon's TmuxStatusLines writes the rows
-// into tmux (src/daemon/tmux-status.ts); `cc-candybar frames --lane
-// tmuxStatus` shows the same encoding.
+// candybar-animation-wbxz.oy3.w5t): each drawn Frame as the rows a tmux status
+// line draws — tmux style directives (`#[fg=…]`), not SGR, since a status line
+// takes a format, not terminal output — and the links its clickable ranges
+// stand for. The daemon's TmuxStatusLines writes the rows into tmux
+// (src/daemon/tmux-status.ts); `cc-candybar frames --lane tmuxStatus` shows the
+// same encoding.
 //
 // [LAW:one-source-of-truth] The daemon stays the only renderer: a frame is the
-// statusline's own render, classified and planned by the relay's own outcome
-// code, decoded by rich-js's own AnsiDecoder, as the band lane's frames are
+// draw the statusline's bytes are encoded from, as the band lane's frames are
 // (src/band/frames.ts).
 
 import { createHash } from "node:crypto";
-import { AnsiDecoder, ColorDepth, Style } from "@promptctl/rich-js";
-import type { ColorSpec, StyleOptions } from "@promptctl/rich-js";
-import { renderOutcomeOf } from "../daemon/client";
-import type { Response } from "../daemon/protocol";
-import { DIAGNOSTIC_ERROR_COLORS } from "../render/diagnostic-style";
-import { ansiOf, diagnosticFrame } from "../render/frame";
-import { planOutcome } from "../render/outcome-plan";
+import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
+import {
+  mergedRuns,
+  type Attribute,
+  type Frame,
+  type Run,
+} from "../render/frame";
 
 // One frame, as a tmux status line draws it: a format per row, and each range
 // id a row marks to the link it stands for.
@@ -64,13 +63,15 @@ const STANDARD_NAMES = [
   "brightwhite",
 ] as const;
 
-// [LAW:types-are-the-program] A colour as the escape drew it: the terminal's
+// [LAW:types-are-the-program] A colour as the frame drew it: the terminal's
 // own where it named none (tmux's `terminal`, not `default`, which is the
 // status line's style), one of its sixteen or its 256-colour palette by
 // number, so the terminal's theme draws them as it draws the statusline's, and
 // a truecolor value as itself.
-function tmuxColor(spec: ColorSpec | undefined): string {
-  if (spec === undefined || spec.isDefault) return "terminal";
+function tmuxColor(drawn: string | undefined): string {
+  if (drawn === undefined) return "terminal";
+  const spec = ColorSpec.parse(drawn);
+  if (spec.isDefault) return "terminal";
   switch (spec.type) {
     case ColorDepth.STANDARD: {
       const name =
@@ -93,17 +94,9 @@ function tmuxColor(spec: ColorSpec | undefined): string {
   throw new Error(`frames: no tmux colour for ${spec.name}`);
 }
 
-// rich-js's text attributes: every on/off field of a `Style`.
-type StyleAttribute = {
-  [K in keyof StyleOptions]-?: NonNullable<StyleOptions[K]> extends boolean
-    ? K
-    : never;
-}[keyof StyleOptions];
-
-// Every text attribute a rich-js `Style` carries, and tmux's name for it; null
-// where tmux has none, which the lane refuses rather than drawing it some
-// other way.
-// [LAW:one-source-of-truth] Keyed by rich-js's `StyleOptions`, as the band's
+// Every text attribute a Run can hold, and tmux's name for it; null where tmux
+// has none, which the lane refuses rather than drawing it some other way.
+// [LAW:one-source-of-truth] Keyed by the Run's own `Attribute`, as the band's
 // table is: an attribute rich-js adds fails to compile here until the lane
 // says how tmux draws it.
 const ATTRIBUTES = {
@@ -120,7 +113,7 @@ const ATTRIBUTES = {
   blink2: null,
   frame: null,
   encircle: null,
-} as const satisfies Record<StyleAttribute, string | null>;
+} as const satisfies Record<Attribute, string | null>;
 
 const ATTRIBUTE_NAMES = Object.keys(ATTRIBUTES) as Array<
   keyof typeof ATTRIBUTES
@@ -135,8 +128,8 @@ function escaped(text: string): string {
 
 // A run's whole style, from nothing: `none` clears the attributes the run
 // before it set, so each run reads alone.
-function directive(style: Style): string {
-  const attributes = ATTRIBUTE_NAMES.filter((name) => style[name] === true).map(
+function directive({ fg, bg, attrs = [] }: Run): string {
+  const attributes = ATTRIBUTE_NAMES.filter((name) => attrs.includes(name)).map(
     (name) => {
       const tmux = ATTRIBUTES[name];
       if (tmux === null)
@@ -144,54 +137,20 @@ function directive(style: Style): string {
       return tmux;
     },
   );
-  return `#[${["none", `fg=${tmuxColor(style.color)}`, `bg=${tmuxColor(style.bgcolor)}`, ...attributes].join(",")}]`;
+  return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
 
-const PLAIN = new Style();
-
-// One rendered bar, ANSI and OSC 8, as the rows a status line draws. Text no
-// span covers is drawn plain; a linked run is a range whose id names its link.
-export function tmuxStatusFrame(ansi: string): TmuxStatusBar {
+// One drawn bar as the rows a status line draws. A linked run is a range whose
+// id names its link.
+export function tmuxStatusFrame(frame: Frame): TmuxStatusBar {
   const links: Record<string, string> = {};
-  const run = (text: string, style: Style): string => {
-    const drawn = directive(style) + escaped(text);
-    if (style.link === undefined) return drawn;
-    const range = rangeOf(style.link);
-    links[range] = style.link;
-    return `#[range=user|${range}]${drawn}#[norange]`;
+  const drawn = (run: Run): string => {
+    const text = directive(run) + escaped(run.text);
+    if (run.link === undefined) return text;
+    const range = rangeOf(run.link);
+    links[range] = run.link;
+    return `#[range=user|${range}]${text}#[norange]`;
   };
-  const rows = new AnsiDecoder().decode(ansi).map((line) => {
-    const plain = line.plain;
-    const runs: string[] = [];
-    let at = 0;
-    for (const span of line.spans) {
-      if (!(span.style instanceof Style)) {
-        throw new Error(
-          `frames: the decoder gave a span a ${typeof span.style} style`,
-        );
-      }
-      if (span.start > at) runs.push(run(plain.slice(at, span.start), PLAIN));
-      runs.push(run(plain.slice(span.start, span.end), span.style));
-      at = span.end;
-    }
-    if (at < plain.length) runs.push(run(plain.slice(at), PLAIN));
-    return runs.join("");
-  });
+  const rows = frame.rows.map((row) => mergedRuns(row).map(drawn).join(""));
   return { rows, links };
-}
-
-// One pushed render response as the frame the status line draws.
-// [LAW:no-silent-failure] A bar the status line cannot draw is a frame saying
-// why, in the diagnostics' colours, as the band's is; a render that
-// failed is drawn as the statusline draws it, its error glyph.
-export function tmuxStatusResponse(resp: Response): TmuxStatusBar {
-  const ansi = planOutcome(renderOutcomeOf(resp)).output;
-  try {
-    return tmuxStatusFrame(ansi);
-  } catch (error) {
-    const why = error instanceof Error ? error.message : String(error);
-    return tmuxStatusFrame(
-      ansiOf(diagnosticFrame(`⚠ cc-candybar ${why}`, DIAGNOSTIC_ERROR_COLORS)),
-    );
-  }
 }
