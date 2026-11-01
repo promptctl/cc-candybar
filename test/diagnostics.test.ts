@@ -6,7 +6,13 @@
 // exactly the viewed message. Width is asserted with rich-js cellLength — the
 // one display-width measure the renderer wraps by.
 
-import { RichText } from "@promptctl/rich-js";
+import {
+  RichText,
+  Segment,
+  Style,
+  resolveDestination,
+  segmentsToString,
+} from "@promptctl/rich-js";
 import {
   APPROVAL_SEVERITY,
   collectDiagnostics as collectSourced,
@@ -14,6 +20,8 @@ import {
   diagnosticSpan,
   diagnosticsProjection,
   ERROR_SEVERITY,
+  HANDOFF_SEVERITY,
+  handoffRows,
   UPDATE_SEVERITY,
   viewerKey,
   viewedIndex,
@@ -28,7 +36,18 @@ import {
 import {
   DIAGNOSTIC_ERROR_COLORS,
   DIAGNOSTIC_WARNING_COLORS,
+  type DiagnosticColors,
 } from "../src/render/diagnostic-style";
+import {
+  ansiOf,
+  diagnosticFrame,
+  encodeAnsi,
+  type Row,
+} from "../src/render/frame";
+import {
+  COLOR_COMPATIBILITIES,
+  type ColorCompatibility,
+} from "../src/themes/policy";
 import { DIAGNOSTICS_VIEWING } from "../src/config/door";
 import { effectsOf } from "./helpers/click";
 import { links, linkUrls, stripAnsi } from "./helpers/ansi";
@@ -66,6 +85,14 @@ const notice = (text: string): DiagnosticMessage => ({
   copy: text,
   lines: [[diagnosticSpan(text, null)]],
 });
+
+const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
+  encodeAnsi(
+    rows.map((row) => row.runs),
+    depth,
+  );
+const viewer = (...args: Parameters<typeof viewerRows>): string =>
+  encoded(viewerRows(...args), args[4].colorCompatibility);
 
 const rowsOf = (out: string): string[] => out.split("\n").map(stripAnsi);
 const cellWidth = (row: string): number => new RichText(row).cellLength;
@@ -200,7 +227,7 @@ describe("the viewer", () => {
     const keys = list.map((_, i) => viewerKey(list, i, 0));
     expect(new Set(keys).size).toBe(4);
     expect(keys.map((k) => viewedIndex(k, list)!.index)).toEqual([1, 2, 3, 4]);
-    const said = links(viewerRows(list, at(2), SID, "request", geometry(80))).map(
+    const said = links(viewer(list, at(2), SID, "request", geometry(80))).map(
       (l) => /does=([^&]*)/.exec(l.url)![1],
     );
     expect(said).toEqual([
@@ -210,7 +237,7 @@ describe("the viewer", () => {
       "copy+diagnostic+2",
       "copy+diagnostic+2",
     ]);
-    const next = links(viewerRows(list, at(2), SID, "request", geometry(80)))
+    const next = links(viewer(list, at(2), SID, "request", geometry(80)))
       .filter((l) => stripAnsi(l.text).trim() === "›")
       .flatMap((l) => effectsOf(l.url));
     expect(next).toEqual([
@@ -222,13 +249,13 @@ describe("the viewer", () => {
     const long = Array.from({ length: 30 }, (_, i) => `issue ${i}`).join("\n");
     const list = collectDiagnostics([long, "next"], [], []);
     const short = { ...geometry(80), rows: 5 };
-    const first = rowsOf(viewerRows(list, at(1), SID, "request", short));
+    const first = rowsOf(viewer(list, at(1), SID, "request", short));
     expect(first).toHaveLength(5);
     expect(first[0]).toBe("✕   [1/2 1/8] › ⧉ copy ");
-    const last = rowsOf(viewerRows(list, { index: 1, page: 7 }, SID, "request", short));
+    const last = rowsOf(viewer(list, { index: 1, page: 7 }, SID, "request", short));
     expect(last.at(-1)).toBe("  issue 29 ");
     const onward = (pos: { index: number; page: number }) =>
-      links(viewerRows(list, pos, SID, "request", short))
+      links(viewer(list, pos, SID, "request", short))
         .filter((l) => stripAnsi(l.text).trim() === "›")
         .flatMap((l) => effectsOf(l.url))
         .map((e) => viewedIndex(e.args[2] as string, list));
@@ -242,7 +269,7 @@ describe("the viewer", () => {
     const narrow = { ...geometry(14), rows: 5 };
     for (const page of [0, 3])
       expect(
-        rowsOf(viewerRows(list, { index: 1, page }, SID, "request", narrow)).length,
+        rowsOf(viewer(list, { index: 1, page }, SID, "request", narrow)).length,
       ).toBeLessThanOrEqual(5);
   });
 
@@ -253,10 +280,10 @@ describe("the viewer", () => {
     const list = collectDiagnostics([long, "next"], [], []);
     const tiny = { ...geometry(80), rows: 2 };
     const last = { index: 1, page: PAGES - 1 };
-    const rows = rowsOf(viewerRows(list, last, SID, "request", tiny));
+    const rows = rowsOf(viewer(list, last, SID, "request", tiny));
     expect(rows).toHaveLength(2);
     expect(rows[1]).toMatch(/… 11 more rows: ⧉ copy has them all/);
-    const onward = links(viewerRows(list, last, SID, "request", tiny))
+    const onward = links(viewer(list, last, SID, "request", tiny))
       .filter((l) => stripAnsi(l.text).trim() === "›")
       .flatMap((l) => effectsOf(l.url))
       .map((e) => viewedIndex(e.args[2] as string, list));
@@ -265,18 +292,18 @@ describe("the viewer", () => {
 
   test("one message: ✕, its position and ⧉, then the message", () => {
     const list = collectDiagnostics(["boom"], [], []);
-    const out = viewerRows(list, at(1), SID, "request", geometry(80));
+    const out = viewer(list, at(1), SID, "request", geometry(80));
     expect(rowsOf(out)).toEqual(["✕ [1/1] ⧉ copy ", "⚠ boom "]);
   });
 
   test("many: ‹ and › step to the neighbours, a blank where there is none", () => {
     const list = collectDiagnostics(["a", "b", "c"], [], []);
     const header = (i: number) =>
-      rowsOf(viewerRows(list, at(i), SID, "request", geometry(80)))[0];
+      rowsOf(viewer(list, at(i), SID, "request", geometry(80)))[0];
     expect(header(1)).toBe("✕   [1/3] › ⧉ copy ");
     expect(header(2)).toBe("✕ ‹ [2/3] › ⧉ copy ");
     expect(header(3)).toBe("✕ ‹ [3/3]   ⧉ copy ");
-    const writes = links(viewerRows(list, at(2), SID, "request", geometry(80)))
+    const writes = links(viewer(list, at(2), SID, "request", geometry(80)))
       .filter((l) =>
         effectsOf(l.url).every((e) => e.verb !== "copy-diagnostic"),
       )
@@ -296,7 +323,7 @@ describe("the viewer", () => {
       ["a warning"],
     );
     for (const width of [20, 40, 80]) {
-      const rows = rowsOf(viewerRows(list, at(1), SID, "request", geometry(width)));
+      const rows = rowsOf(viewer(list, at(1), SID, "request", geometry(width)));
       for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
       const body = rows.slice(1).join(" ");
       expect(body).not.toContain("the other error");
@@ -314,7 +341,7 @@ describe("the viewer", () => {
       verb: "copy-diagnostic",
       args: [SID, "request", copyKeys(list)[0]],
     };
-    const out = viewerRows(list, at(1), SID, "request", geometry(60));
+    const out = viewer(list, at(1), SID, "request", geometry(60));
     const copies = linkUrls(out)
       .flatMap((u) => effectsOf(u))
       .filter((e) => e.verb.startsWith("copy"));
@@ -350,13 +377,13 @@ describe("the viewer", () => {
     expect(list[0]!.lines[0]![0].link).not.toBeNull();
     expect(list[0]!.lines[0]![0].link!.length).toBeLessThan(200);
     expect(list[0]!.lines[1]![0].link).toBeNull();
-    for (const url of linkUrls(viewerRows(list, at(1), SID, "request", geometry(80))))
+    for (const url of linkUrls(viewer(list, at(1), SID, "request", geometry(80))))
       expect(url).not.toContain("FIX");
   });
 
   test("a message's control characters are neutralized before they reach the terminal", () => {
     const list = collectDiagnostics(["x\x1b[31mred\x9bCSI"], [], []);
-    const body = viewerRows(list, at(1), SID, "request", geometry(80)).split("\n")[1]!;
+    const body = viewer(list, at(1), SID, "request", geometry(80)).split("\n")[1]!;
     expect(stripAnsi(body)).not.toMatch(/[\x1b\x9b]/);
   });
 });
@@ -368,5 +395,93 @@ describe("the viewer's row cap", () => {
     // A feed's frame the tmux status line shows pages within its five rows.
     expect(viewerRowCap(40, [5])).toBe(5);
     expect(viewerRowCap(3, [5])).toBe(3);
+  });
+});
+
+// [LAW:verifiable-goals] A viewer row's bytes, by comparison: what rich-js writes
+// for its text and link in the colours the message stated, encoded at the depth
+// it was drawn at. So nothing between the strip and the bytes moves a look at
+// any depth, and no snapshot has to say what those bytes are.
+describe("the viewer and the handoff line at every colour depth", () => {
+  const written = (
+    rows: readonly Row[],
+    { fg, bg }: DiagnosticColors,
+    depth: ColorCompatibility,
+  ): string =>
+    rows
+      .map(({ runs }) =>
+        segmentsToString(
+          runs.map(
+            ({ text, link }) =>
+              new Segment(text, new Style({ color: fg, bgcolor: bg, link })),
+          ),
+          resolveDestination(depth),
+        ),
+      )
+      .join("\n");
+  const at40 = (colorCompatibility: ColorCompatibility): DiagnosticGeometry => ({
+    width: 40,
+    rows: 40,
+    colorCompatibility,
+  });
+  const clicks = (rows: readonly Row[]): number =>
+    rows.flatMap((row) => row.runs).filter((run) => run.link !== undefined)
+      .length;
+  const handoff = {
+    severity: HANDOFF_SEVERITY,
+    lines: [[diagnosticSpan("the bar is drawn in the band", null)]],
+  } as const;
+  const warned = collectDiagnostics([], [], ["a warning"]);
+
+  test.each(COLOR_COMPATIBILITIES)("the viewer at %s", (depth) => {
+    const list = collectDiagnostics([ERROR, "second"], [], []);
+    const rows = viewerRows(list, at(1), SID, "request", at40(depth));
+    expect(encoded(rows, depth)).toBe(
+      written(rows, DIAGNOSTIC_ERROR_COLORS, depth),
+    );
+    // A message that wrapped, and clicks, so neither passes by being absent.
+    expect(rows.length).toBeGreaterThan(ERROR.split("\n").length);
+    expect(clicks(rows)).toBeGreaterThan(0);
+  });
+
+  test.each(COLOR_COMPATIBILITIES)("the handoff line at %s", (depth) => {
+    const rows = handoffRows(handoff, warned, SID, at40(depth));
+    expect(encoded(rows, depth)).toBe(
+      written(rows, DIAGNOSTIC_WARNING_COLORS, depth),
+    );
+    expect(clicks(rows)).toBeGreaterThan(0);
+  });
+
+  test("a depth moves the looks: the text, the rows and the clicks stay", () => {
+    const list = collectDiagnostics([ERROR], [], []);
+    const drawn = COLOR_COMPATIBILITIES.map((depth) => ({
+      depth,
+      rows: viewerRows(list, at(1), SID, "request", at40(depth)),
+    }));
+    const unstyled = ({ rows }: (typeof drawn)[number]) =>
+      rows.map(({ kind, runs }) => ({
+        kind,
+        runs: runs.map(({ text, link }) => ({ text, link })),
+      }));
+    for (const one of drawn) expect(unstyled(one)).toEqual(unstyled(drawn[0]!));
+    expect(
+      new Set(drawn.map(({ depth, rows }) => encoded(rows, depth))).size,
+    ).toBe(COLOR_COMPATIBILITIES.length);
+  });
+});
+
+describe("a diagnostic frame", () => {
+  test("is one row of one run in its colours, whatever its text holds", () => {
+    const { fg, bg } = DIAGNOSTIC_ERROR_COLORS;
+    const frame = diagnosticFrame(
+      "first\n\x1b[31msecond",
+      DIAGNOSTIC_ERROR_COLORS,
+    );
+    expect(frame.rows).toEqual([
+      { kind: "diagnostic", runs: [{ text: "first [31msecond", fg, bg }] },
+    ]);
+    expect(ansiOf(frame)).not.toContain("\n");
+    expect(frame.nextChange).toBe(Infinity);
+    expect(frame.motion).toBe("still");
   });
 });

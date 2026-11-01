@@ -16,12 +16,8 @@ import { AnsiDecoder, ColorDepth, Style } from "@promptctl/rich-js";
 import type { ColorSpec, StyleOptions } from "@promptctl/rich-js";
 import { renderOutcomeOf } from "../daemon/client";
 import type { Response } from "../daemon/protocol";
-import {
-  ANSI_RESET,
-  DIAGNOSTIC_ERROR_BG,
-  DIAGNOSTIC_ERROR_FG,
-} from "../render/diagnostic-style";
-import { sanitizeText } from "../render/diagnostic-text";
+import { DIAGNOSTIC_ERROR_COLORS } from "../render/diagnostic-style";
+import { ansiOf, diagnosticFrame } from "../render/frame";
 import { planOutcome } from "../render/outcome-plan";
 
 // One frame, as a tmux status line draws it: a format per row, and each range
@@ -193,11 +189,9 @@ export function tmuxStatusResponse(resp: Response): TmuxStatusBar {
   try {
     return tmuxStatusFrame(ansi);
   } catch (error) {
-    const why = sanitizeText(
-      error instanceof Error ? error.message : String(error),
-    );
+    const why = error instanceof Error ? error.message : String(error);
     return tmuxStatusFrame(
-      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}⚠ cc-candybar ${why}${ANSI_RESET}\n`,
+      ansiOf(diagnosticFrame(`⚠ cc-candybar ${why}`, DIAGNOSTIC_ERROR_COLORS)),
     );
   }
 }

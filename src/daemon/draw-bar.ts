@@ -37,7 +37,7 @@ import {
 import { roleOf, answeredOf } from "./render-sightings";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
-import { ansiOf } from "../render/frame.js";
+import { ansiOf, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
   renderWidth,
@@ -135,7 +135,7 @@ export function renderFrame(
         fps,
       },
     );
-    const output = composeBar(drawn);
+    const output = composeBar(drawn.body);
     return {
       resp: { ok: true, output },
       statusline: {
@@ -679,15 +679,12 @@ export function drawRender(
   // [LAW:one-source-of-truth] The body says when it next changes. The viewer
   // in the bar's place is still text, so a feed drawing it waits a still
   // period, not the hidden bar's beat; that bar can move again once it closes.
-  const body: { text: string; nextChange: number; motion: DrawnMotion } =
+  const body: Frame =
     viewing === null
-      ? {
-          text: ansiOf(frame),
-          nextChange: frame.nextChange,
-          motion: frame.motion,
-        }
+      ? frame
       : {
-          text: viewerRows(
+          ...frame,
+          rows: viewerRows(
             diagnostics,
             viewing,
             sessionId,
@@ -772,7 +769,7 @@ export function drawRender(
   });
   return {
     drawn: {
-      body: body.text,
+      body,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
@@ -809,15 +806,15 @@ type StandingWarning =
 // what the statusline's handoff line is drawn from: whether the body is the
 // viewer, the draw's one diagnostic list, and the geometry.
 interface DrawnBar {
-  readonly body: string;
+  readonly body: Frame;
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
 }
 
 // The response's bar.
-function composeBar(drawn: DrawnBar): string {
-  return drawn.body + "\n";
+function composeBar(body: Frame): string {
+  return ansiOf(body) + "\n";
 }
 
 // [LAW:effects-at-boundaries] What a render request said, recorded where the
@@ -996,7 +993,7 @@ async function drawAnswer(
     setup,
     ANSWERING,
   );
-  const output = composeBar(drawn);
+  const output = composeBar(drawn.body);
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   const statusline = statuslineOf(sessionId, drawn, output, elsewhere);
@@ -1032,10 +1029,13 @@ function statuslineOf(
   const [first, ...rest] = elsewhere;
   return first === undefined || drawn.viewerOpen
     ? output
-    : handoffRows(
-        laneHandoff(sessionId, [first, ...rest]),
-        drawn.diagnostics,
-        sessionId,
-        drawn.geometry,
-      ) + "\n";
+    : composeBar({
+        ...drawn.body,
+        rows: handoffRows(
+          laneHandoff(sessionId, [first, ...rest]),
+          drawn.diagnostics,
+          sessionId,
+          drawn.geometry,
+        ),
+      });
 }

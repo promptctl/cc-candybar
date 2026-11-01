@@ -5,6 +5,7 @@
 // the composed strip, by what each click DOES.
 
 import { messageRows, UPDATE_SEVERITY } from "../src/render/diagnostics";
+import { plainOf } from "../src/render/frame";
 import {
   describeStamp,
   factsOf,
@@ -20,7 +21,6 @@ import type { ActState } from "../src/daemon/update-act";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
 import type { Currency } from "../src/install/currency";
 import { effectsOf as decode } from "./helpers/click";
-import { linkUrls, stripAnsi } from "./helpers/daemon-e2e";
 
 // A span's click, decoded; a plain span has none.
 const clicksOf = (link: string | null) => (link === null ? [] : decode(link));
@@ -210,15 +210,17 @@ describe("updateNotice", () => {
 
   test("drawn: the row reads as the sentence and its three clicks, each linked to its own effect", () => {
     const [message] = updateNotice(SOURCE, { kind: "idle" }, ctx());
-    const out = messageRows(message!, {
+    const rows = messageRows(message!, {
       width: 200,
       rows: 20,
       colorCompatibility: "truecolor",
     });
-    expect(out.split("\n").map(stripAnsi)).toEqual([
+    expect(rows.map((row) => plainOf(row.runs))).toEqual([
       "⬆ Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456]. [rebuild] [dismiss] [disable] ",
     ]);
-    const verbs = linkUrls(out).flatMap((u) => clicksOf(u).map((e) => e.verb));
+    const verbs = rows
+      .flatMap((row) => row.runs)
+      .flatMap(({ link }) => clicksOf(link ?? null).map((e) => e.verb));
     expect(new Set(verbs)).toEqual(
       new Set(["apply-update", "set-state", "set-config"]),
     );

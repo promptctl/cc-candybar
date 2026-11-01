@@ -5,12 +5,12 @@
 // and shows one message in full.
 //
 // [LAW:one-source-of-truth] A message's rows are ordinary render data: every
-// word becomes a cell that flows through the SAME renderStripCells the bar's
+// word becomes a cell that flows through the SAME drawStripCells the bar's
 // own rows use, so the viewer wraps by the same width measure (rich-js
-// cellLength), the same FlexStrip pack, the same serializer and the same
-// colour downsampling as the bar. [LAW:single-enforcer]
+// cellLength), the same FlexStrip pack and the same colour downsampling as the
+// bar, and its rows reach bytes as the bar's do. [LAW:single-enforcer]
 //
-// [LAW:effects-at-boundaries] Pure: (messages, geometry, viewing) → strings.
+// [LAW:effects-at-boundaries] Pure: (messages, geometry, viewing) → rows.
 
 import { createHash } from "node:crypto";
 
@@ -28,8 +28,9 @@ import {
   DIAGNOSTIC_WARNING_COLORS,
   type DiagnosticColors,
 } from "./diagnostic-style.js";
+import type { Row } from "./frame.js";
 import {
-  renderStripCells,
+  drawStripCells,
   type BuildLineOptions,
   type ColorCompatibility,
 } from "./strip.js";
@@ -353,7 +354,7 @@ export function viewerRows(
   sessionId: string,
   by: Drawing["by"],
   geometry: DiagnosticGeometry,
-): string {
+): readonly Row[] {
   const { index } = at;
   const shown = list[index - 1]!;
   const opts = viewerOptions(geometry);
@@ -378,7 +379,7 @@ export function viewerRows(
           ),
         );
   // The header for a message of `pages` pages, shown at `page`.
-  const headerOf = (pages: number, page: number): string => {
+  const headerOf = (pages: number, page: number): readonly Row[] => {
     const back =
       page > 0
         ? { index, page: page - 1 }
@@ -396,7 +397,7 @@ export function viewerRows(
       pages > 1
         ? `[${index}/${list.length} ${page + 1}/${pages}]`
         : `[${index}/${list.length}]`;
-    return renderStripCells(
+    return drawnRows(
       [
         button("✕", viewerLink(sessionId, DIAGNOSTICS_CLOSED)),
         ...(steps ? [step("‹", back)] : []),
@@ -422,9 +423,8 @@ export function viewerRows(
     // A message that shrank under an open viewer shows its last page.
     const page = Math.min(at.page, pages - 1);
     const header = headerOf(pages, page);
-    const measured = header.split("\n").length;
-    if (measured > headerRows) {
-      headerRows = measured;
+    if (header.length > headerRows) {
+      headerRows = header.length;
       continue;
     }
     const rows = body.slice(page * perPage, (page + 1) * perPage);
@@ -435,13 +435,13 @@ export function viewerRows(
       page === pages - 1 && left > 0
         ? [
             ...rows.slice(0, -1),
-            renderStripCells(
+            ...drawnRows(
               [button(`… ${left + 1} more rows: ⧉ copy has them all`, null)],
               { ...opts, wrap: false },
             ),
           ]
         : rows;
-    return [header, ...shownRows].join("\n");
+    return [...header, ...shownRows];
   }
 }
 
@@ -449,8 +449,8 @@ export function viewerRows(
 export function messageRows(
   message: DiagnosticMessage,
   geometry: DiagnosticGeometry,
-): string {
-  return channelRows(message, viewerOptions(geometry), []).join("\n");
+): readonly Row[] {
+  return channelRows(message, viewerOptions(geometry), []);
 }
 
 // [LAW:single-enforcer] The statusline's handoff line (src/daemon/lane-handoff.ts)
@@ -464,7 +464,7 @@ export function handoffRows(
   list: DiagnosticList,
   sessionId: string,
   geometry: DiagnosticGeometry,
-): string {
+): readonly Row[] {
   const { label, fg, bg, open } = diagnosticsProjection(list);
   const indicator =
     label === ""
@@ -477,7 +477,7 @@ export function handoffRows(
             ),
           ),
         ];
-  return channelRows(handoff, viewerOptions(geometry), indicator).join("\n");
+  return channelRows(handoff, viewerOptions(geometry), indicator);
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
@@ -507,6 +507,16 @@ function viewerOptions(geometry: DiagnosticGeometry): BuildLineOptions {
 const cell = (word: string, style: Style): RichText =>
   new RichText(`${word} `, { style, end: "", overflow: "ignore" });
 
+// A strip's drawn lines, each a row of the viewer.
+const drawnRows = (
+  cells: readonly RichText[],
+  opts: BuildLineOptions,
+): readonly Row[] =>
+  drawStripCells(cells, opts).lines.map((runs) => ({
+    kind: "diagnostic",
+    runs,
+  }));
+
 // Continuation lines (a validator emits one issue per line) indent under the
 // glyph; wrapped continuations of a single line start at column 0, which is
 // how the eye tells "next issue" from "same issue, next row".
@@ -521,7 +531,7 @@ function channelRows(
   message: ChannelMessage,
   opts: BuildLineOptions,
   trailing: readonly RichText[],
-): string[] {
+): readonly Row[] {
   const base = new Style({
     bgcolor: message.severity.colors.bg,
     color: message.severity.colors.fg,
@@ -541,6 +551,6 @@ function channelRows(
         .map((w) => cell(w, styled(span.link))),
     );
     const after = i === 0 ? trailing : [];
-    return renderStripCells([prefix, ...cells, ...after], opts).split("\n");
+    return drawnRows([prefix, ...cells, ...after], opts);
   });
 }
