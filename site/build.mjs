@@ -28,6 +28,7 @@ alias.path = alias["node:path"] = "path-browserify";
 alias.events = alias["node:events"] = "events";
 alias.stream = alias["node:stream"] = "readable-stream";
 alias.buffer = alias["node:buffer"] = "buffer";
+alias.string_decoder = alias["node:string_decoder"] = "string_decoder";
 alias.timers = alias["node:timers"] = shim("timers.ts");
 
 // The output directory: site/dist, or the one named as the first argument (the test builds into its own).

@@ -107,6 +107,22 @@ describe("launch (async)", () => {
     }
   });
 
+  it("keeps a character whose bytes cross two reads whole", async () => {
+    const write = (bytes: string) =>
+      `process.stdout.write(${bytes}); process.stderr.write(${bytes});`;
+    const r = await launch({
+      bin: process.execPath,
+      args: [
+        "-e",
+        `const euro = Buffer.from("€");` +
+          write("euro.subarray(0, 1)") +
+          `setTimeout(() => { ${write("euro.subarray(1)")} }, 200);`,
+      ],
+      category: "user-shell",
+    });
+    expect(r).toMatchObject({ ok: true, stdout: "€", stderr: "€" });
+  });
+
   it("reports non-zero exits as data, not throws", async () => {
     const r = await launch({ bin: "/bin/sh", args: ["-c", "exit 7"], category: "user-shell" });
     expect(r.ok).toBe(false);

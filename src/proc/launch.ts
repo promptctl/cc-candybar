@@ -46,6 +46,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Socket } from "node:net";
+import type { Readable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 import { setImmediate } from "node:timers";
@@ -556,6 +558,18 @@ function leaderRefuses(pid: number): boolean {
   }
 }
 
+// Decodes a stream as it reads; the returned read flushes, once, at settle. An
+// owned decoder, not setEncoding: a launch can end before EOF, and only this
+// one can be flushed then, so a character cut short still shows as U+FFFD.
+function capture(stream: Readable | null): () => string {
+  const decoder = new StringDecoder("utf8");
+  let text = "";
+  stream?.on("data", (chunk: Buffer) => {
+    text += decoder.write(chunk);
+  });
+  return () => text + decoder.end();
+}
+
 async function launchWaited(
   state: LaunchState,
   opts: AsyncLaunchOpts,
@@ -594,8 +608,9 @@ async function launchWaited(
     if (group !== undefined) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
 
-    let stdout = "";
-    let stderr = "";
+    const stdout = capture(child.stdout);
+    const stderr = capture(child.stderr);
+    const output = () => ({ stdout: stdout(), stderr: stderr() });
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
@@ -637,8 +652,7 @@ async function launchWaited(
         settle({
           ok: false,
           reason: "signal-refused",
-          stdout,
-          stderr,
+          ...output(),
           exitCode: null,
           signal: null,
           error: err instanceof Error ? err.message : String(err),
@@ -714,19 +728,11 @@ async function launchWaited(
       }
     };
 
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
-    });
-
     child.on("error", (err) => {
       settle({
         ok: false,
         reason: "spawn-error",
-        stdout,
-        stderr,
+        ...output(),
         exitCode: null,
         signal: null,
         error: spawnErrorText(err, opts.cwd),
@@ -743,23 +749,21 @@ async function launchWaited(
         settle({
           ok: false,
           reason: terminated,
-          stdout,
-          stderr,
+          ...output(),
           exitCode: code,
           signal,
         });
         return;
       }
       if (code === 0) {
-        settle({ ok: true, stdout, stderr, exitCode: code });
+        settle({ ok: true, ...output(), exitCode: code });
         return;
       }
       const reason: "signal" | "non-zero" = signal ? "signal" : "non-zero";
       settle({
         ok: false,
         reason,
-        stdout,
-        stderr,
+        ...output(),
         exitCode: code,
         signal,
       });
