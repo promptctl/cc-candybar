@@ -4,15 +4,22 @@
     {
       "version": "pr-538",
       "ref": "refs/pull/538/merge",
-      "sha": "ee0cd7b9cb213d71a6be125e07f79c89524e5b3e",
-      "timestamp": "2026-11-01T05:04:45.568Z",
+      "sha": "1a5ed485f5f51368150fab02ae74b92c13bbc911",
+      "timestamp": "2026-11-01T05:06:43.146Z",
       "commits": [
         {
-          "sha": "ee0cd7b9cb213d71a6be125e07f79c89524e5b3e",
+          "sha": "1a5ed485f5f51368150fab02ae74b92c13bbc911",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:03:30Z",
-          "message": "Merge f65c6827e29f526c3528f7973fcef095d5500069 into e98fef8ecc1558cc8cdf59993c8534b6d584d2fd\n"
+          "timestamp": "2026-11-01T05:05:51Z",
+          "message": "Merge 379dcc2f368194b29ec77c8cab057e129d8491d9 into e98fef8ecc1558cc8cdf59993c8534b6d584d2fd\n"
+        },
+        {
+          "sha": "379dcc2f368194b29ec77c8cab057e129d8491d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:05:40-06:00",
+          "message": "test(update-act): a SIGKILL refused in the grace timer does not throw (candybar-testing-0x6u.zrb)\n"
         },
         {
           "sha": "f65c6827e29f526c3528f7973fcef095d5500069",
