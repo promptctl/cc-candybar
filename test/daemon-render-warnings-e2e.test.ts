@@ -27,6 +27,7 @@ import {
 } from "./helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
+import { fakeWatches } from "./helpers/fake-watches";
 import { untilHeard } from "./helpers/reload-signal";
 
 jest.setTimeout(30_000);
@@ -220,6 +221,51 @@ describe("a daemon render's event names every warning, and the indicator offers 
         expect.stringContaining("run it?"),
       ]);
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // No edit in a folder the OS refuses reloads, so the fact stands on every bar
+  // drawn from an entry that watches it, a bar drawn over a failed load too.
+  test("a config folder the OS refuses shows in the indicator on every bar drawn from its entry", async () => {
+    const dir = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "cc-candybar-refused-e2e-")),
+    );
+    const broken = path.join(dir, "broken.json5");
+    writeFileSync(broken, "{ nope");
+    const refusal = `config watch: cannot watch ${dir} — EMFILE`;
+    fakeWatches(new Set([dir]));
+    try {
+      const bar = await render(daemon, "refused", dir);
+      expect(indicatorOf(bar)).toBe("⚠ 1");
+      expect(indicatorOf(await render(daemon, "refused", dir))).toBe("⚠ 1");
+      expect(indicatorOf(await render(daemon, "refused-too", dir))).toBe("⚠ 1");
+      const events = (await renderLines(env, "refused", 2)).map(
+        fieldOf("warn"),
+      );
+      expect(events).toEqual(["config-watch", "config-watch"]);
+      const pages = await readDiagnostics(daemon, "refused", dir, bar, {}, []);
+      expect(pages.map((p) => p.text)).toEqual([
+        expect.stringContaining(refusal),
+      ]);
+
+      const args = ["cc-candybar", "--config", broken];
+      const failed = await render(daemon, "refused-broken", dir, {}, args);
+      expect(indicatorOf(failed)).toBe("⚠ 2");
+      const both = await readDiagnostics(
+        daemon,
+        "refused-broken",
+        dir,
+        failed,
+        {},
+        args,
+      );
+      expect(both.map((p) => p.text)).toEqual([
+        expect.stringContaining(`Invalid config in ${broken}`),
+        expect.stringContaining(refusal),
+      ]);
+    } finally {
+      jest.restoreAllMocks();
       rmSync(dir, { recursive: true, force: true });
     }
   });
