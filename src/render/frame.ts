@@ -67,12 +67,14 @@ function drawnColor(spec: ColorSpec): string {
   return spec.type === ColorDepth.TRUECOLOR ? spec.value!.hex : spec.name;
 }
 
+// Every attribute a style can hold, as rich-js names them. `style.attributes`
+// builds a new object on each read, and an effect's row is a run per cell.
+const ATTRIBUTES = Object.keys(new Style().attributes) as readonly Attribute[];
+
 // The look a style draws at a depth that has one.
 function lookOf(style: Style, depth: ColorDepth): Omit<Run, "text" | "link"> {
   const { color, bgcolor } = style.drawnColors(depth);
-  const attrs = (Object.keys(style.attributes) as Attribute[]).filter(
-    (name) => style[name] === true,
-  );
+  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
   return {
     ...(color !== undefined && { fg: drawnColor(color) }),
     ...(bgcolor !== undefined && { bg: drawnColor(bgcolor) }),
