@@ -4,15 +4,22 @@
     {
       "version": "pr-532",
       "ref": "refs/pull/532/merge",
-      "sha": "77e0313ea24a29256dbfebc1d41b2109d47b651e",
-      "timestamp": "2026-11-01T01:47:13.190Z",
+      "sha": "f7eb29614523ddd632de53686055093bca654281",
+      "timestamp": "2026-11-01T01:55:50.416Z",
       "commits": [
         {
-          "sha": "77e0313ea24a29256dbfebc1d41b2109d47b651e",
+          "sha": "f7eb29614523ddd632de53686055093bca654281",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:46:34-06:00",
-          "message": "Merge 6003a9b0dc34204e936a4b64e570bdf2be11b9c8 into 7b77d5fab04cc3822fa430e086169ef7f984b873\n"
+          "timestamp": "2026-11-01T01:54:51Z",
+          "message": "Merge 4ce21e67938d8a4fbc19294a6a3816f3062af31f into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
+        },
+        {
+          "sha": "4ce21e67938d8a4fbc19294a6a3816f3062af31f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T19:54:39-06:00",
+          "message": "fix(daemon): settled holds the loop, and its tests wait on the child they mean (candybar-testing-0x6u.keo)\n"
         },
         {
           "sha": "6003a9b0dc34204e936a4b64e570bdf2be11b9c8",

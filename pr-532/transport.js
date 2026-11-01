@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.173.0";
+var PACKAGE_VERSION = "1.173.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35711,6 +35711,7 @@ function unguard(state, group) {
 function endLifeline(state) {
   const line = state.lifeline;
   state.lifeline = null;
+  line?.process.ref();
   line?.pipe.end();
 }
 function signalGroup(pid2, sig) {
@@ -35819,8 +35820,8 @@ async function launchWaited(state, opts) {
         error: spawnErrorText(err, opts.cwd)
       });
     });
+    child.once("exit", () => state.unreaped.delete(child));
     child.on("close", (code, signal2) => {
-      state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
           ok: false,
