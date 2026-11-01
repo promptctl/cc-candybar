@@ -81,7 +81,6 @@ import {
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { type Instant } from "../utils/instant.js";
-import { type ClientDeadline } from "./request-deadline.js";
 import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
@@ -845,11 +844,11 @@ export async function answerRequest(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
-  wait: RequestWait,
+  waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(parts, req);
-  return drawAnswer(parts, req, at, wait, facts);
+  return drawAnswer(parts, req, at, waitEndsAt, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -916,21 +915,11 @@ export function laneClicked(
     tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
 }
 
-// A request's wait, fixed at its arrival: whether its client stated its
-// deadline, the milliseconds the wait had then, and when it ends, on the
-// monotonic clock. Both, because the render notes the first on its event
-// after the session's id leads it, and has no arrival instant to derive it.
-export interface RequestWait {
-  readonly stated: ClientDeadline["kind"];
-  readonly ms: number;
-  readonly endsAt: number;
-}
-
 async function drawAnswer(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
-  wait: RequestWait,
+  waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
@@ -940,7 +929,6 @@ async function drawAnswer(
     req,
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
   );
-  noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
   // every keyed lane its view declared, and every run of its view's or its
@@ -948,6 +936,13 @@ async function drawAnswer(
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = clock.monotonic();
+  // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
+  // reading. Setup has spent part of what the request arrived with, and below
+  // zero says by how much it overran: the timer fires at once.
+  const budget = waitEndsAt - waitFrom;
+  noteFacts(facts, {
+    deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
+  });
   const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
@@ -955,7 +950,7 @@ async function drawAnswer(
         settlePayload(setup.payloadInputs, at, refreshed),
         setup.view.registry.inFlight(signal),
       ]),
-    wait.endsAt - waitFrom,
+    budget,
     // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
     // it is a bug, said against the session, never one that ends the daemon.
     (e) =>
@@ -963,6 +958,7 @@ async function drawAnswer(
         "error",
         `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
       ),
+    clock.after,
   );
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.

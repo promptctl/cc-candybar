@@ -237,6 +237,19 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.requestsTimedOut).toBe(0);
   });
 
+  test("an answered request is not timed out by a client slow to close", async () => {
+    const daemon = standIn();
+    const { client, send, received } = open(daemon);
+    client.allowHalfOpen = true;
+    send(STATS);
+    await settled();
+    expect(received).toHaveLength(1);
+    expect(client.destroyed).toBe(false);
+
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    expect(daemon.stats.requestsTimedOut).toBe(0);
+  });
+
   test("the exit a reply carries runs once the client holds the reply", async () => {
     let heldAtExit = 0;
     const { send, received } = open(
@@ -568,7 +581,11 @@ describe("a connection to a daemon built in this worker", () => {
     let monotonic = 1_000_000;
     const at = new Date();
     const opened = openedOn(
-      start({ date: () => at, monotonic: () => monotonic }).connect(),
+      start({
+        ...SYSTEM_CLOCK,
+        date: () => at,
+        monotonic: () => monotonic,
+      }).connect(),
     );
     monotonic += 500;
     opened.send(renderRequest("connection-clock", at.getTime() + 2_000));

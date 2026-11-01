@@ -28,6 +28,7 @@ import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
+import { afterRealTime, type After } from "../utils/reading";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import {
   configLoadedLine,
@@ -91,14 +92,18 @@ export interface RunningBundle {
 // [LAW:effects-at-boundaries] The two clocks a daemon draws and times requests
 // by, as values, so a test can hold the instant a bar is drawn at. Its counters
 // keep their own wall clock (RuntimeStats).
+// [LAW:one-source-of-truth] `after` runs a request's wait and its backstop, on
+// the same clock its budget is figured from, so a held clock holds all three.
 export interface DaemonClock {
   date(): Date;
   monotonic(): number;
+  after: After;
 }
 
 export const SYSTEM_CLOCK: DaemonClock = {
   date: () => new Date(),
   monotonic: () => performance.now(),
+  after: afterRealTime,
 };
 
 // Where the session's picks and its settings history persist.

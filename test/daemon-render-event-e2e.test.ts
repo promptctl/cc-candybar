@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -19,9 +20,15 @@ import path from "node:path";
 
 import { stripAnsi } from "./helpers/ansi";
 import {
+  CONNECT_TIMEOUT_MS,
   encodeFrame,
   PROTOCOL_VERSION,
+  TOTAL_BUDGET_MS,
 } from "../src/daemon/protocol";
+import {
+  DRAW_RESERVE_MS,
+  REQUEST_TIMEOUT_MS,
+} from "../src/daemon/request-deadline";
 import {
   hookData,
   render,
@@ -45,7 +52,7 @@ import {
   renderLinesOf,
   type Event,
 } from "./helpers/request-event";
-import { tmuxStub } from "./helpers/tmux-stub";
+import { HELD_CONFIG, tmuxStub } from "./helpers/tmux-stub";
 import { until } from "./helpers/until";
 import {
   heldClock,
@@ -558,6 +565,137 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(await revision()).toBe(before);
     for (const event of (await eventsOf("ev-keyed", 3)).slice(1))
       expect(field(event, "ended")).toBe("answered");
+  });
+});
+
+describe("a request's deadline", () => {
+  // A request is answered by its client's deadline, whatever its sources are
+  // still doing (brandon-unfiled-3248.8ro6, §4c): a source still reading then
+  // draws as pending, and lands for the session's next render. The tmux stub
+  // answers only once the test opens the gate, so the source provably outlives
+  // the deadline, an ordering the test owns. The clock is held, and a request's
+  // timers are on it, so the wait ends at the instant the test moves it to, and
+  // no stall of this worker can reach the connection's backstop first.
+  test("a source that outlives its client's deadline draws pending, and lands for the next render", async () => {
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+      "cc-candybar-event-deadline",
+    );
+    const projectDir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-render-event-e2e-"),
+    );
+    const config = path.join(projectDir, "held.json5");
+    writeFileSync(config, HELD_CONFIG);
+    const args = ["cc-candybar", "--config", config];
+    const tmuxDir = path.join(projectDir, "bin");
+    mkdirSync(tmuxDir);
+    const stub = await tmuxStub(tmuxDir);
+    const clock = heldClock();
+    const daemon = startDaemon(
+      { ...env, PATH: `${tmuxDir}${path.delimiter}${env.PATH ?? ""}` },
+      { clock },
+    );
+    try {
+      const tmuxBody = (sid: string, pane: string) =>
+        renderBody(
+          sid,
+          projectDir,
+          {
+            // A socket inside the test's own directory: were the stub ever
+            // bypassed, a real tmux would find no server there.
+            tmux: {
+              socket: path.join(tmuxDir, "tmux.sock"),
+              pane,
+              truecolor: null,
+            },
+          },
+          args,
+        );
+      const stats = () =>
+        sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "stats" });
+
+      // A render's answer with the nth stub holding its source: the stub's
+      // start follows the arrival that armed the wait, so a moment short of
+      // the wait's end the render still holds its view, and the next moment
+      // ends it, whatever the source is doing.
+      const answeredAfter = async (
+        nth: number,
+        waitMs: number,
+        request: Parameters<typeof sendDaemonRequest>[1],
+      ) => {
+        const [answer] = await Promise.all([
+          sendDaemonRequest(daemon, request),
+          stub.asked(nth).then(async () => {
+            clock.advance(waitMs - 1);
+            await expect(stats()).resolves.toMatchObject({
+              stats: { renderCache: { held: 1 } },
+            });
+            clock.advance(1);
+          }),
+        ]);
+        return answer;
+      };
+
+      // A client that states its deadline, as the native one does: its budget
+      // counted from before it connects.
+      const waitMs = TOTAL_BUDGET_MS - DRAW_RESERVE_MS;
+      const stated = await answeredAfter(1, waitMs, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...tmuxBody("ev-late", "%1"),
+        deadline: daemon.now() + TOTAL_BUDGET_MS,
+      });
+      expect(stated).toMatchObject({ ok: true });
+      expect(stripAnsi((stated as { output: string }).output)).toContain("…");
+      // Answered, it holds nothing, though its source reads on: `using`
+      // released the hold on exit.
+      await expect(stats()).resolves.toMatchObject({
+        ok: true,
+        stats: { renderCache: { held: 0, retired: 0 } },
+      });
+      // The read lands, and the session's next render draws it, waiting on
+      // nothing. The gate opens here because a launch's timeout is on real
+      // time: a stub held past it is killed.
+      await stub.open(1);
+      const late = only(await landedEvents(env, "ev-late", 1));
+      expect(field(late, "outcome")).toBe("ok");
+      expect(field(late, "deadline")).toBe(`stated:${waitMs}ms`);
+      expect(field(late, "ended")).toBe("deadline");
+      expect(field(late, "pending")).toBe("tmux.session");
+      await loggedWhen(
+        env,
+        (lines) => lines.some((l) => / tmux refresh .* outcome=ok /u.test(l)),
+        "tmux's read landing",
+      );
+      const drawn = stripAnsi(
+        await renderRequest(daemon, tmuxBody("ev-late", "%1")),
+      );
+      expect(drawn).toContain("held");
+      expect(field((await landedEvents(env, "ev-late", 2))[1]!, "ended")).toBe("answered");
+
+      // A client too old to state its deadline is answered by the earliest an
+      // old client gives up at: the native client's, whose budget runs from
+      // before its connect, so the connect comes off its wait too.
+      const unstatedWaitMs =
+        TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS - DRAW_RESERVE_MS;
+      await expect(
+        answeredAfter(2, unstatedWaitMs, {
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          ...tmuxBody("ev-late-unstated", "%2"),
+        }),
+      ).resolves.toMatchObject({ ok: true });
+      await stub.open(2);
+      const unstated = only(await landedEvents(env, "ev-late-unstated", 1));
+      expect(field(unstated, "deadline")).toBe(`unstated:${unstatedWaitMs}ms`);
+      expect(field(unstated, "ended")).toBe("deadline");
+    } finally {
+      // A case that failed mid-wait leaves a render only this clock can end.
+      clock.advance(REQUEST_TIMEOUT_MS);
+      await daemon.stop();
+      await stub.close();
+      rmSync(projectDir, { recursive: true, force: true });
+      removeTmpDirs();
+    }
   });
 });
 

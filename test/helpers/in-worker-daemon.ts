@@ -52,21 +52,40 @@ export function bundleAt(
   };
 }
 
-// A clock a test moves by hand. Both of its readings stand still until then, so
-// it belongs on a daemon its case owns, whose clients state their deadlines on
-// it: a request's budget is that deadline less this clock's arrival.
+// A clock a test moves by hand. Both of its readings and a request's timers
+// stand still until then, so it belongs on a daemon its case owns, whose clients
+// state their deadlines on it: a request's budget is that deadline less this
+// clock's arrival.
 export interface HeldClock extends DaemonClock {
   advance(ms: number): void;
 }
 
 export function heldClock(start: Date = new Date()): HeldClock {
   let elapsed = 0;
+  const timers = new Set<{ at: number; fire: () => void }>();
+  const nextDue = (end: number) =>
+    [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
+  // Each timer fires at its own moment, and one cleared by an earlier firing
+  // does not fire at all.
+  const fireThrough = (end: number): void => {
+    for (let due = nextDue(end); due; due = nextDue(end)) {
+      elapsed = due.at;
+      timers.delete(due);
+      due.fire();
+    }
+    elapsed = end;
+  };
   return {
     date: () => new Date(start.getTime() + elapsed),
     monotonic: () => elapsed,
-    advance: (ms) => {
-      elapsed += ms;
+    after: (ms, fire) => {
+      const timer = { at: elapsed + ms, fire };
+      timers.add(timer);
+      // Already due, it fires on the loop's next turn, as a real timer does.
+      if (ms <= 0) setImmediate(() => fireThrough(elapsed));
+      return () => timers.delete(timer);
     },
+    advance: (ms) => fireThrough(elapsed + ms),
   };
 }
 

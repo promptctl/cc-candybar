@@ -77,6 +77,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       return;
     }
     responded = true;
+    clearBackstop();
     const settle =
       exitAfterFlush === null
         ? undefined
@@ -109,7 +110,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
   let timedOut = false;
-  const timer = setTimeout(() => {
+  const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () => {
     timedOut = true;
     daemon.stats.requestsTimedOut++;
     respond(
@@ -122,7 +123,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       null,
       NOTHING_DELIVERED,
     );
-  }, REQUEST_TIMEOUT_MS);
+  });
 
   const reader = makeFrameReader(
     (frame) => {
@@ -166,7 +167,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     // A subscriber that hung up before its subscribe was handled: its close has
     // already fired, so a feed attached now would never hear it.
     if (sock.destroyed) return;
-    clearTimeout(timer);
+    clearBackstop();
     leaveInFlight();
     sock.off("data", reader);
     const write = newestWins(sock);
@@ -192,7 +193,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     daemon.log("warn", `socket error: ${err.message}`);
   });
   sock.on("close", () => {
-    clearTimeout(timer);
+    clearBackstop();
     leaveInFlight();
   });
 }
