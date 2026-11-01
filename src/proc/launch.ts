@@ -525,12 +525,29 @@ type Terminated = "timeout" | "aborted";
 
 // Signal a waited child's whole process group (it leads its own; see the
 // header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
-// — the state this call exists to reach; any other failure propagates.
+// — the state this call exists to reach; any other failure propagates, but for
+// a group's EPERM that its leader does not back.
 function signalGroup(pid: number, sig: NodeJS.Signals): void {
   try {
     process.kill(-pid, sig);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid))) {
+      throw err;
+    }
+  }
+}
+
+// Darwin answers EPERM for a group with nothing left to signal: its members
+// are zombies, or still in their exit teardown. That is the same answer as a
+// refusal, so the leader tells them apart: only one that changed its real uid
+// refuses signal 0. An ended leader answers it as a zombie, or is gone.
+function leaderRefuses(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -1006,7 +1023,8 @@ export function readJobEnd(status: string): JobEnd | null {
 // Whether anything of the job's process group is still running. The group
 // outlives its leader while the program runs, so a sh killed on its own does
 // not read as an ended job. A job runs as its launcher's user, so a group the
-// launcher may not signal (EPERM) is someone else's under a recycled id.
+// launcher may not signal (EPERM) is someone else's under a recycled id, or
+// on darwin holds nothing left running; neither is the job running.
 export function jobGroupAlive(pid: number): boolean {
   try {
     process.kill(-pid, 0);
