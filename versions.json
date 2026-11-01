@@ -4,15 +4,22 @@
     {
       "version": "pr-556",
       "ref": "refs/pull/556/merge",
-      "sha": "f594b2d50c5bbb46f6810367fd860f6fe6da5810",
-      "timestamp": "2026-11-01T21:42:50.894Z",
+      "sha": "cfa6561d9957e0568e28bc01a21ee5d18235d345",
+      "timestamp": "2026-11-01T21:49:53.588Z",
       "commits": [
         {
-          "sha": "f594b2d50c5bbb46f6810367fd860f6fe6da5810",
+          "sha": "cfa6561d9957e0568e28bc01a21ee5d18235d345",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T21:41:57Z",
-          "message": "Merge ade1bf28b7a5b8f0601a8dc0ecafe86097a064d5 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+          "timestamp": "2026-11-01T21:48:59Z",
+          "message": "Merge f2ae450ac04ca82f6ac9f713b73314a172833ac5 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "f2ae450ac04ca82f6ac9f713b73314a172833ac5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:48:47-07:00",
+          "message": "docs(testing): the ratchet counts the cases left to move (candybar-testing-ihvy.43x)\n"
         },
         {
           "sha": "ade1bf28b7a5b8f0601a8dc0ecafe86097a064d5",
