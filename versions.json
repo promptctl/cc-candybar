@@ -4,15 +4,22 @@
     {
       "version": "pr-542",
       "ref": "refs/pull/542/merge",
-      "sha": "2c4e355c7dc797415b023083bcf4709520b3e015",
-      "timestamp": "2026-11-01T07:57:38.866Z",
+      "sha": "e1d8ec047f4c24638a0793d50f4df76a94ef0c7c",
+      "timestamp": "2026-11-01T08:06:40.303Z",
       "commits": [
         {
-          "sha": "2c4e355c7dc797415b023083bcf4709520b3e015",
+          "sha": "e1d8ec047f4c24638a0793d50f4df76a94ef0c7c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:56:52Z",
-          "message": "Merge 79557950b4255425e8c2a40d1343aed978aab832 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+          "timestamp": "2026-11-01T08:05:46Z",
+          "message": "Merge dca13474f5c565b11f1fc5ea481196255782c9a9 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+        },
+        {
+          "sha": "dca13474f5c565b11f1fc5ea481196255782c9a9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:05:39-07:00",
+          "message": "test(daemon): the landing stamp runs on a real verb, even when it throws (candybar-launch-q7o7.rs0)\n"
         },
         {
           "sha": "79557950b4255425e8c2a40d1343aed978aab832",
