@@ -637,6 +637,14 @@ async function launchWaited(
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
+      // The result already holds the output. Whatever outlives the launch — a
+      // refused child, a descendant that left the group — keeps its pipes,
+      // drained: a destroyed one would kill it with SIGPIPE at its next write,
+      // for as long as the launcher lives to read them.
+      for (const pipe of [child.stdout, child.stderr]) {
+        pipe?.removeAllListeners("data").resume();
+        (pipe as Socket | null)?.unref();
+      }
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
@@ -662,14 +670,8 @@ async function launchWaited(
 
     // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
     // what was written before it is read. Nothing of the launch is left, so it
-    // concludes on the child's exit. A descendant that left the group keeps its
-    // pipes, drained: a destroyed one would kill it with SIGPIPE at its next
-    // write, for as long as the launcher lives to read them.
+    // concludes on the child's exit.
     const concludeWithGroup = () => {
-      for (const pipe of [child.stdout, child.stderr]) {
-        pipe?.removeAllListeners("data").resume();
-        (pipe as Socket | null)?.unref();
-      }
       conclude(child.exitCode, child.signalCode);
     };
     // While a member of the group lives the launch waits for it, guarded, so
