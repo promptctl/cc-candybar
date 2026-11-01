@@ -180,7 +180,9 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     if (!quick.ok) throw new Error(quick.error);
     quick.release();
     await until(() => readJobEnd(exited.status) !== null, "the job's verdict");
-    expect(endJob(quick.pid, exited.status, { kind: "timeout" })).toBe(false);
+    expect(endJob(quick.pid, exited.status, { kind: "timeout" }).stands).toBe(
+      false,
+    );
     expect(readJobEnd(exited.status)).toEqual({ kind: "exit", code: 0 });
 
     const ended = {
@@ -193,7 +195,9 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     );
     if (!slow.ok) throw new Error(slow.error);
     slow.release();
-    expect(endJob(slow.pid, ended.status, { kind: "timeout" })).toBe(true);
+    expect(endJob(slow.pid, ended.status, { kind: "timeout" }).stands).toBe(
+      true,
+    );
     await until(() => !groupAlive(slow.pid), "the ended job's group to go");
     expect(readJobEnd(ended.status)).toEqual({ kind: "timeout" });
   });
@@ -212,14 +216,58 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     job.release();
     await until(() => readJobEnd(files.status) !== null, "the job's verdict");
     expect(groupAlive(job.pid)).toBe(true);
-    expect(endJob(job.pid, files.status, { kind: "timeout" })).toBe(false);
+    expect(endJob(job.pid, files.status, { kind: "timeout" }).stands).toBe(
+      false,
+    );
     await until(() => !groupAlive(job.pid), "the left-behind child to end");
     expect(readJobEnd(files.status)).toEqual({ kind: "exit", code: 0 });
   });
 
+  test("a group that refuses SIGTERM is reported, not thrown, and gets no SIGKILL", () => {
+    const files = jobFiles();
+    const kill = jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+    });
+    jest.useFakeTimers();
+    try {
+      expect(endJob(424242, files.status, { kind: "timeout" })).toEqual({
+        stands: true,
+        signalled: false,
+      });
+      jest.runOnlyPendingTimers();
+      expect(kill).not.toHaveBeenCalledWith(-424242, "SIGKILL");
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
+  });
+
+  test("a group that takes SIGTERM and refuses the SIGKILL does not throw from the timer", () => {
+    const files = jobFiles();
+    const kill = jest.spyOn(process, "kill").mockImplementation((_, sig) => {
+      if (sig === "SIGTERM") return true;
+      throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+    });
+    jest.useFakeTimers();
+    try {
+      expect(endJob(424242, files.status, { kind: "timeout" })).toEqual({
+        stands: true,
+        signalled: true,
+      });
+      expect(() => jest.runOnlyPendingTimers()).not.toThrow();
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
+  });
+
   test("ending a job whose files are gone is a no-op, not an error", () => {
     const status = path.join(scratch, "gone", "status");
-    expect(endJob(process.pid, status, { kind: "timeout" })).toBe(false);
+    expect(endJob(process.pid, status, { kind: "timeout" })).toEqual({
+      stands: false,
+      signalled: false,
+    });
   });
 
   test("a status this module did not write is an error, not an end", () => {
@@ -279,7 +327,7 @@ describe("claimAct: one act per bundle", () => {
       endJob(running.record.pid, path.join(dir, "1", "status"), {
         kind: "timeout",
       }),
-    ).toBe(true);
+    ).toMatchObject({ stands: true, signalled: true });
     await until(
       () => judgeAct(reader.read()).kind === "failed",
       "the timeout verdict",

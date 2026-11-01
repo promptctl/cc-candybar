@@ -453,10 +453,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // verdict unless the job's own landed first.
   function endIfOverdue(facts: ActFacts | null): void {
     if (!facts?.alive || Date.now() <= facts.record.deadline) return;
-    const why = endOverdue(actsDir, facts)
-      ? "timed out"
-      : "outlived its verdict";
-    log("error", `apply-update: act ${facts.act} ${why}; ending it`);
+    const { stands, signalled } = endOverdue(actsDir, facts);
+    const why = stands ? "timed out" : "outlived its verdict";
+    const ending = signalled ? "ending it" : "its group took no signal";
+    log("error", `apply-update: act ${facts.act} ${why}; ${ending}`);
   }
 
   // Notices an act ending, whichever daemon started it: a success means the

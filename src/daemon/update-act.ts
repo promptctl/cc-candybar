@@ -22,6 +22,7 @@ import path from "node:path";
 import {
   endJob,
   jobGroupAlive,
+  type JobEnding,
   readJobEnd,
   type JobEnd,
   type JobFiles,
@@ -344,8 +345,8 @@ const CLAIMED_FIRST: Claim = {
 
 // Ends an act whose group its reader saw alive past its deadline, with a
 // `timeout` verdict unless the job's own landed first: a live read already
-// proved the group the recorded job. True when the timeout is the verdict.
-export function endOverdue(dir: string, facts: ActFacts): boolean {
+// proved the group the recorded job.
+export function endOverdue(dir: string, facts: ActFacts): JobEnding {
   const status = filesOf(path.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });
 }

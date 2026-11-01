@@ -1056,20 +1056,29 @@ export function readJobEnd(status: string): JobEnd | null {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text)}`);
 }
 
-// Whether anything of the job's process group is still running. The group
-// outlives its leader while the program runs, so a sh killed on its own does
-// not read as an ended job. A job runs as its launcher's user, so a group the
-// launcher may not signal (EPERM) is someone else's under a recycled id, or
-// on darwin holds nothing left running; neither is the job running.
-export function jobGroupAlive(pid: number): boolean {
+// Signals a job's process group; true when the group took it. A job runs as its
+// launcher's user, so a group the launcher may not signal (EPERM) is someone
+// else's under a recycled id, on darwin holds nothing left running, or holds
+// only a member that changed its uid, which no signal of ours could reach.
+// [LAW:no-silent-failure] exception: the false is the whole report. `endJob`
+// hands SIGTERM's to its caller; the SIGKILL's lands in a timer with no caller,
+// and the launcher has nothing further to try either way.
+function signalJob(pid: number, sig: NodeJS.Signals | 0): boolean {
   try {
-    process.kill(-pid, 0);
+    process.kill(-pid, sig);
     return true;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
   }
+}
+
+// Whether anything of the job's process group the launcher can still signal is
+// running. The group outlives its leader while the program runs, so a sh killed
+// on its own does not read as an ended job.
+export function jobGroupAlive(pid: number): boolean {
+  return signalJob(pid, 0);
 }
 
 // Whether a group has no member left, zombies included. Unlike `jobGroupAlive`,
@@ -1085,18 +1094,27 @@ function groupGone(pid: number): boolean {
   }
 }
 
+// What `endJob` did: whether the launcher's verdict is the one that stands, and
+// whether the group took the SIGTERM. Only a group that took it gets the SIGKILL,
+// since an id that answered nothing may no longer be the job's by the grace's end.
+export interface JobEnding {
+  readonly stands: boolean;
+  readonly signalled: boolean;
+}
+
 // Ends a job's group with the timeout's own escalation, and gives it a verdict
 // of the launcher's unless its own landed first: the first verdict stands, and
 // a group that outlives its verdict (a child the program left) is ended all the
-// same. True when the launcher's verdict is the one that stands. A status
-// whose directory is gone belongs to a job whose files were removed once it
-// had ended, so there is nothing left to end.
-export function endJob(pid: number, status: string, end: JobEnd): boolean {
+// same. A status whose directory is gone belongs to a job whose files were
+// removed once it had ended, so there is nothing left to end.
+export function endJob(pid: number, status: string, end: JobEnd): JobEnding {
   const staged = `${status}.${process.pid}`;
   try {
     writeFileSync(staged, `${formatJobEnd(end)}\n`);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { stands: false, signalled: false };
+    }
     throw err;
   }
   let stands = true;
@@ -1108,9 +1126,11 @@ export function endJob(pid: number, status: string, end: JobEnd): boolean {
   } finally {
     rmSync(staged, { force: true });
   }
-  signalGroup(pid, "SIGTERM");
-  setTimeout(() => signalGroup(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return stands;
+  const signalled = signalJob(pid, "SIGTERM");
+  if (signalled) {
+    setTimeout(() => signalJob(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  }
+  return { stands, signalled };
 }
 
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
