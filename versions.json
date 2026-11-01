@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-533",
+      "ref": "refs/pull/533/merge",
+      "sha": "16729e6c1290745407ff5e015eac6f6e215876b4",
+      "timestamp": "2026-11-01T02:20:05.842Z",
+      "commits": [
+        {
+          "sha": "16729e6c1290745407ff5e015eac6f6e215876b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:19:12-06:00",
+          "message": "Merge 8115806c1db6900c678b933ed38df46f935d3705 into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
+        },
+        {
+          "sha": "8115806c1db6900c678b933ed38df46f935d3705",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:19:01-06:00",
+          "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-532",
       "ref": "refs/pull/532/merge",
       "sha": "22ed84ce9f6c7d25c960ad4d8865812bd9b3f38d",
