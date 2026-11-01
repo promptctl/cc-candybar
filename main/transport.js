@@ -35279,7 +35279,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.177.0";
+var PACKAGE_VERSION = "1.177.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35848,6 +35848,13 @@ function spawnLifeline(state) {
   }
   stats?.onEnd("lifeline", Date.now() - t0);
   const pipe = line.stdin;
+  if (pipe === null || pipe === void 0) {
+    line.once(
+      "error",
+      (err) => setFault(state, `did not start: ${err.message}`)
+    );
+    return null;
+  }
   line.once("spawn", () => {
     if (state.lifeline?.process === line) setFault(state, null);
   });
@@ -36554,10 +36561,10 @@ function unwritable(lines2, e) {
 // src/daemon/memory-report.ts
 init_globals();
 var PROBE_TIMEOUT_MS = 5e3;
-function memoryReport(probes) {
+async function memoryReport(probes) {
   const refusals = [];
   for (const probe2 of probes) {
-    const outcome = probe2.read();
+    const outcome = await probe2.read();
     if (outcome.kind === "text") {
       return `# memory report from: ${probe2.name}
 ${outcome.text}`;
@@ -36635,8 +36642,8 @@ function physFootprintOf(text4) {
 function commandProbe(launcher, bin, args) {
   return {
     name: `${bin} ${args.join(" ")}`,
-    read: () => {
-      const result = launcher.launchSync({
+    read: async () => {
+      const result = await launcher.launch({
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
@@ -36655,7 +36662,7 @@ function commandProbe(launcher, bin, args) {
 function fileProbe(path40) {
   return {
     name: path40,
-    read: () => {
+    read: async () => {
       try {
         const text4 = fs_default.readFileSync(path40, "utf8");
         return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
@@ -36747,12 +36754,18 @@ function makeLimits(deps) {
     );
     const stamp2 = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
     const identity3 = `${stamp2}-${deps.pid}`;
-    attempt(deps.log, "memory report", () => {
+    await attempt(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity3);
-      deps.writeMemoryReport(file, deps.captureMemoryReport());
+      const report2 = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report2);
       deps.log("info", `memory report written: ${file}`);
     });
-    attempt(deps.log, "heap snapshot", () => {
+    if (disarmed) {
+      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
+      return false;
+    }
+    await attempt(deps.log, "heap snapshot", () => {
       deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity3);
       deps.log(
@@ -36760,12 +36773,16 @@ function makeLimits(deps) {
         `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
       );
     });
-    attempt(deps.log, "artifact rotation", () => {
+    await attempt(deps.log, "artifact rotation", async () => {
       for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
         keep2
       )) {
         for (const file of Object.values(artifacts)) {
-          attempt(deps.log, `evicting ${file}`, () => deps.removeFile(file));
+          await attempt(
+            deps.log,
+            `evicting ${file}`,
+            () => deps.removeFile(file)
+          );
         }
       }
     });
@@ -36813,9 +36830,9 @@ function readingFields({ charge, rss, heapTotal }, limit) {
   const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
   return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
 }
-function attempt(log, what, body) {
+async function attempt(log, what, body) {
   try {
-    body();
+    await body();
   } catch (e) {
     log("warn", `${what} failed: ${e.message}`);
   }
@@ -65885,12 +65902,6 @@ function tmuxRun(result, args) {
   const detail = result.error ?? [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
   return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
 }
-function runTmux(launcher, hint, category, args, stdinInput) {
-  return tmuxRun(
-    launcher.launchSync(invocation(hint, category, args, stdinInput)),
-    args
-  );
-}
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
     await launcher.launch(invocation(hint, category, args, stdinInput)),
@@ -70505,7 +70516,7 @@ var redo = async (value, ctx) => {
 };
 var applyUpdate = async (value, ctx) => {
   requireSessionId(oneArg(value));
-  ctx.applyUpdate();
+  await ctx.applyUpdate();
 };
 var SESSION_CLIENT_HINTS_KEY = "client-hints";
 function sessionHints(ctx, sid) {
@@ -71025,7 +71036,8 @@ async function journaled(sid, ctx, turn, handler) {
   };
   const launches = {
     launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line))
+    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
+    applyUpdate: () => turn.landed(ctx.applyUpdate())
   };
   try {
     await handler({
@@ -71477,9 +71489,9 @@ function removeAct(dir, act) {
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
 var bootedAt = () => Date.now() - os_default.uptime() * 1e3;
-function isRecordedJob(record2, read2, boot = bootedAt()) {
+async function isRecordedJob(record2, read2, boot = bootedAt()) {
   if (record2.started <= boot || !jobGroupAlive(record2.pid)) return false;
-  const leader = read2(record2.pid);
+  const leader = await read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
 function readRecord(actDir) {
@@ -71493,12 +71505,12 @@ function readRecord(actDir) {
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2) {
   let known = null;
-  function factsOf2(act) {
+  async function factsOf2(act) {
     const actDir = import_node_path33.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
-      known = { record: record2, ours: isRecordedJob(record2, read2), final: null };
+      known = { record: record2, ours: await isRecordedJob(record2, read2), final: null };
     }
     if (known.final !== null) return known.final;
     known.ours = known.ours && jobGroupAlive(record2.pid);
@@ -71511,7 +71523,7 @@ function makeActReader(dir, read2) {
     return facts;
   }
   return {
-    read() {
+    async read() {
       let vanished = null;
       for (; ; ) {
         const act = actNumbers(dir).at(-1);
@@ -71521,26 +71533,36 @@ function makeActReader(dir, read2) {
             `${import_node_path33.default.join(dir, String(act))}: an act with no record`
           );
         }
-        const facts = factsOf2(act);
+        const facts = await factsOf2(act);
         if (facts !== null) return facts;
         vanished = act;
       }
     }
   };
 }
-function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
-  const act = (after ?? 0) + 1;
-  const actDir = import_node_path33.default.join(dir, String(act));
+function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
   const staging = fs_default.mkdtempSync(import_node_path33.default.join(dir, ".claim-"));
-  const job = launcher.launchJobSync(command, filesOf(actDir));
-  if (!job.ok) {
+  try {
+    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
+    fs_default.renameSync(staging, actDir);
+    return true;
+  } catch (err) {
+    const code = err.code;
+    if (code === "ENOTEMPTY" || code === "EEXIST") return false;
+    throw err;
+  } finally {
     fs_default.rmSync(staging, { recursive: true, force: true });
-    throw new Error(`apply-update: ${job.error}`);
   }
+}
+async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
+  const act = (after ?? 0) + 1;
+  const actDir = import_node_path33.default.join(dir, String(act));
+  const job = launcher.launchJobSync(command, filesOf(actDir));
+  if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
   try {
-    const start = read2(job.pid);
+    const start = await read2(job.pid);
     const record2 = {
       identity: identity3,
       pid: job.pid,
@@ -71548,14 +71570,7 @@ function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, rea
       started: now2,
       deadline: now2 + timeoutMs
     };
-    fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
-    try {
-      fs_default.renameSync(staging, actDir);
-    } catch (err) {
-      const code = err.code;
-      if (code === "ENOTEMPTY" || code === "EEXIST") return CLAIMED_FIRST;
-      throw err;
-    }
+    if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act)) {
       removeAct(dir, act);
       return CLAIMED_FIRST;
@@ -71564,7 +71579,6 @@ function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, rea
   } finally {
     if (stood) job.release();
     else job.withdraw();
-    fs_default.rmSync(staging, { recursive: true, force: true });
   }
   for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
     removeAct(dir, n);
@@ -71582,8 +71596,8 @@ function endOverdue(dir, facts) {
 
 // src/daemon/process-fingerprint.ts
 init_globals();
-function readStartTime(pid2, launch) {
-  const res = launch({
+async function readStartTime(pid2, launch) {
+  const res = await launch({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid2)],
     category: "process-fingerprint",
@@ -71603,6 +71617,37 @@ function readStartTime(pid2, launch) {
   const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
   return { kind: "unavailable", detail };
 }
+
+// src/utils/keyed-serial-queue.ts
+init_globals();
+var KeyedSerialQueue = class {
+  // Each key's tasks still to run, while one runs.
+  waiting = /* @__PURE__ */ new Map();
+  run(key, task) {
+    return new Promise((resolve, reject2) => {
+      const entry = async () => {
+        try {
+          resolve(await task());
+        } catch (e) {
+          reject2(e);
+        }
+      };
+      const behind = this.waiting.get(key);
+      if (behind !== void 0) {
+        behind.push(entry);
+        return;
+      }
+      const tasks = [];
+      this.waiting.set(key, tasks);
+      const drain = (next2) => void next2().then(() => {
+        const after = tasks.shift();
+        if (after === void 0) this.waiting.delete(key);
+        else drain(after);
+      });
+      drain(entry);
+    });
+  }
+};
 
 // src/daemon/update-notice.ts
 var UPDATE_DISMISSED_KEY = "update.dismissed";
@@ -71766,12 +71811,18 @@ function makeUpdateWatch(opts) {
   } = opts;
   let build = { kind: "unchecked", reason: "not sampled yet" };
   let release3 = null;
-  const readStart = (pid2) => readStartTime(pid2, launcher.launchSync);
+  const readStart = async (pid2) => {
+    const read2 = await readStartTime(pid2, launcher.launch);
+    if (closed) throw new DaemonClosing("apply-update");
+    return read2;
+  };
   const acts = makeActReader(actsDir2, readStart);
   let seen = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
+  const actQueue = new KeyedSerialQueue();
+  const actTurn = (body) => actQueue.run("acts", body);
   let closed = false;
   const armed = [];
   const every = (run3, ms) => {
@@ -71806,12 +71857,15 @@ function makeUpdateWatch(opts) {
   }
   let unreadable = null;
   const logUnreadable = changeLogger(log);
-  function touchActs(touch) {
+  async function touchActs(touch) {
     try {
-      const value = touch();
+      const value = await touch();
       unreadable = null;
       return { ok: true, value };
     } catch (err) {
+      if (err instanceof DaemonClosing) {
+        return { ok: false, error: err.message };
+      }
       unreadable = `update act files (${actsDir2}): ${err.message}`;
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
@@ -71824,13 +71878,13 @@ function makeUpdateWatch(opts) {
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
   }
-  function watchAct() {
-    const read2 = touchActs(() => {
-      const facts = acts.read();
-      endIfOverdue(facts);
+  async function watchAct() {
+    const read2 = await touchActs(async () => {
+      const facts = await acts.read();
+      if (!closed) endIfOverdue(facts);
       return facts;
     });
-    if (!read2.ok) return;
+    if (closed || !read2.ok) return;
     const next2 = judgeAct(read2.value);
     if (seen === null && next2.kind === "running") {
       log("info", `apply-update: act ${next2.act} is running; watching it`);
@@ -71847,13 +71901,20 @@ function makeUpdateWatch(opts) {
     }
     seen = next2;
   }
+  let tickTimer;
+  async function tick() {
+    await actTurn(watchAct);
+    if (closed) return;
+    tickTimer = setTimeout(() => void tick(), ACT_POLL_MS);
+    tickTimer.unref();
+  }
   return {
     arm() {
       armed.push(reserveUpdateKeys());
       sampleBuild();
       every(sampleBuild, intervalMs);
-      watchAct();
-      every(watchAct, ACT_POLL_MS);
+      armed.push(() => clearTimeout(tickTimer));
+      void tick();
       if (build.kind === "not-source-checkout") {
         void pollRelease();
         every(() => void pollRelease(), releaseIntervalMs);
@@ -71865,24 +71926,28 @@ function makeUpdateWatch(opts) {
       armed.forEach((release4) => release4());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
-    running() {
-      const read2 = touchActs(() => acts.read());
+    running: () => actTurn(async () => {
+      const read2 = await touchActs(() => acts.read());
       return read2.ok && judgeAct(read2.value).kind === "running";
-    },
+    }),
     error: () => unreadable,
-    act() {
+    act: () => actTurn(async () => {
+      if (closed) throw new DaemonClosing("apply-update");
+      const read2 = await touchActs(() => acts.read());
+      if (closed) throw new DaemonClosing("apply-update");
+      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
       const update = current();
       if (update === null) {
-        throw new BadVerbArgs("apply-update: nothing newer is known to apply");
+        throw new BadVerbArgs(
+          "apply-update: nothing newer is known to apply"
+        );
       }
       const facts = factsOf(update);
-      const read2 = touchActs(() => acts.read());
-      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
       const newest = read2.value;
       if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
-      const claim = claimAct(
+      const claim = await claimAct(
         launcher,
         actsDir2,
         newest === null ? null : newest.act,
@@ -71900,7 +71965,7 @@ function makeUpdateWatch(opts) {
         `apply-update: act ${claim.act}: ${facts.act} \u2014 ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`
       );
       seen = { kind: "running", act: claim.act };
-    }
+    })
   };
 }
 
@@ -77462,7 +77527,13 @@ function makeBinaryWatch(opts) {
   const boot = targets.map((path40) => ({ path: path40, stamp: mtimeOf(path40, stat3) }));
   const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
   let timer = null;
-  const sample = () => {
+  let ended = false;
+  const end = () => {
+    ended = true;
+    if (timer) clearInterval(timer);
+  };
+  const sample = async () => {
+    if (ended) return;
     for (const { path: path40, stamp: stamp2 } of watched) {
       const now2 = mtimeOf(path40, stat3);
       if (now2.kind === "failed") {
@@ -77471,7 +77542,9 @@ function makeBinaryWatch(opts) {
       }
       if (!sameStamp(stamp2, now2)) {
         const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path40})`;
-        if (held()) {
+        const waiting2 = await held();
+        if (ended) return;
+        if (waiting2) {
           logHeld([
             "info",
             `${what}; the restart waits for the running update`
@@ -77479,12 +77552,15 @@ function makeBinaryWatch(opts) {
           return;
         }
         log("info", `${what}; shutting down`);
-        if (timer) clearInterval(timer);
+        end();
         exit2();
         return;
       }
     }
   };
+  const check = () => sample().catch((e) => {
+    log("error", `binary check failed: ${e.message}`);
+  });
   return {
     arm() {
       for (const { path: path40, stamp: stamp2 } of boot) {
@@ -77495,13 +77571,11 @@ function makeBinaryWatch(opts) {
           );
         }
       }
-      timer = setInterval(sample, intervalMs);
+      timer = setInterval(() => void check(), intervalMs);
       timer.unref();
     },
-    checkNow: sample,
-    close() {
-      if (timer) clearInterval(timer);
-    }
+    checkNow: check,
+    close: end
   };
 }
 
@@ -82591,25 +82665,30 @@ var TmuxStatusLines = class {
   }
   // [LAW:single-enforcer] The daemon's shutdown: everything put back, now —
   // a few synchronous tmux calls a server, whatever is in flight.
-  restoreAll() {
+  restoreAll(atExit) {
     this.closed = true;
     for (const held of this.held.values()) held.unsubscribe?.();
     this.held.clear();
     for (const [socket, server] of this.servers) {
       for (const [session, layout] of [...server.layouts]) {
         server.layouts.delete(session);
-        const answers = this.askSync(socket, RESTORE_QUERIES(session));
+        const answers = this.askSync(atExit, socket, RESTORE_QUERIES(session));
         if (answers === null) continue;
         const plan = restorePlan(session, layout.prior, answers);
-        this.writeSync(socket, plan.commands);
+        this.writeSync(atExit, socket, plan.commands);
         this.saidRestored(socket, session, plan.kept);
       }
       const binding = server.binding;
       server.binding = { kind: "none" };
       if (binding.kind === "ours" || binding.kind === "adopted") {
-        const answers = this.askSync(socket, ROOT_KEYS);
+        const answers = this.askSync(atExit, socket, ROOT_KEYS);
         if (answers === null) continue;
-        this.writeBindingRestoreSync(socket, binding.prior, answers[0] ?? "");
+        this.writeBindingRestoreSync(
+          atExit,
+          socket,
+          binding.prior,
+          answers[0] ?? ""
+        );
       }
     }
   }
@@ -82919,10 +82998,10 @@ var TmuxStatusLines = class {
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`
     );
   }
-  writeBindingRestoreSync(socket, prior, listKeys) {
+  writeBindingRestoreSync(atExit, socket, prior, listKeys) {
     const plan = bindingRestorePlan(prior, listKeys);
     for (const step4 of plan.steps)
-      this.writeSync(socket, [step4.command], step4.stdin);
+      this.writeSync(atExit, socket, [step4.command], step4.stdin);
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`
@@ -82952,11 +83031,8 @@ var TmuxStatusLines = class {
     const run3 = await this.run(socket, readChain(queries));
     return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
   }
-  askSync(socket, queries) {
-    const run3 = this.counted(
-      socket,
-      this.deps.edge.runSync(socket, readChain(queries))
-    );
+  askSync(atExit, socket, queries) {
+    const run3 = this.counted(socket, atExit(socket, readChain(queries)));
     return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
   }
   // Whether tmux took the write.
@@ -82965,13 +83041,10 @@ var TmuxStatusLines = class {
     this.writes++;
     return (await this.run(socket, chain(commands), stdin)).kind === "ok";
   }
-  writeSync(socket, commands, stdin) {
+  writeSync(atExit, socket, commands, stdin) {
     if (commands.length === 0) return;
     this.writes++;
-    this.counted(
-      socket,
-      this.deps.edge.runSync(socket, chain(commands), stdin)
-    );
+    this.counted(socket, atExit(socket, chain(commands), stdin));
   }
 };
 function segmentsOf2(value) {
@@ -83140,37 +83213,6 @@ function takeWhile(xs, ok3) {
   const end = xs.findIndex((x) => !ok3(x));
   return end === -1 ? [...xs] : xs.slice(0, end);
 }
-
-// src/utils/keyed-serial-queue.ts
-init_globals();
-var KeyedSerialQueue = class {
-  // Each key's tasks still to run, while one runs.
-  waiting = /* @__PURE__ */ new Map();
-  run(key, task) {
-    return new Promise((resolve, reject2) => {
-      const entry = async () => {
-        try {
-          resolve(await task());
-        } catch (e) {
-          reject2(e);
-        }
-      };
-      const behind = this.waiting.get(key);
-      if (behind !== void 0) {
-        behind.push(entry);
-        return;
-      }
-      const tasks = [];
-      this.waiting.set(key, tasks);
-      const drain = (next2) => void next2().then(() => {
-        const after = tasks.shift();
-        if (after === void 0) this.waiting.delete(key);
-        else drain(after);
-      });
-      drain(entry);
-    });
-  }
-};
 
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
@@ -84326,8 +84368,7 @@ function createDaemon(inputs) {
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
-      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
-      runSync: (socket, args, stdin) => runTmux(launcher, { socket }, "tmux-status", args, stdin)
+      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
     sessionInPane: (socket, pane) => frameFeeds.newestWhere(
@@ -84608,7 +84649,7 @@ function createDaemon(inputs) {
       updateWatch.arm();
       limits.arm();
     },
-    close() {
+    close(atExit) {
       const teardown = [
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
         // the journal in flight commits what landed; none opens after.
@@ -84616,7 +84657,7 @@ function createDaemon(inputs) {
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
         // comes before the abort that ends the daemon's launches.
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
+        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

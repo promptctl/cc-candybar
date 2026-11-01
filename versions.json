@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-549",
-      "ref": "refs/pull/549/merge",
-      "sha": "b5080a71c5f9450a29637a8ba595b2ba3dc24e84",
-      "timestamp": "2026-11-01T12:18:14.461Z",
-      "commits": [
-        {
-          "sha": "b5080a71c5f9450a29637a8ba595b2ba3dc24e84",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T12:17:27Z",
-          "message": "Merge 09596d4b0bdfae1b5d529f7e7bb537a9b9df23d9 into a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066\n"
-        },
-        {
-          "sha": "09596d4b0bdfae1b5d529f7e7bb537a9b9df23d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:08:25-07:00",
-          "message": "fix(daemon): a lifeline out of descriptors stays fail-open, and apply-update reads the update after its wait (candybar-launch-q7o7.jqq)\n"
-        },
-        {
-          "sha": "12fae1225a627d1abdc0faa6a7fea147e37c0eac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:49:08-07:00",
-          "message": "fix(daemon): apply-update stops at its turn's landing, and a queued close answers closing (candybar-launch-q7o7.jqq)\n"
-        },
-        {
-          "sha": "2898a7bbbc9d6149ff325cac26a5f1b0dfdbd105",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:37:21-07:00",
-          "message": "fix(daemon): a close reads as DaemonClosing, and claims and watches judge nothing after it (candybar-launch-q7o7.jqq)\n"
-        },
-        {
-          "sha": "d11c0c650920726e2841f7de0ea142674b0949c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:20:18-07:00",
-          "message": "fix(daemon): background and lifecycle launches go async (candybar-launch-q7o7.jqq)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "7b70464dd074c6775e2cbd7ba963e3ad790cb484",
-      "timestamp": "2026-11-01T10:55:11.342Z",
+      "sha": "722b6fe4c0d62887ce180576956933793a7e8d12",
+      "timestamp": "2026-11-01T12:26:44.143Z",
       "commits": [
         {
-          "sha": "7b70464dd074c6775e2cbd7ba963e3ad790cb484",
+          "sha": "722b6fe4c0d62887ce180576956933793a7e8d12",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:54:11-07:00",
-          "message": "fix(daemon): read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw) (#547)\n\n* fix(daemon): read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw)\n\nA click joins its session's queue on arrival and keeps its place through\ngather and turn; only the daemon-wide turn is taken after the gather. Leading\ngathers hoist out of the turn with their failures carried to their position\nin the fold, a gather is a snapshot of one config and re-gathers in the turn\nwhen that config changed, and doctor-probe leaves the turn. Idle clock pending\nreplaces the arrival stamp; handlers lose launcher, doctor and claudeInput.\n\n* fix(daemon): only a click's first gather runs ahead of its turn; a failed reload re-gathers (candybar-launch-q7o7.fqw)\n\nReview findings: a gather's own step writes, so a later gather stays in the\nfold. A reload that fails keeps its config, so error and warning count as the\nconfig changing. A partial rewind counts as a write. No countdown draws while a\nclick is in flight. The session-queue wait lands on the click event (placeWait).\n\n* fix(daemon): click gathers run one at a time, in no turn (candybar-launch-q7o7.fqw)\n\nDoctor probes share a daemon-wide rate window, so a gather running beside\nanother session's was refused. The hoisted gather is one step, not a list.\n\n* fix(daemon): a click's gathers show in stats, and say what the queue buys (candybar-launch-q7o7.fqw)\n\n* fix(daemon): the stats report prints gathers (candybar-launch-q7o7.fqw)"
+          "timestamp": "2026-11-01T05:25:50-07:00",
+          "message": "fix(daemon): background and lifecycle launches go async (candybar-launch-q7o7.jqq) (#549)\n\n* fix(daemon): background and lifecycle launches go async (candybar-launch-q7o7.jqq)\n\n* fix(daemon): a close reads as DaemonClosing, and claims and watches judge nothing after it (candybar-launch-q7o7.jqq)\n\n* fix(daemon): apply-update stops at its turn's landing, and a queued close answers closing (candybar-launch-q7o7.jqq)\n\n* fix(daemon): a lifeline out of descriptors stays fail-open, and apply-update reads the update after its wait (candybar-launch-q7o7.jqq)"
         },
         {
-          "sha": "44fc94e96c3adeacfd3027d4a33a01715e5eb5cd",
+          "sha": "a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T10:46:06Z",
-          "message": "chore(release): set `package.json` to 1.177.0 [skip ci]\n\n## [1.177.0](https://github.com/promptctl/cc-candybar/compare/v1.176.0...v1.177.0) (2026-11-01)\n\n### Features\n\n* **click:** a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2) ([#546](https://github.com/promptctl/cc-candybar/issues/546)) ([1270b54](https://github.com/promptctl/cc-candybar/commit/1270b544662cfb3f1acdc49573860e38b9c3f14a))\n* **daemon:** click-rooted launches go async (candybar-launch-q7o7.gp7) ([#545](https://github.com/promptctl/cc-candybar/issues/545)) ([ccd8859](https://github.com/promptctl/cc-candybar/commit/ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0))\n"
+          "timestamp": "2026-11-01T11:05:28Z",
+          "message": "chore(release): set `package.json` to 1.177.1 [skip ci]\n\n## [1.177.1](https://github.com/promptctl/cc-candybar/compare/v1.177.0...v1.177.1) (2026-11-01)\n\n### Bug Fixes\n\n* **daemon:** read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw) ([#547](https://github.com/promptctl/cc-candybar/issues/547)) ([7b70464](https://github.com/promptctl/cc-candybar/commit/7b70464dd074c6775e2cbd7ba963e3ad790cb484))\n"
         }
       ]
     },
