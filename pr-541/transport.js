@@ -35742,10 +35742,16 @@ function leaderRefuses(pid2) {
 function capture(stream) {
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
   let text4 = "";
-  stream?.on("data", (chunk3) => {
+  const read2 = (chunk3) => {
     text4 += decoder.write(chunk3);
-  });
-  return () => text4 + decoder.end();
+  };
+  stream?.on("data", read2);
+  return () => {
+    stream?.off("data", read2);
+    const whole = text4 + decoder.end();
+    text4 = "";
+    return whole;
+  };
 }
 async function launchWaited(state, opts) {
   const { stats } = state.scope;
@@ -35801,7 +35807,6 @@ async function launchWaited(state, opts) {
       if (group !== void 0) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
       for (const pipe of [child.stdout, child.stderr]) {
-        pipe?.removeAllListeners("data").resume();
         pipe?.unref();
       }
       deliver();
@@ -35812,6 +35817,7 @@ async function launchWaited(state, opts) {
         signalGroup(pid2, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
+        void exited.then(() => state.unreaped.delete(child));
         settle3({
           ok: false,
           reason: "signal-refused",
@@ -35822,9 +35828,7 @@ async function launchWaited(state, opts) {
         });
       }
     };
-    const concludeWithGroup = () => {
-      conclude(child.exitCode, child.signalCode);
-    };
+    const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
         if (settled3) return;
@@ -35871,7 +35875,6 @@ async function launchWaited(state, opts) {
       });
     });
     const conclude = (code, signal2) => {
-      state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
           ok: false,
