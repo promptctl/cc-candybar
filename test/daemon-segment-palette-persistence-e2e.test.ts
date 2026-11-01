@@ -1,13 +1,13 @@
 // [LAW:verifiable-goals] candybar-config-engine-71o.6's own acceptance,
 // proven the SAME way 71o.5 proved the epic's headline composition (click,
 // gate, persistent write, watcher reload, re-render, daemon restart, fresh
-// session) — but over `segments.directory.palette` instead of a Globals
+// session) — but over `segments.gitaculous.palette` instead of a Globals
 // field, against the daemon's own request handling:
 // "a user picks a different bundled palette for one specific segment via a
 // menu; the choice persists across a daemon restart and appears in new
 // sessions, and every other segment's palette is unaffected." The bundled
 // default no longer carries a control for it (brandon-menu-ia-q30.42a deleted
-// the drawer's directory pin — nothing else in the settings menu is
+// the drawer's gitaculous pin — nothing else in the settings menu is
 // per-segment), so the menu here is the user's own: one `{ persist, from }`
 // action over the segment key, the same seam any config can author.
 
@@ -34,7 +34,7 @@ import { linkUrls, withoutLinks } from "./helpers/ansi";
 jest.setTimeout(30_000);
 
 describe("candybar-config-engine-71o.6: a daemon's segment-palette click → persist → restart", () => {
-  test("a user's directory-palette menu, clicked, survives a cold restart and leaves every other segment's palette untouched", async () => {
+  test("a user's gitaculous-palette menu, clicked, survives a cold restart and leaves every other segment's palette untouched", async () => {
     const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-seg-palette-e2e",
     );
@@ -49,18 +49,18 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
     );
     mkdirSync(path.dirname(userConfigPath), { recursive: true });
     const control = {
-      template: '🎨 directory {{ menu "applyDirectoryPalette" "▸" "▾" }}',
+      template: '🎨 gitaculous {{ menu "applyDirectoryPalette" "▸" "▾" }}',
     };
     const userConfigBody = JSON.stringify({
       globals: {},
       actions: {
         applyDirectoryPalette: {
-          persist: "segments.directory.palette",
+          persist: "segments.gitaculous.palette",
           from: "themes",
         },
       },
-      segments: { directoryPaletteControl: control },
-      root: { rows: { palettes: { h: ["directoryPaletteControl"] } } },
+      segments: { gitaculousPaletteControl: control },
+      root: { rows: { palettes: { h: ["gitaculousPaletteControl"] } } },
     });
     writeFileSync(userConfigPath, userConfigBody);
 
@@ -72,7 +72,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       // the baseline render this test diffs against.
       const before = await render(daemon, SID, projectDir);
       // The status row (model/context/cacheTimer/block/weekly) never reads
-      // `directory`'s palette — the untouched baseline every "other segment
+      // `gitaculous`'s palette — the untouched baseline every "other segment
       // unaffected" assertion below compares against. The rows stack
       // identity, status, then the control's own row, whose open menu drops a
       // line beneath it; the status row is the one line no click here moves,
@@ -117,8 +117,8 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       }
 
       // applyDirectoryPalette is a persist-option action targeting
-      // `segments.directory.palette` (verb set-config, args = [sessionId,
-      // "segments.directory.palette", value]), rendered as one link per
+      // `segments.gitaculous.palette` (verb set-config, args = [sessionId,
+      // "segments.gitaculous.palette", value]), rendered as one link per
       // theme name.
       const applyUrl = openedUrls.find((u) => {
         try {
@@ -126,7 +126,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
           return (
             effects.length === 1 &&
             effects[0]!.verb === "set-config" &&
-            effects[0]!.args[1] === "segments.directory.palette" &&
+            effects[0]!.args[1] === "segments.gitaculous.palette" &&
             effects[0]!.args[2] === targetPalette
           );
         } catch {
@@ -146,7 +146,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       // be trivially true regardless of the palette, since `before` was
       // rendered with the menu CLOSED. With menu state held constant, this
       // proves the persisted palette actually reached
-      // the rendered `directory` segment's colors — not just that the
+      // the rendered `gitaculous` segment's colors — not just that the
       // config file was written (asserted below): a broken reload of
       // the file's own declaration would time out here.
       const afterClick = await renderUntil(
@@ -158,14 +158,14 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
         10_000,
       );
       expect(afterClick).not.toBe(opened);
-      // The status row — nothing to do with `directory` — is byte-identical:
+      // The status row — nothing to do with `gitaculous` — is byte-identical:
       // the override changed exactly one segment's palette, nothing else.
       expect(statusRow(afterClick)).toBe(statusRowBefore);
 
       // [LAW:one-source-of-truth] The config FILE is the durable store
       // (candybar-config-dqe). `segments` merge by name then by field, so
       // pinning a palette on a segment the file does not declare writes
-      // exactly `directory: { palette }` — a delta over the bundled
+      // exactly `gitaculous: { palette }` — a delta over the bundled
       // declaration — beside the file's own control, and nothing else: no
       // template, no globals field, no other segment.
       const written = JSON5.parse(readFileSync(userConfigPath, "utf8")) as {
@@ -174,8 +174,8 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       };
       expect(written.globals).toEqual({});
       expect(written.segments).toEqual({
-        directoryPaletteControl: control,
-        directory: { palette: targetPalette },
+        gitaculousPaletteControl: control,
+        gitaculous: { palette: targetPalette },
       });
       const afterFirstWrite = readFileSync(userConfigPath, "utf8");
 
@@ -188,7 +188,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       // segment palette is baked into the config DEFAULT every session
       // reads, so the status row must be identical to the pre-override
       // baseline for THIS fresh session too (a different session id can
-      // shift nothing content-derived, and directory's own row differs by
+      // shift nothing content-derived, and gitaculous's own row differs by
       // construction — the status row is the untouched control).
       const FRESH_SID = "seg-e2e-session-2-fresh";
       const freshOut = await render(daemon, FRESH_SID, projectDir);

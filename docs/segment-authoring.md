@@ -122,7 +122,7 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- 🍫   polled  ⇄ tester@tester-box  ~/c/c/src  ~/c/c/src ⎇ main +2/-1 SU? ▸ 
+ 🍫   polled  ⇄ tester@tester-box  ~/c/c/src ⎇ main +2/-1 SU? ▸ 
  ✱ Opus 4.8 󰶼  ◔ 48,487 (24%)  September · 35% spent 
 ```
 

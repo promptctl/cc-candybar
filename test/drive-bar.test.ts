@@ -59,12 +59,12 @@ describe("drive-bar", () => {
     await bar.render();
     await bar.click(DOOR_GLYPH);
     await bar.click("✎ arrange");
-    // ✖ #1 is the risen door; #2 removes host, #3 directory.
-    expect(stripAnsi((await bar.click("✖", 3)).rendered)).not.toContain("✖ directory");
+    // ✖ #1 is the risen door; #2 removes host, #3 gitaculous.
+    expect(stripAnsi((await bar.click("✖", 3)).rendered)).not.toContain("✖ gitaculous");
     // Undo writes the file back; the render after it must already draw it.
     const { refused, rendered } = await bar.click("↶");
     expect(refused).toBeNull();
-    expect(stripAnsi(rendered)).toContain("✖ directory");
+    expect(stripAnsi(rendered)).toContain("✖ gitaculous");
   });
 
 

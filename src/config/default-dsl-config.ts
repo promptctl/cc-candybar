@@ -1041,14 +1041,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // `\n` separates the rows.
   //
   // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
-  // own signal (no repo → the identity row is just the directory; no
+  // own signal (no repo → the identity row is gitaculous's path and init; no
   // active rate-limit window → block/weekly drop; no cache activity → cacheTimer
   // drops). A row therefore only ever shows the segments that have real data —
   // the layout is chosen by the data, not by branches — so the default never
   // paints an empty or placeholder cell, but for one: a value whose source has
   // not answered yet draws `…`, and only at the width its placement already
-  // held (src/dsl/node-registry.ts, loadingSegment). The directory has no
-  // `when`, so row 1 always anchors the bar.
+  // held (src/dsl/node-registry.ts, loadingSegment). gitaculous has no `when`
+  // of its own, so row 1 always anchors the bar.
   root: {
     rows: {
       identity: {
@@ -1056,12 +1056,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           // Leads the identity row: the first thing to read is WHICH MACHINE,
-          // because it reframes every path and branch to its right. Same
-          // placement git-taculous gives `(%n@%m)` — ahead of the directory.
-          // Gated off entirely on a local session, so the row still opens with
-          // `directory` where it always has.
+          // because it reframes every path and branch to its right. Gated off
+          // entirely on a local session, so the row opens with `gitaculous`,
+          // which carries the location (`gitPath`) itself.
           { kind: "segment", name: "host" },
-          { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
         ],
       },
@@ -1240,7 +1238,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         kind: "container",
         direction: "horizontal",
         children: [
-          { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "context" },
         ],
@@ -1267,7 +1264,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
             kind: "container",
             direction: "horizontal",
             children: [
-              { kind: "segment", name: "directory" },
               { kind: "segment", name: "gitaculous" },
               { kind: "segment", name: "gitPr" },
             ],
@@ -1312,10 +1308,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       root: {
         kind: "container",
         direction: "horizontal",
-        children: [
-          { kind: "segment", name: "directory" },
-          { kind: "segment", name: "context" },
-        ],
+        children: [{ kind: "segment", name: "context" }],
       },
       globals: { endcaps: "plain", style: "dim" },
     },
@@ -1335,7 +1328,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
             direction: "horizontal",
             children: [
               { kind: "segment", name: "host" },
-              { kind: "segment", name: "directory" },
               { kind: "segment", name: "gitaculous" },
               { kind: "segment", name: "gitPr" },
             ],
@@ -1415,7 +1407,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "host" },
-          { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "model" },
           {

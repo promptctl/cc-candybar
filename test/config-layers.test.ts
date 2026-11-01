@@ -250,12 +250,12 @@ describe("a project layer inserting into the user's row", () => {
 
   test("a whole-tree preset draws the cell when it holds the anchor, and warns naming itself when it does not", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
-    writeProject(`[{ seg: "theirs", before: "directory" }]`);
+    writeProject(`[{ seg: "theirs", before: "gitaculous" }]`);
     const outcome = clean(await checkConfig(undefined, project));
     expect(presetWarnings(outcome.warnings, "compact")).toEqual([]);
     const compact = await presetTree("compact");
     expect(compact.indexOf("theirs")).toBeGreaterThanOrEqual(0);
-    expect(compact.indexOf("theirs")).toBeLessThan(compact.indexOf("directory"));
+    expect(compact.indexOf("theirs")).toBeLessThan(compact.indexOf("gitaculous"));
   });
 
   test("a bundled-only preset that lacks the anchor does not warn; one the user authors does", async () => {

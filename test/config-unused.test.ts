@@ -185,7 +185,7 @@ describe("unusedDeclarations", () => {
   });
 
   test("a delta over a bundled segment the bar places is used; over one it does not, unused", () => {
-    expect(unusedIn(`{ segments: { directory: { fg: "primary" } } }`)).toEqual(
+    expect(unusedIn(`{ segments: { gitaculous: { fg: "primary" } } }`)).toEqual(
       [],
     );
     expect(unusedIn(`{ segments: { commands: { fg: "primary" } } }`)).toEqual([
