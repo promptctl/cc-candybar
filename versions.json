@@ -4,15 +4,22 @@
     {
       "version": "pr-544",
       "ref": "refs/pull/544/merge",
-      "sha": "8e0de59b5d69b41cbc6007721465258cab99eb9c",
-      "timestamp": "2026-11-01T08:26:13.092Z",
+      "sha": "0840797cfd5e62053eeeb3a82e312f320a9dd675",
+      "timestamp": "2026-11-01T08:29:15.893Z",
       "commits": [
         {
-          "sha": "8e0de59b5d69b41cbc6007721465258cab99eb9c",
+          "sha": "0840797cfd5e62053eeeb3a82e312f320a9dd675",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:25:20-07:00",
-          "message": "Merge 7fd1c3d0262894b5dbec761434e798308d94d1f4 into e7c7caacfb9c807a1424dde9d75a66559451e5ed\n"
+          "timestamp": "2026-11-01T08:28:25Z",
+          "message": "Merge 44a74f60ea9525b12fdd2fd671562a806d3a5cf8 into e7c7caacfb9c807a1424dde9d75a66559451e5ed\n"
+        },
+        {
+          "sha": "44a74f60ea9525b12fdd2fd671562a806d3a5cf8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:28:14-07:00",
+          "message": "fix(landscape): the bar's load errors show again, and the panel lists only what the graph pages through\n\nThe merge took the branch's side of the explorer and lost main's bundle and bar-load error handling; restored it. Trait and characteristic lists and counts go through the same pool as the graph under only-with-bars, and the band shares still count every member.\n"
         },
         {
           "sha": "7fd1c3d0262894b5dbec761434e798308d94d1f4",
