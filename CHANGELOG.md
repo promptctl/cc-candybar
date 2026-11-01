@@ -1,3 +1,9 @@
+## [1.177.1](https://github.com/promptctl/cc-candybar/compare/v1.177.0...v1.177.1) (2026-11-01)
+
+### Bug Fixes
+
+* **daemon:** read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw) ([#547](https://github.com/promptctl/cc-candybar/issues/547)) ([7b70464](https://github.com/promptctl/cc-candybar/commit/7b70464dd074c6775e2cbd7ba963e3ad790cb484))
+
 ## [1.177.0](https://github.com/promptctl/cc-candybar/compare/v1.176.0...v1.177.0) (2026-11-01)
 
 ### Features
