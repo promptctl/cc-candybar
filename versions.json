@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-553",
+      "ref": "refs/pull/553/merge",
+      "sha": "ca7a66548c0798d1efe331716353b70180a6651d",
+      "timestamp": "2026-11-01T15:52:18.741Z",
+      "commits": [
+        {
+          "sha": "ca7a66548c0798d1efe331716353b70180a6651d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T08:51:25-07:00",
+          "message": "Merge 9ac76da1f36f5113bad9bc4a05e60c004ec97666 into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+        },
+        {
+          "sha": "9ac76da1f36f5113bad9bc4a05e60c004ec97666",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T08:51:01-07:00",
+          "message": "feat(daemon): a one-shot reader asks for the Frame, scripts and site decode nothing (candybar-isolated-daemon-bfab.dnr)\n\nWith decoding ruled out, a script or harness holding one render's answer had\nno other way to read the bar. A render request can now state `encoding`, `ansi`\nor `frame`. Absent is `ansi`, and the shipped clients never send it, so\n`RenderRequest` stays what they send, key for key, and the protocol check needs\nno exemption; `ReaderRenderRequest` adds the field. A bad value is refused at\nthe checkpoint, and `encoding` lands on the render event.\n\nThe answer is encoded inside the draw's turn, so `drew`, which DRAW_RESERVE_MS\nis held to, still times the bytes. `statuslineOf` returns a Frame, and the\nhandoff line and the diagnostics viewer share one stand-in, since both draw\nstill text over a bar that can move again.\n\n`linksOf` replaces `links` and `drawnLinks` in src/click/read.ts, and\nsite/transport.ts, scripts/bar-web/server.ts, scripts/drive-bar.ts and the bench\nlink lookup read Frames. Bench ticks stay on the client's own request. src holds\nno reader of rendered bytes now: src/render/ansi.ts goes, and the byte readers\ntests still use move to test/helpers/ansi.ts until the epic's last ticket.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ef5e1fd23a63c3bd27493e045e98c9877f67e0fe",
