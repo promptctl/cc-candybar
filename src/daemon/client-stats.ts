@@ -242,6 +242,11 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  sessions      ${s.menuIdle.sessions}`);
   lines.push(`  armed         ${s.menuIdle.armed}`);
   lines.push(``);
+  lines.push(`journalTurns`);
+  lines.push(`  holder        ${s.journalTurns.holder ?? "-"}`);
+  lines.push(`  held          ${s.journalTurns.heldMs}ms`);
+  lines.push(`  queued        ${s.journalTurns.queued}`);
+  lines.push(``);
   lines.push(`sessionState`);
   lines.push(`  sessions      ${s.sessionState.sessions}`);
   lines.push(`  observers     ${s.sessionState.observers}`);

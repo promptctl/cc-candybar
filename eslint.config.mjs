@@ -174,7 +174,7 @@ export default [
       "no-restricted-syntax": [
         "error",
         {
-          selector: "MemberExpression[property.name='launchSync']",
+          selector: "Identifier[name='launchSync']",
           message: "A click-rooted path awaits `launch`.",
         },
         {

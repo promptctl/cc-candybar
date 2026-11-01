@@ -757,6 +757,7 @@ async function launchWaited(
           ...output(),
           exitCode: code,
           signal,
+          error: `${terminated} after ${Date.now() - t0}ms`,
         });
         return;
       }

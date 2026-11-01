@@ -17,13 +17,7 @@ import type {
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
-import {
-  VERBS,
-  CLICK_PROGRAM_TIMEOUT_MS,
-  clickLaunch,
-  clickSessionOf,
-  BadVerbArgs,
-} from "./verbs";
+import { VERBS, clickLaunch, clickSessionOf, BadVerbArgs } from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
@@ -737,7 +731,6 @@ async function statusLineClick(
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
       args: [click.url],
-      timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
       category: "click.open",
     },
     `opening ${click.url}`,

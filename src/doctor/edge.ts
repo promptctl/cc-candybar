@@ -902,8 +902,8 @@ export async function gatherFacts(
       ...privateGlyphsIn(JSON.stringify(load.config)),
     ]),
   ].join("");
-  // Independent probes, together: a click holds the journal's turn through
-  // them, so the hold is the slowest's bound, not their sum.
+  // Independent stages, together: a click holds the journal's turn through
+  // them, so they add the slowest stage's bound to the hold, not their sum.
   const [nerdFont, processes, data] = await Promise.all([
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.

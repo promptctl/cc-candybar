@@ -338,7 +338,7 @@ function oneArg(value: string): string {
 
 // How long a program a click launches has before the click fails: a handful of
 // seconds at most for a clipboard or an opener, each of which hands off and exits.
-export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
+const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 
 // [LAW:single-enforcer] The one launch a click makes of a program — the
 // clipboard, an editor, a status-line link's opener — so its failure handling
@@ -347,13 +347,16 @@ export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 // logged. Other failures are genuine errors that surface as RENDER_FAILED.
 export async function clickLaunch(
   launcher: Launcher,
-  // [LAW:no-ambient-temporal-coupling] A click holds the daemon-wide turn while
-  // it waits, so the bound is no option: it is what gives the turn back.
-  opts: LaunchOpts & { readonly timeoutMs: number },
+  opts: LaunchOpts,
   what: string,
   log: DaemonContext["log"],
 ): Promise<void> {
-  const result = await launcher.launch(opts);
+  // [LAW:no-ambient-temporal-coupling] A click holds the daemon-wide turn while
+  // it waits, so the bound is no option: it is what gives the turn back.
+  const result = await launcher.launch({
+    ...opts,
+    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
+  });
   if (result.ok) return;
   if (result.reason === "rate-limited") {
     log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
@@ -377,7 +380,6 @@ function pbcopy(text: string, ctx: ClickContext): Promise<void> {
       {
         bin: "/usr/bin/pbcopy",
         stdinInput: text,
-        timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
         category: "click.pbcopy",
       },
       "pbcopy",
@@ -423,7 +425,6 @@ const openVscode: VerbHandler = (value, ctx) =>
       {
         bin: "/usr/bin/open",
         args: ["-a", "Visual Studio Code", oneArg(value)],
-        timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
         category: "click.open",
       },
       'open -a "Visual Studio Code"',
