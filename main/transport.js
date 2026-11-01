@@ -54102,6 +54102,59 @@ var EffectSessions = class {
   }
 };
 
+// src/render/frame.ts
+init_globals();
+function drawnColor(spec) {
+  return spec.type === ColorDepth.TRUECOLOR ? spec.value.hex : spec.name;
+}
+var ATTRIBUTES = Object.keys(new Style().attributes);
+function lookOf(style, depth) {
+  const { color, bgcolor } = style.drawnColors(depth);
+  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
+  return {
+    ...color !== void 0 && { fg: drawnColor(color) },
+    ...bgcolor !== void 0 && { bg: drawnColor(bgcolor) },
+    ...attrs.length > 0 && { attrs }
+  };
+}
+function runOf({ text: text4, style }, depth) {
+  return {
+    text: text4,
+    ...style !== void 0 && depth !== null && lookOf(style, depth),
+    ...style?.link !== void 0 && { link: style.link }
+  };
+}
+function runLines(segments, depth) {
+  const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
+  return Segment.splitLines(written2).map(
+    (line) => line.map((segment) => runOf(segment, depth))
+  );
+}
+function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
+  return new Segment(
+    text4,
+    new Style({
+      color: fg,
+      bgcolor: bg,
+      link,
+      ...Object.fromEntries(attrs.map((name) => [name, true]))
+    })
+  );
+}
+function encodeAnsi(lines2, depth) {
+  const destination = resolveDestination(depth);
+  return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
+}
+function ansiOf(frame) {
+  return encodeAnsi(
+    frame.rows.map((row2) => row2.runs),
+    frame.depth
+  );
+}
+function plainOf2(runs) {
+  return runs.map((run3) => run3.text).join("");
+}
+
 // src/render/strip.ts
 var UNBOUNDED_DRAW_WIDTH = 80;
 var ROW_HOST = {};
@@ -54129,7 +54182,7 @@ function draw(renderable, options) {
     })
   ];
   return {
-    text: segmentsToString(segments, destination),
+    lines: runLines(segments, destination.colorSystem),
     nextChange: Math.min(Segment.nextChange(segments), told)
   };
 }
@@ -54169,12 +54222,10 @@ function stripGeometry(options) {
     overflow: "ignore",
     style: new Style({ bgcolor })
   });
-  const width = (cells) => new RichText(
-    draw(new Strip(cells, joiner), { colorSystem: null }).text.replace(
-      /\n$/,
-      ""
-    )
-  ).cellLength;
+  const width = (cells) => {
+    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+    return new RichText(plainOf2(lines2.flat())).cellLength;
+  };
   const one = width([cell3("#101010")]);
   const geometry = {
     chrome: one - 1,
@@ -54197,11 +54248,11 @@ function stripPrivateGlyphs(options) {
   const joiner = pickJoiner(options.endcaps, options.separator);
   const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
   const cells = [cell3("#101010"), cell3("#202020")];
-  const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(drawn.text);
+  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+  return privateGlyphsIn(plainOf2(lines2.flat()));
 }
 function drawStripCells(cells, options, motion = STILL3) {
-  if (cells.length === 0) return { text: "", nextChange: Infinity };
+  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
@@ -54209,16 +54260,17 @@ function drawStripCells(cells, options, motion = STILL3) {
     ...flex ? { width: options.width } : {}
   };
   const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
-  const out = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
-  if (!out.text.endsWith("\n")) {
-    throw new Error(
-      "drawStripCells: rich-js strip output did not end its last line"
-    );
+  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  if (row2.lines.length === 0) {
+    throw new Error("drawStripCells: rich-js strip drew no line");
   }
-  return { text: out.text.slice(0, -1), nextChange: out.nextChange };
+  return row2;
 }
 function renderStripCells(cells, options) {
-  return drawStripCells(cells, options).text;
+  return encodeAnsi(
+    drawStripCells(cells, options).lines,
+    options.colorCompatibility
+  );
 }
 
 // src/daemon/render-sightings.ts
@@ -65498,15 +65550,15 @@ function diagnosticSpan(text4, link) {
 }
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
-  const plainOf2 = (text4, severity) => {
+  const plainOf3 = (text4, severity) => {
     const made = plainMessage(text4, severity);
     for (const m of made) plain.add(m);
     return made;
   };
   const list2 = [
-    ...errors2.flatMap((e) => plainOf2(e, ERROR_SEVERITY)),
+    ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
     ...notices,
-    ...warnings.flatMap((w) => plainOf2(w, WARNING_SEVERITY))
+    ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
   ];
   const keys2 = copyKeys(list2);
   return list2.map(
@@ -70748,7 +70800,7 @@ var slash = async (value, ctx) => {
   }
   ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
-function runOf([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
+function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
   const actions = ctx.configFor(origin).actions;
@@ -70804,7 +70856,7 @@ var run2 = async (value, ctx) => {
   try {
     const parts = decodeWire(() => decodeSegments(value));
     named3 = { sessionId: parts[0] || "-", action: parts[1] || "-" };
-    request2 = runOf(parts, ctx);
+    request2 = runOf2(parts, ctx);
   } catch (e) {
     if (e instanceof BadVerbArgs) {
       ctx.runs.refused(named3.sessionId, named3.action, e.message);
@@ -75600,8 +75652,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     });
     motion.drawn();
     record2.commit();
-    const menuRows = rendered.filter((row2) => row2.kind === "menu").length;
-    const armed = () => menuRows > 0 || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
+    const armed = () => rendered.some((row2) => row2.kind === "menu") || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
       ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
     );
     const nextChange = Math.min(
@@ -75617,12 +75668,16 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         message: `variable "${variable}" cannot refresh: ${fault.message}`
       });
     return {
-      text: rendered.map((row2) => row2.text).join("\n"),
-      nextChange,
-      motion: frameMotion,
-      menuRows,
+      frame: {
+        depth: drawOpts.colorCompatibility,
+        rows: rendered.flatMap(
+          ({ kind, lines: lines2 }) => lines2.map((runs) => ({ kind, runs }))
+        ),
+        nextChange,
+        motion: frameMotion,
+        pending: [...waited].sort()
+      },
       evaluated: parts.evaluated - evaluatedBefore,
-      pending: [...waited].sort(),
       rules
     };
   } catch (_) {
@@ -76410,7 +76465,7 @@ function drawRender(parts, setup, drawing2) {
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
   const idleSince = menuIdle.since(sessionId2, at);
-  const frame = drawDsl(
+  const { frame, evaluated: evaluated2, rules } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -76437,7 +76492,12 @@ function drawRender(parts, setup, drawing2) {
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i) => [keys2[i], m.copy]));
   const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
-  menuIdle.observe(sessionId2, at, frame.menuRows > 0, effective.menuTimeout);
+  menuIdle.observe(
+    sessionId2,
+    at,
+    frame.rows.some((row2) => row2.kind === "menu"),
+    effective.menuTimeout
+  );
   const menusSince = menuIdle.since(sessionId2, at);
   noteFacts(facts, {
     menuIdle: menusSince === void 0 ? "-" : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`
@@ -76465,7 +76525,11 @@ function drawRender(parts, setup, drawing2) {
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
-  const body = viewing === null ? { text: frame.text, nextChange: frame.nextChange, motion: frame.motion } : {
+  const body = viewing === null ? {
+    text: ansiOf(frame),
+    nextChange: frame.nextChange,
+    motion: frame.motion
+  } : {
     text: viewerRows(
       diagnostics,
       viewing,
@@ -76514,12 +76578,12 @@ function drawRender(parts, setup, drawing2) {
     motion: body.motion,
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
-    evaluated: String(frame.evaluated),
+    evaluated: String(evaluated2),
     // The sources it drew as not answered yet; `-` for none.
     pending: frame.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
     // draw, `per-draw` at this frame's instant; `-` for none.
-    rules: [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
+    rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
@@ -76542,7 +76606,7 @@ function drawRender(parts, setup, drawing2) {
     },
     motion: body.motion,
     nextChange: body.nextChange,
-    evaluated: frame.evaluated,
+    evaluated: evaluated2,
     clickShown,
     delivered,
     lanes
@@ -82293,7 +82357,7 @@ function tmuxColor(spec) {
   }
   throw new Error(`frames: no tmux colour for ${spec.name}`);
 }
-var ATTRIBUTES = {
+var ATTRIBUTES2 = {
   bold: "bold",
   dim: "dim",
   italic: "italics",
@@ -82308,14 +82372,14 @@ var ATTRIBUTES = {
   frame: null,
   encircle: null
 };
-var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES);
+var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES2);
 function escaped(text4) {
   return text4.replaceAll("#", "##");
 }
 function directive(style) {
   const attributes = ATTRIBUTE_NAMES2.filter((name) => style[name] === true).map(
     (name) => {
-      const tmux3 = ATTRIBUTES[name];
+      const tmux3 = ATTRIBUTES2[name];
       if (tmux3 === null)
         throw new Error(`frames: a tmux status line cannot draw ${name} text`);
       return tmux3;

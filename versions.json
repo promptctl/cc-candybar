@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-550",
-      "ref": "refs/pull/550/merge",
-      "sha": "03b672b5f44dd383923cb7c249ad4d7690449b1f",
-      "timestamp": "2026-11-01T12:58:46.758Z",
-      "commits": [
-        {
-          "sha": "03b672b5f44dd383923cb7c249ad4d7690449b1f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T12:57:59Z",
-          "message": "Merge 5ae34693eb8a6e0e0f4b9ff1dfb50daa0feb32ad into 722b6fe4c0d62887ce180576956933793a7e8d12\n"
-        },
-        {
-          "sha": "5ae34693eb8a6e0e0f4b9ff1dfb50daa0feb32ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:57:47-07:00",
-          "message": "perf(render): a run's attributes read one list of names, not a new object per run (candybar-isolated-daemon-bfab.abb)\n\nstyle.attributes builds a 13-entry object on each read, only so its keys could name attributes that never change. On a 200-run row that was 0.136 ms against 0.02 ms, about a third of the encoder's added cost on an effect's hot path. The list is derived from rich-js once, so it holds no state and restates nothing.\n"
-        },
-        {
-          "sha": "8300b4423ab6f964d1c15f102b930a4cee2da9b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:41:38-07:00",
-          "message": "fix(render): a strip that draws no line stays loud, and runLines takes only the depth it reads (candybar-isolated-daemon-bfab.abb)\n\nA row vanished silently when rich-js drew no line, where the earlier check threw, so the check returns over lines and carries the single-enforcer marker it lost. runLines took a whole Destination and read one field, so a caller's hyperlinks or reducedMotion were ignored here and honoured nowhere; it takes the depth. Two comments overclaimed: a truecolor run can hold a standard colour's name, and bytes outside a draw are hand-written today.\n"
-        },
-        {
-          "sha": "6d562fd02afb2a026bffc3ef2a5d1834e1886406",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:17:58-07:00",
-          "message": "test(render): encodeAnsi writes what rich-js writes, and is the one path to bytes (candybar-isolated-daemon-bfab.abb)\n\nCompares encodeAnsi over runLines with segmentsToString at all four depths, over\na grid of named, indexed, hex, translucent and blended colours and over every\nloop effect at advancing times, and asserts its own reach. Asserts a run's colours\nwere drawn, not copied from the spec, and that src holds no second path to bytes.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "4faac454a0759521f803e68673dfedebe5307cec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:17:55-07:00",
-          "message": "feat(render): the draw's output is a Frame, and every byte derives from it (candybar-isolated-daemon-bfab.abb)\n\ndraw() held rich-js segments and threw them away, so a bar existed only as\nbytes. It now returns lines of runs in the colours drawn at the frame's depth;\ndrawDsl stamps each line's kind into a Row and DrawnFrame holds the Frame.\nencodeAnsi is the one path from a draw to bytes. Callers holding no Frame hand\nit their depth, and strip geometry reads plainOf without encoding.\n\nNo byte moves: test/frame-bytes.test.ts.snap and the default menu snapshot are\nuntouched. Readers move off the bytes in later tickets.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "add8f319c7f894ca7e067215749e5caf0da1f69e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:10:14-07:00",
-          "message": "test(render): every terminal lane's bytes, pinned before the draw keeps its structure (candybar-isolated-daemon-bfab.abb)\n\nCommitted against unchanged source, so the snapshot is evidence the change\nmoves no byte: the ANSI and the band and tmux status lanes, at all four depths,\nmenus closed and open, from the bundled default and a config using the supported\nAPI's reach, plus a RENDER_FAILED response through both lanes. The reach is\nasserted, so a config that stops drawing a blank row, a wrapped row, a ColorBlend,\na moving effect or a fade fails.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "722b6fe4c0d62887ce180576956933793a7e8d12",
-      "timestamp": "2026-11-01T12:26:44.143Z",
+      "sha": "491054d4c9a3d06c79cf392d409455412fc491cf",
+      "timestamp": "2026-11-01T13:04:42.475Z",
       "commits": [
         {
-          "sha": "722b6fe4c0d62887ce180576956933793a7e8d12",
+          "sha": "491054d4c9a3d06c79cf392d409455412fc491cf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:25:50-07:00",
-          "message": "fix(daemon): background and lifecycle launches go async (candybar-launch-q7o7.jqq) (#549)\n\n* fix(daemon): background and lifecycle launches go async (candybar-launch-q7o7.jqq)\n\n* fix(daemon): a close reads as DaemonClosing, and claims and watches judge nothing after it (candybar-launch-q7o7.jqq)\n\n* fix(daemon): apply-update stops at its turn's landing, and a queued close answers closing (candybar-launch-q7o7.jqq)\n\n* fix(daemon): a lifeline out of descriptors stays fail-open, and apply-update reads the update after its wait (candybar-launch-q7o7.jqq)"
-        },
-        {
-          "sha": "a98ba2fe38fbd3ebb3c00b9156cf888a3b1a6066",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T11:05:28Z",
-          "message": "chore(release): set `package.json` to 1.177.1 [skip ci]\n\n## [1.177.1](https://github.com/promptctl/cc-candybar/compare/v1.177.0...v1.177.1) (2026-11-01)\n\n### Bug Fixes\n\n* **daemon:** read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw) ([#547](https://github.com/promptctl/cc-candybar/issues/547)) ([7b70464](https://github.com/promptctl/cc-candybar/commit/7b70464dd074c6775e2cbd7ba963e3ad790cb484))\n"
+          "timestamp": "2026-11-01T06:03:52-07:00",
+          "message": "refactor(render): the draw's output is a Frame, and every byte derives from it (candybar-isolated-daemon-bfab.abb) (#550)\n\n* test(render): every terminal lane's bytes, pinned before the draw keeps its structure (candybar-isolated-daemon-bfab.abb)\n\nCommitted against unchanged source, so the snapshot is evidence the change\nmoves no byte: the ANSI and the band and tmux status lanes, at all four depths,\nmenus closed and open, from the bundled default and a config using the supported\nAPI's reach, plus a RENDER_FAILED response through both lanes. The reach is\nasserted, so a config that stops drawing a blank row, a wrapped row, a ColorBlend,\na moving effect or a fade fails.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* feat(render): the draw's output is a Frame, and every byte derives from it (candybar-isolated-daemon-bfab.abb)\n\ndraw() held rich-js segments and threw them away, so a bar existed only as\nbytes. It now returns lines of runs in the colours drawn at the frame's depth;\ndrawDsl stamps each line's kind into a Row and DrawnFrame holds the Frame.\nencodeAnsi is the one path from a draw to bytes. Callers holding no Frame hand\nit their depth, and strip geometry reads plainOf without encoding.\n\nNo byte moves: test/frame-bytes.test.ts.snap and the default menu snapshot are\nuntouched. Readers move off the bytes in later tickets.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* test(render): encodeAnsi writes what rich-js writes, and is the one path to bytes (candybar-isolated-daemon-bfab.abb)\n\nCompares encodeAnsi over runLines with segmentsToString at all four depths, over\na grid of named, indexed, hex, translucent and blended colours and over every\nloop effect at advancing times, and asserts its own reach. Asserts a run's colours\nwere drawn, not copied from the spec, and that src holds no second path to bytes.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(render): a strip that draws no line stays loud, and runLines takes only the depth it reads (candybar-isolated-daemon-bfab.abb)\n\nA row vanished silently when rich-js drew no line, where the earlier check threw, so the check returns over lines and carries the single-enforcer marker it lost. runLines took a whole Destination and read one field, so a caller's hyperlinks or reducedMotion were ignored here and honoured nowhere; it takes the depth. Two comments overclaimed: a truecolor run can hold a standard colour's name, and bytes outside a draw are hand-written today.\n\n* perf(render): a run's attributes read one list of names, not a new object per run (candybar-isolated-daemon-bfab.abb)\n\nstyle.attributes builds a 13-entry object on each read, only so its keys could name attributes that never change. On a 200-run row that was 0.136 ms against 0.02 ms, about a third of the encoder's added cost on an effect's hot path. The list is derived from rich-js once, so it holds no state and restates nothing.\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
         }
       ]
     },
