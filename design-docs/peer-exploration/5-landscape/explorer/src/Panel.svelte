@@ -17,9 +17,9 @@
   {#if explorer.selected?.startsWith('p:')}
     <ProjectView id={explorer.selected} {go} />
   {:else if explorer.selected?.startsWith('t:')}
-    <TraitView id={explorer.selected.slice(2)} {go} />
+    <TraitView id={explorer.selected.slice(2)} {go} {explorer} />
   {:else}
-    <Intro {go} />
+    <Intro {go} {explorer} />
   {/if}
 </aside>
 

@@ -39,11 +39,23 @@
     return s && s.bar != null ? s : featured;
   });
   let bars = $state<Bars | null>(null);
+  let barsError = $state<string | null>(null);
+  let barsAttempt = $state(0);
   $effect(() => {
     const p = shown;
+    barsAttempt;
     bars = null;
+    barsError = null;
     let current = true;
-    bundle<Bars>('bars', p.bar!).then((g) => { if (current) bars = g[p.repo] ?? null; });
+    bundle<Bars>('bars', p.bar!).then(
+      (g) => {
+        if (!current) return;
+        // [LAW:no-silent-failure] a bundle without the project it was opened for is a broken export
+        if (g[p.repo] === undefined) barsError = `bars bundle ${p.bar} holds no bar for ${p.repo}`;
+        else bars = g[p.repo];
+      },
+      (e: Error) => { if (current) barsError = e.message; },
+    );
     return () => { current = false; };
   });
   let panelOpen = $state(true);
@@ -86,6 +98,7 @@
       </div>
     {/if}
   </div>
+  {#if barsError !== null}<div class="strip error" style:right="{panelOpen ? PANEL : 0}px">{shown.repo}: {barsError} <button class="caption retry" onclick={() => barsAttempt++}>retry</button></div>{/if}
   {#if bars !== null}<div class="strip" style:right="{panelOpen ? PANEL : 0}px">{#key shown.id}<Bar {bars} />{/key}<button class="caption" onclick={() => explorer.open(shown.id as NodeId)}>{shown.repo}</button></div>{/if}
   {#if panelOpen}<Panel {explorer} />{/if}
 </main>
@@ -101,6 +114,8 @@
   .speed button.on { color: var(--live); }
   .bar { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; z-index: 2; pointer-events: none; }
   .strip { position: absolute; left: 0; bottom: 0; z-index: 3; padding: 0 14px 12px; pointer-events: none; }
+  .strip.error { color: #e06c6c; font-size: 12px; }
+  .retry { display: inline; text-decoration: underline; }
   .caption { display: block; margin-top: 4px; background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; pointer-events: auto; }
   .caption:hover { color: var(--fg); }
   input { width: 320px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: inherit; }

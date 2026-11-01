@@ -18,9 +18,12 @@ export class Explorer {
   // When on, a characteristic lists only the projects whose bar was captured. [LAW:one-source-of-truth] every list of members goes through pool().
   barsOnly = $state(false);
 
-  private pool(t: string): Project[] {
-    const ps = members.get(t)!;
+  keep<P extends { live: boolean }>(ps: P[]): P[] {
     return this.barsOnly ? ps.filter((p) => p.live) : ps;
+  }
+
+  pool(t: string): Project[] {
+    return this.keep(members.get(t)!);
   }
 
   constructor() {

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { liveTraits, members, plain, projects, withIdeas } from './model';
+  import { liveTraits, plain, projects, withIdeas } from './model';
   import { SECTIONS, type Section } from './traits';
   import Ref from './Ref.svelte';
+  import type { Explorer } from './explorer.svelte';
 
-  let { go }: { go: (id: string) => void } = $props();
+  let { go, explorer }: { go: (id: string) => void; explorer: Explorer } = $props();
   const sections = Object.keys(SECTIONS) as Section[];
 </script>
 
@@ -22,7 +23,7 @@
 {#each sections as s}
   <h4 style:color={SECTIONS[s].colour}>{SECTIONS[s].label}</h4>
   {#each liveTraits.filter((t) => t.section === s) as t}
-    <div class="row"><Ref id={'t:' + t.id} {go} /> <span class="muted small">{members.get(t.id)!.length}</span></div>
+    <div class="row"><Ref id={'t:' + t.id} {go} /> <span class="muted small">{explorer.pool(t.id).length}</span></div>
   {/each}
 {/each}
 
