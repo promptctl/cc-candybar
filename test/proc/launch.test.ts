@@ -794,3 +794,52 @@ describe("a launcher's scope", () => {
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });
+
+describe("launch input a child does not read", () => {
+  const unread = "x".repeat(10 * 1024 * 1024);
+
+  it("leaves a child's success standing", async () => {
+    const r = await launch({
+      category: "user-shell",
+      bin: "sh",
+      args: ["-c", "exit 0"],
+      stdinInput: unread,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("leaves a child's failure its own explanation", async () => {
+    const r = await launch({
+      category: "user-shell",
+      bin: "sh",
+      args: ["-c", "echo refused >&2; exit 1"],
+      stdinInput: unread,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1, stderr: "refused\n" });
+    expect(r).not.toHaveProperty("error");
+  });
+
+  it("reports a timeout as a timeout", async () => {
+    const r = await launch({
+      category: "user-shell",
+      bin: "sleep",
+      args: ["5"],
+      stdinInput: unread,
+      timeoutMs: 100,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "timeout" });
+    expect(r).not.toHaveProperty("error");
+  });
+
+  it("gives the blocking launch the same verdicts", () => {
+    const run = (script: string) =>
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
+    expect(run("exit 0").ok).toBe(true);
+    expect(run("exit 1")).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1 });
+    expect(run("head -c 1 >/dev/null").ok).toBe(true);
+    expect(
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", "kill -TERM $$"], timeoutMs: 5000 }),
+    ).toMatchObject({ ok: false, reason: "signal", signal: "SIGTERM" });
+    expect(run("kill -KILL $$")).toMatchObject({ ok: false, reason: "signal", signal: "SIGKILL" });
+  });
+});
