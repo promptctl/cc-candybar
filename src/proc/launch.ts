@@ -1056,20 +1056,26 @@ export function readJobEnd(status: string): JobEnd | null {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text)}`);
 }
 
-// Whether anything of the job's process group is still running. The group
-// outlives its leader while the program runs, so a sh killed on its own does
-// not read as an ended job. A job runs as its launcher's user, so a group the
-// launcher may not signal (EPERM) is someone else's under a recycled id, or
-// on darwin holds nothing left running; neither is the job running.
-export function jobGroupAlive(pid: number): boolean {
+// Signals a job's process group; true when the group took it. A job runs as its
+// launcher's user, so a group the launcher may not signal (EPERM) is someone
+// else's under a recycled id, or on darwin holds nothing left running; neither
+// is the job, so like ESRCH it answers false rather than throwing.
+function signalJob(pid: number, sig: NodeJS.Signals | 0): boolean {
   try {
-    process.kill(-pid, 0);
+    process.kill(-pid, sig);
     return true;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
   }
+}
+
+// Whether anything of the job's process group is still running. The group
+// outlives its leader while the program runs, so a sh killed on its own does
+// not read as an ended job.
+export function jobGroupAlive(pid: number): boolean {
+  return signalJob(pid, 0);
 }
 
 // Whether a group has no member left, zombies included. Unlike `jobGroupAlive`,
@@ -1108,8 +1114,8 @@ export function endJob(pid: number, status: string, end: JobEnd): boolean {
   } finally {
     rmSync(staged, { force: true });
   }
-  signalGroup(pid, "SIGTERM");
-  setTimeout(() => signalGroup(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  signalJob(pid, "SIGTERM");
+  setTimeout(() => signalJob(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
   return stands;
 }
 

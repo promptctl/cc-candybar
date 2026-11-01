@@ -217,6 +217,24 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     expect(readJobEnd(files.status)).toEqual({ kind: "exit", code: 0 });
   });
 
+  test("a group that refuses both signals is not the job, so ending it does not throw", () => {
+    const files = jobFiles();
+    fs.mkdirSync(path.dirname(files.status), { recursive: true });
+    // Every kill refused: the leader too, as a recycled id under another uid.
+    const kill = jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+    });
+    jest.useFakeTimers();
+    try {
+      expect(endJob(424242, files.status, { kind: "timeout" })).toBe(true);
+      jest.runOnlyPendingTimers();
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
+  });
+
   test("ending a job whose files are gone is a no-op, not an error", () => {
     const status = path.join(scratch, "gone", "status");
     expect(endJob(process.pid, status, { kind: "timeout" })).toBe(false);
