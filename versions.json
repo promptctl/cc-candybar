@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-555",
+      "ref": "refs/pull/555/merge",
+      "sha": "3eee710060ee4ccd38f33781613ad915ce5324fa",
+      "timestamp": "2026-11-01T19:52:52.223Z",
+      "commits": [
+        {
+          "sha": "3eee710060ee4ccd38f33781613ad915ce5324fa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T12:52:02-07:00",
+          "message": "Merge aa59fdeaf3e9a00182487831e8a6d9cf679e7c15 into 0f7fe27408eeb8aff9fb34f60ac781cd84668866\n"
+        },
+        {
+          "sha": "aa59fdeaf3e9a00182487831e8a6d9cf679e7c15",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T12:51:49-07:00",
+          "message": "fix(render): a cell wider than its line wraps across lines (candybar-isolated-daemon-bfab.pe6)\n\nA row breaks only between strip items, so one long cell had nowhere to go.\nClaude Code draws each statusline line truncated, so the line lost its right\nend where the bar could not see it. On a long branch that was the git cell's\n`▸`, and on a doctor row the reason it was opened to read.\n\nThe row seam now divides any item wider than a line into items that fit, at\nthe breaks rich-js's own word wrap chooses. Nothing is cut. `paged: false` now\nwraps as its docs have always said, with no picker logic, and `autoWrap: false`\nkeeps each row one unbounded line.\n\nThe ticket offered shortening or a warning. A cut loses content nobody chose\nto lose: controls sit at both ends of a cell and between them. A warning would\nflip on every resize of a terminal nobody has to fix.\n\nWrapping spends height. Closed bars do not change from width 80 up. Two costs\nare accepted and filed: an open doctor report can now pass the terminal's\nheight at sizes where it used to fit (brandon-unfiled-3248.9yxg), and the tmux\nstatus line, which silently shows five rows, loses more of a narrow pane's bar\n(brandon-unfiled-3248.vvdp). `cellBreaks` on the render event and the feed\nsummary says how often this happens.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0f7fe27408eeb8aff9fb34f60ac781cd84668866",
