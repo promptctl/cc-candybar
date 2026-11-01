@@ -422,7 +422,7 @@ test("stats name the holder and what waits", async () => {
   expect(turns.getStats()).toMatchObject({ holder: "dispatch", queued: 1 });
   held.open();
   await Promise.all([slow, queued]);
-  expect(turns.getStats()).toEqual({ holder: null, heldMs: 0, queued: 0 });
+  expect(turns.getStats()).toEqual({ holder: null, heldMs: 0, queued: 0, gathers: 0 });
 });
 
 describe("a doctor click", () => {

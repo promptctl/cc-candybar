@@ -45,6 +45,9 @@ export interface JournalTurnStats {
   readonly holder: string | null;
   readonly heldMs: number;
   readonly queued: number;
+  // Gathers running or queued, which hold no turn: one that never settles
+  // reads here and nowhere else.
+  readonly gathers: number;
 }
 
 // How a click asks for its turn: `waited` hears how many ms it took to come,
@@ -73,6 +76,7 @@ export class JournalTurns {
   private holder: { readonly verb: string; readonly since: number } | null =
     null;
   private queued = 0;
+  private gathersInFlight = 0;
 
   constructor(
     private readonly deps: {
@@ -144,10 +148,17 @@ export class JournalTurns {
     return session === null ? inPlace() : this.sessions.run(session, inPlace);
   }
 
-  // A click's gather, one at a time daemon-wide and in no turn: its probes share
-  // a rate window across sessions, so two at once would refuse the second.
-  gathering<G>(gather: () => Promise<G>): Promise<G> {
-    return this.gathers.run(GATHERS, gather);
+  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
+  // kept them: its probes share rate windows across sessions, so a slow gather
+  // refuses none behind it. Two within a window still meet the limiter's
+  // refusal, the doctor's 'click again'.
+  async gathering<G>(gather: () => Promise<G>): Promise<G> {
+    this.gathersInFlight++;
+    try {
+      return await this.gathers.run(GATHERS, gather);
+    } finally {
+      this.gathersInFlight--;
+    }
   }
 
   getStats(): JournalTurnStats {
@@ -157,6 +168,7 @@ export class JournalTurns {
       heldMs:
         holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
       queued,
+      gathers: this.gathersInFlight,
     };
   }
 

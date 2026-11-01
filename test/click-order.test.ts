@@ -137,11 +137,12 @@ describe("a gather holds no turn", () => {
   });
 
   test("two sessions' doctor gathers run one at a time, while a toggle passes both", async () => {
-    const { held, gathers, doctor, toggle, toggled, reports } = setup();
+    const { turns, held, gathers, doctor, toggle, toggled, reports } = setup();
     const a = doctor(A);
     const b = doctor(B);
     await drain();
     expect(gathers).toHaveLength(1);
+    expect(turns.getStats().gathers).toBe(2);
     await toggle("session-c");
     expect(toggled("session-c")).toBe("1");
     held.open();

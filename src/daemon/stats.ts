@@ -381,7 +381,7 @@ export class RuntimeStats {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
