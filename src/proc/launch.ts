@@ -400,6 +400,11 @@ function refusalOf(
 // backstop so the promise cannot resolve while the child is still alive.
 const TIMEOUT_KILL_GRACE_MS = 250;
 
+// The OS has no event for a process group's end, so a launch whose child has
+// ended samples for it.
+const GROUP_END_POLL_MIN_MS = 25;
+const GROUP_END_POLL_MAX_MS = 1000;
+
 // --- the lifeline ---
 //
 // [LAW:types-are-the-program] "A waited child cannot outlive its frame" holds
@@ -594,6 +599,7 @@ async function launchWaited(
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
+    let groupEndTimer: NodeJS.Timeout | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
     // termination — and which — is data we have to carry. The OS doesn't tell
     // us why a child was signalled — without it, SIGKILL from the OOM killer,
@@ -612,6 +618,7 @@ async function launchWaited(
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      if (groupEndTimer) clearTimeout(groupEndTimer);
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
@@ -639,8 +646,40 @@ async function launchWaited(
       }
     };
 
-    // [LAW:types-are-the-program] Do NOT settle here. We signal and let the
-    // `close` handler resolve once the child is actually gone, so the promise
+    // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
+    // what was written before it is read. Nothing of the launch is left, so it
+    // concludes on the child's exit. A descendant that left the group keeps its
+    // pipes, drained: a destroyed one would kill it with SIGPIPE at its next
+    // write, for as long as the launcher lives to read them.
+    const concludeWithGroup = () => {
+      for (const pipe of [child.stdout, child.stderr]) {
+        pipe?.removeAllListeners("data").resume();
+        (pipe as Socket | null)?.unref();
+      }
+      conclude(child.exitCode, child.signalCode);
+    };
+    // While a member of the group lives the launch waits for it, guarded, so
+    // SIGKILL still reaches it. The OS has no event for a group's end, so it is
+    // polled, with exponential backoff.
+    if (group !== undefined) {
+      const awaitGroupEnd = (delayMs: number) => {
+        if (settled) return;
+        if (groupGone(group)) {
+          setImmediate(concludeWithGroup);
+          return;
+        }
+        groupEndTimer = setTimeout(
+          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
+          delayMs,
+        );
+      };
+      void exited.then(() =>
+        setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
+      );
+    }
+
+    // [LAW:types-are-the-program] Do NOT settle here. We signal and let
+    // `conclude` resolve once the child is actually gone, so the promise
     // never resolves while the child is still alive. SIGTERM first; SIGKILL
     // after a grace period if the child ignores it. One termination per
     // child: the other trigger is disarmed so the cause cannot be rewritten.
@@ -651,24 +690,25 @@ async function launchWaited(
     // wrong target (verified: it can terminate the caller), so escalation is
     // gated on the pid actually existing.
     const terminate = (cause: Terminated) => {
+      // A group that ended between polls has nothing left to signal, and its id
+      // may no longer be the launch's. It did not time out; an abort still stands.
+      const ended = child.exitCode !== null || child.signalCode !== null;
+      if (ended && group !== undefined && groupGone(group)) {
+        terminated = cause === "aborted" ? cause : null;
+        setImmediate(concludeWithGroup);
+        return;
+      }
       terminated = cause;
       if (timer) clearTimeout(timer);
       unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
-        // [LAW:no-ambient-temporal-coupling] The pipes go a turn after the
-        // child's end, once what it wrote is read: a descendant that left the
-        // group could otherwise hold them open, and keep this launch from ever
-        // resolving.
+        // Concluding here is not behind the group's end: a group holding an
+        // unreaped zombie never reads as gone, and this is that launch's bound.
         killTimer = setTimeout(() => {
           signal(pid, "SIGKILL");
-          void exited.then(() =>
-            setImmediate(() => {
-              child.stdout?.destroy();
-              child.stderr?.destroy();
-            }),
-          );
+          void exited.then(() => setImmediate(concludeWithGroup));
         }, TIMEOUT_KILL_GRACE_MS);
         signal(pid, "SIGTERM");
       }
@@ -693,7 +733,7 @@ async function launchWaited(
       });
     });
 
-    child.on("close", (code, signal) => {
+    const conclude = (code: number | null, signal: NodeJS.Signals | null) => {
       state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
@@ -723,7 +763,9 @@ async function launchWaited(
         exitCode: code,
         signal,
       });
-    });
+    };
+
+    child.on("close", conclude);
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
@@ -1033,6 +1075,19 @@ export function jobGroupAlive(pid: number): boolean {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
+  }
+}
+
+// Whether a group has no member left, zombies included. Unlike `jobGroupAlive`,
+// EPERM is not an end here: it is also the answer for a live member that changed
+// its uid, whose pipes a launch must keep reading. Signal 0 to a valid group has
+// no other errors, so anything but ESRCH is that "not gone".
+function groupGone(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ESRCH";
   }
 }
 
