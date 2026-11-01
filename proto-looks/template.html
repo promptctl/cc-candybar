@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accent variation — tuning candidates</title>
+<style>
+@font-face { font-family: "Bar Mono"; font-weight: 400; src: url(data:font/woff2;base64,__FONT_REGULAR__) format("woff2"); }
+@font-face { font-family: "Bar Mono"; font-weight: 700; src: url(data:font/woff2;base64,__FONT_BOLD__) format("woff2"); }
+:root { --bg: #18181b; --panel: #232327; --line: #34343a; --ink: #e7e7ea; --muted: #9a9aa3; --pick: #f5f5f7; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, "Helvetica Neue", sans-serif; }
+header { padding: 20px 24px 8px; max-width: 1100px; }
+h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+header p { margin: 4px 0; color: var(--muted); }
+header b { color: var(--ink); font-weight: 600; }
+.controls { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 24px; display: grid; gap: 6px; }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ctl > span { width: 88px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+button { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 3px 9px; cursor: pointer; }
+button.on { background: var(--pick); color: #111; border-color: var(--pick); }
+#copy { margin-left: auto; }
+main { padding: 12px 24px 48px; display: grid; gap: 14px; }
+.theme { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.theme h2 { margin: 0; padding: 6px 12px; font-size: 13px; font-weight: 600; background: var(--panel); }
+.variant { padding: 8px 12px 10px; }
+.variant + .variant { border-top: 1px dashed rgba(127,127,127,.35); }
+.variant.today { border-bottom: 1px solid rgba(127,127,127,.6); }
+.label { font-size: 12px; margin-bottom: 4px; opacity: .75; }
+.bar { font: 14px/1.25 "Bar Mono", "JetBrains Mono", Menlo, "Apple Color Emoji", monospace; white-space: pre; overflow-x: auto; }
+.bar div { height: 1.25em; }
+</style>
+<header>
+  <h1>Accent variation: tuning candidates</h1>
+  <p>Three things to pick, each a control below: <b>jump</b>, how far apart neighbouring segments sit in lightness; <b>keystone</b>, which places along each line wear the accent; <b>open</b>, the colour a menu wears when open — its header's colour, which its items are shades of.</p>
+  <p>Every closed cell is a colour the theme names: its line's role at a shade of the window, or the accent at a keystone. Every menu item is the header's hue at a shade of the same window, so a menu is a variation on the colour that opened it. The first strip under each theme is the bar as it ships today. <b>Compare along</b> stacks every value of one choice under each theme. A keystone sits on a line's authored end, so when the last cell hides (the activity cell, shown only while Claude works), that end is bare — see the payloads.</p>
+</header>
+<div class="controls" id="controls"></div>
+<main id="main"></main>
+<script>
+const D = __DATA__;
+const S = Object.assign({ jump: "middle", keystone: "ends", open: "primary", state: "calm", view: "closed", compare: "jump",
+  themes: ["textual-dark", "nord", "catppuccin-mocha", "gruvbox", "rose-pine-dawn", "solarized-light"] }, JSON.parse(decodeURIComponent(location.hash.slice(1)) || "{}"));
+const AXES = { jump: D.jumps, keystone: D.keystones, open: D.opens };
+const NAMES = { jump: "Jump", keystone: "Keystone", open: "Open" };
+function el(tag, attrs, ...kids) { const e = document.createElement(tag); Object.assign(e, attrs); e.append(...kids); return e; }
+function bar(rows, pole) {
+  const box = el("div", { className: "bar" });
+  for (const row of rows) {
+    const line = el("div", {});
+    for (const [t, f, b, flags] of row) {
+      let fg = f < 0 ? pole.fg : D.colours[f], bg = b < 0 ? null : D.colours[b];
+      if (flags & 16) [fg, bg] = [bg ?? pole.bg, fg];
+      const s = el("span", { textContent: t });
+      s.style.color = fg; if (bg) s.style.background = bg;
+      if (flags & 1) s.style.fontWeight = 700; if (flags & 2) s.style.opacity = .6;
+      if (flags & 4) s.style.fontStyle = "italic"; if (flags & 8) s.style.textDecoration = "underline";
+      line.append(s);
+    }
+    box.append(line);
+  }
+  return box;
+}
+const pictureOf = (r) => r[S.view === "closed" ? "closed" : "open"];
+function controls() {
+  const c = document.getElementById("controls"); c.replaceChildren();
+  const row = (name, opts, key, extra) => {
+    const r = el("div", { className: "ctl" }, el("span", { textContent: name }));
+    for (const o of opts) r.append(el("button", { textContent: o.label ?? o, className: (S[key] === (o.id ?? o) || (Array.isArray(S[key]) && S[key].includes(o))) ? "on" : "", title: o.label ?? o, onclick: () => {
+      if (Array.isArray(S[key])) S[key] = S[key].includes(o) ? S[key].filter((x) => x !== o) : [...S[key], o];
+      else S[key] = o.id ?? o;
+      update();
+    } }));
+    if (extra) r.append(extra);
+    c.append(r);
+  };
+  for (const a of ["jump", "keystone", "open"]) row(NAMES[a], AXES[a].map((o) => ({ ...o, label: o.label.split(" — ")[0] })), a);
+  row("Compare", [{ id: "none", label: "nothing" }, { id: "jump", label: "along jump" }, { id: "keystone", label: "along keystone" }, { id: "open", label: "along open" }], "compare");
+  row("View", [{ id: "closed", label: "closed bar" }, { id: "open", label: "menu open (depths 0–2)" }], "view",
+    el("button", { id: "copy", textContent: "Copy my pick", onclick: copyPick }));
+  row("Payload", D.states, "state");
+  row("Themes", D.themes, "themes");
+}
+function copyPick() {
+  const lab = (a) => AXES[a].find((o) => o.id === S[a]).label;
+  const text = `jump: ${S.jump} — ${lab("jump")}\nkeystone: ${S.keystone} — ${lab("keystone")}\nopen: ${S.open} — ${lab("open")}`;
+  const button = document.getElementById("copy");
+  navigator.clipboard.writeText(text).then(() => { button.textContent = "Copied"; }, (e) => { button.textContent = `Not copied: ${e.message}`; });
+}
+function picture(box, r, pole) {
+  box.append(bar(r.rows, pole));
+}
+function update() {
+  location.hash = encodeURIComponent(JSON.stringify(S));
+  controls();
+  const m = document.getElementById("main"); m.replaceChildren();
+  const values = S.compare === "none" ? [null] : AXES[S.compare];
+  for (const theme of D.themes.filter((t) => S.themes.includes(t))) {
+    const pole = D.poles[theme];
+    const card = el("section", { className: "theme" }, el("h2", { textContent: theme }));
+    const today = el("div", { className: "variant today" });
+    today.style.background = pole.bg; today.style.color = pole.fg;
+    today.append(el("div", { className: "label", textContent: "today — as the bar ships" }));
+    picture(today, pictureOf(D.reference[`${S.state}.${theme}`]), pole);
+    card.append(today);
+    for (const val of values) {
+      const v = { jump: S.jump, keystone: S.keystone, open: S.open };
+      if (val) v[S.compare] = val.id;
+      const r = pictureOf(D.renders[`${v.jump}.${v.keystone}.${v.open}.${S.state}.${theme}`]);
+      const box = el("div", { className: "variant" });
+      box.style.background = pole.bg; box.style.color = pole.fg;
+      box.append(el("div", { className: "label", textContent: val ? val.label : `${v.jump} · ${v.keystone} · ${v.open}` }));
+      picture(box, r, pole);
+      card.append(box);
+    }
+    m.append(card);
+  }
+}
+update();
+</script>

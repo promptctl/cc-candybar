@@ -8,6 +8,7 @@
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { feedInputs } from "./helpers/inputs";
 import { selectionFor } from "./helpers/selection";
@@ -60,7 +61,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const config = parseAndValidate("<test>", CONFIG_SRC, ALLOWED_PALETTES);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
@@ -83,7 +84,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(render()).toContain("theme=ocean");
   });
 
-  test("set-state theme write changes the rendered COLORS on next render (k5a.4)", () => {
+  test("set-state theme write changes the rendered COLORS on next render (k5a.4)", async () => {
     // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
     // bar. The renderDsl-level tests above prove the TEXT cascade; this proves
     // the COLOR cascade by resolving basePalette per render from the session
@@ -110,7 +111,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // Mirror the daemon's per-render theme resolution. Without this the two
     // renders below would BOTH be the floor theme and the test would assert
@@ -121,7 +122,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const before = render(); // effective theme = textual-dark (globals default)
     recordRender(sessionState, SESSION_ID);
     const ctx = testVerbContext(sessionState, undefined, config);
-    VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
     const after = render(); // effective theme = nord
 
     // Same text, different ANSI color codes — the palette switched live.
@@ -129,7 +130,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(after).not.toBe(before);
   });
 
-  test("set-state click verb propagates to the next render", () => {
+  test("set-state click verb propagates to the next render", async () => {
     // The actual ticket verification: dispatch the verb through the same
     // registry the daemon uses; assert the next render reflects the change.
     const { config, sessionState, render } = buildRuntime();
@@ -138,14 +139,14 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx = testVerbContext(sessionState, undefined, config);
     // set-state value shape: "<sessionId>/<key>/<value>" — key must be
     // one the session's config gates and value must satisfy its validator.
-    VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
     expect(render()).toContain("theme=nord");
 
-    VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
     expect(render()).toContain("theme=dracula");
   });
 
-  test("cascade triggers a reactive observer, not just a fresh render-time read", () => {
+  test("cascade triggers a reactive observer, not just a fresh render-time read", async () => {
     // [LAW:behavior-not-structure] The "set-state click verb propagates"
     // test above asserts the rendered string carries the new value — true
     // whenever renderDsl sees the new value at next read, which can
@@ -175,7 +176,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(observed).toEqual(["(unset)"]);
 
       const ctx = testVerbContext(sessionState, undefined, config);
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Exactly one additional fire — proves the dep graph propagated the
       // change rather than the autorun being scheduled for an unrelated
@@ -186,7 +187,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }
   });
 
-  test("two state vars: mutation propagates only to its dependent observer", () => {
+  test("two state vars: mutation propagates only to its dependent observer", async () => {
     // [LAW:behavior-not-structure] Pins both directions of the coarse-atom
     // trade-off documented in session-state.ts:
     //   - cascade reach: a mutation to one key must still reach computeds
@@ -216,7 +217,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
 
@@ -237,7 +238,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
       recordRender(sessionState, SESSION_ID);
       const ctx = testVerbContext(sessionState, undefined, config);
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
@@ -257,18 +258,17 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }
   });
 
-  test("set-state rejects an unknown theme value (BadVerbArgs)", () => {
+  test("set-state rejects an unknown theme value (BadVerbArgs)", async () => {
     // Pinning the [LAW:no-silent-failure] contract on the verb itself.
     // An unknown theme cannot quietly persist — the daemon's dispatcher
     // converts BadVerbArgs into a BAD_REQUEST wire response.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
-    ).toThrow(/unknown theme/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
+    ).rejects.toThrow(/unknown theme/);
   });
 
-  test('set-state rejects the "custom" theme sentinel (not a renderable theme)', () => {
+  test('set-state rejects the "custom" theme sentinel (not a renderable theme)', async () => {
     // [LAW:one-source-of-truth] The theme validator runs against
     // listResolvablePaletteNames — the set of names that actually resolve
     // to a Palette. "custom" is a sentinel that instructs the cascade to
@@ -276,41 +276,38 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // empty/broken at the next refresh.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
-    ).toThrow(/unknown theme/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
+    ).rejects.toThrow(/unknown theme/);
   });
 
-  test("set-state rejects an unknown key with the registered-key list", () => {
+  test("set-state rejects an unknown key with the registered-key list", async () => {
     // [LAW:no-silent-failure] An unknown key is the session's gate telling
     // the operator "this is not a writable surface" — the BAD_REQUEST surfaces
     // exactly which keys ARE writable, so a typo or stale wire spec is
     // self-diagnosing.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
-    ).toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
+    ).rejects.toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
   });
 
-  test("set-state writes the endcaps key when given a registered endcaps shape", () => {
+  test("set-state writes the endcaps key when given a registered endcaps shape", async () => {
     // The set-state verb covers every registered key; the endcaps key was a
     // separate named verb before this epic.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    VERBS.get("set-state")!(`${SESSION_ID}/endcaps/capsule`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/endcaps/capsule`, ctx);
     expect(sessionState.get(SESSION_ID, "endcaps")).toBe("capsule");
   });
 
-  test("set-state rejects an unknown endcaps value with the allowed-list", () => {
+  test("set-state rejects an unknown endcaps value with the allowed-list", async () => {
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
-    ).toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
+    ).rejects.toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
   });
 
-  test("set-state normalizes boolean-ish toolbar-expanded values", () => {
+  test("set-state normalizes boolean-ish toolbar-expanded values", async () => {
     // [LAW:one-source-of-truth] The canonical truthy/falsy strings are
     // owned by the boolean validator, not by each callsite. "1"/"true"
     // collapse to "1"; "0"/"false" collapse to "" — the same sentinel
@@ -318,28 +315,27 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
 
-    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
 
-    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
 
-    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
 
-    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
 
-  test("set-state rejects non-boolean-ish toolbar-expanded values", () => {
+  test("set-state rejects non-boolean-ish toolbar-expanded values", async () => {
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
-    ).toThrow(/expected boolean-ish/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
+    ).rejects.toThrow(/expected boolean-ish/);
   });
 
-  test("set-state rejects malformed wire input (missing tail or odd count)", () => {
+  test("set-state rejects malformed wire input (missing tail or odd count)", async () => {
     // [LAW:types-are-the-program] The wire shape after <sessionId> is a
     // sequence of even-count <key>/<value> pairs. Each structural
     // defect — empty tail, odd count, empty key segment — surfaces its
@@ -348,21 +344,21 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx = testVerbContext(sessionState, undefined, config);
 
     // Just the session id (no key/value).
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).toThrow(
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).rejects.toThrow(
       /<key>\/<value> is required/,
     );
     // Key but no value separator (odd-count: one segment).
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).rejects.toThrow(
       /expected even-count.*got 1 segment/,
     );
     // Empty key segment at pair 1 — structurally distinct from the
     // unknown-key validator rejection.
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).toThrow(
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).rejects.toThrow(
       /empty key at pair 1/,
     );
   });
 
-  test("set-state rejects prototype-poison keys with a clean BAD_REQUEST", () => {
+  test("set-state rejects prototype-poison keys with a clean BAD_REQUEST", async () => {
     // [LAW:types-are-the-program] A gate's validators are a Map, not a
     // plain object — so wire-level `__proto__` / `constructor` are
     // ordinary non-members, not truthy hits on Object.prototype. The
@@ -377,27 +373,26 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
     for (const poison of ["__proto__", "constructor", "toString"]) {
-      expect(() =>
-        VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
-      ).toThrow(
+      await expect(VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
+      ).rejects.toThrow(
         new RegExp(`unknown state key "${poison.replace(/\$/g, "\\$")}"`),
       );
     }
   });
 
-  test("set-state writes a multi-pair batch atomically (Menu action contract)", () => {
+  test("set-state writes a multi-pair batch atomically (Menu action contract)", async () => {
     // [LAW:dataflow-not-control-flow] The N=2 batched form IS the same
     // dispatch path as N=1 — the parser walks even-count pairs. The
     // Menu primitive (chunk 11 .3) uses this to atomically write the
     // chosen value AND collapse the menu in one click.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
     expect(sessionState.get(SESSION_ID, "theme")).toBe("nord");
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
 
-  test("multi-pair batch fires reactive observers exactly once", () => {
+  test("multi-pair batch fires reactive observers exactly once", async () => {
     // [LAW:single-enforcer] SessionState owns the reactive atomicity
     // contract — observers see the post-batch snapshot, never an
     // intermediate "first write applied, second pending" state. A
@@ -430,7 +425,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     recordRender(sessionState, SESSION_ID);
     sessionState.set(SESSION_ID, "toolbar-expanded", "1");
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
 
@@ -447,7 +442,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(snapshots).toEqual([{ theme: "(unset)", expanded: "1" }]);
 
       const ctx = testVerbContext(sessionState, undefined, config);
-      VERBS.get("set-state")!(
+      await VERBS.get("set-state")!(
         `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
         ctx,
       );
@@ -463,7 +458,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }
   });
 
-  test("set-state rejects whole batch if any pair fails (no partial writes)", () => {
+  test("set-state rejects whole batch if any pair fails (no partial writes)", async () => {
     // [LAW:no-silent-failure] A batch is one transactional click.
     // First pair valid, second pair invalid — the whole batch rejects.
     // Asserting the FIRST pair did NOT land is the load-bearing
@@ -474,29 +469,27 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // Seed a known prior state so we can prove the failing batch did
     // not overwrite it.
     sessionState.set(SESSION_ID, "theme", "dracula");
-    expect(() =>
-      VERBS.get("set-state")!(
+    await expect(VERBS.get("set-state")!(
         `${SESSION_ID}/theme/nord/toolbar-expanded/maybe`,
         ctx,
       ),
-    ).toThrow(/pair 2.*expected boolean-ish/);
+    ).rejects.toThrow(/pair 2.*expected boolean-ish/);
     // The failing batch did NOT advance the prior theme value.
     expect(sessionState.get(SESSION_ID, "theme")).toBe("dracula");
   });
 
-  test("set-state rejects odd-count pair tail with a localizing diagnostic", () => {
+  test("set-state rejects odd-count pair tail with a localizing diagnostic", async () => {
     // [LAW:types-are-the-program] The wire shape is structurally
     // even-count pairs after the session id. Three segments is a
     // missing-value structural error — caught with its own message
     // rather than routed through a validator's unknown-key path.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
-    ).toThrow(/expected even-count.*got 3 segment/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
+    ).rejects.toThrow(/expected even-count.*got 3 segment/);
   });
 
-  test("set-state names the failing pair index for batched diagnostics", () => {
+  test("set-state names the failing pair index for batched diagnostics", async () => {
     // [LAW:no-silent-failure] The operator clicked a Menu URL
     // with N pairs; the diagnostic tells them WHICH pair the validator
     // rejected (1-based) so they can localize their config bug. A
@@ -504,12 +497,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // leave them counting slashes by hand.
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
-    ).toThrow(/pair 2: unknown state key "nonsense-key"/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
+    ).rejects.toThrow(/pair 2: unknown state key "nonsense-key"/);
   });
 
-  test("set-state rejects an empty key at any pair position", () => {
+  test("set-state rejects an empty key at any pair position", async () => {
     // [LAW:types-are-the-program] An empty key segment is structurally
     // distinct from a typo'd key — the operator's mistake is a wrong
     // count of slashes, not a wrong key name. Catching it in the pair
@@ -519,13 +511,12 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { config, sessionState } = buildRuntime();
     const ctx = testVerbContext(sessionState, undefined, config);
     // Empty key at pair 1.
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).toThrow(
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).rejects.toThrow(
       /empty key at pair 1/,
     );
     // Empty key at pair 2 (theme valid, then empty key).
-    expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
-    ).toThrow(/empty key at pair 2/);
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
+    ).rejects.toThrow(/empty key at pair 2/);
   });
 
   test("a state-kind var needs no session.id of the author's — the menu ensures it", () => {
@@ -549,7 +540,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
       endcaps: "powerline",
@@ -561,7 +552,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(stripAnsi(out)).toContain("calm");
   });
 
-  test("toolbar-toggle click verb cascades through state binding", () => {
+  test("toolbar-toggle click verb cascades through state binding", async () => {
     // Same pattern with a different verb / key — exercises the toggle
     // semantics (set on first click, clear on second).
     const config = parseAndValidate(
@@ -581,7 +572,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
@@ -590,9 +581,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx =testVerbContext(sessionState, undefined, config);
 
     expect(render()).toContain("tb=[]");
-    VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
+    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
     expect(render()).toContain("tb=[1]");
-    VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
+    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
     expect(render()).toContain("tb=[]");
   });
 });

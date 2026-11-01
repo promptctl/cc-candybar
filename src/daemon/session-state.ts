@@ -104,7 +104,7 @@ export interface SessionStorage {
 // [LAW:dataflow-not-control-flow] Null-object so the store always calls
 // save()/flush() — no "am I persisting?" branch. The ephemeral case is data
 // (a storage that discards), not a special control path.
-const EPHEMERAL_STORAGE: SessionStorage = {
+export const EPHEMERAL_SESSION_STORAGE: SessionStorage = {
   load: () => ({}),
   save: () => {},
   flush: () => {},
@@ -138,21 +138,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   private readonly atom: IAtom = createAtom("SessionState");
 
   constructor(
-    storage: SessionStorage = EPHEMERAL_STORAGE,
+    storage: SessionStorage = EPHEMERAL_SESSION_STORAGE,
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
     this.storage = storage;
     this.sessions = new Map();
-    this.hydrateFromStorage();
-  }
-
-  // [LAW:single-enforcer] Bind a persistence backend after construction. Only
-  // the daemon process calls this (with the disk-backed storage), so importers
-  // that merely load this module — the CLI relay, subcommands — keep the
-  // ephemeral default and never read or write the state file. Must run before
-  // the daemon serves requests, since it replaces in-memory state with disk.
-  useStorage(storage: SessionStorage): void {
-    this.storage = storage;
     this.hydrateFromStorage();
   }
 
@@ -307,6 +297,15 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // shutdown so a pending pick isn't lost when the process exits.
   flush(): void {
     this.storage.flush();
+  }
+
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
+  // lands, and anything that lands later (a render that was awaiting, a run
+  // settling) stays in memory, so it can never write over the file a next
+  // daemon has taken up.
+  close(): void {
+    this.flush();
+    this.storage = EPHEMERAL_SESSION_STORAGE;
   }
 
   private persist(): void {

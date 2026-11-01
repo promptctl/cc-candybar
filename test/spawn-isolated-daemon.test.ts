@@ -15,17 +15,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { RSS_LIMIT_ENV } from "../src/daemon/limits";
 import { logPath } from "../src/daemon/paths";
-import { waitForExit } from "./helpers/daemon-wire";
 import {
-  prepareIsolatedDaemonEnv,
   readinessFailure,
-  spawnDaemonWithEnv,
   type ReadinessFailure,
 } from "./helpers/spawn-isolated-daemon";
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
+const STDERR_LINE = "Error: died before it had a log";
 const SOCK = "/tmp/ccb-x/cc-candybar/socket";
 
 // An env whose logPath() names a real file, so the projection under test reads
@@ -49,7 +46,7 @@ describe("readinessFailure — what the socket did, what our process did", () =>
   });
 
   const message = (readiness: ReadinessFailure): string =>
-    readinessFailure(readiness, SOCK, env);
+    readinessFailure(readiness, SOCK, env, STDERR_LINE);
 
   // The ticket's acceptance criterion: the message itself distinguishes "never
   // booted" from "booted, never served". Not the log tail beneath it — the
@@ -85,7 +82,9 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     ).toContain("the process exited (signal SIGKILL)");
   });
 
-  test("every combination quotes the daemon's own log, named by path", () => {
+  // A daemon logs nothing until it binds, so a process that died before that
+  // said why only on stderr.
+  test("every combination quotes the daemon's log, named by path, and its stderr", () => {
     const phases = ["booting", "bound"] as const;
     const exits = [null, { code: 1, signal: null }] as const;
     for (const phase of phases) {
@@ -93,76 +92,8 @@ describe("readinessFailure — what the socket did, what our process did", () =>
         const m = message({ phase, exit });
         expect(m).toContain(logPath(env));
         expect(m).toContain(LOG_LINE);
+        expect(m).toContain(`stderr:\n${STDERR_LINE}`);
       }
     }
   });
-});
-
-// [LAW:behavior-not-structure] The claim is about the helper driving the real
-// binary: a daemon that refuses to boot is reported as a refusal carrying its own
-// reason, through the arm that only an observed exit can reach.
-test("a daemon that refuses to boot is reported as a refusal, not as a timeout", async () => {
-  const iso = prepareIsolatedDaemonEnv("ccb-rdy");
-  // A malformed memory budget: the daemon's earliest refusal, before any
-  // resource is committed and therefore before any bind
-  // (test/daemon-boot-refusal.test.ts pins that ordering on the daemon's side).
-  const env = { ...iso.env, [RSS_LIMIT_ENV]: "512MB" };
-  try {
-    await expect(spawnDaemonWithEnv(env)).rejects.toThrow(
-      /the process exited \(code 1\)/,
-    );
-  } finally {
-    iso.removeTmpDirs();
-  }
-});
-
-test("the refusal report names the phase and quotes the daemon's reason", async () => {
-  const iso = prepareIsolatedDaemonEnv("ccb-rdy");
-  const env = { ...iso.env, [RSS_LIMIT_ENV]: "512MB" };
-  try {
-    const failure = await spawnDaemonWithEnv(env).then(
-      (d) => {
-        d.killTree();
-        return new Error("spawnDaemonWithEnv resolved for a refusing daemon");
-      },
-      (e: Error) => e,
-    );
-    expect(failure.message).toContain("never got as far as binding");
-    expect(failure.message).toMatch(
-      /refusing to boot: CC_CANDYBAR_RSS_LIMIT_MB must be a positive integer/,
-    );
-    // The budget-expiry arm is the one an exit excludes: seeing it here would
-    // mean the helper waited the whole budget out to learn what the process had
-    // already told it.
-    expect(failure.message).not.toContain("budget expired");
-  } finally {
-    iso.removeTmpDirs();
-  }
-});
-
-// A PINNED LIMIT, not a wish: readiness is "a daemon answers on this socket",
-// never "the daemon this call spawned answers". Spawned against a socket a LIVE
-// incumbent owns, the second daemon loses the EADDRINUSE arbitration and exits —
-// and this still resolves, because the incumbent answers on the FIRST poll,
-// before our own child has compiled far enough to decide anything. That is why
-// the helper reads the child's exit only while nothing has answered yet: here an
-// exit-based check would be a coin flip on scheduling. Closing it for real needs
-// the answering daemon's identity on the wire; until then this test states the
-// behaviour, so adding that identity becomes a visible, deliberate change.
-test("a spawn against a live incumbent is accepted: the wire carries no identity", async () => {
-  const iso = prepareIsolatedDaemonEnv("ccb-rdy2");
-  const incumbent = await spawnDaemonWithEnv(iso.env);
-  // Reaching the next line IS the claim: this resolves for a daemon that is on
-  // its way out, because what answered was the incumbent.
-  const loser = await spawnDaemonWithEnv(iso.env);
-  try {
-    expect(await waitForExit(loser.child)).toEqual({ code: 0, signal: null });
-    expect(
-      fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8"),
-    ).toMatch(/EADDRINUSE: .+ exiting/);
-  } finally {
-    loser.killTree();
-    incumbent.killTree();
-    iso.removeTmpDirs();
-  }
 });

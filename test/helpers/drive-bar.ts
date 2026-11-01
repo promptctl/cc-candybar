@@ -1,10 +1,10 @@
 // A bar driven the way a user drives one: render it, click what it drew,
-// render again — against an isolated real daemon. `pnpm bar`
-// (scripts/drive-bar.ts) is its command line; test/drive-bar.test.ts holds it
-// to its promises.
+// render again — against an isolated daemon, a real one unless a test hands in
+// another start. `pnpm bar` (scripts/drive-bar.ts) is its command line;
+// test/drive-bar.test.ts holds it to its promises.
 //
 // [LAW:effects-at-boundaries] The daemon is the subject and a black box: an
-// isolated real daemon (its own socket, XDG dirs, Claude config dir, parent
+// isolated daemon (its own socket, XDG dirs, Claude config dir, parent
 // watchdog — never the developer's daemon or files) is driven only over its
 // wire, so a render here is the bytes Claude Code would print and a click is
 // the request the URL handler sends. Nothing is re-implemented in-process: the
@@ -19,7 +19,7 @@
 // [LAW:no-silent-failure] A click on text the bar did not draw stops the run,
 // naming what it did draw. A click the daemon refuses is a fact about the bar,
 // not a failure of the harness: the refusal is returned beside the next render,
-// which shows it in the red strip exactly as a user would see it. A slash
+// which counts it with the indicator beside the door, as a user would see it. A slash
 // command is refused by the daemon itself: the session reports a tmux pane (so
 // the bar draws its slash controls, as it does for a session inside tmux) on a
 // socket in the harness's scratch dir, where no tmux server listens. A click
@@ -35,9 +35,10 @@ import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
-import type { ClaudeHookData } from "../../src/utils/claude";
+import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { renderRequest, sendClick } from "./daemon-e2e";
+import type { DaemonTarget } from "./daemon-wire";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
   describeLink as describeWith,
@@ -49,9 +50,9 @@ import {
   type DrawnLink,
 } from "../../src/click/read";
 
-const SESSION_ID = "bar0a1b2-c3d4-4e5f-8a7b-8c9d0e1f2a3b";
+const SESSION_ID = BAR_SESSION_ID;
 const REPLY_BUDGET_MS = 10_000;
-/** The terminal the client reports: columns, and rows (which cap the diagnostic strip). */
+/** The terminal the client reports: columns, and rows. */
 export interface TerminalSize {
   readonly width: number;
   readonly rows: number;
@@ -91,47 +92,29 @@ export interface Bar {
   click(text: string, nth?: number): Promise<Clicked>;
   /** Click the link of the last render that carries `url`, then render again. */
   follow(url: string): Promise<Clicked>;
-  stop(): void;
+  stop(): Promise<void>;
 }
 
-// The Status hook Claude Code sends, with every field the bundled bar reads
-// set, so each of its segments draws: context, cost, both rate-limit windows.
-function hookData(cwd: string, transcriptPath: string): ClaudeHookData {
-  const nowSec = Math.floor(Date.now() / 1000);
-  return {
-    hook_event_name: "Status",
-    session_id: SESSION_ID,
-    transcript_path: transcriptPath,
-    cwd,
-    version: "2.1.0",
-    model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
-    workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-    cost: {
-      total_cost_usd: 0.39,
-      total_duration_ms: 930_000,
-      total_api_duration_ms: 410_000,
-      total_lines_added: 512,
-      total_lines_removed: 88,
-    },
-    context_window: {
-      total_input_tokens: 48_000,
-      total_output_tokens: 487,
-      context_window_size: 200_000,
-      used_percentage: 24,
-      remaining_percentage: 76,
-      current_usage: {
-        input_tokens: 2_000,
-        output_tokens: 487,
-        cache_creation_input_tokens: 6_000,
-        cache_read_input_tokens: 40_000,
-      },
-    },
-    rate_limits: {
-      five_hour: { used_percentage: 63, resets_at: nowSec + 2 * 3600 },
-      seven_day: { used_percentage: 21, resets_at: nowSec + 5 * 86400 },
-    },
-  };
+/** The daemon a bar draws on, and how it goes. */
+export interface BarDaemon {
+  readonly target: DaemonTarget;
+  stop(): void | Promise<void>;
 }
+
+/** How a bar gets its daemon, from the env that isolates it. */
+export type StartBarDaemon = (env: NodeJS.ProcessEnv) => Promise<BarDaemon>;
+
+/** What `pnpm bar` runs: a real daemon that dies with this process. */
+const spawnedBarDaemon: StartBarDaemon = async (env) => {
+  const daemon = await spawnDaemonWithEnv({
+    ...env,
+    [PARENT_PID_ENV]: String(process.pid),
+    NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
+  });
+  return { target: env.CC_CANDYBAR_SOCKET!, stop: () => daemon.killTree() };
+};
+
+export { hookData };
 
 export { drawnLinks, type DrawnLink };
 
@@ -140,7 +123,10 @@ export function describeLink(link: DrawnLink): string {
   return describeWith(link, SESSION_ID);
 }
 
-export async function startBar(opts: BarOptions): Promise<Bar> {
+export async function startBar(
+  opts: BarOptions,
+  startDaemon: StartBarDaemon = spawnedBarDaemon,
+): Promise<Bar> {
   const daemonEnv = prepareIsolatedDaemonEnv("ccb-bar");
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bar-"));
   const removeDirs = (): void => {
@@ -149,35 +135,31 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
   };
   const configPath = path.join(scratch, "config.json5");
   const claudeConfigDir = path.join(scratch, "claude");
-  let daemon: Awaited<ReturnType<typeof spawnDaemonWithEnv>>;
+  let daemon: BarDaemon;
   try {
     fs.writeFileSync(
       configPath,
       opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
     );
     fs.mkdirSync(claudeConfigDir);
-    daemon = await spawnDaemonWithEnv({
+    daemon = await startDaemon({
       ...daemonEnv.env,
-      // The daemon dies with this process, however this process ends.
-      [PARENT_PID_ENV]: String(process.pid),
       // No update notice reaches the network: the registry is a closed port.
       CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
       // An empty Claude Code config dir, so the daemon reads none of the host's
       // Claude Code settings or transcripts.
       CLAUDE_CONFIG_DIR: claudeConfigDir,
-      NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
     });
   } catch (e) {
     removeDirs();
     throw e;
   }
-  const sockPath = daemonEnv.sockPath;
   let last = "";
   let size: TerminalSize = { width: opts.width, rows: opts.rows };
 
   const render = async (): Promise<string> =>
     (last = await renderRequest(
-      sockPath,
+      daemon.target,
       {
         hookData: hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
         args: ["cc-candybar", "--config", configPath],
@@ -220,7 +202,7 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
-    const resp = await sendClick(sockPath, hit.url, REPLY_BUDGET_MS);
+    const resp = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);
     if (!resp.ok && resp.code === "TIMEOUT") {
       throw new Error(`"${hit.text}" timed out: whether it landed is unknown (${resp.error})`);
     }
@@ -238,8 +220,8 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
     },
     click,
     follow,
-    stop: () => {
-      daemon.killTree();
+    stop: async () => {
+      await daemon.stop();
       removeDirs();
     },
   };

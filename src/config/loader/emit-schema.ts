@@ -1,5 +1,5 @@
 // [LAW:one-source-of-truth] The JSON Schema emitter — the SECOND interpreter over
-// the declarative loader schemas. `validateConfig` composes the per-module
+// the declarative loader schemas. `validateRenderable` composes the per-module
 // `validate*` functions to validate at runtime; `emitConfigSchema` composes the
 // per-module `*Json` functions to derive the editor-facing JSON Schema. Both read
 // the SAME module-private schema declarations (GLOBALS_SCHEMA, VARIABLE_SCHEMA,
@@ -19,6 +19,7 @@ import { actionsJson } from "./actions.js";
 import { stylesJson } from "./styles.js";
 import { presetsJson } from "./presets.js";
 import {
+  insertJson,
   layoutNodeJson,
   LAYOUT_NODE_DEF_NAME,
   rootFragmentJson,
@@ -35,7 +36,7 @@ export const SCHEMA_ID =
 // [LAW:dataflow-not-control-flow] The RawDslConfig schema: every top-level key is
 // optional (a user file declares only what differs from the bundled default), so
 // the object carries no `required`. Each property is one module's emitted shape —
-// the same composition `validateConfig` performs over the validators. `root`
+// the same composition `validateRenderable` performs over the validators. `root`
 // references the RootFragment definition (a whole tree or a `{ rows }` map),
 // whose tree arm is the LayoutNode definition that closes the node recursion
 // via `$ref`. `inheritedSegments` is the base's segment names — the names a
@@ -56,6 +57,7 @@ export function emitConfigSchema(
       variables: variablesMapJson(),
       segments: segmentsJson(inheritedSegments),
       root: { $ref: ROOT_FRAGMENT_REF },
+      insert: insertJson(),
       actions: actionsJson(),
       styles: stylesJson(),
       themeDefaults: themeDefaultsJson(),

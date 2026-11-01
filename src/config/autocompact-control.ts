@@ -6,7 +6,7 @@
 // and ↺ hands the window back to `auto`.
 
 import type { ActionDecl } from "./action.js";
-import { IN_TMUX } from "./payload-inputs.js";
+import { IN_TMUX } from "./lanes.js";
 import { AUTOCOMPACT_WINDOWS } from "../segments/autocompact.js";
 import { slashLine } from "../claude-input/slash-line.js";
 

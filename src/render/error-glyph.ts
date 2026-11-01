@@ -8,13 +8,14 @@
 // runtimes show the same diagnostic so the user's experience does not depend
 // on which client is on the hot path. The mirrored constants are diffed by
 // scripts/check-protocol.mjs; the sanitize/collapse/truncate behavior is
-// pinned by paired fixture tests on both sides.
+// pinned by the one case table both suites assert,
+// test/fixtures/diagnostic-text-cases.json.
 //
 // [LAW:one-source-of-truth] Both shared primitives live in leaf modules under
 // ./: the style constants in ./diagnostic-style (shared with the daemon's
-// composeWithDiagnostics so the diagnostic visual language cannot drift) and
+// diagnostics viewer so the diagnostic visual language cannot drift) and
 // the sanitize-and-truncate primitive in ./diagnostic-text (shared with
-// src/daemon/server.ts so the security-critical control-char neutralization
+// src/daemon/draw-bar.ts so the security-critical control-char neutralization
 // (C0 + DEL + C1/8-bit-CSI) cannot drift between the two callers).
 
 import type { PermanentOutcome } from "../daemon/client-transport";

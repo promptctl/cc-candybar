@@ -1,5 +1,5 @@
-// [LAW:nothing-unseen] brandon-workflow-mgo2, measured on a REAL daemon: the
-// branch's PR reaches the bar in whatever state the forge reports it — open,
+// [LAW:nothing-unseen] brandon-workflow-mgo2, measured on the daemon's own
+// request handling: the branch's PR reaches the bar in whatever state the forge reports it — open,
 // merged or closed — and the render event says which (`pr=`), `failed` when the
 // forge could not answer, `earlier-<state>` when the forge's PR is an older use
 // of the branch's name (REUSED), and `-` when it has none. The forge is a stub
@@ -11,17 +11,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  hookData,
-  killAndWait,
-  renderRequest,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
-} from "./helpers/spawn-isolated-daemon";
+import { hookData, renderRequest, stripAnsi } from "./helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
@@ -43,11 +35,10 @@ esac
 
 describe("a daemon render carries the branch's PR in every state", () => {
   let env: NodeJS.ProcessEnv;
-  let sockPath: string;
   let removeTmpDirs: () => void;
   let dir: string;
   let config: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   // A checkout of its own per branch: the daemon's git cache is keyed by repo
   // root and refreshed by a watch on .git/HEAD, so one checkout switching
@@ -65,7 +56,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-pr-e2e");
-    ({ sockPath, removeTmpDirs } = prepared);
+    ({ removeTmpDirs } = prepared);
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pr-e2e-"));
     const bin = path.join(dir, "bin");
     fs.mkdirSync(bin);
@@ -81,11 +72,11 @@ describe("a daemon render carries the branch's PR in every state", () => {
       ...prepared.env,
       PATH: `${bin}:${process.env.PATH}`,
     };
-    daemon = await spawnDaemonWithEnv(env);
+    daemon = startDaemon(env);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     fs.rmSync(dir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -104,7 +95,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
     const sessionId = `pr-e2e-${branch}`;
     const repo = checkout(branch);
     const out = stripAnsi(
-      await renderRequest(sockPath, {
+      await renderRequest(daemon, {
         hookData: hookData(sessionId, repo),
         args: ["cc-candybar", "--config", config],
         cwd: repo,

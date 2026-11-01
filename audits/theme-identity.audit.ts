@@ -8,9 +8,8 @@
 //   1. Every background the closed bar draws is a colour its theme names:
 //      within PALETTE_FLOOR of a colour in its palette, under every variation
 //      and every position of the shade dial, at the `none` style.
-//   2. Two neighbouring cells never blur: every arrow joins two backgrounds at
-//      least SEAM_MIN_DELTA_E apart, and where a theme's own colours put two
-//      neighbours on one background the joiner draws the divider — with the
+//   2. Two neighbouring cells never blur: every join is an arrow, and every
+//      arrow joins two backgrounds at least SEAM_MIN_DELTA_E apart — with the
 //      rate-limit windows hot and with them calm (the calm block and weekly
 //      used to share `panel`, joined by an arrow nobody could see).
 //
@@ -22,28 +21,31 @@
 // a bar to its theme.
 
 import { TEST_SIGNER } from "../test/helpers/link-signer";
+import { DIVIDER, drawnChars, isRgb, seams, type Drawn } from "../test/helpers/seams";
 import {
   ColorDepth,
   ColorRgba,
   drawnColour,
   getThemePalette,
   listThemePalettes,
+  Oklch,
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
 import { CHECK_TODAY, checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { unauthored, validateConfig } from "../src/config/dsl-loader";
+import { validateConfig } from "../test/helpers/parse-and-validate";
+import { unauthored } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
-  deltaE,
   SHADES,
   VARIATIONS,
   type ShadeName,
   type VariationName,
 } from "../src/themes/decor";
+import { processLauncher } from "../src/proc/launch";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
@@ -52,58 +54,38 @@ import { instantOf } from "../src/utils/instant";
 // colour its palette names (the ticket's own bound).
 const PALETTE_FLOOR = 0.02;
 
-const ARROW = "\u{e0b0}";
-const DIVIDER = "\u{e0b1}";
-const TOKEN = /\x1b\[([0-9;]*)m|\x1b\]8;[^\x1b]*\x1b\\/g;
+/** ΔE in OKLab, through rich-js's own arithmetic. */
+const deltaE = (a: ColorRgba, b: ColorRgba): number => Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
-
-// A seam: the backgrounds either side and the glyph between them. The arrow
-// is drawn in the left cell's background over the right cell's, so its
-// (fg, bg) pair IS the seam. The divider is drawn in the left cell's TEXT
-// colour on the right cell's background — the same style run as the left
-// cell when the two backgrounds are byte-equal — so its left side is the
-// background of the text just before it.
+// A seam: the backgrounds either side and the glyph between them, read by the
+// suite's one seam reader (test/helpers/seams.ts): the ground of the column
+// drawn just before the glyph, and the ground the glyph is drawn on. An
+// arrow's own ink is not read as its left side: the joiner draws it in the
+// left cell's background only where that stands off the right one, and lifts
+// it off the right one where it does not, so reading the ink would see two
+// neighbours on one ground as an arrow between two. Every bar here is drawn in
+// truecolor, so both grounds are RGB.
 interface Seam {
   readonly left: ColorRgba;
   readonly right: ColorRgba;
   readonly glyph: string;
 }
 
-function seams(rendered: string): Seam[] {
-  const out: Seam[] = [];
-  for (const line of rendered.split("\n")) {
-    let fg: ColorRgba | undefined;
-    let bg: ColorRgba | undefined;
-    let cellBg: ColorRgba | undefined;
-    let pos = 0;
-    const text = (t: string): void => {
-      if (t.includes(ARROW)) {
-        if (fg && bg) out.push({ left: fg, right: bg, glyph: ARROW });
-        return;
-      }
-      t.split(DIVIDER).forEach((part, k) => {
-        if (k > 0 && cellBg && bg) out.push({ left: cellBg, right: bg, glyph: DIVIDER });
-        if (part.trim() && bg) cellBg = bg;
-      });
-    };
-    for (const m of line.matchAll(TOKEN)) {
-      text(line.slice(pos, m.index));
-      pos = m.index + m[0].length;
-      if (m[1] === undefined) continue;
-      const p = m[1].split(";").map(Number);
-      for (let i = 0; i < p.length; i++) {
-        if (p[i] === 0) fg = bg = undefined;
-        else if ((p[i] === 38 || p[i] === 48) && p[i + 1] === 2) {
-          const c = new ColorRgba(p[i + 2]!, p[i + 3]!, p[i + 4]!);
-          if (p[i] === 38) fg = c;
-          else bg = c;
-          i += 4;
-        }
-      }
-    }
-    text(line.slice(pos));
-  }
-  return out;
+const rgba = (c: Drawn): ColorRgba => {
+  if (!isRgb(c)) throw new Error(`a truecolor bar drew a seam on ansi slot ${c.ansi}`);
+  return new ColorRgba(...c);
+};
+
+function seamsIn(rendered: string): Seam[] {
+  const chars = drawnChars(rendered);
+  // A divider is a seam too, so that one drawn anywhere is found and fails.
+  const dividers = chars.flatMap(({ ch, bg, before }) =>
+    ch === DIVIDER && before !== undefined && bg !== undefined ? [{ left: rgba(before), right: rgba(bg), glyph: ch }] : [],
+  );
+  const arrows = seams(chars).flatMap(({ glyph, left, right }) =>
+    right === undefined ? [] : [{ left: rgba(left), right: rgba(right), glyph }],
+  );
+  return [...arrows, ...dividers];
 }
 
 const THEMES = listThemePalettes();
@@ -144,7 +126,7 @@ const CALM = {
 // over between renders but the compiled config itself. One instant for every
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore();
-const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
+const REGISTRY = new SourceRegistry(processLauncher, STORE, "", new SessionState());
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());
@@ -209,7 +191,7 @@ function bar(theme: string, calm: boolean, variant: Variant): string {
   return rendered;
 }
 const seamsOf = (theme: string, calm: boolean, variant: Variant): Seam[] =>
-  seams(bar(theme, calm, variant));
+  seamsIn(bar(theme, calm, variant));
 
 // Every background colour a rendered bar draws, in order: each 48;2 SGR.
 function backgrounds(rendered: string): ColorRgba[] {
@@ -258,30 +240,20 @@ describe("no two neighbouring cells blur", () => {
       ),
     );
 
-  // The joiner draws a divider where an arrow would vanish into the ground
-  // it enters: where two neighbours' backgrounds meet. Cells nested in one bar
-  // cell (context beside autocompact) wear that cell's colour
-  // byte for byte (decorEntryFor), as do the cells of a muted row, and a
-  // theme can draw two of its colours alike (textual-ansi's every shade of a
-  // role is one colour). Those are the only neighbours that share a
-  // background, so a divider between two colours is two cells the eye cannot
-  // tell apart, with the divider covering for them.
-  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every arrow joins backgrounds the eye tells apart, and a divider only neighbours of one colour", (_name, variant) => {
+  // Two neighbours on one ground are joined by an arrow the joiner lifts off
+  // that ground: the seam shows, but the two cells still read as one. So every
+  // seam must be an arrow between backgrounds the eye tells apart, and any
+  // divider fails.
+  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every seam is an arrow, and every arrow joins backgrounds the eye tells apart", (_name, variant) => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
+    const at = (s: (typeof seams)[number]) =>
+      `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`;
     const arrows = seams
-      .filter((s) => s.glyph === ARROW && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
-      .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
+      .filter((s) => s.glyph !== DIVIDER && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
+      .map(at);
     expect([...new Set(arrows)]).toEqual([]);
-    const dividers = seams
-      .filter((s) => s.glyph === DIVIDER && s.left.hex !== s.right.hex)
-      .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
+    const dividers = seams.filter((s) => s.glyph === DIVIDER).map(at);
     expect([...new Set(dividers)]).toEqual([]);
-  });
-
-  test("dividers are drawn, so the divider rule has seams to judge", () => {
-    // Non-vacuous: the rule judges every divider, and a muted row is one
-    // colour, as is every shade of a role under textual-ansi.
-    expect(VARIANTS.some((variant) => seamsUnder(variant).some((s) => s.glyph === DIVIDER))).toBe(true);
   });
 });

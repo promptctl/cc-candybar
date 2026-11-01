@@ -25,7 +25,7 @@ import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
-import { launchSync, type LaunchResult } from "../proc/launch.js";
+import type { LaunchResult, Launcher } from "../proc/launch.js";
 import {
   FORGE_CLI,
   REMOTES_ARGS,
@@ -90,6 +90,7 @@ import { fontInUse } from "./font-edge.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import { DoctorBusy } from "./busy.js";
 import type { ClientHint } from "../client-hint.js";
+import type { ConfigTarget, RenderOrigin } from "../config-hint.js";
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import { crateDigest } from "../source-digest.js";
 import { shipsNative } from "../install/platforms.js";
@@ -231,7 +232,7 @@ export interface DoctorEdge {
   // render-cache entry the session's bar is drawn from and answers from it
   // (so the doctor and the bar's strip report one load), the CLI runs one
   // load of its own. Both are the one `loadFromDisk`.
-  readonly loadConfig: (origin: ConfigOrigin) => ConfigLoad;
+  readonly loadConfig: (origin: RenderOrigin) => ConfigLoad;
   // The directory Claude Code's managed settings live in
   // (`claudeManagedSettingsDir`) — a policy every session on the machine
   // reads, so the daemon's own environment may move it, which test/setup.ts
@@ -246,14 +247,6 @@ export interface DoctorEdge {
   // The tail of a session's transcript, read as the bar reads it — absent
   // when no file is at the path (`readTranscriptWindow`).
   readonly transcript: (path: string) => Outcome<TranscriptWindow>;
-}
-
-// The three inputs the config search takes (resolveDslConfig) — a session's
-// recorded render origin, or the CLI's own cwd and `$CC_CANDYBAR_CONFIG`.
-export interface ConfigOrigin {
-  readonly projectDir: string;
-  readonly cwd: string;
-  readonly configFile: string | null;
 }
 
 // One load's outcome, as both a cache entry and a fresh load carry it: the
@@ -337,8 +330,8 @@ export function descendsFromRemoteLogin(
   return { kind: "ok", value: false };
 }
 
-function remoteLogin(pid: number): Asked<boolean> {
-  const run = launchSync({
+function remoteLogin(launcher: Launcher, pid: number): Asked<boolean> {
+  const run = launcher.launchSync({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
     timeoutMs: 2000,
@@ -407,8 +400,8 @@ export function ownsEntry(entry: string): boolean {
   );
 }
 
-function daemons(): Asked<readonly DaemonProcess[]> {
-  const run = launchSync({
+function daemons(launcher: Launcher): Asked<readonly DaemonProcess[]> {
+  const run = launcher.launchSync({
     bin: "ps",
     args: [
       "-U",
@@ -430,8 +423,11 @@ function daemons(): Asked<readonly DaemonProcess[]> {
   return { kind: "ok", value: daemonProcesses(run.stdout, ownsEntry) };
 }
 
-function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
-  const run = runTmux(hint, "doctor.tmux", [
+function probeTmux(
+  launcher: Launcher,
+  hint: TmuxHint,
+): Asked<TmuxClient | null> {
+  const run = runTmux(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
@@ -444,19 +440,21 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
 }
 
 export function productionEdge(
+  launcher: Launcher,
   loadConfig: DoctorEdge["loadConfig"],
 ): DoctorEdge {
   return {
-    probeTmux,
-    remoteLogin,
-    fontInUse,
+    probeTmux: (hint) => probeTmux(launcher, hint),
+    remoteLogin: (pid) => remoteLogin(launcher, pid),
+    fontInUse: (terminal, env, glyphs) =>
+      fontInUse(launcher, terminal, env, glyphs),
     loadConfig,
     managedSettingsDir:
       process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
       claudeManagedSettingsDir(process.platform),
     install: productionInstallEdge,
-    daemons,
-    forge: forgeLogin,
+    daemons: () => daemons(launcher),
+    forge: (cwd) => forgeLogin(launcher, cwd),
     transcript: readTranscriptWindow,
   };
 }
@@ -554,10 +552,13 @@ const FORGE_PROBE: Readonly<
 // remotesOf, forgeRemoteUrl, detectForge), then its CLI asked about the
 // remote's host. Under the daemon's environment for a click — the one the
 // bar's lookup runs with — and the shell's for `cc-candybar doctor`.
-export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
+export function forgeLogin(
+  launcher: Launcher,
+  cwd: string,
+): Asked<ForgeLogin | null> {
   if (gitRootOf(cwd) === undefined) return { kind: "ok", value: null };
   const remotes = remotesOf(
-    launchSync({
+    launcher.launchSync({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd,
@@ -575,7 +576,7 @@ export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
   const probe = FORGE_PROBE[forge];
   // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
   const host = probe.loginHost(remoteHost(url)!);
-  const run = launchSync({
+  const run = launcher.launchSync({
     bin: cli,
     args: [...probe.args(host)],
     cwd,
@@ -609,9 +610,10 @@ export function forgeLoginOf(
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
 // two.
-function configFacts(load: ConfigLoad): ConfigFacts {
+function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
   const base = {
     layers: load.layers,
+    target,
     warnings: load.warning === null ? [] : load.warning.split("\n"),
   };
   return load.error !== null
@@ -798,7 +800,7 @@ function need<T>(segments: readonly string[], fact: () => T): DataNeed<T> {
 function segmentDataFacts(
   edge: DoctorEdge,
   needs: DataNeeds,
-  origin: ConfigOrigin,
+  origin: RenderOrigin,
   rateLimits: Asked<readonly RateLimitsSeen[]>,
 ): SegmentDataFacts {
   return {
@@ -844,7 +846,7 @@ export function sessionWidth(
 export function gatherFacts(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
-  origin: ConfigOrigin,
+  origin: RenderOrigin,
   sessionPick: (key: string) => string | null,
   // The daemon that serves the bar, as it reports itself: the click's own
   // process, or the one `cc-candybar doctor` asked.
@@ -910,7 +912,7 @@ export function gatherFacts(
       processes: edge.daemons(),
       read: stores.postMortemsRead,
     },
-    config: configFacts(load),
+    config: configFacts(load, origin.target),
     sighted,
     frames: bars.kind === "failed" ? bars : { kind: "read" },
     data: segmentDataFacts(

@@ -3,16 +3,16 @@
 // same path the daemon renders through, never a parallel rig.
 //
 // The unit of rendering is the SEGMENT: one strip item. The
-// powerline joiner caps BETWEEN units, never inside one, and a same-bg seam
-// between two distinct units survives as a structural boundary. Both facts are
+// powerline joiner caps BETWEEN units, never inside one, and two distinct
+// units are always joined by a filled arrow. Both facts are
 // observed here as powerline-glyph counts in the rendered output:
 //
 //   1. A unit with internal variation (multiple clickable regions) renders as
 //      ONE strip item — no internal chevron, every clickable region preserved.
-//   2. Two adjacent segments that resolve to the SAME bg still read as two
-//      units — the structural chevron between them survives equal bg (it is no
-//      longer suppressed by `bgcolor === bgcolor`).
+//   2. Two adjacent segments are always joined by a filled arrow, whatever
+//      their grounds: no thin divider is drawn in its place.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -28,9 +28,9 @@ import { instantOf } from "../src/utils/instant";
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The powerline arrow, drawn at the lead, between items and at the tail, and
-// the divider drawn where two items share a ground.
+// U+E0B1, the thin divider, which no join draws.
 const CHEVRON = POWERLINE.glyph;
-const DIVIDER = POWERLINE.divider;
+const DIVIDER = "\u{E0B1}";
 
 // Strip (not FlexStrip): an unbounded line, so the glyph count is exactly the
 // joiner walk's output — no width-driven wrap to perturb it.
@@ -49,7 +49,7 @@ function render(src: string, hookData: Record<string, unknown>): string {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return renderDsl(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
 }
@@ -105,10 +105,10 @@ describe("segment is the rendering unit (2de.10)", () => {
     );
   });
 
-  test("two adjacent same-bg segments read as TWO units — the structural chevron survives equal bg", () => {
+  test("two segments authoring one bg are joined by a filled arrow, and no divider is drawn anywhere", () => {
     // `a` and `b` author the same bg spec against the same palette, so they
-    // resolve to the SAME background. The mid-join between them must still be
-    // painted: the boundary is structural, not bg-decided.
+    // share one ground. A join is an arrow whatever the two grounds are: on
+    // one ground, the joiner lifts the arrow's ink off it.
     const src = `{
       globals: { palette: 'textual-dark' },
       variables: {
@@ -122,17 +122,10 @@ describe("segment is the rendering unit (2de.10)", () => {
     }`;
     const out = render(src, { session_id: "s1" });
 
-    // Two items ⇒ one mid-join + one end-cap. Pre-fix the equal bg suppressed
-    // the mid-join. The a↔b join is now the DIVIDER — the arrow would be drawn
-    // in the shared background and vanish (rich-js CellJoiner) — so the
-    // arrows are the lead, the join to the global settings menu every bar
-    // carries (candybar-settings-ui-aok.1) and the tail. The dividers are
-    // a↔b and the one inside that menu's unit, between the door and the
-    // frame rate beside it, which share its band.
-    expect(chevronCount(out)).toBe(3);
-    expect(out.split(DIVIDER).length - 1).toBe(2);
-    expect(stripAnsi(out)).toMatch(new RegExp(`AAA\\s*${DIVIDER}\\s*BBB`));
-    expect(out).toContain("AAA");
-    expect(out).toContain("BBB");
+    // The cells are the door, its frame rate, a and b: the lead, three joins
+    // and the tail are all arrows.
+    expect(out.split(DIVIDER).length - 1).toBe(0);
+    expect(chevronCount(out)).toBe(5);
+    expect(stripAnsi(out)).toMatch(new RegExp(`AAA\\s*${CHEVRON}\\s*BBB`));
   });
 });

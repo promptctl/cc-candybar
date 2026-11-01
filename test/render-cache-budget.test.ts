@@ -11,8 +11,8 @@ const MB = 1024 * 1024;
 const sessions = (n: number) => n * (ENTRY_BYTES + VIEW_BYTES) + COMPILE_BYTES;
 
 // Whether the reserve covers the rest of the daemon is measured, not derived:
-// the load gate holds a hundred sessions' charge (~430 MB, of which the share
-// accounts 560 MB) under its budget at the default limit.
+// the load gate serves a hundred sessions at the default limit without the
+// backstop firing, charged less than the 560 MB the share accounts for them.
 describe("the render cache's share of the memory limit", () => {
   // Below that the share is the quarter a small limit has always had.
   test.each([64, 96, 128])(

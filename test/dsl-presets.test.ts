@@ -14,6 +14,7 @@
 // checkConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
@@ -193,6 +194,7 @@ describe("preset compile diagnostics name the authored path", () => {
     try {
       const config = parseAndValidate("<presets>", src, ALLOWED);
       const registry = new SourceRegistry(
+        processLauncher,
         new VariableStore(),
         "",
         new SessionState(),
@@ -268,7 +270,7 @@ describe("preset compile diagnostics name the authored path", () => {
 
 // ─── Selection: the render actually changes ───────────────────────────────────
 
-// Mirrors the daemon's per-render resolution verbatim (server.ts): the preset
+// Mirrors the daemon's per-render resolution verbatim (draw-bar.ts): the preset
 // resolves FIRST, its fragment's globals feed everything else, and its compiled
 // root is the tree renderDsl walks.
 describe("preset selection — the arrangement the bar renders", () => {
@@ -295,7 +297,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const config = parseAndValidate("<presets>", src, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // A click is gated by the config its session renders; record the render so
     // the click below resolves this config and passes through its real gate.
@@ -323,11 +325,11 @@ describe("preset selection — the arrangement the bar renders", () => {
     return { config, sessionState, resolve, render, dispose };
   }
 
-  const clickPreset = (
+  const clickPreset = async (
     rt: ReturnType<typeof buildRuntime>,
     preset: string,
-  ): void => {
-    clickUrl(
+  ): Promise<void> => {
+    await clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]),
       testVerbContext(rt.sessionState, undefined, rt.config),
     );
@@ -345,10 +347,10 @@ describe("preset selection — the arrangement the bar renders", () => {
     }
   });
 
-  test("a session pick restages the layout — the click drives the real wire", () => {
+  test("a session pick restages the layout — the click drives the real wire", async () => {
     const rt = buildRuntime();
     try {
-      clickPreset(rt,"both");
+      await clickPreset(rt,"both");
       expect(rt.resolve().preset).toBe("both");
       const out = rt.render();
       expect(out).toContain("ALPHA");
@@ -368,10 +370,10 @@ describe("preset selection — the arrangement the bar renders", () => {
     }
   });
 
-  test("a session pick beats the config literal — the chain's last layer wins", () => {
+  test("a session pick beats the config literal — the chain's last layer wins", async () => {
     const rt = buildRuntime(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
-      clickPreset(rt,PRESET_FLOOR);
+      await clickPreset(rt,PRESET_FLOOR);
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
       expect(rt.render()).not.toContain("BETA");
     } finally {
@@ -381,11 +383,11 @@ describe("preset selection — the arrangement the bar renders", () => {
 
   // The globals half of a fragment: a preset carrying only `globals` restages
   // nothing and changes the display defaults, per field.
-  test("a preset's globals shallow-merge over the config's, per field", () => {
+  test("a preset's globals shallow-merge over the config's, per field", async () => {
     const rt = buildRuntime();
     try {
       expect(rt.resolve().padding).toBe(1);
-      clickPreset(rt,"roomy");
+      await clickPreset(rt,"roomy");
       expect(rt.resolve().padding).toBe(4);
       // `roomy` declares no root, so the config's own layout still renders —
       // the fragment is a DELTA, not a replacement.

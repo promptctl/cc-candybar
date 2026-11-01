@@ -40,8 +40,10 @@ const approving = (...dirs: string[]): RepoAnswers => ({
 // repositories are approved and ship no plugins.
 const NOTHING_GATED = {
   plugins: null,
+  approved: [],
   awaiting: [],
   declined: [],
+  unproven: [],
   unread: null,
 };
 
@@ -178,7 +180,7 @@ describe("resolveDslConfig", () => {
       const resolved = resolveDslConfig(approving(), undefined, dir);
       expect(resolved).toEqual({
         kind: "chain",
-        layers: [jsonPath],
+        layers: [{ path: jsonPath, scope: "plugins" }],
         home: jsonPath,
         unchecked: [],
         repos: NOTHING_GATED,
@@ -203,7 +205,7 @@ describe("resolveDslConfig", () => {
       // Documented format outranks the legacy compatibility tail.
       expect(resolved).toEqual({
         kind: "chain",
-        layers: [json5Path],
+        layers: [{ path: json5Path, scope: "plugins" }],
         home: json5Path,
         unchecked: [],
         repos: NOTHING_GATED,
@@ -234,14 +236,21 @@ describe("resolveDslConfig", () => {
       const repo = proj;
       expect(resolved).toEqual({
         kind: "chain",
-        layers: [xdgJson5, projJson],
+        layers: [
+          { path: xdgJson5, scope: "plugins" },
+          { path: projJson, scope: "repo" },
+        ],
         home: xdgJson5,
         unchecked: [],
-        repos: { ...NOTHING_GATED, plugins: repo },
+        repos: {
+          ...NOTHING_GATED,
+          plugins: repo,
+          approved: [realpathSync(proj)],
+        },
       });
       expect(durableConfig(approving(proj), proj, dir)).toEqual({
         path: xdgJson5,
-        above: [projJson],
+        above: [{ path: projJson, scope: "repo" }],
         repo,
         cwd: dir,
       });
@@ -267,7 +276,12 @@ describe("resolveDslConfig", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(durableConfig(approving(), undefined, dir)).toEqual({ path: home, above: [], repo: null, cwd: dir });
+      expect(durableConfig(approving(), undefined, dir)).toEqual({
+        path: home,
+        above: [],
+        repo: null,
+        cwd: dir,
+      });
     } finally {
       restore();
       cleanup();
@@ -284,12 +298,17 @@ describe("resolveDslConfig", () => {
       writeFileSync(local, VALID_CFG);
       expect(resolveDslConfig(approving(), dir, dir, named)).toEqual({
         kind: "chain",
-        layers: [named],
+        layers: [{ path: named, scope: "plugins" }],
         home: named,
         unchecked: [],
         repos: NOTHING_GATED,
       });
-      expect(durableConfig(approving(), dir, dir, named)).toEqual({ path: named, above: [], repo: null, cwd: dir });
+      expect(durableConfig(approving(), dir, dir, named)).toEqual({
+        path: named,
+        above: [],
+        repo: null,
+        cwd: dir,
+      });
     } finally {
       restore();
       cleanup();
@@ -318,7 +337,12 @@ describe("resolveDslConfig", () => {
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
       // A durable write creates the file the bar is waiting for.
-      expect(durableConfig(approving(), dir, dir, named)).toEqual({ path: named, above: [], repo: null, cwd: dir });
+      expect(durableConfig(approving(), dir, dir, named)).toEqual({
+        path: named,
+        above: [],
+        repo: null,
+        cwd: dir,
+      });
     } finally {
       restore();
       cleanup();
@@ -383,7 +407,7 @@ describe("resolveDslConfig", () => {
         const resolved = resolveDslConfig(approving(cwd), locked, cwd);
         expect(resolved).toEqual({
           kind: "chain",
-          layers: [cwdFile],
+          layers: [{ path: cwdFile, scope: "repo" }],
           home: join(dir, "cc-candybar", "config.json5"),
           unchecked: [
             {
@@ -395,14 +419,16 @@ describe("resolveDslConfig", () => {
               error: expect.stringContaining("EACCES"),
             },
           ],
-          repos: NOTHING_GATED,
+          repos: { ...NOTHING_GATED, approved: [realpathSync(cwd)] },
         });
         const notice = configResolutionNotice(resolved);
         expect(notice).toContain("Config location could not be checked");
         expect(notice).toContain(join(locked, ".cc-candybar.json5"));
         expect(notice).toContain(join(locked, ".cc-candybar.json"));
         expect(notice?.split("\n")).toHaveLength(2);
-        expect(durableConfig(approving(cwd), locked, cwd).above).toEqual([cwdFile]);
+        expect(durableConfig(approving(cwd), locked, cwd).above).toEqual([
+          { path: cwdFile, scope: "repo" },
+        ]);
         // The same directory as both project and cwd is still ONE location:
         // two unchecked entries (one per extension), two notice lines.
         const sameDir = resolveDslConfig(approving(), locked, locked);
@@ -547,13 +573,14 @@ describe("the layer chain", () => {
       cleanup();
     }
   }
-  const layersOf = (
-    projectDir: string,
-    cwd: string,
-    configFile?: string,
-  ) => {
-    const r = resolveDslConfig(approving(projectDir), projectDir, cwd, configFile);
-    return r.kind === "chain" ? r.layers : null;
+  const layersOf = (projectDir: string, cwd: string, configFile?: string) => {
+    const r = resolveDslConfig(
+      approving(projectDir),
+      projectDir,
+      cwd,
+      configFile,
+    );
+    return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
   };
 
   test("the user's file is the bottom layer, the project's on top", () => {

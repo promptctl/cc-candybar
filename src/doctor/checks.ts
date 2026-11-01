@@ -14,6 +14,7 @@
 // membership in it.
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
+import { CONFIG_ENV, chainName, type ConfigTarget } from "../config-hint.js";
 import { LANE_NAMES } from "../config/lanes.js";
 import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
@@ -100,6 +101,7 @@ export type TmuxFacts =
 // the advisories the load earned on the way, in either arm.
 export type ConfigFacts = {
   readonly layers: readonly string[];
+  readonly target: ConfigTarget;
   readonly warnings: readonly string[];
 } & (
   | { readonly kind: "failed"; readonly error: string }
@@ -763,7 +765,7 @@ const termWidth: Check = {
           }
         : {
             ok: false,
-            reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+            reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
           },
 };
 
@@ -774,37 +776,68 @@ const UNUSED: Readonly<Record<DeclKind, string>> = {
   segment: "is in no preset",
 };
 
+// What named a file the run judged. The search names none: its chain says what
+// it found.
+const NAMED_BY: Readonly<
+  Record<Exclude<ConfigTarget["source"], "search">, string>
+> = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  pick: "load-config pick",
+  unknown: "source unknown",
+};
+
+// [LAW:no-silent-failure] Which config a verdict is about. A named file reads
+// as itself, never as its layers: one that is missing has none, and it is not
+// the bundled default the bar draws under it.
+function judgedConfig({ target, layers }: ConfigFacts): string {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0
+    ? chainName(layers)
+    : `${chainName(layers)} (searched)`;
+}
+
+function configProblems(config: ConfigFacts): readonly string[] {
+  switch (config.kind) {
+    case "failed": {
+      const problems = [
+        ...config.error
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line !== ""),
+        ...config.warnings,
+      ];
+      // [LAW:no-silent-failure] A load that failed is never ok, even when the
+      // error it threw carries no text.
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config.warnings,
+        ...config.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`,
+        ),
+      ];
+  }
+}
+
 // "The config is correct" (brandon-doctor-v62x.e91): it loads, the load earned
 // no advisory (a duplicate key, a `.json`/`.json5` collision, a location the
 // search could not check, a variable that failed to declare), and everything
 // the files declare is used. A threshold whose knobs do not ascend is a load error, so it is the first of
-// those.
+// those. Either verdict names the file or chain it judged and what named it.
 const config: Check = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config }) => {
-    switch (config.kind) {
-      case "failed": {
-        // [LAW:no-silent-failure] A load that failed is never ok, even when
-        // the error it threw carries no text.
-        const [reason = "the config failed to load", ...more] = [
-          ...config.error
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line !== ""),
-          ...config.warnings,
-        ];
-        return { ok: false, reason, more };
-      }
-      case "loaded":
-        return problemsVerdict([
-          ...config.warnings,
-          ...config.unused.map(
-            ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`,
-          ),
-        ]);
-    }
+    const judged = judgedConfig(config);
+    const verdict = problemsVerdict(configProblems(config));
+    return verdict.ok
+      ? { ok: true, note: judged }
+      : { ...verdict, reason: `${judged}: ${verdict.reason}` };
   },
 };
 
@@ -1316,7 +1349,8 @@ const barsSeen = (bars: readonly FrameSighting[]): BarsSeen => {
   if (drawn.includes("moves")) {
     return {
       kind: "moving",
-      wearing: "the bar moves (an effect, a fade, or an animated segment)",
+      wearing:
+        "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
     };
   }
   if (drawn.includes("can-move")) {

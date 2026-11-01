@@ -33,6 +33,9 @@
   body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 system-ui, sans-serif; }
   header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  #nav { margin-left: auto; }
+  #nav a { color: var(--accent); text-decoration: none; }
+  #nav a:hover { text-decoration: underline; }
   .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .label { color: var(--muted); }
   button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3px 9px; cursor: pointer; }
@@ -85,6 +88,7 @@
     <button type="button" id="restart" title="A fresh session: nothing open, nothing saved">⟲ new session</button>
   </div>
   <span id="size"></span>
+  <nav id="nav" hidden></nav>
 </header>
 <main>
   <p id="about" hidden></p>
@@ -111,7 +115,7 @@
 // The page draws what a transport answers. `pnpm bar:web` serves an HTTP transport to an
 // isolated daemon; the Pages build serves one that runs the daemon in this page. Either:
 //   render(size), click(url, size), restart(size) → { ansi, links: [{ text, url, does }], refused }
-//   about?: string (HTML)   scenario?: see the scenario strip below
+//   about?: string (HTML)   landscape?: string | null (path to the landscape explorer)   scenario?: see the scenario strip below
 import { transport } from "./transport.js";
 
 const GROUNDS = {
@@ -119,7 +123,7 @@ const GROUNDS = {
   light: { background: "#f4f4f7", foreground: "#343b58", cursor: "#f4f4f7" },
 };
 // The terminal is as tall as the bar; the daemon is told a terminal of a usual height,
-// which is what caps its diagnostic strip.
+// as a real client would report.
 const REPORTED_ROWS = 40;
 // Claude Code's fastest status-line cadence (`statusLine.refreshInterval: 1`):
 // the page asks for a render this often, so whatever the bar shows of the time
@@ -317,6 +321,13 @@ document.fonts.load("14px 'Rich Powerline'", "").then(() => {
   if (transport.about) {
     $("about").innerHTML = transport.about;
     $("about").hidden = false;
+  }
+  if (transport.landscape) {
+    const a = document.createElement("a");
+    a.href = transport.landscape;
+    a.textContent = "Statusline landscape →";
+    $("nav").append(a);
+    $("nav").hidden = false;
   }
   if (transport.scenario) mountScenario(transport.scenario);
   redraw();

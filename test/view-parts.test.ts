@@ -4,6 +4,7 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -40,7 +41,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 // A view of `config`: its store and registry, and the compile it draws with.
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const errors: string[] = [];
   const warnings: RenderWarning[] = [];
@@ -86,9 +87,10 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const first = view.draw({ x: "1" }, A);
     const second = view.draw({ x: "1" }, B);
     expect(first.evaluated).toBeGreaterThan(second.evaluated);
-    // `stamp`'s body, and the settings door's, which reads who the frame is
-    // drawn for (`drawing.fps`, a draw projection); nothing else.
-    expect(second.evaluated).toBe(2);
+    // `stamp`'s body, the rate beside the settings door, which reads who the
+    // frame is drawn for (`drawing.fps`, a draw projection), and the door's
+    // own cell, whose indicator reads the draw's diagnostics; nothing else.
+    expect(second.evaluated).toBe(3);
     expect(stripAnsi(second.text)).toContain(String(Math.floor(B)));
     expect(view.errors).toEqual([]);
   });
@@ -97,9 +99,9 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const view = viewOf(CONFIG);
     view.draw({ x: "1" }, A);
     const changed = view.draw({ x: "2" }, A);
-    // `stamp`'s body, the door's, and `shown`'s body: `shown`'s colours read
-    // no `x`.
-    expect(changed.evaluated).toBe(3);
+    // `stamp`'s body, the door's two cells, and `shown`'s body: `shown`'s
+    // colours read no `x`.
+    expect(changed.evaluated).toBe(4);
     expect(stripAnsi(changed.text)).toContain("x=2");
   });
 
@@ -261,8 +263,9 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       ),
     );
     view.draw({}, A);
-    // The settings door's body alone, which reads who the frame is drawn for.
-    expect(view.draw({}, B).evaluated).toBe(1);
+    // The settings door's two cells alone, which read who the frame is drawn
+    // for and the draw's diagnostics.
+    expect(view.draw({}, B).evaluated).toBe(2);
     expect(view.errors).toEqual([]);
   });
 
@@ -301,7 +304,7 @@ describe("a kept view draws what a fresh one draws", () => {
     DEFAULT_DSL_CONFIG,
   );
 
-  test("through the bundled bar's clicks and picks", () => {
+  test("through the bundled bar's clicks and picks", async () => {
     const sessionState = new SessionState();
     const kept = viewOf(config, sessionState);
     recordRender(sessionState, SID);
@@ -344,7 +347,7 @@ describe("a kept view draws what a fresh one draws", () => {
       last = drawn.text;
       return drawn.evaluated;
     };
-    const clickText = (text: string): void => {
+    const clickText = async (text: string): Promise<void> => {
       const hit = links(last).find((l) => stripAnsi(l.text) === text);
       if (hit === undefined) {
         throw new Error(
@@ -356,14 +359,14 @@ describe("a kept view draws what a fresh one draws", () => {
       const { verb, value } = parseHandlerUrl(hit.url);
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
     };
 
     const cold = step();
     expect(step()).toBeLessThan(cold);
-    clickText("🍫");
+    await clickText("🍫");
     step();
-    clickText("🎨 look");
+    await clickText("🎨 look");
     step();
     sessionState.set(SID, "theme", listResolvablePaletteNames()[3]!);
     step();
@@ -375,7 +378,7 @@ describe("a kept view draws what a fresh one draws", () => {
     step();
     model = "Sonnet 4.7";
     step();
-    clickText("✖");
+    await clickText("✖");
     step();
     sessionState.set(SID, "preset", "compact");
     step();

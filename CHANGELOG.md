@@ -1,3 +1,281 @@
+## [1.174.7](https://github.com/promptctl/cc-candybar/compare/v1.174.6...v1.174.7) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) ([#541](https://github.com/promptctl/cc-candybar/issues/541)) ([63c79c5](https://github.com/promptctl/cc-candybar/commit/63c79c571fe30da5a6ba1df1c66e3c0610a95c03))
+
+## [1.174.6](https://github.com/promptctl/cc-candybar/compare/v1.174.5...v1.174.6) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a character split across two reads stays whole (candybar-testing-0x6u.71b) ([#540](https://github.com/promptctl/cc-candybar/issues/540)) ([62bc62d](https://github.com/promptctl/cc-candybar/commit/62bc62daea77f6e6c8b7543db42bf9736245ebaa))
+
+## [1.174.5](https://github.com/promptctl/cc-candybar/compare/v1.174.4...v1.174.5) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb) ([#538](https://github.com/promptctl/cc-candybar/issues/538)) ([6917276](https://github.com/promptctl/cc-candybar/commit/691727676169eed0e0826fea6dee07d1d902077d))
+* **var-sources:** a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8) ([#539](https://github.com/promptctl/cc-candybar/issues/539)) ([1435f5c](https://github.com/promptctl/cc-candybar/commit/1435f5c909561280b02fc77cc21e462541e582fb))
+
+## [1.174.4](https://github.com/promptctl/cc-candybar/compare/v1.174.3...v1.174.4) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e) ([#537](https://github.com/promptctl/cc-candybar/issues/537)) ([e98fef8](https://github.com/promptctl/cc-candybar/commit/e98fef8ecc1558cc8cdf59993c8534b6d584d2fd))
+
+## [1.174.3](https://github.com/promptctl/cc-candybar/compare/v1.174.2...v1.174.3) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425) ([#535](https://github.com/promptctl/cc-candybar/issues/535)) ([043f443](https://github.com/promptctl/cc-candybar/commit/043f44379d2c1a27622f7b48535a323be7a59242))
+
+## [1.174.2](https://github.com/promptctl/cc-candybar/compare/v1.174.1...v1.174.2) (2026-11-01)
+
+### Bug Fixes
+
+* **daemon:** a request's timers run on its clock, and the deadline case holds them (brandon-unfiled-3248.a5k3) ([#533](https://github.com/promptctl/cc-candybar/issues/533)) ([4814ee7](https://github.com/promptctl/cc-candybar/commit/4814ee778a28c55a7193789772cc2d681d409ab0))
+
+## [1.174.1](https://github.com/promptctl/cc-candybar/compare/v1.174.0...v1.174.1) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz) ([#534](https://github.com/promptctl/cc-candybar/issues/534)) ([96f1881](https://github.com/promptctl/cc-candybar/commit/96f1881bee934f602971a13dea41977a614a98e3))
+
+## [1.174.0](https://github.com/promptctl/cc-candybar/compare/v1.173.1...v1.174.0) (2026-11-01)
+
+### Features
+
+* **daemon:** close says when the launches it ended have ended (candybar-testing-0x6u.keo) ([#532](https://github.com/promptctl/cc-candybar/issues/532)) ([d189b5c](https://github.com/promptctl/cc-candybar/commit/d189b5c56cbf38da7151f2400b2ae226f8331328))
+
+## [1.173.1](https://github.com/promptctl/cc-candybar/compare/v1.173.0...v1.173.1) (2026-11-01)
+
+### Bug Fixes
+
+* **test:** a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj) ([#531](https://github.com/promptctl/cc-candybar/issues/531)) ([7b77d5f](https://github.com/promptctl/cc-candybar/commit/7b77d5fab04cc3822fa430e086169ef7f984b873))
+
+## [1.173.0](https://github.com/promptctl/cc-candybar/compare/v1.172.0...v1.173.0) (2026-11-01)
+
+### Features
+
+* **effect:** the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8) ([#528](https://github.com/promptctl/cc-candybar/issues/528)) ([8169390](https://github.com/promptctl/cc-candybar/commit/8169390eb96da95acccf40e944cb0c61f88a1f39))
+
+### Bug Fixes
+
+* **test:** a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el) ([#529](https://github.com/promptctl/cc-candybar/issues/529)) ([516c3eb](https://github.com/promptctl/cc-candybar/commit/516c3eb319a548c706d04da1795e462774d057a7))
+
+## [1.172.0](https://github.com/promptctl/cc-candybar/compare/v1.171.0...v1.172.0) (2026-11-01)
+
+### Features
+
+* **settings:** a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt) ([#527](https://github.com/promptctl/cc-candybar/issues/527)) ([3439d4a](https://github.com/promptctl/cc-candybar/commit/3439d4a05a61f8cd02c3099414d573b8e8e1cffc))
+
+## [1.171.0](https://github.com/promptctl/cc-candybar/compare/v1.170.1...v1.171.0) (2026-10-31)
+
+### Features
+
+* **carousel:** the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr) ([#518](https://github.com/promptctl/cc-candybar/issues/518)) ([e0b1483](https://github.com/promptctl/cc-candybar/commit/e0b1483c0864fe01633d47904d1f453e411b8da2))
+
+## [1.170.1](https://github.com/promptctl/cc-candybar/compare/v1.170.0...v1.170.1) (2026-10-31)
+
+### Bug Fixes
+
+* **doctor:** the config verdict names what it judged and what named it (brandon-unfiled-3248.hpxb) ([#519](https://github.com/promptctl/cc-candybar/issues/519)) ([3405285](https://github.com/promptctl/cc-candybar/commit/3405285f6ee15d063c84e720f6659f9babe4bc6a))
+
+## [1.170.0](https://github.com/promptctl/cc-candybar/compare/v1.169.2...v1.170.0) (2026-10-31)
+
+### Features
+
+* **menu:** the menu opens with no tab open, and its timeout defaults to 120s in 15s steps ([#516](https://github.com/promptctl/cc-candybar/issues/516)) ([8da9964](https://github.com/promptctl/cc-candybar/commit/8da9964e91dd7db20d259a81a05cf0f2328ee0c2))
+
+## [1.169.2](https://github.com/promptctl/cc-candybar/compare/v1.169.1...v1.169.2) (2026-10-31)
+
+### Bug Fixes
+
+* **site:** the live bar defines Symbol.dispose where Safari has none ([#515](https://github.com/promptctl/cc-candybar/issues/515)) ([0a5c459](https://github.com/promptctl/cc-candybar/commit/0a5c459f404f83438a0772eb02741da617b6a82b))
+
+## [1.169.1](https://github.com/promptctl/cc-candybar/compare/v1.169.0...v1.169.1) (2026-10-31)
+
+### Bug Fixes
+
+* **watchers:** every directory watch is judged against the disk on the delivery owner's period (brandon-unfiled-3248.erwl) ([#514](https://github.com/promptctl/cc-candybar/issues/514)) ([0d7e327](https://github.com/promptctl/cc-candybar/commit/0d7e32730906f412f757614cd2ea4aed3dbd3cac))
+
+## [1.169.0](https://github.com/promptctl/cc-candybar/compare/v1.168.1...v1.169.0) (2026-10-31)
+
+### Features
+
+* **menus:** the animation speed menu offers 10x between 5x and 20x (brandon-menus-sjhy.why) ([#511](https://github.com/promptctl/cc-candybar/issues/511)) ([7fa9b11](https://github.com/promptctl/cc-candybar/commit/7fa9b112cc7061c7e0e1a63a7955c56987054064))
+
+### Bug Fixes
+
+* **colour:** a cell moved at a hue turn never wears the pressed shade an open trigger beside it would wear (candybar-joiners-e5r4.34r) ([#512](https://github.com/promptctl/cc-candybar/issues/512)) ([0160616](https://github.com/promptctl/cc-candybar/commit/016061643ad23b49d130b2c30124599d4beab3bb))
+* **colour:** a dial window widens toward its position's count of tones and leaves its ladder's last colour to the pressed button (candybar-joiners-e5r4.cfm) ([#510](https://github.com/promptctl/cc-candybar/issues/510)) ([0ed75d1](https://github.com/promptctl/cc-candybar/commit/0ed75d194e35c845f139e257b73bd2118c63d722))
+
+## [1.168.1](https://github.com/promptctl/cc-candybar/compare/v1.168.0...v1.168.1) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1) ([#508](https://github.com/promptctl/cc-candybar/issues/508)) ([b51f005](https://github.com/promptctl/cc-candybar/commit/b51f00510c4bcca14fc9ff4177320380f9052873))
+* **site:** the live bar and the landscape explorer link to each other ([#509](https://github.com/promptctl/cc-candybar/issues/509)) ([19183e1](https://github.com/promptctl/cc-candybar/commit/19183e1e39371f3a80b53ee9182655ebec2787f9))
+
+## [1.168.0](https://github.com/promptctl/cc-candybar/compare/v1.167.1...v1.168.0) (2026-10-30)
+
+### Features
+
+* **feed:** a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014) ([#505](https://github.com/promptctl/cc-candybar/issues/505)) ([5b44ba9](https://github.com/promptctl/cc-candybar/commit/5b44ba9e047f7fd59d83562b39c5d23776c81d14))
+
+### Bug Fixes
+
+* **colour:** a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686) ([#506](https://github.com/promptctl/cc-candybar/issues/506)) ([35846ae](https://github.com/promptctl/cc-candybar/commit/35846ae8042324805c53b14c0c5fc02d669edcd3))
+* **diagnostics:** what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk) ([#507](https://github.com/promptctl/cc-candybar/issues/507)) ([38412c6](https://github.com/promptctl/cc-candybar/commit/38412c68e7a12dce2557dc35449033e18226bae2))
+* **test:** the build-currency e2e waits on the daemon's own signal, so a loaded runner cannot fail it (brandon-unfiled-3248.cuvv) ([#502](https://github.com/promptctl/cc-candybar/issues/502)) ([b100e43](https://github.com/promptctl/cc-candybar/commit/b100e4391f45deea8b68df49f4ebdd4a6ee988cb))
+
+## [1.167.1](https://github.com/promptctl/cc-candybar/compare/v1.167.0...v1.167.1) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30) ([#503](https://github.com/promptctl/cc-candybar/issues/503)) ([e03723c](https://github.com/promptctl/cc-candybar/commit/e03723ccfd5e2ed7bcd921e08ab6228dc1949671))
+
+## [1.167.0](https://github.com/promptctl/cc-candybar/compare/v1.166.3...v1.167.0) (2026-10-30)
+
+### Features
+
+* **tmux:** the tmux status line is a renderer the config menu offers inside tmux (candybar-plugins-vf6g.qzx) ([#499](https://github.com/promptctl/cc-candybar/issues/499)) ([4674510](https://github.com/promptctl/cc-candybar/commit/46745100f446a07971644e712c1ae93efc7f4a04))
+
+## [1.166.3](https://github.com/promptctl/cc-candybar/compare/v1.166.2...v1.166.3) (2026-10-30)
+
+### Bug Fixes
+
+* **watchers:** the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx) ([#501](https://github.com/promptctl/cc-candybar/issues/501)) ([ac7fa00](https://github.com/promptctl/cc-candybar/commit/ac7fa0066116393d2e51df899b6ec19d31ba5071))
+
+## [1.166.2](https://github.com/promptctl/cc-candybar/compare/v1.166.1...v1.166.2) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) ([#494](https://github.com/promptctl/cc-candybar/issues/494)) ([db7ae9e](https://github.com/promptctl/cc-candybar/commit/db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f))
+* **test:** a test that SIGKILLs a daemon waits for its session state to be saved (brandon-unfiled-3248.vfhf) ([#500](https://github.com/promptctl/cc-candybar/issues/500)) ([79eac59](https://github.com/promptctl/cc-candybar/commit/79eac595257ef87be616ea19c3ea787386d26db6))
+
+## [1.166.1](https://github.com/promptctl/cc-candybar/compare/v1.166.0...v1.166.1) (2026-10-30)
+
+### Bug Fixes
+
+* **colour:** grouped cells and the door's rate cell take their own row positions (candybar-joiners-e5r4.3m7) ([#493](https://github.com/promptctl/cc-candybar/issues/493)) ([73801c6](https://github.com/promptctl/cc-candybar/commit/73801c6e3b63cf23ed6af12476e50b45a0c45333))
+* **colour:** the activated segment and its menu plane wear named theme shades; the inter-cell floors go (candybar-joiners-e5r4.dg6) ([#492](https://github.com/promptctl/cc-candybar/issues/492)) ([fe783f4](https://github.com/promptctl/cc-candybar/commit/fe783f48728a83116d74cf3674e4695aff77fd76))
+* **render:** bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr) ([#496](https://github.com/promptctl/cc-candybar/issues/496)) ([16ba284](https://github.com/promptctl/cc-candybar/commit/16ba284b459a5bc135c21f529414a4020a2b2b46))
+
+## [1.166.0](https://github.com/promptctl/cc-candybar/compare/v1.165.1...v1.166.0) (2026-10-30)
+
+### Features
+
+* **plugins:** a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) ([#497](https://github.com/promptctl/cc-candybar/issues/497)) ([5577ddd](https://github.com/promptctl/cc-candybar/commit/5577ddd8731d529e5500113fe2febc34aff9f5b2))
+
+## [1.165.1](https://github.com/promptctl/cc-candybar/compare/v1.165.0...v1.165.1) (2026-10-30)
+
+### Bug Fixes
+
+* **var-system:** a watch_file path is heard wherever its link chain can change, by the rule the config watcher shares (brandon-unfiled-3248.sy24) ([#495](https://github.com/promptctl/cc-candybar/issues/495)) ([5920905](https://github.com/promptctl/cc-candybar/commit/592090572d8ec1c672f7c5994824e93e218f8291))
+
+## [1.165.0](https://github.com/promptctl/cc-candybar/compare/v1.164.1...v1.165.0) (2026-10-30)
+
+### Features
+
+* **plugins:** a repo's own plugins load as repo.<name> beside installed plugins.<name> (candybar-plugins-vf6g.3gg) ([#489](https://github.com/promptctl/cc-candybar/issues/489)) ([c7c3ecd](https://github.com/promptctl/cc-candybar/commit/c7c3ecda46896168f06ef5bc176b5bb541bd0a28))
+
+### Bug Fixes
+
+* **daemon:** the update act is a job every daemon reads, so it finishes whatever happens to the daemon that started it (brandon-unfiled-3248.z676) ([#491](https://github.com/promptctl/cc-candybar/issues/491)) ([3ac1f0e](https://github.com/promptctl/cc-candybar/commit/3ac1f0ebd17dcc49615d30cb2f79602aa362240d))
+
+## [1.164.1](https://github.com/promptctl/cc-candybar/compare/v1.164.0...v1.164.1) (2026-10-30)
+
+### Bug Fixes
+
+* **proc:** a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga) ([#488](https://github.com/promptctl/cc-candybar/issues/488)) ([092f79f](https://github.com/promptctl/cc-candybar/commit/092f79f3f5bc5cd6eea2aa0a0ea0ce725f0e64d4))
+
+## [1.164.0](https://github.com/promptctl/cc-candybar/compare/v1.163.0...v1.164.0) (2026-10-30)
+
+### Features
+
+* **config:** a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v) ([#486](https://github.com/promptctl/cc-candybar/issues/486)) ([cd51ad0](https://github.com/promptctl/cc-candybar/commit/cd51ad088846247d4d8d328c870849e2b81ba424))
+
+### Bug Fixes
+
+* **ci:** the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80) ([#487](https://github.com/promptctl/cc-candybar/issues/487)) ([e31c958](https://github.com/promptctl/cc-candybar/commit/e31c958417e5127d95819930643df17eb59fe2bf))
+
+## [1.163.0](https://github.com/promptctl/cc-candybar/compare/v1.162.5...v1.163.0) (2026-10-30)
+
+### Features
+
+* **diagnostics:** every error and warning shows as one indicator with a viewer (candybar-plugins-vf6g.84i) ([#483](https://github.com/promptctl/cc-candybar/issues/483)) ([4363d2a](https://github.com/promptctl/cc-candybar/commit/4363d2a7982c76c6f6ada1028f154dd9a498309c))
+
+### Bug Fixes
+
+* **daemon:** one owner says whether the OS is delivering file events, and an edit made while it wasn't reloads when they resume (brandon-unfiled-3248.y66h) ([#485](https://github.com/promptctl/cc-candybar/issues/485)) ([5a804ba](https://github.com/promptctl/cc-candybar/commit/5a804bae2e48bf30b8b4d2ff3d85331f9dff15ad))
+
+## [1.162.5](https://github.com/promptctl/cc-candybar/compare/v1.162.4...v1.162.5) (2026-10-30)
+
+### Bug Fixes
+
+* **daemon:** a reload of the inputs a state was built from keeps it, so a save reopens each view once (brandon-unfiled-3248.0rr5) ([#484](https://github.com/promptctl/cc-candybar/issues/484)) ([df3c874](https://github.com/promptctl/cc-candybar/commit/df3c874c2a35e7f73d2857ab19c085ce8fe7c0d7))
+
+## [1.162.4](https://github.com/promptctl/cc-candybar/compare/v1.162.3...v1.162.4) (2026-10-29)
+
+### Bug Fixes
+
+* **daemon:** every config load says why it ran, and a click reloads no entry (brandon-unfiled-3248.7nq0) ([#481](https://github.com/promptctl/cc-candybar/issues/481)) ([34f2f8f](https://github.com/promptctl/cc-candybar/commit/34f2f8f995929cdfb25ae15d119ac336290790d4))
+
+## [1.162.3](https://github.com/promptctl/cc-candybar/compare/v1.162.2...v1.162.3) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** the tmux stub waits on a gate the test holds (brandon-unfiled-3248.009i) ([#480](https://github.com/promptctl/cc-candybar/issues/480)) ([fd6ec8d](https://github.com/promptctl/cc-candybar/commit/fd6ec8d4733e93e217d07463582ca5edf2c228bb))
+
+## [1.162.2](https://github.com/promptctl/cc-candybar/compare/v1.162.1...v1.162.2) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** a removed folder's wait lays the folder down again each round, until the watch hears it (brandon-unfiled-3248.rfpg) ([#479](https://github.com/promptctl/cc-candybar/issues/479)) ([571b5c5](https://github.com/promptctl/cc-candybar/commit/571b5c50dc27af202258dd28207a56c2deaa5169))
+
+## [1.162.1](https://github.com/promptctl/cc-candybar/compare/v1.162.0...v1.162.1) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** a watched-file rewrite is a rename over the file, re-applied until the feed hears it (brandon-unfiled-3248.v9ix) ([#478](https://github.com/promptctl/cc-candybar/issues/478)) ([2377fc2](https://github.com/promptctl/cc-candybar/commit/2377fc2986a52b1c81e1717e5c90e7b17373a205))
+
+## [1.162.0](https://github.com/promptctl/cc-candybar/compare/v1.161.4...v1.162.0) (2026-10-29)
+
+### Features
+
+* **approval:** approving a repository covers all of its worktrees (candybar-plugins-vf6g.svv) ([#477](https://github.com/promptctl/cc-candybar/issues/477)) ([c0cbfc6](https://github.com/promptctl/cc-candybar/commit/c0cbfc62bf5d8cc64dcaf60c67df971379b28fcc))
+
+## [1.161.4](https://github.com/promptctl/cc-candybar/compare/v1.161.3...v1.161.4) (2026-10-28)
+
+### Bug Fixes
+
+* **load-gate:** the budget judges the charge once V8 has collected (brandon-frame-feed-znsy.zpm) ([#475](https://github.com/promptctl/cc-candybar/issues/475)) ([fd4f89e](https://github.com/promptctl/cc-candybar/commit/fd4f89eba779df530659e2fd7e1506eac358f8d1))
+
+## [1.161.3](https://github.com/promptctl/cc-candybar/compare/v1.161.2...v1.161.3) (2026-10-28)
+
+### Bug Fixes
+
+* **menu:** a menu's items are the theme's shades of its header's colour; the trial looks sit in 🧪 trials (brandon-menus-sjhy.6xa) ([#451](https://github.com/promptctl/cc-candybar/issues/451)) ([f2eecdf](https://github.com/promptctl/cc-candybar/commit/f2eecdf3cb2dbd4e1b9ff2837047e9aeadae7d7f))
+
+## [1.161.2](https://github.com/promptctl/cc-candybar/compare/v1.161.1...v1.161.2) (2026-10-28)
+
+### Bug Fixes
+
+* **test:** the real-client e2e runs the client again on a blank answer, as the next tick would (brandon-unfiled-3248.s1je) ([#474](https://github.com/promptctl/cc-candybar/issues/474)) ([c425751](https://github.com/promptctl/cc-candybar/commit/c425751301e47461eaace7e400402d0882682ee6))
+
+## [1.161.1](https://github.com/promptctl/cc-candybar/compare/v1.161.0...v1.161.1) (2026-10-28)
+
+### Bug Fixes
+
+* **check:** each preset's pass awaits the runs its payload started (brandon-unfiled-3248.qniv) ([#470](https://github.com/promptctl/cc-candybar/issues/470)) ([1a69a2d](https://github.com/promptctl/cc-candybar/commit/1a69a2d3008355bf63db5bb29fd536ea9d1eab7c))
+
+## [1.161.0](https://github.com/promptctl/cc-candybar/compare/v1.160.11...v1.161.0) (2026-10-28)
+
+### Features
+
+* **bench:** a benchmark of what a statusline tick costs (brandon-unfiled-3248.1vnf) ([#473](https://github.com/promptctl/cc-candybar/issues/473)) ([10aa78b](https://github.com/promptctl/cc-candybar/commit/10aa78b576fe62e635399b0300e17c1ef0b1e65a))
+
 ## [1.160.11](https://github.com/promptctl/cc-candybar/compare/v1.160.10...v1.160.11) (2026-10-28)
 
 ### Bug Fixes

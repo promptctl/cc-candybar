@@ -10,6 +10,7 @@
 // the nav glyphs visible), never the internal pagination shape — driven through
 // the real spine (registerDslConfig + renderDsl) and the real strip serializer.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, RichText } from "@promptctl/rich-js";
 import { Style } from "@promptctl/rich-js";
@@ -83,7 +84,7 @@ function buildRuntime(
   const config = parseAndValidate("<test>", pickerConfig(), ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const renderPage = (width: number, page: number, wrap = true): string => {
@@ -287,7 +288,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
     const config = parseAndValidate("<test>", menuRowConfig(), ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     // openStyle: also open the style menu (its own page cursor) so BOTH bodies

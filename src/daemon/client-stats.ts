@@ -2,6 +2,7 @@ import { describeFailure, requestOutcome } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import { RuntimeStats, type StatsSnapshot } from "./stats";
+import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
 import { shortDigest } from "../source-digest";
@@ -211,8 +212,9 @@ export function formatStats(s: StatsSnapshot): string {
     .map(([cause, n]) => `${cause}:${n}`)
     .join(" ");
   lines.push(
-    `  plugin storage folders=${storage.folders} lost=${storage.lost} probes=${storage.probes} probeFailures=${storage.probeFailures} stalled=${storage.stalled} stalls=${storage.stalls} faults ${faults}`,
+    `  plugin storage folders=${storage.folders} lost=${storage.lost} faults ${faults}`,
   );
+  lines.push(`  fileEvents    ${fileEventsLine(s.fileEvents)}`);
   lines.push(``);
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);
@@ -251,6 +253,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  closed        ${s.watchers.closed}`);
   lines.push(`  refused       ${s.watchers.refused}`);
   lines.push(`  errors        ${s.watchers.errors}`);
+  lines.push(
+    `  dirs          ${s.watchers.dirs.active} open (${s.watchers.dirs.opened} opened, ${s.watchers.dirs.closed} closed)`,
+  );
   lines.push(``);
   lines.push(`subprocesses`);
   lines.push(`  total         ${s.subprocesses.total}`);
@@ -259,11 +264,17 @@ export function formatStats(s: StatsSnapshot): string {
   // Snapshot already includes only executed categories (stats.ts:
   // snapshotSubprocesses keeps byCategory and the histograms symmetric).
   const activeCats = Object.entries(s.subprocesses.byCategory);
+  const refusedRows = Object.entries(s.subprocesses.refused).map(
+    ([cat, n]) => [`${cat} refused`, n] as const,
+  );
   // [LAW:dataflow-not-control-flow] Column width is a function of the data,
   // not a hardcoded constant that drifts when new categories are added. The
   // padEnd(13) baseline matches the "  pid           " etc. columns above so
   // short categories still line up; longer ones expand the column.
-  const colWidth = activeCats.reduce((w, [cat]) => Math.max(w, cat.length), 13);
+  const colWidth = [...activeCats, ...refusedRows].reduce(
+    (w, [label]) => Math.max(w, label.length),
+    13,
+  );
   for (const [cat, n] of activeCats) {
     const p50 = s.subprocesses.p50DurationMs[cat];
     const p99 = s.subprocesses.p99DurationMs[cat];
@@ -272,6 +283,9 @@ export function formatStats(s: StatsSnapshot): string {
         ? `  (p50 ${p50}ms · p99 ${p99}ms)`
         : "";
     lines.push(`  ${cat.padEnd(colWidth)} ${n}${timing}`);
+  }
+  for (const [label, n] of refusedRows) {
+    lines.push(`  ${label.padEnd(colWidth)} ${n}`);
   }
   if (s.nextRestartReason) {
     lines.push(``);

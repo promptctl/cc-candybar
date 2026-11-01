@@ -25,10 +25,14 @@ import {
 } from "@promptctl/rich-js";
 import {
   SHADES,
+  TRIAL_SHADE_NAMES,
+  TRIAL_VARIATION_NAMES,
   VARIATIONS,
   type ShadeName,
   type VariationName,
 } from "./decor.js";
+
+export { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES };
 
 // [LAW:one-source-of-truth] Theme names the registry no longer installs: old
 // name → the theme that replaced it. `dark`/`light` were second names for the
@@ -407,7 +411,12 @@ export const EFFECT_NAMES: readonly EffectName[] = Object.freeze([
 // domain the loader, the settings control and the session gate admit, and each
 // value is the rate the session's animation clock advances at against the wall
 // clock.
-export const ANIMATION_SPEEDS = Object.freeze({ "1x": 1, "5x": 5, "20x": 20 });
+export const ANIMATION_SPEEDS = Object.freeze({
+  "1x": 1,
+  "5x": 5,
+  "10x": 10,
+  "20x": 20,
+});
 export type AnimationSpeedName = keyof typeof ANIMATION_SPEEDS;
 export const ANIMATION_SPEED_NAMES = Object.keys(
   ANIMATION_SPEEDS,

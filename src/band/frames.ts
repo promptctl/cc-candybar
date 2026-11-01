@@ -151,7 +151,7 @@ export function bandFrame(ansi: string): BandBar {
 
 // One pushed render response as the frame the mod draws.
 // [LAW:no-silent-failure] A bar the band cannot draw is a frame saying why,
-// in the diagnostic strip's colours. The stream goes on, so the next bar it
+// in the diagnostics' colours. The stream goes on, so the next bar it
 // can draw takes its place, as the statusline's next render replaces its
 // error glyph: a config fixed brings the band back. A render that failed is
 // drawn as the statusline draws it, its error glyph — so every frame a band

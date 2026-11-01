@@ -26,6 +26,7 @@ import { RichText } from "@promptctl/rich-js";
 import type { ColorRgba, Palette, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
+  ContainerNode,
   LayoutNode,
   Direction,
   Placement,
@@ -49,7 +50,6 @@ import {
   type Address,
   type AddressStep,
   type Disclosure,
-  type Distribution,
   type Region,
 } from "../themes/decor.js";
 import {
@@ -103,10 +103,11 @@ export interface CompiledContainerNode {
   readonly direction: Direction;
   readonly when?: Template<RichText>;
   readonly children: readonly CompiledNode[];
-  // [LAW:parse-dont-validate] The authored NAME (or its absence) resolved ONCE
-  // to the function this container places its children by — every child's
-  // address step carries it, so the walk never re-reads the config.
-  readonly distribution: Distribution;
+  // [LAW:parse-dont-validate] The step each child is placed at, by index,
+  // worked out ONCE from the authored tree (`placeChildren`): its place among
+  // the rows, or on its row's line, with the distribution that places it —
+  // so the walk never re-reads the config or measures a sibling.
+  readonly steps: readonly AddressStep[];
 }
 export type CompiledNode = CompiledSegmentNode | CompiledContainerNode;
 
@@ -182,12 +183,20 @@ export interface NodeCompileCtx {
   readonly path: string;
   // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
+  // The step THIS node is placed at in its parent (`placeChildren`): none at
+  // a root — the bar's, or a disclosure body's, which roots a band.
+  readonly at: AddressStep | undefined;
   // Parse one more template field of THIS node through the driver's one
   // parse site, so its error names `path.field` like a `when` does.
   parse(src: string, field: string): Template<RichText>;
-  // Compile a child node (the recursion, injected so this module needn't import
-  // the driver). Generic so a container child compiles to a container.
-  compileChild<N extends LayoutNode>(node: N, path: string): Compiled<N>;
+  // Compile a child node placed at `at` (the recursion, injected so this
+  // module needn't import the driver). Generic so a container child compiles
+  // to a container.
+  compileChild<N extends LayoutNode>(
+    node: N,
+    path: string,
+    at: AddressStep | undefined,
+  ): Compiled<N>;
   // The resolved settings of a segment placement: the driver holds the
   // declarations they resolve against.
   placementSettings(node: SegmentNode): PlacementSettings;
@@ -374,9 +383,6 @@ export interface EvaluatedSegment {
   // Whether anything hangs open under the segment — a dropped menu body or
   // its open disclosure body — so it wears its band's state colour.
   readonly open: boolean;
-  // The floors the band it opens stands short of as drawn (`bandFor`), none
-  // while nothing hangs open under it.
-  readonly shortfalls: readonly string[];
 }
 
 // [LAW:one-source-of-truth] A placement's parts as its view keeps them
@@ -515,32 +521,136 @@ export interface NodeType<K extends NodeKind> {
   ): RenderedLines;
 }
 
-// [LAW:one-source-of-truth] THE address step of a container's `index`th child:
-// which child of how many, placed by the container's distribution, along the
-// axis its direction lays children out on. The walk extends every address
+// [LAW:one-source-of-truth] THE address step of a container's `index`th child,
+// as the compile placed it (`placeChildren`). The walk extends every address
 // through this, so a test that computes an expected colour from an address
 // calls it too rather than re-spelling the step.
 export function childStep(
   node: CompiledContainerNode,
   index: number,
 ): AddressStep {
-  return {
+  // [LAW:no-defensive-null-guards] The compile places every child, and every
+  // caller reads an index the container has; the `!` states that, it does not
+  // guard it.
+  return node.steps[index]!;
+}
+
+// What a node takes along the line it is drawn on: `width`, the places on
+// its first line, so its next sibling starts that many places on; `reach`,
+// the places it spans over every line it draws, so every leaf it holds is
+// placed within its row's count. A segment takes one place, and so does a
+// unit, whose children share it. A horizontal container lays its children
+// side by side. A vertical one draws its first child that draws a line on the
+// line it sits on, and each child after it on a line of its own below,
+// starting where it sits: a row zips its children's first lines and stacks
+// every further line under them, and an empty container draws no line at
+// all (`composeFlow`).
+interface Span {
+  readonly width: number;
+  readonly reach: number;
+}
+
+// A child's span, the place it starts at, counted from its container's, and
+// whether it is drawn on a line of its own: a child of a vertical container
+// once an earlier child has drawn a line.
+interface Laid {
+  readonly start: number;
+  readonly span: Span;
+  readonly ownLine: boolean;
+}
+
+function spanOf(node: LayoutNode): Span {
+  if (node.kind === "segment" || node.unit === true) {
+    return { width: 1, reach: 1 };
+  }
+  const laid = laidOut(node);
+  return { width: widthOf(laid), reach: reachOf(laid) };
+}
+
+// A container's children, each with where it starts: side by side in a
+// horizontal container; all where the container sits in a unit, whose
+// children share one place, and in a vertical one, whose children each start
+// a line.
+function laidOut(node: ContainerNode): Laid[] {
+  const spans = node.children.map(spanOf);
+  const ownLine = (index: number): boolean =>
+    node.direction === "vertical" &&
+    spans.slice(0, index).some(({ width }) => width > 0);
+  if (node.direction === "vertical" || node.unit === true) {
+    return spans.map((span, i) => ({ start: 0, span, ownLine: ownLine(i) }));
+  }
+  let start = 0;
+  return spans.map((span, i) => {
+    const at = start;
+    start += span.width;
+    return { start: at, span, ownLine: ownLine(i) };
+  });
+}
+
+// The places on a container's first line: those of the children drawn on
+// it, so none for a container that draws no line.
+const widthOf = (laid: readonly Laid[]): number =>
+  laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
+
+const reachOf = (laid: readonly Laid[]): number =>
+  laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
+
+// [LAW:single-enforcer] THE placement of a container's children, worked out
+// from the authored tree when it is compiled, so a node's step — and with it
+// its colour — is a fact of the tree alone: no sibling's `when` moves it.
+// Among the rows, a vertical container stacks its children as rows, one step
+// each, placed by its own distribution. A horizontal one there is a ROW, and
+// places every leaf it holds by its own distribution, at the leaf's place on
+// the line: a container nested in a row is layout, not a colour unit, because
+// the cells in it sit side by side with the row's other cells, and two cells
+// side by side must differ. Under a row every step is a cell step at a place
+// on its line. It carries the row's count and distribution, which is why the
+// loader refuses a `distribution` written inside a row, and the ends of the
+// line it is drawn on (the row's own, or one a `{ v }` starts below it), so
+// the keystones find the first and last leaf of every drawn line. A unit —
+// edit chrome around one content cell — is the one container that keeps its
+// children on one place, so entering edit mode recolours nothing.
+function placeChildren(
+  node: ContainerNode,
+  at: AddressStep | undefined,
+): AddressStep[] {
+  const laid = laidOut(node);
+  if (at?.axis === "cell") {
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine
+        ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 }
+        : { ...at, index };
+    });
+  }
+  const axis = AXIS_OF[node.direction];
+  const distribution = placedBy(node.distribution);
+  // Rows are a stack, from the first to the last; a row's cells are on its
+  // line, which ends at the last place its first line holds.
+  const [places, count, lineEnd] =
+    axis === "row"
+      ? [laid.map((_, index) => index), laid.length, laid.length - 1]
+      : [laid.map(({ start }) => start), reachOf(laid), widthOf(laid) - 1];
+  return places.map((index) => ({
     index,
-    count: node.children.length,
-    distribution: node.distribution,
-    axis: AXIS_OF[node.direction],
-  };
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd,
+  }));
 }
 
 const containerType: NodeType<"container"> = {
   compile(node, cctx) {
+    const steps = placeChildren(node, cctx.at);
     return {
       kind: "container",
       direction: node.direction,
       when: cctx.when,
-      distribution: placedBy(node.distribution),
+      steps,
       children: node.children.map((child, i) =>
-        cctx.compileChild(child, childPath(cctx.path, i)),
+        cctx.compileChild(child, childPath(cctx.path, i), steps[i]),
       ),
     };
   },
@@ -552,8 +662,8 @@ const containerType: NodeType<"container"> = {
     if (ctx.gate.kind === "failed") ctx.gate.report();
     // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
     // visibility is a value `parentVisible` threads, never a skipped call, and a
-    // child's address step is its (index, count) here, placed by THIS
-    // container's distribution — unchanged by any sibling's `when`.
+    // child's address step is the one the compile placed it at — unchanged by
+    // any sibling's `when`.
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
@@ -605,7 +715,12 @@ const segmentType: NodeType<"segment"> = {
       ...(node.opens !== undefined && {
         opens: {
           open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          body: cctx.compileChild(node.opens.body, bodyPath(cctx.path)),
+          // A body roots a band: its first step is placed afresh.
+          body: cctx.compileChild(
+            node.opens.body,
+            bodyPath(cctx.path),
+            undefined,
+          ),
           key: node.opens.ref.key,
           placement: node.opens.placement,
         },

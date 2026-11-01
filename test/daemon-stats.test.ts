@@ -48,12 +48,20 @@ const SOURCES: SourceSnapshots = {
     folders: 1,
     faults: { unusable: 0, refused: 1, error: 0 },
     lost: 1,
-    probes: 7,
-    probeFailures: 1,
-    stalled: 1,
-    stalls: 2,
   },
 };
+
+// Stalled since a fixed instant, after one earlier stall and one catch-up.
+const FILE_EVENTS = {
+  delivery: {
+    kind: "stalled",
+    missedSince: Date.parse("2026-10-27T04:00:00.000Z"),
+  },
+  stalls: 2,
+  catchUps: 1,
+  probes: 7,
+  probeFailures: 1,
+} as const;
 
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
@@ -66,8 +74,11 @@ describe("RuntimeStats.snapshot", () => {
     stats.watchersClosed = 3;
     stats.watchRefusals = 1;
     stats.watchErrors = 2;
+    stats.dirWatchesOpened = 9;
+    stats.dirWatchesClosed = 4;
 
     const snap = stats.snapshot({
+      sourceDigest: null,
       gitCache: {
         size: 4,
         held: 1,
@@ -78,6 +89,7 @@ describe("RuntimeStats.snapshot", () => {
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       sources: SOURCES,
+      fileEvents: FILE_EVENTS,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 3,
@@ -105,6 +117,7 @@ describe("RuntimeStats.snapshot", () => {
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
+      dirWatchesActive: 5,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
       clients: [
         {
@@ -177,6 +190,7 @@ describe("RuntimeStats.snapshot", () => {
       closed: 3,
       refused: 1,
       errors: 2,
+      dirs: { active: 5, opened: 9, closed: 4 },
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -279,6 +293,7 @@ describe("formatStats", () => {
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       sources: SOURCES,
+      fileEvents: FILE_EVENTS,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 4,
@@ -305,12 +320,20 @@ describe("formatStats", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 5, opened: 7, closed: 2, refused: 1, errors: 3 },
+      watchers: {
+        active: 5,
+        opened: 7,
+        closed: 2,
+        refused: 1,
+        errors: 3,
+        dirs: { active: 4, opened: 6, closed: 2 },
+      },
       subprocesses: {
         total: 0,
         inFlight: 0,
         lastMinute: 0,
         byCategory: {},
+        refused: {},
         p50DurationMs: {},
         p99DurationMs: {},
       },
@@ -347,7 +370,10 @@ describe("formatStats", () => {
       "held          git:1 tmux:1 host:2 today:1 pluginStorage:1",
     );
     expect(out).toContain(
-      "plugin storage folders=1 lost=1 probes=7 probeFailures=1 stalled=1 stalls=2 faults unusable:0 refused:1 error:0",
+      "plugin storage folders=1 lost=1 faults unusable:0 refused:1 error:0",
+    );
+    expect(out).toContain(
+      "fileEvents    stalled unvouched since 2026-10-27T04:00:00.000Z stalls=2 catchUps=1 probes=7 probeFailures=1",
     );
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");
@@ -358,6 +384,24 @@ describe("formatStats", () => {
     expect(out).toContain("revision      7");
     expect(out).toContain("compiles      2");
     expect(out).toContain("accounted     32.0MB / 128.0MB");
+  });
+
+  test("a refused row sits in the column the rows above it use", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const out = formatStats({
+      ...snap,
+      subprocesses: {
+        ...snap.subprocesses,
+        byCategory: { git: 1 },
+        p50DurationMs: {},
+        p99DurationMs: {},
+        refused: { "click.pbcopy": 3 },
+      },
+    });
+
+    const width = "click.pbcopy refused".length;
+    expect(out).toContain(`  ${"git".padEnd(width)} 1\n`);
+    expect(out).toContain(`  ${"click.pbcopy refused".padEnd(width)} 3\n`);
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -385,6 +429,7 @@ describe("formatStats", () => {
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: RuntimeStats.referenceSnapshot().sources,
+      fileEvents: RuntimeStats.referenceSnapshot().fileEvents,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
@@ -411,12 +456,20 @@ describe("formatStats", () => {
         found: 0,
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 0, opened: 0, closed: 0, refused: 0, errors: 0 },
+      watchers: {
+        active: 0,
+        opened: 0,
+        closed: 0,
+        refused: 0,
+        errors: 0,
+        dirs: { active: 0, opened: 0, closed: 0 },
+      },
       subprocesses: {
         total: 0,
         inFlight: 0,
         lastMinute: 0,
         byCategory: {},
+        refused: {},
         p50DurationMs: {},
         p99DurationMs: {},
       },
@@ -456,10 +509,7 @@ describe("statsPlan — the text/exit-code contract", () => {
 
   it("a skewed daemon's JSON is still delivered, beside the skew and a failing code", () => {
     const { clients: _clients, ...older } = snap;
-    const plan = statsPlan(
-      { kind: "ok", value: older as typeof snap },
-      true,
-    );
+    const plan = statsPlan({ kind: "ok", value: older as typeof snap }, true);
     expect(plan.code).toBe(1);
     expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
     expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");

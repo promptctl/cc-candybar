@@ -15,6 +15,7 @@
 //   5. The loader proves the group invariants (identifier name, unique names,
 //      reserved namespace, ancestor/descendant key sharing, one open per key).
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -52,7 +53,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (): string =>
     renderDsl(
@@ -66,24 +67,24 @@ function buildRuntime(src: string, sessionId = "s1") {
     );
   recordRender(sessionState, sessionId);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
-  const clickToggle = (out: string, key: string, value: string): void => {
+  const clickToggle = async (out: string, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
-    click(url);
+    await click(url);
   };
   return { config, store, sessionState, render, click, clickToggle };
 }
@@ -114,15 +115,15 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     expect(out.split("\n")).toHaveLength(1);
   });
 
-  test("click opens: ▾ + body rendered; second click closes", () => {
+  test("click opens: ▾ + body rendered; second click closes", async () => {
     const { render, clickToggle, sessionState } =
       buildRuntime(DETAILS_SRC);
-    clickToggle(render(), "groups.details", "details");
+    await clickToggle(render(), "groups.details", "details");
     expect(sessionState.get("s1", "groups.details")).toBe("details");
     const open = stripAnsi(render());
     expect(open).toContain("details ▾");
     expect(open).toContain("METRICS-BODY");
-    clickToggle(render(), "groups.details", "closed");
+    await clickToggle(render(), "groups.details", "closed");
     expect(stripAnsi(render())).not.toContain("METRICS-BODY");
   });
 
@@ -191,9 +192,9 @@ const ACCORDION_SRC = `{
 }`;
 
 describe("2de.4 — accordion (shared key)", () => {
-  test("one key holds one open group: opening B auto-closes A", () => {
+  test("one key holds one open group: opening B auto-closes A", async () => {
     const { render, clickToggle } = buildRuntime(ACCORDION_SRC);
-    clickToggle(render(), "menu", "files");
+    await clickToggle(render(), "menu", "files");
     let out = stripAnsi(render());
     expect(out).toContain("files ▾");
     expect(out).toContain("FILES-BODY");
@@ -201,7 +202,7 @@ describe("2de.4 — accordion (shared key)", () => {
     expect(out).not.toContain("TOOLS-BODY");
     // B's toggle renders closed (current "files" is outside its cycle domain),
     // so its click writes "tools" — expand B, auto-closing A on the shared key.
-    clickToggle(render(), "menu", "tools");
+    await clickToggle(render(), "menu", "tools");
     out = stripAnsi(render());
     expect(out).toContain("files ▸");
     expect(out).not.toContain("FILES-BODY");
@@ -252,20 +253,20 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     );
   });
 
-  test("a closed parent hides the whole subtree, and closes what was open in it", () => {
+  test("a closed parent hides the whole subtree, and closes what was open in it", async () => {
     const { render, clickToggle } = buildRuntime(SRC);
     // Closed outer: inner toggle not rendered at all.
     expect(stripAnsi(render())).not.toContain("inner");
-    clickToggle(render(), "groups.outer", "outer");
+    await clickToggle(render(), "groups.outer", "outer");
     let out = stripAnsi(render());
     expect(out).toContain("inner ▸");
     expect(out).not.toContain("LEAF-BODY");
-    clickToggle(render(), "groups.inner", "inner");
+    await clickToggle(render(), "groups.inner", "inner");
     expect(stripAnsi(render())).toContain("LEAF-BODY");
     // Close outer: everything inside vanishes; reopen: inner is closed.
-    clickToggle(render(), "groups.outer", "closed");
+    await clickToggle(render(), "groups.outer", "closed");
     expect(stripAnsi(render())).not.toContain("LEAF-BODY");
-    clickToggle(render(), "groups.outer", "outer");
+    await clickToggle(render(), "groups.outer", "outer");
     out = stripAnsi(render());
     expect(out).toContain("inner ▸");
     expect(out).not.toContain("LEAF-BODY");

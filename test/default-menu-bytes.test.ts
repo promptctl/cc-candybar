@@ -21,6 +21,7 @@
 // (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
 // menus left to pin are edit mode's `+` insert affordances.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { createEngine } from "@promptctl/go-template-js";
 
@@ -125,7 +126,7 @@ function buildRuntime(root: string) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // No theme handed in: renderDsl resolves it from `globals.palette`, so these
   // bytes are the bundled default's own declared theme (tokyo-night) — the ones
@@ -136,23 +137,23 @@ function buildRuntime(root: string) {
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const render = (): string =>
     renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // Click by the label a user clicks. Loud when absent: a silently skipped
   // click would snapshot a closed menu under an "open" name and prove the
   // opposite of what this file claims [LAW:no-silent-failure].
-  const clickLabel = (rendered: string, label: string): void => {
+  const clickLabel = async (rendered: string, label: string): Promise<void> => {
     const link = links(rendered).find((l) => l.text.includes(label));
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
-    click(link.url);
+    await click(link.url);
   };
   return { config, sessionState, render, click, clickLabel };
 }
@@ -195,15 +196,15 @@ describe("every {{ menu }} the bundled default renders", () => {
   // carousels rather than `{{ menu }}` grids (brandon-theme-picker-bgw.ef6,
   // .x2m), so it hosts no menu of its own; test/theme-carousel.test.ts pins
   // what each carousel does.
-  const openConfigMenu = () => {
+  const openConfigMenu = async () => {
     const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
-    rig.clickLabel(rig.render(), "🍫");
-    rig.clickLabel(rig.render(), "config");
+    await rig.clickLabel(rig.render(), "🍫");
+    await rig.clickLabel(rig.render(), "config");
     return rig;
   };
 
-  test("the config menu with every picker closed: exact bytes", () => {
-    const rig = openConfigMenu();
+  test("the config menu with every picker closed: exact bytes", async () => {
+    const rig = await openConfigMenu();
     const out = rig.render();
     expect(menuOpeners(out)).toEqual([]);
     expect(out).toMatchSnapshot("closed");
@@ -211,15 +212,15 @@ describe("every {{ menu }} the bundled default renders", () => {
 
   // brandon-menus-sjhy.5zy: ⚙ config's 🧪 toggles opens onto the three lane
   // toggles, each a session draft like every control in the menu.
-  test("the config menu with 🧪 toggles open: exact bytes", () => {
-    const rig = openConfigMenu();
-    rig.clickLabel(rig.render(), "🧪 toggles");
+  test("the config menu with 🧪 toggles open: exact bytes", async () => {
+    const rig = await openConfigMenu();
+    await rig.clickLabel(rig.render(), "🧪 toggles");
     const out = rig.render();
     for (const label of ["🧪 band (A)", "🧪 statusline (B)", "🧪 tmux pane (C)"]) {
       expect(stripAnsi(out)).toContain(`☐ ${label}`);
     }
     expect(out).toMatchSnapshot("toggles open");
-    rig.clickLabel(out, "🧪 band (A)");
+    await rig.clickLabel(out, "🧪 band (A)");
     expect(rig.sessionState.get(SID, "experimentalBand")).toBe("true");
   });
 
@@ -255,13 +256,13 @@ describe("every {{ menu }} the bundled default renders", () => {
       expect(out).toMatchSnapshot("closed");
     });
 
-    test("one + opened: exact bytes", () => {
+    test("one + opened: exact bytes", async () => {
       const rig = editRig();
       const opener = menuOpeners(rig.render()).find((o) =>
         o.member.startsWith(EDIT_NS),
       );
       if (!opener) throw new Error("edit mode rendered no + opener");
-      rig.click(opener.url);
+      await rig.click(opener.url);
       const out = rig.render();
       expect(barRow(out)).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
       expect(out).toMatchSnapshot("open");
@@ -274,7 +275,7 @@ describe("every {{ menu }} the bundled default renders", () => {
     // `+` did I open" — and it answers only because the trigger binds a display
     // per state. A static display would pass every snapshot above and fail
     // here, which is the point.
-    test("an opened + is distinguishable from its unopened siblings", () => {
+    test("an opened + is distinguishable from its unopened siblings", async () => {
       const rig = editRig();
       const openers = menuOpeners(rig.render()).filter((o) =>
         o.member.startsWith(EDIT_NS),
@@ -282,7 +283,7 @@ describe("every {{ menu }} the bundled default renders", () => {
       expect(openers.length).toBeGreaterThan(1);
 
       const closedRow = barRow(rig.render());
-      rig.click(openers[0]!.url);
+      await rig.click(openers[0]!.url);
       const openRow = barRow(rig.render());
       expect(openRow).not.toBe(closedRow);
     });

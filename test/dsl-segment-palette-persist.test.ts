@@ -32,6 +32,7 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
@@ -66,6 +67,7 @@ import {
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -280,7 +282,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (width = Number.POSITIVE_INFINITY): string =>
     renderDsl(
@@ -297,14 +299,14 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
     durable.historyFor(sessionState),
     config,
   );
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   return { config, store, render, click };
@@ -341,12 +343,12 @@ describe("segment-palette persist action click → the config file", () => {
     root: { h: ['sidebar', 'bar'] },
   }`;
 
-  test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", () => {
+  test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", async () => {
     const { render, click } = buildRuntime(SRC);
     const original = durable.text()!;
     const barBefore = fileSegments(durable).bar;
     const applyUrl = ownUrls(render())[0]!;
-    click(applyUrl);
+    await click(applyUrl);
 
     expect(fileSegments(durable).sidebar).toEqual({
       template: "sidebar-text",
@@ -370,13 +372,13 @@ describe("segment-palette persist action click → the config file", () => {
     ]);
   });
 
-  test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", () => {
+  test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", async () => {
     const { render, click } = buildRuntime(SRC);
     const [applyUrl, resetUrl] = ownUrls(render());
-    click(applyUrl!);
+    await click(applyUrl!);
     expect(fileSegments(durable).sidebar!.palette).toBe("nord");
 
-    click(resetUrl!);
+    await click(resetUrl!);
     expect(fileSegments(durable).sidebar).toEqual({
       template: "sidebar-text",
       bg: "surface",
@@ -388,11 +390,11 @@ describe("segment-palette persist action click → the config file", () => {
     expect(durable.history().past).toHaveLength(2);
   });
 
-  test("reset over a palette the file never authored changes nothing and records nothing", () => {
+  test("reset over a palette the file never authored changes nothing and records nothing", async () => {
     const { render, click } = buildRuntime(SRC);
     const original = durable.text()!;
     const resetUrl = ownUrls(render())[1]!;
-    click(resetUrl);
+    await click(resetUrl);
     expect(durable.text()).toBe(original);
     expect(existsSync(durable.historyPath)).toBe(false);
   });
@@ -401,7 +403,7 @@ describe("segment-palette persist action click → the config file", () => {
   // the first pin on a bundled segment writes exactly one key path — a
   // delta the loader lays over the bundled declaration — and the reset that
   // empties it prunes it, leaving the file byte-identical to before the pin.
-  test("pinning a segment the file does not declare writes exactly `directory: { palette }`; reset restores the file byte-for-byte", () => {
+  test("pinning a segment the file does not declare writes exactly `directory: { palette }`; reset restores the file byte-for-byte", async () => {
     const SRC_BUNDLED = `{
       globals: {},
       variables: {
@@ -432,10 +434,10 @@ describe("segment-palette persist action click → the config file", () => {
       return matches[0]!.url;
     };
     const [applyUrl, resetUrl] = [urlOf("nord"), urlOf("↺")];
-    click(applyUrl);
+    await click(applyUrl);
     expect(fileSegments(durable).directory).toEqual({ palette: "nord" });
 
-    click(resetUrl);
+    await click(resetUrl);
     expect(durable.text()).toBe(original);
   });
 });
@@ -485,14 +487,14 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, fileEvents: NO_FILE_EVENTS, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

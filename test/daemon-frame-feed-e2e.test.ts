@@ -1,4 +1,4 @@
-// candybar-animation-wbxz.jmm.usl, measured on a REAL daemon: a subscriber
+// candybar-animation-wbxz.jmm.usl, measured on a daemon: a subscriber
 // receives one session's frames at the rate its bar moves. While an effect
 // moves the bar, the daemon draws it many times a second — faster than the one
 // a second Claude Code's statusline reaches — and pushes every frame whose
@@ -29,7 +29,10 @@ import {
   type StreamEnd,
 } from "../src/daemon/client-frames";
 import { FEED_PERIODS } from "../src/daemon/frame-feed";
-import { followFrames, SWITCHED_OFF_RETRY_MS } from "../src/daemon/frame-follow";
+import {
+  followFrames,
+  SWITCHED_OFF_RETRY_MS,
+} from "../src/daemon/frame-follow";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -38,7 +41,6 @@ import {
 import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
-  killAndWait,
   sendClick,
   render,
   renderBody,
@@ -48,7 +50,10 @@ import {
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
-import { until } from "./helpers/until";
+import { pageOf, viewerLink } from "./helpers/diagnostics-viewer";
+import { untilHeard } from "./helpers/reload-signal";
+import { writeAtomic } from "../src/utils/atomic-write";
+import { until, type Condition } from "./helpers/until";
 import {
   loggedLines,
   logLines,
@@ -61,10 +66,9 @@ import {
   VERB_LOAD_CONFIG,
   VERB_SET_STATE,
 } from "../src/click/wire";
+import { startDaemon, statsOf, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
@@ -80,6 +84,9 @@ const CONFIGS = {
   // does, so every frame the daemon draws while it moves is a new one.
   turning: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames ${1 / 30} "a" ${1 / 30} "b" ${1 / 30} "c" }}' } }, root: { h: ['mark'] } }`,
   still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  // A glyph that turns once a second, the bar's only motion, as the effort
+  // gauge at max does.
+  beat: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   // The band lane alone, which draws the bar elsewhere: its own file, since
   // the statusline's reset button rewrites the file it names.
@@ -87,9 +94,12 @@ const CONFIGS = {
   // The band lane switched off, which a test switches on by rewriting the file
   // as another session's save would.
   fileLane: `{ segments: { mark: { template: 'a file-switched mark' } }, root: { h: ['mark'] } }`,
-  // Moves, and carries a load warning (a duplicate key) the diagnostic strip
+  // Moves, and carries a load warning (a duplicate key) the indicator
   // shows on every frame.
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
+  // Still, and its palette rule names no theme for two seconds of every four:
+  // a render warning that comes and goes while nothing else moves.
+  clock: `{ globals: { experimentalStatusline: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
@@ -104,7 +114,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   let removeTmpDirs: () => void;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   const args = (name: keyof typeof CONFIGS): string[] => [
     "cc-candybar",
@@ -116,7 +126,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // arrived. `during` is handed the frames
   // received so far, so it can wait for ones the daemon has sent before the
   // stream closes (closing drops whatever is still in flight); `elapsed`, the
-  // clock those arrivals are read on; and `waitFor`, the wait for them.
+  // clock those arrivals are read on; `waitFor`, the wait for them; and
+  // `untilHeard`, the wait that re-applies a watched write until they come.
   // [LAW:no-silent-failure] A daemon too busy to take the subscribe inside its
   // request budget answers TIMEOUT, and the subscriber opens another, as
   // afterStreamEnd decides for every real consumer; any other end fails the
@@ -129,6 +140,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       received: ReadonlyArray<Frame>;
       elapsed: () => number;
       waitFor: typeof until;
+      untilHeard: typeof untilHeard;
     }) => Promise<void>,
   ): Promise<Frame[]> {
     const frames: Frame[] = [];
@@ -150,18 +162,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
             );
         },
       );
+    const live =
+      (reached: Condition): Condition =>
+      () => {
+        if (ended !== null) throw ended;
+        return reached();
+      };
     const waitFor: typeof until = (reached, what, budgetMs) =>
-      until(
-        () => {
-          if (ended !== null) throw ended;
-          return reached();
-        },
-        what,
-        budgetMs,
-      );
+      until(live(reached), what, budgetMs);
+    const untilHeardLive: typeof untilHeard = (mutate, heard, what) =>
+      untilHeard(mutate, live(heard), what);
     let stream = open();
     try {
-      await during({ received: frames, elapsed, waitFor });
+      await during({
+        received: frames,
+        elapsed,
+        waitFor,
+        untilHeard: untilHeardLive,
+      });
     } finally {
       stream.close();
     }
@@ -169,17 +187,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     return frames;
   }
 
-  const stats = async (): Promise<StatsSnapshot> => {
-    const resp = await sendDaemonRequest(
-      sockPath,
-      { v: PROTOCOL_VERSION, kind: "stats" },
-      5000,
-    );
-    if (!resp.ok || !("stats" in resp)) throw new Error(JSON.stringify(resp));
-    return resp.stats;
-  };
   const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> =>
-    (await stats()).frameFeeds;
+    (await statsOf(daemon.daemon)).frameFeeds;
 
   // A band-lane frame's text: its rows of runs (src/daemon/lane-frames.ts).
   const barText = (resp: Response): unknown =>
@@ -193,6 +202,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         throw new Error(`not a frame: ${JSON.stringify(resp)}`);
       return resp.output;
     });
+
+  const shows = (frames: ReadonlyArray<Frame>, text: string): boolean =>
+    outputs(frames).some((o) => stripAnsi(o).includes(text));
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
@@ -209,14 +221,15 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 0 1 0 1\\n' ;; *) printf 'stub\\n' ;; esac\n`,
     );
     chmodSync(path.join(bin, "tmux"), 0o755);
-    daemon = await spawnDaemonWithEnv({
+    daemon = startDaemon({
       ...prepared.env,
       PATH: `${bin}:${prepared.env.PATH ?? ""}`,
     });
+    await daemon.listen(sockPath);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -229,17 +242,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // count includes has arrived: comparing after close raced the frames still
     // in flight, which closing drops.
     let after = before;
-    const frames = await framesOf("feed-moving", async ({ received, waitFor }) => {
-      await sleep(2000);
-      after = await feedStats();
-      const sent = after.pushed - before.pushed;
-      await waitFor(() => received.length >= sent, "every counted frame arrived");
-    });
+    const frames = await framesOf(
+      "feed-moving",
+      async ({ received, waitFor }) => {
+        await sleep(2000);
+        after = await feedStats();
+        const sent = after.pushed - before.pushed;
+        await waitFor(
+          () => received.length >= sent,
+          "every counted frame arrived",
+        );
+      },
+    );
     const pushed = outputs(frames);
     for (const output of pushed) {
       expect(stripAnsi(output)).toContain("a moving mark");
-      // candybar-animation-wbxz.829: a frame the feed drew shows its pace.
-      expect(stripAnsi(output)).toMatch(/ \d+ fps /u);
+      // candybar-animation-wbxz.829, .014: a frame the feed drew shows its
+      // ceiling.
+      expect(stripAnsi(output)).toMatch(/ ≤\d+ fps /u);
     }
     // An unchanged frame is never sent twice.
     for (let i = 1; i < pushed.length; i++)
@@ -272,24 +292,88 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   test("a still bar is pushed once, and not again while nothing changes", async () => {
-    const answered = await render(sockPath, "feed-still", projectDir, {}, args("still"));
+    const answered = await render(
+      sockPath,
+      "feed-still",
+      projectDir,
+      {},
+      args("still"),
+    );
     // The request's own answer is Claude Code's to poll: it shows no pace.
-    expect(stripAnsi(answered)).toMatch(new RegExp(`${POLLED}.*a still mark`, "su"));
+    expect(stripAnsi(answered)).toMatch(
+      new RegExp(`${POLLED}.*a still mark`, "su"),
+    );
     let drawn = 0;
-    const frames = await framesOf("feed-still", async ({ received, waitFor }) => {
-      await waitFor(() => received.length > 0, "the first frame");
-      const before = (await feedStats()).drawn;
-      await sleep(2000);
-      drawn = (await feedStats()).drawn - before;
-    });
-    // Its pace, one a second, is part of the frame and does not change it.
+    const frames = await framesOf(
+      "feed-still",
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length > 0, "the first frame");
+        const before = (await feedStats()).drawn;
+        await sleep(2000);
+        drawn = (await feedStats()).drawn - before;
+      },
+    );
+    // Its ceiling is part of the frame and does not change it.
     expect(outputs(frames).map(stripAnsi)).toEqual([
-      expect.stringMatching(/ 1 fps .*a still mark/su),
+      expect.stringMatching(/ ≤30 fps .*a still mark/su),
     ]);
     // brandon-unfiled-3248.8ro6 §4e: and it is drawn once a second. A draw
     // that wrote something its view reads would wake the next frame, and the
     // still bar would be redrawn at the moving rate, its bytes never pushed.
     expect(drawn).toBeLessThanOrEqual(3);
+  });
+
+  // candybar-animation-wbxz.014: a bar is drawn when it next changes, so one
+  // whose only motion turns once a second is drawn about once a second, each
+  // frame a new one, not thirty times a second with twenty-nine dropped.
+  test("a bar that turns once a second is drawn about once a second, every frame new", async () => {
+    await render(sockPath, "feed-beat", projectDir, {}, args("beat"));
+    let drawn = 0;
+    let pushed = 0;
+    const frames = await framesOf(
+      "feed-beat",
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length > 0, "the first frame");
+        const before = await feedStats();
+        await sleep(3000);
+        const after = await feedStats();
+        drawn = after.drawn - before.drawn;
+        pushed = after.pushed - before.pushed;
+        await waitFor(
+          () => received.length >= pushed + 1,
+          "every counted frame arrived",
+        );
+      },
+    );
+    // Three turns in three seconds: a draw for each, and each pushed. A draw
+    // a moment before its turn would show the last glyph again and be drawn
+    // twice; the moving rate would draw about ninety.
+    expect(drawn).toBeGreaterThanOrEqual(2);
+    expect(drawn).toBeLessThanOrEqual(4);
+    expect(pushed).toBe(drawn);
+    const glyphs = outputs(frames).map(
+      (o) => /(tick|tock)/u.exec(stripAnsi(o))![1],
+    );
+    for (let i = 1; i < glyphs.length; i++)
+      expect(glyphs[i]).not.toBe(glyphs[i - 1]);
+  });
+
+  test("the viewer open over a moving bar is drawn a still period apart, not at the bar's beat", async () => {
+    const sid = "feed-viewer-still";
+    const bar = await render(sockPath, sid, projectDir, {}, args("warned"));
+    await click(sockPath, viewerLink(bar, "open")!.url);
+    let drawn = 0;
+    await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(
+        () => outputs(received).some((o) => /\[1\/1\]/u.test(stripAnsi(o))),
+        "a frame showing the viewer",
+      );
+      const before = await feedStats();
+      await sleep(2000);
+      drawn = (await feedStats()).drawn - before.drawn;
+    });
+    // The viewer is still text: two still periods, not sixty moving ones.
+    expect(drawn).toBeLessThanOrEqual(4);
   });
 
   test("a click on a still bar is pushed at once, not when the next frame falls due", async () => {
@@ -301,22 +385,25 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       args("toggle"),
     );
     let secondAt = 0;
-    const frames = await framesOf("feed-click", async ({ received, elapsed, waitFor }) => {
-      // The click lands the moment the bar's first frame is in.
-      await waitFor(() => received.length > 0, "the bar before the click");
-      await click(sockPath, urlWriting(shut, "face", "open"));
-      await waitFor(() => received.length > 1, "the clicked bar");
-      // A second click 100 ms after the first, inside the still period the
-      // first one's frame started: it too is drawn within the feed's spacing,
-      // not when the still bar's next frame falls due, about 900 ms after it.
-      await sleep(100);
-      await click(
-        sockPath,
-        urlWriting(outputs(received)[1]!, "face", "shut"),
-      );
-      secondAt = elapsed();
-      await waitFor(() => received.length > 2, "the bar clicked again");
-    });
+    const frames = await framesOf(
+      "feed-click",
+      async ({ received, elapsed, waitFor }) => {
+        // The click lands the moment the bar's first frame is in.
+        await waitFor(() => received.length > 0, "the bar before the click");
+        await click(sockPath, urlWriting(shut, "face", "open"));
+        await waitFor(() => received.length > 1, "the clicked bar");
+        // A second click 100 ms after the first, inside the still period the
+        // first one's frame started: it too is drawn within the feed's spacing,
+        // not when the still bar's next frame falls due, about 900 ms after it.
+        await sleep(100);
+        await click(
+          sockPath,
+          urlWriting(outputs(received)[1]!, "face", "shut"),
+        );
+        secondAt = elapsed();
+        await waitFor(() => received.length > 2, "the bar clicked again");
+      },
+    );
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("door shut"),
       expect.stringContaining("door open"),
@@ -357,22 +444,42 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       config,
       `{ globals: { experimentalStatusline: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
     );
-    await render(sockPath, sid, projectDir, {}, ["cc-candybar", "--config", config]);
+    await render(sockPath, sid, projectDir, {}, [
+      "cc-candybar",
+      "--config",
+      config,
+    ]);
     let wrote = 0;
-    const frames = await framesOf(sid, async ({ received, elapsed, waitFor }) => {
-      await waitFor(() => received.length > 0, "the bar before the write");
-      wrote = elapsed();
-      writeFileSync(statusFile, "red");
-      await waitFor(() => received.length > 1, "the rewritten value");
-    });
+    const frames = await framesOf(
+      sid,
+      async ({ received, elapsed, waitFor, untilHeard }) => {
+        await waitFor(() => received.length > 0, "the bar before the write");
+        // [LAW:no-ambient-temporal-coupling] The watch has no ready signal, so
+        // one value is re-applied until a frame shows it heard, and only then is
+        // the measured write made, once: a retried write's frame may answer an
+        // earlier round, and timed from the last it measures short.
+        await untilHeard(
+          () => writeAtomic(statusFile, "amber"),
+          () => shows(received, "status amber"),
+          "the value that proves the watch live",
+        );
+        wrote = elapsed();
+        writeAtomic(statusFile, "red");
+        await waitFor(
+          () => shows(received, "status red"),
+          "the rewritten value",
+        );
+      },
+    );
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("status green"),
+      expect.stringContaining("status amber"),
       expect.stringContaining("status red"),
     ]);
     // Measured from the write, as the click's is: the still bar's next frame
-    // falls due a still period after its first started, just before the
+    // falls due a still period after the last one started, just before the
     // write, so a frame in by half of one is the wake's.
-    expect(frames[1]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
+    expect(frames[2]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
     expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
   });
 
@@ -382,12 +489,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const configOf = (mark: string): string =>
       `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
     writeFileSync(config, configOf("before the save"));
-    await render(sockPath, sid, projectDir, {}, ["cc-candybar", "--config", config]);
-    const frames = await framesOf(sid, async ({ received, waitFor }) => {
-      await waitFor(() => received.length > 0, "the bar before the save");
-      writeFileSync(config, configOf("after the save"));
-      await waitFor(() => received.length > 1, "the saved bar");
-    });
+    await render(sockPath, sid, projectDir, {}, [
+      "cc-candybar",
+      "--config",
+      config,
+    ]);
+    const frames = await framesOf(
+      sid,
+      async ({ received, waitFor, untilHeard }) => {
+        await waitFor(() => received.length > 0, "the bar before the save");
+        // The config's watch has no ready signal either, and a repeated save
+        // draws the same bytes, which are never pushed twice.
+        await untilHeard(
+          () => writeAtomic(config, configOf("after the save")),
+          () => shows(received, "after the save"),
+          "the saved bar",
+        );
+      },
+    );
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("before the save"),
       expect.stringContaining("after the save"),
@@ -407,18 +526,15 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'the picked mark' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, args("still"));
-    const pick = (file: string): Promise<void> =>
-      click(
+    const pick = async (file: string): Promise<void> =>
+      await click(
         sockPath,
         `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(file)}`,
       );
     const frames = await framesOf(sid, async ({ received, waitFor }) => {
       await waitFor(() => received.length > 0, "the bar before the pick");
       await pick(picked);
-      await waitFor(
-        () => outputs(received).some((o) => stripAnsi(o).includes("the picked mark")),
-        "the picked bar",
-      );
+      await waitFor(() => shows(received, "the picked mark"), "the picked bar");
       await pick("");
       await waitFor(
         () => stripAnsi(outputs(received).at(-1)!).includes("a still mark"),
@@ -449,11 +565,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
-    const frames = await framesOf("feed-early", async ({ received, waitFor }) => {
-      await sleep(200);
-      await render(sockPath, "feed-early", projectDir, {}, args("still"));
-      await waitFor(() => received.length > 0, "the first render's frame");
-    });
+    const frames = await framesOf(
+      "feed-early",
+      async ({ received, waitFor }) => {
+        await sleep(200);
+        await render(sockPath, "feed-early", projectDir, {}, args("still"));
+        await waitFor(() => received.length > 0, "the first render's frame");
+      },
+    );
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("a still mark"),
     ]);
@@ -484,11 +603,21 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a subscribe that names no session is refused, and the stream ends on the refusal", async () => {
     const frames: Response[] = [];
     const end = await new Promise<StreamEnd>((resolve) =>
-      openFrameStream(sockPath, "", "band", (resp) => frames.push(resp), resolve),
+      openFrameStream(
+        sockPath,
+        "",
+        "band",
+        (resp) => frames.push(resp),
+        resolve,
+      ),
     );
     expect(end).toMatchObject({
       kind: "refused",
-      resp: { ok: false, code: "BAD_REQUEST", error: expect.stringMatching(/sessionId/) },
+      resp: {
+        ok: false,
+        code: "BAD_REQUEST",
+        error: expect.stringMatching(/sessionId/),
+      },
     });
     expect(frames).toEqual([]);
   });
@@ -498,13 +627,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const frames: Response[] = [];
     let end: StreamEnd | null = null;
     const ended = new Promise<StreamEnd>((resolve) =>
-      openFrameStream(sockPath, sessionId, lane, (resp) => frames.push(resp), (e) =>
-        resolve((end = e)),
+      openFrameStream(
+        sockPath,
+        sessionId,
+        lane,
+        (resp) => frames.push(resp),
+        (e) => resolve((end = e)),
       ),
     );
     // The frames so far, or the stream's end, thrown, once it has ended.
     const live = (): ReadonlyArray<Response> => {
-      if (end !== null) throw new Error(`the ${lane} stream ended: ${JSON.stringify(end)}`);
+      if (end !== null)
+        throw new Error(`the ${lane} stream ended: ${JSON.stringify(end)}`);
       return frames;
     };
     return { frames, ended, live };
@@ -517,13 +651,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     logLines(env).filter(
       (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
     );
-  const setState = (sid: string, key: string, value: string): Promise<void> =>
-    click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+  const setState = async (sid: string, key: string, value: string): Promise<void> =>
+    await click(
+      sockPath,
+      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+    );
 
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
   // the mod or the tmux pane, we should NOT show the original bar except a
   // single line that contains a button to reset those settings".
-  test("while the band draws the bar, Claude Code's statusline is one line whose button brings the bar back", async () => {
+  test("while the band draws the bar, Claude Code's statusline is one small row whose button brings the bar back", async () => {
     const sid = "feed-handoff";
     // [LAW:nothing-unseen] Each render's event says whether the statusline
     // handed off, and to which lanes.
@@ -543,9 +680,15 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(barText(band.frames[0]!)).toEqual(
       expect.stringContaining("a handed-off mark"),
     );
-    const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
+    const handedOff = await render(
+      sockPath,
+      sid,
+      projectDir,
+      {},
+      args("handoff"),
+    );
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
-      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
+      `🧪 ${HANDOFF_BUTTON}`,
     ]);
     // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
     // as one more event than a count read before the render: a retry of the
@@ -559,9 +702,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const button = links(handedOff).find((l) => l.text.includes("⟲"));
     await click(sockPath, button!.url);
     // The reset took the lane's setting out of the file it was in.
-    expect(readFileSync(path.join(projectDir, "handoff.json5"), "utf8")).not.toContain(
-      "experimentalBand",
-    );
+    expect(
+      readFileSync(path.join(projectDir, "handoff.json5"), "utf8"),
+    ).not.toContain("experimentalBand");
     expect(
       stripAnsi(await render(sockPath, sid, projectDir, {}, args("handoff"))),
     ).toContain("a handed-off mark");
@@ -585,44 +728,78 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-file-lane";
     const file = path.join(projectDir, "fileLane.json5");
     await render(sockPath, sid, projectDir, { termCols: 80 }, args("fileLane"));
-    writeFileSync(file, CONFIGS.fileLane.replace("{ segments", "{ globals: { experimentalBand: true }, segments"));
-    // Renders, each with hints its last did not report, until the daemon has
-    // reloaded the file and one draws by its switch.
-    for (let cols = 81; !renderEvents(sid).some((l) => l.includes(" lanes=band ")); cols++) {
-      if (cols > 400) throw new Error("no render drew by the file's switch");
-      await render(sockPath, sid, projectDir, { termCols: cols }, args("fileLane"));
-    }
+    // The file's watch has no ready signal, so the save is re-applied until a
+    // render, each with hints its last did not report, draws by its switch.
+    let cols = 80;
+    await untilHeard(
+      () =>
+        writeAtomic(
+          file,
+          CONFIGS.fileLane.replace(
+            "{ segments",
+            "{ globals: { experimentalBand: true }, segments",
+          ),
+        ),
+      async () => {
+        await render(
+          sockPath,
+          sid,
+          projectDir,
+          { termCols: ++cols },
+          args("fileLane"),
+        );
+        return renderEvents(sid).some((l) => l.includes(" lanes=band "));
+      },
+      "a render drawn by the file's switch",
+    );
     await render(sockPath, sid, projectDir, { termCols: 20 }, args("fileLane"));
     // The session moves the switch itself: its click sets it up, with no
     // request after it, and it is the only setup this session's log holds.
     await setState(sid, "experimentalBand", "false");
-    await until(() => laneLines(sid).length > 0, "the session's own move's setup");
+    await until(
+      () => laneLines(sid).length > 0,
+      "the session's own move's setup",
+    );
     expect(laneLines(sid)).toEqual([expect.stringContaining("lane: band off")]);
   });
 
-  // Only the body is handed off: what the strip says above it stays.
-  test("a handed-off statusline still carries the strip: a load warning stays above the handoff line", async () => {
+  // The bar is handed off whole: the lane drawing it carries the indicator,
+  // and so does the statusline's handoff line, whose indicator opens the same
+  // viewer there. The message itself is never drawn twice.
+  test("a handed-off statusline carries the bar's indicator, which opens the viewer in the statusline", async () => {
     const sid = "feed-handoff-warned";
     await render(sockPath, sid, projectDir, {}, args("warned"));
     const band = subscribeUntilEnd(sid, "band");
-    await until(() => band.live().length > 0, "the band's frame");
-    const lines = stripAnsi(
+    await until(
+      () => band.live().some((f) => String(barText(f)).includes("⚠ 1")),
+      "a band frame carrying the indicator",
+    );
+    const handedOff = await render(
+      sockPath,
+      sid,
+      projectDir,
+      {},
+      args("warned"),
+    );
+    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
+      `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
+    ]);
+    expect(stripAnsi(handedOff)).not.toContain('duplicate key "effect"');
+    const last = String(barText(band.live().at(-1)!));
+    expect(last).toContain("a warned mark");
+    expect(last.match(/⚠/g)).toHaveLength(1);
+    expect(last).not.toContain("duplicate key");
+    // The statusline's indicator opens the viewer, drawn in the statusline.
+    await click(sockPath, viewerLink(handedOff, "open")!.url);
+    const viewer = pageOf(
       await render(sockPath, sid, projectDir, {}, args("warned")),
-    )
-      .trim()
-      .split("\n");
-    expect(lines.at(-1)).toBe(
-      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
     );
-    expect(lines.slice(0, -1).join("\n")).toContain('duplicate key "effect"');
-    expect(lines.join("\n")).not.toContain("a warned mark");
-    // A strip over its row cap is cut to it; the handoff line, in the body's
-    // place, is not.
-    const capped = stripAnsi(
-      await render(sockPath, sid, projectDir, { termRows: 2, termCols: 50 }, args("warned")),
-    );
-    expect(capped).toMatch(/more\s+rows/);
-    expect(capped.replace(/\s+/g, " ")).toContain(HANDOFF_BUTTON);
+    expect(viewer.position).toBe("1/1");
+    expect(viewer.text).toContain('duplicate key "effect"');
+    await click(sockPath, viewerLink(viewer.rendered, "✕")!.url);
+    expect(
+      stripAnsi(await render(sockPath, sid, projectDir, {}, args("warned"))),
+    ).toContain(HANDOFF_BUTTON);
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to
@@ -632,7 +809,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const subscribe = (lane: unknown) =>
       sendDaemonRequest(
         sockPath,
-        { v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-nolane", lane },
+        {
+          v: PROTOCOL_VERSION,
+          kind: "subscribe",
+          sessionId: "feed-nolane",
+          lane,
+        },
         5000,
       );
     expect(await subscribe(undefined)).toMatchObject({
@@ -644,7 +826,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(await subscribe("everywhere")).toMatchObject({
       ok: false,
       code: "BAD_REQUEST",
-      error: expect.stringMatching(/needs a lane, one of band, statusline, pane/),
+      error: expect.stringMatching(
+        /needs a lane, one of band, statusline, pane/,
+      ),
     });
   });
 
@@ -678,7 +862,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const pane = subscribeUntilEnd("feed-lane", "pane");
     expect(await pane.ended).toMatchObject({
       kind: "refused",
-      resp: { code: "SWITCHED_OFF", error: expect.stringContaining("experimentalPane") },
+      resp: {
+        code: "SWITCHED_OFF",
+        error: expect.stringContaining("experimentalPane"),
+      },
     });
     await until(() => band.live().length > 0, "the switched-on lane's frame");
     expect(band.frames.map(barText)).toEqual([
@@ -722,7 +909,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   }, 20_000);
 
   test("a render request whose cwd is not a string is refused and counted, not thrown", async () => {
-    const before = (await stats()).requests.errored;
+    const before = (await statsOf(daemon.daemon)).requests.errored;
     const resp = await sendDaemonRequest(
       sockPath,
       {
@@ -736,9 +923,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(resp).toMatchObject({
       ok: false,
       code: "BAD_REQUEST",
-      error: expect.stringContaining("request 'cwd' is not an absolute path: 42"),
+      error: expect.stringContaining(
+        "request 'cwd' is not an absolute path: 42",
+      ),
     });
-    expect((await stats()).requests.errored).toBe(before + 1);
+    expect((await statsOf(daemon.daemon)).requests.errored).toBe(before + 1);
   });
 
   test("a subscriber that hangs up before its subscribe is handled leaves no feed behind", async () => {
@@ -746,7 +935,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const before = await feedStats();
     await new Promise<void>((resolve) => {
       const sock = net.createConnection({ path: sockPath }, () => {
-        sock.end(encodeFrame({ v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-hangup", lane: "band" }));
+        sock.end(
+          encodeFrame({
+            v: PROTOCOL_VERSION,
+            kind: "subscribe",
+            sessionId: "feed-hangup",
+            lane: "band",
+          }),
+        );
         sock.destroy();
         resolve();
       });
@@ -758,15 +954,35 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     });
   });
 
-  test("a frame records nothing: no session-state write and no dump write, which the session's next request makes", async () => {
+  // A render warning is known only after the walk that met it, so the frame
+  // that met it is followed at once by one that counts it: an idle lane draws
+  // once a second, and would otherwise show a second-old count.
+  test("a warning an idle lane's frame meets is counted by a frame, with no wake of its own", async () => {
+    const sid = "feed-clock-warning";
+    await render(sockPath, sid, projectDir, {}, args("clock"));
+    const frames = await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(
+        () => received.some((f) => shows([f], "⚠ 1")),
+        "a frame that counts the warning",
+        8000,
+      );
+    });
+    // The session's list is every renderer's, so the lane may count what the
+    // request met from its first frame. A frame that starts counting it later
+    // is the lane's next spaced frame, a still second after the one before,
+    // never a wake that could feed itself.
+    const shown = outputs(frames).map((o) => stripAnsi(o).includes("⚠ 1"));
+    for (const [i, onset] of frames.entries()) {
+      if (i === 0 || !shown[i] || shown[i - 1]) continue;
+      expect(onset.at - frames[i - 1]!.at).toBeGreaterThan(500);
+    }
+    expect(await closedSummary(sid)).not.toMatch(/ woke=[^ ]*frame/u);
+  });
+
+  test("a frame records nothing: no session-state write", async () => {
     const sid = "feed-frame-records-nothing";
-    const dumpFile = path.join(
-      path.dirname(sockPath),
-      "diagnostics",
-      `${sid}.txt`,
-    );
     const revision = async (): Promise<number> =>
-      (await stats()).sessionState.revision;
+      (await statsOf(daemon.daemon)).sessionState.revision;
     await render(sockPath, sid, projectDir, {}, args("still"));
     // The pick lands before anyone subscribes, so no frame draws until the
     // revision is read: every frame after it draws the warned config.
@@ -785,12 +1001,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect((await feedStats()).drawn - drawnBefore).toBeGreaterThan(0);
     const shown = outputs(frames).map(stripAnsi);
     expect(shown.length).toBeGreaterThan(0);
-    expect(shown.every((text) => /duplicate key/.test(text))).toBe(true);
+    // Every frame counts the warned config's load warning.
+    expect(shown.every((text) => text.includes("⚠ 1"))).toBe(true);
     expect(after).toBe(before);
-    expect(existsSync(dumpFile)).toBe(false);
-    // The session's next request is where both are written.
-    await render(sockPath, sid, projectDir, {}, args("still"));
-    expect(readFileSync(dumpFile, "utf8")).toMatch(/duplicate key/);
   });
 
   test("a failed click's error shows on the pushed frames and Claude Code's bar for the hold, and leaves by time alone", async () => {
@@ -798,7 +1011,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const bad = effectsUrl([
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
     ]);
-    const shows = (text: string): boolean => /bogus/.test(text);
+    // The error is the one message the bar holds, so the indicator counts it.
+    const shows = (text: string): boolean => text.includes("⚠ 1");
     // The bar, the bar with the error for the hold, the bar: where the error
     // first shows, and the first frame after it that no longer does.
     const hold = (frames: ReadonlyArray<Frame>) => {
@@ -809,23 +1023,35 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     };
     let inside = "";
     let clickedAt = 0;
-    const frames = await framesOf("feed-click-error", async ({ received, elapsed, waitFor }) => {
-      await waitFor(() => received.length > 0, "the bar before the click");
-      clickedAt = elapsed();
-      expect((await sendClick(sockPath, bad)).ok).toBe(false);
-      inside = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
-      await waitFor(() => hold(received).errorAt > 0, "a frame showing the error");
-      // No statusline request from here on: only time ends the hold, so the
-      // stream stays open until a frame no longer shows it.
-      // How long past the hold the clearing frame comes is the daemon's
-      // scheduling, not the hold, so the wait bets nothing on it; the hold's
-      // end is pinned on owned instants in test/click-error.test.ts.
-      await waitFor(
-        () => hold(received).clearAt > 0,
-        "a frame past the hold",
-        CLICK_ERROR_HOLD_S * 1000 + 10_000,
-      );
-    });
+    const frames = await framesOf(
+      "feed-click-error",
+      async ({ received, elapsed, waitFor }) => {
+        await waitFor(() => received.length > 0, "the bar before the click");
+        clickedAt = elapsed();
+        expect((await sendClick(sockPath, bad)).ok).toBe(false);
+        inside = await render(
+          sockPath,
+          "feed-click-error",
+          projectDir,
+          {},
+          args("toggle"),
+        );
+        await waitFor(
+          () => hold(received).errorAt > 0,
+          "a frame showing the error",
+        );
+        // No statusline request from here on: only time ends the hold, so the
+        // stream stays open until a frame no longer shows it.
+        // How long past the hold the clearing frame comes is the daemon's
+        // scheduling, not the hold, so the wait bets nothing on it; the hold's
+        // end is pinned on owned instants in test/click-error.test.ts.
+        await waitFor(
+          () => hold(received).clearAt > 0,
+          "a frame past the hold",
+          CLICK_ERROR_HOLD_S * 1000 + 10_000,
+        );
+      },
+    );
     expect(shows(stripAnsi(inside))).toBe(true);
     const { shown, errorAt, clearAt } = hold(frames);
     expect(shows(shown[0]!)).toBe(false);

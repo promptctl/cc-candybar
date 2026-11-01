@@ -28,6 +28,7 @@ Most of the facts the doctor needs are visible only to the statusline client, wh
 - Clicked terminals get a file of their own, separate from the mark book. Older builds parse the mark book strictly and refuse keys they don't know.
 - If the spawn rate limit refuses a probe, the click is refused too. The refusal never becomes a fact.
 - The CLI reads the doctor's stores through the daemon, never from files of its own.
+- Session state is one unversioned file that builds of either age read, because a rollback or a pinned install runs over a newer build's records. So a record there only gains fields and a field keeps its meaning. A new value of an existing field needs the same care: a parser that refuses values it doesn't know fails every click on that build.
 - Node resolves its entry point through links, but argv[1] keeps the symlink of npm's global bin. Name a bundle by the resolved path.
 - The native build stamp is computed by calling the repo's tsx binary directly. pnpm exec prints its install check on stdout, which would end up in the stamp.
 

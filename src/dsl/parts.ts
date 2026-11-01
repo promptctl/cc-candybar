@@ -835,7 +835,7 @@ function placeOf(
 }
 
 // The band the segment opens, read the one way for the background `{{ bgOf }}`
-// sees, its shortfalls and every Style it can wear.
+// sees and every Style it can wear.
 const bandOf = (colours: Dealt) =>
   bandFor(colours.palette, colours.disclosure, colours.drawnAt);
 
@@ -872,8 +872,7 @@ function coloursOf(
 // known before the body evaluates, so the body reads it too; a dropped menu is
 // known only after, so the lead and trail — evaluated last — read the final
 // ground either way. A band is read only where something hangs open under the
-// segment: a band that can never be drawn throws when it is opened, never from
-// a closed cell.
+// segment.
 function bodyOf(
   ref: ActiveSegmentRef,
   node: CompiledSegmentNode,
@@ -915,8 +914,7 @@ function affixesOf(
 const NO_AFFIXES: Affixes = { lead: [], trail: [], drops: [] };
 
 // Every Style a placement coloured `colours` can wear. A band is read only
-// where one is worn: one that can never be drawn throws when it is opened,
-// never from a closed cell.
+// where one is worn, so a closed cell pays nothing for one.
 function stylesOf(colours: Colours): SegmentStyles {
   const { palette, drawnAt, disclosure } = colours;
   return {
@@ -946,9 +944,6 @@ function evaluated(
     trail: affixes.trail,
     drops: [...body.drops, ...affixes.drops],
     open: body.open,
-    // [LAW:no-silent-failure] A floor the band stands short of is drawn as
-    // near as it comes, and said so.
-    shortfalls: body.open ? bandOf(colours).shortfalls : [],
   };
 }
 

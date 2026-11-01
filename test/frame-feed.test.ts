@@ -38,7 +38,8 @@ const nowAt = (): Instant => instantOf(new Date());
 const PERIODS = { moving: 20, still: 400 };
 
 // How the harness's bar moves: on a screen, where nobody can see it, or not at
-// all. A frame says only whether it moves; the feed asks whether it is shown.
+// all. A moving frame says it changes at once (a continuous effect), a still
+// one never; the feed asks whether it is shown.
 type Motion = "moving" | "unseen" | "still";
 
 // A feed over a render whose bar moves as `motion` says, every frame a new
@@ -49,7 +50,17 @@ type Motion = "moving" | "unseen" | "still";
 // to draw, and its frames wait. `pins` counts each session's pins.
 // `duringRender` runs inside a render, as a write that wakes the feed while
 // it draws would.
-function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
+// `beatMs`, when given, makes the bar turn on every multiple of it on the
+// wall clock and say so, as a template's `frames` does: each frame shows the
+// beat it was drawn in and next changes at the next one. The wall clock the
+// feed reads is the real one, moved by `wallOffsetS` and read short by up to
+// `jitterMs` (a reading truncated to the millisecond, a timer fired early).
+function harness(opts: {
+  motion: Motion;
+  renderMs?: number;
+  fails?: boolean;
+  beatMs?: number;
+}) {
   const state = {
     motion: opts.motion,
     renders: 0,
@@ -60,7 +71,12 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     // The lanes the session's settings switch on, read by the feed when it
     // asks; `opened` counts the times the feeds began to watch, `stopped` the
     // times they stopped.
-    lanes: { band: true, statusline: true, pane: true, tmuxStatus: true } as LaneSwitches,
+    lanes: {
+      band: true,
+      statusline: true,
+      pane: true,
+      tmuxStatus: true,
+    } as LaneSwitches,
     opened: 0,
     stopped: 0,
     // A lane gate that throws, as a daemon bug in reading the settings would.
@@ -73,29 +89,44 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     // Runs inside the next render, once.
     duringRender: null as (() => void) | null,
     pins: new Map<string, number>(),
+    // The frames whose copy clicks were recorded as delivered.
+    delivered: [] as string[],
+    // The instant each render was drawn for, in order.
+    ats: [] as Instant[],
+    wallOffsetS: 0,
+    jitterMs: 0,
   };
-  const frameOf = (req: string): FeedFrame =>
-    opts.fails === true
-      ? failedFrame(req)
-      : barFrame(
-          `${req}#${state.motion === "still" ? state.n : ++state.n}`,
-          state.motion !== "still",
-          state.handoff,
-        );
+  const frameOf = (req: string, at: Instant): FeedFrame => {
+    if (opts.fails === true) return failedFrame(req);
+    if (opts.beatMs !== undefined) {
+      const beat = Math.floor((at * 1000) / opts.beatMs);
+      return barFrame(`${req}@${beat}`, ((beat + 1) * opts.beatMs) / 1000);
+    }
+    const output = `${req}#${state.motion === "still" ? state.n : ++state.n}`;
+    return {
+      ...barFrame(
+        output,
+        state.motion === "still" ? Infinity : at,
+        state.handoff,
+      ),
+      delivered: () => state.delivered.push(output),
+    };
+  };
   const changes = new Map<string, () => void>();
   const log: string[] = [];
   const ledger = new RefreshLedger();
   const feeds: FrameFeeds<string> = new FrameFeeds<string>({
-    render: (sessionId, fps): FeedFrame | null => {
+    render: (sessionId, fps, at): FeedFrame | null => {
       const req = feeds.latest(sessionId);
       if (req === null) return null;
       state.renders++;
       state.rates.push(fps);
+      state.ats.push(at);
       if (opts.renderMs !== undefined) block(opts.renderMs);
       const during = state.duringRender;
       state.duringRender = null;
       during?.();
-      return frameOf(req);
+      return frameOf(req, at);
     },
     lanes: (sessionId) => {
       if (state.gateThrows) throw new Error("the gate broke");
@@ -121,9 +152,16 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     refreshes: () => ledger.totals(),
     periods: PERIODS,
     now: () => Date.now() + state.skewMs,
+    instant: () =>
+      (Math.floor(Date.now() - Math.random() * state.jitterMs) / 1000 +
+        state.wallOffsetS) as Instant,
     log: (_level, line) => log.push(line),
   });
-  const note = (sessionId: string, req: string, order = ++state.order): void => {
+  const note = (
+    sessionId: string,
+    req: string,
+    order = ++state.order,
+  ): void => {
     feeds.note(sessionId, req, order);
     feeds.wake(sessionId, "data");
   };
@@ -133,31 +171,35 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
 // The parts each bar frame says it evaluated.
 const EVALUATED = 3;
 
-// A frame drawing `output`, whose statusline shows `handoff` in its place, if
-// any.
+// A frame drawing `output`, next changing at `nextChange`, whose statusline
+// shows `handoff` in its place, if any.
 function barFrame(
   output: string,
-  moves: boolean,
+  nextChange: number,
   handoff: string | null = null,
 ): FeedFrame {
   return {
-    at: nowAt(),
     resp: { ok: true, output },
     statusline: { ok: true, output: handoff ?? output },
-    moves,
+    nextChange,
     evaluated: EVALUATED,
+    delivered: () => {},
     failure: null,
   };
 }
 
 function failedFrame(req: string): FeedFrame {
-  const resp: Response = { ok: false, error: `${req} threw`, code: "RENDER_FAILED" };
+  const resp: Response = {
+    ok: false,
+    error: `${req} threw`,
+    code: "RENDER_FAILED",
+  };
   return {
-    at: nowAt(),
     resp,
     statusline: resp,
-    moves: false,
+    nextChange: Infinity,
     evaluated: 0,
+    delivered: () => {},
     failure: { level: "error", line: `frame ${req} threw` },
   };
 }
@@ -184,7 +226,10 @@ test("while a lane draws the bar elsewhere, the statusline lane is sent the hand
   note("s", "bar");
   const band: string[] = [];
   const statusline: string[] = [];
-  const closeBand = feeds.subscribe("s", sub((r) => band.push(outputOf(r))));
+  const closeBand = feeds.subscribe(
+    "s",
+    sub((r) => band.push(outputOf(r))),
+  );
   const closeLine = feeds.subscribe(
     "s",
     sub((r) => statusline.push(outputOf(r)), "statusline"),
@@ -198,7 +243,9 @@ test("while a lane draws the bar elsewhere, the statusline lane is sent the hand
   expect(band.every((b) => b.startsWith("bar#"))).toBe(true);
   // The handoff line, then the moving bar once nothing draws it elsewhere.
   expect(statusline[0]).toBe("the bar is drawn in the band");
-  expect(statusline.filter((l) => l === "the bar is drawn in the band")).toHaveLength(1);
+  expect(
+    statusline.filter((l) => l === "the bar is drawn in the band"),
+  ).toHaveLength(1);
   expect(statusline.length).toBeGreaterThan(2);
   expect(statusline.slice(1).every((l) => l.startsWith("bar#"))).toBe(true);
 });
@@ -223,7 +270,10 @@ test("a moving bar is drawn a moving period apart, every new frame pushed", asyn
   const { feeds, note } = harness({ motion: "moving" });
   note("s", "bar");
   const got: string[] = [];
-  const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
+  const close = feeds.subscribe(
+    "s",
+    sub((r) => got.push(outputOf(r))),
+  );
   await sleep(500);
   close();
   // 25 frames in 500 ms at 20 ms; a loaded box draws fewer, never more.
@@ -236,7 +286,10 @@ test("a still bar is drawn a still period apart and pushed only when it changes"
   const { feeds, note, state, changes } = harness({ motion: "still" });
   note("s", "bar");
   const got: string[] = [];
-  const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
+  const close = feeds.subscribe(
+    "s",
+    sub((r) => got.push(outputOf(r))),
+  );
   await sleep(100);
   expect(state.renders).toBe(1);
   expect(got).toEqual(["bar#0"]);
@@ -249,18 +302,38 @@ test("a still bar is drawn a still period apart and pushed only when it changes"
   close();
 });
 
+test("a frame's copies are recorded once it goes out to a follower, never while none follows", async () => {
+  const { feeds, note, state } = harness({ motion: "still" });
+  note("s", "bar");
+  await sleep(50);
+  expect(state.delivered).toEqual([]);
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
+  await sleep(100);
+  expect(state.delivered).toEqual(["bar#0"]);
+  close();
+});
+
 test("a new request is drawn at once, and two subscribers share every frame", async () => {
   const { feeds, note, state } = harness({ motion: "still" });
   const a: string[] = [];
   const b: string[] = [];
-  const closeA = feeds.subscribe("s", sub((r) => a.push(outputOf(r))));
+  const closeA = feeds.subscribe(
+    "s",
+    sub((r) => a.push(outputOf(r))),
+  );
   await sleep(50);
   expect(state.renders).toBe(0);
   note("s", "first");
   await sleep(20);
   // The request's own answer is its client's: the feed draws its frame.
   expect(state.renders).toBe(1);
-  const closeB = feeds.subscribe("s", sub((r) => b.push(outputOf(r))));
+  const closeB = feeds.subscribe(
+    "s",
+    sub((r) => b.push(outputOf(r))),
+  );
   // The newcomer gets the bar as it stands, before any new render, and the
   // next frame is brought forward, since who follows is drawn into it. Its
   // bytes are the same, so it is pushed to no one.
@@ -280,9 +353,15 @@ test("a new request is drawn at once, and two subscribers share every frame", as
 });
 
 test("a render slower than the period is followed by the next at once, and a wake during it is coalesced into it", async () => {
-  const { feeds, note, state, changes } = harness({ motion: "moving", renderMs: 60 });
+  const { feeds, note, state, changes } = harness({
+    motion: "moving",
+    renderMs: 60,
+  });
   note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
   await sleep(10);
   state.duringRender = () => {
     changes.get("s")!();
@@ -299,7 +378,10 @@ test("a render slower than the period is followed by the next at once, and a wak
 test("the last subscriber leaving stops the feed and logs what it drew", async () => {
   const { feeds, note, state, changes, log } = harness({ motion: "moving" });
   note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
   await sleep(100);
   close();
   const drawn = state.renders;
@@ -319,18 +401,26 @@ test("the last subscriber leaving stops the feed and logs what it drew", async (
 test("a bar that moves where nobody can see it is drawn at the still rate, and its feed counts it", async () => {
   const { feeds, note, state, log } = harness({ motion: "unseen" });
   note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
   await sleep(500);
   close();
   // Drawn at 0 and 400 ms: the still period, not the 20 ms a moving bar gets.
   expect(state.renders).toBe(2);
-  expect(log.at(-1)).toMatch(/ drawn=2 noted=0 noView=0 moving=0 unseen=2 failed=0 /);
+  expect(log.at(-1)).toMatch(
+    / drawn=2 noted=0 noView=0 moving=0 unseen=2 failed=0 /,
+  );
 });
 
 test("a noted request is drawn at once, and the next frame falls due a period after that one", async () => {
   const { feeds, note, state, log } = harness({ motion: "still" });
   const got: string[] = [];
-  const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
+  const close = feeds.subscribe(
+    "s",
+    sub((r) => got.push(outputOf(r))),
+  );
   note("s", "bar");
   await sleep(200);
   expect(state.renders).toBe(1);
@@ -338,13 +428,18 @@ test("a noted request is drawn at once, and the next frame falls due a period af
   close();
   expect(state.renders).toBe(1);
   expect(got).toEqual(["bar#0"]);
-  expect(log.at(-1)).toMatch(/ drawn=1 noted=1 noView=0 moving=0 unseen=0 failed=0 pushed=1 /);
+  expect(log.at(-1)).toMatch(
+    / drawn=1 noted=1 noView=0 moving=0 unseen=0 failed=0 pushed=1 /,
+  );
 });
 
 test("a request that arrived before the one held is not the session's data, however late its render finishes", async () => {
   const { feeds, note } = harness({ motion: "still" });
   const got: string[] = [];
-  const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
+  const close = feeds.subscribe(
+    "s",
+    sub((r) => got.push(outputOf(r))),
+  );
   note("s", "newer", 2);
   note("s", "older", 1);
   await sleep(20);
@@ -355,7 +450,10 @@ test("a request that arrived before the one held is not the session's data, howe
 test("a watched session's request outlives the eviction of the least recently noted", async () => {
   const { feeds, note, state, changes } = harness({ motion: "still" });
   note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
   await sleep(20);
   for (let i = 0; i < 300; i++) note(`other-${i}`, "x");
   const drawn = state.renders;
@@ -366,9 +464,15 @@ test("a watched session's request outlives the eviction of the least recently no
 });
 
 test("a frame that keeps failing the same way is logged once, and counted every time", async () => {
-  const { feeds, note, changes, log } = harness({ motion: "still", fails: true });
+  const { feeds, note, changes, log } = harness({
+    motion: "still",
+    fails: true,
+  });
   note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
   await sleep(20);
   changes.get("s")!();
   await sleep(20);
@@ -388,7 +492,10 @@ describe("on a faked clock", () => {
   test("a moving bar that comes into view is drawn at the moving rate from then", async () => {
     const { feeds, note, state, log } = harness({ motion: "unseen" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(50);
     expect(state.renders).toBe(1);
     state.motion = "moving";
@@ -400,27 +507,38 @@ describe("on a faked clock", () => {
     expect(log.at(-1)).toMatch(/ moving=6 unseen=1 /);
   });
 
-  // candybar-animation-wbxz.829: the rate a fed bar shows is the pace its feed
-  // set — what an extra draw or the frame's own push cannot move, so a still
-  // bar showing it stays still.
-  test("each frame is handed the pace its feed set: still, then moving, then still", async () => {
+  // candybar-animation-wbxz.829, .014: the rate a fed bar shows is its feed's
+  // ceiling — the most frames a second it draws the bar at, set by whether
+  // the pane is on a screen — which neither the bar's own beat, an extra draw,
+  // nor the frame's own push can move, so a still bar showing it stays still.
+  test("each frame is handed its feed's ceiling: the moving rate while shown, the still rate while not", async () => {
     const pace = (ms: number) => Math.round(1000 / ms);
     const { feeds, note, state, changes, log } = harness({ motion: "moving" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(200);
-    // The first frame is drawn at once, at the still pace it would follow at.
-    expect(state.rates[0]).toBe(pace(PERIODS.still));
-    expect(state.rates.slice(1)).toEqual(state.rates.slice(1).map(() => pace(PERIODS.moving)));
+    expect(state.rates).toEqual(state.rates.map(() => pace(PERIODS.moving)));
     // A change draws an extra frame, which moves nothing.
     changes.get("s")!();
     await pass(1);
     expect(state.rates.at(-1)).toBe(pace(PERIODS.moving));
+    // A still bar on a screen is drawn a still period apart, and still shows
+    // the ceiling: it would be drawn that fast if it moved.
     state.motion = "still";
     await pass(1000);
+    expect(state.rates.at(-1)).toBe(pace(PERIODS.moving));
+    // Unseen, its next frame is spaced a still period from the last.
+    state.motion = "unseen";
+    feeds.wakeWhere("visibility", () => true);
+    await pass(PERIODS.still);
     close();
     expect(state.rates.at(-1)).toBe(pace(PERIODS.still));
-    expect(log.at(-1)).toMatch(new RegExp(` pace=${pace(PERIODS.still)}fps `));
+    expect(log.at(-1)).toMatch(
+      new RegExp(` ceiling=${pace(PERIODS.still)}fps `),
+    );
   });
 
   // The rate a feed drew at, beside the pace it set: the gap is what the
@@ -428,12 +546,17 @@ describe("on a faked clock", () => {
   test("the summary states the rate the feed drew at over its life", async () => {
     const { feeds, note, state, log } = harness({ motion: "moving" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(2000);
     close();
     expect(state.renders).toBeGreaterThan(1);
     expect(log.at(-1)).toMatch(
-      new RegExp(` for=2s drawn=${state.renders} .* achieved=${(state.renders / 2).toFixed(1)}fps `),
+      new RegExp(
+        ` for=2s drawn=${state.renders} .* achieved=${(state.renders / 2).toFixed(1)}fps `,
+      ),
     );
   });
 
@@ -442,12 +565,17 @@ describe("on a faked clock", () => {
   test("the summary counts the parts its frames evaluated", async () => {
     const { feeds, note, state, log } = harness({ motion: "moving" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(100);
     close();
     expect(state.renders).toBeGreaterThan(1);
     expect(log.at(-1)).toMatch(
-      new RegExp(` drawn=${state.renders} .* evaluated=${EVALUATED * state.renders} `),
+      new RegExp(
+        ` drawn=${state.renders} .* evaluated=${EVALUATED * state.renders} `,
+      ),
     );
   });
 
@@ -458,7 +586,10 @@ describe("on a faked clock", () => {
   test("wakes of every cause at 1 ms intervals draw a shown feed at most once a moving period", async () => {
     const { feeds, note, state, log } = harness({ motion: "still" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(1);
     expect(state.renders).toBe(1);
     const causes = ["data", "state", "reload", "visibility"] as const;
@@ -474,7 +605,9 @@ describe("on a faked clock", () => {
     // close may have cancelled: every other wake was coalesced.
     const moved = state.renders - 1;
     const summary = log.at(-1)!;
-    expect(summary).toContain(" woke=data:50,state:50,reload:50,visibility:50 ");
+    expect(summary).toContain(
+      " woke=data:50,state:50,reload:50,visibility:50 ",
+    );
     const coalesced = Number(/ coalesced=(\d+) /.exec(summary)![1]);
     expect([200 - moved, 200 - moved - 1]).toContain(coalesced);
   });
@@ -482,7 +615,10 @@ describe("on a faked clock", () => {
   test("a feed whose pane nobody can see, woken at 1 ms intervals, draws at most once a still period", async () => {
     const { feeds, note, state } = harness({ motion: "unseen" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(1);
     for (let ms = 0; ms < 1000; ms++) {
       feeds.wake("s", "data");
@@ -505,7 +641,10 @@ describe("on a faked clock", () => {
     });
     tmux.recorded("pane=%1", "first", ok(null), 1);
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(1);
     tmux.recorded("pane=%1", "period", ok(null), 1);
     tmux.recorded("pane=%1", "period", ok(null), 1);
@@ -522,7 +661,10 @@ describe("on a faked clock", () => {
     const { feeds, note, state, log } = harness({ motion: "still" });
     note("s", "bar");
     state.duringRender = () => feeds.wake("s", "data");
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(PERIODS.still - 1);
     expect(state.renders).toBe(1);
     await pass(1);
@@ -538,7 +680,10 @@ describe("on a faked clock", () => {
   // view the request opens says so (the harness's `note`), and that draws.
   test("a feed waiting for a view draws once the view that opens wakes it", async () => {
     const { feeds, note, state, log } = harness({ motion: "still" });
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(PERIODS.still * 2);
     expect(state.renders).toBe(0);
     feeds.note("s", "bar", 1);
@@ -556,7 +701,10 @@ describe("on a faked clock", () => {
   // feed's first frame is not held a still period behind it.
   test("the frame a view's opening wakes is drawn at once, not spaced from a draw that found no view", async () => {
     const { feeds, note, state } = harness({ motion: "unseen" });
-    const close = feeds.subscribe("s", sub(() => {}));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
     await pass(PERIODS.still / 8);
     expect(state.renders).toBe(0);
     note("s", "bar");
@@ -570,8 +718,14 @@ describe("on a faked clock", () => {
     note("a", "%1:a");
     note("b", "%2:b");
     note("c", "%1:c");
-    const closeA = feeds.subscribe("a", sub(() => {}));
-    const closeB = feeds.subscribe("b", sub(() => {}));
+    const closeA = feeds.subscribe(
+      "a",
+      sub(() => {}),
+    );
+    const closeB = feeds.subscribe(
+      "b",
+      sub(() => {}),
+    );
     await pass(20);
     expect(state.renders).toBe(2);
     // c matches but nobody watches it, so nothing is drawn for it.
@@ -585,12 +739,15 @@ describe("on a faked clock", () => {
 
 // What runs while any feed exists (the tmux visibility loop) starts with the
 // first feed and stops with the last, not a moment later.
-// The pace is drawn into the frame, so a pace that moved with a render's
+// The ceiling is drawn into the frame, so a rate that moved with a render's
 // duration would make every frame of an unchanged bar differ, and be pushed.
 test("a render slower than the moving period leaves the pace at the moving rate", async () => {
   const { feeds, note, state } = harness({ motion: "moving", renderMs: 60 });
   note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
+  const close = feeds.subscribe(
+    "s",
+    sub(() => {}),
+  );
   await sleep(400);
   close();
   expect(state.renders).toBeGreaterThan(2);
@@ -604,16 +761,28 @@ test("the feeds watch from the first feed opening to the last closing", async ()
   note("a", "x");
   note("b", "y");
   expect(state.opened).toBe(0);
-  const closeA = feeds.subscribe("a", sub(() => {}));
-  const closeA2 = feeds.subscribe("a", sub(() => {}));
-  const closeB = feeds.subscribe("b", sub(() => {}));
+  const closeA = feeds.subscribe(
+    "a",
+    sub(() => {}),
+  );
+  const closeA2 = feeds.subscribe(
+    "a",
+    sub(() => {}),
+  );
+  const closeB = feeds.subscribe(
+    "b",
+    sub(() => {}),
+  );
   expect([state.opened, state.stopped]).toEqual([1, 0]);
   closeA();
   closeA2();
   expect([state.opened, state.stopped]).toEqual([1, 0]);
   closeB();
   expect([state.opened, state.stopped]).toEqual([1, 1]);
-  feeds.subscribe("a", sub(() => {}))();
+  feeds.subscribe(
+    "a",
+    sub(() => {}),
+  )();
   expect([state.opened, state.stopped]).toEqual([2, 2]);
 });
 
@@ -622,11 +791,23 @@ test("the feeds watch from the first feed opening to the last closing", async ()
 describe("a subscription's lane", () => {
   test("switched off in the session's settings is refused before any feed opens", async () => {
     const { feeds, note, state, log } = harness({ motion: "moving" });
-    state.lanes = { band: false, statusline: true, pane: true, tmuxStatus: false };
+    state.lanes = {
+      band: false,
+      statusline: true,
+      pane: true,
+      tmuxStatus: false,
+    };
     note("s", "bar");
     const refusals: Refusal[] = [];
     const frames: string[] = [];
-    feeds.subscribe("s", sub((r) => frames.push(outputOf(r)), "band", (r) => refusals.push(r)));
+    feeds.subscribe(
+      "s",
+      sub(
+        (r) => frames.push(outputOf(r)),
+        "band",
+        (r) => refusals.push(r),
+      ),
+    );
     await sleep(50);
     expect(refusals).toEqual([
       expect.objectContaining({
@@ -639,7 +820,11 @@ describe("a subscription's lane", () => {
     expect(frames).toEqual([]);
     expect(state.renders).toBe(0);
     expect(state.opened).toBe(0);
-    expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0, refused: 1 });
+    expect(feeds.getStats()).toMatchObject({
+      feeds: 0,
+      subscribers: 0,
+      refused: 1,
+    });
     expect(log).toContain('feed sid="s" refused lane=band switched-off');
   });
 
@@ -649,10 +834,25 @@ describe("a subscription's lane", () => {
     const band: string[] = [];
     const pane: string[] = [];
     const refusals: Refusal[] = [];
-    feeds.subscribe("s", sub((r) => band.push(outputOf(r)), "band", (r) => refusals.push(r)));
-    const closePane = feeds.subscribe("s", sub((r) => pane.push(outputOf(r)), "pane"));
+    feeds.subscribe(
+      "s",
+      sub(
+        (r) => band.push(outputOf(r)),
+        "band",
+        (r) => refusals.push(r),
+      ),
+    );
+    const closePane = feeds.subscribe(
+      "s",
+      sub((r) => pane.push(outputOf(r)), "pane"),
+    );
     await sleep(30);
-    state.lanes = { band: false, statusline: true, pane: true, tmuxStatus: false };
+    state.lanes = {
+      band: false,
+      statusline: true,
+      pane: true,
+      tmuxStatus: false,
+    };
     state.motion = "moving"; // the next frame differs, so it is pushed
     changes.get("s")!();
     await sleep(60);
@@ -661,15 +861,25 @@ describe("a subscription's lane", () => {
     await sleep(60);
     expect(band.length).toBe(bandSeen);
     expect(pane.length).toBeGreaterThan(bandSeen);
-    expect(feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 1, refused: 1 });
+    expect(feeds.getStats()).toMatchObject({
+      feeds: 1,
+      subscribers: 1,
+      refused: 1,
+    });
     // Each subscribe names its lane; the running summary names the lanes still
     // subscribed when it is written.
-    expect(log).toContain('feed sid="s" subscribed lane=band subscribers=1 view=Y');
-    expect(log).toContain('feed sid="s" subscribed lane=pane subscribers=2 view=Y');
+    expect(log).toContain(
+      'feed sid="s" subscribed lane=band subscribers=1 view=Y',
+    );
+    expect(log).toContain(
+      'feed sid="s" subscribed lane=pane subscribers=2 view=Y',
+    );
     state.skewMs = 60_000;
     changes.get("s")!();
     await sleep(30);
-    expect(log.some((l) => /feed sid="s" running subscribers=1 lanes=pane /.test(l))).toBe(true);
+    expect(
+      log.some((l) => /feed sid="s" running subscribers=1 lanes=pane /.test(l)),
+    ).toBe(true);
     closePane();
     expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
   });
@@ -681,12 +891,19 @@ describe("a subscription's lane", () => {
     const { feeds, note, state, changes, log } = harness({ motion: "still" });
     note("s", "bar");
     const got: string[] = [];
-    const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
+    const close = feeds.subscribe(
+      "s",
+      sub((r) => got.push(outputOf(r))),
+    );
     await sleep(20);
     state.gateThrows = true;
     changes.get("s")!();
     await sleep(20);
-    expect(log.some((l) => l.startsWith('feed sid="s" threw: Error: the gate broke'))).toBe(true);
+    expect(
+      log.some((l) =>
+        l.startsWith('feed sid="s" threw: Error: the gate broke'),
+      ),
+    ).toBe(true);
     expect(feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 1 });
     state.gateThrows = false;
     state.motion = "moving";
@@ -699,10 +916,22 @@ describe("a subscription's lane", () => {
   test("of a session with no frame yet waits, and the first frame decides", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
     const refusals: Refusal[] = [];
-    feeds.subscribe("s", sub(() => {}, "pane", (r) => refusals.push(r)));
+    feeds.subscribe(
+      "s",
+      sub(
+        () => {},
+        "pane",
+        (r) => refusals.push(r),
+      ),
+    );
     await sleep(20);
     expect(refusals).toEqual([]);
-    state.lanes = { band: true, statusline: true, pane: false, tmuxStatus: false };
+    state.lanes = {
+      band: true,
+      statusline: true,
+      pane: false,
+      tmuxStatus: false,
+    };
     note("s", "bar");
     await sleep(20);
     expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
@@ -713,14 +942,34 @@ describe("a subscription's lane", () => {
   // toggle turned on is honoured by the next subscribe, with no new request.
   test("turned on in the session's settings is honoured at once, with no frame between", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
-    state.lanes = { band: false, statusline: true, pane: true, tmuxStatus: false };
+    state.lanes = {
+      band: false,
+      statusline: true,
+      pane: true,
+      tmuxStatus: false,
+    };
     note("s", "bar");
     const refusals: Refusal[] = [];
-    feeds.subscribe("s", sub(() => {}, "band", (r) => refusals.push(r)));
+    feeds.subscribe(
+      "s",
+      sub(
+        () => {},
+        "band",
+        (r) => refusals.push(r),
+      ),
+    );
     expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
-    state.lanes = { band: true, statusline: true, pane: true, tmuxStatus: false };
+    state.lanes = {
+      band: true,
+      statusline: true,
+      pane: true,
+      tmuxStatus: false,
+    };
     const frames: string[] = [];
-    const close = feeds.subscribe("s", sub((r) => frames.push(outputOf(r))));
+    const close = feeds.subscribe(
+      "s",
+      sub((r) => frames.push(outputOf(r))),
+    );
     await sleep(20);
     close();
     expect(frames).toEqual(["bar#0"]);
@@ -752,7 +1001,8 @@ describe("noteSent", () => {
   test("a lane's log holds the sends of the window ending at this one, a wall clock stepped back included", () => {
     const at = (ms: number): Instant => instantOf(new Date(ms));
     const rate: Instant[] = [];
-    for (const ms of [100_000, 100_500, 100_900, 101_200]) noteSent(rate, at(ms));
+    for (const ms of [100_000, 100_500, 100_900, 101_200])
+      noteSent(rate, at(ms));
     expect(rate).toEqual([at(100_500), at(100_900), at(101_200)]);
     // An hour back: every earlier send is stamped after this one.
     noteSent(rate, at(101_200 - 3_600_000));
@@ -777,15 +1027,28 @@ describe("feedsOf", () => {
   test("counts each lane's subscribers and the frames pushed in the last second", async () => {
     const { feeds, note } = harness({ motion: "moving" });
     note("s", "bar");
-    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
-    const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
-    const closeC = feeds.subscribe("s", sub(() => {}, "pane"));
+    const closeA = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
+    const closeB = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
+    const closeC = feeds.subscribe(
+      "s",
+      sub(() => {}, "pane"),
+    );
     await pass(1100);
     const now = feeds.feedsOf("s", nowAt());
     expect(now.band).toEqual(UNFOLLOWED);
     // The window holds only the last second's frames, never the 1.1 s since
     // subscribing.
-    expect(now.statusline).toEqual({ subscribers: 2, fps: MOVING, shown: true });
+    expect(now.statusline).toEqual({
+      subscribers: 2,
+      fps: MOVING,
+      shown: true,
+    });
     expect(now.pane).toEqual({ subscribers: 1, fps: MOVING, shown: true });
     expect(feedsFact(now)).toBe(
       `statusline:2sub/${MOVING}fps/shown,pane:1sub/${MOVING}fps/shown`,
@@ -799,9 +1062,15 @@ describe("feedsOf", () => {
   test("a lane is credited only with the frames sent since its first subscriber joined", async () => {
     const { feeds, note } = harness({ motion: "moving" });
     note("s", "bar");
-    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeA = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
     await pass(1000);
-    const closeB = feeds.subscribe("s", sub(() => {}, "pane"));
+    const closeB = feeds.subscribe(
+      "s",
+      sub(() => {}, "pane"),
+    );
     await pass(100);
     const now = feeds.feedsOf("s", nowAt());
     closeA();
@@ -815,9 +1084,15 @@ describe("feedsOf", () => {
   test("a lane's rate is unmoved by a subscriber joining it late or leaving it", async () => {
     const { feeds, note } = harness({ motion: "moving" });
     note("s", "bar");
-    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeA = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
     await pass(1000);
-    const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeB = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
     await pass(100);
     expect(feeds.feedsOf("s", nowAt()).statusline).toEqual({
       subscribers: 2,
@@ -833,9 +1108,16 @@ describe("feedsOf", () => {
   test("a subscriber rejoining a still bar is not counted as a frame", async () => {
     const { feeds, note } = harness({ motion: "still" });
     note("s", "bar");
-    const keep = feeds.subscribe("s", sub(() => {}, "band"));
+    const keep = feeds.subscribe(
+      "s",
+      sub(() => {}, "band"),
+    );
     await pass(1000);
-    for (let i = 0; i < 3; i++) feeds.subscribe("s", sub(() => {}, "band"))();
+    for (let i = 0; i < 3; i++)
+      feeds.subscribe(
+        "s",
+        sub(() => {}, "band"),
+      )();
     expect(feeds.feedsOf("s", nowAt()).band.fps).toBe(0);
     keep();
   });
@@ -844,8 +1126,14 @@ describe("feedsOf", () => {
     const { feeds, note, state } = harness({ motion: "moving" });
     state.handoff = "the bar is drawn in the band";
     note("s", "bar");
-    const closeBand = feeds.subscribe("s", sub(() => {}, "band"));
-    const closeLine = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeBand = feeds.subscribe(
+      "s",
+      sub(() => {}, "band"),
+    );
+    const closeLine = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
     await pass(1100);
     const now = feeds.feedsOf("s", nowAt());
     closeBand();
@@ -858,7 +1146,10 @@ describe("feedsOf", () => {
   test("a pane off screen is drawn at the still rate, and says so", async () => {
     const { feeds, note } = harness({ motion: "unseen" });
     note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}, "statusline"),
+    );
     await pass(1100);
     const { statusline } = feeds.feedsOf("s", nowAt());
     close();
@@ -867,5 +1158,75 @@ describe("feedsOf", () => {
     expect(feedsFact({ ...UNFOLLOWED_FEEDS, statusline })).toBe(
       "statusline:1sub/2fps/offscreen",
     );
+  });
+});
+
+// candybar-animation-wbxz.014: a feed draws its next frame when the drawn
+// frame next changes — within its spacing, and no later than the still period
+// — and draws it for the instant of that change.
+describe("a feed draws when its bar next changes", () => {
+  test("a bar that turns every 100 ms is drawn once a turn, not at the moving rate", async () => {
+    const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
+    note("s", "bar");
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
+    await sleep(1050);
+    close();
+    // About eleven turns in 1.05 s; the moving rate would draw about fifty.
+    expect(state.renders).toBeGreaterThanOrEqual(9);
+    expect(state.renders).toBeLessThanOrEqual(13);
+  });
+
+  test("an unseen bar that turns every 100 ms is drawn a still period apart", async () => {
+    const { feeds, note, state } = harness({ motion: "unseen", beatMs: 100 });
+    note("s", "bar");
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
+    await sleep(1000);
+    close();
+    // At once, then 400 ms apart.
+    expect(state.renders).toBe(3);
+  });
+
+  test("a frame set for a turn is drawn for it, however short the wall reading falls, and each turn costs one draw", async () => {
+    const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
+    state.wallOffsetS = 0.0003;
+    state.jitterMs = 1.5;
+    note("s", "bar");
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
+    await sleep(1550);
+    close();
+    const beats = state.ats.map((at) => Math.floor((at * 1000) / 100));
+    // After the first, every frame is drawn in the turn after the last one's:
+    // never for the instant before its turn, so never twice in one.
+    expect(beats.slice(1)).toEqual(beats.slice(1).map((_, i) => beats[i]! + 1));
+    expect(beats.length).toBeGreaterThanOrEqual(13);
+  });
+
+  test("a wall clock stepped back is followed at the next draw, not drawn ahead of", async () => {
+    const { feeds, note, state } = harness({ motion: "moving", beatMs: 100 });
+    note("s", "bar");
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
+    await sleep(250);
+    state.wallOffsetS = -10;
+    const before = state.renders;
+    await sleep(1200);
+    close();
+    const after = state.ats.slice(before);
+    expect(after.length).toBeGreaterThan(0);
+    // Drawn within the timer's resolution of the stepped wall, never 10 s
+    // ahead of it.
+    for (const at of after)
+      expect(at - (Date.now() / 1000 - 10)).toBeLessThan(0.01);
   });
 });

@@ -14,6 +14,7 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
@@ -217,6 +218,7 @@ describe("the bundled host segment", () => {
   function render(host: Record<string, unknown>): string {
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),

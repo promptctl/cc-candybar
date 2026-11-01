@@ -4,7 +4,7 @@
 // omit the theme selection entirely — so they render the floor theme every time
 // and never exercise the recolor. The recolor lives in the daemon's PER-RENDER
 // theme resolution (resolveThemeSelection), OUTSIDE renderDsl. This test
-// replicates that resolution exactly as src/daemon/server.ts does, so it proves
+// replicates that resolution exactly as src/daemon/draw-bar.ts does, so it proves
 // the end-to-end loop: a set-state `theme` click changes the bytes a
 // non-picker segment renders.
 //
@@ -19,6 +19,7 @@
 // happens to lead the row, and silently starts measuring a different segment
 // the day a cell is added ahead of it.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import type { RichText } from "@promptctl/rich-js";
@@ -87,14 +88,14 @@ function buildRuntime() {
   const config = parseAndValidate("<recolor>", SRC, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
 
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
-  // pass while the real daemon recolors. (server.ts hands renderDsl
+  // pass while the real daemon recolors. (draw-bar.ts hands renderDsl
   // `theme: resolveThemeSelection(staged, sessionState.get(sid,'theme'),
   // globals.palette)`, and the SELECTION carries the palette, so there is no
   // separate base palette here to fall out of step with the name.)
@@ -143,28 +144,28 @@ function bgColors(rendered: string): Set<string> {
   return out;
 }
 
-function clickTheme(
+async function clickTheme(
   { config, sessionState }: ReturnType<typeof buildRuntime>,
   theme: string,
-): void {
+): Promise<void> {
   // Drive the real wire end-to-end: emit the click URL the picker would, then
   // dispatch it exactly as the daemon does (parse → dispatch → set-state).
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
   ]);
   recordRender(sessionState, SID);
-  clickUrl(url, testVerbContext(sessionState, undefined, config));
+  await clickUrl(url, testVerbContext(sessionState, undefined, config));
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
-  test("clicking a theme repaints the whole bar's background colors", () => {
+  test("clicking a theme repaints the whole bar's background colors", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
 
     const beforeBgs = bgColors(render().bar);
     expect(beforeBgs.size).toBeGreaterThan(0);
 
-    clickTheme(rt, PICKED_THEME);
+    await clickTheme(rt, PICKED_THEME);
 
     // [LAW:verifiable-goals] The coarse whole-bar claim: the set of backgrounds
     // the bar paints with must change. Blanket DISJOINTNESS is deliberately NOT
@@ -177,7 +178,7 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
     expect(bgColors(render().bar)).not.toEqual(beforeBgs);
   });
 
-  test("every cell the config declares repaints — the non-picker `plain` too", () => {
+  test("every cell the config declares repaints — the non-picker `plain` too", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
 
@@ -185,14 +186,14 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
       Object.fromEntries(DECLARED.map((name) => [name, painted.bgOf(name)]));
 
     const before = bgsOf(render());
-    clickTheme(rt, PICKED_THEME);
+    await clickTheme(rt, PICKED_THEME);
     const after = bgsOf(render());
 
     const unchanged = DECLARED.filter((name) => after[name] === before[name]);
     expect(unchanged).toEqual([]);
   });
 
-  test("active marking tracks the rendered theme: default marked, then the pick", () => {
+  test("active marking tracks the rendered theme: default marked, then the pick", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
 
@@ -202,7 +203,7 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
       [{ verb: "set-state", args: [SID, "theme", BASE_THEME] }],
     ]);
 
-    clickTheme(rt, PICKED_THEME);
+    await clickTheme(rt, PICKED_THEME);
 
     expect(boldUrls(render().bar).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: [SID, "theme", PICKED_THEME] }],

@@ -3,6 +3,7 @@
 // drawn in, pure; the glyphs it asks about measured through the joiner; and
 // the pure readers the font edge parses with.
 
+import type { RenderOrigin } from "../src/config-hint";
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import {
   checkByName,
@@ -43,7 +44,9 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
 import type { ClientHints } from "../src/daemon/protocol";
 
-const GLYPHS = "";
+// Two private-use glyphs a bar draws: the powerline arrow and the wrapper's
+// lead.
+const GLYPHS = "\u{E0B0}\u{E0B2}";
 const probe = checkByName("nerdFont")!.probe;
 
 // A mark made on one sighting, as the verb files it in the book.
@@ -133,7 +136,7 @@ describe("nerdFont probe", () => {
 
   test("a configured terminal whose font lacks glyphs names the font, where it was read, and what it lacks", () => {
     expect(expectFailedWithSighting(verdictIn(MENLO), MENLO)).toBe(
-      'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1 — set a Nerd Font as its font',
+      'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B2 — set a Nerd Font as its font',
     );
   });
 
@@ -202,8 +205,8 @@ describe("nerdFont probe", () => {
   test("a sighting names the terminal, never its release, and what its font reading was", () => {
     const kitty = (version: string | null): TerminalFacts => ({ kind: "bundling", name: "kitty", version });
     expect(idIn(kitty("0.45.0"))).toBe(idIn(kitty(null)));
-    expect(idIn(kitty(null))).toBe("kitty|U+E0B0 U+E0B1");
-    expect(idIn(MENLO)).toBe('iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B1');
+    expect(idIn(kitty(null))).toBe("kitty|U+E0B0 U+E0B2");
+    expect(idIn(MENLO)).toBe('iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B2');
     // Turning the built-in glyphs on is a different reading, so a different sighting.
     const builtIn = ITERM({
       kind: "ok",
@@ -217,7 +220,7 @@ describe("nerdFont probe", () => {
     const f = facts({ kind: "glyphs", glyphs: GLYPHS, terminal: MENLO }, null, broken);
     expect(probe(f)).toEqual({
       ok: false,
-      reason: 'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1 — set a Nerd Font as its font',
+      reason: 'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B2 — set a Nerd Font as its font',
       more: ["the mark book could not be read: /s/doctor-marks.json is not JSON"],
     });
     // Nothing names the terminal, so no mark could settle it, and no book is told.
@@ -227,7 +230,7 @@ describe("nerdFont probe", () => {
     });
     const ghostty: TerminalFacts = { kind: "bundling", name: "ghostty", version: null };
     expect(probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal: ghostty }, null, broken))).toEqual({ ok: true });
-    expect(checkByName("config")!.probe(f)).toEqual({ ok: true });
+    expect(checkByName("config")!.probe(f).ok).toBe(true);
     // A bar with no private-use glyph needs no mark, so no book.
     expect(probe(facts({ kind: "none" }, null, broken))).toEqual({ ok: true });
   });
@@ -236,7 +239,7 @@ describe("nerdFont probe", () => {
     const sighting = idIn(MENLO);
     expect(verdictIn(MENLO, { mark: "drawn", sighting })).toEqual({ ok: true });
     expect(expectFailedWithSighting(verdictIn(MENLO, { mark: "boxes", sighting }), MENLO)).toBe(
-      'iTerm2 3.7.2 draws U+E0B0 U+E0B1 as boxes — set a Nerd Font as its font',
+      'iTerm2 3.7.2 draws U+E0B0 U+E0B2 as boxes — set a Nerd Font as its font',
     );
     // Made in another terminal, or on another joiner's glyphs: no mark here.
     const elsewhere = idIn({ kind: "unknown", called: "Apple_Terminal" });
@@ -260,22 +263,22 @@ describe("nerdFont probe", () => {
 });
 
 describe("the glyphs the bar draws", () => {
-  test("are measured through the joiner, divider included", () => {
-    expect(stripPrivateGlyphs({ endcaps: "powerline" })).toBe("");
+  test("are measured through the joiner", () => {
+    expect(stripPrivateGlyphs({ endcaps: "powerline" })).toBe("");
     expect(stripPrivateGlyphs({ endcaps: "capsule" })).toBe("");
     expect(stripPrivateGlyphs({ endcaps: "stitch" })).toBe("");
   });
 
   test("include a private-use separator the author chose for plain", () => {
     expect(
-      stripPrivateGlyphs({ endcaps: "plain", separator: "" }),
-    ).toBe("");
+      stripPrivateGlyphs({ endcaps: "plain", separator: "" }),
+    ).toBe("");
     expect(stripPrivateGlyphs({ endcaps: "plain", separator: "|" })).toBe("");
   });
 });
 
 describe("the mark book", () => {
-  const ID = "iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B1";
+  const ID = "iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B2";
 
   test("files each mark under its check and sighting; the latest mark on a sighting answers", () => {
     const once = withMark({}, "nerdFont", ID, "boxes");
@@ -306,7 +309,7 @@ describe("the doctor event's Nerd Font fields", () => {
   test("say the glyphs, the terminal, the font and the mark honoured", () => {
     const menlo = { kind: "glyphs" as const, glyphs: GLYPHS, terminal: MENLO };
     expect(nerdFontFields(menlo, { kind: "ok", value: {} })).toBe(
-      'glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=-',
+      'glyphs=e0b0,e0b2 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=-',
     );
     // The mark on the sighting shown is the one honoured; one on another is not.
     const book: DoctorFacts["marks"] = {
@@ -319,7 +322,7 @@ describe("the doctor event's Nerd Font fields", () => {
         { kind: "glyphs", glyphs: GLYPHS, terminal: { kind: "unknown", called: "Apple Terminal" } },
         book,
       ),
-    ).toBe('glyphs=e0b0,e0b1 terminal=unknown:"Apple Terminal" font=- mark=-');
+    ).toBe('glyphs=e0b0,e0b2 terminal=unknown:"Apple Terminal" font=- mark=-');
     expect(nerdFontFields({ kind: "none" }, book)).toBe("glyphs=- terminal=- font=- mark=-");
     expect(nerdFontFields(menlo, { kind: "failed", reason: "x" })).toMatch(/ mark=unread$/);
   });
@@ -453,7 +456,11 @@ describe("the font edge's readers", () => {
 
 describe("gatherFacts: where the Nerd Font facts come from", () => {
   const HINT = { socket: "/s", pane: "%1", truecolor: null };
-  const ORIGIN = { projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null };
+  const ORIGIN: RenderOrigin = {
+    projectDir: "/tmp/proj",
+    cwd: "/tmp/proj",
+    target: { source: "search" },
+  };
   const COVERED = {
     kind: "ok" as const,
     value: { font: "JetBrainsMonoNF-Regular", from: 'iTerm2 profile "Default"', lacks: [] },
@@ -675,7 +682,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
   });
 
   test("the marks are the mark book's, whichever session made them", () => {
-    const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B1", "drawn");
+    const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B2", "drawn");
     const { e } = edge(tmuxSays("ghostty 1.3.1"));
     const marks = { kind: "ok", value: book } as const;
     expect(gathered(e, { tmux: HINT }, undefined, { ...EMPTY_STORES, marks }).marks).toEqual(marks);

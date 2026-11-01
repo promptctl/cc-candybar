@@ -11,10 +11,12 @@ import {
 import { LANES, LANE_NAMES, type Lane } from "./config/lanes";
 import { SETTINGS } from "./config/setting-projections";
 
-// Where the lanes' toggles are, each place once: one place while they sit
-// together, every place if the menu's map ever parts them.
+// Where the lanes' switches are, each place once: the 🧪 toggles, and the
+// renderer that switches the tmux status line.
 const LANE_PLACES = [
-  ...new Set(Object.values(LANES).map((l) => settingMenuPath(l.setting))),
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting)),
+  ),
 ].join(" or ");
 
 // The settings list's label column starts two spaces past the longest field.
@@ -65,8 +67,8 @@ export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
     "on: opens that pane · off: closes it",
   ],
   tmuxStatus: [
-    "animates the bar in the tmux status line, while this session's pane is the one it shows",
-    "on: the daemon draws it there · off: puts the status line back as it was",
+    "draws the bar in the tmux status line, while this session's pane is the one it shows",
+    "tmux: the daemon draws it there · claude: puts the status line back as it was",
   ],
 };
 
@@ -114,7 +116,7 @@ ${settingsByPlace()
   Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
   in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
 
-Animation lanes (experimental; toggles in the settings menu's ${LANE_PLACES}):
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
 ${LANE_NAMES.map((lane) => `  ${LANES[lane].label}\n${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
 Subcommands:
@@ -154,7 +156,7 @@ Subcommands:
                            drawn at PANE's width, so split PANE with -v for a
                            pane under it that fits. Experimental:
                            runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.setting)}.
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
 
 Config tooling:
   doctor [file]            Check your setup the way the bar's 🩺 doctor does —

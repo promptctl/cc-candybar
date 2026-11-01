@@ -12,7 +12,7 @@
 
 </div>
 
-**[Try the live bar in your browser →](https://promptctl.github.io/cc-candybar/)** The real daemon, compiled for the page, replays a few turns of a Claude Code session; every click in the bar is real.
+**[Try the live bar in your browser →](https://promptctl.github.io/cc-candybar/main/)** The real daemon, compiled for the page, replays a few turns of a Claude Code session; every click in the bar is real.
 
 ## What it is
 
@@ -49,7 +49,7 @@ Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are acce
 
 Without `$CC_CANDYBAR_CONFIG`, every file found is a layer: your user file merges over the bundled default, the cwd's over that, and the project's on top. So a project file declares only what that project adds or changes — a segment placed in a row, a plugin listed — and keeps the rest of your own config. `$CC_CANDYBAR_CONFIG` names the one file the session loads, and the others are not read. A change made from the bar (a theme picked and saved, a segment added in edit mode) is written to your user file, never to a project's; when a project file sets the same value, the click is refused and names that file.
 
-A project or cwd file, and a repository's own plugins (`.cc-candybar/plugins/`), come from somebody's repository, and a config can run commands. So the first time a session works in a directory holding one, the bar asks — `<dir> has a cc-candybar config — run it? [approve] [decline]` — and until you answer, it draws your own config and runs nothing from that directory. The answer is kept per directory in `$XDG_STATE_HOME/cc-candybar/repo-configs/repo-configs.json` (default `~/.local/state/cc-candybar/`) and holds across later edits of the files, as Claude Code's answer for a project's MCP servers does. Remove a directory's entry there to be asked again. `cc-candybar check` names a directory still awaiting an answer and runs nothing from it.
+A project or cwd file, and a repository's own plugins (`.cc-candybar/plugins/`), come from somebody's repository, and a config can run commands. So the first time a session works in a directory holding one, the bar asks — `a cc-candybar config for <dir> — run it? [approve] [decline]` — and until you answer, it draws your own config and runs nothing from that directory. The answer is kept per directory of the repository and covers that directory in every linked worktree `git worktree add` made from its checkout, so a new worktree never asks again. (A checkout whose `.git` is kept elsewhere, such as a submodule, answers apart from its worktrees.) It is kept in `$XDG_STATE_HOME/cc-candybar/repo-configs/repo-configs.json` (default `~/.local/state/cc-candybar/`) and holds across later edits of the files, as Claude Code's answer for a project's MCP servers does. Remove a directory's entry there to be asked again. `cc-candybar check` names a directory still awaiting an answer and runs nothing from it.
 
 JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 
@@ -91,7 +91,7 @@ Saving the file triggers a hot-reload of every active session.
 
 - **Daemon** (`src/daemon/`) — long-lived background process. One per user. Caches git state via filesystem watchers, usage data, and per-session key/value state. Runs until it exits on a memory backstop — on what the platform charges the process: `phys_footprint` on macOS, RSS on Linux (default 1024 MB via `CC_CANDYBAR_RSS_LIMIT_MB`; the V8 heap cap the spawner passes is twice that, a margin wide enough that the graceful backstop fires first under any growth its 60 s poll can see) or the host restarts; there is no idle or age timeout.
 - **Client** (`rust-client/src/main.rs`) — the Rust binary installed as `bin/cc-candybar`, and the only thing on the per-render path: it connects to the daemon, sends the hook JSON, and prints the ANSI response. On a daemon miss it spawns one detached and prints an empty line, so the next refresh finds a warm daemon. Every subcommand (`install`, `daemon`, `check`, `doctor`, …) execs the Node bundle at `dist/index.mjs`, which carries a socket relay of its own (`src/daemon/client.ts`) as the fallback when no native binary is staged.
-- **Renderer** (`src/dsl/render.ts`) — `renderDsl` is the single render path; the daemon, the demo and the tests all call it. It walks the config's layout tree, evaluates each segment's templates against the daemon's payload, and hands the styled cells to `src/render/` (strip and joiner selection, pickers and menus, the diagnostic strip). The payload's data comes from the providers in `src/segments/` — git, session, context, metrics, tmux, pricing.
+- **Renderer** (`src/dsl/render.ts`) — `renderDsl` is the single render path; the daemon, the demo and the tests all call it. It walks the config's layout tree, evaluates each segment's templates against the daemon's payload, and hands the styled cells to `src/render/` (strip and joiner selection, pickers and menus, the diagnostics viewer). The payload's data comes from the providers in `src/segments/` — git, session, context, metrics, tmux, pricing.
 - **Themes** (`src/themes/`) — palette construction plus name policy (which theme, style, variation, endcaps and colour depth names resolve to what). The colour arithmetic itself — blending, contrast, OKLCH transposition — lives in the separate `rich-js` package; this repo does none of it.
 
 ## Segments
@@ -110,7 +110,6 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `gitPr` | `⇆ #N` linked to the pull request, or `⚠ PR` when the forge lookup failed | when a PR or a lookup error is known |
 | `toolbar` | click affordances — copy the session id, open the project dir, the transcript and the repo page (also inside the settings menu) | always |
 | `commands` | type `/compact`, `/model` or `/clear` into this session; `/clear` asks for a second click (also inside the settings menu) | inside tmux (not placed by default) |
-| `themeSwitcher` | `◀ <theme> ▶` — the theme the bar is wearing; ◀/▶ switch this session to the previous/next theme | always (not placed by default) |
 | `session` | `§` this session's cost and tokens, plus budget status | always |
 | `today` | `☉` today's cost and tokens across sessions, plus budget status | always |
 | `block` | `◱` the 5-hour rate-limit window's utilization | while that window is active |
@@ -124,7 +123,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 
-Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `30 fps` while an animation lane draws it and it moves where you can see it, ` 1 fps` while that lane's bar is still or off screen, and `polled` when Claude Code reruns the statusline itself. It sits wherever the door does, so no layout has to place it, and none can leave it out.
+Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `≤30 fps` while an animation lane draws it where you can see it, ` ≤1 fps` while that lane's bar is off screen, and ` polled` when Claude Code reruns the statusline itself. The number is the most frames a second the lane draws; a lane redraws the bar only when it changes, so a still bar is redrawn far less often. It sits wherever the door does, so no layout has to place it, and none can leave it out.
 
 The lit ticket a checkout is working on is not bundled: it is a plugin, installed with `cc-candybar plugin install promptctl/links-issue-tracker`, whose one segment (`plugins.lit.ticket`, each of its parts a setting) is in edit mode's add-segment library. It reads the `.lit/statusline.json` lit keeps in each checkout, so no lit process runs for the bar.
 

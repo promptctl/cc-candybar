@@ -768,23 +768,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template: COMMAND_TRAY.template,
       when: COMMAND_TRAY.when,
     },
-    // Declared-but-opt-in: a theme stepper that lives ON the bar — one click
-    // per theme, with no menu to open (brandon-theme-picker-bgw.exj).
-    // Kept out of the bundled rows because every setting lives behind the
-    // door by default; place it by naming it in a row.
-    //
-    // [LAW:one-type-per-behavior] Not a second theme picker: it is the
-    // settings menu's own `{{ carousel }}` asked for zero neighbours, over a
-    // plain `{ set: "theme", from: "themes" }` — the session key the menu's
-    // theme control writes unsaved, read back through `theme.effective` (the
-    // theme the bar wears), so the two can never disagree about the current
-    // theme. Nothing here a user config could not author itself.
-    themeSwitcher: {
-      group: "session-tools",
-      description:
-        "`◀ <theme> ▶`: the theme the bar is wearing; ◀ and ▶ switch this session to the previous or next theme, wrapping at the ends.",
-      template: '{{ carousel "stepTheme" 0 }}',
-    },
     session: {
       group: "cost-limits",
       description:
@@ -1064,8 +1047,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "model" },
-          // One cell unit: the auto-compact window reads against the context
-          // use beside it, and hidden it takes no colour slot from the row.
+          // The auto-compact window reads against the context use beside it,
+          // so the two are placed together; like any two cells side by side,
+          // each takes its own place in the row's colours.
           {
             kind: "container",
             direction: "horizontal",
@@ -1105,10 +1089,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     ...COMMAND_TRAY.actions,
     // The `directory` cell's click: the full path its abbreviation hides.
     copyDir: { copy: "{{ .current_dir }}" },
-    // The `themeSwitcher` segment's click: each arrow writes the theme it
-    // points at into this session. Gated by the themes domain it names, the
-    // same allow-list the settings menu's theme control derives.
-    stepTheme: { set: "theme", from: "themes" },
     // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
     gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
     ...AUTOCOMPACT.actions,
@@ -1470,12 +1450,13 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `warning`/`error` — those hues keep their meaning for the cells that
     // measure danger.
     // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once,
-    // and every level computes max's bubble, colours and frames, so a render at
-    // any level evaluates the whole template (`check` renders xhigh: max moves
-    // a frame a second). The one branch is the domain's own, and it chooses
-    // only what is drawn: max draws its bubble, every other level its rung on
-    // the cell as the cell is filled — which may be no fill at all
-    // (`bg: "none"`), so below max nothing paints a background. A level
+    // and every level computes max's bubble. Max's climbing colour and frames
+    // are computed only where max draws them: a stepped colour tells the frame
+    // when it next changes as it is evaluated, drawn or not, so computed at
+    // every level it would make a still rung claim to move. The one branch is
+    // the domain's own, and it chooses what is drawn: max its bubble, every
+    // other level its rung on the cell as the cell is filled — which may be no
+    // fill at all (`bg: "none"`), so below max nothing paints a background. A level
     // outside the five known names is ordinal 0: the ladder's `?`, visible
     // rather than blank. The ladder is split on runs of spaces, so a doubled
     // space shifts no rung. Called with the scope as dot.
@@ -1483,9 +1464,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       '{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}' +
       '{{ $glyphs := compact (splitList " " .effort.glyphs) }}' +
       `{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}` +
+      "{{ if eq $ord 5 }}" +
       `{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}` +
       "{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}" +
-      "{{ if eq $ord 5 }}" +
       '{{ fg $bubble "\u{E0B6}" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\u{E0B4}" }}' +
       "{{ else }}" +
       `{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}` +
@@ -1693,7 +1674,7 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // [LAW:single-enforcer] Run the authored literal through the SAME parse
 // pipeline every user config goes through (JSON5 stage + group synthesis and
 // the parse-time checks) instead of hand-duplicating that logic here. Without
-// this, the zero-config daemon path (loadConfig: no config file found ⇒
+// this, the zero-config daemon path (loadConfig: no config file loaded ⇒
 // raw={}, merged directly against this constant — see src/config/dsl-loader.ts
 // and src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
 // synthesis that only ever ran over TEXT a user typed, never over this TS

@@ -22,6 +22,7 @@
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
@@ -104,7 +105,7 @@ function buildRuntime(source = src(RULE)): Runtime {
   const config = parseAndValidate("<theme-expr>", source, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const sink = new Map<string, readonly RichText[]>();
@@ -118,7 +119,7 @@ function buildRuntime(source = src(RULE)): Runtime {
       instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
-      // Resolved as src/daemon/server.ts resolves it, over the session's picks.
+      // Resolved as src/daemon/draw-bar.ts resolves it, over the session's picks.
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: renderDsl clears
@@ -333,6 +334,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -362,6 +364,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -428,6 +431,7 @@ describe("globals.palette as an expression — loader", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -555,7 +559,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     try {
       return body(config, registry, store);
     } finally {

@@ -1,15 +1,17 @@
-// [LAW:verifiable-goals] brandon-doctor-v62x.e91 through a REAL daemon over a
-// REAL socket: the 🩺 doctor click reads the config load of the render-cache
+// [LAW:verifiable-goals] brandon-doctor-v62x.e91 through the daemon's own
+// request handling: the 🩺 doctor click reads the config load of the render-cache
 // entry the session's bar is drawn from. The in-process suite
 // (test/doctor-menu.test.ts) fakes that edge; this is the one place the
 // daemon's own is exercised — a project config found first, a user config
 // unread behind it, and a declaration the project config never uses.
 
-import { builtBundle } from "./helpers/spawn-test-daemon";
+import { processLauncher } from "../src/proc/launch";
 import {
+  cpSync,
   mkdtempSync,
   mkdirSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -17,7 +19,6 @@ import path from "node:path";
 
 import {
   click,
-  killAndWait,
   linkUrls,
   render,
   renderBody,
@@ -25,16 +26,19 @@ import {
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
+import { bundleAt, startDaemon, statsOf } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { effectsOf } from "./helpers/click";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
-import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
+import {
+  VERB_DOCTOR_PROBE,
+  VERB_DOCTOR_RUN,
+  VERB_LOAD_CONFIG,
+} from "../src/click/wire";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { tryClickViaDaemon } from "../src/daemon/client";
@@ -55,7 +59,6 @@ import {
 } from "../src/doctor/daemon-answer";
 import { claudeConfigDir, detectClaudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
-import type { StatsSnapshot } from "../src/daemon/stats";
 import { answerRepo } from "./helpers/repo-approval";
 
 jest.setTimeout(30_000);
@@ -65,7 +68,7 @@ const flat = (rendered: string): string =>
   stripAnsi(rendered).replace(/\s+/g, " ");
 
 test("the doctor's config row reports the session's own config load", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const userConfig = path.join(
@@ -83,55 +86,111 @@ test("the doctor's config row reports the session's own config load", async () =
   // The project's config is the session's own: the user approved it.
   answerRepo(projectDir, "approved", env);
 
-  let daemon: RunningDaemon | undefined;
+  const daemon = startDaemon(env);
   try {
-    daemon = await spawnDaemonWithEnv(env);
     const SID = "doctor-e2e-1";
-    const closed = await render(sockPath, SID, projectDir);
-    await click(sockPath, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
-    const opened = await render(sockPath, SID, projectDir);
-    await click(sockPath, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
-    const tools = await render(sockPath, SID, projectDir);
+    const closed = await render(daemon, SID, projectDir);
+    await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
+    const opened = await render(daemon, SID, projectDir);
+    await click(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
+    const tools = await render(daemon, SID, projectDir);
     const run = linkUrls(tools).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
-    await click(sockPath, run!);
+    await click(daemon, run!);
 
     // The project layer's unused helper, read over the user's file.
-    expect(flat(await render(sockPath, SID, projectDir))).toContain(
-      `✗ config — helper "idle" is never called`,
+    expect(flat(await render(daemon, SID, projectDir))).toContain(
+      `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
     );
 
     // Fixing it turns the row over on the very next run: the click reloads
     // the entry, so it never reports the load from before the edit while
     // the fs watcher catches up.
     writeFileSync(projectConfig, `{}`);
-    await click(sockPath, run!);
-    expect(flat(await render(sockPath, SID, projectDir))).toContain("✓ config");
+    await click(daemon, run!);
+    expect(flat(await render(daemon, SID, projectDir))).toContain("✓ config");
   } finally {
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
   }
 });
 
-// brandon-doctor-v62x.a1z: the daemon's half of `cc-candybar doctor`'s probe,
-// over the real socket — a `doctor-probe` click as the URL handler sends it
-// (its own version on the request) is listed in the stats the CLI reads back,
-// and the doctor row of a session reads the version its own click carried.
-test("a probe click is listed in stats; a doctor click's handler version is its row", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+// What named the file reaches the click from the request that named it, so
+// the row and `cc-candybar doctor` agree on it, and it is the spelling a person
+// would have to change: `--config` wins even where the variable names one file.
+test("the doctor's config row says what named the session's file", async () => {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const projectDir = realpathSync(
     mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
   );
-  let daemon: RunningDaemon | undefined;
+  const named = path.join(projectDir, "named.json5");
+  const picked = path.join(projectDir, "picked.json5");
+  writeFileSync(named, "{}");
+  writeFileSync(picked, "{}");
+  // Wrapping may fall inside a path, so spaces are no part of what is read.
+  const squeezed = (s: string): string => stripAnsi(s).replace(/\s+/g, "");
+
+  const daemon = startDaemon(env);
   try {
-    daemon = await spawnDaemonWithEnv(env);
+    const row = async (
+      sid: string,
+      hints: ClientHints,
+      args: string[],
+    ): Promise<string> => {
+      const draw = () => render(daemon, sid, projectDir, hints, args);
+      await click(daemon, urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN));
+      await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+      const run = linkUrls(await draw()).find((u) =>
+        effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
+      );
+      await click(daemon, run!);
+      return squeezed(await draw());
+    };
+    const flag = ["cc-candybar", "--config", named];
+
+    expect(await row("source-argument", { configEnv: named }, flag)).toContain(
+      squeezed(`✓ config — ${named} (command argument)`),
+    );
+    expect(await row("source-env", { configEnv: named }, [])).toContain(
+      squeezed(`✓ config — ${named} ($CC_CANDYBAR_CONFIG)`),
+    );
+    expect(await row("source-search", {}, [])).toContain(
+      squeezed("✓ config — bundled default (no config file loaded)"),
+    );
+
+    await click(
+      daemon,
+      `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`,
+    );
+    expect(await row("source-pick", { configEnv: named }, flag)).toContain(
+      squeezed(`✓ config — ${picked} (load-config pick)`),
+    );
+  } finally {
+    await daemon.stop();
+    removeTmpDirs();
+  }
+});
+
+// brandon-doctor-v62x.a1z: the daemon's half of `cc-candybar doctor`'s probe,
+// over the wire — a `doctor-probe` click as the URL handler sends it
+// (its own version on the request) is listed in the stats the CLI reads back,
+// and the doctor row of a session reads the version its own click carried.
+test("a probe click is listed in stats; a doctor click's handler version is its row", async () => {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const daemon = startDaemon(env);
+  try {
     const request = (body: Record<string, unknown>) =>
       sendDaemonRequest(
-        sockPath,
+        daemon,
         { v: PROTOCOL_VERSION, ...body } as never,
         5000,
       );
@@ -145,13 +204,12 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
         clientVersion: "0.0.1",
       }),
     ).toMatchObject({ ok: true });
-    expect(await request({ kind: "stats" })).toMatchObject({
-      ok: true,
-      stats: { handlerProbes: [{ nonce, handler: "0.0.1" }] },
-    });
+    expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
+      { nonce, handler: "0.0.1" },
+    ]);
 
     const SID = "doctor-e2e-2";
-    await render(sockPath, SID, projectDir);
+    await render(daemon, SID, projectDir);
     expect(
       await request({
         kind: "click",
@@ -161,31 +219,31 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
       }),
     ).toMatchObject({ ok: true });
     await click(
-      sockPath,
+      daemon,
       urlWriting(
-        await render(sockPath, SID, projectDir),
+        await render(daemon, SID, projectDir),
         SETTINGS_ANCHOR,
         SETTINGS_OPEN,
       ),
     );
     await click(
-      sockPath,
+      daemon,
       urlWriting(
-        await render(sockPath, SID, projectDir),
+        await render(daemon, SID, projectDir),
         `${SETTINGS_NS}tab`,
         "tools",
       ),
     );
-    expect(flat(await render(sockPath, SID, projectDir))).toContain(
+    expect(flat(await render(daemon, SID, projectDir))).toContain(
       "✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs",
     );
   } finally {
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
   }
 });
 
-// The CLI's probe end to end over real processes, less Launch Services: the
+// The CLI's probe end to end over a real socket, less Launch Services: the
 // production edge, with the one leg this test cannot isolate — macOS handing
 // the link to the handler app, which would deliver it to the user's own
 // daemon — replaced by what that app runs, `url-handle`'s own send.
@@ -193,14 +251,13 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
-  const savedSocket = process.env.CC_CANDYBAR_SOCKET;
-  process.env.CC_CANDYBAR_SOCKET = sockPath;
-  let daemon: RunningDaemon | undefined;
+  // The env it places names this socket, which is where the CLI's send looks.
+  const daemon = startDaemon(env);
   try {
-    daemon = await spawnDaemonWithEnv(env);
+    await daemon.listen(sockPath);
     const delivered: Promise<unknown>[] = [];
     const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(),
+      ...productionHandlerProbeEdge(processLauncher),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon.
       sockets: { own: sockPath, handler: sockPath },
@@ -220,47 +277,45 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
       checkByName("urlHandler")!.probe({ urlHandler: facts } as never),
     ).toEqual({ ok: true });
   } finally {
-    if (savedSocket === undefined) delete process.env.CC_CANDYBAR_SOCKET;
-    else process.env.CC_CANDYBAR_SOCKET = savedSocket;
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
   }
 });
 
-// brandon-doctor-v62x.tfb through a real daemon: a render request records its
+// brandon-doctor-v62x.tfb through a daemon: a render request records its
 // session's client, daemon-stats serves each session's latest, and the CLI's
-// reading of them is the install verdict. The daemon runs this checkout's
-// built bundle (`pnpm build` first), so it names the checkout's dist and a native client of
-// it must carry the crateDigest of the checkout's rust-client.
+// reading of them is the install verdict. The daemon runs from a checkout laid
+// down here, so it names that checkout's dist, and a native client of it must
+// carry the crateDigest of that checkout's rust-client.
 test("the clients the daemon saw render are the install check's facts", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const projectDir = realpathSync(
     mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
   );
-  const repo = process.cwd();
+  // What `installFacts` reads of an install: the bundle resolves, `src/` says
+  // it is a checkout, and the crate's digest is the checkout's.
+  const repo = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-checkout-")),
+  );
+  mkdirSync(path.join(repo, "src"));
+  mkdirSync(path.join(repo, "dist"));
+  writeFileSync(path.join(repo, "dist", "index.mjs"), "");
+  cpSync(
+    path.join(process.cwd(), "rust-client", "Cargo.toml"),
+    path.join(repo, "rust-client", "Cargo.toml"),
+    { recursive: true },
+  );
   const native = {
     kind: "native",
     bundle: path.join(repo, "bin", "..", "dist", "index.mjs"),
     source: crateDigest(path.join(repo, "rust-client")),
   } as const;
-  let daemon: RunningDaemon | undefined;
+  const daemon = startDaemon(env, { bundle: bundleAt(repo) });
   try {
-    // The built bundle, as production runs it: a daemon from src/ under tsx
-    // runs no bundle, and names the module it was loaded from.
-    daemon = await spawnDaemonWithEnv(
-      env,
-      builtBundle(path.join(repo, "dist", "index.mjs")),
-    );
     const verdict = async () => {
-      const resp = await sendDaemonRequest(
-        sockPath,
-        { v: PROTOCOL_VERSION, kind: "stats" } as never,
-        5000,
-      );
-      const stats = (resp as { stats: StatsSnapshot }).stats;
-      const asked = parseDaemonClients(stats);
+      const asked = parseDaemonClients(await statsOf(daemon.daemon));
       const install = installOf(
         productionInstallEdge,
         { kind: "recent" },
@@ -269,11 +324,11 @@ test("the clients the daemon saw render are the install check's facts", async ()
       return checkByName("install")!.probe({ install } as never);
     };
 
-    await render(sockPath, "install-e2e-1", projectDir, { client: native });
+    await render(daemon, "install-e2e-1", projectDir, { client: native });
     expect(await verdict()).toEqual({ ok: true });
 
     // A second session drawn by a client too old to report itself.
-    await render(sockPath, "install-e2e-2", projectDir);
+    await render(daemon, "install-e2e-2", projectDir);
     expect(await verdict()).toEqual({
       ok: false,
       reason: `the bar is drawn by a statusline client too old to say what it is — run \`just install-rust\` and point the statusLine command at ${repo}/bin/cc-candybar-native`,
@@ -281,20 +336,21 @@ test("the clients the daemon saw render are the install check's facts", async ()
     });
 
     // Its next render, by the current client, replaces it at once.
-    await render(sockPath, "install-e2e-2", projectDir, { client: native });
+    await render(daemon, "install-e2e-2", projectDir, { client: native });
     expect(await verdict()).toEqual({ ok: true });
   } finally {
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
+    rmSync(repo, { recursive: true, force: true });
   }
 });
 
-// brandon-doctor-v62x.onf through a real daemon: a render request records
+// brandon-doctor-v62x.onf through a daemon: a render request records
 // whether its payload carried the rate-limit windows, and with which Claude
 // Code directory its session runs; daemon-stats serves both, and the CLI's
 // reading keeps only its own directory's recent renders.
 test("the rate-limit windows each render carried are the segment-data row's facts", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const projectDir = realpathSync(
@@ -322,23 +378,17 @@ test("the rate-limit windows each render carried are the segment-data row's fact
     hints: ClientHints = {},
   ) => {
     const body = renderBody(sid, projectDir, hints);
-    return renderRequest(sockPath, {
+    return renderRequest(daemon, {
       ...body,
       hookData: { ...(body.hookData as object), ...extra },
     });
   };
-  let daemon: RunningDaemon | undefined;
+  const daemon = startDaemon(env);
   try {
-    daemon = await spawnDaemonWithEnv(env);
     const seen = async () => {
-      const resp = await sendDaemonRequest(
-        sockPath,
-        { v: PROTOCOL_VERSION, kind: "stats" } as never,
-        5000,
-      );
       return rateLimitsOf(
         { kind: "recent" },
-        parseRateLimitSightings((resp as { stats: StatsSnapshot }).stats),
+        parseRateLimitSightings(await statsOf(daemon.daemon)),
         ownDir,
       );
     };
@@ -365,16 +415,16 @@ test("the rate-limit windows each render carried are the segment-data row's fact
       value: ["carried", "unanswered"],
     });
   } finally {
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
   }
 });
 
 // brandon-doctor-v62x.p4l: the transcript the session's render named, read by
-// the doctor click — through the real socket, the render's sighting and the
+// the doctor click — through the wire, the render's sighting and the
 // daemon's own edge.
 test("the session data row reads the transcript the session's render named", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const projectDir = realpathSync(
@@ -385,43 +435,42 @@ test("the session data row reads the transcript the session's render named", asy
   const SID = "doctor-e2e-transcript";
   const renderT = () => {
     const body = renderBody(SID, projectDir);
-    return renderRequest(sockPath, {
+    return renderRequest(daemon, {
       ...body,
       hookData: { ...(body.hookData as object), transcript_path: transcript },
     });
   };
-  let daemon: RunningDaemon | undefined;
+  const daemon = startDaemon(env);
   try {
-    daemon = await spawnDaemonWithEnv(env);
     const closed = await renderT();
-    await click(sockPath, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
+    await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
     const opened = await renderT();
-    await click(sockPath, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
+    await click(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
     const run = linkUrls(await renderT()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
-    await click(sockPath, run!);
+    await click(daemon, run!);
     expect(flat(await renderT())).toContain(
       `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
     );
 
     writeFileSync(transcript, `{"type":"user"}\n`);
-    await click(sockPath, run!);
+    await click(daemon, run!);
     expect(flat(await renderT())).toContain("✓ session data");
   } finally {
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
   }
 });
 
 // brandon-doctor-v62x.tgp: the effect-refresh row reads what the session's
-// bar drew, through a real daemon. A bar whose only motion is a template's
+// bar drew, through a daemon. A bar whose only motion is a template's
 // `frames` — no effect, no transitions — fails the row while its statusLine
 // sets no refreshInterval, and the same bar drawn still passes; each render
 // event says which.
 test("a bar whose only motion is a template's fails effect refresh", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const projectDir = realpathSync(
@@ -440,56 +489,56 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
   writeFileSync(projectConfig, barOf('{{ frames 1 "a" 1 "b" }}'));
   answerRepo(projectDir, "approved", env);
 
-  let daemon: RunningDaemon | undefined;
+  const daemon = startDaemon(env);
   try {
-    daemon = await spawnDaemonWithEnv(env);
     const SID = "doctor-e2e-frames";
     const hints = { claudeConfigDir: claudeDir };
     let drawn = 0;
     const draw = () => {
       drawn++;
-      return render(sockPath, SID, projectDir, hints);
+      return render(daemon, SID, projectDir, hints);
     };
     await click(
-      sockPath,
+      daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
     await click(
-      sockPath,
+      daemon,
       urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
     );
     const run = linkUrls(await draw()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
-    await click(sockPath, run!);
+    await click(daemon, run!);
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval",
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
     );
 
     writeFileSync(projectConfig, barOf("still"));
-    await click(sockPath, run!);
+    await click(daemon, run!);
     await draw();
-    await click(sockPath, run!);
+    await click(daemon, run!);
     // Still, but drawn under the open menu the doctor is clicked from, which
-    // flashes and closes on its own.
+    // counts down to the flash before it closes on its own: the frame says
+    // when that starts (candybar-animation-wbxz.014), so the bar moves.
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar can start moving (an open menu,",
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
     );
 
     // The same bar with its menu closed is still, and passes.
     await click(
-      sockPath,
+      daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
     );
     await draw();
-    await click(sockPath, run!);
+    await click(daemon, run!);
     await click(
-      sockPath,
+      daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
     await click(
-      sockPath,
+      daemon,
       urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
     );
     expect(flat(await draw())).toContain("✓ effect refresh");
@@ -501,17 +550,26 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // The render event says how long a drawn menu has sat idle, of its timeout.
     const menuIdle = events.map((l) => l.match(/ menuIdle=(\S+) /)?.[1]);
     expect(menuIdle[0]).toBe("-");
-    expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/30s$/));
+    expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/120s$/));
     expect(motion).toContain("still");
     const doctorLines = (lines: readonly string[]) =>
-      lines.filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`));
+      lines.filter(
+        (l) => l.includes("doctor:") && l.includes(`session=${SID}`),
+      );
     expect(
       (
-        await loggedLines(env, doctorLines, (found) => found.length >= 4, "the doctor's four runs")
+        await loggedLines(
+          env,
+          doctorLines,
+          (found) => found.length >= 4,
+          "the doctor's four runs",
+        )
       ).map((l) => l.match(/ frames=(\S+) /)?.[1]),
-    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/1/0/0/0", "0/0/1/0/0"]);
+      // The third run's still bar sits under a menu counting down to its
+      // close, which moves it; the fourth's menu is closed.
+    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "1/0/0/0/0", "0/0/1/0/0"]);
   } finally {
-    if (daemon) await killAndWait(daemon);
+    await daemon.stop();
     removeTmpDirs();
   }
 });

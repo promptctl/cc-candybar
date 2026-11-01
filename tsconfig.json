@@ -24,6 +24,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src/**/*", "test/**/*", "audits/**/*", "site/**/*.ts", "scripts/load-gate.ts"],
+  "include": ["src/**/*", "test/**/*", "audits/**/*", "site/**/*.ts", "scripts/load-gate.ts", "scripts/bench/**/*", "scripts/lib/**/*", "proto-looks/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

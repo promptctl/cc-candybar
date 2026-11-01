@@ -10,6 +10,7 @@
 // constructed URL — so a test keeps passing when the bar is restyled and fails
 // when the click stops doing what it claimed.
 
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 
 import {
@@ -20,20 +21,28 @@ import {
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
-import { sendDaemonRequest, waitForExit } from "./daemon-wire";
+import {
+  endpointOf,
+  sendDaemonRequest,
+  waitForExit,
+  type DaemonTarget,
+} from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
-import { linkUrls } from "./ansi";
+import { linkUrls, stripAnsi } from "./ansi";
+import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
-import { logPath } from "../../src/daemon/paths";
 import { valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
 export { linkUrls, stripAnsi } from "./ansi";
 
+// The argv a client sends: binary path first, as parseRenderArgs expects.
+export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
+
 const REPLY_BUDGET_MS = 5000;
 
-// [LAW:no-ambient-temporal-coupling] `TIMEOUT` (server.ts's REQUEST_TIMEOUT_MS
+// [LAW:no-ambient-temporal-coupling] `TIMEOUT` (request-deadline.ts's REQUEST_TIMEOUT_MS
 // — a real 200ms per-request guard protecting the daemon from one slow request
 // blocking every other connection) is classified `transient` by the real client
 // (client-transport.ts's interpretResponse): the daemon is up, just slow for
@@ -57,19 +66,19 @@ const TIMEOUT_RETRY_BUDGET = 5;
 // of its own (sendDaemonRequest).
 const PENDING_RETRY_BUDGET = 20;
 
-// The daemon's log, found from its socket: an isolated daemon keeps its
-// socket in its state directory (prepareIsolatedDaemonEnv), whose log is the
-// one the daemon itself writes (logPath).
-function logOf(sockPath: string): string {
-  return logPath({ XDG_STATE_HOME: path.dirname(path.dirname(sockPath)) });
-}
-
 // A session's render events whose reply its client read, in log order.
-function answeredEvents(log: string, sessionId: string): string[] {
+export function answeredEvents(log: string, sessionId: string): string[] {
   return logLines(log).filter(
     (l) =>
-      l.includes(` render sid=${valueOf(sessionId)} `) &&
+      l.includes(`] render sid=${valueOf(sessionId)} `) &&
       l.includes(" timedOut=N "),
+  );
+}
+
+// The click events whose client had already been told TIMEOUT, in log order.
+function timedOutClicks(log: string): string[] {
+  return logLines(log).filter(
+    (l) => l.includes("] click ") && l.includes(" timedOut=Y "),
   );
 }
 
@@ -91,11 +100,11 @@ export function hookData(sessionId: string, cwd: string): ClaudeHookData {
 // spelling of the transient contract: `render` below and
 // test/helpers/drive-bar.ts both send through it.
 export async function renderRequest(
-  sockPath: string,
+  target: DaemonTarget,
   request: Record<string, unknown>,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
-  const log = logOf(sockPath);
+  const { log, now } = endpointOf(target);
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
   );
@@ -106,11 +115,11 @@ export async function renderRequest(
     // wait for its refreshes ends by that or by its own backstop
     // (src/daemon/request-deadline.ts). A case's own deadline wins.
     const resp = await sendDaemonRequest(
-      sockPath,
+      target,
       {
         v: PROTOCOL_VERSION,
         kind: "render",
-        deadline: Date.now() + replyBudgetMs,
+        deadline: now() + replyBudgetMs,
         ...request,
       },
       replyBudgetMs,
@@ -189,26 +198,26 @@ export function renderBody(
 
 // One status-line render, as Claude Code would ask for it.
 export function render(
-  sockPath: string,
+  target: DaemonTarget,
   sessionId: string,
   cwd: string,
   hints: ClientHints = {},
   args: string[] = [],
 ): Promise<string> {
-  return renderRequest(sockPath, renderBody(sessionId, cwd, hints, args));
+  return renderRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
 // A click, decoded the same way `cc-candybar url-handle` decodes it, then sent
 // as the wire request the URL handler app sends. The daemon's answer is
 // returned as it came, refusal included.
 export function sendClick(
-  sockPath: string,
+  target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
   const { verb, value } = parseHandlerUrl(url);
   return sendDaemonRequest(
-    sockPath,
+    target,
     {
       v: PROTOCOL_VERSION,
       kind: "click",
@@ -221,10 +230,32 @@ export function sendClick(
 }
 
 // `sendClick`, for a test whose click must land.
-export async function click(sockPath: string, url: string): Promise<void> {
-  const resp = await sendClick(sockPath, url);
-  if (!resp.ok) {
+//
+// [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
+// daemon's 200 ms guard abandons a request's reply, never its work, so a click
+// answered TIMEOUT still runs and its effect still lands (reply.ts records it
+// as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
+// read; a click is a write, so sending it again applies it twice, and a second
+// apply-update is refused as already running. On TIMEOUT the click's outcome
+// is read from the daemon's own click event instead.
+export async function click(target: DaemonTarget, url: string): Promise<void> {
+  const { log } = endpointOf(target);
+  const before = timedOutClicks(log).length;
+  const resp = await sendClick(target, url);
+  if (resp.ok) return;
+  if (resp.code !== "TIMEOUT") {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
+  }
+  let event = "";
+  // The event is the click's answer by another road, so it has the budget
+  // the click's reply had.
+  await until(
+    () => (event = timedOutClicks(log)[before] ?? "") !== "",
+    `the click event of a click answered TIMEOUT (${url})`,
+    REPLY_BUDGET_MS,
+  );
+  if (!/ outcome=ok(?: |$)/.test(event)) {
+    throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
   }
 }
 
@@ -238,7 +269,7 @@ export async function click(sockPath: string, url: string): Promise<void> {
 // encodes the actual contract ("the write becomes visible"), and the budget
 // makes a broken write fail with the last render in hand rather than hanging.
 export async function renderUntil(
-  sockPath: string,
+  target: DaemonTarget,
   sessionId: string,
   projectDir: string,
   accepts: (rendered: string) => boolean,
@@ -247,7 +278,7 @@ export async function renderUntil(
 ): Promise<string> {
   let last = "";
   await until(
-    async () => accepts((last = await render(sockPath, sessionId, projectDir))),
+    async () => accepts((last = await render(target, sessionId, projectDir))),
     () =>
       last
         ? `a render of ${what}; last render was:\n${last}`
@@ -255,6 +286,39 @@ export async function renderUntil(
     timeoutMs,
   );
   return last;
+}
+
+// [LAW:no-ambient-temporal-coupling] The real client answers within its own
+// wall-clock budgets (a 50 ms connect, a 150 ms round trip), and a client
+// starved by a loaded machine spends them before it has run. Its contract for
+// that is a blank line and a respawn kick, with the answer left to Claude
+// Code's next tick; a test has no next tick, so this is it: run the client
+// again until it draws something. A client that never draws fails at the
+// last run's output rather than passing on a blank.
+export function runRealClient(
+  args: readonly string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; input: string },
+  attempts = 5,
+): SpawnSyncReturns<string> {
+  let run!: SpawnSyncReturns<string>;
+  for (let i = 0; i < attempts; i++) {
+    run = spawnSync(
+      process.execPath,
+      [path.join(process.cwd(), "dist", "index.mjs"), ...args],
+      {
+        ...options,
+        env: { ...options.env, [ROUTE_ENV]: "client" },
+        encoding: "utf8",
+        timeout: 10_000,
+      },
+    );
+    if (run.status !== 0 || stripAnsi(run.stdout).trim() !== "") break;
+    // [LAW:no-silent-failure] A retry that absorbs a blank is named, so a
+    // client that needs several runs every time (a real latency regression)
+    // shows in the log instead of passing unseen.
+    console.warn(`runRealClient: blank answer on run ${i + 1}/${attempts}`);
+  }
+  return run;
 }
 
 // [LAW:single-enforcer] THE search over rendered affordances: decode each
@@ -299,7 +363,7 @@ export function urlWriting(
 // does not care how the daemon dies, and SIGKILL cannot hang. It is the WRONG
 // signal for a test that restarts the daemon and expects durable state to come
 // back: SIGKILL bypasses server.ts's `shutdown()` funnel, and with it the
-// `sessionState.flush()` that lands writes still inside FileSessionStorage's
+// session state close that lands writes still inside FileSessionStorage's
 // 500ms debounce. Pass "SIGTERM" to exercise the graceful path a real restart
 // takes (a signal, the RSS backstop, or the parent watchdog — all three go
 // through that one funnel).

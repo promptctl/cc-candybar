@@ -13,6 +13,9 @@
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
+import { GitService } from "../segments/git";
+import type { Launcher } from "../proc/launch";
+import type { FileEvents } from "./cache/file-events";
 import type { DaemonLogger } from "../utils/logger";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { RenderPayloadDeps } from "./render-payload";
@@ -33,14 +36,20 @@ export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
 // one ledger, so its stats read every source in one place.
 export function createPayloadProviders(opts: {
+  // Who the git and tmux reads belong to.
+  readonly launcher: Launcher;
   readonly watchers: WatcherRegistry;
+  // Whether the OS is delivering file events: the caller's one owner, which
+  // only the daemon starts.
+  readonly fileEvents: FileEvents;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
 }): PayloadProviders {
-  const { logger, ledger } = opts;
+  const { launcher, logger, ledger } = opts;
   return {
     hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
+      inner: new GitService(launcher),
       watchers: opts.watchers,
       logger,
       ledger,
@@ -49,11 +58,12 @@ export function createPayloadProviders(opts: {
     contextProvider: new ContextProvider({ logger, ledger }),
     metricsProvider: new MetricsProvider({ logger, ledger }),
     activityProvider: new ActivityProvider({ logger, ledger }),
-    tmuxService: new TmuxService({ logger, ledger }),
+    tmuxService: new TmuxService({ launcher, logger, ledger }),
     autoCompact: new AutoCompactProvider(logger, ledger),
     cacheExpiry: new CacheExpiryProvider(logger, ledger),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
+      fileEvents: opts.fileEvents,
       logger,
       ledger,
     }),

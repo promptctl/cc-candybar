@@ -79,7 +79,7 @@ describe("checkConfig — explicit target", () => {
     const outcome = await checkConfig(p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
-      expect(outcome.layers).toEqual([p]);
+      expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
       expect(outcome.rendered.length).toBeGreaterThan(0);
     }
   });
@@ -113,7 +113,7 @@ describe("checkConfig — explicit target", () => {
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow`,
+      `source still running after ${SHORT_SETTLE_MS} ms, drawn as pending: slow`,
     );
     expect(checkPlan(outcome).code).toBe(0);
   });
@@ -141,7 +141,41 @@ describe("checkConfig — explicit target", () => {
     expect(outcome.warnings).toEqual([]);
   });
 
-  // brandon-config-16g: the same advisory the daemon puts on the strip, so an
+  // brandon-unfiled-3248.qniv: each preset's pass pushes its own payload, and
+  // a source keyed on an input the preset moves re-reads on that push — so the
+  // pass waits for that read and renders what it yielded, never the previous
+  // preset's value or its fallback. The source counts its own runs and the
+  // probe segment fails on purpose with what it drew, so the verdict lists one
+  // (preset, run) per pass: every preset drew a run of its own.
+  it("a source keyed on the preset renders, under each preset, what it yielded for that preset", async () => {
+    const counter = path.join(dir, "preset-runs");
+    const command = `f='${counter}'; [ -f "$f" ] || printf 0 > "$f"; n=$(($(cat "$f")+1)); printf %s "$n" > "$f"; printf %s "$n"`;
+    const p = write(
+      "preset-keyed.json5",
+      `{
+        variables: {
+          runs: { kind: "shell", command: ${JSON.stringify(command)}, parse: { text: true }, cache: { key: "{{ .preset.effective }}" }, default: "none" },
+        },
+        segments: { probe: { template: '{{ fail (printf "%s drew %s" .preset.effective .runs) }}' } },
+        globals: { preset: "a" },
+        presets: { a: {}, b: { root: { h: ["probe"] } } },
+        root: { h: ["probe"] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    const drew = new Map(
+      [...message.matchAll(/segment "probe": (\S+) drew (\S+)/g)].map((m) => [m[1]!, m[2]!]),
+    );
+    const total = Number(fs.readFileSync(counter, "utf8"));
+    // One run per preset the key moved to, each pass drawing its own.
+    expect([...drew.keys()]).toEqual(expect.arrayContaining(["a", "b"]));
+    expect(drew.get("a")).toBe("1");
+    expect(new Set(drew.values()).size).toBe(drew.size);
+    for (const run of drew.values()) expect(Number(run)).toBeLessThanOrEqual(total);
+    expect(message).not.toContain("drew none");
+  });
+
+  // brandon-config-16g: the same advisory the daemon puts on the bar, so an
   // authoring agent sees the duplicate before a durable click refuses it.
   it("a duplicate object key is a clean verdict with a warning naming the key and its line", async () => {
     const p = write(
@@ -222,7 +256,7 @@ describe("checkConfig — explicit target", () => {
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow2`,
+      `source still running after ${SHORT_SETTLE_MS} ms, drawn as pending: slow2`,
     );
     expect(checkPlan(outcome).code).toBe(0);
   });
@@ -623,71 +657,6 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain('(under preset "b"');
   });
 
-  it("an open trigger no colour stands off is a WARNING in its own words: the config renders the look it chose", async () => {
-    // textual-dark's navy secondary and orange accent under `alt`: the first
-    // row (the door, three cells and the group's trigger) turns between them,
-    // and no colour stands 2.2:1 off both. The daemon draws the nearest under
-    // an amber warning; check lists the same warning and passes — neither a
-    // fault of the config nor a globals rule.
-    const p = write(
-      "state-floor-short.json5",
-      `{
-        globals: { palette: 'textual-dark', variation: 'alt' },
-        segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' }, d: { template: 'd' } },
-        root: { h: ['a', 'b', 'c', { kind: 'group', name: 'more', label: 'more', open: true, children: ['d'] }] },
-      }`,
-    );
-    const outcome = await checkConfig(p, dir);
-    expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") {
-      expect(outcome.warnings).toEqual([
-        expect.stringMatching(
-          /^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it/,
-        ),
-      ]);
-    }
-  });
-
-  it("a shortfall only another preset reaches is tagged with that preset, as a failure is", async () => {
-    // The same row as above, opened only in preset b: the fresh session's bar
-    // (preset a) opens nothing, so the warning names where it is reached.
-    const p = write(
-      "state-floor-other-preset.json5",
-      `{
-        globals: { palette: 'textual-dark', variation: 'alt', preset: 'a' },
-        segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' }, d: { template: 'd' } },
-        presets: {
-          a: {},
-          b: { root: { h: ['a', 'b', 'c', { kind: 'group', name: 'more', label: 'more', open: true, children: ['d'] }] } },
-        },
-        root: { h: ['a', 'b', 'c', 'd'] },
-      }`,
-    );
-    const outcome = await checkConfig(p, dir);
-    expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") {
-      expect(outcome.warnings).toEqual([
-        expect.stringMatching(
-          /^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it.* \(under preset "b"\)$/,
-        ),
-      ]);
-    }
-  });
-
-  it("at colour depth none nothing is drawn in colour, so no shortfall is reported", async () => {
-    const p = write(
-      "state-floor-none.json5",
-      `{
-        globals: { palette: 'textual-dark', variation: 'alt', colorCompatibility: 'none' },
-        segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' }, d: { template: 'd' } },
-        root: { h: ['a', 'b', 'c', { kind: 'group', name: 'more', label: 'more', open: true, children: ['d'] }] },
-      }`,
-    );
-    const outcome = await checkConfig(p, dir);
-    expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.warnings).toEqual([]);
-  });
-
   it("a segment only another preset places is rendered, and its error is FATAL", async () => {
     const p = write(
       "segment-other-preset.json5",
@@ -828,7 +797,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     answerRepo(cwd);
     const outcome = await checkConfig(undefined, cwd);
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "repo" }]);
   });
 
   // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
@@ -850,7 +819,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     // ...the CLI edge lifts it into the target.
     const viaEnv = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(viaEnv.kind).toBe("clean");
-    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([p]);
+    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([{ path: p, scope: "plugins" }]);
     process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
     const absent = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(absent.kind).toBe("unreadable");
@@ -865,7 +834,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     );
     const outcome = await checkConfig("target.json5", path.join(dir, "rel"));
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
   });
 
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", async () => {
@@ -892,7 +861,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean → exit 0 with the verdict on stdout", async () => {
     const plan = checkPlan({
       kind: "clean",
-      layers: ["/tmp/x.json5"],
+      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       warnings: [],
       rendered: "line",
     });
@@ -916,7 +885,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps fatal → exit 1 with the diagnostic on stderr", async () => {
     const plan = checkPlan({
       kind: "fatal",
-      layers: ["/tmp/x.json5"],
+      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       message: "broken here",
       warnings: [],
     });
@@ -942,7 +911,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
     const clean: CheckOutcome = {
       kind: "clean",
-      layers: ["/tmp/x.json5"],
+      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       warnings: [],
       rendered: " ~/c/x \n Opus 4.8 ",
     };
@@ -964,7 +933,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       checkPlan(
         {
           kind: "fatal",
-          layers: ["/tmp/x.json5"],
+          layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
           message: "broken",
           warnings: [],
         },

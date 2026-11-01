@@ -67,7 +67,7 @@ async function main(): Promise<void> {
       }
     }
   } finally {
-    bar.stop();
+    await bar.stop();
   }
 }
 

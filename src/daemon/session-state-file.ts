@@ -41,7 +41,7 @@ export class FileSessionStorage implements SessionStorage {
     private readonly filePath: string,
     private readonly debounceMs: number = 500,
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
-    // daemon.log: the daemon passes `dlog`, every other caller stays quiet.
+    // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
   ) {
     this.writingPath = `${filePath}.writing`;

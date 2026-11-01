@@ -12,6 +12,7 @@
 // (resolveStyleSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -75,7 +76,7 @@ function buildRuntime() {
   const config = parseAndValidate("<ramp-recolor>", SRC, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   registries.push(registry);
   // The click gate is the config this session renders, so the theme and style
@@ -95,8 +96,8 @@ function buildRuntime() {
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
   };
-  const click = (key: "theme" | "style", value: string): void =>
-    clickUrl(
+  const click = async (key: "theme" | "style", value: string): Promise<void> =>
+    await clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
       testVerbContext(sessionState, undefined, config),
     );
@@ -117,7 +118,7 @@ describe("ramp over palette-name stops follows the live theme", () => {
     [95, "error"],
   ])(
     "at %i the ramp paints `%s` — equal to the named cell under the base theme, a theme click, and a look click",
-    (pct, stop) => {
+    async (pct, stop) => {
       const { render, click } = buildRuntime();
       const agree = (): string => {
         const line = render({ pct, stop });
@@ -127,9 +128,9 @@ describe("ramp over palette-name stops follows the live theme", () => {
       };
 
       const base = agree();
-      click("theme", PICKED_THEME);
+      await click("theme", PICKED_THEME);
       const themed = agree();
-      click("style", PICKED_STYLE);
+      await click("style", PICKED_STYLE);
       const looked = agree();
 
       // Three states, three colours: the ramp did not freeze at first render.

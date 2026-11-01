@@ -17,10 +17,8 @@ import { encodeSegments } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
 import { hookData, renderRequest } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
-import {
-  spawnIsolatedDaemon,
-  type IsolatedDaemonHandle,
-} from "./helpers/spawn-isolated-daemon";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
 // Every id a door refuses, and the problem the checkpoint names.
 const REFUSED: ReadonlyArray<readonly [string, string, RegExp]> = [
@@ -58,44 +56,48 @@ describe("a click's session id", () => {
   const toggle = VERBS.get("toolbar-toggle")!;
   const stepState = VERBS.get("step-state")!;
 
-  test.each(REFUSED)("refuses %s", (_, raw, problem) => {
+  test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    expect(() => toggle(encodeURIComponent(raw), ctx)).toThrow(BadVerbArgs);
-    expect(() => toggle(encodeURIComponent(raw), ctx)).toThrow(problem);
-    expect(() => stepState(encodeSegments([raw, "k", "1"]), ctx)).toThrow(
+    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(BadVerbArgs);
+    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(problem);
+    await expect(stepState(encodeSegments([raw, "k", "1"]), ctx)).rejects.toThrow(
       problem,
     );
   });
 
-  test("passes a UUID", () => {
+  test("passes a UUID", async () => {
     const state = new SessionState();
     const uuid = randomUUID();
-    toggle(encodeURIComponent(uuid), testVerbContext(state));
+    await toggle(encodeURIComponent(uuid), testVerbContext(state));
     expect(state.get(uuid, "toolbar-expanded")).toBe("1");
   });
 });
 
 describe("a render's and a subscribe's session id, at the daemon", () => {
-  let daemon: IsolatedDaemonHandle;
+  let daemon: InWorkerDaemon;
+  let removeTmpDirs: () => void;
   let projectDir: string;
   beforeAll(async () => {
-    daemon = await spawnIsolatedDaemon("cc-candybar-session-id");
+    const prepared = prepareIsolatedDaemonEnv("cc-candybar-session-id");
+    ({ removeTmpDirs } = prepared);
+    daemon = startDaemon(prepared.env);
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-session-id-"));
   });
-  afterAll(() => {
-    daemon.cleanup();
+  afterAll(async () => {
+    await daemon.stop();
+    removeTmpDirs();
     fs.rmSync(projectDir, { recursive: true, force: true });
   });
 
   const render = (sessionId: string) =>
-    renderRequest(daemon.sockPath, {
+    renderRequest(daemon, {
       hookData: hookData(sessionId, projectDir),
       args: [],
       cwd: projectDir,
     });
   const subscribe = (sessionId: string, lane: string) =>
     sendDaemonRequest(
-      daemon.sockPath,
+      daemon,
       { v: PROTOCOL_VERSION, kind: "subscribe", sessionId, lane },
       5000,
     );

@@ -31,9 +31,9 @@ import {
 import { laneOffReason } from "../config/menu-places";
 
 // What one frame of the feed drew: the response its subscribers receive,
-// whether the bar it drew moves, and — for a render that threw — the render
+// when the bar it drew next changes, and — for a render that threw — the render
 // event describing it, logged when that failure is first pushed. It is drawn
-// for the feed (`drawing.by` "feed"), so it shows the feed's pace where a
+// for the feed (`drawing.by` "feed"), so it shows the feed's ceiling where a
 // render request's answer shows that it is polled.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
@@ -41,14 +41,16 @@ import { laneOffReason } from "../config/menu-places";
 // and what Claude Code's statusline shows — the bar, or the handoff line in
 // its place while a lane draws it elsewhere (src/daemon/lane-handoff.ts).
 export interface FeedFrame {
-  // The instant the frame was drawn at: what its push is counted under in its
-  // lanes' frame rates (`feedsOf`).
-  readonly at: Instant;
   readonly resp: Response;
   readonly statusline: Response;
-  readonly moves: boolean;
+  // The moment, in wall seconds, the drawn bar next changes without new data
+  // (an effect's next step, a template's next frame, the closing flash's next
+  // turn), or Infinity: when the feed draws it next, within its spacing.
+  readonly nextChange: number;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
+  // Records what the frame's copy clicks copy, once it went out to a follower.
+  readonly delivered: () => void;
   readonly failure: LogLine | null;
 }
 
@@ -58,15 +60,18 @@ export interface LogLine {
   readonly line: string;
 }
 
-// Milliseconds from the start of one frame to the next: while the bar moves,
-// and while it is still (when only its data and the clock change it).
+// Milliseconds from the start of one frame to the next: the closest a feed
+// draws a bar on a screen, and the furthest apart it draws any bar — what a
+// bar that says nothing of its next change, or sits on no screen, is drawn at,
+// since its data and the clock (an age, a time of day) still move it.
 export interface FeedPeriods {
   readonly moving: number;
   readonly still: number;
 }
 
-// 30 fps is the rate rich-js's effects were signed off at (EFFECT_CURVES), and
-// one a second the rate Claude Code itself reaches.
+// 30 fps is the rate rich-js's effects were signed off at (EFFECT_CURVES), so a
+// continuous effect is drawn at it, and one a second the rate Claude Code
+// itself reaches.
 export const FEED_PERIODS: FeedPeriods = {
   moving: 1000 / MOVING_FPS,
   still: 1000,
@@ -75,6 +80,18 @@ export const FEED_PERIODS: FeedPeriods = {
 // The window a lane's frame rate is counted over, in seconds of the frames'
 // own instants.
 const RATE_WINDOW_S = 1;
+
+// [LAW:no-ambient-temporal-coupling] How far the wall clock read at a draw may
+// fall short of the instant its timer was set for when nothing is wrong, in
+// seconds: the daemon's wall reading is truncated to the millisecond, a Node
+// timer fires up to a millisecond early against it (libuv sets timers from its
+// cached loop time), and a system clock being slewed moves the wall against the
+// timer's clock by well under a millisecond across the longest wait, the still
+// period — past the bound, that last term costs one extra draw, never a frame
+// drawn before its change. A frame is drawn for the instant it was set for
+// within this of the wall, so a frame set for a change shows it however its
+// timer fires, and a wall clock stepped back is followed at the next draw.
+const TIMER_RESOLUTION_S = 0.002;
 
 // A subscriber: its lane's answer to each frame, and its JSON as the feed
 // serialized it once for every subscriber of that lane.
@@ -95,18 +112,20 @@ export interface Subscriber {
 }
 
 export interface FeedDeps<Req> {
-  // Draws a frame of the session `req` is from. `fps` is the feed's pace, the
-  // frames a second it draws this bar at, which the frame shows.
-  // [LAW:one-source-of-truth] The pace the feed set, not a count of frames
-  // (`feedsOf` counts pushes): a frame showing a count changes whenever the
-  // count does — an extra draw for a click, the frame's own push — and is
-  // pushed for it, so a still bar would never be still.
+  // Draws a frame of the session `req` is from, for the wall instant `at`.
+  // `fps` is the feed's ceiling, the most frames a second it draws this bar
+  // at, which the frame shows.
+  // [LAW:one-source-of-truth] The ceiling the feed's spacing sets, not a count
+  // of frames (`feedsOf` counts pushes) nor the gap between two: a frame
+  // showing either changes whenever it does — an extra draw for a click, the
+  // frame's own push, a bar's own beat — and is pushed for it, so a still bar
+  // would never be still.
   // [LAW:effects-at-boundaries] Synchronous by type: a frame only reads what
   // its sources stored, so drawing one can await nothing and refresh nothing.
   // [LAW:types-are-the-program] Null when the session has no view to draw
   // yet: a frame opens none (src/daemon/cache/render.ts `holdView`), so the
   // feed waits for the event that opens one.
-  render(sessionId: string, fps: number): FeedFrame | null;
+  render(sessionId: string, fps: number, at: Instant): FeedFrame | null;
   // Which animation lanes the session's settings switch on now, as its view
   // draws them — never a copy taken when a frame was drawn, so a toggle turned
   // on is honoured at the next subscribe. Null while it has no view.
@@ -131,8 +150,11 @@ export interface FeedDeps<Req> {
   refreshes(): Readonly<Record<RefreshTrigger, number>>;
   periods: FeedPeriods;
   // Milliseconds on a clock that never steps back: a feed measures only
-  // durations with it — periods, the rate window, how long it has run.
+  // durations with it — its spacing, how long it has run, a draw's cost.
   now(): number;
+  // The wall clock: the instant a frame is drawn for, which its cells' next
+  // change is a time on.
+  instant(): Instant;
   log(level: Level, line: string): void;
 }
 
@@ -143,8 +165,8 @@ const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
 export type WakeCause = (typeof WAKE_CAUSES)[number];
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
-// state: no view to draw yet; the next frame due `at` a timer; or a frame
-// being drawn.
+// state: no view to draw yet; the next frame due `at` a timer, on the
+// monotonic clock; or a frame being drawn.
 type Phase =
   | { readonly kind: "waiting" }
   | {
@@ -167,7 +189,8 @@ interface Feed {
   readonly unwatch: () => void;
   readonly unpin: () => void;
   phase: Phase;
-  // When the last frame's draw started: what the next one is spaced from.
+  // The moment the last frame was drawn for, on the monotonic clock: what a
+  // wake's next frame is spaced from.
   lastStart: number;
   // The last frame pushed, as serialized, so an unchanged frame is never
   // pushed twice and a new subscriber gets the bar at once.
@@ -179,15 +202,14 @@ interface Feed {
   noted: number;
   // Frames due that found no view to draw, and waited.
   noView: number;
-  // Next frames set at the moving rate, and those set at the still rate
-  // because the moving bar was on no screen: counts of the decision, since
-  // only the decision asks whether a bar is seen.
+  // Next frames set sooner than the still period, because the bar changes
+  // sooner on a screen, and those held to it only because the bar was on no
+  // screen: counts of the decision, since only the decision asks whether a bar
+  // is seen.
   moving: number;
   unseen: number;
   failed: number;
   pushed: number;
-  // The frames a second the feed draws at, as it last set the next frame.
-  pace: number;
   drawMs: number;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
@@ -238,13 +260,14 @@ const sentOf = (resp: Response): Sent => ({
 // [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
 // the one drawing it in the statusline draws what the statusline shows.
 const answerOf = (answers: Answers, lane: Lane): Sent =>
-  LANES[lane].elsewhere === null ? answers.statusline : answers.bar;
+  LANES[lane].handsOff ? answers.bar : answers.statusline;
 
-// [LAW:one-source-of-truth] The frames a second a feed draws at: the period it
-// set, never a time it measured. The pace is drawn into the frame, so a
-// measured one (a render's duration) would move with each render and make
-// frames whose bar did not change differ, defeating the dedupe; how many
-// frames a lane was actually sent is feedsOf's count.
+// [LAW:one-source-of-truth] The frames a second a spacing allows: the most a
+// feed draws its bar at, never a time it measured. It is drawn into the frame,
+// so a measured one (a render's duration, the gap to the next change) would
+// move with each render and make frames whose bar did not change differ,
+// defeating the dedupe; how many frames a lane was actually sent is feedsOf's
+// count.
 const paceOf = (period: number): number => Math.round(1000 / period);
 
 // How often a long-lived feed writes its summary to the log.
@@ -318,7 +341,7 @@ export class FrameFeeds<Req> {
     // a view included.
     // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
     // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
-    // feed's pace): the request's own answer is its client's alone.
+    // feed's ceiling): the request's own answer is its client's alone.
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -459,10 +482,6 @@ export class FrameFeeds<Req> {
       unseen: 0,
       failed: 0,
       pushed: 0,
-      // Not yet set: the first frame is drawn at once, before any period is
-      // chosen, and shows the still pace; a moving bar's next frame, one
-      // moving period later, shows the moving pace.
-      pace: paceOf(this.deps.periods.still),
       drawMs: 0,
       evaluated: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
@@ -473,6 +492,13 @@ export class FrameFeeds<Req> {
     this.feeds.set(sessionId, feed);
     this.stopWatching ??= this.deps.watching();
     return feed;
+  }
+
+  // The daemon's close: every feed ends as its last subscriber's leaving ends
+  // it, and the pane follow with the last of them.
+  close(): void {
+    for (const feed of [...this.feeds.values()])
+      for (const sub of [...feed.followers.keys()]) this.unsubscribe(feed, sub);
   }
 
   private unsubscribe(feed: Feed, sub: Subscriber): void {
@@ -500,28 +526,43 @@ export class FrameFeeds<Req> {
   // is logged as the feed's fault, and the feed's next frame is set as a
   // still frame's is. A frame step runs off a timer, so a throw it let go
   // would be an unhandled rejection, which exits the daemon.
-  private draw(feed: Feed): void {
+  // [LAW:no-ambient-temporal-coupling] The frame is drawn for the instant its
+  // timer was set for, kept within TIMER_RESOLUTION_S of the wall clock: a
+  // frame set for a change shows it however early its timer fires, and none is
+  // ever drawn further ahead of the wall than that, so nothing carries from
+  // one frame to the next. Its moment on the monotonic clock is that instant's.
+  private draw(feed: Feed, due: Instant): void {
     feed.phase = { kind: "drawing" };
     const started = this.deps.now();
+    const wall = this.deps.instant();
+    const at = Math.min(
+      Math.max(due, wall),
+      wall + TIMER_RESOLUTION_S,
+    ) as Instant;
+    const moment = started + (at - wall) * 1000;
     try {
-      this.step(feed, started);
+      this.step(feed, started, moment, at);
     } catch (error) {
       // A frame that faulted spaces the next as a drawn one does, so a feed
       // woken while its adapter throws still draws at its spacing.
-      feed.lastStart = started;
+      feed.lastStart = moment;
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
       );
       if (this.feeds.get(feed.sessionId) !== feed) return;
-      this.schedule(feed, null, started);
+      this.schedule(feed, null, at);
     }
   }
 
-  private step(feed: Feed, started: number): void {
+  private step(feed: Feed, started: number, moment: number, at: Instant): void {
     // The render adapter answers a failed render with its error frame; a throw
     // out of it is a fault in the adapter, `draw`'s to report.
-    const frame = this.deps.render(feed.sessionId, feed.pace);
+    const frame = this.deps.render(
+      feed.sessionId,
+      paceOf(this.spacingOf(feed)),
+      at,
+    );
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits,
     // with no timer, until the event that opens one wakes it.
     // A draw that found no view drew nothing, so it spaces nothing: the
@@ -531,7 +572,7 @@ export class FrameFeeds<Req> {
       feed.phase = { kind: "waiting" };
       return;
     }
-    feed.lastStart = started;
+    feed.lastStart = moment;
     const finished = this.deps.now();
     this.drawn++;
     feed.drawn++;
@@ -541,27 +582,31 @@ export class FrameFeeds<Req> {
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
     this.countFailure(feed, frame);
-    this.push(feed, frame);
+    this.push(feed, frame, at);
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
-    this.schedule(feed, frame, started);
+    this.schedule(feed, frame, at);
   }
 
-  // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
-  // this one STARTED, so the rate holds whatever a render costs, up to a
-  // render as slow as the period, when frames are drawn back to back. A frame
-  // step that faulted is followed as a still frame is.
-  // [LAW:dataflow-not-control-flow] The moving period is for a bar that moves
-  // where someone can see it, asked here, as the next frame is set.
-  private schedule(feed: Feed, frame: FeedFrame | null, started: number): void {
-    const moves = frame?.moves === true;
-    const seen = moves && this.shown(feed);
-    if (seen) feed.moving++;
-    if (moves && !seen) feed.unseen++;
-    const period = seen ? this.deps.periods.moving : this.deps.periods.still;
-    feed.pace = paceOf(period);
-    this.arm(feed, started + period);
+  // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
+  // next changes, measured from the instant this one was drawn for — no
+  // sooner than the feed's spacing allows and no later than the still period
+  // — so a 1 s beat is drawn once a second, for the moment it turns, and a
+  // continuous effect at the moving rate. Set as an instant, so the time this
+  // frame took to draw comes off the wait and the rate holds whatever a render
+  // costs. A frame step that faulted is followed as a still frame is.
+  // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
+  // next change is Infinity, and an unseen bar's spacing is the still period.
+  private schedule(feed: Feed, frame: FeedFrame | null, at: Instant): void {
+    const { moving, still } = this.deps.periods;
+    const until = ((frame?.nextChange ?? Infinity) - at) * 1000;
+    const shownPeriod = Math.min(Math.max(until, moving), still);
+    const shown = this.shown(feed);
+    if (shownPeriod < still && shown) feed.moving++;
+    if (shownPeriod < still && !shown) feed.unseen++;
+    const period = shown ? shownPeriod : still;
+    this.arm(feed, (at + period / 1000) as Instant, this.deps.instant());
   }
 
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
@@ -575,32 +620,36 @@ export class FrameFeeds<Req> {
   }
 
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
-  // to the earliest its spacing allows after the last frame started, never
-  // later than it already falls due. Answers whether it moved anything: a
-  // wake that did not was coalesced into a frame already due.
+  // to the earliest its spacing allows after the last frame was drawn for,
+  // never later than it already falls due. Answers whether it moved anything:
+  // a wake that did not was coalesced into a frame already due. Spaced on the
+  // monotonic clock, so a wall clock stepped back cannot stall a wake.
   // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
   // turn and opens nothing, so a wake while it draws is the draw's own, and
   // the frame reads what that moved: it is coalesced into that frame.
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
     if (phase.kind === "drawing") return false;
-    const at = Math.max(this.deps.now(), feed.lastStart + this.spacingOf(feed));
+    const now = this.deps.now();
+    const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
-    this.arm(feed, at);
+    const wall = this.deps.instant();
+    this.arm(feed, (wall + (at - now) / 1000) as Instant, wall);
     return true;
   }
 
-  // The feed's one timer, set to draw its next frame `at`, in a later turn
-  // than the caller's however soon that is.
-  private arm(feed: Feed, at: number): void {
+  // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
+  // the wall instant `due`, in a later turn than the caller's however soon
+  // that is. Its wait is measured from `wall`, the caller's own reading, so
+  // the instant a caller set is never rebuilt from a second, truncated one;
+  // its monotonic due time is what a wake compares against.
+  private arm(feed: Feed, due: Instant, wall: Instant): void {
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
+    const delay = Math.max(0, (due - wall) * 1000);
     feed.phase = {
       kind: "due",
-      at,
-      timer: setTimeout(
-        () => this.draw(feed),
-        Math.max(0, at - this.deps.now()),
-      ),
+      at: this.deps.now() + delay,
+      timer: setTimeout(() => this.draw(feed, due), delay),
     };
   }
 
@@ -613,7 +662,7 @@ export class FrameFeeds<Req> {
     if (frame.failure !== null) feed.failed++;
   }
 
-  private push(feed: Feed, frame: FeedFrame): void {
+  private push(feed: Feed, frame: FeedFrame, at: Instant): void {
     // The lanes the session's settings switch on as this frame goes out.
     const lanes = this.deps.lanes(feed.sessionId);
     if (lanes !== null) {
@@ -624,6 +673,9 @@ export class FrameFeeds<Req> {
       }
     }
     if (feed.followers.size === 0) return;
+    // [LAW:one-source-of-truth] A frame whose bytes match the last one shows
+    // the same links, so what they copy is this frame's, pushed or not.
+    frame.delivered();
     const answers = {
       bar: sentOf(frame.resp),
       statusline: sentOf(frame.statusline),
@@ -647,7 +699,7 @@ export class FrameFeeds<Req> {
         before === null ||
         answerOf(before, lane).bytes !== answerOf(answers, lane).bytes
       )
-        noteSent(rate, frame.at);
+        noteSent(rate, at);
     for (const sub of feed.followers.keys()) this.send(feed, sub);
   }
 
@@ -685,8 +737,9 @@ export class FrameFeeds<Req> {
   private summarize(feed: Feed, state: "running" | "closed"): void {
     const now = this.deps.now();
     const refreshes = this.deps.refreshes();
-    // The rate it drew at over its life, beside the pace it set: the gap is
-    // what contention for the daemon's one thread cost it.
+    // The rate it drew at over its life, beside the most it draws at now: a
+    // bar that changes less often than the ceiling is drawn as often as it
+    // changes.
     const seconds = (now - feed.since) / 1000;
     const achieved =
       seconds === 0 ? "-" : `${(feed.drawn / seconds).toFixed(1)}fps`;
@@ -695,7 +748,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

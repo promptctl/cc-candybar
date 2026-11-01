@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
@@ -50,8 +50,8 @@ export interface RenderRequest {
   hookData: ClaudeHookData;
   // The client's own path, then the flags the statusline command gave it —
   // the native binary's, the Node script's, never the node interpreter's.
-  // Anything after the path that is not `--config <file>` is refused on the
-  // strip (parseRenderArgs, server.ts).
+  // Anything after the path that is not `--config <file>` is refused as the
+  // bar's error (parseRenderArgs, render-checkpoint.ts).
   args: string[];
   cwd: string;
   // When the client hangs up, in epoch milliseconds: the daemon's wait for
@@ -80,7 +80,7 @@ export interface RenderRequest {
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
 // the session it is rendering for". `termCols` established the pattern; `ssh`
-// and `termRows` (the diagnostic strip's row cap) followed it, and the
+// and `termRows` (the terminal's height) followed it, and the
 // documented-but-unbuilt client-aware `colorCompatibility: "auto"` is the
 // next. Naming the set as ONE type is what keeps each addition a field
 // rather than another sanitizer, another wire read, and another parameter
@@ -118,8 +118,8 @@ export interface RenderRequest {
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is
 //     the absolute path the client resolved the variable to against its own
-//     cwd (detectConfigEnv, src/config-hint.ts); server.ts composes it beneath
-//     a load-config pick and `--config`, never with the daemon's own env —
+//     cwd (detectConfigEnv, src/config-hint.ts); it ranks beneath a load-config
+//     pick and `--config`, and is never read from the daemon's own env —
 //     the override that ticket brandon-config-5g8 measured going nowhere.
 //   • `claudeConfigDir` absent — the client's Claude Code runs with no
 //     CLAUDE_CONFIG_DIR (or the client is too old to say; both mean the
@@ -209,7 +209,7 @@ export function refusedHints(
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
 
-// The red strip's line for the refused hints, null when every sent hint was
+// The error message for the refused hints, null when every sent hint was
 // taken.
 export function refusedHintsError(
   refused: readonly RefusedHint[],
@@ -246,7 +246,7 @@ const REFUSAL_LINES: Readonly<
   positional: (args) => `Unexpected arguments: ${args}`,
 };
 
-// The red strip's lines for the refused arguments, null when every argument
+// The error message for the refused arguments, null when every argument
 // was taken. Either way the bar renders without them.
 export function refusedArgsError(
   refused: readonly RefusedArg[],
@@ -522,7 +522,7 @@ export function makeFrameReader(
 // client hangs up when it said it would. Resolves to the parsed response or
 // rejects on timeout / parse error / socket error.
 export function sendOne(
-  sock: Socket,
+  sock: Duplex,
   req: Request,
   deadline: number,
 ): Promise<Response> {
@@ -532,7 +532,11 @@ export function sendOne(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      sock.removeAllListeners();
+      // [LAW:locality-or-seam] Only its own: the stream's other listeners are
+      // what carry its end and its hang-up, and they aren't this call's.
+      sock.off("data", reader);
+      sock.off("error", onError);
+      sock.off("close", onClose);
       try {
         fn();
       } catch {}
@@ -548,11 +552,12 @@ export function sendOne(
       (frame) => finish(() => resolve(frame as Response)),
       (err) => finish(() => reject(err)),
     );
+    const onError = (err: Error): void => finish(() => reject(err));
+    const onClose = (): void =>
+      finish(() => reject(new Error("socket closed before response")));
     sock.on("data", reader);
-    sock.on("error", (err) => finish(() => reject(err)));
-    sock.on("close", () =>
-      finish(() => reject(new Error("socket closed before response"))),
-    );
+    sock.on("error", onError);
+    sock.on("close", onClose);
 
     sock.write(encodeFrame(req));
   });

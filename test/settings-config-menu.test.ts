@@ -16,6 +16,7 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -55,7 +56,7 @@ import { linkUrls, links } from "./helpers/ansi";
 import { instantOf, type Instant } from "../src/utils/instant";
 import {
   LANES,
-  LANE_NAMES,
+  TOGGLED_LANES,
   MOVING_FPS,
   UNFOLLOWED_FEEDS,
   type Drawing,
@@ -63,6 +64,7 @@ import {
   type LaneFeeds,
 } from "../src/config/lanes";
 import { LANE_HELP } from "../src/help-text";
+import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -100,8 +102,11 @@ function rig(
   // the picks were still held while the file reloaded.
   reloads: { text: string; picks: Record<string, string | null> }[];
   render: (feeds?: LaneFeeds, at?: Instant, drawing?: Drawing) => string;
-  click: (url: string) => void;
+  click: (url: string) => Promise<void>;
   dispose: () => void;
+  // The tmux pane the session's client reports it runs in, "" outside tmux —
+  // the `tmux.pane` input every render's payload carries.
+  tmuxPane: string;
 } {
   const sessionState = new SessionState();
   durable?.write(source);
@@ -119,7 +124,7 @@ function rig(
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
@@ -128,11 +133,12 @@ function rig(
     return { config, store, registry, compiled, fileHeld };
   };
   let entry = load(source);
+  let tmuxPane = "";
   const logs: string[] = [];
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
-    dlog: (_level, msg) => logs.push(msg),
+    log: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {
       reloads.push({
@@ -150,6 +156,12 @@ function rig(
     get config() {
       return entry.config;
     },
+    get tmuxPane() {
+      return tmuxPane;
+    },
+    set tmuxPane(pane: string) {
+      tmuxPane = pane;
+    },
     sessionState,
     logs,
     reloads,
@@ -159,7 +171,7 @@ function rig(
       drawing: Drawing = { by: "request" },
     ) => {
       const { config, compiled, store, registry } = entry;
-      // [LAW:one-source-of-truth] The daemon's own projection (server.ts): one
+      // [LAW:one-source-of-truth] The daemon's own projection (draw-bar.ts): one
       // `resolveEffectiveGlobals` over the session's picks feeds the payload's
       // `.effective` labels, the render options and the selection, through the
       // same `effectiveInputs`/`renderOptionsOf` and the resolution itself, so a preset
@@ -186,7 +198,7 @@ function rig(
             added_dirs: [],
           },
           ...effectiveInputs(effective),
-          // The daemon derives these per render (server.ts) through the same
+          // The daemon derives these per render (draw-bar.ts) through the same
           // function.
           ...settingCounts(config, entry.fileHeld, sessionPick),
           // What the daemon publishes from the session's settings history.
@@ -195,7 +207,8 @@ function rig(
             redo: durable?.history(SID).future.length ?? 0,
           },
           feeds,
-          // What the daemon sets beside the payload (server.ts).
+          tmux: { pane: tmuxPane },
+          // What the daemon sets beside the payload (draw-bar.ts).
           drawing,
         },
         at,
@@ -206,11 +219,11 @@ function rig(
     },
     // The daemon's own path: the URL's verb — `dispatch` for a compound
     // click — looked up in the one table, so a click is one history step.
-    click: (url: string) => {
+    click: async (url: string) => {
       const { verb, value } = parseHandlerUrl(url);
       const handler = VERBS.get(verb);
       if (!handler) throw new Error(`no handler for verb "${verb}"`);
-      handler(value, ctx);
+      await handler(value, ctx);
     },
     dispose: () => entry.registry.dispose(),
   };
@@ -237,34 +250,34 @@ function writesTo(rendered: string, key: string): string[] {
 // tab is open. Opens `tab` — found in the rendered bytes, never constructed —
 // unless it already is.
 const TAB_KEY = "candybar.tab";
-function showTab(
-  r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
+async function showTab(
+  r: { render: () => string; click: (url: string) => Promise<void>; sessionState: SessionState },
   tab: string,
-): void {
+): Promise<void> {
   if (r.sessionState.get(SID, TAB_KEY) === tab) return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some((e) => e.args[1] === TAB_KEY && e.args[2] === tab),
   );
   if (url === undefined) throw new Error(`no tab writes ${TAB_KEY}=${tab}`);
-  r.click(url);
+  await r.click(url);
 }
 
 // The theme picker's gear (brandon-theme-swatch-8v9r): the style, variation
 // and shade controls are behind it, beside the theme on the door's first line.
-function showGear(
-  r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
-): void {
+async function showGear(
+  r: { render: () => string; click: (url: string) => Promise<void>; sessionState: SessionState },
+): Promise<void> {
   if (r.sessionState.get(SID, PICKERS_KEY) === "gear") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some((e) => e.args[1] === PICKERS_KEY && e.args[2] === "gear"),
   );
   if (url === undefined) throw new Error("no link opens the theme picker's gear");
-  r.click(url);
+  await r.click(url);
 }
 // The theme picker, open: its label shows the theme in force beside its swatch.
-function showThemePicker(
-  r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
-): void {
+async function showThemePicker(
+  r: { render: () => string; click: (url: string) => Promise<void>; sessionState: SessionState },
+): Promise<void> {
   if (r.sessionState.get(SID, PICKERS_KEY) === "candybar.apply.theme") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some(
@@ -272,7 +285,7 @@ function showThemePicker(
     ),
   );
   if (url === undefined) throw new Error("no link opens the theme picker");
-  r.click(url);
+  await r.click(url);
 }
 const PICKERS_KEY = "menus.candybar_pickers";
 
@@ -339,26 +352,26 @@ describe("the config menu, reached from a user config whose root is one row", ()
   // developer's own config.
   let durable: DurableConfig;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     durable = durableConfig("cc-candybar-settings-menu-");
     r = rig(TWO_SEGMENT_ROOT, durable);
     // Open the menu — the click a "🍫" tap dispatches, found in the rendered
     // bytes, never constructed, so this also proves it is REACHABLE.
     const menuToggle = writesTo(r.render(), "candybar.menu")[0];
     expect(menuToggle).toBeDefined();
-    r.click(menuToggle!);
+    await r.click(menuToggle!);
   });
   afterEach(() => {
     r.dispose();
     durable.dispose();
   });
 
-  const wrapUrl = (): string => {
-    showTab(r, "config");
+  const wrapUrl = async (): Promise<string> => {
+    await showTab(r, "config");
     return writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
   };
-  const paddingUp = (): string => {
-    showTab(r, "config");
+  const paddingUp = async (): Promise<string> => {
+    await showTab(r, "config");
     return links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "▶" &&
@@ -370,21 +383,23 @@ describe("the config menu, reached from a user config whose root is one row", ()
       effectsOf(l.url).some((e) => e.verb === "save"),
     )?.url;
 
-  test("every setting the menu owns is one control, reachable from that root", () => {
+  test("every setting the menu owns is one control, reachable from that root", async () => {
+    const tabs: string[] = [];
+    for (const tab of ["look", "layout", "config"]) {
+      await showTab(r, tab);
+      tabs.push(plain(r.render()));
+    }
     const out = [
-      ...["look", "layout", "config"].map((tab) => {
-        showTab(r, tab);
-        return plain(r.render());
-      }),
-      (showGear(r), plain(r.render())),
-      (showThemePicker(r), plain(r.render())),
+      ...tabs,
+      (await showGear(r), plain(r.render())),
+      (await showThemePicker(r), plain(r.render())),
     ].join("\n");
-    // One labelled control each, showing the value the bar actually rendered.
-    expect(out).toContain("▦ ◀ default ▶"); // preset
+    // One labelled control each, named for what it sets.
+    expect(out).toContain("◀ ▦ preset ▶"); // preset
     expect(out).toContain("🎨 theme ▀▀▀"); // theme, closed: its swatch
     expect(out).toContain("tokyo-night ▀▀▀"); // theme, open: its name too
-    expect(out).toContain("◐ ◀ none ▀▀▀ ▶"); // style, behind the gear, with its swatch
-    expect(out).toContain("✦ ◀ powerline ▶"); // style
+    expect(out).toContain("◀ ◐ style ▀▀▀ ▶"); // style, behind the gear, with its swatch
+    expect(out).toContain("◀ ✦ endcaps ▶"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
     expect(out).toContain("☑ update notice"); // updateNotice
@@ -395,27 +410,27 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
   // brandon-menus-sjhy.ek7: "Make theme and arrange top-level menus, next to
   // preset. Move padding and wrap from the layout menu to config."
-  test("theme and arrange sit beside preset on the first line; wrap and padding are in ⚙ config", () => {
+  test("theme and arrange sit beside preset on the first line; wrap and padding are in ⚙ config", async () => {
     const firstLine = plain(r.render()).split("\n")[0]!;
-    for (const cell of ["🎨 theme ▀▀▀", "⚙", "▦ ◀ default ▶", "✎ arrange"]) {
+    for (const cell of ["🎨 theme ▀▀▀", "⚙", "◀ ▦ preset ▶", "✎ arrange"]) {
       expect(firstLine).toContain(cell);
     }
-    const tab = (name: string): string => (showTab(r, name), plain(r.render()));
-    expect(tab("config")).toMatch(/☑ wrap[\s\S]*padding 1/);
+    const tab = async (name: string): Promise<string> => (await showTab(r, name), plain(r.render()));
+    expect(await tab("config")).toMatch(/☑ wrap[\s\S]*padding 1/);
     for (const name of ["look", "layout"]) {
-      const body = tab(name).split("\n").slice(2).join("\n");
+      const body = (await tab(name)).split("\n").slice(2).join("\n");
       for (const moved of ["🎨 theme", "✎ arrange", "wrap", "padding"]) {
         expect(body).not.toContain(moved);
       }
     }
   });
 
-  test("every control writes the session key; the only durable links are the ↺ resets", () => {
+  test("every control writes the session key; the only durable links are the ↺ resets", async () => {
     // Open the theme ring so its option cells render too.
     const themeMenu = writesTo(r.render(), "menus.candybar_pickers").find((u) =>
       effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
     );
-    r.click(themeMenu!);
+    await r.click(themeMenu!);
     const open = r.render();
     expect(writesTo(open, "theme").length).toBeGreaterThan(0);
     for (const url of linkUrls(open)) {
@@ -427,23 +442,23 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(writesTo(open, "palette").every(isReset)).toBe(true);
   });
 
-  test("a pick is a draft: the bar follows it, 💾 save counts it, the file is untouched", () => {
+  test("a pick is a draft: the bar follows it, 💾 save counts it, the file is untouched", async () => {
     const before = durable.text();
-    r.click(wrapUrl());
+    await r.click(await wrapUrl());
     expect(plain(r.render())).toContain("☐ wrap");
     expect(plain(r.render())).toContain("💾 save 1");
-    r.click(paddingUp());
+    await r.click(await paddingUp());
     expect(plain(r.render())).toContain("💾 save 2");
     expect(durable.text()).toBe(before);
   });
 
   // brandon-save-undo-bwi.bcn: the bundled compact preset pins padding 0, so
   // the stepper starts from the 0 the bar shows, never top-level globals' 1.
-  test("an unpicked padding steps from the value the session's preset shows", () => {
+  test("an unpicked padding steps from the value the session's preset shows", async () => {
     r.sessionState.set(SID, "preset", "compact");
-    showTab(r, "config");
+    await showTab(r, "config");
     expect(plain(r.render())).toContain("padding 0");
-    r.click(paddingUp());
+    await r.click(await paddingUp());
     expect(r.sessionState.get(SID, "padding")).toBe("1");
     expect(plain(r.render())).toContain("padding 1");
     expect(r.logs).toContainEqual(
@@ -451,18 +466,18 @@ describe("the config menu, reached from a user config whose root is one row", ()
     );
   });
 
-  test("a pick back to the saved value is no draft", () => {
-    r.click(wrapUrl());
+  test("a pick back to the saved value is no draft", async () => {
+    await r.click(await wrapUrl());
     expect(plain(r.render())).toContain("💾 save 1");
-    r.click(wrapUrl());
+    await r.click(await wrapUrl());
     expect(plain(r.render())).toContain("☑ wrap");
     expect(plain(r.render())).not.toContain("💾");
   });
 
-  test("save writes every draft in one edit, reloads, releases the picks, and the cell is gone", () => {
-    r.click(wrapUrl());
-    r.click(paddingUp());
-    r.click(saveUrl()!);
+  test("save writes every draft in one edit, reloads, releases the picks, and the cell is gone", async () => {
+    await r.click(await wrapUrl());
+    await r.click(await paddingUp());
+    await r.click(saveUrl()!);
     const globals = durable.parsed().globals as Record<string, unknown>;
     expect(globals.autoWrap).toBe(false);
     expect(globals.padding).toBe(2);
@@ -491,25 +506,25 @@ describe("the config menu, reached from a user config whose root is one row", ()
     );
   });
 
-  test("a second click on a bar drawn before the save is a recorded no-op", () => {
-    r.click(paddingUp());
+  test("a second click on a bar drawn before the save is a recorded no-op", async () => {
+    await r.click(await paddingUp());
     const url = saveUrl()!;
-    r.click(url);
+    await r.click(url);
     const saved = durable.text();
     const depth = durable.history(SID).past.length;
-    expect(() => r.click(url)).not.toThrow();
+    await expect(r.click(url)).resolves.toBeUndefined();
     expect(durable.text()).toBe(saved);
     expect(durable.history(SID).past).toHaveLength(depth);
     expect(r.logs).toContainEqual(`save: nothing unsaved (session=${SID})`);
   });
 
-  test("a refused write keeps every draft and leaves the file as it was", () => {
-    r.click(wrapUrl());
-    r.click(paddingUp());
+  test("a refused write keeps every draft and leaves the file as it was", async () => {
+    await r.click(await wrapUrl());
+    await r.click(await paddingUp());
     const before = durable.text();
     chmodSync(dirname(durable.configPath), 0o500);
     try {
-      expect(() => r.click(saveUrl()!)).toThrow(/config write failed/);
+      await expect(r.click(saveUrl()!)).rejects.toThrow(/config write failed/);
     } finally {
       chmodSync(dirname(durable.configPath), 0o755);
     }
@@ -519,11 +534,11 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(plain(r.render())).toContain("💾 save 2");
   });
 
-  test("a pick the render ignores is no draft, and a save leaves it be", () => {
-    r.click(paddingUp());
+  test("a pick the render ignores is no draft, and a save leaves it be", async () => {
+    await r.click(await paddingUp());
     r.sessionState.set(SID, "theme", "no-such-theme");
     expect(plain(r.render())).toContain("💾 save 1");
-    r.click(saveUrl()!);
+    await r.click(saveUrl()!);
     const globals = durable.parsed().globals as Record<string, unknown>;
     expect(globals.padding).toBe(2);
     expect(globals).not.toHaveProperty("palette");
@@ -560,33 +575,33 @@ describe("save under a preset that pins the setting", () => {
 
   // Pick `plain` from the style carousel, save, and return the bar after the
   // save released the pick — what the file alone renders.
-  const pickPlainAndSave = (r: ReturnType<typeof rig>): string => {
-    showTab(r, "look");
-    r.click(
+  const pickPlainAndSave = async (r: ReturnType<typeof rig>): Promise<string> => {
+    await showTab(r, "look");
+    await r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.endcaps"),
       )!,
     );
     const capsule = plain(r.render());
-    expect(capsule).toContain("✦ ◀ capsule ▶");
+    expect(capsule).toContain("◀ ✦ endcaps ▶");
     expect(capsule).not.toContain(PLAIN_SEAM);
     const pickPlain = writesTo(r.render(), "endcaps").find((u) =>
       effectsOf(u).some((e) => e.args[1] === "endcaps" && e.args[2] === "plain"),
     );
-    r.click(pickPlain!);
+    await r.click(pickPlain!);
     const save = links(r.render()).find((l) =>
       effectsOf(l.url).some((e) => e.verb === "save"),
     )!.url;
-    r.click(save);
+    await r.click(save);
     expect(r.sessionState.get(SID, "endcaps")).toBeNull();
     return plain(r.render());
   };
 
-  test("the file names the preset: the save lands in its globals and the bar draws it", () => {
+  test("the file names the preset: the save lands in its globals and the bar draws it", async () => {
     const r = rig(PINNING_PRESET_NAMED, durable);
     try {
-      r.click(writesTo(r.render(), "candybar.menu")[0]!);
-      const after = pickPlainAndSave(r);
+      await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+      const after = await pickPlainAndSave(r);
 
       const parsed = durable.parsed() as {
         globals: Record<string, unknown>;
@@ -594,7 +609,6 @@ describe("save under a preset that pins the setting", () => {
       };
       expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(parsed.globals).not.toHaveProperty("endcaps");
-      expect(after).toContain("✦ ◀ plain ▶");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
       expect(r.logs).toContainEqual(
@@ -605,23 +619,23 @@ describe("save under a preset that pins the setting", () => {
     }
   });
 
-  test("the session picks the preset: the save writes both, the style into the preset", () => {
+  test("the session picks the preset: the save writes both, the style into the preset", async () => {
     const r = rig(PINNING_PRESET, durable);
     try {
-      r.click(writesTo(r.render(), "candybar.menu")[0]!);
-      r.click(
+      await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+      await r.click(
         writesTo(r.render(), "menus.candybar_pickers").find((u) =>
           effectsOf(u).some((e) => e.args[2] === "candybar.apply.preset"),
         )!,
       );
-      r.click(
+      await r.click(
         writesTo(r.render(), "preset").find((u) =>
           effectsOf(u).some(
             (e) => e.args[1] === "preset" && e.args[2] === "narrow",
           ),
         )!,
       );
-      const after = pickPlainAndSave(r);
+      const after = await pickPlainAndSave(r);
 
       const parsed = durable.parsed() as {
         globals: Record<string, unknown>;
@@ -630,7 +644,6 @@ describe("save under a preset that pins the setting", () => {
       expect(parsed.globals).toEqual({ preset: "narrow" });
       expect(parsed.presets.narrow.globals.endcaps).toBe("plain");
       expect(r.sessionState.get(SID, "preset")).toBeNull();
-      expect(after).toContain("✦ ◀ plain ▶");
       expect(after).toContain(PLAIN_SEAM);
       expect(after).not.toContain("💾");
     } finally {
@@ -660,11 +673,11 @@ describe("reset returns settings to the bundled default", () => {
   let r: ReturnType<typeof rig>;
   let durable: DurableConfig;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     durable = durableConfig("cc-candybar-settings-reset-");
     r = rig(CUSTOMIZED, durable);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    showTab(r, "look");
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await showTab(r, "look");
   });
   afterEach(() => {
     r.dispose();
@@ -674,8 +687,8 @@ describe("reset returns settings to the bundled default", () => {
   // The ↺ beside one setting: the link whose only reset names `configKey`,
   // in whichever tab holds that setting's control.
   const TAB_OF: Record<string, string> = { padding: "config" };
-  const resetOf = (configKey: string): string => {
-    showTab(r, TAB_OF[configKey] ?? "look");
+  const resetOf = async (configKey: string): Promise<string> => {
+    await showTab(r, TAB_OF[configKey] ?? "look");
     return links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "↺" &&
@@ -711,11 +724,11 @@ describe("reset returns settings to the bundled default", () => {
     narrow: { globals: { endcaps: "plain" } },
   };
 
-  test("↺ clears the session's pick and the saved value, and the bar shows the default", () => {
+  test("↺ clears the session's pick and the saved value, and the bar shows the default", async () => {
     r.sessionState.set(SID, "theme", "dracula");
-    showThemePicker(r);
+    await showThemePicker(r);
     expect(plain(r.render())).toContain("dracula ▀▀▀");
-    r.click(resetOf("palette"));
+    await r.click(await resetOf("palette"));
     expect(r.reloads).toEqual([
       { text: durable.text(), picks: { theme: "dracula", style: null, padding: null } },
     ]);
@@ -727,8 +740,8 @@ describe("reset returns settings to the bundled default", () => {
     expect(userContent()).toEqual(USER_CONTENT);
   });
 
-  test("↺ clears a value saved into a bundled preset's fragment, never a user preset's pin", () => {
-    r.click(resetOf("padding"));
+  test("↺ clears a value saved into a bundled preset's fragment, never a user preset's pin", async () => {
+    await r.click(await resetOf("padding"));
     const parsed = durable.parsed() as {
       globals: Record<string, unknown>;
       presets: Record<string, unknown>;
@@ -739,7 +752,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(parsed.presets).not.toHaveProperty("compact");
     expect(userContent()).toEqual(USER_CONTENT);
 
-    r.click(resetOf("endcaps"));
+    await r.click(await resetOf("endcaps"));
     expect(durable.parsed().globals).not.toHaveProperty("endcaps");
     expect(userContent()).toEqual(USER_CONTENT);
     expect(r.logs).toContainEqual(
@@ -749,41 +762,41 @@ describe("reset returns settings to the bundled default", () => {
     );
   });
 
-  test("reset all takes two clicks in one open menu, and the door disarms it", () => {
+  test("reset all takes two clicks in one open menu, and the door disarms it", async () => {
     const before = durable.text();
-    r.click(labelled("⟲")!);
+    await r.click(labelled("⟲")!);
     expect(durable.text()).toBe(before);
     expect(labelled("⟲")).toBeUndefined();
     expect(labelled("⟲ reset all?")).toBeDefined();
     // Close and reopen the menu: the arm does not survive it.
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     expect(labelled("⟲ reset all?")).toBeUndefined();
     expect(labelled("⟲")).toBeDefined();
     expect(durable.text()).toBe(before);
   });
 
-  test("the armed reset all offers a ✕ that disarms it without resetting", () => {
+  test("the armed reset all offers a ✕ that disarms it without resetting", async () => {
     const before = durable.text();
-    r.click(labelled("⟲")!);
-    r.click(cancelResetAll());
+    await r.click(labelled("⟲")!);
+    await r.click(cancelResetAll());
     expect(labelled("⟲ reset all?")).toBeUndefined();
     expect(labelled("⟲")).toBeDefined();
     expect(durable.text()).toBe(before);
   });
 
-  test("an armed reset all stays in view when nothing is left to reset, so it never returns already armed", () => {
-    r.click(labelled("⟲")!);
-    r.click(labelled("⟲ reset all?")!);
+  test("an armed reset all stays in view when nothing is left to reset, so it never returns already armed", async () => {
+    await r.click(labelled("⟲")!);
+    await r.click(labelled("⟲ reset all?")!);
     expect(labelled("⟲")).toBeUndefined();
 
     // A draft brings `⟲` back; arming it, then losing the draft (an undo),
     // leaves nothing to reset — but the armed confirm and its ✕ stay.
     r.sessionState.set(SID, "padding", "5");
-    r.click(labelled("⟲")!);
+    await r.click(labelled("⟲")!);
     r.sessionState.clear(SID, "padding");
     expect(labelled("⟲ reset all?")).toBeDefined();
-    r.click(cancelResetAll());
+    await r.click(cancelResetAll());
     expect(labelled("⟲ reset all?")).toBeUndefined();
     expect(labelled("⟲")).toBeUndefined();
   });
@@ -797,13 +810,13 @@ describe("reset returns settings to the bundled default", () => {
     expect(line1).not.toContain("💾");
   });
 
-  test("reset all clears every setting at every layer as one step, and undo restores the exact bytes", () => {
+  test("reset all clears every setting at every layer as one step, and undo restores the exact bytes", async () => {
     const before = durable.text();
     r.sessionState.set(SID, "padding", "5");
     r.sessionState.set(SID, "style", "dim");
     const depth = durable.history(SID).past.length;
-    r.click(labelled("⟲")!);
-    r.click(labelled("⟲ reset all?")!);
+    await r.click(labelled("⟲")!);
+    await r.click(labelled("⟲ reset all?")!);
 
     // Every setting's reset in one click is ONE write and ONE reload, made
     // while the session still held its picks — released only after.
@@ -822,15 +835,15 @@ describe("reset returns settings to the bundled default", () => {
     expect(r.sessionState.get(SID, "style")).toBeNull();
     // Nothing is left for a reset to change, so `⟲` is gone.
     expect(labelled("⟲")).toBeUndefined();
-    showGear(r);
-    expect(plain(r.render())).toContain("◐ ◀ none ▀▀▀ ▶");
+    await showGear(r);
+    expect(plain(r.render())).toContain("◀ ◐ style ▀▀▀ ▶");
     expect(plain(r.render())).not.toContain("💾");
-    showTab(r, "config");
+    await showTab(r, "config");
     expect(plain(r.render())).toContain("padding 1");
 
     // One click, one step — undone by the ↶ on the bar.
     expect(durable.history(SID).past).toHaveLength(depth + 1);
-    r.click(labelled("↶")!);
+    await r.click(labelled("↶")!);
     expect(durable.text()).toBe(before);
     expect(r.sessionState.get(SID, "padding")).toBe("5");
     expect(r.sessionState.get(SID, "style")).toBe("dim");
@@ -850,34 +863,33 @@ describe("the drift marker", () => {
 
   // Every setting whose ↺ the bar draws, read tab by tab (a control renders
   // only while its tab is open; the preset's sits on the door's own line).
-  const marked = (r: ReturnType<typeof rig>): string[] =>
-    [
-      ...new Set(
-        ["look", "layout", "config"].flatMap((tab) => {
-          showTab(r, tab);
-          return links(r.render())
-            .filter((l) => stripAnsi(l.text) === "↺")
-            .flatMap((l) => effectsOf(l.url))
-            .filter((e) => e.verb === "reset-config")
-            .map((e) => e.args[1]!);
-        }),
-      ),
-    ].sort();
+  const marked = async (r: ReturnType<typeof rig>): Promise<string[]> => {
+    const keys = new Set<string>();
+    for (const tab of ["look", "layout", "config"]) {
+      await showTab(r, tab);
+      links(r.render())
+        .filter((l) => stripAnsi(l.text) === "↺")
+        .flatMap((l) => effectsOf(l.url))
+        .filter((e) => e.verb === "reset-config")
+        .forEach((e) => keys.add(e.args[1]!));
+    }
+    return [...keys].sort();
+  };
   // The tabs the strip marks, read off what a reader sees.
   const markedTabs = (r: ReturnType<typeof rig>): string[] =>
     ["session", "look", "layout", "config", "tools"].filter((tab) =>
       new RegExp(`${tab} •`).test(plain(r.render())),
     );
-  const open = (source: string): ReturnType<typeof rig> => {
+  const open = async (source: string): Promise<ReturnType<typeof rig>> => {
     const r = rig(source, durable);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     return r;
   };
 
-  test("nothing picked and nothing in the file: no ↺, no tab marked, no ⟲", () => {
-    const r = open(TWO_SEGMENT_ROOT);
+  test("nothing picked and nothing in the file: no ↺, no tab marked, no ⟲", async () => {
+    const r = await open(TWO_SEGMENT_ROOT);
     try {
-      expect(marked(r)).toEqual([]);
+      expect(await marked(r)).toEqual([]);
       expect(markedTabs(r)).toEqual([]);
       expect(plain(r.render())).not.toContain("⟲");
     } finally {
@@ -885,15 +897,15 @@ describe("the drift marker", () => {
     }
   });
 
-  test("a draft marks its own control and its tab, and nothing else", () => {
-    const r = open(TWO_SEGMENT_ROOT);
+  test("a draft marks its own control and its tab, and nothing else", async () => {
+    const r = await open(TWO_SEGMENT_ROOT);
     try {
       r.sessionState.set(SID, "padding", "5");
-      expect(marked(r)).toEqual(["padding"]);
+      expect(await marked(r)).toEqual(["padding"]);
       expect(markedTabs(r)).toEqual(["config"]);
       expect(plain(r.render())).toContain("⟲");
       // The open tab keeps its mark beside the open glyph.
-      showTab(r, "config");
+      await showTab(r, "config");
       expect(plain(r.render())).toContain("▾ ⚙ config •");
     } finally {
       r.dispose();
@@ -902,8 +914,8 @@ describe("the drift marker", () => {
 
   // brandon-menus-sjhy.ek7: the ⚙ gear sits on the door's first line, which
   // no tab encloses, so the gear's own trigger carries the mark.
-  test("a gear setting's draft marks the closed ⚙ gear and no tab", () => {
-    const r = open(TWO_SEGMENT_ROOT);
+  test("a gear setting's draft marks the closed ⚙ gear and no tab", async () => {
+    const r = await open(TWO_SEGMENT_ROOT);
     try {
       expect(plain(r.render())).not.toContain("⚙ •");
       r.sessionState.set(SID, "shade", "deepest");
@@ -916,12 +928,12 @@ describe("the drift marker", () => {
 
   // brandon-menus-sjhy.5zy: a control inside a submenu still marks its tab,
   // with the submenu closed.
-  test("a lane toggle's draft marks ⚙ config while 🧪 toggles is closed", () => {
-    const r = open(TWO_SEGMENT_ROOT);
+  test("a lane toggle's draft marks ⚙ config while 🧪 toggles is closed", async () => {
+    const r = await open(TWO_SEGMENT_ROOT);
     try {
       r.sessionState.set(SID, "experimentalPane", "true");
       expect(markedTabs(r)).toEqual(["config"]);
-      showTab(r, "config");
+      await showTab(r, "config");
       expect(plain(r.render())).toContain("🧪 toggles");
       expect(plain(r.render())).not.toContain("tmux pane (C)");
     } finally {
@@ -929,36 +941,36 @@ describe("the drift marker", () => {
     }
   });
 
-  test("a value the file holds is marked with no draft", () => {
-    const r = open(CUSTOMIZED);
+  test("a value the file holds is marked with no draft", async () => {
+    const r = await open(CUSTOMIZED);
     try {
       // padding is held twice (globals and compact's fragment), endcaps once;
       // narrow's pin is the user's own preset, which a reset leaves alone.
-      expect(marked(r)).toEqual(["endcaps", "padding", "palette"]);
+      expect(await marked(r)).toEqual(["endcaps", "padding", "palette"]);
       expect(markedTabs(r)).toEqual(["look", "config"]);
     } finally {
       r.dispose();
     }
   });
 
-  test("a value the active preset pins is not marked: a reset could not move it", () => {
+  test("a value the active preset pins is not marked: a reset could not move it", async () => {
     // The user's preset pins endcaps; the file's own preset pick is marked.
-    const pinned = open(PINNING_PRESET_NAMED);
+    const pinned = await open(PINNING_PRESET_NAMED);
     try {
-      expect(marked(pinned)).toEqual(["preset"]);
+      expect(await marked(pinned)).toEqual(["preset"]);
       expect(markedTabs(pinned)).toEqual([]);
     } finally {
       pinned.dispose();
     }
   });
 
-  test("a bundled preset's pin is not marked either; picking the preset is", () => {
-    const r = open(TWO_SEGMENT_ROOT);
+  test("a bundled preset's pin is not marked either; picking the preset is", async () => {
+    const r = await open(TWO_SEGMENT_ROOT);
     try {
       r.sessionState.set(SID, "preset", "compact");
-      showTab(r, "config");
+      await showTab(r, "config");
       expect(plain(r.render())).toContain("padding 0");
-      expect(marked(r)).toEqual(["preset"]);
+      expect(await marked(r)).toEqual(["preset"]);
       expect(markedTabs(r)).toEqual([]);
     } finally {
       r.dispose();
@@ -975,10 +987,10 @@ describe("the drift marker", () => {
 // from it.
 describe("a pick leaves the picker open", () => {
   let r: ReturnType<typeof rig>;
-  beforeEach(() => {
+  beforeEach(async () => {
     r = rig(TWO_SEGMENT_ROOT, undefined, 80);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    r.click(
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
       )!,
@@ -1000,13 +1012,13 @@ describe("a pick leaves the picker open", () => {
   // The open picker names the theme in force beside its swatch.
   const theme = (rendered: string) => /(\S+) ▀▀▀/u.exec(plain(rendered))![1]!;
 
-  test("two picks in a row from the swatches: still open, the control naming the second pick", () => {
+  test("two picks in a row from the swatches: still open, the control naming the second pick", async () => {
     const pickOne = option(r.render());
-    r.click(pickOne.url);
+    await r.click(pickOne.url);
     const first = r.render();
     expect(theme(first)).toBe(pickOne.theme);
     const pickTwo = option(first);
-    r.click(pickTwo.url);
+    await r.click(pickTwo.url);
     const second = r.render();
     expect(theme(second)).toBe(pickTwo.theme);
     // Still open after each pick: the row's swatches are still drawn.
@@ -1072,8 +1084,8 @@ describe("save as preset", () => {
   const link = (text: string): string | undefined =>
     links(r.render()).find((l) => stripAnsi(l.text) === text)?.url;
   // `+ preset`, in the 📐 layout tab.
-  const savePreset = (): string => {
-    showTab(r, "layout");
+  const savePreset = async (): Promise<string> => {
+    await showTab(r, "layout");
     return link("+ preset")!;
   };
   const effective = () =>
@@ -1083,29 +1095,29 @@ describe("save as preset", () => {
       () => false,
     );
   // The door, then the preset control's ▸: the ring and the rows beneath it.
-  const openPresets = () => {
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    r.click(
+  const openPresets = async () => {
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await r.click(
       links(r.render()).find((l) =>
         effectsOf(l.url).some((e) => e.args[2] === "candybar.apply.preset"),
       )!.url,
     );
   };
 
-  function start(source: string, picks: Record<string, string> = {}): void {
+  async function start(source: string, picks: Record<string, string> = {}): Promise<void> {
     durable = durableConfig("cc-candybar-save-preset-");
     r = rig(source, durable);
     for (const [k, v] of Object.entries(picks)) r.sessionState.set(SID, k, v);
-    openPresets();
+    await openPresets();
   }
   afterEach(() => {
     r.dispose();
     durable.dispose();
   });
 
-  test("keeps the bar as custom-1 — the arrangement and only what differs — and switches to it", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim", padding: "2" });
-    r.click(savePreset());
+  test("keeps the bar as custom-1 — the arrangement and only what differs — and switches to it", async () => {
+    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim", padding: "2" });
+    await r.click(await savePreset());
 
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     // Reloaded once, while the session still held its picks.
@@ -1123,31 +1135,30 @@ describe("save as preset", () => {
       "dracula",
       2,
     ]);
-    // The ring is on the new preset, and the one draft left is the switch.
+    // The one draft left is the switch.
     const out = plain(r.render());
-    expect(out).toContain("◀ custom-1 ▶");
     expect(out).toContain("💾 save 1");
     expect(r.logs).toContainEqual(
       `save-preset: custom-1 from=narrow palette=dracula style=dim → ${durable.configPath} (session=${SID})`,
     );
   });
 
-  test("switching away and back changes no byte, and the preset still renders what was saved", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    r.click(savePreset());
-    r.click(link("default")!);
+  test("switching away and back changes no byte, and the preset still renders what was saved", async () => {
+    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+    await r.click(await savePreset());
+    await r.click(link("default")!);
     expect(effective().preset).toBe("default");
     expect(effective().theme).toMatchObject({ name: "nord" });
-    r.click(link("custom-1")!);
+    await r.click(link("custom-1")!);
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     expect(effective().theme).toMatchObject({ name: "dracula" });
     expect(effective().style).toMatchObject({ name: "dim" });
   });
 
-  test("a second save takes the next free name", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    r.click(savePreset());
-    r.click(savePreset());
+  test("a second save takes the next free name", async () => {
+    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+    await r.click(await savePreset());
+    await r.click(await savePreset());
     const presets = durable.parsed().presets as Record<string, unknown>;
     expect(Object.keys(presets)).toEqual(["narrow", "custom-1", "custom-2"]);
     // Saved from custom-1 with nothing picked: its arrangement and its pins.
@@ -1155,11 +1166,11 @@ describe("save as preset", () => {
     expect(effective().preset).toBe("custom-2");
   });
 
-  test(`${PRESET_DELETE_GLYPH} deletes the preset it names, returning the file byte for byte, and only a user preset offers it`, () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+  test(`${PRESET_DELETE_GLYPH} deletes the preset it names, returning the file byte for byte, and only a user preset offers it`, async () => {
+    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
     expect(plain(r.render())).toContain(`${PRESET_DELETE_GLYPH} delete narrow`);
-    r.click(savePreset());
-    r.click(link(`${PRESET_DELETE_GLYPH} delete custom-1`)!);
+    await r.click(await savePreset());
+    await r.click(link(`${PRESET_DELETE_GLYPH} delete custom-1`)!);
 
     expect(durable.text()).toBe(USER_PRESETS);
     expect(r.sessionState.get(SID, "preset")).toBeNull();
@@ -1171,43 +1182,42 @@ describe("save as preset", () => {
     );
   });
 
-  test("save and delete are one undo step each, restoring the exact bytes and picks", () => {
-    start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    r.click(savePreset());
-    r.click(link(`${PRESET_DELETE_GLYPH} delete custom-1`)!);
+  test("save and delete are one undo step each, restoring the exact bytes and picks", async () => {
+    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+    await r.click(await savePreset());
+    await r.click(link(`${PRESET_DELETE_GLYPH} delete custom-1`)!);
 
-    r.click(link("↶")!);
+    await r.click(link("↶")!);
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     expect(r.sessionState.get(SID, "preset")).toBe("custom-1");
 
-    r.click(link("↶")!);
+    await r.click(link("↶")!);
     expect(durable.text()).toBe(USER_PRESETS);
     expect(
       ["preset", "theme", "style"].map((k) => r.sessionState.get(SID, k)),
     ).toEqual(["narrow", "dracula", "dim"]);
   });
 
-  test("a bundled preset is never deleted, even one the file pins a setting on", () => {
+  test("a bundled preset is never deleted, even one the file pins a setting on", async () => {
     const source = `{
   presets: { compact: { globals: { padding: 3 } } },
 }`;
-    start(source, { preset: "compact" });
+    await start(source, { preset: "compact" });
     expect(plain(r.render())).not.toContain(PRESET_DELETE_GLYPH);
     // The click a stale or hand-built URL could still carry.
-    expect(() =>
-      r.click(`cc-candybar://delete-preset/${SID}/compact`),
-    ).toThrow('cannot delete preset "compact": it is bundled');
+    await expect(r.click(`cc-candybar://delete-preset/${SID}/compact`),
+    ).rejects.toThrow('cannot delete preset "compact": it is bundled');
     expect(durable.text()).toBe(source);
   });
 
-  test("deleting the preset the file selects removes the selection too, so the file still loads", () => {
+  test("deleting the preset the file selects removes the selection too, so the file still loads", async () => {
     const source = `{
   globals: { preset: 'mine' },
   presets: { mine: { globals: { padding: 4 } } },
 }`;
-    start(source);
+    await start(source);
     expect(effective().preset).toBe("mine");
-    r.click(link(`${PRESET_DELETE_GLYPH} delete mine`)!);
+    await r.click(link(`${PRESET_DELETE_GLYPH} delete mine`)!);
     expect(durable.parsed()).toEqual({});
     expect(effective().preset).toBe("default");
   });
@@ -1215,15 +1225,15 @@ describe("save as preset", () => {
   // [LAW:single-enforcer] Every write is proved to load before it lands, so a
   // click that would break the file changes nothing — not the file, not the
   // session's picks.
-  test("a preset holding a group cannot be copied — group names are config-wide — and nothing changes", () => {
+  test("a preset holding a group cannot be copied — group names are config-wide — and nothing changes", async () => {
     const source = `{
   segments: { mine: { template: 'mine' } },
   presets: {
     grouped: { root: { h: [{ kind: 'group', name: 'extra', label: 'x', children: ['mine'] }] } },
   },
 }`;
-    start(source, { preset: "grouped", theme: "dracula" });
-    expect(() => r.click(savePreset())).toThrow(
+    await start(source, { preset: "grouped", theme: "dracula" });
+    await expect(r.click(await savePreset())).rejects.toThrow(
       /would not load after this click[\s\S]*extra/,
     );
     expect(durable.text()).toBe(source);
@@ -1233,25 +1243,25 @@ describe("save as preset", () => {
     ]);
   });
 
-  test("a preset an action targets is not deleted out from under it", () => {
+  test("a preset an action targets is not deleted out from under it", async () => {
     const source = `{
   actions: { resetMine: { reset: 'presets.mine.root' } },
   presets: { mine: { globals: { padding: 4 } } },
 }`;
-    start(source, { preset: "mine" });
-    expect(() => r.click(link(`${PRESET_DELETE_GLYPH} delete mine`)!)).toThrow(
+    await start(source, { preset: "mine" });
+    await expect(r.click(link(`${PRESET_DELETE_GLYPH} delete mine`)!)).rejects.toThrow(
       /would not load after this click[\s\S]*resetMine/,
     );
     expect(durable.text()).toBe(source);
     expect(r.sessionState.get(SID, "preset")).toBe("mine");
   });
 
-  test("the name skips one the file holds under the loader's identifier collapse", () => {
+  test("the name skips one the file holds under the loader's identifier collapse", async () => {
     const source = `{
   presets: { custom_1: {} },
 }`;
-    start(source, { preset: "custom_1", theme: "dracula" });
-    r.click(savePreset());
+    await start(source, { preset: "custom_1", theme: "dracula" });
+    await r.click(await savePreset());
     expect(Object.keys(durable.parsed().presets as object)).toEqual([
       "custom_1",
       "custom-2",
@@ -1259,12 +1269,12 @@ describe("save as preset", () => {
     expect(effective().preset).toBe("custom-2");
   });
 
-  test("the copy keeps the preset's own globals — those no picker spells too — under the picks", () => {
+  test("the copy keeps the preset's own globals — those no picker spells too — under the picks", async () => {
     const source = `{
   presets: { spaced: { globals: { palette: 'nord', default_separator: ' | ' } } },
 }`;
-    start(source, { preset: "spaced", style: "dim" });
-    r.click(savePreset());
+    await start(source, { preset: "spaced", style: "dim" });
+    await r.click(await savePreset());
     const presets = durable.parsed().presets as Record<string, unknown>;
     expect(presets["custom-1"]).toEqual({
       globals: { palette: "nord", default_separator: " | ", style: "dim" },
@@ -1333,19 +1343,19 @@ describe("a theme's default look, set from the bar", () => {
   };
   // The door, then the theme's ⚙ gear, where the cell sits beside the
   // settings it saves.
-  function start(source: string): void {
+  async function start(source: string): Promise<void> {
     durable = durableConfig("cc-candybar-theme-default-");
     r = rig(source, durable);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    showGear(r);
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await showGear(r);
   }
   afterEach(() => {
     r.dispose();
     durable.dispose();
   });
 
-  test("a pick equal to the theme's default is no draft, and picking a theme drafts only the theme", () => {
-    start(THEMED);
+  test("a pick equal to the theme's default is no draft, and picking a theme drafts only the theme", async () => {
+    await start(THEMED);
     pick({ variation: "duo" });
     expect(plain(r.render())).not.toContain("💾 save");
     // dracula's own default shade comes with it: the theme is the one draft.
@@ -1358,8 +1368,8 @@ describe("a theme's default look, set from the bar", () => {
     expect(plain(r.render())).toContain("💾 save 2");
   });
 
-  test("the control shows exactly while the look differs from the theme's default", () => {
-    start(THEMED);
+  test("the control shows exactly while the look differs from the theme's default", async () => {
+    await start(THEMED);
     expect(plain(r.render())).not.toContain("⤓ default");
     pick({ variation: "duo" });
     expect(plain(r.render())).not.toContain("⤓ default");
@@ -1372,10 +1382,10 @@ describe("a theme's default look, set from the bar", () => {
     expect(plain(r.render())).toContain("⤓ default for dracula ▀▀▀");
   });
 
-  test("the click writes the look into themeDefaults.<theme>, reloads, then releases the picks", () => {
-    start(THEMED);
+  test("the click writes the look into themeDefaults.<theme>, reloads, then releases the picks", async () => {
+    await start(THEMED);
     pick({ shade: "deepest", style: "dim" });
-    r.click(link(SAVE_LABEL)!);
+    await r.click(link(SAVE_LABEL)!);
 
     expect(durable.text()).toBe(THEMED_SAVED);
     // Reloaded once, while the session still held its picks.
@@ -1396,18 +1406,18 @@ describe("a theme's default look, set from the bar", () => {
     );
   });
 
-  test("a field the user's own globals declare is not the theme's to save", () => {
+  test("a field the user's own globals declare is not the theme's to save", async () => {
     const source = `{
   globals: { palette: 'nord', shade: 'brighter' },
 }`;
-    start(source);
+    await start(source);
     // globals.shade outranks the theme's default, so it is no difference the
     // theme's default could hold — with or without a pick over it.
     expect(plain(r.render())).not.toContain("⤓ default");
     pick({ shade: "deepest" });
     expect(plain(r.render())).not.toContain("⤓ default");
     pick({ variation: "duo" });
-    r.click(link(SAVE_LABEL)!);
+    await r.click(link(SAVE_LABEL)!);
     // The entry keeps the theme's own shade; the variation is saved.
     expect(durable.parsed().themeDefaults).toEqual({
       nord: { shade: "middle", variation: "duo", style: "none" },
@@ -1420,30 +1430,30 @@ describe("a theme's default look, set from the bar", () => {
     expect(plain(r.render())).toContain("💾 save 1");
   });
 
-  test("a field the active preset pins does not leak into the theme's default", () => {
+  test("a field the active preset pins does not leak into the theme's default", async () => {
     // The bundled zen preset pins style "dim".
     expect(DEFAULT_DSL_CONFIG.presets.zen!.globals?.style).toBe("dim");
-    start(`{
+    await start(`{
   globals: { palette: 'nord' },
 }`);
     pick({ preset: "zen" });
     expect(look()[2]).toBe("dim");
     expect(plain(r.render())).not.toContain("⤓ default");
     pick({ shade: "deepest" });
-    r.click(link(SAVE_LABEL)!);
+    await r.click(link(SAVE_LABEL)!);
     expect(durable.parsed().themeDefaults).toEqual({
       nord: { shade: "deepest", variation: "accent", style: "none" },
     });
   });
 
-  test("↺ clears the theme's default with the rest, so the bar shows the bundled default", () => {
-    start(THEMED);
+  test("↺ clears the theme's default with the rest, so the bar shows the bundled default", async () => {
+    await start(THEMED);
     pick({ shade: "deepest" });
-    r.click(link(SAVE_LABEL)!);
+    await r.click(link(SAVE_LABEL)!);
     expect(durable.parsed().themeDefaults).toMatchObject({
       nord: { shade: "deepest" },
     });
-    showGear(r);
+    await showGear(r);
     const reset = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "↺" &&
@@ -1452,7 +1462,7 @@ describe("a theme's default look, set from the bar", () => {
         ),
     );
     expect(reset).toBeDefined();
-    r.click(reset!.url);
+    await r.click(reset!.url);
     const saved = durable.parsed().themeDefaults as Record<string, object>;
     expect(saved.nord).not.toHaveProperty("shade");
     // Every other theme's entry loses its shade too; its other fields stay.
@@ -1460,26 +1470,26 @@ describe("a theme's default look, set from the bar", () => {
     expect(look()[0]).toBe("middle");
   });
 
-  test("the click is one undo step, restoring the exact bytes and picks", () => {
-    start(THEMED);
+  test("the click is one undo step, restoring the exact bytes and picks", async () => {
+    await start(THEMED);
     pick({ shade: "deepest", style: "dim" });
-    r.click(link(SAVE_LABEL)!);
-    r.click(link("↶")!);
+    await r.click(link(SAVE_LABEL)!);
+    await r.click(link("↶")!);
     expect(durable.text()).toBe(THEMED);
     expect(
       ["shade", "variation", "style"].map((k) => r.sessionState.get(SID, k)),
     ).toEqual(["deepest", null, "dim"]);
   });
 
-  test("under a theme chosen by a rule there is no name to save: no control, and the click refuses", () => {
+  test("under a theme chosen by a rule there is no name to save: no control, and the click refuses", async () => {
     const source = `{
   globals: { palette: '{{ if true }}nord{{ end }}' },
 }`;
-    start(source);
+    await start(source);
     pick({ shade: "deepest" });
     expect(plain(r.render())).not.toContain("⤓ default");
     // The click a stale or hand-built URL could still carry.
-    expect(() => r.click(`cc-candybar://save-theme-default/${SID}`)).toThrow(
+    await expect(r.click(`cc-candybar://save-theme-default/${SID}`)).rejects.toThrow(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default",
     );
     expect(durable.text()).toBe(source);
@@ -1511,34 +1521,34 @@ describe("the themeDefault action", () => {
 // just part of it."
 describe("the animation lanes' toggles", () => {
   // The settings menu open on ⚙ config with 🧪 toggles open.
-  const openToggles = () => {
+  const openToggles = async () => {
     const r = rig(TWO_SEGMENT_ROOT);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    showTab(r, "config");
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
       ),
     );
     if (url === undefined) throw new Error("no link opens 🧪 toggles");
-    r.click(url);
+    await r.click(url);
     return { r };
   };
 
   // What the lane runs follows the switch the session renders by, whatever
   // moved it (test/lane-setup.test.ts, "LaneSetups"), so the toggle is its
   // setting's write and nothing else.
-  test.each(LANE_NAMES)(
+  test.each(TOGGLED_LANES)(
     "%s: the toggle's click is its switch's write alone",
-    (lane) => {
-      const { r } = openToggles();
+    async (lane) => {
+      const { r } = await openToggles();
       try {
-        const [url, ...others] = writesTo(r.render(), LANES[lane].setting);
+        const [url, ...others] = writesTo(r.render(), LANES[lane].switch.setting);
         expect(others).toEqual([]);
         expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
-          ["set-state", SID, LANES[lane].setting, "true"],
+          ["set-state", SID, LANES[lane].switch.setting, "true"],
         ]);
-        r.click(url!);
+        await r.click(url!);
         expect(plain(r.render())).toContain(`☑ ${LANES[lane].label}`);
       } finally {
         r.dispose();
@@ -1546,20 +1556,20 @@ describe("the animation lanes' toggles", () => {
     },
   );
 
-  test.each(LANE_NAMES)(
+  test.each(TOGGLED_LANES)(
     "%s: the (?) beside the toggle says what the lane does",
-    (lane) => {
-      const { r } = openToggles();
+    async (lane) => {
+      const { r } = await openToggles();
       try {
         for (const line of LANE_HELP[lane])
           expect(plain(r.render())).not.toContain(line);
-        const key = `candybar.help.${LANES[lane].setting}`;
+        const key = `candybar.help.${LANES[lane].switch.setting}`;
         const url = urlsOf(r.render()).find((u) => {
           const effects = effectsOf(u);
           return effects.length === 1 && effects[0]!.args[1] === key;
         });
         if (url === undefined) throw new Error(`no (?) writes ${key}`);
-        r.click(url);
+        await r.click(url);
         for (const line of LANE_HELP[lane])
           expect(plain(r.render())).toContain(line);
       } finally {
@@ -1571,20 +1581,188 @@ describe("the animation lanes' toggles", () => {
 
 // [LAW:verifiable-goals] candybar-animation-wbxz.a4h: a lane toggle says what
 // its frames are doing, so whether a lane works can be seen from the bar.
+
+// candybar-plugins-vf6g.qzx — the tmux status line is a renderer: a menu in ⚙
+// config with `claude` and `tmux`, offered to a session inside tmux.
+describe("the renderer menu", () => {
+  const RENDERER_APPLY = "candybar.apply.renderer";
+  // The settings menu open on ⚙ config, the session in tmux pane %7 or in no
+  // pane at all.
+  const openConfig = async (pane: string, source = TWO_SEGMENT_ROOT, durable?: DurableConfig) => {
+    const r = rig(source, durable);
+    r.tmuxPane = pane;
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await showTab(r, "config");
+    return r;
+  };
+  const rendererLine = (rendered: string): string | undefined =>
+    plain(rendered)
+      .split("\n")
+      .find((l) => l.includes("◀ renderer ▶"));
+  const openList = async (r: ReturnType<typeof rig>): Promise<void> => {
+    const url = urlsOf(r.render()).find((u) =>
+      effectsOf(u).some((e) => e.args[2] === RENDERER_APPLY),
+    );
+    if (url === undefined) throw new Error("no link opens the renderer list");
+    await r.click(url);
+  };
+
+  test("inside tmux, ⚙ config holds `◀ renderer ▶`, and its closed list takes no row", async () => {
+    const r = await openConfig("%7");
+    try {
+      expect(rendererLine(r.render())).toBeDefined();
+      expect(plain(r.render())).not.toContain("Claude Code's status line");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("opened, it lays one aligned row per renderer, as the add-segment menu lays its library", async () => {
+    const r = await openConfig("%7");
+    try {
+      await openList(r);
+      const lines = plain(r.render()).split("\n");
+      expect(lines.some((l) => l.includes("draw the bar in"))).toBe(true);
+      const claude = lines.find((l) => l.includes("Claude Code's status line"))!;
+      const tmux = lines.find((l) => l.includes("the tmux status line, while"))!;
+      expect(claude).toMatch(/claude\s+Claude Code's status line/u);
+      expect(tmux).toMatch(/tmux\s+the tmux status line/u);
+      expect(claude.indexOf("Claude Code's")).toBe(tmux.indexOf("the tmux"));
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("its arrow switches the value, as a draft the save cell counts", async () => {
+    const r = await openConfig("%7");
+    try {
+      const arrow = links(r.render()).find(
+        (l) =>
+          stripAnsi(l.text) === "▶" &&
+          effectsOf(l.url).some(
+            (e) => e.args[1] === "renderer" && e.args[2] === "tmux",
+          ),
+      );
+      expect(arrow).toBeDefined();
+      await r.click(arrow!.url);
+      expect(r.sessionState.get(SID, "renderer")).toBe("tmux");
+      expect(plain(r.render())).toContain("💾 save 1");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("outside tmux there is no renderer menu, and a file's tmux marks nothing", async () => {
+    const source = `{
+  globals: { renderer: "tmux" },
+  segments: { a: { template: 'a' } },
+  root: { h: ['a'] },
+}`;
+    const inside = await openConfig("%7", source);
+    const outside = await openConfig("", source);
+    try {
+      expect(rendererLine(inside.render())).toBeDefined();
+      expect(rendererLine(outside.render())).toBeUndefined();
+      expect(plain(outside.render())).not.toContain("the tmux status line");
+      // The tab's drift mark counts the renderer only where it is drawn.
+      expect(plain(inside.render())).toContain("config •");
+      expect(plain(outside.render())).not.toContain("config •");
+      expect(plain(outside.render())).not.toContain("⟲");
+    } finally {
+      inside.dispose();
+      outside.dispose();
+    }
+  });
+
+  test("the tmux status line is no longer one of the 🧪 toggles", async () => {
+    const r = await openConfig("%7");
+    try {
+      const url = urlsOf(r.render()).find((u) =>
+        effectsOf(u).some(
+          (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
+        ),
+      );
+      await r.click(url!);
+      const rendered = plain(r.render());
+      for (const lane of TOGGLED_LANES)
+        expect(rendered).toContain(`☐ ${LANES[lane].label}`);
+      expect(rendered).not.toMatch(/☐ .*tmux status line/u);
+      expect(settingMenuPath("renderer")).toBe(settingMenuPath("padding"));
+    } finally {
+      r.dispose();
+    }
+  });
+
+  // [LAW:no-silent-failure] The setting is shared by every session the config
+  // renders: a reset-all clicked where the renderer is not drawn leaves it.
+  test("a reset-all outside tmux leaves the shared renderer as the file holds it", async () => {
+    const durable = durableConfig("cc-candybar-renderer-reset-");
+    const r = await openConfig(
+      "",
+      `{
+  globals: { renderer: "tmux", padding: 3 },
+  segments: { a: { template: 'a' } },
+  root: { h: ['a'] },
+}`,
+      durable,
+    );
+    try {
+      const labelled = (text: string): string =>
+        links(r.render()).find((l) => stripAnsi(l.text) === text)!.url;
+      await r.click(labelled("⟲"));
+      await r.click(labelled("⟲ reset all?"));
+      const globals = durable.parsed().globals as Record<string, unknown>;
+      expect(globals).not.toHaveProperty("padding");
+      expect(globals.renderer).toBe("tmux");
+    } finally {
+      r.dispose();
+      durable.dispose();
+    }
+  });
+
+  // [LAW:single-enforcer] The `•` and the `⟲` count a control by one gate:
+  // where the renderer is drawn, a reset-all is offered for it and resets it.
+  test("inside tmux, a renderer alone off its default offers ⟲, and the reset-all resets it", async () => {
+    const durable = durableConfig("cc-candybar-renderer-reset-in-");
+    const r = await openConfig(
+      "%7",
+      `{
+  globals: { renderer: "tmux" },
+  segments: { a: { template: 'a' } },
+  root: { h: ['a'] },
+}`,
+      durable,
+    );
+    try {
+      const labelled = (text: string): string =>
+        links(r.render()).find((l) => stripAnsi(l.text) === text)!.url;
+      await r.click(labelled("⟲"));
+      await r.click(labelled("⟲ reset all?"));
+      const globals = durable.parsed().globals as
+        | Record<string, unknown>
+        | undefined;
+      expect(globals?.renderer).toBeUndefined();
+    } finally {
+      r.dispose();
+      durable.dispose();
+    }
+  });
+});
+
 describe("a lane toggle's readout", () => {
   const SPINNER = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u;
   // The 🧪 toggles submenu open in the ⚙ config tab, statusline (B) on.
-  const showToggles = (): ReturnType<typeof rig> => {
+  const showToggles = async (): Promise<ReturnType<typeof rig>> => {
     const r = rig(TWO_SEGMENT_ROOT);
-    r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    showTab(r, "config");
+    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    await showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
       ),
     );
     if (url === undefined) throw new Error("no link opens 🧪 toggles");
-    r.click(url);
+    await r.click(url);
     r.sessionState.set(SID, "experimentalStatusline", "true");
     return r;
   };
@@ -1597,8 +1775,8 @@ describe("a lane toggle's readout", () => {
     statusline: { subscribers: 1, fps: MOVING_FPS, shown: true, ...feed },
   });
 
-  test("off, the toggle says nothing more", () => {
-    const r = showToggles();
+  test("off, the toggle says nothing more", async () => {
+    const r = await showToggles();
     try {
       r.sessionState.set(SID, "experimentalStatusline", "false");
       const line = lineOf(r.render(following({})));
@@ -1609,8 +1787,8 @@ describe("a lane toggle's readout", () => {
     }
   });
 
-  test("on with nobody following, it says so, and nothing turns", () => {
-    const r = showToggles();
+  test("on with nobody following, it says so, and nothing turns", async () => {
+    const r = await showToggles();
     try {
       const line = lineOf(r.render());
       expect(line).toContain("statusline (B) no subscriber");
@@ -1620,8 +1798,8 @@ describe("a lane toggle's readout", () => {
     }
   });
 
-  test("followed, it counts the frames pushed and its spinner turns every frame", () => {
-    const r = showToggles();
+  test("followed, it counts the frames pushed and its spinner turns every frame", async () => {
+    const r = await showToggles();
     try {
       const t0 = 1_792_573_980;
       const glyphs = [0, 1, 2].map(
@@ -1638,8 +1816,8 @@ describe("a lane toggle's readout", () => {
     }
   });
 
-  test("followed from a pane judged off screen, it says so", () => {
-    const r = showToggles();
+  test("followed from a pane judged off screen, it says so", async () => {
+    const r = await showToggles();
     try {
       expect(lineOf(r.render(following({ fps: 1, shown: false })))).toMatch(
         / 1 fps · off screen/u,

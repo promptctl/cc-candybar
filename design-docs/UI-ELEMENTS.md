@@ -11,7 +11,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 
 `--ssh` makes the host segment show. The drawings were taken on 2026-10-03, from this branch on top of `main` at `dff9dbb`, which is why the git cell reads `docs/ui-elements-inventory`.
 
-**Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The carousel itself is unchanged where it remains: the opt-in `themeSwitcher` segment and an author's own `{{ carousel }}`.
+**Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The `{{ carousel }}` is now `◀ label ▶` everywhere: the label names the setting and opens the list, and the opt-in `themeSwitcher` segment is gone. Mentions below of neighbours, caps or that segment show the earlier design.
 
 **And since then (brandon-theme-swatch-8v9r, 2026-10-15):** the theme picker of the proposal is built. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background. The theme control is `🎨 theme ▀▀▀` with a `⚙` beside it; its label opens `◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →` (previous, random, next, then pages of swatches with the one in force bracketed) over a two-row demo, and the gear opens the style, variation and shade controls. Configure mode's placement theme is the same picker. A list opens on the page holding the current value.
 
@@ -27,7 +27,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Menu](#menu) | A trigger that drops a picker below the row | Edit mode's `✚` | `{{ menu "apply" "▸" "▾" }}` |
 | [Picker grid](#picker-grid) | Choose one option from a list | Inside every menu | `{{ picker }}` (never authored directly) |
 | [Library pages](#library-pages) | A picker over a catalogue: one group per page, one row per item | Edit mode's `✚` | A domain that declares groups |
-| [Carousel](#carousel) | Step through options, current one centred | Settings rings, configure mode, `themeSwitcher` | `{{ carousel "apply" [cap] }}` |
+| [Carousel](#carousel) | Step through options under a named label | Settings controls, configure mode | `{{ carousel "apply" "open" "label" }}` |
 | [Theme and layout previews](#theme-and-layout-previews) | Show what a pick will look like | Under the theme, style, preset, variation rings | `{{ themePreview }}`, `{{ layoutPreview }}` |
 | [Confirm step](#confirm-step) | Two clicks for a destructive act | `⟲ reset all`, `/clear` | `confirmStep` |
 | [Setting control](#setting-control) | The control a setting gets, chosen by its domain | Settings menu, configure mode | `settingControl` |
@@ -36,14 +36,14 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Configure mode](#configure-mode) | Change one placement's settings | Edit mode's `🔧` | Synthesized |
 | [Bundled segments with clicks](#bundled-segments-with-clicks) | Git detail, autocompact, trays, theme switcher, PR link | Default rows and opt-in | `segments:` in the default config |
 | [State-showing segments](#state-showing-segments) | Colour or glyph that tracks a value | Default rows and opt-in | `bg:` ramps, `cascade`, `gauge`, `sparkline` |
-| [Diagnostic strip](#diagnostic-strip) | Errors, warnings, update notice, above the bar | Any bar with something to say | Composed by the daemon |
+| [Diagnostics](#diagnostics) | Errors, warnings, update notice, repository questions: one indicator and a viewer | Any bar with something to say | The door's own cell; the viewer composed by the daemon |
 
 ## Beside the pickers proposal
 
 These are the existing pieces each part of the proposal touches. They are facts about today, not recommendations.
 
 - **General picker, state 1 (`[Preset]`, the field's name).** Nothing names its field today. A ring row shows a glyph and the current value (`▦ default ▸`, `🎨 tokyo-night ▸`), and the tabs are glyph-labelled. Configure mode is the one place controls carry words (`warning at %`, `theme`).
-- **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel) capped at zero neighbours, which already exists: `{{ carousel "apply" 0 }}`, drawn by the opt-in `themeSwitcher` segment as `◀ tokyo-night ▶`. Each arrow applies the previous or next value. Clicking the centre name applies the current value again; it does not open anything.
+- **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel): `{{ carousel "apply" "open" "label" }}`, drawn as `◀ preset ▶`. Each arrow applies the previous or next value. Clicking the label fires `open`.
 - **State 3 (the list below, with `X`).** This is a [menu](#menu) body: a picker grid dropped below the row, led by `✕`, with `←`/`→` paging when it does not fit. Picking applies the value; whether the list stays open is the `closeOnPick` option (default: stays open).
 - **"The colour changes to show a menu is attached."** That is already the rule for every trigger: an open trigger wears its band's state colour, and the body below sits on a plane of the same hue ([disclosure](#disclosure-and-the--close)).
 - **Theme swatches.** `{{ themePreview }}` draws swatches of the current theme as one row of sample cells. It is the only swatch-like element today. There is no per-theme swatch next to a name.
@@ -57,7 +57,7 @@ These are the existing pieces each part of the proposal touches. They are facts 
 
 Every clickable span is an OSC-8 link, `cc-candybar://dispatch/…`, carrying an ordered list of effects (`src/click/wire.ts`, `effectsUrl`). Clicking it runs the URL handler app, which sends the effects to the daemon. The daemon runs each effect through its verb table (`src/daemon/verbs/index.ts`, `VERBS`), and the next render shows the result.
 
-An effect writes in one of two places: the **session** (state that lasts as long as this Claude Code session), or the **config file** (durable; the daemon reloads it). Settings changed in the menu are session drafts until `💾 save` writes them to the file. One click is one step of the session's undo history. A click the daemon refuses shows its reason once, in the red strip above the bar:
+An effect writes in one of two places: the **session** (state that lasts as long as this Claude Code session), or the **config file** (durable; the daemon reloads it). Settings changed in the menu are session drafts until `💾 save` writes them to the file. One click is one step of the session's undo history. A click the daemon refuses is counted by the red indicator beside the door for a few seconds, and its reason is read in the viewer the indicator opens:
 
 ```
 ⚠ slash: /compact was not typed: this session's statusline client reports no tmux facts (it predates this daemon) —
@@ -245,7 +245,7 @@ At 200 columns the descriptions are cut later:
 | `✕` | closes |
 
 - **Where used:** edit mode's `✚` only. Its domain is the declared segments, grouped by each segment's own `group:` (`location`, `git`, `model & context`, `cost & limits`, `activity`, `session tools`, then `other` for a segment that declares none).
-- **Authored as:** a domain that declares a library (`DomainLibrary` in `src/config/option-domain.ts`); laid out by `src/render/library.ts` (`libraryLayout`, at most 8 rows per page). A bare `{{ picker }}` refuses a catalogue domain; only a menu body lays one out.
+- **Authored as:** a domain that declares a library (`DomainLibrary` in `src/config/option-domain.ts`); laid out by `src/render/library.ts` (`libraryLayout`, at most 8 rows per page). A `{{ picker }}` over one draws the first row in its cell and drops the rest below, the way a menu body does.
 
 ### Carousel
 
@@ -274,12 +274,11 @@ Short domains fit whole at either width: style, endcaps, variation and colour de
 | Region | Click |
 |---|---|
 | `◀` / `▶` | applies the previous / next option |
-| A neighbour's name | applies that option |
-| The current name | applies the current option again |
+| The label | fires `open`, which shows the list of options |
 
-- **Use cases:** every option-valued setting in the settings menu; a placement's `theme` in configure mode; the opt-in `themeSwitcher` segment (`◀ tokyo-night ▶`, capped at zero neighbours).
-- **Width:** the ring is 51 cells at 80 columns and 175 at 200 for the theme domain. It takes whatever width the row allows.
-- **Authored as:** `{{ carousel "apply" }}` or `{{ carousel "apply" 0 }}` over a `{ set, from }` action. `src/render/carousel.ts` (`renderCarousel`, `neighbourLevels`). Options are coloured as in the [picker grid](#picker-grid).
+- **Use cases:** every option-valued setting in the settings menu; a placement's `theme` in configure mode.
+- **Width:** the arrows and the label, whatever the domain holds.
+- **Authored as:** `{{ carousel "apply" "open" "label" }}` over a `{ set, from }` action. `src/render/carousel.ts`. A colour-valued domain adds a swatch of the applied value beside the label.
 
 ### Theme and layout previews
 
@@ -496,7 +495,7 @@ Charset and colour depth are rings; update notice is a toggle.
 
 ```
  ✕  🩺 doctor
-    ✓ config
+    ✓ config — /Users/me/.config/cc-candybar/config.json5 (searched)
     ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
@@ -504,12 +503,12 @@ At 80 columns the row moves under an empty row and is still 113 cells wide:
 
 ```
  ✕  🩺 doctor
-    ✓ config
+    ✓ config — /Users/me/.config/cc-candybar/config.json5 (searched)
 
  ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
-A passing check reads `✓ <label>`. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. A failing check that shows glyphs to look at (`Nerd Font`) adds them after its reason, then `[✓ shapes]` and `[✗ boxes]` (`doctor-mark`). The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor`, `effect refresh` and `Nerd Font`.
+A passing check reads `✓ <label>`, then ` — <note>` when it has one: `config` names the file or chain it judged and what named it, and a failed `config` row opens with the same words. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. A failing check that shows glyphs to look at (`Nerd Font`) adds them after its reason, then `[✓ shapes]` and `[✗ boxes]` (`doctor-mark`). The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor`, `effect refresh` and `Nerd Font`.
 
 ## Edit mode
 
@@ -635,7 +634,6 @@ At 80 columns the expanded form moves to its own row. Which facts each form show
 
 | Segment | Looks | Click |
 |---|---|---|
-| `themeSwitcher` | `◀ tokyo-night ▶` | each arrow applies the previous / next theme (session `theme`) |
 | `toolbar` | `⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config` | as in the `⚡ session` tab |
 | `commands` | `/compact /model /clear` | as in the `⚡ session` tab |
 | `gitPr` | `⇆ #N`, or `⚠ PR` when the lookup failed | `⇆ #N` is a web link to the pull request |
@@ -660,36 +658,32 @@ These have no click. They show a value by glyph or colour, and each is a place a
 
 Every other bundled segment (`directory`, `model`, `version`, `sessionId`, `session`, `today`, `speed`, `tmux`) is plain text on its decoration colour.
 
-## Diagnostic strip
+## Diagnostics
 
-Rows above the bar for errors (red), warnings (amber) and the update notice. Each line wraps at the client's width; the strip is capped at 20 rows (or the terminal's height), and a `↳` row closes it when it has something to open. `src/render/diagnostic-strip.ts`.
-
-An invalid config, with a duplicate key as a second (warning) channel, at 80 columns:
+Every error, warning, update notice and repository question is one message, and they reach the screen one way. The settings door's own cell carries an indicator after its glyph: `⚠ N`, red when any message is an error, amber when none is, absent when there are none; past nine it reads `⚠ 9+`. Because it is the door's cell, it sits beside the door wherever the door is placed, in the statusline, in every lane, and in the tmux status line. `src/render/diagnostics.ts`.
 
 ```
-⚠ Invalid config in
-/var/folders/80/071_2pk11ms1qftgqxswr2p40000gn/T/ccb-bar-hvxkaD/config.json5
-(1 issue):
-  [line 1 • root.h] a container must have a "children" array of layout nodes,
-got number
-⚠
-/var/folders/80/071_2pk11ms1qftgqxswr2p40000gn/T/ccb-bar-hvxkaD/config.json5:
-1: duplicate key "h" — the settings menu cannot edit this file until it is
-fixed
-↳ open /var/folders/80/071_2pk11ms1qftgqxs…000gn/T/ccb-bar-hvxkaD/config.json5
- 🍫  ~/c/cc-candybar  ⎇ docs/ui-elements-inventory +1 ? ▸
- ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
+ 🍫 ⚠ 2  polled  ~/c/cc-candybar  ⎇ main
+```
+
+Clicking it opens the viewer, which takes the bar's place: a header, then one message in full, wrapped at the client's width, with no row cap.
+
+```
+✕ ‹ [2/2]   ⧉ copy
+⚠ /Users/someone/.config/cc-candybar/config.json5:1: duplicate key "h" — the
+settings menu cannot edit this file until it is fixed
 ```
 
 | Region | Click |
 |---|---|
-| Any word of an error or warning | copies the whole message (`show-config-error` / `show-config-warning`) |
-| `↳ open <path>` | `file://` link to the failing config file |
-| `↳ N more rows · open full text` | `file://` link to the complete text, when the cap dropped rows |
+| `⚠ N` | opens the viewer at the first message (session `candybar.diagnostics` ← `1`) |
+| `✕` | closes the viewer (session `candybar.diagnostics` ← `0`) |
+| `‹` / `›` | the previous or next message; drawn only where there is one, and only when there is more than one message |
+| `⧉ copy` | copies the message shown, whole |
 
-The bar under a failing config is the bundled default, so the settings menu is still there.
+A config that fails to load draws the bundled default under its error, so the settings menu is still there. A placement of a segment nothing declares drops only that cell; the rest of the bar draws, and the drop is an error message. While a lane draws the bar elsewhere, Claude Code's statusline is the handoff line alone, so a message shows once, on the lane's bar.
 
-**Update notice.** It shows when the code rendering the bar is older than the source checkout beside it, or than the latest release. That condition is not reproduced here; this is from `updateNotice` in `src/daemon/update-notice.ts`:
+**Update notice.** A message whose clicks work inside the viewer. It shows when the code rendering the bar is older than the source checkout beside it, or than the latest release. That condition is not reproduced here; this is from `updateNotice` in `src/daemon/update-notice.ts`:
 
 ```
 ⬆ Newer source: 1.48.0 [abc1234]. You're on 1.47.0 [def5678]. [rebuild] [dismiss] [disable]
@@ -697,7 +691,6 @@ The bar under a failing config is the bundled default, so the settings menu is s
 
 | Region | Click |
 |---|---|
-| The sentence | copies it |
 | `[rebuild]` / `[upgrade]` | rebuilds the checkout, or installs the release; reads `[rebuilding…]` while it runs. A failure adds a row `rebuild failed: <reason>` |
 | `[dismiss]` | hides it for this session, until something newer appears |
 | `[disable]` | turns the notice off in the config file and the session |
@@ -711,17 +704,16 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | Verb | Emitted by |
 |---|---|
 | `dispatch` | every rendered click: the wrapper around the list below |
-| `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, `[dismiss]` |
+| `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, `[dismiss]`, the diagnostics indicator and viewer |
 | `set-config`, `step-config` | `persist` actions (author configs); `[disable]` |
 | `reset-config` | every `↺`, `⟲ reset all`, `↺ reset layout` |
 | `save` | `💾 save`, `✓ save` |
 | `save-preset`, `delete-preset` | `+ preset`, `🚮 delete` |
 | `apply-layout-op` | edit mode's `✖` and `✚` |
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
-| `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config` |
+| `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config`, the viewer's `⧉ copy` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
 | `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
-| `show-config-error`, `show-config-warning` | the diagnostic strip's words |
 | `apply-update` | `[rebuild]` / `[upgrade]` |
 | `toolbar-toggle` | nothing |
 | `load-config` | nothing |
@@ -730,7 +722,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 
 Found while drawing the above. Each is for Brandon to decide; none is changed here.
 
-1. **A two-value carousel hides its other value.** Neighbours come in symmetric pairs, so a domain of two shows none: the charset ring is `◀ unicode ▶`, and `ascii` appears nowhere until it is picked (`neighbourLevels` in `src/render/carousel.ts`).
+1. **A value outside a carousel's domain counts as its first member.** A stale value steps from the first member, so `▶` skips that member, and a colour-valued domain shows the first member's swatch.
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
 3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.

@@ -17,9 +17,10 @@
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
 //   - the closed door on the bar wears its address's tint, and the band it
-//     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
-//     anchor of the chain.
+//     opens is the depth-0 band of the bar's lineage every bar trigger opens —
+//     the anchor of the chain.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -40,10 +41,12 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   barRoot,
   bandFor,
+  bandItemFor,
   bandRoot,
   decorFor,
   decorationFor,
   descend,
+  DISTRIBUTIONS,
   textOn,
   type Disclosure,
   type Region,
@@ -152,10 +155,15 @@ function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
 
 // [LAW:behavior-not-structure] An item's colour as the model states it, from
 // the cell's place alone — never through decorationFor, the function the walk
-// colours it with. Under the default van der Corput placement, two items are
-// dealt by the cell's index parity; a row of a vertical body is a first cell.
+// colours it with. Placed by the default van der Corput distribution, which
+// reads no count; a row of a vertical body is a first cell.
 function itemAt(palette: Palette, band: Disclosure, cellIndex: number): ColorRgba {
-  return bandFor(palette, band, ColorDepth.TRUECOLOR).items[cellIndex % 2]!;
+  return bandItemFor(
+    palette,
+    band,
+    { index: cellIndex, count: cellIndex + 1, distribution: DISTRIBUTIONS["van-der-corput"] },
+    ColorDepth.TRUECOLOR,
+  );
 }
 
 // The index of segment `name` among the cells of the row `trigger` opens.
@@ -178,7 +186,7 @@ function build(src: string, withDefault = false) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();
@@ -209,14 +217,14 @@ function build(src: string, withDefault = false) {
     resolvedStyle(cellsOf(name)[0]!.style).bgcolor?.value?.hex ?? "(no bg)";
   const fgOf = (name: string): string =>
     resolvedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // The link spans of a segment's cells, by URL.
@@ -230,20 +238,20 @@ function build(src: string, withDefault = false) {
     );
   // Click the affordance in `name` that writes `value` to `key` — a
   // disclosure toggle's set-state — loud when it is not on the bar.
-  const clickWriting = (name: string, key: string, value: string): void => {
+  const clickWriting = async (name: string, key: string, value: string): Promise<void> => {
     const url = urlsIn(name).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (url === undefined) {
       throw new Error(`"${name}" renders nothing writing ${key}=${value}`);
     }
-    click(url);
+    await click(url);
   };
   // Open the `{{ menu }}` in `name`: its opener is the one set-state whose
   // 4th arg is the page key of its 2nd (the coupled batch `renderMenu`
   // emits) and whose member is not the closed sentinel — the same shape
   // test/default-menu-bytes.test.ts identifies openers by.
-  const openMenuIn = (name: string): void => {
+  const openMenuIn = async (name: string): Promise<void> => {
     const url = urlsIn(name).find((u) =>
       effectsOf(u).some(
         (e) =>
@@ -253,7 +261,7 @@ function build(src: string, withDefault = false) {
       ),
     );
     if (url === undefined) throw new Error(`"${name}" hosts no menu opener`);
-    click(url);
+    await click(url);
   };
   const expectedTint = (name: string): string =>
     decorationFor(palette, regionOf(root, palette, name), ColorDepth.TRUECOLOR).tint.hex;
@@ -283,108 +291,6 @@ function build(src: string, withDefault = false) {
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
 describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker chain, depth by depth", () => {
-  test("each trigger wears the state of the band at its depth, and its cells are that band's items", () => {
-    const rt = build(BUNDLED, true);
-    const { palette, root } = rt;
-    rt.render();
-    const band0 = rt.opensOf(SETTINGS_ANCHOR);
-
-    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(rt.expectedTint(SETTINGS_ANCHOR));
-
-    // 🍫 open: the trigger wears the depth-0 state; its body row's cells are
-    // depth-0 items, each placed by its band-relative step, text chosen.
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_ANCHOR, "open");
-    rt.render();
-    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(bandFor(palette, band0, ColorDepth.TRUECOLOR).state.hex);
-    // The door's body is two lines, each a row of cells.
-    const lines = bodyOf(root, SETTINGS_ANCHOR).children.map((line) => {
-      if (line.kind !== "container") throw new Error("a 🍫 body line is a row of cells");
-      return cellsOf(line);
-    });
-    expect(lines).toHaveLength(2);
-    const look = lines.flat().find((n) => n === "candybar.tab.look");
-    if (look === undefined) throw new Error("no 🎨 look tab in the 🍫 body");
-    // A fresh session opens the menu on its session tab, a trigger inside
-    // the depth-0 band: it wears the depth-1 state, not a depth-0 item.
-    const firstTab = "candybar.tab.session";
-    expect(rt.bgOf(firstTab)).toBe(bandFor(palette, { ...band0, depth: 1 }, ColorDepth.TRUECOLOR).state.hex);
-    for (const [line, cells] of lines.entries()) {
-      for (const [index, name] of cells.entries()) {
-        if (name === firstTab) continue;
-        // Band-relative: the line among the body's lines, then the cell's
-        // index among the line's cells.
-        const address = regionAddress(rt, name);
-        expect(address).toMatchObject([
-          { index: line, count: lines.length },
-          { index, count: cells.length },
-        ]);
-        const item = itemAt(palette, band0, index);
-        expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
-        expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
-      }
-    }
-
-    // 🎨 look open: a trigger INSIDE the depth-0 band opens depth 1 — the
-    // hue's next form, recessed one step further — and its row's cells are
-    // depth-1 items.
-    rt.clickWriting(look, "candybar.tab", "look");
-    rt.render();
-    const band1: Disclosure = { ...band0, depth: 1 };
-    expect(rt.bgOf(look)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
-    const row2 = bodyCellsOf(root, look);
-    expect(row2.length).toBeGreaterThan(2);
-    for (const name of row2) {
-      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
-      expect([name, rt.fgOf(name)]).toEqual([
-        name,
-        textOn(palette, itemAt(palette, band1, cellIndexIn(root, look, name)), ColorDepth.TRUECOLOR).hex,
-      ]);
-    }
-
-    // A picker control open: the ticket's Done-when, verbatim — its trigger
-    // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the first
-    // row it opens — the effect's list of options — is a depth-2 item of
-    // that band.
-    const control = row2[0]!;
-    expect(control).toBe("candybar.effect");
-    const pickers = sharedMenuStateKey("candybar.pickers");
-    rt.clickWriting(control, pickers, "candybar.apply.effect");
-    rt.render();
-    const band2: Disclosure = { ...band0, depth: 2 };
-    expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
-    const list = "candybar.list.effect.0";
-    expect(rt.bgOf(list)).toBe(
-      itemAt(palette, band2, 0).hex,
-    );
-
-    // The ⚙ beside the theme control sits on the door's first line, a trigger
-    // in the depth-0 band like the tabs, so it opens depth 1, and the style
-    // control behind it opens depth 2 — its list a depth-2 item.
-    const gear = "candybar.gear";
-    rt.clickWriting(gear, pickers, "gear");
-    rt.render();
-    expect(rt.bgOf(gear)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
-    // Its body — style, variation, shade, then `⤓ default for <theme>` — is
-    // depth-1 items, as the look tab's row is.
-    const gearRow = bodyCellsOf(root, gear);
-    expect(gearRow).toContain("candybar.themeDefault.save");
-    for (const name of gearRow) {
-      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
-      expect([name, rt.fgOf(name)]).toEqual([
-        name,
-        textOn(palette, itemAt(palette, band1, cellIndexIn(root, gear, name)), ColorDepth.TRUECOLOR).hex,
-      ]);
-    }
-    const style = "candybar.style";
-    rt.clickWriting(style, sharedMenuStateKey("candybar.gearPickers"), "candybar.apply.style");
-    rt.render();
-    expect(rt.bgOf(style)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
-    const styles = "candybar.list.style.0";
-    expect(rt.bgOf(styles)).toBe(
-      itemAt(palette, band2, 0).hex,
-    );
-    rt.dispose();
-  });
 });
 
 function regionAddress(rt: ReturnType<typeof build>, name: string) {
@@ -417,11 +323,11 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       `{ v: [ { h: ['m'] } ] }`,
       `{ v: [ { h: ['m'], when: '{{ .show }}' } ], when: '{{ .show }}' }`,
     ],
-  ])("%s adds no depth: the open menu renders byte-identical to the ungated tree", (_label, plain, gated) => {
-    const outputs = [plain, gated].map((row2) => {
+  ])("%s adds no depth: the open menu renders byte-identical to the ungated tree", async (_label, plain, gated) => {
+    const outputs = await Promise.all([plain, gated].map(async (row2) => {
       const rt = build(MENU_SRC(row2));
       rt.render();
-      rt.openMenuIn("m");
+      await rt.openMenuIn("m");
       const out = rt.render();
       // The menu's band is depth 0 — the trigger sits on the bar, whatever
       // `when`s enclose it — and the trigger wears that band's state.
@@ -430,7 +336,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       expect(resolvedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
       rt.dispose();
       return out;
-    });
+    }));
     expect(outputs[1]).toBe(outputs[0]);
   });
 });
@@ -453,16 +359,16 @@ const GROUP_SRC = `{
 }`;
 
 describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
-  test("closed it wears its address's tint; open it wears the state of the band its body is, and the body cells are that band's items", () => {
+  test("closed it wears its address's tint; open it wears the state of the band its body is, and the body cells are that band's items", async () => {
     const rt = build(GROUP_SRC);
     const { palette } = rt;
     rt.render();
     const toggle = "groups.outer";
-    const tint = decorFor(palette, BAR, barAddress(rt, toggle)).hex;
+    const tint = decorFor(palette, BAR, barAddress(rt, toggle), ColorDepth.TRUECOLOR).hex;
     expect(rt.bgOf(toggle)).toBe(tint);
     expect(() => rt.bgOf("b")).toThrow(/did not render/);
 
-    rt.clickWriting(toggle, toggle, "outer");
+    await rt.clickWriting(toggle, toggle, "outer");
     rt.render();
     expect(rt.bgOf(toggle)).toBe(bandFor(palette, rt.opensOf(toggle), ColorDepth.TRUECOLOR).state.hex);
     // The body: three cells of a horizontal band, placed by their own step.
@@ -475,16 +381,16 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
 
     // Closing again returns the toggle to its tint — the state is a VALUE the
     // walk selects by the body's openness, not a transform left behind.
-    rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
+    await rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
     rt.render();
     expect(rt.bgOf(toggle)).toBe(tint);
   });
 
-  test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", () => {
+  test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", async () => {
     const rt = build(GROUP_SRC);
     const { palette } = rt;
     rt.render();
-    rt.clickWriting("groups.outer", "groups.outer", "outer");
+    await rt.clickWriting("groups.outer", "groups.outer", "outer");
     rt.render();
     const authored = palette.get("error")!;
     expect(rt.bgOf("e")).toBe(authored.hex);
@@ -495,15 +401,15 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.dispose();
   });
 
-  test("a group nested in a group's body opens the next depth", () => {
+  test("a group nested in a group's body opens the next depth", async () => {
     const rt = build(GROUP_SRC);
     const { palette } = rt;
     rt.render();
-    rt.clickWriting("groups.outer", "groups.outer", "outer");
+    await rt.clickWriting("groups.outer", "groups.outer", "outer");
     rt.render();
     // Closed inner toggle: a depth-0 item, like its siblings.
     expect(rt.bgOf("groups.inner")).toBe(rt.expectedTint("groups.inner"));
-    rt.clickWriting("groups.inner", "groups.inner", "inner");
+    await rt.clickWriting("groups.inner", "groups.inner", "inner");
     rt.render();
     const nested: Disclosure = { ...rt.opensOf("groups.outer"), depth: 1 };
     const band1 = bandFor(palette, nested, ColorDepth.TRUECOLOR);

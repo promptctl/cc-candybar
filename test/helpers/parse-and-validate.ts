@@ -11,12 +11,10 @@ import {
   inheritableSegmentNames,
   parseDslConfig,
   mergeWithDefault,
-  validateConfig,
+  validateRenderable,
+  type AuthoredConfig,
 } from "../../src/config/dsl-loader";
-import type {
-  DslConfig,
-  ValidatedConfig,
-} from "../../src/config/dsl-types";
+import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
 
 export const EMPTY_DEFAULT: DslConfig = {
   globals: {},
@@ -30,6 +28,23 @@ export const EMPTY_DEFAULT: DslConfig = {
   editGlobals: {},
   themeDefaults: {},
 };
+
+// The judgment `check` makes: the bar's own validation, refusing every
+// placement it would drop rather than drawing past it.
+export function validateConfig(
+  authored: AuthoredConfig,
+  filePath = "<config>",
+  allowedPalettes?: ReadonlySet<string>,
+): ValidatedConfig {
+  const { config, dropped } = validateRenderable(
+    authored,
+    new Map(),
+    filePath,
+    allowedPalettes,
+  );
+  if (dropped.length > 0) throw dropped[0];
+  return config;
+}
 
 export function parseAndValidate(
   filePath: string,

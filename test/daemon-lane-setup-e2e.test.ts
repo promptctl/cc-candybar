@@ -7,7 +7,10 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
+  realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -22,14 +25,22 @@ import {
 import { rangeOf } from "../src/tmux-status/frames";
 import { linkUrls } from "./helpers/ansi";
 import { LANES, type Lane } from "../src/config/lanes";
+import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import type { ClientHints } from "../src/daemon/protocol";
-import { click, killAndWait, render, sendClick } from "./helpers/daemon-e2e";
+import {
+  click,
+  render,
+  sendClick,
+  stripAnsi,
+} from "./helpers/daemon-e2e";
 import { answeredRender, logLines, renderLines } from "./helpers/daemon-log";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { untilHeard } from "./helpers/reload-signal";
+import { writeAtomic } from "../src/utils/atomic-write";
+import { valueOf } from "../src/utils/logfmt";
 import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
@@ -38,16 +49,15 @@ jest.setTimeout(30_000);
 const CONFIG = `{ segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
 
 describe("lane setups and the tmux status line follow events, never a draw", () => {
-  let sockPath: string;
   let removeTmpDirs: () => void;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
   let otherDir: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-lane-e2e");
-    ({ sockPath, removeTmpDirs } = prepared);
+    ({ removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-lane-e2e-"));
     otherDir = path.join(projectDir, "elsewhere");
     mkdirSync(otherDir);
@@ -62,11 +72,11 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     );
     chmodSync(path.join(bin, "tmux"), 0o755);
     env = { ...prepared.env, PATH: `${bin}:${prepared.env.PATH ?? ""}` };
-    daemon = await spawnDaemonWithEnv(env);
+    daemon = startDaemon(env);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -82,15 +92,24 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     tmux: { socket: `/tmp/lane-e2e-${sid}`, pane: "%7", truecolor: null },
   });
   const renderIn = (sid: string, dir = projectDir): Promise<string> =>
-    render(sockPath, sid, dir, inTmux(sid), args());
-  const switchLanes = (sid: string, on: boolean, ...lanes: Lane[]) =>
-    click(
-      sockPath,
+    render(daemon, sid, dir, inTmux(sid), args());
+  // A lane's switch, moved: on is the value that turns it on, off the
+  // setting's floor (`false` for a 🧪 toggle, `claude` for the renderer).
+  const switchLanes = async (sid: string, on: boolean, ...lanes: Lane[]) =>
+    await click(
+      daemon,
       effectsUrl(
-        lanes.map((lane) => ({
-          verb: VERB_SET_STATE,
-          args: [sid, LANES[lane].setting, String(on)],
-        })),
+        lanes.map((lane) => {
+          const { setting, on: value } = LANES[lane].switch;
+          return {
+            verb: VERB_SET_STATE,
+            args: [
+              sid,
+              setting,
+              on ? String(value) : String(GLOBAL_FIELDS[setting].floor),
+            ],
+          };
+        }),
       ),
     );
   const laneLines = (sid: string): string[] =>
@@ -161,11 +180,14 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     // Refused until the status line has drawn its first frame, which runs
     // nothing; the first click it answers runs the link.
     let refusal = "";
-    await until(async () => {
-      const resp = await sendClick(sockPath, statusClick);
-      refusal = resp.ok ? "" : resp.error;
-      return resp.ok;
-    }, () => `the status-line click's acceptance (refused: ${refusal})`);
+    await until(
+      async () => {
+        const resp = await sendClick(daemon, statusClick);
+        refusal = resp.ok ? "" : resp.error;
+        return resp.ok;
+      },
+      () => `the status-line click's acceptance (refused: ${refusal})`,
+    );
     const ran = (): string[] =>
       logLines(env).filter(
         (l) =>
@@ -221,7 +243,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       () => statusLines(sid, "holding").length > 0,
       "the status line's hold",
     );
-    await render(sockPath, "lane-taker", projectDir, inTmux(sid), args());
+    await render(daemon, "lane-taker", projectDir, inTmux(sid), args());
     await until(
       () => statusLines(sid, "released").length > 0,
       "the taken pane's release",
@@ -239,16 +261,35 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(statusLines(sid, "holding")).toHaveLength(1);
   });
 
+  // candybar-plugins-vf6g.qzx: the renderer is shared by every session the
+  // config renders, and a session outside tmux has no status line to take.
+  test("a session outside tmux under renderer tmux draws the whole bar in its statusline and leaves the setting as it is", async () => {
+    const sid = "lane-no-tmux";
+    const file = path.join(projectDir, "renderer-tmux.json5");
+    const source = `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
+    writeFileSync(file, source);
+    const drawn = await render(daemon, sid, projectDir, {}, [
+      "cc-candybar",
+      "--config",
+      file,
+    ]);
+    expect(stripAnsi(drawn)).toContain("a lane mark");
+    expect(stripAnsi(drawn)).not.toContain("⟲ claude");
+    await renderLines(env, sid, 1);
+    expect(statusLines(sid, "holding")).toEqual([]);
+    expect(readFileSync(file, "utf8")).toBe(source);
+  });
+
   test("a load-config pick of a config that switches a lane on sets it up, as the session's click", async () => {
     const sid = "lane-load";
     await renderIn(sid);
     const picked = path.join(projectDir, "tmux-on.json5");
     writeFileSync(
       picked,
-      `{ globals: { experimentalTmuxStatus: true }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`,
+      `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`,
     );
     await click(
-      sockPath,
+      daemon,
       `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
     );
     await until(() => laneLines(sid).length > 0, "the pick's setup");
@@ -268,8 +309,8 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   test("a click before the session's first request owes its setup to that request", async () => {
     const sid = "lane-owed";
     await renderIn(sid);
-    await killAndWait(daemon!, "SIGTERM");
-    daemon = await spawnDaemonWithEnv(env);
+    await daemon.stop();
+    daemon = startDaemon(env);
     await switchLanes(sid, true, "tmuxStatus");
     await renderedAgain(sid);
     await until(() => laneLines(sid).length > 1, "the owed setup");
@@ -280,5 +321,85 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       expect.stringContaining(" by=owed "),
     ]);
     expect(statusLines(sid, "holding")).toHaveLength(1);
+  });
+
+  // A click that writes no config file reloads no entry, however many
+  // directories render that config. Judged by what each load says caused it,
+  // on the event every load path emits. The directories are this test's own,
+  // so every load of their entries is here: each opens once, and after that
+  // only its config watch, hearing the config rewritten after the click,
+  // loads it again. A load the click caused would say another cause; a write
+  // of its own to the config would leave the file changed before the rewrite.
+  test("a lane switch's click reloads no entry; the config's own rewrite reloads each one", async () => {
+    const sid = "lane-no-reload";
+    const root = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "cc-candybar-lane-reload-")),
+    );
+    try {
+      const cfg = path.join(root, "reload.json5");
+      writeFileSync(cfg, CONFIG);
+      const dirs = ["a", "b", "c"].map((d) => path.join(root, d));
+      for (const [i, d] of dirs.entries()) {
+        mkdirSync(d);
+        await render(daemon, `${sid}-${i}`, d, inTmux(`${sid}-${i}`), [
+          "cc-candybar",
+          "--config",
+          cfg,
+        ]);
+      }
+      const written = (): bigint => statSync(cfg, { bigint: true }).mtimeNs;
+      const unwritten = written();
+      await switchLanes(`${sid}-0`, true, "pane");
+      await until(() => laneLines(`${sid}-0`).length > 0, "the pane's setup");
+      const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
+      // The click's one file write, landed: a save after the click wrote a
+      // snapshot taken after its pick.
+      await until(() => {
+        const lines = logLines(env);
+        const at = lines.findIndex((l) => l.includes(clicked));
+        return (
+          at >= 0 &&
+          lines.slice(at).some((l) => l.includes(" session-state saved "))
+        );
+      }, "the session-state save after the click");
+      expect(written()).toBe(unwritten);
+      const causes = (d: string): string[] =>
+        logLines(env)
+          .filter((l) =>
+            l.includes(
+              ` config loaded projectDir=${valueOf(d)} cwd=${valueOf(d)} `,
+            ),
+          )
+          // A logfmt value: bare, or a JSON string.
+          .map((l) => / cause=("(?:[^"\\]|\\.)*"|\S+) /.exec(l)![1]!);
+      const rewrite = valueOf(`config-watch:${cfg}`);
+      // The positive control: each entry draws the rewritten config, so its
+      // watch delivered the rewrite, and an event the click caused would
+      // have been delivered before it.
+      const reloaded = CONFIG.replace("a lane mark", "a reloaded mark");
+      await untilHeard(
+        () => writeAtomic(cfg, reloaded),
+        async () =>
+          (
+            await Promise.all(
+              dirs.map((d, i) =>
+                render(daemon, `${sid}-${i}`, d, inTmux(`${sid}-${i}`), [
+                  "cc-candybar",
+                  "--config",
+                  cfg,
+                ]),
+              ),
+            )
+          ).every((drawn) => drawn.includes("a reloaded mark")),
+        "each entry's draw of the rewritten config",
+      );
+      for (const d of dirs) {
+        const [opened, ...reloads] = causes(d);
+        expect(opened).toBe("open");
+        expect(new Set(reloads)).toEqual(new Set([rewrite]));
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

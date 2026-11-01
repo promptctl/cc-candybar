@@ -4,8 +4,8 @@ import path from "node:path";
 import { NAME_PERIOD_MS, TmuxService } from "../src/segments/tmux";
 import { Holds } from "../src/utils/holds";
 import {
-  setLaunchStats,
-  __resetRateLimitsForTest,
+  createLauncher,
+  type Launcher,
 } from "../src/proc/launch";
 import type { LaunchCategory } from "../src/proc/launch";
 import type { LaunchStatsHandle } from "../src/proc/stats-handle";
@@ -46,6 +46,7 @@ const asked = (h: TmuxHint): string =>
   `-S ${h.socket} display-message -p -t ${h.pane} #S`;
 
 let starts: LaunchCategory[];
+let launcher: Launcher;
 let svc: TmuxService;
 let holds: Holds;
 
@@ -73,20 +74,20 @@ afterAll(() => {
 
 beforeEach(() => {
   fs.rmSync(path.join(bin, "tmux.renamed"), { force: true });
-  __resetRateLimitsForTest();
   starts = [];
   const handle: LaunchStatsHandle = {
-    onStart: (c) => starts.push(c),
+    // A launcher's first launch starts its lifeline too, a spawn of its own.
+    onStart: (c) => void (c !== "lifeline" && starts.push(c)),
     onEnd: () => {},
+    onRefused: () => {},
   };
-  setLaunchStats(handle);
-  svc = new TmuxService();
+  launcher = createLauncher({ stats: handle });
+  svc = new TmuxService({ launcher });
   holds = new Holds();
 });
 
 afterEach(() => {
   svc.close();
-  setLaunchStats(null);
   jest.useRealTimers();
 });
 
@@ -174,7 +175,10 @@ describe("TmuxService", () => {
     fakeClock();
     const lines: string[] = [];
     svc.close();
-    svc = new TmuxService({ logger: (level, msg) => lines.push(`${level} ${msg}`) });
+    svc = new TmuxService({
+      launcher,
+      logger: (level, msg) => lines.push(`${level} ${msg}`),
+    });
     const h = hint("/client/refuse.sock", "%1");
     const first = await laneOutcome(svc.declare(holds, h));
     expect(first.kind).toBe("failed");

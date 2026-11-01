@@ -11,6 +11,7 @@
 // cannot import the default without a cycle.
 
 import type { VariableDecl } from "./dsl-types.js";
+import type { DiagnosticsProjection } from "../render/diagnostics.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 import {
   ANSWERING,
@@ -142,6 +143,20 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "number",
     default: 0,
   },
+  // The settings door's indicator (src/render/diagnostics.ts,
+  // DiagnosticsProjection): its label, "" while there is nothing to show, the
+  // colours of the worst level the draw's diagnostics hold, and the key of
+  // the message its click opens.
+  ...Object.fromEntries(
+    (
+      ["label", "fg", "bg", "open"] as const satisfies ReadonlyArray<
+        keyof DiagnosticsProjection
+      >
+    ).map((field) => [
+      `diagnostics.${field}`,
+      { kind: "input", path: `diagnostics.${field}`, default: "" },
+    ]),
+  ),
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
@@ -209,6 +224,7 @@ export const DRAW_PROJECTIONS = {
   today: "the day the draw is at",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
+  diagnostics: "the errors and warnings the draw owes its reader",
 } as const;
 export type DrawProjection = keyof typeof DRAW_PROJECTIONS;
 
@@ -236,10 +252,3 @@ export const SLOT_PATHS: Readonly<Record<ExpressionSlot, string>> =
 export function slotAt(path: string): ExpressionSlot | undefined {
   return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path);
 }
-
-// [LAW:one-source-of-truth] The one spelling of "a `slash` click has a pane to
-// type into", as a template expression: every bundled slash control gates on
-// it, so none shows a button whose every click the verb would refuse
-// (brandon-tmux-tk7). A user's own slash button gates the same way:
-// `when: '{{ ne .tmux.pane "" }}'`.
-export const IN_TMUX = 'ne .tmux.pane ""';

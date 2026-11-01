@@ -9,7 +9,9 @@ const KEEP_GENERATIONS = 3;
 // The whole log's lines, oldest first: the rotated generations, then the live
 // file. A rotation can move a generation between listing and reading it, so a
 // reader that lands just after one finds its lines in the next, or no live
-// file yet.
+// file yet. A line is in the log once its newline is: a read that lands while
+// a batch is still being written sees the batch's start, so whatever follows
+// the last newline is left for the next read.
 // [LAW:one-source-of-truth] Whatever reads the whole log reads it here.
 export function logLines(filePath: string): string[] {
   return [
@@ -20,7 +22,7 @@ export function logLines(filePath: string): string[] {
     filePath,
   ].flatMap((f) => {
     try {
-      return fs.readFileSync(f, "utf8").split("\n");
+      return fs.readFileSync(f, "utf8").split("\n").slice(0, -1);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw e;
@@ -152,8 +154,14 @@ const drainedWaiters: Array<() => void> = [];
 let exiting = false;
 let exitArmed = false;
 
+// [LAW:one-source-of-truth] One line of the log as it lands in the file: when,
+// at what level, and the message. Whatever writes a log line spells it here.
+export function logLine(level: LogLevel, msg: string): string {
+  return `${new Date().toISOString()} [${level}] ${msg}\n`;
+}
+
 export function dlog(level: LogLevel, msg: string): void {
-  const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
+  const line = logLine(level, msg);
   if (!exitArmed) {
     exitArmed = true;
     process.on("exit", () => {
@@ -228,7 +236,10 @@ function take(): string {
   const lost =
     dropped === 0
       ? ""
-      : `${new Date().toISOString()} [warn] log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk\n`;
+      : logLine(
+          "warn",
+          `log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
+        );
   const lines = lost + waiting.join("");
   waiting = [];
   waitingBytes = 0;

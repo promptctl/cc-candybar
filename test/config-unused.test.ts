@@ -5,10 +5,10 @@
 // [LAW:behavior-not-structure] Every case is a config file's text through the
 // real loader; the expectation is the names an author would have to remove.
 
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   loadConfigSource,
   NO_PROJECT,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unusedDeclarations } from "../src/config/unused";
@@ -18,15 +18,26 @@ function unusedIn(source: string): string[] {
   // The file must be one the bar would load: an unused name is an advisory
   // about a config that works, never a second spelling of a load error.
   validateConfig(loaded, "/cfg.json5");
-  return unusedDeclarations(loaded.raw, loaded.config).map(
-    (u) => `${u.kind} ${u.name}`,
-  );
+  return unusedDeclarations(
+    loaded.raw,
+    loaded.config,
+    (loaded.raw.insert ?? []).map((cell) => cell.seg),
+  ).map((u) => `${u.kind} ${u.name}`);
 }
 
 describe("unusedDeclarations", () => {
   test("no file, and an empty file, declare nothing unused", () => {
-    expect(unusedDeclarations({}, DEFAULT_DSL_CONFIG)).toEqual([]);
+    expect(unusedDeclarations({}, DEFAULT_DSL_CONFIG, [])).toEqual([]);
     expect(unusedIn("{}")).toEqual([]);
+  });
+
+  test("a segment only an insert entry places is used, even where its anchor's plugin is absent", () => {
+    expect(
+      unusedIn(`{
+        segments: { extra: { template: "extra" } },
+        insert: [{ seg: "extra", after: "repo.lit.ticket" }],
+      }`),
+    ).toEqual([]);
   });
 
   test("each kind of declaration nothing uses is named, in file order", () => {
@@ -118,23 +129,29 @@ describe("unusedDeclarations", () => {
     ).toEqual(["variable stale", "action unbound"]);
   });
 
-  test("the action a carousel's centre fires is clicked; a literal after a bare carousel is not", () => {
-    const config = (template: string): string => `{
+  test("the action a carousel's label fires is clicked; its label is not an action", () => {
+    const config = (template: string, extra = ""): string => `{
       variables: {
         pick: { kind: "state", key: "pick", default: "a" },
         opened: { kind: "state", key: "opened", default: "closed" },
       },
       actions: {
+        ${extra}
         pick: { set: "pick", from: ["a", "b"] },
         openIt: { set: "opened", cycle: ["closed", "open"] },
       },
       segments: { s: { template: '${template}' } },
       root: { h: ["s"] },
     }`;
-    expect(unusedIn(config('{{ carousel "pick" 0 "openIt" }}'))).toEqual([]);
+    expect(unusedIn(config('{{ carousel "pick" "openIt" "label" }}'))).toEqual([]);
     expect(
-      unusedIn(config('{{ printf "%s%s" (carousel "pick" 0) "openIt" }}')),
-    ).toEqual(["variable opened", "action openIt"]);
+      unusedIn(
+        config(
+          '{{ carousel "pick" "shut" "openIt" }}',
+          'shut: { set: "opened", to: "closed" },',
+        ),
+      ),
+    ).toEqual(["action openIt"]);
   });
 
   test("the members of a clicked `do` are clicked; a `when` on a node is a read", () => {

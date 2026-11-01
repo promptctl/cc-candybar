@@ -4,7 +4,9 @@
 
 A subscription turns a connection into a stream of frames. Data and frames travel separately: render requests bring data, and frames are drawn from what the owners stored. A request's answer goes only to its own client and is never pushed, so every pushed frame was drawn by the feed.
 
-A feed runs at 30 fps while its last frame moved in a pane someone can see, and at 1 fps when the frame is still or the pane is off screen. The daemon polls tmux for pane visibility only between the first feed opening and the last one closing.
+A feed draws its next frame when the drawn frame next changes, no closer than 30 fps while its pane is on a screen and no further apart than 1 s, and at 1 fps while the pane is off screen. The 1 s tick is what refreshes a template reading the instant (an age, a clock), which stamps no change. The daemon polls tmux for pane visibility only between the first feed opening and the last one closing.
+
+A frame is drawn for the instant its timer was set for, kept within a couple of milliseconds of the wall clock. The wall reading is truncated to the millisecond and Node timers fire early against it, and a change lands at an exact instant, so a frame drawn for the wall reading would show the step before its change and be drawn twice. Nothing carries from one frame's instant to the next, so a wall clock stepped back is followed at once rather than drawn ahead of.
 
 A feed has one timer, and nothing that wakes it draws: a value its bar draws from moving, the session's state, a config reload, or a pane coming into view only brings that timer forward, to a moving period after the last frame started while its pane is shown and a still period while not. So no cause sets the draw rate, and an unseen feed woken every millisecond still draws once a second. A frame is never drawn in the turn that woke it, so a click's writes and its journal commit land first, and a subscribe draws nothing in its caller's turn.
 
@@ -12,7 +14,7 @@ A view reports that its data moved from one reaction over everything it draws fr
 
 A frame only finds its session's view; it never builds a cache entry or opens a view, because either is I/O on the frame path. Only an event opens one: a request, a reload's successor, or a click that moved the session's config. So an open feed pins its session in the render cache, and its entry is never evicted nor its view closed idle while the feed is open. A feed whose session has no view waits until the event that opens one wakes it. A view whose opening threw leaves that error in its place, so an open feed draws the failure rather than freezing on the last bar it pushed.
 
-The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed. A bar Claude Code polls says `polled` rather than a rate, because request arrivals can't tell Claude Code's timer from its event redraws or from a daemon stall, and a count over a trailing second never reads below one.
+The fps a frame shows is the feed's ceiling, `≤30` while its pane is shown and `≤1` while not, never a measurement or the gap to the next frame. The number is drawn into the frame, so a value that moved with a render's cost or the bar's own beat would make otherwise unchanged frames differ, and they would all get pushed. A bar Claude Code polls says `polled` rather than a rate, because request arrivals can't tell Claude Code's timer from its event redraws or from a daemon stall, and a count over a trailing second never reads below one.
 
 The rate cell hangs on the menu's anchor, beside the door, because the anchor is the one position every bar is guaranteed. Placed in a preset's root instead, it would be missing from every preset and authored root that didn't name it.
 
@@ -30,7 +32,9 @@ A lane is set up or torn down only by the session's own click that moved its swi
 
 The tmux status line is held at a request's arrival and a click's commit, never at a draw. Between requests nothing re-takes a status line that was released, because a re-take from a remembered switch would re-take one another session's save turned off.
 
-While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one handoff line instead of a second bar. Turning the switch on alone draws nothing.
+While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one small row instead of a second bar: a button that draws it back there, and the error indicator, so an error is seen even where the lane's bar isn't. Turning the switch on alone draws nothing.
+
+The tmux status line is switched by the renderer, a setting every session the config renders shares. A session outside tmux has no status line to take, so it draws in Claude Code's while the setting still says tmux, and nothing writes the setting for it. Its control is offered only inside tmux, and reset-all resets it only where it is drawn: a reset clicked outside tmux would turn tmux off for every tmux session.
 
 ## Relaunching Claude Code under the attach launcher
 

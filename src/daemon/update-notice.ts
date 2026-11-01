@@ -15,7 +15,7 @@
 //
 // [LAW:effects-at-boundaries] `updateOf` / `updateNotice` are pure: (facts,
 // act state, session context) → diagnostic channels. The watch below is the
-// edge: the clocks, the registry fetch, the subprocess, the validator
+// edge: the clocks, the registry fetch, the act's record, the validator
 // registrations.
 
 import type { Globals } from "../config/dsl-types";
@@ -25,7 +25,6 @@ import {
   VERB_APPLY_UPDATE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
-  VERB_SHOW_CONFIG_WARNING,
 } from "../click/wire";
 import {
   assessCurrency,
@@ -35,22 +34,32 @@ import {
   type Currency,
   type Version,
 } from "../install/currency";
-import { launch, type LaunchOpts, type LaunchResult } from "../proc/launch";
+import type { LaunchOpts, Launcher } from "../proc/launch";
 import {
   diagnosticSpan,
   UPDATE_SEVERITY,
-  type DiagnosticChannel,
   type DiagnosticLine,
-} from "../render/diagnostic-strip";
+  type DiagnosticMessage,
+} from "../render/diagnostics";
 import { shortDigest } from "../source-digest";
 import { PACKAGE_VERSION } from "../version";
 import {
   assessBuild,
-  bakedStamp,
+  bundleStamp,
   type BuildCurrency,
   type SourceStamp,
 } from "./build-currency";
-import type { LogLevel } from "../utils/logger";
+import {
+  claimAct,
+  endOverdue,
+  IDLE,
+  judgeAct,
+  makeActReader,
+  type ActFacts,
+  type ActState,
+} from "./update-act";
+import { readStartTime } from "./process-fingerprint";
+import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";
@@ -137,22 +146,6 @@ export function factsOf(update: Update): UpdateFacts {
   }
 }
 
-// [LAW:types-are-the-program] The act's lifecycle as a value: idle, running
-// (one child at a time — a second click is refused, not queued), or failed
-// with the reason, named against the identity it was attempted on: the
-// notice for a DIFFERENT newer thing owes the reader no line about a build
-// it never tried.
-export type ActState =
-  | { readonly kind: "idle" }
-  | { readonly kind: "running" }
-  | {
-      readonly kind: "failed";
-      readonly identity: string;
-      readonly reason: string;
-    };
-const IDLE: ActState = { kind: "idle" };
-const RUNNING: ActState = { kind: "running" };
-
 // The per-session facts the notice reads: whose clicks these are, what this
 // session dismissed (the identity it wrote, or nothing), and whether the
 // session's config allows the notice at all (Globals.updateNotice).
@@ -163,15 +156,15 @@ export interface NoticeContext {
 }
 
 // [LAW:dataflow-not-control-flow] One update becomes zero or one channel —
-// the list IS the answer, so the strip composer folds it beside the error
-// and warning channels with no "is there a notice" branch. Line one is the
+// the list IS the answer, so the diagnostics fold it beside the errors and
+// warnings with no "is there a notice" branch. Line one is the
 // sentence and the three affordances; a failed act adds a second line naming
 // the failure, and while the act runs its affordance is a busy label.
 export function updateNotice(
   update: Update | null,
   act: ActState,
   ctx: NoticeContext,
-): DiagnosticChannel[] {
+): DiagnosticMessage[] {
   if (update === null) return [];
   const identity = updateIdentity(update);
   if (!ctx.enabled || ctx.dismissed === identity) return [];
@@ -182,20 +175,17 @@ export function updateNotice(
       ? [`${facts.act} failed: ${act.reason}`]
       : [];
   const message = [sentence, ...failure].join("\n");
-  // The sentence copies itself (the warning verb's clipboard), like every
-  // other diagnostic row; the affordances each carry their own effect.
-  const copy = effectsUrl([
-    { verb: VERB_SHOW_CONFIG_WARNING, args: [message] },
-  ]);
+  // The sentence is plain text (the viewer's ⧉ copies it); the affordances
+  // each carry their own effect.
   const actSpan =
     act.kind === "running"
-      ? diagnosticSpan(`[${facts.busy}]`, copy)
+      ? diagnosticSpan(`[${facts.busy}]`, null)
       : diagnosticSpan(
           `[${facts.act}]`,
           effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }]),
         );
   const first: DiagnosticLine = [
-    diagnosticSpan(sentence, copy),
+    diagnosticSpan(sentence, null),
     actSpan,
     diagnosticSpan(
       "[dismiss]",
@@ -220,8 +210,16 @@ export function updateNotice(
       ]),
     ),
   ];
-  const rest = failure.map((f): DiagnosticLine => [diagnosticSpan(f, copy)]);
-  return [{ severity: UPDATE_SEVERITY, message, lines: [first, ...rest] }];
+  const rest = failure.map((f): DiagnosticLine => [diagnosticSpan(f, null)]);
+  return [
+    {
+      severity: UPDATE_SEVERITY,
+      about: `update\0${identity}`,
+      message,
+      copy: message,
+      lines: [first, ...rest],
+    },
+  ];
 }
 
 // [LAW:dataflow-not-control-flow] The two currency facts folded into one
@@ -256,8 +254,15 @@ export function updateOf(
 }
 
 export interface UpdateWatchOptions {
+  // Who the act's job and its `ps` belong to.
+  readonly launcher: Launcher;
   // The daemon's `import.meta.url` — the bundle whose checkout is assessed.
   readonly entryUrl: string;
+  // The digest that bundle was stamped with, which the checkout is assessed
+  // against.
+  readonly digest: string | null;
+  // Where this bundle's acts are recorded (src/daemon/update-act.ts).
+  readonly actsDir: string;
   // How often the source tree is re-digested.
   readonly intervalMs: number;
   // How often the registry is asked for `latest` (published installs only).
@@ -272,15 +277,26 @@ export interface UpdateWatchOptions {
 
 export interface UpdateWatch {
   arm(): void;
-  notice(ctx: NoticeContext): DiagnosticChannel[];
+  close(): void;
+  notice(ctx: NoticeContext): DiagnosticMessage[];
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
-  // to apply or an act is already running.
+  // to apply or an act is already running on this bundle.
   act(): void;
+  // Whether an act may be rewriting this bundle now, whichever daemon started
+  // it. False while its files can't be read: the error says so, and holding
+  // every restart on a file nothing repairs would hold them for good.
+  running(): boolean;
+  // Why this bundle's act files can't be read, as of the last look; null when
+  // they can.
+  error(): string | null;
 }
 
 // A build or an install is a long child; ten minutes is generous for either
 // and bounds a wedged one.
 const ACT_TIMEOUT_MS = 10 * 60 * 1000;
+// How often the act's record is looked at for an end: the notice's busy label
+// and the restart after a success trail an end by at most this.
+const ACT_POLL_MS = 2_000;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -317,40 +333,9 @@ function describeRelease(c: Currency): [LogLevel, string] {
   }
 }
 
-// [LAW:one-type-per-behavior] A log line that repeats only on change, one
-// per channel — the steady state of a one-minute clock is silence.
-function changeLogger(
-  log: UpdateWatchOptions["log"],
-): (entry: [LogLevel, string]) => void {
-  let last: string | null = null;
-  return ([level, msg]) => {
-    if (msg === last) return;
-    last = msg;
-    log(level, msg);
-  };
-}
-
-// The last non-empty line of a stream — where a build tool puts its verdict.
-const lastLine = (text: string): string | undefined =>
-  text
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter((s) => s !== "")
-    .at(-1);
-
-// Why the act failed, for the notice's second line: the launch's own
-// classification, the exit code when there is one, and the most specific
-// text the child left behind.
-function failureReason(r: Extract<LaunchResult, { ok: false }>): string {
-  const exit = r.exitCode === null ? "" : ` (exit ${r.exitCode})`;
-  const detail =
-    lastLine(r.stderr) ?? r.error ?? lastLine(r.stdout) ?? "no output";
-  return `${r.reason}${exit}: ${detail}`;
-}
-
 // [LAW:single-enforcer] The daemon's one owner of "what is newer than me":
 // it samples the build on a clock, polls the registry on a slower one when
-// the layout is a published install, keeps the act's state, and owns the two
+// the layout is a published install, starts and watches the act, and owns the two
 // click gates — the dismiss allow-list (re-registered to the current
 // identity whenever it changes, so a stale dismissal simply stops matching)
 // and the disable allow-list (registered once; `false` is the only value a
@@ -371,7 +356,10 @@ export function reserveUpdateKeys(): () => void {
 
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
+    launcher,
     entryUrl,
+    digest,
+    actsDir,
     intervalMs,
     releaseIntervalMs,
     registryUrl,
@@ -383,13 +371,29 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // honestly unchecked — a notice asked for before arm() renders nothing.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
-  let act: ActState = IDLE;
+  const readStart = (pid: number) => readStartTime(pid, launcher.launchSync);
+  const acts = makeActReader(actsDir, readStart);
+  // [LAW:one-source-of-truth] The act as last read, for the notice's render
+  // and for noticing an end; null until the first read. Every decision — a
+  // second click, a restart's hold — reads the record afresh instead, since a
+  // read a tick old can say "idle" after a build has cleared the bundle.
+  let seen: ActState | null = null;
   let gate: { readonly identity: string; readonly dispose: () => void } | null =
     null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
 
-  const current = (): Update | null => updateOf(build, release);
+  // [LAW:no-ambient-temporal-coupling] A closed watch knows of no update, so a
+  // release poll landing after the close registers no gate.
+  let closed = false;
+  const armed: Array<() => void> = [];
+  const every = (run: () => void, ms: number): void => {
+    const timer = setInterval(run, ms).unref();
+    armed.push(() => clearInterval(timer));
+  };
+
+  const current = (): Update | null =>
+    closed ? null : updateOf(build, release);
 
   // The dismiss gate follows the identity: dispose the old allow-list, register
   // the new one, none when nothing is newer.
@@ -408,7 +412,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   }
 
   function sampleBuild(): void {
-    build = assessBuild(entryUrl, bakedStamp);
+    build = assessBuild(entryUrl, () => bundleStamp(digest));
     logBuild(describeBuild(build));
     syncGate();
   }
@@ -424,53 +428,121 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     syncGate();
   }
 
+  // [LAW:single-enforcer] The one edge every touch of the act files passes
+  // through. [LAW:no-silent-failure] Files that can't be read or written are
+  // an error the indicator shows, never a throw out of a timer: that would end
+  // this daemon, and each one after it on this bundle at its first look.
+  type ActsTouch<T> =
+    | { readonly ok: true; readonly value: T }
+    | { readonly ok: false; readonly error: string };
+  let unreadable: string | null = null;
+  const logUnreadable = changeLogger(log);
+  function touchActs<T>(touch: () => T): ActsTouch<T> {
+    try {
+      const value = touch();
+      unreadable = null;
+      return { ok: true, value };
+    } catch (err) {
+      unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
+      logUnreadable(["error", unreadable]);
+      return { ok: false, error: unreadable };
+    }
+  }
+
+  // Ends the act if its group is alive past its deadline, with a timeout
+  // verdict unless the job's own landed first.
+  function endIfOverdue(facts: ActFacts | null): void {
+    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
+    const { stands, signalled } = endOverdue(actsDir, facts);
+    const why = stands ? "timed out" : "outlived its verdict";
+    const ending = signalled ? "ending it" : "its group took no signal";
+    log("error", `apply-update: act ${facts.act} ${why}; ${ending}`);
+  }
+
+  // Notices an act ending, whichever daemon started it: a success means the
+  // bundle on disk changed, so the build is sampled and the binary watch asked
+  // now.
+  function watchAct(): void {
+    const read = touchActs(() => {
+      const facts = acts.read();
+      endIfOverdue(facts);
+      return facts;
+    });
+    if (!read.ok) return;
+    const next = judgeAct(read.value);
+    if (seen === null && next.kind === "running") {
+      log("info", `apply-update: act ${next.act} is running; watching it`);
+    }
+    if (seen?.kind === "running" && next.kind !== "running") {
+      if (next.kind === "succeeded") {
+        log("info", `apply-update: act ${next.act} succeeded`);
+        sampleBuild();
+        onApplied();
+      }
+      if (next.kind === "failed") {
+        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
+      }
+    }
+    seen = next;
+  }
+
   return {
     arm() {
-      // Daemon-lifetime registration: the disposer would only matter to a
-      // watch that is torn down, and the daemon exits instead.
-      reserveUpdateKeys();
+      armed.push(reserveUpdateKeys());
       sampleBuild();
-      setInterval(sampleBuild, intervalMs).unref();
+      every(sampleBuild, intervalMs);
+      watchAct();
+      every(watchAct, ACT_POLL_MS);
       // The registry is a question only a published install asks: a checkout
       // rebuilds from the source beside it, whatever npm has.
       if (build.kind === "not-source-checkout") {
         void pollRelease();
-        setInterval(() => void pollRelease(), releaseIntervalMs).unref();
+        every(() => void pollRelease(), releaseIntervalMs);
       }
     },
-    notice: (ctx) => updateNotice(current(), act, ctx),
+    close() {
+      closed = true;
+      syncGate();
+      armed.forEach((release) => release());
+    },
+    notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
+    running() {
+      const read = touchActs(() => acts.read());
+      return read.ok && judgeAct(read.value).kind === "running";
+    },
+    error: () => unreadable,
     act() {
       const update = current();
       if (update === null) {
         throw new BadVerbArgs("apply-update: nothing newer is known to apply");
       }
       const facts = factsOf(update);
-      if (act.kind === "running") {
+      const read = touchActs(() => acts.read());
+      if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
+      const newest = read.value;
+      if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
-      act = RUNNING;
-      log(
-        "info",
-        `apply-update: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
-      );
       // The child inherits the daemon's environment (PATH included): no env
       // is passed, so nothing about the command is composed from data.
-      void launch({
-        ...facts.command,
-        category: "update.apply",
-        timeoutMs: ACT_TIMEOUT_MS,
-      }).then((result) => {
-        if (result.ok) {
-          act = IDLE;
-          log("info", `apply-update: ${facts.act} succeeded`);
-          sampleBuild();
-          onApplied();
-          return;
-        }
-        const reason = failureReason(result);
-        act = { kind: "failed", identity: updateIdentity(update), reason };
-        log("error", `apply-update: ${facts.act} failed: ${reason}`);
-      });
+      const claim = claimAct(
+        launcher,
+        actsDir,
+        newest === null ? null : newest.act,
+        updateIdentity(update),
+        { ...facts.command, category: "update.apply" },
+        ACT_TIMEOUT_MS,
+        Date.now(),
+        readStart,
+      );
+      if (!claim.ok) {
+        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
+      }
+      log(
+        "info",
+        `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
+      );
+      seen = { kind: "running", act: claim.act };
     },
   };
 }

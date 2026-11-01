@@ -93,7 +93,7 @@ const factsIn = (
     ...gatherFacts(
       edge,
       { tmux, claudeConfigDir: conf },
-      { projectDir: projectDir(), cwd: projectDir(), configFile: null },
+      { projectDir: projectDir(), cwd: projectDir(), target: { source: "search" } },
       sessionPick,
       { kind: "ok", value: HEALTHY_SERVING },
       CARRIED,
@@ -257,7 +257,7 @@ describe("gatherFacts: a settings chain per location", () => {
     ...gatherFacts(
       NO_TMUX,
       { tmux: null, claudeConfigDir: conf },
-      { projectDir: projectDir(), cwd: projectDir(), configFile: null },
+      { projectDir: projectDir(), cwd: projectDir(), target: { source: "search" } },
       NO_SESSION,
       { kind: "ok", value: HEALTHY_SERVING },
       CARRIED,

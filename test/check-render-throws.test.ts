@@ -1,9 +1,10 @@
 // [LAW:no-silent-failure] Nothing a config authors makes a render throw
 // (brandon-unfiled-3248.ryf), so check's catch of a thrown render
 // (`loadRegisterRender`, src/check.ts) is reached only by a renderer bug. It is
-// driven here by a renderDsl that throws under one preset: that pass's throw
-// is one failure tagged with the preset that reached it, and every other
-// pass's failures are still reported beside it.
+// driven here by a drawDsl (the draw every pass of check goes through) that
+// throws under one preset: that pass's throw is one failure tagged with the
+// preset that reached it, and every other pass's failures are still reported
+// beside it.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -16,9 +17,9 @@ jest.mock("../src/dsl/render", () => {
     jest.requireActual<typeof import("../src/dsl/render")>("../src/dsl/render");
   return {
     ...actual,
-    renderDsl: (...args: Parameters<typeof actual.renderDsl>) => {
-      if (args[8]?.preset === "b") throw new Error("the renderer broke");
-      return actual.renderDsl(...args);
+    drawDsl: (...args: Parameters<typeof actual.drawDsl>) => {
+      if (args[8].preset === "b") throw new Error("the renderer broke");
+      return actual.drawDsl(...args);
     },
   };
 });

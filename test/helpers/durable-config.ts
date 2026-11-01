@@ -12,6 +12,7 @@
 // developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
 // it is a client hint, composed into the render origin, brandon-config-5g8.)
 
+import { requestedConfigTarget } from "../../src/config-hint";
 import {
   mkdirSync,
   mkdtempSync,
@@ -130,7 +131,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
         encodeRenderOrigin({
           projectDir: root,
           cwd: root,
-          configFile: configFile ?? null,
+          target: requestedConfigTarget(configFile, undefined),
         }),
       ),
     dispose: () => {

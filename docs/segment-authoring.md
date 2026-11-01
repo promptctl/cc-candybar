@@ -44,9 +44,11 @@ edit config  →  cc-candybar check --render <path>  →  read exit code + stder
 
 `check` runs the daemon's exact pipeline (parse → merge on the bundled
 default → validate → register → render against a representative payload). It
-**runs your `shell` and `file` sources** and waits up to 5 s for their first
-runs; a source still running at the deadline is reported as a warning and the
-bar renders with that variable's `default`. A user config merges onto the
+**runs your `shell` and `file` sources** and waits for their first runs, and
+then, before each preset's pass, for the re-reads that preset's payload starts
+(a `key` over `.preset.effective`), all under one 5 s budget; a source still
+running at the deadline is reported as a warning naming the source, and the pass draws the variable as pending (its loading cell),
+never as its `default`: a default stands in for a failure, not a wait. A user config merges onto the
 bundled default by name, so declare only what differs: the variables and
 segments below, plus the row that places the segment. A row you name under
 `root.rows` replaces the bundled row of that name wholesale — the bundled
@@ -120,7 +122,7 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- 🍫  polled  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
+ 🍫   polled  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
  ✱ Opus 4.8 󰶼  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
@@ -136,7 +138,7 @@ The complete shape of a `shell` variable:
 | `kind` | `"shell"` |
 | `command` | the command line, run by `/bin/sh -c` |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
-| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes; a watch the OS refuses is reported like a key that throws, below), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's warning strip says it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
+| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A source that reads no session's value runs once for its directory, shared by
@@ -582,7 +584,7 @@ want in your order:
 ```
 
 ```render
- 🍫  polled  ⎇ main SU? (1 stashed) ▸ 
+ 🍫   polled  ⎇ main SU? (1 stashed) ▸ 
 ```
 
 Start every session expanded — redeclare the state variable with the other
@@ -598,7 +600,7 @@ default. The arrow still collapses it for the session that clicks:
 ```
 
 ```render
- 🍫  polled  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
+ 🍫   polled  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
 ```
 
 Hide one fact — override its piece with an empty body. A piece is shared, so
@@ -612,7 +614,7 @@ the fact leaves both forms:
 ```
 
 ```render
- 🍫  polled  ⎇ main +2/-1 ▸ 
+ 🍫   polled  ⎇ main +2/-1 ▸ 
 ```
 
 Hide a fact from one copy only — each optional piece also reads a setting of
@@ -631,7 +633,7 @@ it does not):
 ```
 
 ```render
- 🍫  polled  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
+ 🍫   polled  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
 ```
 
 Recolour one fact — override its colour variable (any palette name or hex),
@@ -646,7 +648,7 @@ or re-spell it by overriding its piece:
 ```
 
 ```render
- 🍫  polled  on main +2/-1 SU? ▸ 
+ 🍫   polled  on main +2/-1 SU? ▸ 
 ```
 
 ## One segment, many placements: settings
@@ -688,7 +690,7 @@ as `.settings.<name>`:
 ```
 
 ```render
- 🍫  polled  Opus 4.8  ◆ Opus 
+ 🍫   polled  Opus 4.8  ◆ Opus 
 ```
 
 The segment's `when`, `bg:` and `fg:` read the same `.settings` as its
@@ -723,8 +725,8 @@ reads either as `.settings.theme` / `.settings.effect` like any other setting.
 A setting is also changeable from the bar. In edit mode every placement
 carries a `🔧` after its name (every placement has `theme` and `effect`); clicking it
 configures that one placement: the `+`/`-` chrome goes away and one control
-per setting hangs below the cell, one row each (a toggle for `"bool"`, a cycle for a word
-list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` a `◀ ▶` carousel
+per setting hangs below the cell, one row each (a toggle for `"bool"`, a `◀ label ▶` control over a list for a word
+list, a `◀ ▶` stepper for `{ min, max }`, and for `theme` the theme picker,
 whose every option is drawn in the palette it would put on the placement),
 bounded by the declaration. A change shows at once and is unsaved until `💾 save`, which
 writes it into that placement in the config file — a bare `"modelTag"`
@@ -769,8 +771,8 @@ writes a DEFINITION once:
   segments: {
     status: {
       description: "The current deploy: its environment and state",
-      when: '{{ hasKey .plugins.deploy.data "env" }}',
-      template: '⇪ {{ .plugins.deploy.data.env }} {{ template "plugins.deploy.state" .plugins.deploy.data }}',
+      when: '{{ hasKey .self.data "env" }}',
+      template: '⇪ {{ .self.data.env }} {{ template "self.state" .self.data }}',
     },
   },
   helpers: {
@@ -802,17 +804,28 @@ What the definition can say, and what follows from it:
   `<name>` — one lowercase identifier — is the plugin's name; the file does
   not repeat it.
 - **Every name is the plugin's, under `plugins.`.** A segment, helper or
-  action declared as `status` is `plugins.deploy.status` everywhere else — in `root`, in edit mode's
-  add-segment library (where the plugin's segments appear with their
-  `description`), and in templates, which is why the segment above calls
-  `{{ template "plugins.deploy.state" }}`. A plugin replaces, whole, any
-  plugin of its name beneath it (a listed one replaces an installed one);
-  listing one name twice is refused.
-- **The data is `.plugins.<plugin>.data`.** `data` is optional; a
+  action declared as `status` is `plugins.deploy.status` everywhere outside
+  the definition — in `root`, in edit mode's add-segment library (where the
+  plugin's segments appear with their `description`), and in your templates.
+  A plugin replaces, whole, any plugin of its name beneath it (a listed one
+  replaces an installed one); listing one name twice is refused. A
+  repository's own plugins sit under `repo.` instead (see below), so they
+  never replace yours.
+- **The definition calls itself `self`.** Inside it, `.self.data`,
+  `{{ template "self.state" }}`, `{{ action "self.go" "…" }}` and
+  `do: ["self.go", …]` name the plugin's own data, helpers and actions, and
+  the loader binds `self` to the namespace the plugin loads under. So one
+  definition loads alike installed (`plugins.deploy`) and shipped in a
+  repository (`repo.deploy`), and `cc-candybar plugin install` changes
+  nothing about it. A definition that spells its own name under the scope
+  it did not load in (`.plugins.deploy.data` in a repository's `deploy`) is
+  dropped, naming the `self` spelling to write instead.
+- **The data is `.self.data`** — `.plugins.<plugin>.data` from your own
+  file. `data` is optional; a
   definition without it has no data variable. It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
-  so gate the segment with `when: '{{ hasKey .plugins.<plugin>.data "<field>" }}'`;
+  so gate the segment with `when: '{{ hasKey .self.data "<field>" }}'`;
   blank data reads the same way, and data that is not JSON is a `⚠` on every
   segment reading it. The app may create the file late and rewrite it any
   way it likes: a read caught mid-rewrite keeps the last document showing.
@@ -825,12 +838,12 @@ What the definition can say, and what follows from it:
   each optional.** A definition never edits `root` — placing a segment is your
   choice. Its `variables` are a config's `variables:`, every kind, checked the
   same way, and named under the plugin: `greeting` is read as
-  `.plugins.<plugin>.greeting`. A segment's `vars` may be of any kind too; a
+  `.self.greeting`. A segment's `vars` may be of any kind too; a
   `state` one reads what the session's own clicks wrote, so a segment can
   open a detail row of its own (`{ kind: "state", key, default }` beside a
-  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`).
+  `{ set: key, cycle: [...] }` action, read as `.self.<segment>.<var>`).
   A `state` variable's `key` and an action's `set` are written
-  bare and meet under `plugins.<plugin>.` — a plugin's session keys are
+  bare and meet under the plugin's namespace — a plugin's session keys are
   namespaced as its names are, so none can clash with the bar's or your file's.
   No variable or source may be named `data`, the data file's name.
   The plugin name is one lowercase identifier.
@@ -845,10 +858,10 @@ A plugin with no data file derives what it shows from variables of its own:
 {
   variables: {
     model: { kind: "input", path: "model.display_name" },
-    greeting: { kind: "template", template: "hello, {{ .plugins.hello.model }}" },
+    greeting: { kind: "template", template: "hello, {{ .self.model }}" },
   },
   segments: {
-    greeting: { template: "{{ .plugins.hello.greeting }}" },
+    greeting: { template: "{{ .self.greeting }}" },
   },
 }
 ```
@@ -879,8 +892,8 @@ plugin's folder:
   segments: {
     ticket: {
       description: "The ticket this session works on",
-      when: '{{ hasKey .plugins.focus "status" }}',
-      template: '◎ {{ .plugins.focus.status.ticket }}',
+      when: '{{ hasKey .self "status" }}',
+      template: '◎ {{ .self.status.ticket }}',
     },
   },
 }
@@ -893,8 +906,9 @@ plugin's folder:
 }
 ```
 
-- **The source is the session's document.** A template reads it as
-  `.plugins.<plugin>.<source>`, its fields by dotted path. The one source
+- **The source is the session's document.** The plugin's templates read it
+  as `.self.<source>` (`.plugins.<plugin>.<source>` from your own file), its
+  fields by dotted path. The one source
   built is the one above — `scope: "session"`, `refresh: { watch: true }`,
   `read: { file: { json: true } }`, with no path — and anything else drops
   the plugin with an error naming the field and what is built. Its name is
@@ -912,7 +926,7 @@ plugin's folder:
   written for 30 days belongs to a session that is gone, and is deleted —
   unless a session's bar holds it now.
 - **Until the program writes, there is nothing to read.** No file, or a
-  blank one, reads as absent: `hasKey .plugins.<plugin> "<source>"` is
+  blank one, reads as absent: `hasKey .self "<source>"` is
   false, so a segment gated on it hides. That gate is the only safe read
   before the first write. An unguarded read is the missing-field error —
   the segment draws `⚠` and `check` fails — and a file that is not JSON
@@ -931,7 +945,7 @@ plugin's folder:
     status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
   segments: {
-    ticket: { template: '◎ {{ .plugins.bare.status.ticket }}' },
+    ticket: { template: '◎ {{ .self.status.ticket }}' },
   },
 }
 ```
@@ -953,7 +967,7 @@ segment "plugins.bare.ticket": field "plugins.bare.status.ticket" not found on r
     ticket: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
     title: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
-  segments: { ticket: { template: '◎ {{ .plugins.twice.ticket.id }}' } },
+  segments: { ticket: { template: '◎ {{ .self.ticket.id }}' } },
 }
 ```
 
@@ -979,11 +993,12 @@ declares — drops **that plugin only**: the rest of your config renders, a
 template reading its data, a source or a variable, calling its helper or
 binding its action shows `⚠` naming the drop — a segment of it you placed or
 retuned stands in as that cell — a `run` of yours that refreshes one of its
-sources still runs, with nothing of it to refresh, the bar's diagnostic strip
-names the definition and the reason, and `check` fails. An INSTALLED plugin
+sources still runs, with nothing of it to refresh, the bar's diagnostics
+indicator offers a message naming the definition and the reason, and `check`
+fails. An INSTALLED plugin
 that does not load is your config's problem only where it reaches it (a
 placement, a retune, a helper call, an action binding or a `refreshes`): one
-nothing reaches is neither on the strip nor in `check`. A
+nothing reaches is neither among the bar's messages nor in `check`. A
 listed definition is a folder's `plugin.json5`, the folder naming the plugin.
 A definition is watched like your config file, so fixing or installing it
 reloads the bar:
@@ -1028,16 +1043,83 @@ because it sits in a plugin root:
   `/opt/homebrew/share`);
 - `<repo>/.cc-candybar/plugins/<name>/` — a repository's own, there only in
   sessions working in that repo, once the user has approved the repository
-  in the bar (as its `.cc-candybar.json5` is).
+  in the bar (as its `.cc-candybar.json5` is). Its plugins load under
+  `repo.`, not `plugins.`: a repo's `lit` folder's `ticket` is placed as
+  `repo.lit.ticket`, beside an installed `lit` whose names stay
+  `plugins.lit.*`. Both load side by side, and a name missing from one is
+  never looked up in the other. A plugin a repository's `.cc-candybar.json5`
+  lists is a `repo.` plugin too. The definition itself is the same file an
+  install would copy: it names itself `self`, never `repo.lit`.
 
 A plugin is a folder: a file sitting directly in a root is a drop naming
 where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A
 `data: { checkout }` path stays inside the checkout — an absolute path, `~`
-or a `..` that leaves it is refused. A nearer root replaces a farther one's plugin of the same name (repo over
-user over package manager). An installed plugin's segments are in the
+or a `..` that leaves it is refused. The user's root replaces a package
+manager's plugin of the same name; a repository's plugins replace nothing,
+since they live under `repo.`. An installed plugin's segments are in the
 add-segment library; it draws something only once a segment of it is
 placed. The roots are watched, so installing or removing a folder reloads
 the bar.
+
+A placement of a plugin that is not present in the session draws nothing
+and is no error: no `⚠`, and `check` passes. So your own config can place
+`repo.lit.ticket` for every repository that ships `lit`, and in any other
+directory the cell is simply not there; the same goes for a `plugins.` cell
+whose plugin is not installed. A placement under a plugin that IS present
+but declares no such segment is an error: the message names the plugin file
+that won and every segment and setting it declares, and clicking it in the
+bar copies a prompt for Claude that names your config file and asks it to
+fix the placement.
+
+```json5 check:pass
+{
+  segments: { mine: { template: "mine" } },
+  root: { h: ["mine", "repo.lit.ticket", "plugins.notinstalled.status"] },
+}
+```
+
+### Adding your segment to the user's bar from a repo
+
+A repository's `.cc-candybar.json5` merges over the user's config, so it
+could restate a row, but that replaces the user's row. To add a cell to
+whatever the user already has, list it under `insert`, beside a placement
+id the user's bar holds (a bare placement's id is its segment's name):
+
+```json5 check:pass
+{
+  segments: { lit: { template: "lit" } },
+  root: { rows: { status: { h: ["model", "context"] } } },
+  insert: [{ seg: "lit", after: "model" }],
+}
+```
+
+A segment of the repository's own plugin is inserted by its `repo.` name —
+`insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.phase" }]` — so it
+draws beside the user's placements of an installed plugin of the same name
+rather than replacing them.
+
+Here the file stands alone, so the row it inserts into is its own. In a
+repository, leave `root` out and the cell lands in the user's row. Each
+cell takes exactly one of `before` or `after`, and an optional `id`. The
+anchor must be a placement: the bar's own chrome, such as the settings
+door, is refused. Every
+arrangement places the cell in its own tree, presets included, and one
+whose tree lacks the anchor doesn't draw it. When that tree is a root or a
+preset some config file writes, the bar warns once per cell, naming your
+file, the cell, the anchor and every tree that lacks it. A root or preset only
+cc-candybar ships has no such placement to sit beside, so it simply draws
+without the cell. A cell a tree already places is not drawn twice: a cell
+without an `id` is already placed by any placement of its segment, whatever
+its id and however deep; a cell with an `id` only by a placement with that
+id. A cell whose id the tree holds under another segment, or that would
+clash with the bar once placed, is not drawn, and the bar warns naming your
+file and the entry. The cell shows only where its anchor does: a `when` that
+hides the anchor hides the cell too. Like the rest of the file, `insert` takes effect only once the
+user has approved the repository. In edit mode the cell shows which file
+placed it, and offers no remove or move: it is an `insert` entry, and edit
+mode's clicks don't rewrite those, even in the user's own file. To change
+one, edit the `insert` list by hand. The cell stays beside its anchor, and if the user removes their
+own copy of it, yours comes back.
 
 ## Mistakes and the errors they produce
 

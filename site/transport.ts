@@ -1,21 +1,27 @@
 // The page's transport on GitHub Pages: the daemon runs in this page.
 //
 // [LAW:single-enforcer] A render and a click are the daemon's own request
-// handler (src/daemon/server.ts `replyTo`), sent the request the Rust
-// client and the URL handler send. Nothing here renders: the daemon reads the
+// handler (`createDaemon`'s `reply`), sent the request the Rust client and the
+// URL handler send. Nothing here renders: the daemon reads the
 // simulated machine (world.ts) through node:fs and node:child_process, as it
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
 import { VERB_COPY } from "../src/click/wire";
 import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/read";
-import { establishLimits, reloadConfig, replyTo } from "../src/daemon/server";
+import { createDaemon, SYSTEM_CLOCK } from "../src/daemon/daemon";
+import { memoryLimitBytes } from "../src/daemon/limits";
+import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
+import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
+import { REGISTRY_URL } from "../src/install/currency";
 import { parseHandlerUrl } from "../src/install/index";
 import { PACKAGE_VERSION } from "../src/version";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
 import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
 
+// Where the deploy publishes the landscape explorer, relative to this page; null outside the deploy.
+declare const __LANDSCAPE__: string | null;
 // The page's clipboard (this file is checked against Node's types, which have no `navigator`).
 declare const navigator: { readonly clipboard: { writeText(text: string): Promise<void> } };
 
@@ -54,8 +60,27 @@ const onClock = ({ headAt, ...rest }: Partial<ScenarioRepo>): Partial<RepoState>
 
 seedWorld(onClock(INITIAL_REPO) as RepoState);
 // The daemon the page runs has the limits a daemon has, so the doctor can ask
-// it what it holds; nothing counts its memory, as no socket was won.
-establishLimits(process.env);
+// it what it holds; it is never armed, so nothing counts its memory, as no
+// socket was won. Nothing it holds outlives the page.
+const pageDaemon = createDaemon({
+  bundle: {
+    entryUrl: "file:///app/dist/index.mjs",
+    digest: null,
+    path: "/app/dist/index.mjs",
+    node: [],
+    targets: [],
+  },
+  storage: () => ({
+    session: EPHEMERAL_SESSION_STORAGE,
+    history: EPHEMERAL_HISTORY_STORAGE,
+  }),
+  memoryLimitBytes: memoryLimitBytes(process.env),
+  registryUrl: REGISTRY_URL,
+  clock: SYSTEM_CLOCK,
+  exit: (code) => {
+    throw new Error(`the page's daemon asked to exit ${code}`);
+  },
+});
 
 function lines(entry: Entry, at: number): object[] {
   const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
@@ -140,7 +165,7 @@ function hookData(): ClaudeHookData {
 async function daemon(request: RenderRequest | ClickRequest): Promise<string> {
   // In the page there is no socket, so no reply timer to have fired, and the
   // answer in hand is the one the page draws.
-  const { resp, delivered } = await replyTo(request, () => false, performance.now());
+  const { resp, delivered } = await pageDaemon.reply(request, () => false, pageDaemon.clock.monotonic());
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";
@@ -247,13 +272,14 @@ export const transport = {
   about:
     'This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>\'s own daemon, compiled for the browser and running in this page against a simulated machine. ' +
     "The bar replays a few turns of a Claude Code session. Every click is real: open the 🍫 menu, switch themes, arrange segments.",
+  landscape: __LANDSCAPE__,
   render,
   click,
   // A new session over the bundled config: what the visitor's clicks wrote is
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size: Size) => {
     forgetWrites();
-    reloadConfig({ projectDir: REPO, cwd: REPO, configFile: null });
+    pageDaemon.reloadConfig({ projectDir: REPO, cwd: REPO, target: { source: "search" } });
     sessionId = crypto.randomUUID();
     startAt(t);
     notify();

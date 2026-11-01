@@ -2,6 +2,7 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -82,7 +83,7 @@ test("a date function of its arguments alone reads no clock", () => {
   }`);
   expect([...own(projectionsOf(cfg)).keys()]).toEqual([]);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(processLauncher, store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     // Read with no draw bound: neither reaches the clock.
@@ -99,7 +100,7 @@ test("a value reaching the instant by a name it does not spell is refused, never
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(processLauncher, store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     // The fold cannot see the read, so `hidden` keeps its answer.
@@ -119,7 +120,7 @@ test("a value that keeps its answer is told why, drawn or not", () => {
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(processLauncher, store);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     expect(() => store.read("hidden")).toThrow(
@@ -162,7 +163,7 @@ test("a projection is derived at each draw; a derived template is cached", () =>
     shown: { kind: "template", template: "{{ .label }}" },
   }`);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(processLauncher, store);
   try {
     // The synthesized menu's `state` variables need a SessionState this
     // registry has not got; this test's own variables declare.
@@ -194,7 +195,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    const loaded = loadFromDisk(dir, dir, file, { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();
@@ -217,6 +218,11 @@ test("the config load line names the load's projections", () => {
       }`),
       ),
     ).toEqual([
+      // The settings door's indicator reads the draw's diagnostics.
+      "diagnostics.label",
+      "diagnostics.fg",
+      "diagnostics.bg",
+      "diagnostics.open",
       "clock",
       "git.timeSinceCommit",
       "block.etaMinutes",
@@ -226,6 +232,10 @@ test("the config load line names the load's projections", () => {
     // The bundled default's: what its stored instants say relative to now
     // (brandon-unfiled-3248.8ro6 step 3).
     expect(named(line("{}"))).toEqual([
+      "diagnostics.label",
+      "diagnostics.fg",
+      "diagnostics.bg",
+      "diagnostics.open",
       "git.timeSinceCommit",
       "block.etaMinutes",
       "weekly.etaMinutes",

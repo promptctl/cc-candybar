@@ -34,12 +34,11 @@ Current categories (13):
 
 The render-hot-path call chain (daemon side, per request):
 ```
-handleRequest (server.ts)
+handleRequest (reply.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
   └─ settlePayload / payloadOf          — reads provider snapshots, no spawn
   └─ renderDsl(...)                  — pure CPU
-  └─ diagnosticDump.sync(...)            — the one synchronous fs write, taken only when the diagnostic text changed
-  └─ composeWithDiagnostics(...)         — string assembly
+  └─ collectDiagnostics / viewerRows     — string assembly
 ```
 
 ### Where subprocess work actually happens
@@ -59,7 +58,7 @@ None of these run inside the render request lifecycle. They fire asynchronously 
 
 ### Metering
 
-Every `launch()` call increments `stats.launchStats` (wired by `setLaunchStats(stats.launchStats)` in `src/daemon/server.ts`). Surfaced via:
+Every `launch()` call increments `stats.launchStats` (handed to `createLauncher` in `src/daemon/daemon.ts`). Surfaced via:
 
 ```
 cc-candybar daemon-stats

@@ -22,7 +22,7 @@ An option from a colour-valued domain shows its name plus a swatch of what picki
 
 The add-segment library shows each segment's description rather than a rendered sample. Rendering a segment needs a placement's scope (settings, drafts, gates), and the library doesn't have one.
 
-A carousel keeps no position of its own: its centre is the applied value. If no variable reads its key back, that's a render error, since the ring could never see its own writes.
+A carousel names what it sets, never the value, because the value belongs to the list its label opens. It keeps no position of its own: its arrows step from the applied value. If no variable reads its key back, that's a render error, since the ring could never see its own writes.
 
 ## Disclosures
 
@@ -59,3 +59,7 @@ The click is answered at once and the program runs after it. Its failure therefo
 ## A failed click's error
 
 A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully.
+
+## Copying a diagnostic
+
+A diagnostic's copy click carries the message's key and the renderer that drew it, never its text, and the daemon reads the text from the frame that renderer last delivered when the click runs. The key alone is not enough: one message keeps its key while its text changes, and the statusline and a feed can show different frames of it. The texts are held per session rather than per view, because a frame stays on screen after a reload replaces the view it was drawn from. Every word cell of a line repeats its link, and terminals drop OSC 8 links past a couple of kilobytes, so a fix prompt carried in the link would multiply a frame's bytes and then silently stop clicking.

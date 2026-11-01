@@ -8,7 +8,7 @@
 // sugar is WHEN this can run: a group is authored data, lowered per file
 // before merge; edit chrome is DERIVED from which segments are actually in
 // the tree, which is only known after merge and preset-root resolution. So
-// this runs from validateConfig, on the fully resolved
+// this runs from validateRenderable, on the fully resolved
 // config each declared preset stages — see synthesizeEditChrome below.
 //
 // [LAW:single-enforcer] The +/- affordances reuse EXISTING primitives
@@ -20,6 +20,7 @@
 // (menu-keys.ts/disclosure.ts) so a synthesized menu and a hand-authored one
 // are indistinguishable at render. Nothing here is a new render concept.
 
+import path from "node:path";
 import { synthesisInputs } from "./synthesis-inputs.js";
 import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
@@ -32,6 +33,7 @@ import {
   type ContainerNode,
   type DisclosureRef,
   type DslConfig,
+  type InsertedBy,
   type LayoutNode,
   type PresetDecl,
   type SegmentDecl,
@@ -464,13 +466,8 @@ function labelChrome(
   ctx: SpliceCtx,
   configure: ConfigureParts,
 ): SegmentNode {
-  const { artifacts } = ctx;
   const id = placementId(child);
-  const name = `${LABEL_NS}${id}:${child.name}`;
-  artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(id)}" }}`,
-    ...(decl.palette !== undefined && { palette: decl.palette }),
-  };
+  const name = labelSegment(ctx, id, child, decl, id);
   // [LAW:one-source-of-truth] Every implied setting rides across — the theme
   // and the effect the placement wears, saved and unsaved — so a name moves as
   // its placement would.
@@ -493,6 +490,114 @@ function labelChrome(
       IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]!]),
     ),
   };
+}
+
+// [LAW:one-source-of-truth] THE declaration of a placement's names-view label,
+// reading `text`, shared by the label that opens configure and the bare one an
+// inserted cell wears. Returns the segment name it declared,
+// `edit.label:<key>:<segment>`: `key` names one text, so two labels that read
+// differently never share a declaration.
+function labelSegment(
+  ctx: SpliceCtx,
+  key: string,
+  child: SegmentNode,
+  decl: SegmentDecl,
+  text: string,
+): string {
+  const name = `${LABEL_NS}${key}:${child.name}`;
+  ctx.artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(text)}" }}`,
+    ...(decl.palette !== undefined && { palette: decl.palette }),
+  };
+  return name;
+}
+
+// The unit an editable content cell gets: the leading `+` when it is the
+// row's first content, its label (opening configure), the cell wearing `✖`
+// and configure, and the `+` after it.
+function editableUnit(
+  child: SegmentNode,
+  spliced: SegmentNode,
+  first: boolean,
+  ctx: SpliceCtx,
+): LayoutNode[] {
+  const id = placementId(child);
+  const leading = first
+    ? [insertTerm(ctx, String(ctx.posCounter.n++), id, "before")]
+    : [];
+  const afterPos = String(ctx.posCounter.n++);
+  const after = insertTerm(ctx, afterPos, id, "after");
+  // Every content segment has exactly one `after` insertion, so its
+  // position names its removal and its configuration too.
+  const remove = removeTerm(ctx, afterPos, id);
+  // Every placement has settings — `theme` at least (settingsOf) — so
+  // every placement configures. [LAW:no-defensive-null-guards] cross-ref
+  // proved every placed segment is declared.
+  const decl = ctx.segments[child.name]!;
+  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  // The buttons are drawn inside the cell of the placement they act on, in
+  // whichever of the two views shows it, so nothing sits between them.
+  const lead = inArrangeMode(remove);
+  const trail = inArrangeMode(configure.term);
+  return [
+    ...leading.map((lead) =>
+      chromeCell(lead.host, lead.template, ctx.artifacts),
+    ),
+    // Labelled by the placement's id: two placements of one segment are
+    // told apart by it, and a bare placement's id is its segment's name.
+    { ...labelChrome(child, decl, ctx, configure), lead, trail },
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+      lead,
+      trail,
+      drafts: configure.drafts,
+    },
+    chromeCell(after.host, after.template, ctx.artifacts),
+  ];
+}
+
+// A config file as a label on the bar: its directory's name and its own.
+// Every file a chain layers is named `.cc-candybar.*` or `config.*`, so the
+// name alone can't tell a project's from a subdirectory's, and the directory
+// beside it can; the full path would outrun the bar.
+function fileLabel(file: string): string {
+  return path.join(path.basename(path.dirname(file)), path.basename(file));
+}
+
+// The unit an inserted cell gets: the cell, and in the names view a label
+// naming the file and entry that placed it. No `+`, `✖` or configure: the
+// cell is an insert entry, which no click rewrites.
+// [LAW:types-are-the-program] The click is not refused; it is never drawn.
+function insertedUnit(
+  child: SegmentNode,
+  insertedBy: InsertedBy,
+  spliced: SegmentNode,
+  ctx: SpliceCtx,
+): LayoutNode[] {
+  const decl = ctx.segments[child.name]!;
+  const id = placementId(child);
+  const label: SegmentNode = {
+    kind: "segment",
+    // Keyed by the preset too: another preset may hold the same id as an
+    // editable placement, whose label reads only the id. An id holds no
+    // `/` and a preset ident no `:`, so the two names never meet.
+    name: labelSegment(
+      ctx,
+      `${id}/${ctx.presetIdent}`,
+      child,
+      decl,
+      `${id} · ${fileLabel(insertedBy.file)} ${insertedBy.entry}`,
+    ),
+    when: `{{ ${namesView(ctx.presetIdent)} }}`,
+  };
+  return [
+    label,
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+    },
+  ];
 }
 
 // The `+` affordance for one gap: an `insertSegmentFrom` action over this
@@ -592,8 +697,13 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
   // chrome — the settings door, where it defaults — would otherwise anchor on
   // a segment no layout op may move. The trailing insert point needs no such
   // rule: every content segment's gap cell carries its own `after`.
+  // An inserted cell is not content a `+` may anchor on either: it is an
+  // insert entry, which no click rewrites.
   const firstContent = node.children.findIndex(
-    (child) => child.kind === "segment" && !isChromeExempt(child.name),
+    (child) =>
+      child.kind === "segment" &&
+      !isChromeExempt(child.name) &&
+      child.insertedBy === undefined,
   );
   const splice = (body: ContainerNode): ContainerNode =>
     spliceContainer(body, ctx);
@@ -607,47 +717,21 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       children.push(spliced);
       continue;
     }
-    const id = placementId(child);
-    const leading =
-      i === firstContent
-        ? [insertTerm(ctx, String(ctx.posCounter.n++), id, "before")]
-        : [];
-    const afterPos = String(ctx.posCounter.n++);
-    const after = insertTerm(ctx, afterPos, id, "after");
-    // Every content segment has exactly one `after` insertion, so its
-    // position names its removal and its configuration too.
-    const remove = removeTerm(ctx, afterPos, id);
-    // Every placement has settings — `theme` at least (settingsOf) — so
-    // every placement configures. [LAW:no-defensive-null-guards] cross-ref
-    // proved every placed segment is declared.
-    const decl = ctx.segments[child.name]!;
-    const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
-    // The buttons are drawn inside the cell of the placement they act on, in
-    // whichever of the two views shows it, so nothing sits between them.
-    const lead = inArrangeMode(remove);
-    const trail = inArrangeMode(configure.term);
-    const cells: LayoutNode[] = [
-      ...leading.map((lead) =>
-        chromeCell(lead.host, lead.template, ctx.artifacts),
-      ),
-      // Labelled by the placement's id: two placements of one segment are
-      // told apart by it, and a bare placement's id is its segment's name.
-      { ...labelChrome(child, decl, ctx, configure), lead, trail },
-      {
-        ...spliced,
-        when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
-        lead,
-        trail,
-        drafts: configure.drafts,
-      },
-      chromeCell(after.host, after.template, ctx.artifacts),
-    ];
+    // [LAW:dataflow-not-control-flow] Which unit a cell gets is read off the
+    // cell: one a root holds is editable, one a layer's `insert` placed is
+    // shown and labelled only.
+    const cells =
+      child.insertedBy === undefined
+        ? editableUnit(child, spliced, i === firstContent, ctx)
+        : insertedUnit(child, child.insertedBy, spliced, ctx);
     // [LAW:one-type-per-behavior] A content segment and its affordances are
-    // ONE unit of the row: a horizontal container holding them, so the row
-    // places its content cells and nothing else. Each child's position in its
-    // parent is what its colour derives from (src/themes/decor.ts); chrome
-    // spliced in as SIBLINGS took two of every three positions, so visible
-    // neighbours were never consecutive and the row's shades collided
+    // ONE unit of the row: a horizontal container marked `unit`, whose
+    // children share the one place in the row the content holds outside edit
+    // mode, so the row places its content cells and nothing else. A cell's
+    // place in its row is what its colour derives from (src/themes/decor.ts),
+    // and every leaf of a row takes its own place through any plain container;
+    // chrome given places took two of every three, so visible neighbours were
+    // never consecutive and the row's shades collided
     // (brandon-theme-picker-bgw.8fp). Under a VERTICAL container the content
     // was a whole row (presetRoot stacks every root's rows vertically, so a
     // bare `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this
@@ -659,6 +743,7 @@ function spliceContainer(node: ContainerNode, ctx: SpliceCtx): ContainerNode {
       kind: "container",
       direction: "horizontal",
       children: cells,
+      unit: true,
     };
     children.push(
       node.direction === "vertical"
@@ -835,7 +920,7 @@ function spliceEditChromeForPreset(
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
-// validateConfig after cross-ref/cycle checks pass. Every declared preset
+// validateRenderable after cross-ref/cycle checks pass. Every declared preset
 // (the floor "default" included — presetNames/presetByName/presetRoot
 // already treat it uniformly) gets an explicit `presets[name].root` carrying
 // its spliced tree; `config.root` itself is left untouched (presetRoot falls

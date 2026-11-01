@@ -1,6 +1,6 @@
 {
   "name": "@promptctl/cc-candybar",
-  "version": "1.160.11",
+  "version": "1.174.7",
   "description": "Statusline renderer for Claude Code — a JSON5-configurable DSL with daemon-cached data sources, byte-clean palette-aware composition, and OSC8 click verbs.",
   "type": "module",
   "main": "./dist/index.mjs",
@@ -12,7 +12,7 @@
     "cc-candybar": "./bin/cc-candybar"
   },
   "scripts": {
-    "build": "tsx scripts/gen-schema.ts && tsdown",
+    "build": "tsdown",
     "build:rust": "cd rust-client && cargo build --release",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
@@ -20,6 +20,8 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "test": "jest",
+    "test:worker": "jest --config jest.worker.config.js",
+    "test:process": "jest --config jest.process.config.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "audit:colour": "jest --config audits/jest.config.js",
@@ -28,7 +30,7 @@
     "bar": "node --require ./scripts/version-stamp.cjs --import tsx scripts/drive-bar.ts",
     "bar:web": "node --require ./scripts/version-stamp.cjs --import tsx scripts/bar-web.ts",
     "site:build": "node site/build.mjs",
-    "benchmark:timing": "scripts/benchmark_timing.sh",
+    "bench": "node --require ./scripts/version-stamp.cjs --import tsx scripts/bench/index.ts",
     "load-gate": "node --require ./scripts/version-stamp.cjs --import tsx scripts/load-gate.ts",
     "check:protocol": "node scripts/check-protocol.mjs",
     "gen:schema": "tsx scripts/gen-schema.ts",
@@ -70,7 +72,7 @@
     "@eslint/js": "^9.33.0",
     "@pkgjs/parseargs": "0.11.0",
     "@promptctl/go-template-js": "^0.10.0",
-    "@promptctl/rich-js": "^0.24.1",
+    "@promptctl/rich-js": "^0.27.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/exec": "^7.0.3",
@@ -96,15 +98,16 @@
     "readable-stream": "4.7.0",
     "semantic-release": "^25.0.2",
     "smol-toml": "^1.9.1",
+    "string_decoder": "1.3.0",
     "ts-jest": "^29.4.1",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0"
   },
   "optionalDependencies": {
-    "@promptctl/cc-candybar-darwin-arm64": "1.160.11",
-    "@promptctl/cc-candybar-darwin-x64": "1.160.11",
-    "@promptctl/cc-candybar-linux-arm64": "1.160.11",
-    "@promptctl/cc-candybar-linux-x64": "1.160.11"
+    "@promptctl/cc-candybar-darwin-arm64": "1.174.7",
+    "@promptctl/cc-candybar-darwin-x64": "1.174.7",
+    "@promptctl/cc-candybar-linux-arm64": "1.174.7",
+    "@promptctl/cc-candybar-linux-x64": "1.174.7"
   }
 }

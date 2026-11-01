@@ -1,10 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { launch, type LaunchResult } from "../proc/launch";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import type { LaunchResult, Launcher } from "../proc/launch";
+import { ABSENT, failed, ok, orElse, type Outcome } from "../utils/outcome";
 import type { Current } from "../utils/reading";
 import { debug } from "../utils/logger";
-import { gitRootOf, holdsGit } from "../utils/git-root";
+import {
+  commonDirOf,
+  gitDirNamed,
+  gitRootOf,
+  holdsGit,
+} from "../utils/git-root";
 
 export interface WorkingTree {
   staged: number;
@@ -859,6 +864,10 @@ function configIdentity(configPath: string): ConfigIdentity | null {
 }
 
 export class GitService {
+  // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
+  // close refuses the next read of a pass under way.
+  constructor(private readonly launcher: Launcher) {}
+
   private isGitRepo(workingDir: string): boolean {
     return holdsGit(workingDir);
   }
@@ -877,7 +886,7 @@ export class GitService {
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
-    return launch({
+    return this.launcher.launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -1063,29 +1072,15 @@ export class GitService {
   // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
   // real HEAD/index files even for git worktrees. For a regular repo this is
   // `<workingDir>/.git`. For a worktree, `<workingDir>/.git` is a *file*
-  // containing `gitdir: <abs-path-to-worktree-metadata-dir>` and the actual
-  // HEAD/index live inside that metadata dir — watching `<workingDir>/.git/HEAD`
-  // would fail (no such path) and the cache would never invalidate. Returning
-  // the resolved gitDir lets the provider point watchers at real files.
+  // naming the worktree-metadata dir, where HEAD and index live — watching
+  // `<workingDir>/.git/HEAD` would fail (no such path) and the cache would
+  // never invalidate.
   //
-  // [LAW:no-defensive-null-guards] The try/catch is a trust-boundary guard,
-  // not a silent skip — fs races (file removed between existsSync and
-  // statSync), permission errors, or unreadable .git files fall back to the
-  // dotGit path so callers always get a string, never a throw.
+  // [LAW:no-silent-failure] exception: this is a watch target, not an answer.
+  // A `.git` that names nothing readable (a directory, an unreadable or
+  // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir: string): string {
-    const dotGit = path.join(workingDir, ".git");
-    try {
-      if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
-        const content = fs.readFileSync(dotGit, "utf-8");
-        const match = content.match(/^gitdir:\s*(.+)$/m);
-        if (match?.[1]) {
-          return path.resolve(workingDir, match[1].trim());
-        }
-      }
-    } catch {
-      // Fall through to the dotGit fallback below.
-    }
-    return dotGit;
+    return orElse(gitDirNamed(workingDir), path.join(workingDir, ".git"));
   }
 
   private getOngoingOperation(workingDir: string): Outcome<string> {
@@ -1244,17 +1239,10 @@ export class GitService {
   // backing them exists ONLY under the common dir. Reading the per-worktree
   // gitdir would answer zero stashes for every worktree, silently.
   resolveCommonGitDir(gitDir: string): string {
-    try {
-      // A linked worktree's gitdir holds `commondir`, one line, a path relative
-      // to it (`../..` in the ordinary layout).
-      const commonDir = fs
-        .readFileSync(path.join(gitDir, "commondir"), "utf-8")
-        .trim();
-      if (commonDir) return path.resolve(gitDir, commonDir);
-    } catch {
-      // No `commondir` file is the ordinary case: this already IS the common dir.
-    }
-    return gitDir;
+    // No `commondir` file is the ordinary case: this already IS the common dir.
+    // [LAW:no-silent-failure] exception: as resolveGitDir's, a read target —
+    // an unreadable `commondir` reads the git dir itself.
+    return orElse(commonDirOf(gitDir), gitDir);
   }
 
   // [LAW:one-source-of-truth] `git stash list` counts REFLOG ENTRIES for
@@ -1432,7 +1420,7 @@ export class GitService {
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
-    return launch({
+    return this.launcher.launch({
       bin,
       args: [...args],
       cwd: options.cwd,

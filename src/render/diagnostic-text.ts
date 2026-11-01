@@ -2,8 +2,8 @@
 // any diagnostic text we embed inside a single-line, ANSI-styled envelope.
 // Two callers today:
 //   - src/render/error-glyph.ts (permanent client-side glyph; budget 60)
-//   - src/render/diagnostic-strip.ts (per-render diagnostic strip carrying
-//     the actual config error/warning message; sanitize only — it wraps)
+//   - src/render/diagnostics.ts (the diagnostics viewer, carrying the actual
+//     config error/warning message; sanitize only — it wraps)
 // A third copy in the daemon would duplicate the security-critical
 // control-char neutralization rules; sharing the primitive guarantees the
 // rules cannot drift between callers.
@@ -43,7 +43,7 @@ const ELLIPSIS = "…";
 // `pnpm check:protocol`. The Rust side also mirrors the collapse-whitespace-
 // runs + trim pass below, so the two runtimes produce byte-identical output;
 // that is behaviour, not a literal, so both suites assert the one case
-// table at test/fixtures/diagnostic-sanitize-cases.json.
+// table at test/fixtures/diagnostic-text-cases.json.
 //
 // Inclusive ranges: C0 (U+0000..U+001F), DEL and C1 (U+007F..U+009F) — the
 // Unicode Cc class — then the two bidi/format ranges above.
@@ -61,7 +61,7 @@ export function isControlChar(code: number): boolean {
 // Sanitize control characters (→ single space) and collapse whitespace runs
 // to one space so multi-line indented messages don't display as awkwardly-
 // spaced single lines. The envelope-safety half of the contract, on its own:
-// the diagnostic strip (src/render/diagnostic-strip.ts) wraps to the
+// the diagnostics viewer (src/render/diagnostics.ts) wraps to the
 // terminal instead of clipping, so it needs the neutralization without the
 // cap.
 export function sanitizeText(text: string): string {
@@ -85,9 +85,10 @@ export function sanitizeAndTruncate(text: string, maxLen: number): string {
   // both one visible code point — equal contributions to length.
   const sanitized = sanitizeText(text);
 
-  // Truncate-with-ellipsis. The /.$/u regex matches a full code point
-  // (unicode flag), not a UTF-16 unit — important for emoji and other
-  // astral-plane chars in user-supplied paths.
+  // [LAW:one-type-per-behavior] Truncate-with-ellipsis. The /.$/u regex matches
+  // a full code point (unicode flag), not a UTF-16 unit — important for emoji
+  // and other astral-plane chars in user-supplied paths, and the unit the Rust
+  // clip counts, so the runtimes agree outside ASCII.
   let out = "";
   let count = 0;
   for (const ch of sanitized) {

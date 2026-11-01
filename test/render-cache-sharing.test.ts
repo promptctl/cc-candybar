@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -14,6 +15,7 @@ import {
   VIEW_BYTES,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import {
@@ -30,6 +32,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { links, stripAnsi } from "./helpers/ansi";
+import { effectsOf } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
@@ -57,13 +60,14 @@ afterEach(() => {
 function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -109,7 +113,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
     log: () => {},
   });
   try {
-    return drawn(view);
+    return drawnBytes(view);
   } finally {
     view.dispose();
   }
@@ -120,7 +124,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
 // so a caller can watch whether anything still holds it.
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   renderDsl(
     config,
@@ -140,13 +144,18 @@ const exposeGc = (): (() => void) => {
   return vm.runInNewContext("gc") as () => void;
 };
 
+// Where a frame's carousel's ▶ steps to. Over its two options that is the one
+// the key does not hold, so it shows which variable the ring read back.
+const nextOf = (bytes: string): string | undefined =>
+  effectsOf(links(bytes).find((l) => stripAnsi(l.text) === "▶")!.url)[0]!.args[2];
+
 // One action over session key `k`, and a carousel centred on what reads it
 // back; `reader` names the state variable over `k`, `value` its default.
 const carouselConfig = (reader: string, value: string): string =>
   JSON.stringify({
     variables: { [reader]: { kind: "state", key: "k", default: value } },
-    actions: { pick: { set: "k", from: ["alpha", "beta"] } },
-    segments: { ring: { template: '{{ carousel "pick" 0 }}' } },
+    actions: { pick: { set: "k", from: ["alpha", "beta"] }, list: { copy: "x" } },
+    segments: { ring: { template: '{{ carousel "pick" "list" "k" }}' } },
     root: { h: ["ring"] },
   });
 
@@ -170,7 +179,31 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const made = lines.filter((l) => l.startsWith("render-cache entry "));
     expect(made).toHaveLength(3);
     expect(made[2]).toMatch(/ entries=3 compiles=1 accounted=\d+\/\d+MB$/);
-    for (const s of states) expect(render(s)).toContain("alpha");
+    for (const s of states) expect(nextOf(render(s))).toBe("beta");
+  });
+
+  // An edit to a config many directories render from reloads every one of
+  // their entries. The first reload builds the edited config's compile; the
+  // rest take it from the table, so the edit costs one compile, not one per
+  // entry.
+  test("a changed config reloaded across its entries builds one compile", () => {
+    const { cache, lines } = makeCache(64 * COMPILE_BYTES);
+    const cfg = file("config.json5", carouselConfig("mode", "alpha"));
+    const dirs = ["a", "b", "c"].map((d) => path.join(dir, d));
+    for (const d of dirs) {
+      fs.mkdirSync(d);
+      cache.getOrCreate(d, d, cfg);
+    }
+    const built = () =>
+      lines.filter((l) => l.startsWith("render-cache compile built ")).length;
+    expect(built()).toBe(1);
+    fs.writeFileSync(cfg, carouselConfig("other", "beta"));
+    for (const d of dirs) cache.reload(d, d, cfg, { kind: "write" });
+    expect(built()).toBe(2);
+    const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
+    expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
+    expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
+    for (const s of states) expect(nextOf(render(s))).toBe("alpha");
   });
 
   // [LAW:types-are-the-program] The one per-entry fact a compile reads is
@@ -185,8 +218,8 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const b = cache.getOrCreate(dir, dir, two).state;
     expect(a.compiled).not.toBe(b.compiled);
     expect(cache.stats.compiles).toBe(2);
-    expect(render(a)).toContain("alpha");
-    expect(render(b)).toContain("beta");
+    expect(nextOf(render(a))).toBe("beta");
+    expect(nextOf(render(b))).toBe("alpha");
   });
 });
 
@@ -242,7 +275,7 @@ describe("the cache is bounded by bytes", () => {
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const state = cache.getOrCreate(dir, dir, cfg).state;
     expect(cache.stats.size).toBe(1);
-    expect(render(state)).toContain("alpha");
+    expect(nextOf(render(state))).toBe("beta");
   });
 
   // [LAW:single-enforcer] The budget is held after every change to what the
@@ -260,12 +293,12 @@ describe("the cache is bounded by bytes", () => {
     cache.getOrCreate(b, b, cfgB);
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     fs.writeFileSync(cfgB, carouselConfig("other", "beta"));
-    cache.reload(b, b, cfgB);
+    cache.reload(b, b, cfgB, { kind: "write" });
     // `b` moved onto a compile of its own; `a`, least recently used, left.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(cache.stats.budgetBytes);
     expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
-    expect(render(cache.getOrCreate(b, b, cfgB).state)).toContain("beta");
+    expect(nextOf(render(cache.getOrCreate(b, b, cfgB).state))).toBe("alpha");
   });
 
   test("a compile leaves with the last state carrying it, held or not", () => {
@@ -282,7 +315,7 @@ describe("the cache is bounded by bytes", () => {
       cache.getOrCreate(dir, dir, three);
       // `two`'s state is retired but a render draws with it: its compile stays.
       expect(cache.stats).toMatchObject({ size: 1, compiles: 2, retired: 1 });
-      expect(render(held.state)).toContain("beta");
+      expect(nextOf(render(held.state))).toBe("alpha");
     }
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1, retired: 0 });
   });
@@ -325,7 +358,7 @@ test("a compile keeps nothing of a render once it returns", async () => {
 // redraws the map from the heap, so a change that grows any fails here rather
 // than quietly over-filling the budget. The bundled default, as `test/setup.ts`
 // leaves the XDG config empty.
-test("an entry, a compile and a view hold no more than the cache charges for them", () => {
+test("an entry, a compile and a view hold no more than the cache charges for them", async () => {
   const gc = exposeGc();
   const heapUsed = (): number => {
     gc();
@@ -390,7 +423,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // disposed (src/dsl/parts.ts), so it is charged for the most the bundled
   // default draws: a session that opened the door, the theme picker, every
   // list behind the ⚙ and the preset list, and every tab.
-  const walked = (i: number): SessionView => {
+  const walked = async (i: number): Promise<SessionView> => {
     const sid = `w${i}`;
     using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, viewFacts(dir + "/c0", sid));
     recordRender(sessionState, sid);
@@ -401,14 +434,14 @@ test("an entry, a compile and a view hold no more than the cache charges for the
       if (hit === undefined) throw new Error(`no link "${text}" in:\n${stripAnsi(last)}`);
       const { verb, value } = parseHandlerUrl(hit.url);
       const effects = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
       last = drawnBytes(held.view);
     }
     return held.view;
   };
-  views.push(walked(0));
+  views.push(await walked(0));
   const beforeWalked = heapUsed();
-  for (let i = 1; i <= N; i++) views.push(walked(i));
+  for (let i = 1; i <= N; i++) views.push(await walked(i));
   const perWalked = (heapUsed() - beforeWalked) / N;
   expect(perWalked).toBeLessThan(VIEW_BYTES);
 });
@@ -418,10 +451,10 @@ const MENU_WALK = [
   "🍫",
   "🎨 theme",
   "⚙",
-  "none ▀▀▀",
-  "accent",
-  "muted",
-  "default",
+  "◐ style ▀▀▀",
+  "🎼 variation",
+  "🔆 shade",
+  "▦ preset",
   "🎨 look",
   "📐 layout",
   "⚙ config",

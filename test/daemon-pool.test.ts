@@ -1,11 +1,11 @@
+import { processLauncher } from "../src/proc/launch";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { createDaemonPool } from "./helpers/daemon-pool";
-import { isConnectable } from "./helpers/daemon-wire";
-import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { spawnTestDaemon, type TestDaemonProcess } from "./helpers/spawn-test-daemon";
 import { throughout, until } from "./helpers/until";
 import { readStartTime } from "../src/daemon/process-fingerprint";
 
@@ -78,7 +78,7 @@ describe("daemon pool", () => {
       stdio: "ignore",
     });
     const deadPid = dead.pid!;
-    const startTimeRead = readStartTime(deadPid);
+    const startTimeRead = readStartTime(deadPid, processLauncher.launchSync);
     const deadStartTime = startTimeRead.kind === "start" ? startTimeRead.token : null;
     dead.kill("SIGKILL");
     await new Promise<void>((resolve) => dead.once("exit", () => resolve()));
@@ -134,131 +134,68 @@ describe("daemon pool", () => {
   });
 });
 
-// [LAW:verifiable-goals] End-to-end proof of the epic's own acceptance
-// criterion ("Full `pnpm test` peaks at ≤ the chosen ceiling of live
-// daemons — assert via a probe") against REAL cc-candybar daemon
-// subprocesses, not fake stand-ins. Pinned to an isolated size-2 pool (not
-// the shared default) so this test is fast and never contends with the rest
-// of the suite's real spawns.
-describe("daemon pool caps real daemon subprocesses (integration)", () => {
-  jest.setTimeout(30_000);
-
-  interface Fixture {
-    sockPath: string;
-    env: NodeJS.ProcessEnv;
-    cleanup(): void;
-  }
-
-  function makeFixture(prefix: string): Fixture {
-    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-    const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}c-`));
-    const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}g-`));
-    const stateDir = path.join(stateRoot, "cc-candybar");
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const sockPath = path.join(stateDir, "socket");
-    return {
-      sockPath,
-      env: {
-        ...process.env,
-        CC_CANDYBAR_SOCKET: sockPath,
-        XDG_STATE_HOME: stateRoot,
-        XDG_CACHE_HOME: cacheRoot,
-        XDG_CONFIG_HOME: configRoot,
-      },
-      cleanup(): void {
-        for (const d of [stateRoot, cacheRoot, configRoot]) {
-          try {
-            fs.rmSync(d, { recursive: true, force: true });
-          } catch {
-            // best-effort
-          }
-        }
-      },
-    };
-  }
-
-  test("a 3rd real daemon blocks until a slot frees, on a pool sized 2", async () => {
+// [LAW:verifiable-goals] The ceiling holds at the spawn: a process the pool has
+// no slot for never starts. What that needs is a process and a slot, not a
+// daemon, so each spawn runs a stand-in that leaves a marker and sleeps. It is
+// `/bin/sh -c` because the helper appends `daemon`, which node would read as its
+// subcommand and the ledger would count as a real start. To `sh -c` it is `$0`.
+// Pinned to an isolated size-2 pool, so it never contends with the suite's spawns.
+describe("the pool holds a spawn to its ceiling", () => {
+  test("a 3rd spawn starts nothing until a slot frees, on a pool sized 2", async () => {
     const pool = createDaemonPool(tmpPoolDir(), 2);
-    const fx1 = makeFixture("cc-candybar-poolit-1-");
-    const fx2 = makeFixture("cc-candybar-poolit-2-");
-    const fx3 = makeFixture("cc-candybar-poolit-3-");
+    const markers = tmpPoolDir();
+    const marker = (n: number): string => path.join(markers, `started-${n}`);
+    const spawned: TestDaemonProcess[] = [];
+    const standIn = async (n: number): Promise<TestDaemonProcess> => {
+      const proc = await spawnTestDaemon(process.env, pool, {
+        bin: "/bin/sh",
+        args: ["-c", `: > ${JSON.stringify(marker(n))}; exec sleep 60`],
+      });
+      spawned.push(proc);
+      return proc;
+    };
+    const started = (n: number) => (): boolean => fs.existsSync(marker(n));
 
+    let third: Promise<TestDaemonProcess> | undefined;
     try {
-      // Each spawn's own try/finally starts immediately after it succeeds —
-      // not after all three have been kicked off — so a later spawn (d2, d3)
-      // throwing can never leak an earlier one (d1) that already succeeded.
-      const d1 = await spawnTestDaemon(fx1.env, pool);
-      try {
-        const d2 = await spawnTestDaemon(fx2.env, pool);
-        try {
-          await until(() => isConnectable(fx1.sockPath), "d1's socket");
-          await until(() => isConnectable(fx2.sockPath), "d2's socket");
+      const first = await standIn(1);
+      await standIn(2);
+      await until(started(1), "the 1st stand-in starting");
+      await until(started(2), "the 2nd stand-in starting");
 
-          // Pool is full (2/2). The 3rd spawn must not even start its daemon
-          // process until a slot frees — that's the ceiling this pool exists
-          // to enforce. spawnTestDaemon(..., { timeoutMs: 15000 }) isn't an
-          // option (the signature doesn't expose it), so race the acquire
-          // itself against a short "still blocked" probe.
-          const d3Promise = spawnTestDaemon(fx3.env, pool);
-          try {
-            try {
-              await throughout(
-                async () => !(await isConnectable(fx3.sockPath)),
-                "d3's socket staying unbound",
-                800,
-              );
-            } finally {
-              // Free one slot UNCONDITIONALLY — whether or not the
-              // "still blocked" assertion above passed. d3Promise can only
-              // resolve once a slot frees; releasing here (rather than
-              // after the assertion, which might throw first) guarantees
-              // the drain in the outer catch below always has a slot to
-              // resolve against instead of hanging on spawnTestDaemon's own
-              // ~20s acquire timeout. killTree (not child.kill) — the `tsx`
-              // wrapper forks its own worker that holds the real socket,
-              // which survives as an orphan if only the wrapper dies.
-              d1.killTree();
-              d1.release();
-            }
-
-            const d3 = await d3Promise;
-            try {
-              await until(() => isConnectable(fx3.sockPath), "d3's socket");
-            } finally {
-              d3.killTree();
-              d3.release();
-            }
-          } catch (err) {
-            // An assertion above threw before `d3Promise` was drained (or
-            // before its own cleanup ran) — d1's slot is already free (the
-            // finally above guarantees that unconditionally), so d3Promise
-            // is resolvable; drain and clean it up rather than abandoning
-            // the handle. Tolerate d3Promise itself rejecting (a genuine
-            // spawn failure) — spawnTestDaemon already releases its slot
-            // internally on that path, so there's nothing further to clean.
-            try {
-              const d3 = await d3Promise;
-              d3.killTree();
-              d3.release();
-            } catch {
-              // already handled internally by spawnTestDaemon
-            }
-            throw err;
-          }
-        } finally {
-          d2.killTree();
-          d2.release();
-        }
-      } finally {
-        // Idempotent — a no-op if the pool-full branch above already freed
-        // d1 (release() is guarded; killTree tolerates an already-dead group).
-        d1.killTree();
-        d1.release();
-      }
+      third = standIn(3);
+      // Freed whether or not the wait passed: `third` settles only once a slot
+      // does, and the `finally` below waits on it.
+      await throughout(
+        () => !started(3)(),
+        "the 3rd stand-in staying unstarted",
+        800,
+      ).finally(() => {
+        first.killTree();
+        first.release();
+      });
+      await until(started(3), "the 3rd stand-in starting once a slot freed");
     } finally {
-      fx1.cleanup();
-      fx2.cleanup();
-      fx3.cleanup();
+      // Settled, not awaited: a third that fails is named by the wait above, and
+      // the kills below run either way.
+      await Promise.allSettled([third]);
+      for (const proc of spawned) {
+        proc.killTree();
+        proc.release();
+      }
     }
+  });
+});
+
+describe("a spawned process's stderr", () => {
+  // The shell exits first and its background job writes after it, so a tail
+  // taken at the exit misses what the process said.
+  test("the tail holds what arrives after the exit", async () => {
+    const proc = await spawnTestDaemon(
+      process.env,
+      createDaemonPool(tmpPoolDir(), 1),
+      { bin: "/bin/sh", args: ["-c", "(sleep 0.2; echo why >&2) & exit 1"] },
+    );
+    await expect(proc.stderrTail).resolves.toContain("why");
   });
 });

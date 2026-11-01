@@ -50,17 +50,18 @@ import {
   sprigFlow,
   sprigDicts,
 } from "@promptctl/go-template-js";
-import { RichText, type ColorDepth } from "@promptctl/rich-js";
+import { RichText, type ColorDepth, type Timeline } from "@promptctl/rich-js";
 import { _isComputingDerivation } from "mobx";
 import {
   animationFuncs,
   readableOnFunc,
   richTextFuncs,
   type DrawnAt,
+  type TemplateFrame,
 } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs, relativeTimeFuncs } from "./funcs.js";
 import type { Clock, ClockFactory } from "./clock.js";
-import { dateOf, type AnimationTime, type Instant } from "../utils/instant.js";
+import { dateOf, type Instant } from "../utils/instant.js";
 
 // [LAW:no-shared-mutable-globals] The draw in progress: the one record every
 // clock function reads, owned here and written only by `bindClock`, which binds
@@ -70,19 +71,48 @@ import { dateOf, type AnimationTime, type Instant } from "../utils/instant.js";
 // drawn. A read with no draw bound is a read outside any frame, and throws
 // [LAW:no-silent-failure] — only a projection reads the clock, and only a draw
 // evaluates one (brandon-unfiled-3248.8ro6, step 6).
-let drawing: { readonly at: Instant; readonly anim: AnimationTime } | null =
-  null;
+interface Drawing {
+  readonly at: Instant;
+  readonly timeline: Timeline;
+  readonly frame: TemplateFrame;
+  // The soonest moment, on the host clock, at which a hold an animation
+  // function told the frame ends.
+  soonest: number;
+}
+let drawing: Drawing | null = null;
 
-// [LAW:no-ambient-temporal-coupling] The instant and the animation reading of
-// the draw about to walk, for exactly as long as the returned handle is held.
-// Draws do not nest: a second bind while one is held would hand the inner
-// draw's instant to the outer's remaining reads, so it is refused.
-export function bindClock(at: Instant, anim: AnimationTime): Disposable {
+// A draw's bound clock: released when the draw ends, and asked, once its walk
+// is done, the soonest moment a hold told to it ends — Infinity when none was.
+export interface BoundClock extends Disposable {
+  heard(): number;
+}
+
+// [LAW:no-ambient-temporal-coupling] The instant and the session's animation
+// timeline of the draw about to walk, for exactly as long as the returned
+// handle is held. Draws do not nest: a second bind while one is held would hand
+// the inner draw's instant to the outer's remaining reads, so it is refused.
+// [LAW:one-source-of-truth] rich-js's `stepped`, `tween` and `loop` draw no
+// cells, so the frame they are evaluated for is the only place they say when
+// what they drew changes (`TemplateFrame.onHold`); the binding keeps that, and
+// the frame's own hold is its cells' and this one's together (src/dsl/render.ts).
+export function bindClock(at: Instant, timeline: Timeline): BoundClock {
   if (drawing !== null) {
     throw new Error("a draw is already in progress: draws do not nest");
   }
-  drawing = { at, anim };
+  const bound: Drawing = {
+    at,
+    timeline,
+    frame: {
+      time: at,
+      onHold: ({ nextChange }) => {
+        bound.soonest = Math.min(bound.soonest, nextChange);
+      },
+    },
+    soonest: Infinity,
+  };
+  drawing = bound;
   return {
+    heard: () => bound.soonest,
     [Symbol.dispose]: () => {
       drawing = null;
     },
@@ -97,10 +127,7 @@ export function bindClock(at: Instant, anim: AnimationTime): Disposable {
 // reaching it by a name it does not spell (`index . "clock"`).
 // [LAW:single-enforcer] exception: MobX's `_isComputingDerivation` is reached
 // here and nowhere else; it is true exactly while a derivation tracks.
-function drawInProgress(read: string): {
-  readonly at: Instant;
-  readonly anim: AnimationTime;
-} {
+function drawInProgress(read: string): Drawing {
   // A value that keeps its answer is refused first, drawn or not: its fix is
   // its template, whenever it is first read.
   if (_isComputingDerivation()) {
@@ -119,12 +146,38 @@ function drawInProgress(read: string): {
 // function passed in `extraFuncs` cannot capture a clock — none is in reach.
 const CLOCK: Clock = {
   now: () => dateOf(drawInProgress("now").at),
-  animatedAt: () => drawInProgress("animatedAt").anim,
+  frame: () => drawInProgress("frame").frame,
+  timeline: () => drawInProgress("timeline").timeline,
 };
 
+// rich-js's `frames` and `stepped`, the animation functions the bar's
+// templates draw with, evaluated for the draw's frame and run through
+// `timeline` — the host clock itself when none is given. `tween`, `loop` and
+// `glyphs` are not registered, so a template naming one is refused as an
+// unknown function. Every one of them says when what it drew changes on the
+// host clock: `frames` and `glyphs` on the cells they stamp, the rest to the
+// frame's `onHold` (`bindClock`).
+function animationPair(
+  frame: () => TemplateFrame,
+  timeline?: () => Timeline,
+): FuncMap {
+  const { frames, stepped } = animationFuncs(
+    frame,
+    timeline === undefined ? {} : { timeline },
+  );
+  // [LAW:no-silent-failure] A rich-js that drops either is a vocabulary the
+  // bundled bar's templates no longer load against.
+  if (frames === undefined || stepped === undefined) {
+    throw new Error(
+      "rich-js's animationFuncs no longer registers frames and stepped",
+    );
+  }
+  return { frames, stepped };
+}
+
 // The engine's own clock factories. `frames`/`stepped` are decoration, so they
-// draw at the session's animation clock and run at its speed;
-// `realtimeFrames`/`realtimeStepped` are the same pair at the instant, for a
+// run through the session's animation timeline, at its speed;
+// `realtimeFrames`/`realtimeStepped` are the same pair on the host clock, for a
 // readout of real time — the lane toggles' spinner, which shows frames arriving
 // at 30 a second and would read frozen at 20x (brandon-menus-sjhy.nt2)
 // [LAW:one-type-per-behavior].
@@ -151,15 +204,13 @@ const SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
 
 const CLOCK_FACTORIES: readonly ClockFactory[] = [
   (clock) => sprigDatetimeWhere(clock.now, true),
-  (clock) => animationFuncs(clock.animatedAt),
+  (clock) => animationPair(clock.frame, clock.timeline),
   (clock) =>
     Object.fromEntries(
-      Object.entries(animationFuncs(() => clock.now().getTime() / 1000)).map(
-        ([name, func]) => [
-          `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
-          func,
-        ],
-      ),
+      Object.entries(animationPair(clock.frame)).map(([name, func]) => [
+        `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
+        func,
+      ]),
     ),
   relativeTimeFuncs,
 ];

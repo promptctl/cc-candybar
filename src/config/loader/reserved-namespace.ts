@@ -12,6 +12,7 @@ import { ident } from "../ident.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { scopeOf } from "./plugin-scope.js";
 
 // [LAW:one-source-of-truth] The reserved namespaces, spelled once. Each is the
 // prefix one synthesis pass mints its artifacts under — the `state` var, the
@@ -92,6 +93,55 @@ export function reservedNamespaceCollisions(
           line: findKeyLine(ctx.source, ["root"]),
         });
       }
+    }
+  }
+}
+
+// [LAW:single-enforcer] A plugin scope (`plugins`, `repo`) is a root plugins
+// own: every name under it is declared by a plugin's own definition, and the
+// payload carries its sources there. A config file's own declaration there —
+// a variable named `repo`, an action `plugins.x.go`, a segment no plugin
+// declares — would shadow a plugin or the payload, so it is refused by every
+// config file alike, whichever scope that file's plugins load under. Only a
+// variable can shadow the payload's root itself; a segment, action or helper
+// named just `repo` sits beside every plugin's names — but a segment's own
+// `vars` are variables named under it, so a segment `repo`'s var `lit` is
+// `repo.lit`, a plugin's namespace, and is refused as one. A segment a plugin
+// beneath already declares is the exception: a file retunes it by field, as
+// it retunes any inherited segment.
+export function pluginScopeCollisions(
+  ctx: ValidateCtx,
+  out: Mutable<RawDslConfig>,
+  inherited: ReadonlySet<string>,
+): void {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments",
+  ] as const) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === undefined) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) — rename it`,
+        line: findKeyLine(ctx.source, [section, name]),
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const scope = scopeOf(name);
+      if (scope === undefined || inherited.has(segment)) continue;
+      ctx.issues.push({
+        path: `segments.${segment}.vars.${v}`,
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own — rename the var or the segment`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
+      });
     }
   }
 }

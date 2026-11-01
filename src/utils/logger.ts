@@ -23,7 +23,20 @@ export type LogLevel = "info" | "warn" | "error";
 // inject a different impl (a quiet default in tests) take this shape.
 export type DaemonLogger = (level: LogLevel, msg: string) => void;
 
+// [LAW:one-type-per-behavior] A log line that repeats only on change, one
+// per channel — the steady state of a one-minute clock is silence.
+export function changeLogger(
+  log: DaemonLogger,
+): (entry: [LogLevel, string]) => void {
+  let last: string | null = null;
+  return ([level, msg]) => {
+    if (msg === last) return;
+    last = msg;
+    log(level, msg);
+  };
+}
+
 // What every component logs through when its caller injects no sink: silent
 // unless CC_CANDYBAR_DEBUG is set, and never daemon.log — only the daemon
-// passes `dlog`.
+// passes its log.
 export const quietLogger: DaemonLogger = (_level, message) => debug(message);

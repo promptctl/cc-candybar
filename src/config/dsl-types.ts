@@ -48,12 +48,12 @@ import {
 //                     Output of `loadConfig`. Cross-refs and cycles have NOT
 //                     yet been checked at this stage.
 //
-//   ValidatedConfig — DslConfig + a phantom brand proving validateConfig()
+//   ValidatedConfig — DslConfig + a phantom brand proving validateRenderable()
 //                     has run. The renderer accepts only this type, so the
 //                     compiler structurally enforces "no unvalidated config
 //                     can reach rendering." The brand is module-scoped via
 //                     `unique symbol`, so the only construction site is
-//                     `validateConfig` itself.
+//                     `validateRenderable` itself.
 // [LAW:types-are-the-program] The recursive layout substrate collapses to
 // exactly two kinds: a `segment` leaf (a ref into the named `segments` block —
 // THE unit of rendering, a single template that IS its content) or a
@@ -80,8 +80,8 @@ export type Direction = (typeof DIRECTIONS)[number];
 // [LAW:one-source-of-truth] What a container's children are to the bar's
 // colour: a vertical container stacks ROWS (which choose the hue), a
 // horizontal one lines up the CELLS of a row (which choose the shade). Read by
-// the address builder (`childStep`) and by the loader's refusal of a
-// `distribution` inside a cell. [LAW:types-are-the-program] Total over
+// the address builder (`placeChildren`) and by the loader's refusal of a
+// `distribution` inside a row. [LAW:types-are-the-program] Total over
 // Direction, so a new direction is a compile error here.
 export const AXIS_OF: Readonly<Record<Direction, Axis>> = {
   vertical: "row",
@@ -141,6 +141,30 @@ export interface SegmentNode {
   // is made and `💾 save` writes it into the placement.
   // Synthesis-only, like `opens`: edit chrome mints one per declared setting.
   readonly drafts?: Readonly<Record<string, DraftSlot>>;
+  // The layer that placed this cell through its `insert` list rather than
+  // authoring it in a root: the file and the entry. Synthesis-only, like
+  // `opens`: the loader's one insert pass stamps it and no config can write
+  // it. Edit mode reads it to offer no edit on a cell that is an insert entry,
+  // which no click rewrites.
+  readonly insertedBy?: InsertedBy;
+}
+
+export interface InsertedBy {
+  readonly file: string;
+  readonly entry: string;
+}
+
+// [LAW:types-are-the-program] One cell a layer adds beside a placement its
+// bar already has: the edit-mode insert's addressing (an anchor placement id
+// and a side), so a layer never restates a row to add to it. Stamped at
+// parse with the file and entry that wrote it, which the loader's insert
+// pass carries onto the cell it places.
+export interface InsertCell {
+  readonly seg: string;
+  readonly id?: string;
+  readonly anchor: string;
+  readonly relation: "before" | "after";
+  readonly by: InsertedBy;
 }
 
 // One setting's unsaved value: the session key it is held at, and the `state`
@@ -235,9 +259,20 @@ export interface ContainerNode {
   // of the five shipped distributions. Absent ≡ `van-der-corput`, resolved once
   // at compile (`placedBy`). Per instance, not global: a `{{ menu }}`'s band is
   // the other kind of placer and carries the SAME field in its options dict.
-  // Choosing `monotonic` / `ends-interleaved` reads the sibling count, so adding
-  // a child re-spaces its siblings — a trade the author spends knowingly.
+  // Read on a row, which places every leaf it nests, and on a stack of rows;
+  // refused anywhere inside a row. Choosing `monotonic` / `ends-interleaved`
+  // reads the row's count, the farthest place any of its lines reaches, so
+  // adding a cell anywhere in the row re-spaces all of it — a trade the author
+  // spends knowingly.
   readonly distribution?: DistributionName;
+  // A horizontal container whose children share ONE place on the row: edit
+  // mode's chrome around the content cell it edits. Every other container
+  // inside a row is layout, and each leaf it holds takes its own place, since
+  // its cells sit side by side (`placeChildren` in src/dsl/node-registry.ts).
+  // A unit is one place so that entering edit mode recolours no cell.
+  // Synthesis-only, like a segment's `opens`: edit chrome is the one producer,
+  // and neither the node schema nor the root's lists the field.
+  readonly unit?: true;
 }
 
 export type LayoutNode = ContainerNode | SegmentNode;
@@ -259,10 +294,11 @@ export type LayoutNode = ContainerNode | SegmentNode;
 // whole bar, `distribution` places the rows — by derivation, not by listing: a
 // field added to ContainerNode reaches the root, its lowering (`rootOf`), its
 // projection (`rootNode`), and the rows-fragment schema (RecordSchema<Root>
-// fails to typecheck until it lists the field) without a second edit.
+// fails to typecheck until it lists the field) without a second edit. `unit`
+// is no field of a root: the root stacks rows, and only synthesis marks one.
 export type ContainerOwn = Omit<
   ContainerNode,
-  "kind" | "direction" | "children"
+  "kind" | "direction" | "children" | "unit"
 >;
 export interface Root extends ContainerOwn {
   readonly rows: Readonly<Record<string, LayoutNode>>;
@@ -396,6 +432,10 @@ export interface RawDslConfig {
   // A fragment over the bundled default's root — see RootFragment: a tree
   // replaces the default's rows, a rows map merges over them by name.
   readonly root?: RootFragment;
+  // Cells added beside placements of the bar this layer merges over. The
+  // loader places every layer's cells once, into each root that renders
+  // (presets.ts's placeInserts); the merged config holds only the result.
+  readonly insert?: readonly InsertCell[];
   readonly actions?: Readonly<Record<string, ActionDecl>>;
   // Named config fragments ("presets"): each an alternative `root`/`globals`
   // arrangement selected per session, the exact twin of `styles` one level up
@@ -498,7 +538,7 @@ export interface DslConfig {
 
 // [LAW:single-enforcer] The brand symbol is `unique` and module-private —
 // nothing outside this file can construct a value carrying it. The only
-// production-path producer is validateConfig() in dsl-loader.ts (one
+// production-path producer is validateRenderable() in dsl-loader.ts (one
 // callsite of `config as ValidatedConfig`). Renderer signatures require
 // ValidatedConfig; the type system therefore proves the validation step
 // ran before any render path consumed the config.
@@ -533,7 +573,7 @@ export type AuthoredVariableDecl =
 
 // [LAW:no-silent-failure] A plugin's data variable when the plugin did not
 // load: a DOCUMENT whose one outcome is the drop, so every template reading
-// `.plugins.<plugin>.data…` renders ⚠ naming why rather than failing the
+// `.<scope>.<plugin>.data…` renders ⚠ naming why rather than failing the
 // config that reads it. Synthesized by the plugin loader, never authored —
 // the variable loader accepts no `kind: "dropped"`.
 export interface DroppedVarDecl {
@@ -733,16 +773,31 @@ export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
 }
 
 // [LAW:one-source-of-truth] The templates a variable's declaration carries,
-// by field: a template variable's body and a source's cache key.
+// by field: a template variable's body and a source's cache key — listed once,
+// here, for the walk that reads them and the one that rewrites them.
+export function mapVariableTemplates(
+  v: VariableDecl,
+  f: (template: string, field: "template" | "cache.key") => string,
+): VariableDecl {
+  const body: VariableDecl =
+    v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
+  return hasCacheField(body) && "key" in body.cache
+    ? ({
+        ...body,
+        cache: { ...body.cache, key: f(body.cache.key, "cache.key") },
+      } as VariableDecl)
+    : body;
+}
+
 export function variableTemplates(
   v: VariableDecl,
 ): ReadonlyArray<readonly [field: "template" | "cache.key", template: string]> {
-  return [
-    ...(v.kind === "template" ? [["template", v.template] as const] : []),
-    ...(hasCacheField(v) && "key" in v.cache
-      ? [["cache.key", v.cache.key] as const]
-      : []),
-  ];
+  const found: Array<readonly [field: "template" | "cache.key", string]> = [];
+  mapVariableTemplates(v, (template, field) => {
+    found.push([field, template]);
+    return template;
+  });
+  return found;
 }
 
 export interface SegmentDecl {

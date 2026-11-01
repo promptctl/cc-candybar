@@ -5,6 +5,7 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   chmodSync,
@@ -15,15 +16,16 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
+import fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   RenderCache,
   type CacheEntry,
+  type LoadCause,
   type Hold,
   type RenderCacheObservers,
   type SessionView,
@@ -34,16 +36,22 @@ import {
   COMPILE_BYTES,
   VIEW_BYTES,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { Holds } from "../src/utils/holds";
 import { stateGate } from "../src/daemon/verbs/state-validators";
-import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  WatcherRegistry,
+  type WatcherCounters,
+} from "../src/daemon/cache/watchers";
 import type { DaemonLogger } from "../src/utils/logger";
 import { writeAtomic } from "../src/utils/atomic-write";
+import { editedConfig, editProjectConfig } from "./helpers/edited-config";
 import { ReloadSignal } from "./helpers/reload-signal";
+import { until } from "./helpers/until";
 import {
   walkNodes,
   type LayoutNode,
@@ -80,24 +88,27 @@ function makeCache(
   cleanups: Array<() => void>;
   reloads: ReloadSignal;
   watchers: WatcherRegistry;
+  counters: WatcherCounters;
 } {
   const cleanups: Array<() => void> = [];
-  const watchers = new WatcherRegistry({
-    counters: {
-      watchersOpened: 0,
-      watchersClosed: 0,
-      watchRefusals: 0,
-      watchErrors: 0,
-    },
-    logger: () => {},
-  });
+  const counters: WatcherCounters = {
+    watchersOpened: 0,
+    watchersClosed: 0,
+    watchRefusals: 0,
+    watchErrors: 0,
+    dirWatchesOpened: 0,
+    dirWatchesClosed: 0,
+  };
+  const watchers = new WatcherRegistry({ counters, logger: () => {} });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     {
+      launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       log,
@@ -111,7 +122,7 @@ function makeCache(
     },
   );
   cleanups.unshift(() => cache.close());
-  return { cache, cleanups, reloads, watchers };
+  return { cache, cleanups, reloads, watchers, counters };
 }
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
@@ -468,7 +479,7 @@ describe("RenderCache", () => {
         l.startsWith(`config watch bound projectDir=${dir} cwd=${dir} dirs=`),
       );
     const hears = (line: string, dir: string): boolean =>
-      / dirs=(.*) refused=\d+$/
+      / dirs=(.*) deaf=\d+$/
         .exec(line)![1]!
         .split(",")
         .includes(realpathSync(dir));
@@ -619,6 +630,91 @@ describe("RenderCache", () => {
     });
   });
 
+  // A reload that keeps its watch retries nothing: a config folder the OS
+  // refused waits for the registry's period or a new slot on it, so the fault
+  // the bar shows stands while the OS still refuses and clears within one
+  // period of the OS watching it again.
+  test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const at = realpathSync(dir);
+    const watch = fs.watch.bind(fs);
+    let refuse = true;
+    const spy = jest.spyOn(fs, "watch").mockImplementation(((
+      ...args: Parameters<typeof fs.watch>
+    ) => {
+      if (refuse && args[0] === at) throw new Error("EMFILE: too many open files");
+      return watch(...args);
+    }) as typeof fs.watch);
+    const { cache, cleanups, watchers } = makeCache();
+    try {
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      watchers.judge();
+      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      refuse = false;
+      cache.reload(dir, dir, undefined, { kind: "doctor" });
+      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      watchers.judge();
+      expect(entry.watch!.held.handle.deaf).toEqual([]);
+    } finally {
+      for (const fn of cleanups) fn();
+      spy.mockRestore();
+      cleanup();
+    }
+  });
+
+  // On Linux a directory watch binds an inode, and a strict ancestor renamed
+  // away reports nothing to it, so an entry whose project directory's parent
+  // is swapped (a project re-cloned beside the old one and moved into place)
+  // keeps a handle on the old tree, listening and deaf to the new one. The
+  // period's judgment rebinds it, and the edit after that is heard.
+  test("an entry whose project directory's parent is replaced by rename reads the new tree on the period's judgment, and hears the edit after it", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")));
+    const proj = join(root, "proj", "app");
+    const { cache, cleanups, reloads, watchers, counters } = makeCache();
+    try {
+      mkdirSync(proj, { recursive: true });
+      answerRepo(proj);
+      const cfg = join(proj, ".cc-candybar.json5");
+      const config = (value: string): string =>
+        JSON.stringify({
+          globals: {},
+          variables: { x: { kind: "literal", value } },
+          segments: {
+            only: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
+          },
+          root: { h: ["only"] },
+        });
+      writeFileSync(cfg, config("old"));
+      const entry = cache.getOrCreate(proj, proj, undefined);
+      const x = (): unknown => {
+        const decl = entry.state.config.variables.x;
+        if (decl === undefined) return "absent";
+        return decl.kind === "literal" ? decl.value : decl.kind;
+      };
+      expect(entry.configLayers).toEqual([cfg]);
+      expect(x()).toBe("old");
+
+      renameSync(join(root, "proj"), join(root, "old"));
+      mkdirSync(proj, { recursive: true });
+      writeFileSync(cfg, config("new"));
+      // On macOS the watch follows the path and would hear the write on its
+      // own, so what proves the judgment on both platforms is the handle it
+      // closes, before any window can land.
+      const closed = counters.dirWatchesClosed;
+      watchers.judge();
+      expect(counters.dirWatchesClosed).toBe(closed + 1);
+      await until(() => x() === "new", "the entry read the tree now at its path");
+      expect(entry.configLayers).toEqual([cfg]);
+
+      await reloads.after(entry, () => writeFileSync(cfg, config("edited")));
+      expect(x()).toBe("edited");
+    } finally {
+      for (const fn of cleanups) fn();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("a `{ rows }` fragment merges over the bundled rows and authors the floor preset's root", async () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
@@ -720,13 +816,10 @@ describe("RenderCache", () => {
       expect(entry.lastWarning).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
-      // watcher fires on file deletion in the same dir. Rewrite-then-unlink
-      // so every application of the mutation emits an event (a bare unlink
-      // of an already-absent file emits none) and ends with the file absent.
-      await reloads.after(entry, () => {
-        writeFileSync(cfgJson, validCfg);
-        unlinkSync(cfgJson);
-      });
+      // watcher fires on file deletion in the same dir.
+      await reloads.afterRemoving(entry, cfgJson, () =>
+        writeFileSync(cfgJson, validCfg),
+      );
       expect(entry.lastWarning).toBeNull();
       // The .json5 is still the resolved file; render state intact.
       expect(entry.configLayers).toEqual([cfgJson5]);
@@ -780,20 +873,37 @@ describe("RenderCache", () => {
     }
   });
 
+  test("a placement of an undeclared segment drops only its cell: the config loads, and the drop is its error", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      writeFileSync(
+        cfg,
+        `{ segments: { s: { template: "mine" } }, root: { h: ["s", "nope"] } }`,
+      );
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.dropped[0]?.message).toMatch(
+        /root entry "nope" does not match any declared segment/,
+      );
+      const placed = JSON.stringify(entry.state.config.root);
+      expect(placed).toContain('"s"');
+      expect(placed).not.toContain('"nope"');
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
   test("a duplicate key's advisory survives beside a fatal validation error", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups } = makeCache();
     try {
       const cfg = join(dir, ".cc-candybar.json5");
-      // The duplicate plus a dangling segment reference: the reference is
-      // fatal; the advisory still reaches the strip beside it.
-      writeFileSync(
-        cfg,
-        DUPLICATE_KEY_CONFIG.replace(
-          `root: { h: ["s"] }`,
-          `root: { h: ["nope"] }`,
-        ),
-      );
+      // The duplicate plus a dangling variable reference: the reference is
+      // fatal; the advisory still reaches the bar beside it.
+      writeFileSync(cfg, DUPLICATE_KEY_CONFIG.replace("{{ .x }}", "{{ .nope }}"));
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toContain("nope");
       expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
@@ -950,11 +1060,13 @@ describe("RenderCache", () => {
   // per entry, and a change to them reloads the entries under the new answer.
   test("an entry follows the answers through the cache's one watch", async () => {
     const { dir, cleanup } = mkConfigDir();
-    const lines: string[] = [];
-    const { cache, cleanups, reloads, watchers } = makeCache(
-      undefined,
-      (_level, msg) => lines.push(msg),
-    );
+    const causes: LoadCause["kind"][] = [];
+    const { cache, cleanups, reloads, watchers } = makeCache({
+      onReload: (entry, sessions, cause, settled) => {
+        causes.push(cause.kind);
+        reloads.observers.onReload!(entry, sessions, cause, settled);
+      },
+    });
     try {
       const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
@@ -971,9 +1083,7 @@ describe("RenderCache", () => {
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
-      expect(lines).toContain(
-        "repo-config answers changed, reloading entries=1",
-      );
+      expect(causes).toContain("answers-watch");
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1013,12 +1123,16 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
       lines.push(msg),
     );
+    // The entry the test reloads loads a file it edits, so the reload builds.
+    const cfg = editedConfig();
+    cleanups.push(cfg.cleanup);
+    const fileOf = (i: number) => (i === 4 ? cfg.file : undefined);
     try {
       cache
         .holdSession("/p0", "/p0", undefined, viewFacts("/p0", "s0"))
         [Symbol.dispose]();
       for (let i = 0; i < 5; i++)
-        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+        cache.getOrCreate(`/p${i}`, `/p${i}`, fileOf(i));
       const evict = lines.filter((l) => l.startsWith("config disposed "));
       expect(evict).toHaveLength(1);
       expect(evict[0]).toMatch(
@@ -1032,7 +1146,8 @@ describe("RenderCache", () => {
         ],
       );
 
-      cache.reload("/p4", "/p4", undefined);
+      cfg.edit();
+      cache.reload("/p4", "/p4", cfg.file, { kind: "write" });
       const reload = lines.filter((l) =>
         l.startsWith("config disposed reason=reload"),
       );
@@ -1043,7 +1158,7 @@ describe("RenderCache", () => {
 
       // A close tears every entry down at once, but a state a render still
       // holds waits for it, as an eviction's does.
-      const hold = cache.hold("/p4", "/p4", undefined);
+      const hold = cache.hold("/p4", "/p4", cfg.file);
       const closes = () =>
         lines.filter((l) => l.startsWith("config disposed reason=close"));
       cache.close();
@@ -1119,13 +1234,16 @@ describe("RenderCache", () => {
     );
     const disposals = () =>
       lines.filter((l) => l.startsWith("config disposed reason=reload"));
+    const cfg = editedConfig();
+    cleanups.push(cfg.cleanup);
     try {
-      const hold = cache.hold("/p0", "/p0", undefined);
-      cache.reload("/p0", "/p0", undefined);
+      const hold = cache.hold("/p0", "/p0", cfg.file);
+      cfg.edit();
+      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
       // The entry serves the fresh state; the render keeps the one it
       // started on, undisposed, until it returns.
       expect(hold.entry.state).not.toBe(hold.state);
-      expect(cache.getOrCreate("/p0", "/p0", undefined)).toBe(hold.entry);
+      expect(cache.getOrCreate("/p0", "/p0", cfg.file)).toBe(hold.entry);
       expect(disposals()).toEqual([]);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 1 });
       hold[Symbol.dispose]();
@@ -1136,7 +1254,8 @@ describe("RenderCache", () => {
       ]);
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
-      cache.reload("/p0", "/p0", undefined);
+      cfg.edit();
+      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
       expect(disposals()).toHaveLength(2);
       expect(disposals()[1]).toMatch(/ held=0$/);
     } finally {
@@ -1149,14 +1268,17 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
       lines.push(msg),
     );
+    const cfg = editedConfig();
+    cleanups.push(cfg.cleanup);
     try {
       const holds: Hold[] = [
-        cache.hold("/p0", "/p0", undefined),
-        cache.hold("/p0", "/p0", undefined),
+        cache.hold("/p0", "/p0", cfg.file),
+        cache.hold("/p0", "/p0", cfg.file),
       ];
       expect(holds[1]!.state).toBe(holds[0]!.state);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
-      cache.reload("/p0", "/p0", undefined);
+      cfg.edit();
+      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
@@ -1226,7 +1348,7 @@ describe("RenderCache", () => {
       mkdirSync(root, { recursive: true });
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(
-        entry.state.config.segments["plugins.deploy.status"],
+        entry.state.config.segments["repo.deploy.status"],
       ).toBeUndefined();
       // Staged then renamed in, so every repetition is an event in the root.
       const staging = join(dir, "staging");
@@ -1241,7 +1363,7 @@ describe("RenderCache", () => {
       });
       expect(entry.lastError).toBeNull();
       expect(
-        entry.state.config.segments["plugins.deploy.status"],
+        entry.state.config.segments["repo.deploy.status"],
       ).toBeDefined();
     } finally {
       cleanup();
@@ -1266,8 +1388,10 @@ describe("RenderCache idle sweep", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -1298,9 +1422,9 @@ describe("RenderCache idle sweep", () => {
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "render cache used after close",
       );
-      expect(() => cache.reload(dir, dir, undefined)).toThrow(
-        "render cache used after close",
-      );
+      expect(() =>
+        cache.reload(dir, dir, undefined, { kind: "write" }),
+      ).toThrow("render cache used after close");
     } finally {
       cache.close();
       jest.useRealTimers();
@@ -1316,8 +1440,10 @@ describe("RenderCache idle sweep", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -1370,8 +1496,10 @@ describe("RenderCache idle sweep", () => {
     const logs: string[] = [];
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState,
         watchers,
         log: (_level, message) => logs.push(message),
@@ -1472,8 +1600,10 @@ describe("RenderCache frames and pins", () => {
     const logs: string[] = [];
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: (_level, line) => logs.push(line),
@@ -1618,8 +1748,10 @@ describe("RenderCache frames and pins", () => {
     let opens = 0;
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: (_level, line) => logs.push(line),
@@ -1642,7 +1774,8 @@ describe("RenderCache frames and pins", () => {
         );
       }
       const unpin = cache.pin("s1");
-      cache.reload(dir, dir, undefined);
+      editProjectConfig(dir);
+      cache.reload(dir, dir, undefined, { kind: "write" });
       expect(logs).toContainEqual(
         expect.stringMatching(
           /^session view reopen failed sid="s1": Error: the successor broke/,
@@ -1683,8 +1816,10 @@ describe("RenderCache frames and pins", () => {
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: () => {},
@@ -1719,8 +1854,10 @@ describe("RenderCache frames and pins", () => {
     let opens = 0;
     const cache = new RenderCache(
       {
+        launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: () => {},
@@ -1758,7 +1895,8 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request, opened } = pinCache();
     try {
       request("s1", dirs[0]!);
-      cache.reload(dirs[0]!, dirs[0]!, undefined);
+      editProjectConfig(dirs[0]!);
+      cache.reload(dirs[0]!, dirs[0]!, undefined, { kind: "write" });
       expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
         "request",
         "reload",

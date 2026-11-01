@@ -26,6 +26,7 @@ import {
   type Asked,
   type Width,
   type CheckReport,
+  type ConfigFacts,
   type DaemonFacts,
   type DoctorFacts,
   type InstallFacts,
@@ -66,6 +67,11 @@ export function doctorReportKeys(checkName: string): ReportKeys {
     fixable: `${base}fixable`,
     sighting: `${base}sighting`,
   };
+}
+
+// Which spelling named the config the run judged.
+export function configFields({ target }: ConfigFacts): string {
+  return `configTarget=${target.source}`;
 }
 
 // [LAW:nothing-unseen] What the links check reasoned over, as logfmt fields:

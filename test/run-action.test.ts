@@ -6,28 +6,31 @@
 // cache over the payload providers, declared by `declareLanes`, drawn from
 // `sessionSource`.
 
+import { processLauncher, type Launcher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
+import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
   loadFromDisk,
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { declareLanes, renderOptionsOf } from "../src/daemon/render-payload";
 import { sessionSource, type SessionSource } from "../src/daemon/session-source";
 import { SessionState } from "../src/daemon/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { drawDsl } from "../src/dsl/render";
+import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { parseDslConfig } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { instantOf } from "../src/utils/instant";
-import { launch } from "../src/proc/launch";
 import { Runs, type RunRequest } from "../src/daemon/runs";
 import { sessionEnv } from "../src/daemon/session-env";
 import { lastClickError } from "../src/daemon/click-error";
@@ -49,7 +52,7 @@ import { linkUrls } from "./helpers/ansi";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
-import { until } from "./helpers/until";
+import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
@@ -75,12 +78,10 @@ function write(rel: string, contents: string): string {
   return p;
 }
 
-// The fixture program, in the plugin's folder: after `DELAY` seconds it writes
-// the session's file whole, by rename, with what it saw — its directory and
-// the session variables of its environment — and exits `EXIT`, saying
-// `SAY` on stderr.
+// The fixture program, in the plugin's folder: it writes the session's file
+// whole, by rename, with what it saw — its directory and the session variables
+// of its environment — and exits `EXIT`, saying `SAY` on stderr.
 const PROGRAM = `#!/bin/sh
-sleep "\${DELAY:-0}"
 sid="$CLAUDE_CODE_SESSION_ID"
 mkdir -p session
 printf '{"home":"%s","cwd":"%s","sid":"%s","project":"%s","config":"%s","tmux":"%s","pane":"%s"}' \\
@@ -115,7 +116,7 @@ function plugin(actions?: string): string {
       actions: ${
         actions ??
         `{
-        go: { run: ["./write.sh", "{{ .session.id }}"], env: { HOME_VALUE: "{{ .plugins.q.doc.home }}", DELAY: "{{ .plugins.q.doc.delay }}" }, refreshes: ["status"] },
+        go: { run: ["./write.sh", "{{ .session.id }}"], env: { HOME_VALUE: "{{ .plugins.q.doc.home }}" }, refreshes: ["status"] },
         go2: { run: ["./write.sh"], env: { HOME_VALUE: "{{ .plugins.q.doc.home2 }}" }, refreshes: ["status"] },
       }`
       },
@@ -148,26 +149,46 @@ interface Rig {
   readonly lines: string[];
 }
 
-// The daemon's own composition (src/daemon/server.ts): the render cache, the
+// A fake of the launch port: the program runs from the call until the test says
+// it exited, so "still running" is a state the test holds, with no process
+// behind it and no sleep standing in for it. A close aborts it, as it would a
+// child.
+function heldLaunch() {
+  let exit!: () => void;
+  const launch: Launcher["launch"] = (opts) =>
+    new Promise((resolve) => {
+      exit = () => resolve({ ok: true, stdout: "", stderr: "", exitCode: 0 });
+      opts.signal?.addEventListener("abort", () =>
+        resolve({ ok: false, reason: "aborted", stdout: "", stderr: "", exitCode: null, signal: null }),
+      );
+    });
+  return { launch, exit: () => exit() };
+}
+
+// The daemon's own composition (src/daemon/daemon.ts): the render cache, the
 // storage owner, and the run owner over the same storage and session state.
-function rig(timeoutMs?: number): Rig {
+function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const lines: string[] = [];
   const log = (level: string, message: string): void => {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({ logger: log });
   const providers = createPayloadProviders({
+    launcher: processLauncher,
     watchers,
+    fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
     {
+      launcher: processLauncher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),
@@ -186,7 +207,6 @@ function rig(timeoutMs?: number): Rig {
     state: sessionState,
     log,
     now: () => instantOf(new Date()),
-    timeoutMs,
   });
   cleanups.push(() => {
     runs.close();
@@ -285,7 +305,7 @@ function clickContext(r: Rig, view: SessionView<SessionSource>, over: Partial<Ve
   r.sessionState.set(
     SID,
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: dir, cwd: dir, configFile: null }),
+    encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }),
   );
   r.sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ claudeConfigDir: "/u/.claude-x" }));
   return {
@@ -324,6 +344,7 @@ describe("a run's declaration", () => {
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
     const loaded = loadFromDisk(dir, dir, config(["mine"]), {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -332,7 +353,7 @@ describe("a run's declaration", () => {
       expect(loaded.error).toBeNull();
       expect(loaded.state!.config.actions["plugins.p.go"]).toEqual({
         run: ["./write.sh", "{{ .session.id }}"],
-        env: { HOME_VALUE: "{{ .plugins.q.doc.home }}", DELAY: "{{ .plugins.q.doc.delay }}" },
+        env: { HOME_VALUE: "{{ .plugins.q.doc.home }}" },
         refreshes: [STATUS],
         cwd: path.join(dir, "p"),
       });
@@ -349,6 +370,7 @@ describe("a run's declaration", () => {
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, file, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -431,14 +453,14 @@ describe("a run link", () => {
     await answered(view, DOC);
     // q's source: no segment placed or unplaced reads it, only `go`'s env.
     expect([...view.lanes().sources.keys()]).toEqual(expect.arrayContaining([STATUS, DOC]));
-    await writeUntilRead(view, DOC, SID, { home: "/h/other", delay: "0" });
+    await writeUntilRead(view, DOC, SID, { home: "/h/other" });
     const { links, errors } = draw(view);
     expect(errors).toEqual([]);
     const link = runLink(links, "plugins.p.go");
     expect(link.sid).toBe(SID);
     expect(link.drawn).toEqual({
       run: ["./write.sh", SID],
-      env: { HOME_VALUE: "/h/other", DELAY: "0" },
+      env: { HOME_VALUE: "/h/other" },
     });
     const declaration = declarationOf(view, link.name);
     expect(TEST_SIGNER.verify({ sessionId: link.sid, action: link.name, declaration, evaluated: link.evaluated }, link.mac)).toBe(
@@ -461,7 +483,7 @@ describe("a click on a run link", () => {
   async function drawnLink(r: Rig) {
     const view = viewOf(r, config(["plugins.p.shown", "plugins.p.go"]));
     await answered(view, DOC);
-    await writeUntilRead(view, DOC, SID, { home: "/h/new", delay: "1" });
+    await writeUntilRead(view, DOC, SID, { home: "/h/new" });
     return { view, link: runLink(draw(view).links, "plugins.p.go") };
   }
 
@@ -485,8 +507,8 @@ describe("a click on a run link", () => {
     const ctx = clickContext(r, view);
     // Another session that has rendered: what its link must prove is the
     // signature.
-    r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, configFile: null }));
-    expect(() => clickUrl(relink(tampered), ctx)).toThrow(BadVerbArgs);
+    r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }));
+    await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(BadVerbArgs);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     expect(r.lines).toContainEqual(
       expect.stringMatching(
@@ -501,7 +523,7 @@ describe("a click on a run link", () => {
   test("a link naming a session that has never rendered is refused, and nothing runs", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
-    expect(() => clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view))).toThrow(
+    await expect(clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view))).rejects.toThrow(
       "session s3 has not rendered yet — no config to act on",
     );
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
@@ -517,10 +539,10 @@ describe("a click on a run link", () => {
       actions: { ...drawnUnder.actions, [link.name]: { ...decl, run: ["./other.sh", ...decl.run.slice(1)] } },
     } as typeof drawnUnder;
     const ctx = clickContext(r, view, { configFor: () => edited });
-    expect(() => clickUrl(link.url, ctx)).toThrow(/its action has been edited since it was drawn/);
+    await expect(clickUrl(link.url, ctx)).rejects.toThrow(/its action has been edited since it was drawn/);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     // The same link under the declaration it was drawn from runs.
-    clickUrl(link.url, clickContext(r, view));
+    await clickUrl(link.url, clickContext(r, view));
     expect(r.runs.stats()).toMatchObject({ started: 1 });
   });
 
@@ -528,7 +550,7 @@ describe("a click on a run link", () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
     const ctx = clickContext(r, view, { links: linkSigner(Buffer.alloc(32, 9)) });
-    expect(() => clickUrl(link.url, ctx)).toThrow(/signature does not match/);
+    await expect(clickUrl(link.url, ctx)).rejects.toThrow(/signature does not match/);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
   });
 
@@ -541,7 +563,7 @@ describe("a click on a run link", () => {
         name: action,
         mac: TEST_SIGNER.sign({ sessionId: SID, action, declaration: "[]", evaluated: link.evaluated }),
       };
-      expect(() => clickUrl(relink(forged), clickContext(r, view))).toThrow(
+      await expect(clickUrl(relink(forged), clickContext(r, view))).rejects.toThrow(
         `"${action}" is not a run action this session's config declares`,
       );
     }
@@ -549,24 +571,41 @@ describe("a click on a run link", () => {
     expect(r.lines).toContainEqual(expect.stringContaining('run refused sid=s1 action=plugins.p.nope reason="\\"plugins.p.nope\\" is not a run action'));
   });
 
-  test("the click returns before the program exits; the source reads pending until it does, then the program's write; the program sees the session, never the daemon", async () => {
-    daemonSessionEnv();
-    const r = rig();
+  test("the click returns with the program still running: the source draws its loading cell until the program exits, then its write", async () => {
+    const program = heldLaunch();
+    const r = rig(program.launch);
     const { view, link } = await drawnLink(r);
     await writeUntilRead(view, STATUS, SID, { home: "/h/old" });
     expect(draw(view).text).toContain("home=/h/old");
 
-    const clicked = Date.now();
-    clickUrl(link.url, clickContext(r, view));
-    // The program sleeps a second before it writes: the click did not wait.
-    expect(Date.now() - clicked).toBeLessThan(500);
+    await clickUrl(link.url, clickContext(r, view));
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 1 });
-    const during = view.lanes().sources.get(STATUS)!.current();
-    expect(during).toMatchObject({ kind: "pending", why: "superseded" });
-    expect(draw(view).text).not.toContain("home=/h/old");
+    // `superseded` is the state no request waits on
+    // (test/render-payload-outcomes.test.ts).
+    expect(view.lanes().sources.get(STATUS)!.current()).toMatchObject({ kind: "pending", why: "superseded" });
+    const during = draw(view).text;
+    expect(during).toContain(LOADING_GLYPH);
+    expect(during).not.toContain("home=/h/old");
 
+    // Through real turns with its write on disk, so a source resumed before the
+    // exit would draw it. A slow machine shortens this hold and cannot fail it.
+    programWrites(SID, { home: "/h/new" });
+    await throughout(() => draw(view).text.includes(LOADING_GLYPH), "the loading cell while the program runs", 200);
+
+    program.exit();
+    await until(() => draw(view).text.includes("home=/h/new"), "the program's write");
+    expect(r.runs.stats()).toMatchObject({ started: 1, running: 0 });
+  });
+
+  test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
+    daemonSessionEnv();
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+
+    await clickUrl(link.url, clickContext(r, view));
     await until(() => draw(view).text.includes("home=/h/new"), "the program's write", 10_000);
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
+    expect(lastClickError(r.sessionState, SID)).toBeNull();
     const read = view.lanes().sources.get(STATUS)!.current();
     if (read.kind !== "ok") throw new Error(JSON.stringify(read));
     expect(read.value).toEqual({
@@ -583,7 +622,6 @@ describe("a click on a run link", () => {
     expect(r.lines).toContainEqual(
       expect.stringMatching(/^info run sid=s1 action=plugins\.p\.go program=\.\/write\.sh outcome=ok exit=0 took=\d+ refreshed=plugins\.p\.status$/),
     );
-    expect(lastClickError(r.sessionState, SID)).toBeNull();
   });
 });
 
@@ -602,7 +640,7 @@ describe("the run owner", () => {
         held.push(`supersede ${key.folder} ${sid}`);
         return () => held.push(`resume ${key.folder} ${sid}`);
       },
-      launch,
+      launch: processLauncher.launch,
       state: sessionState,
       log: (level, message) => lines.push(`${level} ${message}`),
       now: () => instantOf(new Date()),

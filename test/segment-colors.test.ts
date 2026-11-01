@@ -11,6 +11,7 @@
 import { TEST_ENGINE } from "./helpers/test-engine";
 import {
   Palette,
+  getThemePalette,
   parseRgbHex,
   ColorRgba,
   Oklch,
@@ -35,32 +36,40 @@ import {
 import type { ActiveSegmentRef } from "../src/render/active-segment";
 import { segmentColorFuncs } from "../src/render/segment-color";
 import type { Disclosure } from "../src/themes/decor";
+import { DEFAULT_DECOR } from "./helpers/decor";
 import {
   transposedPalette,
   paletteForThemeName,
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
+import type { PaletteRole, RichText, Style, ThemeKey } from "@promptctl/rich-js";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 
 // ─── Test palette ─────────────────────────────────────────────────────────────
 
+// Hand-spelled roles laid over a bundled theme's complete set, as `buildPalette`
+// would re-derive from them and move the colours each case measures on paper.
+const withRoles = (name: string, stated: ReadonlyMap<PaletteRole, ColorRgba>): Palette =>
+  new Palette(
+    name,
+    true,
+    getThemePalette("nord").mapRoles((colour, role) => stated.get(role) ?? colour),
+  );
+
 function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
-  const vars = new Map<string, ColorRgba>([
+  const vars = new Map<PaletteRole, ColorRgba>([
     ["primary", parseRgbHex(primaryHex)],
     ["error", parseRgbHex("ff4444")],
-    ["info", parseRgbHex("44aaff")],
+    ["secondary", parseRgbHex("44aaff")],
     ["success", parseRgbHex("44cc88")],
     ["surface", parseRgbHex("1a1a2e")],
     ["text", parseRgbHex("eeeeee")],
     // The two poles `textOn` chooses an unauthored foreground between.
     ["foreground", parseRgbHex("eeeeee")],
-    // transposePalette derives the dark flag from "background" (required for
-    // any non-identity key); real registry palettes always carry it.
     ["background", parseRgbHex("12121a")],
   ]);
-  return new Palette(name, true, vars);
+  return withRoles(name, vars);
 }
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
@@ -103,11 +112,7 @@ function resolve(
 }
 
 // This file is about bg/fg resolution; the disclosure only rides the record.
-const DISCLOSURE: Disclosure = {
-  hue: "primary",
-  depth: 0,
-  ground: [{ hue: "primary", shade: "base" }],
-};
+const DISCLOSURE: Disclosure = { decor: DEFAULT_DECOR, depth: 0 };
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
 const TINT = parseRgbHex("102030");
@@ -227,6 +232,64 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 1c. roleTextOn: a role's text on a ground, selected among the colours the
+//     theme names for the role
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("roleTextOn: a role's text on a ground is a colour the theme names for the role, never a synthesised one", () => {
+  // A role whose text colour and ladder are spelled by hand, so each answer
+  // below is one entry, measured on paper against the ground it is asked for.
+  const RED = new Map<PaletteRole, ColorRgba>([
+    ["text-error", parseRgbHex("c86464")],
+    ["error", parseRgbHex("a03c3c")],
+    ["error-lighten-1", parseRgbHex("b45050")],
+    ["error-lighten-2", parseRgbHex("d27878")],
+    ["error-lighten-3", parseRgbHex("f0a0a0")],
+    ["error-darken-1", parseRgbHex("822828")],
+    ["error-darken-2", parseRgbHex("641414")],
+    ["error-darken-3", parseRgbHex("460000")],
+  ]);
+  const on = (ground: string, palette = withRoles("reds", RED), role = "error"): string => {
+    const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
+    const engine = createCcCandybarEngine({ ...TEST_ENGINE, extraFuncs: segmentColorFuncs(ref) });
+    openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
+    return engine
+      .parse(`{{ roleTextOn "${role}" "${ground}" }}`)
+      .evaluate({})
+      .map((f) => f.plain)
+      .join("");
+  };
+
+  test("the role's text colour, where it clears the text floor, though a rung stands farther off", () => {
+    // On black: text-error 5.46:1, error-lighten-3 10.2:1.
+    expect(on("#000000")).toBe("#c86464");
+  });
+
+  test("otherwise the role itself where it clears, though a rung stands farther off", () => {
+    // On white, whose pole is black: text-error 3.84:1, error 6.55:1,
+    // darken-1 9.20:1.
+    expect(on("#ffffff")).toBe("#a03c3c");
+  });
+
+  test("otherwise the first rung out toward the pole the ground stands farther from that clears it, not the farthest", () => {
+    // On #202020, whose pole is white: text-error 4.23:1, error 2.49:1,
+    // lighten-1 3.26:1, lighten-2 5.20:1, lighten-3 7.94:1.
+    expect(on("#202020")).toBe("#d27878");
+  });
+
+  test("where none of the role's colours clears it, the one standing farthest off, on either side of the ground", () => {
+    // On #707070, whose pole is white yet whose lightenings close in on it:
+    // lighten-3 2.41:1 at best, darken-3 3.37:1, text-error 1.29:1.
+    expect(on("#707070")).toBe("#460000");
+  });
+
+  test("a role the palette names no full ladder for fails loudly, naming the missing entry, even where the text colour reads", () => {
+    // nord's text-muted reads on black, and no theme has a muted ladder.
+    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(/"muted" did not resolve/);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // 2. Color references: a bare palette name and a computed hex take ONE path
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -272,7 +335,7 @@ describe("conditional bg template", () => {
   const h = makeHarness();
   const palette = makeTestPalette();
   const bgTpl = h.parse(
-    "{{ if gt .percent 90.0 }}error{{ else if gt .percent 75.0 }}info{{ else }}success{{ end }}",
+    "{{ if gt .percent 90.0 }}error{{ else if gt .percent 75.0 }}secondary{{ else }}success{{ end }}",
   );
 
   test("percent > 90 → error color", () => {
@@ -280,7 +343,7 @@ describe("conditional bg template", () => {
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
-  test("percent 76–90 → info color", () => {
+  test("percent 76–90 → secondary color", () => {
     const style = resolve(h, palette, bgTpl, undefined, { percent: 80 });
     expect(style.bgcolor?.value?.hex).toBe("#44aaff");
   });
@@ -514,7 +577,7 @@ describe("both bg and fg resolved", () => {
 // [LAW:behavior-not-structure] The hue behavior is a property of the palette
 // handed to resolveSegmentColors, not an option of it. These assert the
 // observable: resolved hex through a transposed palette. The anchor rule itself
-// (error/success/warning hue-locked, info NOT) is owned + exhaustively tested in
+// (error/success/warning hue-locked, the rest not) is owned + exhaustively tested in
 // rich-js (transposePalette / ANCHORED_ROOTS); here we assert only that
 // cc-candybar wires it through correctly.
 // ────────────────────────────────────────────────────────────────────────────
@@ -565,12 +628,10 @@ describe("per-segment hue via palette transposition", () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
-    // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
-    // does not. This is the drift the reshaping removed.
+  test("hueShift 30 → a role rich-js does not anchor transposes", () => {
     const shifted = transposedPalette(base, hueKey(30));
     expect(
-      maxChannelDelta(shifted.get("info")!, base.get("info")!),
+      maxChannelDelta(shifted.get("secondary"), base.get("secondary")),
     ).toBeGreaterThan(5);
   });
 
@@ -598,7 +659,7 @@ describe("per-segment hue via palette transposition", () => {
     const h = makeHarness();
     const shifted = transposedPalette(base, hueKey(60));
     const bgTpl = h.parse("surface");
-    const fgTpl = h.parse("info");
+    const fgTpl = h.parse("secondary");
     const style = resolve(h, shifted, bgTpl, fgTpl);
     const baseStyle = resolve(h, base, bgTpl, fgTpl);
     expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);

@@ -23,7 +23,7 @@
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
 // as data). The generic engine never imports this module.
 
-import { RichText, Style } from "@promptctl/rich-js";
+import { RichText, Style, type ColorRgba } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
@@ -47,7 +47,7 @@ import {
   requireActiveSegment,
   type ActiveSegmentRef,
 } from "./active-segment.js";
-import { placedBy } from "../themes/decor.js";
+import { bandFor, placedBy } from "../themes/decor.js";
 
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
@@ -69,8 +69,8 @@ export function cellWidth(text: string): number {
 // past it by both — the maximally-packed middle pages once overflowed and the
 // terminal ate the trailing →. Reserved HERE, at the row-fitting seam, rather
 // than by shrinking the width every template reads; stripChromeCols measures
-// the per-shape geometry. The picker and the carousel both fit a row by this
-// one budget.
+// the per-shape geometry. Every row-laying picker fits a row by this one
+// budget.
 export function rowBudget(runtime: ActionRuntime): number {
   const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
   return Math.max(1, width - chromeCols - 2 * padding);
@@ -210,7 +210,7 @@ export interface PickerStep {
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
 // to declared actions; this asserts the KIND each must be (apply ⇒ set-option,
 // page ⇒ set-int) — a wrong kind is an author error surfaced loudly at render
-// (composeWithDiagnostics shows it), not a silent empty picker.
+// (the bar's diagnostics show it), not a silent empty picker.
 export function requireKind<K extends CompiledActionDecl["kind"]>(
   runtime: ActionRuntime,
   name: string,
@@ -365,10 +365,11 @@ export function renderPicker(
     groups: apply.library.groups,
     entries: apply.options.map(apply.library.entry),
   };
+  const labelOf = apply.labelOf ?? ((option: string) => option);
   // A grid's cells are drawn once: measured to page them, then laid.
   const gridFaces =
     catalogue === undefined
-      ? apply.options.map((option, i) => optionFace(i, option))
+      ? apply.options.map((option, i) => optionFace(i, labelOf(option)))
       : [];
   const pages: readonly LibraryPageLayout[] =
     catalogue !== undefined
@@ -508,18 +509,18 @@ export function renderPicker(
       );
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i) => cellWidth(apply.options[i]!)),
+      ...section.indices.map((i) => cellWidth(labelOf(apply.options[i]!))),
     );
     for (const i of section.indices) {
-      const option = apply.options[i]!;
+      const name = labelOf(apply.options[i]!);
       // An authored description is free text and a row is one cell: control
       // characters and line breaks fold to single spaces, as a diagnostic's do.
       const authored = catalogue.entries[i]!.description;
       const description =
         authored === undefined ? undefined : sanitizeText(authored);
-      const gap = " ".repeat(nameWidth - cellWidth(option) + 2);
+      const gap = " ".repeat(nameWidth - cellWidth(name) + 2);
       const row =
-        description === undefined ? option : `${option}${gap}${description}`;
+        description === undefined ? name : `${name}${gap}${description}`;
       lines.push(
         assemble(
           [optionCell(optionFace(i, fitCells(row, available)), i)],
@@ -589,49 +590,56 @@ export function pickerFuncs(
             `{{ picker "${applyName}" … }} sets both closeOnPick and inBody; a picker in a body is closed by the body's ✕, so it has no close to fold into a pick`,
           );
         }
-        // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
-        // one value, so it cannot carry a library's several rows; a menu body
-        // is where a catalogue domain lays out. Refused by what the domain
-        // declares, before anything renders.
         const apply = requireOptionKind(runtime, applyName, "picker");
-        if (apply.library !== undefined) {
-          throw new Error(
-            `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`,
-          );
-        }
         const active = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active.bg === undefined) {
           throw new Error(
             `{{ picker }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a picker is drawn on that background`,
           );
         }
-        const [line] = renderPicker(
-          applyName,
-          apply,
-          { key: page.key, stateVar: page.stateVar },
-          inBody === true
-            ? { kind: "led" }
-            : {
-                kind: "own",
-                writes: [[page.key, "-1"]],
-                onPick: closeOnPick === true,
-              },
-          paged === true,
-          runtime,
-          // A bare `{{ picker }}` authors no options dict, so it places by
-          // the default — the same resolution a `{{ menu }}` with no
-          // "distribution" option makes.
-          optionPaint(
-            active,
-            placedBy(undefined),
-            renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
-            activeSegment.drawnAt(),
-            active.bg,
-          ),
-          closeOn(active.palette, active.bg, activeSegment.drawnAt()),
-        );
-        return line!;
+        // [LAW:types-are-the-program] `{{ picker }}` emits one value, so a
+        // catalogue's rows past its first drop below the segment on its
+        // declared drop list, the channel a `{{ menu }}` body rides — one
+        // library layout, wherever it is drawn.
+        const drawnAt = activeSegment.drawnAt();
+        const draw = (ground: ColorRgba): readonly RichText[] =>
+          renderPicker(
+            applyName,
+            apply,
+            { key: page.key, stateVar: page.stateVar },
+            inBody === true
+              ? { kind: "led" }
+              : {
+                  kind: "own",
+                  writes: [[page.key, "-1"]],
+                  onPick: closeOnPick === true,
+                },
+            paged === true,
+            runtime,
+            // A bare `{{ picker }}` authors no options dict, so it places by
+            // the default — the same resolution a `{{ menu }}` with no
+            // "distribution" option makes.
+            optionPaint(
+              active,
+              placedBy(undefined),
+              renderLook(runtime, "{{ picker }}"),
+              apply.paletteOf,
+              drawnAt,
+              ground,
+            ),
+            closeOn(active.palette, ground, drawnAt),
+          );
+        // [LAW:one-source-of-truth] A catalogue's drops open the segment's
+        // band, so the walk draws its first row on the band's state and the
+        // drops on its plane (node-registry's `trigger` and `band`); each is
+        // painted on the ground it is drawn on, read from the same band.
+        const band = bandFor(active.palette, active.disclosure, drawnAt);
+        // A catalogue page laid out as one line drops nothing, so its segment
+        // stays closed and the line is drawn on the segment's own ground.
+        const [, ...rows] = apply.library === undefined ? [] : draw(band.plane);
+        if (rows.length === 0) return draw(active.bg)[0]!;
+        active.drops.push(...rows);
+        return draw(band.state)[0]!;
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },

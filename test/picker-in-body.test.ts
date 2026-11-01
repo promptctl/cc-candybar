@@ -1,6 +1,7 @@
-// brandon-menu-ia-q30.jl1: the two template arguments the `◀ value ▶` picker
-// is built from — a carousel whose centre fires an action of the author's, and a
+// brandon-menu-ia-q30.jl1: the two template arguments the `◀ label ▶` picker
+// is built from — a carousel whose label fires an action of the author's, and a
 // picker that is a row of a disclosure body and so draws no ✕ of its own.
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -14,6 +15,8 @@ import { effectsOf } from "./helpers/click";
 import { links, stripAnsi } from "./helpers/ansi";
 import { cellWidth as cellLength } from "../src/render/picker";
 import { instantOf } from "../src/utils/instant";
+import { ColorRgba, contrastRatio } from "@promptctl/rich-js";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -46,7 +49,7 @@ function renderOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   return renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
     ...OPTS,
@@ -54,41 +57,112 @@ function renderOf(
   });
 }
 
-describe("{{ carousel }} with a centre action", () => {
-  test("the arrows still step; the centre shows the option and fires the named action", () => {
-    const out = renderOf('{{ carousel "pick" 0 "hello" }}');
-    expect(stripAnsi(out)).toMatch(/◀ mid ▶/);
+describe("{{ carousel }} names what it sets", () => {
+  test("the arrows step; the label fires the named action and writes nothing of its own", () => {
+    const out = renderOf('{{ carousel "pick" "hello" "zoom" }}');
+    expect(stripAnsi(out)).toContain("◀ zoom ▶");
     const writes = (text: string) =>
       effectsOf(links(out).find((l) => stripAnsi(l.text) === text)!.url);
     expect(writes("◀")[0]!.args.slice(1)).toEqual(["zoom", "low"]);
     expect(writes("▶")[0]!.args.slice(1)).toEqual(["zoom", "high"]);
-    // The centre fires the named action, never a write of `zoom`.
-    expect(writes("mid").some((e) => e.args[1] === "zoom")).toBe(false);
+    expect(writes("zoom").some((e) => e.args[1] === "zoom")).toBe(false);
   });
 
-  test("a centre naming no declared action is refused: at load when spelled, at render when computed", () => {
-    expect(() => renderOf('{{ carousel "pick" 0 "nope" }}')).toThrow(
+  test("an open action naming nothing declared is refused: at load when spelled, at render when computed", () => {
+    expect(() => renderOf('{{ carousel "pick" "nope" "zoom" }}')).toThrow(
       /template references unknown action "nope" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/,
     );
     expect(
-      stripAnsi(renderOf('{{ carousel "pick" 0 (printf "no%s" "pe") }}')),
-    ).toMatch(/centre must name a declared action/);
+      stripAnsi(renderOf('{{ carousel "pick" (printf "no%s" "pe") "zoom" }}')),
+    ).toMatch(/open must name a declared action/);
   });
 
-  test("a centre that writes a bound value is refused: the centre binds none", () => {
-    for (const centre of ["pick", "page"]) {
+  test("a computed open leaves a spelled label a label, never an action name", () => {
+    expect(
+      stripAnsi(renderOf('{{ $o := "hello" }}{{ carousel "pick" $o "zoom" }}')),
+    ).toContain("zoom");
+  });
+
+  test("a computed label that comes up empty is refused: a control needs a name", () => {
+    expect(
+      stripAnsi(renderOf('{{ carousel "pick" "hello" (printf "") }}')),
+    ).toMatch(/label is empty/);
+  });
+
+  test("an open action that writes a bound value is refused: the label binds none", () => {
+    for (const open of ["pick", "page"]) {
       expect(
-        stripAnsi(renderOf(`{{ carousel "pick" 0 "${centre}" }}`)),
+        stripAnsi(renderOf(`{{ carousel "pick" "${open}" "zoom" }}`)),
       ).toMatch(/writes a value the template binds/);
     }
   });
 
-  test("an unknown current value centres on the first option, still clickable", () => {
-    // The value an empty or stale key holds is no option: the centre shows
-    // the first, the one ▶ steps from, and its click still fires.
-    const out = renderOf('{{ carousel "pick" 0 "hello" }}', "");
-    expect(stripAnsi(out)).toMatch(/◀ low ▶/);
-    expect(links(out).some((l) => stripAnsi(l.text) === "low")).toBe(true);
+  test("an unset key steps from the first option", () => {
+    const out = renderOf('{{ carousel "pick" "hello" "zoom" }}', "");
+    const next = links(out).find((l) => stripAnsi(l.text) === "▶")!;
+    expect(effectsOf(next.url)[0]!.args.slice(1)).toEqual(["zoom", "mid"]);
+  });
+
+  test("a label computed at render is drawn like a spelled one", () => {
+    const out = renderOf('{{ carousel "pick" "hello" (printf "%s!" "zoom") }}');
+    expect(stripAnsi(out)).toContain("◀ zoom! ▶");
+  });
+});
+
+// The text and background colours an SGR run sets, truecolor.
+const sgrColours = (
+  sgr: string,
+): { fg: ColorRgba | null; bg: ColorRgba | null } => {
+  const at = (code: "38" | "48"): ColorRgba | null => {
+    const m = new RegExp(`${code};2;(\\d+);(\\d+);(\\d+)`).exec(sgr);
+    return m === null ? null : new ColorRgba(+m[1]!, +m[2]!, +m[3]!);
+  };
+  return { fg: at("38"), bg: at("48") };
+};
+
+describe("{{ picker }} over a catalogue", () => {
+  // [LAW:one-source-of-truth] A catalogue's drops open the segment's band, so
+  // its first row is drawn on the band's state colour: the ✕ there is chosen
+  // for that ground, not for the segment's closed one.
+  test("its ✕ is legible on the colour its row is drawn on", () => {
+    const config = parseAndValidate(
+      "<user>",
+      `{
+        variables: { r: { kind: 'state', key: 'r', default: 'claude' } },
+        actions: {
+          pickR: { set: 'r', from: 'renderers' },
+          pageR: { set: 'r.page', int: true },
+        },
+        segments: { s: { template: '{{ picker "pickR" "pageR" false true }}' } },
+        root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
+      }`,
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
+    const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp/proj",
+    });
+    const out = renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      PAYLOAD,
+      instantOf(new Date()),
+      OPTS,
+    );
+    expect(stripAnsi(out)).toContain("Claude Code's status line");
+    // The ✕'s own SGR run: the escape sequence right before the glyph.
+    const runs = [...out.matchAll(/\x1b\[([0-9;]*)m([^\x1b]*)/gu)];
+    const close = runs.find(([, , text]) => text === DISCLOSURE_GLYPH_CLOSE);
+    expect(close).toBeDefined();
+    const { fg, bg } = sgrColours(close![1]!);
+    expect(fg).not.toBeNull();
+    expect(bg).not.toBeNull();
+    expect(contrastRatio(fg!, bg!)).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 });
 

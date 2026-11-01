@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -11,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
+import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import {
   WatcherRegistry,
   type WatcherCounters,
@@ -21,8 +23,10 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import {
   declareLanes,
+  projectSources,
   renderOptionsOf,
   sourcesFactOf,
 } from "../src/daemon/render-payload";
@@ -112,13 +116,15 @@ interface Rig {
   readonly lines: string[];
 }
 
-// The daemon's own composition of a render cache (src/daemon/server.ts).
+// The daemon's own composition of a render cache (src/daemon/daemon.ts).
 function rig(): Rig {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
     watchRefusals: 0,
     watchErrors: 0,
+    dirWatchesOpened: 0,
+    dirWatchesClosed: 0,
   };
   const lines: string[] = [];
   const log = (level: string, message: string): void => {
@@ -126,7 +132,9 @@ function rig(): Rig {
   };
   const watchers = new WatcherRegistry({ counters, logger: log });
   const providers = createPayloadProviders({
+    launcher: processLauncher,
     watchers,
+    fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
     ledger: new RefreshLedger(log),
   });
@@ -134,10 +142,12 @@ function rig(): Rig {
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
     {
+      launcher: processLauncher,
       sessionState,
       watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),
@@ -249,6 +259,7 @@ describe("a source's declaration", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -334,12 +345,13 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
     });
     try {
-      expect(loaded.state!.plugins.dropped.map((d) => d.plugin)).toEqual(["p"]);
+      expect(loaded.state!.plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
       expect(loaded.state!.sources.size).toBe(0);
       expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
       expect(r.providers.managedStorage.stats().folders).toBe(0);
@@ -362,6 +374,7 @@ describe("a source's declaration", () => {
          root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -369,7 +382,7 @@ describe("a source's declaration", () => {
     try {
       expect(loaded.error).toBeNull();
       const { config, plugins } = loaded.state!;
-      expect(plugins.dropped.map((d) => d.plugin)).toEqual(["p"]);
+      expect(plugins.dropped.map((d) => [d.scope, d.name])).toEqual([["plugins", "p"]]);
       // The namespace is the drop, so every name under it reads it.
       expect(config.variables["plugins.p"]).toMatchObject({ kind: "dropped" });
       expect(config.actions.raise).toMatchObject({ refreshes: [] });
@@ -471,6 +484,7 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadFromDisk(dir, dir, p, {
+      launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -584,7 +598,7 @@ describe("a session reads its source", () => {
 describe("a source's document", () => {
   function sourceDoc(payload: () => unknown) {
     const store = new VariableStore();
-    const registry = new SourceRegistry(store);
+    const registry = new SourceRegistry(processLauncher, store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
       read: (p) => resolvePath(payload(), p),
@@ -716,8 +730,15 @@ describe("a storage folder's watch", () => {
     const entry = r.cache.getOrCreate(dir, dir, file);
     const opened = r.counters.watchersOpened;
     const closed = r.counters.watchersClosed;
-    const edited = `${fs.readFileSync(file, "utf8")}\n`;
+    // An edit that changes what the config loads, so the reload builds a
+    // state: a reload of unchanged inputs keeps the one served.
+    const edited = fs
+      .readFileSync(file, "utf8")
+      .replace(`template: "mine"`, `template: "mine, edited"`);
+    expect(edited).toContain("mine, edited");
+    const before = entry.state;
     await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
+    expect(entry.state).not.toBe(before);
     expect(r.counters.watchersOpened).toBe(opened);
     expect(r.counters.watchersClosed).toBe(closed);
     expect(r.providers.managedStorage.stats().folders).toBe(1);
@@ -732,19 +753,7 @@ describe("a storage folder's watch", () => {
     const entry = r.cache.getOrCreate(dir, dir, file);
     const storage = storageOf();
     const before = entry.state.sources.get(STATUS)!;
-    await until(
-      () => {
-        if (
-          fs.existsSync(storage) &&
-          entry.state.sources.get(STATUS) !== before
-        )
-          return true;
-        fs.rmSync(storage, { recursive: true, force: true });
-        return false;
-      },
-      "a reload that recreated the removed folder",
-      10_000,
-    );
+    await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
     expect(fs.statSync(storage).isDirectory()).toBe(true);
     expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
       before.generation,
@@ -835,16 +844,12 @@ describe("an installed plugin's storage", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
     const entry = r.cache.getOrCreate(dir, dir, file);
     const folder = path.join(root(), "p");
-    await until(
-      () => {
-        fs.rmSync(folder, { recursive: true, force: true });
-        return Object.keys(entry.state.config.variables).every(
-          (n) => !n.startsWith("plugins.p."),
-        );
-      },
-      "the reload that drops the uninstalled plugin",
-      10_000,
-    );
+    await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
+    expect(
+      Object.keys(entry.state.config.variables).filter((n) =>
+        n.startsWith("plugins.p."),
+      ),
+    ).toEqual([]);
     expect(r.providers.managedStorage.stats().folders).toBe(0);
     expect(fs.existsSync(folder)).toBe(false);
   });
@@ -888,4 +893,18 @@ describe("an installed plugin's storage", () => {
       "the installed folder's write",
     );
   });
+});
+
+// A repo's plugin and an installed one of its name each read their own
+// sources, at their own scope: `.repo.lit.<source>` beside `.plugins.lit.<source>`.
+test("sources nest by scope, each plugin's at its own namespace", () => {
+  const payload = projectSources(["plugins.lit.status", "repo.lit.status"], (name) => ({
+    kind: "ok" as const,
+    value: name,
+  }));
+  expect(payload).toEqual({
+    plugins: { lit: { status: { kind: "ok", value: "plugins.lit.status" } } },
+    repo: { lit: { status: { kind: "ok", value: "repo.lit.status" } } },
+  });
+  expect(projectSources([], () => ({ kind: "ok" as const, value: 0 }))).toEqual({ plugins: {}, repo: {} });
 });

@@ -13,8 +13,7 @@ import {
 import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import { DISCLOSURE_CLOSE_ROLE } from "../config/disclosure.js";
 import {
-  bandItemFor,
-  paletteRole,
+  bandItem,
   TEXT_MIN_CONTRAST,
   textOn,
   type Decoration,
@@ -27,7 +26,7 @@ import type { ActiveSegment } from "./active-segment.js";
  * whichever theme pole reads better on it. A fixed foreground measurably fails
  * on pure hues (design doc, Decisions), so text on a state cell is CHOSEN, never
  * inherited from the segment's `fg:`. [LAW:one-source-of-truth] The one
- * spelling, so a trigger, a band's floor and a band's items agree on how text
+ * spelling, so a trigger, a band's plane and a band's items agree on how text
  * meets a state colour.
  */
 export function stateCell(
@@ -72,7 +71,7 @@ export function closeOn(
   return new Style({
     color: ColorSpec.fromRgba(
       ensureContrast(
-        paletteRole(palette, DISCLOSURE_CLOSE_ROLE),
+        palette.get(DISCLOSURE_CLOSE_ROLE),
         ground,
         TEXT_MIN_CONTRAST,
         drawnAt,
@@ -107,9 +106,7 @@ export function bandItemStyle(
   step: PlacedStep,
   drawnAt: ColorDepth,
 ): Style {
-  return stateCell(
-    active.palette,
-    bandItemFor(active.palette, active.disclosure, step, drawnAt),
-    drawnAt,
+  return decoratedCell(
+    bandItem(active.palette, active.disclosure, step, drawnAt),
   );
 }

@@ -10,7 +10,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { SessionState } from "../src/daemon/session-state";
 import { FileSessionStorage } from "../src/daemon/session-state-file";
-import { until } from "./helpers/until";
+import { throughout, until } from "./helpers/until";
 
 describe("SessionState disk persistence", () => {
   let dir: string;
@@ -34,13 +34,27 @@ describe("SessionState disk persistence", () => {
     return ss;
   };
 
-  it("ephemeral until useStorage(): construction reads no file, then binds disk", () => {
+  it("the ephemeral default reads no file, and a file storage loads it at construction", () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
-    const ss = new SessionState(); // ephemeral default — must not touch disk
-    expect(ss.get("s1", "theme")).toBeNull();
-    ss.useStorage(new FileSessionStorage(file, 0));
+    expect(new SessionState().get("s1", "theme")).toBeNull();
+    expect(
+      new SessionState(new FileSessionStorage(file, 0)).get("s1", "theme"),
+    ).toBe("nord");
+  });
+
+  // [LAW:no-ambient-temporal-coupling] What lands after a daemon closed stays
+  // in memory: a late write can't land over the file a next daemon took up.
+  it("a write after close reaches memory and not the file", () => {
+    const ss = new SessionState(new FileSessionStorage(file, 0));
+    ss.set("s1", "theme", "nord");
+    ss.close();
+    const closedWith = readFileSync(file, "utf8");
+    expect(JSON.parse(closedWith)).toEqual({ s1: { theme: "nord" } });
+
+    ss.set("s1", "theme", "dracula");
+    expect(ss.get("s1", "theme")).toBe("dracula");
     ss.flush();
-    expect(ss.get("s1", "theme")).toBe("nord"); // now loaded from disk
+    expect(readFileSync(file, "utf8")).toBe(closedWith);
   });
 
   // [LAW:nothing-unseen] A flush blocks the daemon's one thread, so each one
@@ -78,27 +92,6 @@ describe("SessionState disk persistence", () => {
       s1: { theme: "nord" },
     });
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${file}.writing`)).toBe(false);
-  });
-
-  // [LAW:no-ambient-temporal-coupling] Shutdown's synchronous flush writes the
-  // newest state; a debounced write already on its way is older, and must not
-  // land over it.
-  it("a synchronous flush during a debounced write keeps the newer state", async () => {
-    const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
-    );
-    ss.set("s1", "theme", "old");
-    // The debounce fires, and its write is under way.
-    await new Promise((resolve) => setTimeout(resolve, 1));
-    ss.set("s1", "theme", "new");
-    ss.flush();
-    // Whatever the debounced write does next, it lands before this settles.
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
     expect(existsSync(`${file}.writing`)).toBe(false);
   });
 
@@ -194,8 +187,10 @@ describe("SessionState disk persistence", () => {
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
-  // A flush that lands before the debounced write reaches its rename: the
-  // write removes its own temp file and says it was superseded.
+  // [LAW:no-ambient-temporal-coupling] Shutdown's synchronous flush writes the
+  // newest state; a debounced write already on its way is older, and must not
+  // land over it. Here the flush lands before that write reaches its rename:
+  // the write removes its own temp file and says it was superseded.
   it("a synchronous flush before the debounced rename supersedes it", async () => {
     const logged: string[] = [];
     const ss = new SessionState(
@@ -275,8 +270,11 @@ describe("SessionState disk persistence", () => {
     );
     ss.set("s1", "theme", "nord");
     await settled(() => logged.some((l) => l.includes("save failed")));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+    await throughout(
+      () => logged.filter((l) => l.includes("save failed")).length === 1,
+      "one failed write, not retried",
+      100,
+    );
   });
 
   it("survives a daemon restart: a fresh instance reads identical values", () => {

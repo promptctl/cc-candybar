@@ -9,6 +9,7 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, type RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -18,7 +19,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { DECOR_HUES, paletteRole } from "../src/themes/decor";
+import { DECOR_HUES } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { swatch, SWATCH_GLYPH } from "../src/render/swatch";
 import { links, stripAnsi } from "./helpers/ansi";
@@ -54,7 +55,7 @@ function rig(template: string) {
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
   const rendered = renderDsl(
@@ -84,8 +85,8 @@ const swatchColours = (cells: readonly RichText[]) =>
 const ofTheme = (name: string) => {
   const palette = getThemePalette(name)!;
   return DECOR_HUES.map((role) => [
-    paletteRole(palette, role).hex,
-    paletteRole(palette, "background").hex,
+    palette.get(role).hex,
+    palette.get("background").hex,
   ]);
 };
 

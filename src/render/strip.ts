@@ -22,31 +22,44 @@ import { STILL, type RowMotion } from "./effect.js";
 // Strip is drawn at, so a row drawn here is the bytes it always was.
 const UNBOUNDED_DRAW_WIDTH = 80;
 
-// [LAW:types-are-the-program] A drawn row: its bytes, and whether anything on
-// it changes without new data — a looping effect, a transition in flight, a
-// template's `frames`. Read off the drawn cells (rich-js `Segment.nextChange`)
-// rather than inferred from what the config asked for, so motion a template
-// draws counts exactly as an effect does. The answer is a time on the clock of
-// whoever drew each cell — an effect's own, the epoch for a template — so the
-// one fact a row of mixed cells can state is whether it is finite.
+// The identity rich-js's `HostFrame.host` asks for: what drew a frame, with
+// nothing on it to read, so the frame's `time` is the only time in it.
+const ROW_HOST = {};
+
+// [LAW:types-are-the-program] A drawn row: its bytes, and the moment, in wall
+// seconds, at which something on it next changes without new data — a looping
+// effect, a transition in flight, the closing flash, a template's `frames` —
+// or Infinity when nothing will. Read off what was drawn (rich-js
+// `Segment.nextChange`, and the holds the render was told) rather than
+// inferred from what the config asked for, so motion a template draws counts
+// exactly as an effect does. Every animation on a row is drawn on the host
+// clock (`FrameClock`), so its cells, whatever drew them, say one time.
 export interface DrawnRow {
   readonly text: string;
-  readonly moves: boolean;
+  readonly nextChange: number;
 }
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
 // through before the render — so the two agree by construction rather than by
 // each call site remembering the option. The segments are drawn once and read
-// twice: encoded as bytes, and asked when they next change.
+// twice: encoded as bytes, and asked when they next change. A row drawn under
+// motion is drawn for its frame's `time`, the one moment rich-js hands every
+// animation placed in it; a still row is drawn for none.
+// [LAW:one-source-of-truth] rich-js's hold of a frame is its cells' holds and
+// the holds it was told that no cell carries (`RenderOptions.onHold`), so the
+// row's next change is the soonest of both.
 function draw(
   renderable: Renderable,
   options: {
     readonly colorSystem: ColorSystemName | null;
     readonly width?: number;
+    readonly time?: number;
   },
 ): DrawnRow {
   const destination = resolveDestination(options.colorSystem);
+  const { time } = options;
+  let told = Infinity;
   const segments = [
     ...render(renderable, {
       maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
@@ -54,17 +67,21 @@ function draw(
       asciiOnly: false,
       theme: RENDER_THEME,
       colorSystem: destination.colorSystem,
+      ...(time === undefined ? {} : { frame: { time, host: ROW_HOST } }),
       // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
       // as no style at all; a name the theme lacks is a broken config, so it
       // throws here exactly as the cell splitter throws on it.
       onStyleError: (error) => {
         throw error;
       },
+      onHold: ({ nextChange }) => {
+        told = Math.min(told, nextChange);
+      },
     }),
   ];
   return {
     text: segmentsToString(segments, destination),
-    moves: Number.isFinite(Segment.nextChange(segments)),
+    nextChange: Math.min(Segment.nextChange(segments), told),
   };
 }
 
@@ -132,7 +149,7 @@ function plainWith(separator: string): CellJoiner {
     const seam = form.seam.map((cell) =>
       "cap" in cell ? cell : { ...cell, glyph: separator },
     );
-    return { seam, divider: seam };
+    return { seam };
   };
   const { seam, caps } = JOINERS.plain;
   const joiner = new CellJoiner(
@@ -218,16 +235,17 @@ export function privateGlyphsIn(text: string): string {
   return [...new Set(text.match(PRIVATE_USE) ?? [])].join("");
 }
 
-// The private-use glyphs a row draws — its caps, the seam between two cells,
-// and the divider between two on one ground, each once, in the order drawn:
-// what a terminal needs a Nerd Font (or its own built-in glyphs) to show.
-// MEASURED through the joiner that draws the row, as its geometry is, so a
-// joiner rich-js adds needs no entry here.
+// The private-use glyphs a row draws — its caps and the seam between two
+// cells, each once, in the order drawn: what a terminal needs a Nerd Font (or
+// its own built-in glyphs) to show. MEASURED through the joiner that draws the
+// row, as its geometry is, so a joiner rich-js adds needs no entry here. Two
+// cells reach every part a join draws, because a seam is one form whatever
+// the two grounds are.
 export function stripPrivateGlyphs(options: StripShape): string {
   const joiner = pickJoiner(options.endcaps, options.separator);
   const cell = (bgcolor: string): RichText =>
     new RichText("x", { end: "", style: new Style({ bgcolor }) });
-  const cells = [cell("#101010"), cell("#202020"), cell("#202020")];
+  const cells = [cell("#101010"), cell("#202020")];
   const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
   return privateGlyphsIn(drawn.text);
 }
@@ -263,7 +281,7 @@ export function drawStripCells(
   options: BuildLineOptions,
   motion: RowMotion = STILL,
 ): DrawnRow {
-  if (cells.length === 0) return { text: "", moves: false };
+  if (cells.length === 0) return { text: "", nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
@@ -276,7 +294,10 @@ export function drawStripCells(
   // [LAW:single-enforcer] An effect wraps the whole composed strip, here, so a
   // powerline seam's ink — its left cell's fill — moves with that cell. The
   // effect reads the row's width off the frame it draws.
-  const out = draw(motion.kind === "still" ? strip : motion.wrap(strip), drawn);
+  const out =
+    motion.kind === "still"
+      ? draw(strip, drawn)
+      : draw(motion.wrap(strip), { ...drawn, time: motion.time });
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.
@@ -285,7 +306,7 @@ export function drawStripCells(
       "drawStripCells: rich-js strip output did not end its last line",
     );
   }
-  return { text: out.text.slice(0, -1), moves: out.moves };
+  return { text: out.text.slice(0, -1), nextChange: out.nextChange };
 }
 
 // A row's bytes alone, for a caller that draws no motion.

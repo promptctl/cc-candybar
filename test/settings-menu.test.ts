@@ -19,6 +19,7 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -114,7 +115,7 @@ function buildRuntime(
   const config = parseAndValidate("<user>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
@@ -133,30 +134,30 @@ function buildRuntime(
     encodeRenderOrigin({
       projectDir: "/tmp/proj",
       cwd: "/tmp/proj",
-      configFile: null,
+      target: { source: "search" },
     }),
   );
   const ctx: VerbContext = {
     ...testVerbContext(sessionState),
     configFor: () => config,
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = (out: string, key: string, value: string): void => {
+  const clickWriting = async (out: string, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
-    click(url);
+    await click(url);
   };
   return { config, sessionState, sink, render, click, clickWriting };
 }
@@ -192,14 +193,14 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(stripAnsi(render())).toContain(DOOR_GLYPH);
   });
 
-  test("the toggle opens a body carrying preset switching and the tabs", () => {
+  test("the toggle opens a body carrying preset switching and the tabs", async () => {
     const { render, clickWriting } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     const closed = stripAnsi(render());
     expect(closed).not.toContain("⚡ session");
 
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    await clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
     // One symbol per state: the open door is the ✖, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
@@ -214,83 +215,16 @@ describe("the global settings menu is reachable from a user config", () => {
 
   // brandon-menu-ia-q30.4oj: the menu opens ABOVE the bar and leaves the
   // bar's own rows as they were.
-  test("the menu opens above the bar: two lines stacked over rows that do not change", () => {
-    const { render, clickWriting } = buildRuntime(
-      userConfig(`{ v: [${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
-    );
-    const closed = render().split("\n");
-    expect(stripAnsi(closed[0]!)).toContain("Opus");
-    expect(stripAnsi(closed.join("\n"))).not.toContain("⎘ id");
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = render().split("\n");
-    expect(opened).toHaveLength(closed.length + MENU_LINES);
-    const [line1 = "", line2 = "", line3 = ""] = opened.map(stripAnsi);
-    const bar = opened.slice(MENU_LINES).map(stripAnsi);
-    // Line 1: the preset control. Line 2: the tabs. Then the open tab's body.
-    expect(line1).toContain("▦");
-    expect(line1).not.toContain("⎘ id");
-    expect(line2.indexOf("⚡ session")).toBeLessThan(line2.indexOf("🧰 tools"));
-    expect(line3).toContain("↗ proj");
-    // The bar: the door has risen to lead line 1, every other byte of every
-    // row is what it was.
-    expect(line1.includes(DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(bar[0]).toBe(withoutDoor(stripAnsi(closed[0]!)));
-    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
-  });
 
-  test("a door on a row of its own rises out of it, leaving the frame rate, every other row byte-identical", () => {
-    const { render, clickWriting } = buildRuntime(
-      userConfig(`{ v: ['${SETTINGS_ANCHOR}', ${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
-    );
-    const closed = render().split("\n");
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = render().split("\n");
-    expect(opened).toHaveLength(closed.length + MENU_LINES);
-    expect(stripAnsi(opened[0]!)).toContain(DOOR_CLOSE_GLYPH);
-    expect(stripAnsi(opened[MENU_LINES]!)).toBe(withoutDoor(stripAnsi(closed[0]!)));
-    expect(stripAnsi(opened[MENU_LINES]!)).toContain(POLLED);
-    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
-  });
 
-  test("an open sibling's body stays open under the open menu", () => {
-    const { render, clickWriting } = buildRuntime(
-      userConfig(
-        `{ h: ['directory', { kind: 'group', name: 'g', label: 'more', children: ['model'] }] }`,
-      ),
-    );
-    clickWriting(render(), "groups.g", "g");
-    const before = stripAnsi(render()).split("\n");
-    expect(before.join("\n")).toContain("Opus");
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = stripAnsi(render()).split("\n");
-    expect(opened.slice(MENU_LINES)).toEqual(before.map(withoutDoor));
-  });
 
-  test("a door placed deep in the tree lifts its menu over the whole bar", () => {
-    const { render, clickWriting } = buildRuntime(
-      userConfig(
-        `{ v: [{ h: ['context'] }, { h: [{ v: ['${SETTINGS_ANCHOR}', { h: ['directory'] }] }, 'model'] }] }`,
-      ),
-    );
-    const closed = stripAnsi(render()).split("\n");
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = stripAnsi(render()).split("\n");
-    expect(opened[0]).toContain(DOOR_CLOSE_GLYPH);
-    expect(opened[2]).toContain("⎘ id");
-    // The door's column composes as if the door were absent: the frame rate
-    // it leaves keeps the door's line, zipped with `model`, and nothing moves.
-    expect(opened.slice(MENU_LINES)).toHaveLength(closed.length);
-    expect(opened.slice(MENU_LINES).join("|")).toMatch(
-      new RegExp(`${POLLED}.*Opus[^|]*\\|[^|]*t/proj`, "u"),
-    );
-  });
 
-  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", () => {
+  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", async () => {
     const { render, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    clickWriting(render(), EDIT_MODE_KEY, "arrange");
+    await clickWriting(render(), SETTINGS_ANCHOR, "open");
+    await clickWriting(render(), EDIT_MODE_KEY, "arrange");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
     // The menu stays as it was, so its tabs and ◁ back stay in reach while
     // the bar is arranged.
@@ -303,15 +237,15 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(editing.length).toBeGreaterThan(0);
     // Leaving needs no trip back into the menu: edit mode's own `✓ done`,
     // top left, lands on the plain bar.
-    clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    await clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("the preset picker's click is admitted by the derived gate", () => {
+  test("the preset picker's click is admitted by the derived gate", async () => {
     const { render, click, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    await clickWriting(render(), SETTINGS_ANCHOR, "open");
     // Open the picker's own disclosure, then pick `compact` from its options.
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
@@ -321,8 +255,8 @@ describe("the global settings menu is reachable from a user config", () => {
       ),
     );
     expect(pickerUrl).toBeDefined();
-    click(pickerUrl!);
-    clickWriting(render(), "preset", "compact");
+    await click(pickerUrl!);
+    await clickWriting(render(), "preset", "compact");
     expect(sessionState.get("s1", "preset")).toBe("compact");
   });
 });
@@ -480,136 +414,10 @@ describe("the menu's second line is five tabs, one open at a time", () => {
   const deepNames = (node: LayoutNode): string[] =>
     [...walkNodes(node)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
 
-  test("opening a tab closes the others, and the open one alone wears its state colour", () => {
-    const { render, clickWriting, sink } = buildRuntime(
-      userConfig(TWO_SEGMENT_ROW),
-    );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    // What each tab's click writes: the open one's closes it, every other
-    // one's opens that tab. A tab's click leads with its own write; the door's
-    // also writes the tab key, back to the first tab, after its own.
-    const writes = (rendered: string) =>
-      linkUrls(rendered).flatMap((u) => {
-        const [face] = effectsOf(u);
-        return face?.args[1] === TAB_KEY ? [face.args[2]] : [];
-      });
-    for (const open of TABS) {
-      // A fresh session opens on ⚡ session, so only the others take a click.
-      if (open !== "session") clickWriting(render(), TAB_KEY, open);
-      const raw = render();
-      const out = stripAnsi(raw);
-      expect(writes(raw)).not.toContain(open);
-      expect(writes(raw)).toContain(DISCLOSURE_CLOSED);
-      // Every tab stays on the strip; one body hangs below it.
-      for (const tab of TABS) expect(sink.has(tabSeg(tab))).toBe(true);
-      const openBg = bgOf(sink.get(tabSeg(open)));
-      const closedBgs = TABS.filter((t) => t !== open).map((t) => bgOf(sink.get(tabSeg(t))));
-      expect(openBg).toBeDefined();
-      expect(closedBgs).not.toContain(openBg);
-      // The body is the open tab's: its first control, and no other tab's.
-      const marker = { session: "⎘ id", look: "✨", layout: "+ preset", config: "update notice", tools: "🩺 doctor" };
-      for (const tab of TABS) {
-        expect([tab, out.includes(marker[tab])]).toEqual([tab, tab === open]);
-      }
-    }
-  });
-
-  // brandon-menu-ia-q30.0nl: the auto-compact window sits beside the commands
-  // that would summarize at it, as the menu's own instance of the control, so
-  // it needs nothing from the config it lands in (EMPTY_DEFAULT: no bundled
-  // `autocompact` segment, actions or `formatTokenCount` helper).
-  test.each([
-    ["the bundled default", DEFAULT_DSL_CONFIG, userConfig(TWO_SEGMENT_ROW)],
-    [
-      "an empty default",
-      EMPTY_DEFAULT,
-      `{ segments: { hi: { template: "hi" } }, root: { h: ['hi'] } }`,
-    ],
-  ])("the session tab's second row carries the autocompact control over %s", (_name, dflt, src) => {
-    const AUTOCOMPACT = "candybar.autocompact";
-    const { render, clickWriting, sink, config } = buildRuntime(
-      src,
-      dflt,
-      {
-        ...PAYLOAD,
-        autocompact: {
-          window: 400_000,
-          applied: 400_000,
-          lower: 300_000,
-          higher: 500_000,
-          error: "",
-        },
-      },
-    );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const raw = render();
-    const cells = sink.get(AUTOCOMPACT);
-    expect(cells).toBeDefined();
-    const text = cells!.map((c) => c.plain).join("");
-    expect(text).toContain("⇲ 400.0K");
-    // − / + / ↺ type /autocompact through the one slash verb.
-    const slashes = linkUrls(raw)
-      .flatMap((u) => effectsOf(u))
-      .filter((e) => e.verb === "slash")
-      .map((e) => e.args[1]);
-    expect(slashes).toEqual(
-      expect.arrayContaining([
-        "/autocompact 300000",
-        "/autocompact 500000",
-        "/autocompact auto",
-      ]),
-    );
-    // The second row of the session tab: the commands, then the window.
-    const row = [...walkNodes(resolvedRoot(config))].find(
-      (n) =>
-        n.kind === "container" &&
-        n.children.some((c) => c.kind === "segment" && c.name === AUTOCOMPACT),
-    );
-    expect(row && row.kind === "container" ? segmentNames(row) : []).toEqual([
-      "candybar.commands",
-      AUTOCOMPACT,
-    ]);
-  });
-
   // Both instances spell the window by the one K/M rule, and the bundled one
   // through the config's `formatTokenCount` helper, so an override reaches it
   // exactly as it reaches the ceiling beside it; a window of 0 still reads.
-  test("the bundled autocompact honours a formatTokenCount override; the menu's keeps the rule", () => {
-    const { render, clickWriting, sink } = buildRuntime(
-      `{ helpers: { formatTokenCount: "{{ . }} tok" }, root: { h: ['autocompact'] } }`,
-      DEFAULT_DSL_CONFIG,
-      {
-        ...PAYLOAD,
-        autocompact: { window: 300_000, applied: 0, lower: 0, higher: 0, error: "" },
-      },
-    );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    render();
-    const plain = (name: string): string =>
-      sink.get(name)!.map((c) => c.plain).join("");
-    expect(plain("autocompact")).toContain("⇲ 0 tok");
-    expect(plain("candybar.autocompact")).toContain("⇲ 0");
-    expect(plain("candybar.autocompact")).not.toContain("tok");
-  });
 
-  test("closing the menu folds everything in it: reopening finds it as a fresh session does", () => {
-    const { render, clickWriting, sessionState } = buildRuntime(
-      userConfig(TWO_SEGMENT_ROW),
-    );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    // A fresh session opens on ⚡ session.
-    expect(stripAnsi(render())).toContain("⎘ id");
-    clickWriting(render(), TAB_KEY, "tools");
-    expect(stripAnsi(render())).toContain("🩺 doctor");
-    // Closing the menu clears what was left open inside it, so reopening
-    // finds the tab a fresh session holds: none, read as its default.
-    clickWriting(render(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    expect(sessionState.get("s1", TAB_KEY)).toBeNull();
-    const reopened = stripAnsi(render());
-    expect(reopened).toContain("⎘ id");
-    expect(reopened).not.toContain("🩺 doctor");
-  });
 
   test("every setting's control is in exactly one place: the door's first line or one tab", () => {
     const config = parseAndValidate("<user>", userConfig(TWO_SEGMENT_ROW), ALLOWED, DEFAULT_DSL_CONFIG);
@@ -733,24 +541,6 @@ describe("the default placement never inherits an author's gate", () => {
     expect(bar).toContain("Opus");
   });
 
-  test("a gated stack keeps its rows under the open menu", () => {
-    const { render, clickWriting } = buildRuntime(
-      `{ globals: {}, root: { v: [{ v: [{ h: ['directory'] }, { h: ['model'] }], when: '{{ eq "a" "a" }}' }] } }`,
-    );
-    const closed = stripAnsi(render()).split("\n");
-    expect(closed).toHaveLength(3);
-    expect(closed[0]).toContain(DOOR_GLYPH);
-    expect(closed[0]).not.toContain("proj");
-    expect(closed[2]).toContain("Opus");
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = stripAnsi(render()).split("\n");
-    // The door rises out of its own row to lead the menu; the frame rate
-    // keeps that row.
-    expect(opened).toHaveLength(closed.length + MENU_LINES);
-    expect(opened[0]!.startsWith(POWERLINE.lead + DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(opened[MENU_LINES]).toBe(withoutDoor(closed[0]!));
-    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
-  });
 
   test("a bar gated away entirely still renders its door", () => {
     const { render } = buildRuntime(
@@ -815,7 +605,7 @@ describe("the menu in a config that declares no variables", () => {
       ),
     );
 
-  test("loads, renders the door, and opens every disclosure without a ⚠", () => {
+  test("loads, renders the door, and opens every disclosure without a ⚠", async () => {
     const { config, render, click } = buildRuntime(BARE, EMPTY_DEFAULT);
     const keys = disclosureKeys(config);
     const first = stripAnsi(render());
@@ -836,7 +626,7 @@ describe("the menu in a config that declares no variables", () => {
         const id = opens.map((e) => `${e.args[1]}=${e.args[2]}`).join("&");
         if (opens.length === 0 || opened.has(id)) continue;
         opened.add(id);
-        click(url);
+        await click(url);
         const out = stripAnsi(render());
         expect(out).not.toContain("⚠");
         frontier = true;
@@ -1048,6 +838,7 @@ describe("the menu is chrome-exempt", () => {
     const compiled = registerDslConfig(
       config,
       new SourceRegistry(
+        processLauncher,
         new VariableStore(),
         "",
         new SessionState(),

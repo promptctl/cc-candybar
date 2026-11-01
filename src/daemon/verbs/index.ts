@@ -1,6 +1,6 @@
 // [LAW:single-enforcer] One registry that maps click verb names to their
 // handlers. Adding a new verb is one entry — no branching in handleClick,
-// no scattered if/else in server.ts. The dispatcher does table lookup
+// no scattered if/else in reply.ts. The dispatcher does table lookup
 // only; verb semantics live in the per-verb handler functions.
 //
 // [LAW:dataflow-not-control-flow] The verb is data, the lookup is data;
@@ -18,10 +18,10 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import { launchSync, type LaunchOpts } from "../../proc/launch";
+import type { LaunchOpts, Launcher } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
-import { instantOf } from "../../utils/instant";
+import type { Instant } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
 import {
   disclosureNest,
@@ -30,7 +30,7 @@ import {
   type DisclosureNest,
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
-import type { LaneSwitches } from "../../config/lanes";
+import type { Drawing, LaneSwitches } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -108,8 +108,6 @@ import {
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
   VERB_UNDO,
   VERB_DOCTOR_RUN,
@@ -119,11 +117,12 @@ import {
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
   type EvaluatedRun,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
-import { repoAnswerFields, repoConfigs } from "../repo-configs";
-import { withAnswer, type RepoAnswer } from "../../config/loader/repo-gate";
+import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
+import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
@@ -148,10 +147,16 @@ import {
   truecolorEnvFields,
   doctorReportPairs,
   linkFields,
+  configFields,
   nerdFontFields,
   terminalFeatureFields,
   installFields,
 } from "../../doctor/report";
+import type {
+  ConfigTarget,
+  RenderOrigin,
+  RequestedOrigin,
+} from "../../config-hint";
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
@@ -176,7 +181,11 @@ import { typeSlash, type ClaudeInputEdge } from "../../claude-input/edge";
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
 export interface DaemonContext {
   readonly sessionState: SessionStateRW;
-  readonly dlog: (level: "info" | "warn" | "error", msg: string) => void;
+  // [LAW:effects-at-boundaries] The daemon's clock.
+  readonly now: () => Instant;
+  readonly log: (level: "info" | "warn" | "error", msg: string) => void;
+  // Who a click's programs belong to.
+  readonly launcher: Launcher;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
@@ -206,6 +215,12 @@ export interface DaemonContext {
   // open (src/daemon/navigation-history.ts), journaled around each click
   // beside the settings history.
   readonly navigation: NavigationHistory;
+  // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
+  // (src/daemon/journal-turns.ts).
+  readonly journalTurns: Pick<JournalTurns, "take">;
+  // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
+  // turn: what an idle close queued behind it re-reads (src/daemon/menu-idle.ts).
+  readonly clickLanded: (sessionId: string) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
@@ -243,6 +258,13 @@ export interface DaemonContext {
   readonly views: {
     readonly follow: (sessionId: string, origin: RenderOrigin) => void;
   };
+  // What the diagnostic the frame renderer `by` last delivered for the
+  // session listed under `key` copies; undefined when it lists none under it.
+  readonly diagnosticCopy: (
+    sessionId: string,
+    by: Drawing["by"],
+    key: string,
+  ) => string | undefined;
 }
 
 export interface VerbContext extends DaemonContext {
@@ -251,6 +273,8 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
+  // [LAW:nothing-unseen] How long THIS click waited for its turn, for its event.
+  readonly turnWaited: (ms: number) => void;
 }
 
 // A context with the journals the verb table opens around a write.
@@ -267,12 +291,17 @@ export type ClickContext = Journaled<VerbContext>;
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
 // raw wire-level `value` string and the daemon's verb context; it returns
-// nothing (clicks have no payload). User-facing failures throw an Error;
-// the dispatcher in server.ts converts that to a RENDER_FAILED response.
+// nothing (clicks have no payload), at once or when what it awaits has landed.
+// User-facing failures throw an Error;
+// the dispatcher in reply.ts converts that to a RENDER_FAILED response.
 // Invalid-shape inputs (e.g. missing required slash-delimited subfield)
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
-export type VerbHandler = (value: string, ctx: ClickContext) => void;
+export type VerbHandler = (
+  value: string,
+  ctx: ClickContext,
+) => void | Promise<void>;
 
+import type { JournalTurn, JournalTurns } from "../journal-turns";
 import { BadVerbArgs, decodeWire } from "../verb-error";
 import {
   parseSessionId,
@@ -311,14 +340,15 @@ function oneArg(value: string): string {
 // one outcome among many — the click is acknowledged and the rejection is
 // logged. Other failures are genuine errors that surface as RENDER_FAILED.
 export function clickLaunch(
+  launcher: Launcher,
   opts: LaunchOpts,
   what: string,
-  dlog: DaemonContext["dlog"],
+  log: DaemonContext["log"],
 ): void {
-  const result = launchSync(opts);
+  const result = launcher.launchSync(opts);
   if (result.ok) return;
   if (result.reason === "rate-limited") {
-    dlog("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
   // What the launch itself said of its failure: the spawn's error, or what
@@ -333,35 +363,54 @@ export function clickLaunch(
 // segment) and the diagnostic verbs (already hold a plain message) funnel here.
 function pbcopy(text: string, ctx: VerbContext): void {
   clickLaunch(
+    ctx.launcher,
     { bin: "/usr/bin/pbcopy", stdinInput: text, category: "click.pbcopy" },
     "pbcopy",
-    ctx.dlog,
+    ctx.log,
   );
 }
 
 const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
 
+// [LAW:parse-dont-validate] The renderer a copy click names: the surface it
+// was drawn on, whose last frame it copies from.
+const DRAWERS: ReadonlySet<string> = new Set<Drawing["by"]>([
+  "request",
+  "feed",
+]);
+function requireDrawer(by: string): Drawing["by"] {
+  if (!DRAWERS.has(by))
+    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
+  return by as Drawing["by"];
+}
+
+// [LAW:no-silent-failure] A key the frame the click came from does not list
+// (the message fixed since, or the session never drawn here) is refused,
+// never a clipboard silently left as it was.
+const copyDiagnostic: VerbHandler = (value, ctx) => {
+  const [sessionId = "", by = "", key = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
+  const sid = requireSessionId(sessionId);
+  const text = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  if (text === undefined)
+    throw new BadVerbArgs(
+      `that message is no longer listed in session ${sid}'s diagnostics — open ⚠ again and copy from there`,
+    );
+  pbcopy(text, ctx);
+};
+
 const openVscode: VerbHandler = (value, ctx) =>
   clickLaunch(
+    ctx.launcher,
     {
       bin: "/usr/bin/open",
       args: ["-a", "Visual Studio Code", oneArg(value)],
       category: "click.open",
     },
     'open -a "Visual Studio Code"',
-    ctx.dlog,
+    ctx.log,
   );
-
-// Click on the ⚠ in the bar copies the parse error to clipboard.
-const showConfigError: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
-
-// [LAW:one-type-per-behavior] Warnings (advisory diagnostics — e.g. config
-// extension collision) and errors (load-fatal) are surfaced as distinct
-// icons in the bar so the operator can tell them apart at a glance. The
-// click behavior is the same — copy the message — but the diagnostic
-// categories are kept in separate channels through the render pipeline.
-const showConfigWarning: VerbHandler = (value, ctx) =>
-  pbcopy(oneArg(value), ctx);
 
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
@@ -393,7 +442,7 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 // branch's `value` is the only thing it may write) and cannot proceed
 // on `ok: false` (it throws BadVerbArgs with the reason verbatim,
 // naming the failing pair so the operator can localize the typo). The
-// dispatcher in server.ts maps BadVerbArgs to BAD_REQUEST.
+// dispatcher in reply.ts maps BadVerbArgs to BAD_REQUEST.
 //
 // [LAW:no-silent-failure] Batch atomicity: every pair is validated
 // BEFORE any write happens. Any single failure rejects the whole
@@ -462,7 +511,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // and the seam guarantees the writes ship as one transaction.
   ctx.navigating.setBatch(sid, validated);
   const summary = validated.map((p) => `${p.key}=${p.value}`).join(" ");
-  ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
+  ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 
 // [LAW:single-enforcer] One integer-shape boundary, mirroring the range
@@ -543,7 +592,7 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
   );
@@ -612,18 +661,8 @@ function stepFrom(
 // cwd either, which describes whichever shell spawned it.
 export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
 
-// [LAW:types-are-the-program] Exactly the three inputs resolveDslConfig
-// takes. Recorded, `configFile` is the explicit path the REQUEST named
-// (`--config` over the `configEnv` hint) or null; the session's load-config
-// pick is a session fact, joined over it by `sessionRenderOrigin`.
-export interface RenderOrigin {
-  readonly projectDir: string;
-  readonly cwd: string;
-  readonly configFile: string | null;
-}
-
 // [LAW:one-source-of-truth] The one place a load-config pick outranks the
-// path the request named: what the render draws from (server.ts) and what a
+// path the request named: what the render draws from (draw-bar.ts) and what a
 // durable click resolves (sessionOrigin) both come through here, so a click
 // made right after a pick lands in the file the bar now draws from, without
 // waiting for the session's next request to record it.
@@ -634,21 +673,48 @@ export function sessionRenderOrigin(
   state: SessionStateReader,
   sid: string,
 ): RenderOrigin {
-  return {
-    ...requested,
-    configFile:
-      state.get(sid, SESSION_CONFIG_OVERRIDE_KEY) ?? requested.configFile,
-  };
+  const pick = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
+  return pick === null
+    ? requested
+    : { ...requested, target: { source: "pick", path: pick } };
 }
 
-export function encodeRenderOrigin(origin: RenderOrigin): string {
-  return JSON.stringify(origin);
+// The record is flat and additive, and `configFile` keeps its meaning, because
+// session state sits at one unversioned path that builds of either age read:
+// an older build finds the field it requires and ignores `source`.
+export function encodeRenderOrigin({
+  projectDir,
+  cwd,
+  target,
+}: RequestedOrigin): string {
+  return JSON.stringify({
+    projectDir,
+    cwd,
+    configFile: target.path ?? null,
+    source: target.source,
+  });
+}
+
+// [LAW:parse-dont-validate] What a record's two fields say together. The path
+// is what a session reads and keeps its meaning across builds, so no path is a
+// search whichever build wrote it. The source only labels the path: one this
+// build cannot read, because an older build kept none or a newer build has a
+// source of its own, leaves the path standing with its source unknown. A
+// refusal here would fail every durable click over a label.
+function recordedTarget(
+  source: unknown,
+  configFile: string | null,
+): ConfigTarget {
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment"
+    ? { source, path: configFile }
+    : { source: "unknown", path: configFile };
 }
 
 // [LAW:parse-dont-validate] The one boundary that lifts the stored string
 // back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
 // guessed path.
-function parseRenderOrigin(raw: string): RenderOrigin {
+export function parseRenderOrigin(raw: string): RenderOrigin {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -658,7 +724,10 @@ function parseRenderOrigin(raw: string): RenderOrigin {
   if (parsed === null || typeof parsed !== "object") {
     throw new BadVerbArgs(`render origin is not an object: ${raw}`);
   }
-  const { projectDir, cwd, configFile } = parsed as Record<string, unknown>;
+  const { projectDir, cwd, configFile, source } = parsed as Record<
+    string,
+    unknown
+  >;
   if (
     typeof projectDir !== "string" ||
     typeof cwd !== "string" ||
@@ -666,7 +735,7 @@ function parseRenderOrigin(raw: string): RenderOrigin {
   ) {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  return { projectDir, cwd, configFile };
+  return { projectDir, cwd, target: recordedTarget(source, configFile) };
 }
 
 // [LAW:no-silent-failure] A session that has never rendered has no origin
@@ -751,14 +820,14 @@ function originHome(origin: RenderOrigin): ConfigHome {
     repoConfigs().read(),
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? undefined,
+    origin.target.path,
   );
 }
 
 function editStore(ctx: ClickContext, sid: string): EditStore {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.dlog,
+    logger: ctx.log,
   };
 }
 
@@ -793,7 +862,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} → ${home.path} (session=${sid})`,
   );
@@ -850,7 +919,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
-  ctx.dlog(
+  ctx.log(
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${home.path} (session=${sid})`,
   );
@@ -879,9 +948,9 @@ const save: VerbHandler = (value, ctx) => {
   const placements = placementDrafts(config, pick);
   // Nothing unsaved is the save's own postcondition already holding — a second
   // click on a bar drawn before the first save released its picks — so it is
-  // a recorded no-op, never a failure on the diagnostic strip.
+  // a recorded no-op, never a failure the bar reports.
   if (drafts.length + placements.length === 0) {
-    ctx.dlog("info", `save: nothing unsaved (session=${sid})`);
+    ctx.log("info", `save: nothing unsaved (session=${sid})`);
     return;
   }
   const gate = stateGate(config);
@@ -900,7 +969,7 @@ const save: VerbHandler = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `save: ${[
       ...pairs.map(([k, v]) => `${k}=${v}`),
@@ -966,7 +1035,7 @@ const savePreset: VerbHandler = (value, ctx) => {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${home.path} (session=${sid})`,
   );
@@ -1007,7 +1076,7 @@ const saveThemeDefault: VerbHandler = (value, ctx) => {
     (f) => SETTINGS[f].sessionKey,
   ).filter((key) => !drafted.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
-  ctx.dlog(
+  ctx.log(
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${home.path} (session=${sid})`,
   );
@@ -1030,7 +1099,7 @@ const deletePreset: VerbHandler = (value, ctx) => {
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
 };
 
 // [LAW:one-source-of-truth] `reset`: return each key to its bundled default
@@ -1063,7 +1132,7 @@ const resetConfig: VerbHandler = (value, ctx) => {
   deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
-  ctx.dlog(
+  ctx.log(
     "info",
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${home.path} (session=${sid})`,
   );
@@ -1157,7 +1226,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
-  ctx.dlog(
+  ctx.log(
     "info",
     `apply-layout-op: ${key} ${result.value} → ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
   );
@@ -1177,7 +1246,7 @@ const undo: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
   reloadIfWritten(ctx, sid, step);
-  ctx.dlog("info", `undo: restored ${describeStep(step)} (session=${sid})`);
+  ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
 // [LAW:single-enforcer] Back restores through the click's settings view, never
@@ -1190,7 +1259,7 @@ const back: VerbHandler = (value, ctx) => {
     stateGate(sessionConfig(ctx, sid)),
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
-  ctx.dlog("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
+  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
 // [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
@@ -1205,7 +1274,7 @@ const rewind: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
-  ctx.dlog(
+  ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
   );
@@ -1218,7 +1287,7 @@ const redo: VerbHandler = (value, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
   reloadIfWritten(ctx, sid, step);
-  ctx.dlog("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
+  ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
 // [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
@@ -1233,7 +1302,7 @@ const applyUpdate: VerbHandler = (value, ctx) => {
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] Where the daemon records each session's STAMPED
-// client hints (server.ts writes `JSON.stringify(parseClientHints(req))` here
+// client hints (draw-bar.ts writes `JSON.stringify(parseClientHints(req))` here
 // on every render request that changes them) — the SESSION_RENDER_ORIGIN_KEY move for
 // client facts. A click carries no hints, so the doctor reasons over the facts
 // of the session's last render, read back through the SAME checkpoint the live
@@ -1269,9 +1338,9 @@ function sessionHints(
 function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
-  ctx.dlog(
+  ctx.log(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`,
   );
 }
 
@@ -1287,7 +1356,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     sessionId: sid,
     via: ctx.arrival.via,
   } as const;
-  const said = ctx.clients.ofSession(sid, instantOf(new Date()));
+  const said = ctx.clients.ofSession(sid, ctx.now());
   let gathered: ReturnType<typeof gatherFacts>;
   try {
     gathered = gatherFacts(
@@ -1343,7 +1412,7 @@ function clickedFrom(
       withClicked(list, sighting),
     );
   } catch (e) {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`,
     );
@@ -1369,7 +1438,7 @@ const doctorProbe: VerbHandler = (value, ctx) => {
     throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
   const { handler } = ctx.arrival;
   ctx.probes.arrive({ nonce, handler });
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`,
   );
@@ -1399,7 +1468,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (after.kind === "failed") {
     throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-fix: ${check.name} → ${describeFix(verdict.fix)} (session=${sid})`,
   );
@@ -1443,7 +1512,7 @@ const doctorMark: VerbHandler = (value, ctx) => {
   if (marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
   }
-  ctx.dlog(
+  ctx.log(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
@@ -1477,7 +1546,7 @@ const slash: VerbHandler = (value, ctx) => {
     action.slash,
   );
   if (result.kind === "refused") {
-    ctx.dlog(
+    ctx.log(
       "warn",
       `slash: ${line} refused — ${result.reason} (session=${sid})`,
     );
@@ -1485,7 +1554,7 @@ const slash: VerbHandler = (value, ctx) => {
     // store refusal, so BAD_REQUEST; a tmux failure throws from the edge.
     throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
-  ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 
 // ─── Run (a `run` action) ───────────────────────────────────────────────────
@@ -1591,11 +1660,15 @@ const repoConfig: VerbHandler = (value, ctx) => {
       "the answer's signature does not match what it carries: it was not drawn by this daemon",
     );
   }
-  const filed = repoConfigs().update((book) => withAnswer(book, dir, answered));
+  const filed = recordAnswer(repoConfigs(), dir, answered);
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
-  ctx.dlog("info", `repo-config: ${dir} ${answered} (session=${sid})`);
+  const { superseded, absent, unchecked } = filed.value;
+  ctx.log(
+    "info",
+    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`,
+  );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
 
@@ -1644,10 +1717,10 @@ const loadConfig: VerbHandler = (value, ctx) => {
   }
   if (p === "") {
     ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.dlog("info", `load-config: override cleared (session=${sid})`);
+    ctx.log("info", `load-config: override cleared (session=${sid})`);
   } else {
     ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p);
-    ctx.dlog("info", `load-config: ${p} (session=${sid})`);
+    ctx.log("info", `load-config: ${p} (session=${sid})`);
   }
 };
 
@@ -1669,8 +1742,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_REDO, redo],
   [VERB_BACK, back],
   [VERB_REWIND, rewind],
-  [VERB_SHOW_CONFIG_ERROR, showConfigError],
-  [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
   [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
@@ -1680,6 +1751,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SLASH, slash],
   [VERB_RUN, run],
   [VERB_REPO_CONFIG, repoConfig],
+  [VERB_COPY_DIAGNOSTIC, copyDiagnostic],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1705,6 +1777,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1735,6 +1808,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_LOAD_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
@@ -1790,7 +1864,7 @@ function sessionOfEffects(
   return sid === "" ? null : parseSessionId(sid);
 }
 
-const dispatch: VerbHandler = (rawValue, ctx) => {
+const dispatch: VerbHandler = async (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
   const effects = parseEffects(rawValue);
@@ -1804,7 +1878,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
       continue;
     }
     try {
-      handler(value, ctx);
+      await handler(value, ctx);
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) operational = true;
       errors.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
@@ -1816,13 +1890,22 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
         ctx.sessionState,
         session.id,
         errors.join("\n"),
-        instantOf(new Date()),
+        ctx.now(),
       );
     }
     const message = `dispatch: ${errors.join("; ")}`;
     throw operational ? new Error(message) : new BadVerbArgs(message);
   }
 };
+
+function throwAll(failures: readonly unknown[]): void {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new Error(
+      failures.map((e) => String((e as Error).message ?? e)).join("; "),
+    );
+  }
+}
 
 // [LAW:single-enforcer] One click is one undoable step, so the step boundary
 // is the click boundary: every entry of the table the daemon looks up against
@@ -1839,15 +1922,38 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // reload is synchronous. What a lane runs follows the difference, which no
 // render, frame or other session's write can make. After the commit it also
 // brings the session's view to the config its origin now resolves to.
-function journaled<C extends DaemonContext>(
-  handler: (value: string, ctx: Journaled<C>) => void,
+//
+// [LAW:single-enforcer] And it is the one place a journal's turn is taken
+// (src/daemon/journal-turns.ts), begin through view-follow, so an awaited
+// handler keeps its step whole. A turn the daemon's close cut off was committed
+// there, and the daemon is gone from under what follows the commit.
+export function journaled<C extends DaemonContext>(
+  verb: string,
+  handler: (value: string, ctx: Journaled<C>) => void | Promise<void>,
   sessionOf: (value: string) => string | null,
-): (value: string, ctx: C) => void {
-  return (value, ctx) => {
+  turnWaited: (ctx: C, ms: number) => void,
+): (value: string, ctx: C) => Promise<void> {
+  const inTurn = async (
+    value: string,
+    ctx: C,
+    turn: JournalTurn,
+  ): Promise<void> => {
     const sid = sessionOf(value);
     const lanes = sid === null ? null : laneMeter(ctx, sid);
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
+    // Each commit runs whatever the other did: both record what landed.
+    const commit = turn.holds(() => {
+      const failed: unknown[] = [];
+      for (const step of [navigation, journal]) {
+        try {
+          step.commit();
+        } catch (e) {
+          failed.push(e);
+        }
+      }
+      throwAll(failed);
+    });
     const failures: unknown[] = [];
     // Both views close what a write closes, the navigating one above its
     // recording, so ◁ back restores a closed menu with what was open in it.
@@ -1855,10 +1961,10 @@ function journaled<C extends DaemonContext>(
       closingView(
         store,
         (sid) => nestOf(ctx, sid),
-        (line) => ctx.dlog("info", line),
+        (line) => ctx.log("info", line),
       );
     try {
-      handler(value, {
+      await handler(value, {
         ...ctx,
         sessionState: closing(journal.sessionState),
         journal,
@@ -1867,13 +1973,13 @@ function journaled<C extends DaemonContext>(
     } catch (e) {
       failures.push(e);
     }
-    navigation.commit();
+    let live = true;
     try {
-      journal.commit();
+      live = commit();
     } catch (e) {
       failures.push(e);
     }
-    if (lanes !== null) {
+    if (live && lanes !== null) {
       try {
         ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
       } catch (e) {
@@ -1885,7 +1991,7 @@ function journaled<C extends DaemonContext>(
     // history step restoring or clearing one — moves its view: a frame opens
     // none (src/daemon/cache/render.ts `holdView`).
     // A session that has never rendered has no origin, and no view.
-    if (sid !== null) {
+    if (live && sid !== null) {
       try {
         const origin = recordedOrigin(ctx, sid);
         if (origin !== null) ctx.views.follow(sid, origin);
@@ -1893,13 +1999,14 @@ function journaled<C extends DaemonContext>(
         failures.push(e);
       }
     }
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) {
-      throw new Error(
-        failures.map((e) => String((e as Error).message ?? e)).join("; "),
-      );
-    }
+    throwAll(failures);
   };
+  return (value, ctx) =>
+    ctx.journalTurns.take(
+      verb,
+      (ms) => turnWaited(ctx, ms),
+      (turn) => inTurn(value, ctx, turn),
+    );
 }
 
 // [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
@@ -1907,18 +2014,30 @@ function journaled<C extends DaemonContext>(
 // name a leaf verb directly still resolve here; new renders all emit `dispatch`.
 export const VERBS: ReadonlyMap<
   string,
-  (value: string, ctx: VerbContext) => void
+  (value: string, ctx: VerbContext) => Promise<void>
 > = new Map(
-  [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(
-    ([verb, handler]) =>
-      [
+  [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(([verb, handler]) => {
+    const sessionOf = (value: string): string | null => {
+      const session = clickSessionOf(verb, value);
+      return session?.ok ? session.id : null;
+    };
+    return [
+      verb,
+      journaled<VerbContext>(
         verb,
-        journaled(handler, (value) => {
-          const session = clickSessionOf(verb, value);
-          return session?.ok ? session.id : null;
-        }),
-      ] as const,
-  ),
+        async (value, ctx) => {
+          try {
+            await handler(value, ctx);
+          } finally {
+            const sid = sessionOf(value);
+            if (sid !== null) ctx.clickLanded(sid);
+          }
+        },
+        sessionOf,
+        (ctx, ms) => ctx.turnWaited(ms),
+      ),
+    ] as const;
+  }),
 );
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
@@ -1929,6 +2048,9 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 export interface IdleClose {
   readonly idleS: number;
   readonly timeoutS: number;
+  // Whether the session is still known idle since the timer fired, read in the
+  // close's turn: a click, or its record's eviction, ends that.
+  readonly stillIdle: () => boolean;
 }
 
 // [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
@@ -1941,9 +2063,14 @@ export function closeIdleMenus(
   sid: string,
   idle: IdleClose,
   ctx: DaemonContext,
-): void {
-  journaled<DaemonContext>(
+): Promise<void> {
+  return journaled<DaemonContext>(
+    "menu-idle",
     (_value, c) => {
+      if (!idle.stillIdle()) {
+        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
+        return;
+      }
       const roots = openRoots(nestOf(c, sid), (key) =>
         c.navigating.get(sid, key),
       );
@@ -1951,12 +2078,13 @@ export function closeIdleMenus(
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
       );
-      c.dlog(
+      c.log(
         "info",
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
           `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
       );
     },
     () => sid,
+    (c, ms) => c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
   )("", ctx);
 }

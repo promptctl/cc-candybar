@@ -1,16 +1,21 @@
 // [LAW:one-source-of-truth] `{{ themePreview }}` — a small sample of the theme
 // the bar is wearing, drawn from the colours the bar itself is drawn from
-// (brandon-theme-picker-bgw.ef6): every decoration a closed cell can wear under
-// the render's decor (each of its variation's roles at each of its shade's
-// shades), the state/plane pair of the band the preview's own lineage opens
-// from the bar — inside the settings menu, the door's, so "▾ open" is the
-// colour the open door wears — and the two alerts. Nothing here computes a
-// colour. Each swatch is a call to the SAME function the render walk calls for
-// that kind of cell (`decorEntryColour`, `bandFor`, the role lookup), on the
+// (brandon-theme-picker-bgw.ef6): the decorations a closed cell wears under the
+// render's decor at the depth drawn (each of its variation's roles at the
+// tones of that role's window there, the roles side by side), the state/plane
+// pair of the band the preview's own lineage opens from the bar — inside the
+// settings menu, the door's, so "▾ open" is the colour the open door wears —
+// and the two alerts. Nothing here computes a colour. Each swatch is a call to
+// the SAME function the render walk calls for that kind of cell
+// (`decorEntryColour` over the window, `bandFor`, the role lookup), on the
 // SAME palette object the walk colours every unpinned segment from
 // (the look renderDsl publishes, `renderLook`), with its text the one the
 // walk draws there — the shade's for a closed cell, `textOn` for the rest — so
-// a preview cannot show a colour the bar under that theme would not draw.
+// a preview shows only colours its theme names, in the shades the bar deals.
+// Where one role's swatches meet the next's they are held apart by the rule a
+// bar row turning hue is (`vocabularyOf`), so a swatch there can wear another
+// tone or a rung past its role's window in place of the tone it was dealt, as
+// a cell either side of a turn on the bar can.
 //
 // The palette sampled is the render's own, not the active segment's: a segment
 // pinned to another theme by `palette:` still previews the bar's theme, which
@@ -29,7 +34,6 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import {
   bandFor,
   decorEntryColour,
-  paletteRole,
   textOn,
   vocabularyOf,
   type Decor,
@@ -77,7 +81,7 @@ function previewRows(
   });
   return [
     [
-      vocabularyOf(decor).map((entry, i) => {
+      vocabularyOf(palette, decor, drawnAt).map((entry, i) => {
         const colour = decorEntryColour(palette, entry);
         return {
           text: BAR_WORDS[i % BAR_WORDS.length]!,
@@ -89,15 +93,15 @@ function previewRows(
     [
       [chosen("▾ open", band.state), chosen("menu", band.plane)],
       [
-        chosen("warn", paletteRole(palette, "warning")),
-        chosen("error", paletteRole(palette, "error")),
+        chosen("warn", palette.get("warning")),
+        chosen("error", palette.get("error")),
       ],
     ],
   ];
 }
 
-// [LAW:dataflow-not-control-flow] Each row fits the row it sits on the way the
-// carousel above it does (`ledRowBudget`): whole swatches, in drawing order,
+// [LAW:dataflow-not-control-flow] Each row fits the row it sits on the way a
+// picker does (`ledRowBudget`): whole swatches, in drawing order,
 // while they fit — a narrow terminal shows fewer swatches, never a line the
 // terminal breaks away from its ✕. Swatches in a group touch, like
 // neighbouring bar cells; groups are set apart by one space of whatever the

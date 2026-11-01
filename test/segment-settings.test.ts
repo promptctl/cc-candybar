@@ -2,6 +2,7 @@
 // DECLARES its settings, each PLACEMENT in `root` is an instance with its own
 // id and values, and the segment's templates read `.settings.<name>` scoped to
 // the placement being rendered.
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -29,7 +30,7 @@ function buildRuntime(src: string) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string =>
@@ -51,11 +52,11 @@ function buildRuntime(src: string) {
     );
   recordRender(sessionState, "s1");
   const ctx = testVerbContext(sessionState, undefined, config);
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
   };
   // The text one placement drew, read off the sink by its id.
   const textOf = (id: string): string =>
@@ -158,18 +159,18 @@ describe("two placements of a menu-hosting segment open independently", () => {
     root: { h: ['picker', { seg: 'picker', id: 'second' }] },
   }`;
 
-  test("each placement's menu is keyed by its id, and opening one leaves the other closed", () => {
+  test("each placement's menu is keyed by its id, and opening one leaves the other closed", async () => {
     const rt = buildRuntime(SRC);
     expect(rt.config.variables["menus.picker.applyTheme"]).toBeDefined();
     expect(rt.config.variables["menus.second.applyTheme"]).toBeDefined();
-    const open = (key: string): void => {
+    const open = async (key: string): Promise<void> => {
       const url = linkUrls(rt.render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "applyTheme"),
       );
       if (url === undefined) throw new Error(`no toggle for ${key}`);
-      rt.click(url);
+      await rt.click(url);
     };
-    open("menus.second.applyTheme");
+    await open("menus.second.applyTheme");
     expect(rt.sessionState.get("s1", "menus.second.applyTheme")).toBe(
       "applyTheme",
     );
@@ -178,7 +179,7 @@ describe("two placements of a menu-hosting segment open independently", () => {
     expect(rt.sink.get("second")!.length).toBeGreaterThan(
       rt.sink.get("picker")!.length,
     );
-    open("menus.picker.applyTheme");
+    await open("menus.picker.applyTheme");
     expect(rt.sessionState.get("s1", "menus.picker.applyTheme")).toBe(
       "applyTheme",
     );

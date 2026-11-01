@@ -7,6 +7,7 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
@@ -60,7 +61,7 @@ function renderer(cfg: ValidatedConfig) {
   const compiled = compileDslConfig(compileInputOf(cfg), TEST_SIGNER);
   const store = new VariableStore();
   const session = new SessionState();
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(processLauncher, store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {

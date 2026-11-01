@@ -104,7 +104,10 @@ export interface HistoryStorage {
   save(state: HistoryState): void;
 }
 
-const EPHEMERAL_STORAGE: HistoryStorage = { load: () => ({}), save: () => {} };
+export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
+  load: () => ({}),
+  save: () => {},
+};
 
 // [LAW:one-source-of-truth] The session keys a settings control writes: a
 // display setting's, and every placement setting's unsaved value, which
@@ -170,15 +173,8 @@ export class SettingsHistory {
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
-    private storage: HistoryStorage = EPHEMERAL_STORAGE,
+    private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
   ) {
-    this.state = new Map(Object.entries(storage.load()));
-  }
-
-  // [LAW:single-enforcer] Mirrors SessionState.useStorage: only the daemon
-  // binds the file, after it has won the socket.
-  useStorage(storage: HistoryStorage): void {
-    this.storage = storage;
     this.state = new Map(Object.entries(storage.load()));
   }
 

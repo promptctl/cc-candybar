@@ -186,7 +186,7 @@ export function tmuxStatusFrame(ansi: string): TmuxStatusBar {
 
 // One pushed render response as the frame the status line draws.
 // [LAW:no-silent-failure] A bar the status line cannot draw is a frame saying
-// why, in the diagnostic strip's colours, as the band's is; a render that
+// why, in the diagnostics' colours, as the band's is; a render that
 // failed is drawn as the statusline draws it, its error glyph.
 export function tmuxStatusResponse(resp: Response): TmuxStatusBar {
   const ansi = planOutcome(renderOutcomeOf(resp)).output;

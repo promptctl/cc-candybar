@@ -71,9 +71,18 @@ export function allNodes(
     node.children.forEach((child, index) =>
       walk(child, [...path, index], [
         ...address,
-        // Levels alternate rows and cells, the way a bar's vertical and
-        // horizontal containers nest.
-        { index, count: node.children.length, distribution, axis: path.length % 2 === 0 ? "row" : "cell" },
+        // Levels alternate rows and cells. A compiled bar never puts a row
+        // step under a cell step, since every step inside a row is a place on
+        // its line; the colour function answers for any address alone, which
+        // is all these properties ask of it.
+        {
+          index,
+          count: node.children.length,
+          distribution,
+          axis: path.length % 2 === 0 ? "row" : "cell",
+          lineStart: 0,
+          lineEnd: node.children.length - 1,
+        },
       ]),
     );
   };

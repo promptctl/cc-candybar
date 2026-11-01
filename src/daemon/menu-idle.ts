@@ -15,6 +15,9 @@ import type { IdleClose } from "./verbs/index.js";
 
 interface Idle {
   since: Instant;
+  // How many times a click has stamped the clock, at its arrival and its
+  // landing: a close compares it to see whether one came since.
+  clicks: number;
   timeoutS: number;
   shown: boolean;
   // The instant of the frame `shown` and `timeoutS` were read off.
@@ -32,9 +35,9 @@ export interface MenuIdleDeps {
   readonly now: () => Instant;
   // Close the session's menus: the journaled write a ✕ makes
   // (`closeIdleMenus`, src/daemon/verbs/index.ts).
-  readonly close: (sessionId: string, idle: IdleClose) => void;
-  // [LAW:no-silent-failure] A close that threw: a timer has no caller to
-  // throw to, and an uncaught throw would end the daemon.
+  readonly close: (sessionId: string, idle: IdleClose) => Promise<void>;
+  // [LAW:no-silent-failure] A close that rejected: a timer has no caller to
+  // reject to, and an unhandled rejection would end the daemon.
   readonly failed: (sessionId: string, error: unknown) => void;
 }
 
@@ -44,12 +47,15 @@ const MAX_SESSIONS = 256;
 
 export class MenuIdle {
   private readonly sessions = new Map<string, Idle>();
+  private disposed = false;
 
   constructor(private readonly deps: MenuIdleDeps) {}
 
   // A click in the session starts a new idle period.
   clicked(sessionId: string, at: Instant): void {
-    this.record(sessionId, at).since = at;
+    const idle = this.record(sessionId, at);
+    idle.since = at;
+    idle.clicks++;
     this.settle(sessionId);
   }
 
@@ -90,6 +96,7 @@ export class MenuIdle {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const idle of this.sessions.values()) this.disarm(idle);
     this.sessions.clear();
   }
@@ -97,6 +104,7 @@ export class MenuIdle {
   private record(sessionId: string, at: Instant): Idle {
     const idle = this.sessions.get(sessionId) ?? {
       since: at,
+      clicks: 0,
       timeoutS: 0,
       shown: false,
       drawnAt: at,
@@ -116,7 +124,10 @@ export class MenuIdle {
   // [LAW:single-enforcer] The one place the timer follows the record.
   private settle(sessionId: string): void {
     const idle = this.sessions.get(sessionId)!;
-    const due = idle.shown ? closesAt(idle.since, idle.timeoutS) : null;
+    // [LAW:no-ambient-temporal-coupling] Disposed, nothing is due: a render
+    // that was awaiting when the daemon closed arms no timer as it lands.
+    const due =
+      idle.shown && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -138,21 +149,26 @@ export class MenuIdle {
   // every menu shut — so the timer waits for a render that draws a menu again
   // (a group open by default, a close that failed) and closes it a timeout
   // after this one: never at once, and never for a session that stopped
-  // rendering.
+  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
+  // among the journals, so whether the session is still idle is read in that
+  // turn: a click since this firing, or one landing ahead of it, keeps what
+  // it opened.
   private fire(sessionId: string): void {
     const idle = this.sessions.get(sessionId)!;
     idle.timer = null;
     const now = this.deps.now();
+    const lastClick = idle.clicks;
     const closing: IdleClose = {
       idleS: now - idle.since,
       timeoutS: idle.timeoutS,
+      // An evicted record stops counting, so its session is no longer known idle.
+      stillIdle: () =>
+        this.sessions.get(sessionId) === idle && idle.clicks === lastClick,
     };
     idle.since = now;
     idle.shown = false;
-    try {
-      this.deps.close(sessionId, closing);
-    } catch (e) {
-      this.deps.failed(sessionId, e);
-    }
+    this.deps
+      .close(sessionId, closing)
+      .catch((e: unknown) => this.deps.failed(sessionId, e));
   }
 }

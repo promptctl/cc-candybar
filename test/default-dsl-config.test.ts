@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
@@ -27,9 +28,8 @@ import {
   parseDslConfig,
   mergeWithDefault,
   unauthored,
-  validateConfig,
 } from "../src/config/dsl-loader";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -203,6 +203,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -278,6 +279,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -521,14 +523,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // own applyTheme/applyStyle actions (clickUrl → VERBS → the gate of the
   // config the session renders, the same chain the daemon runs),
   // then re-renders with theme.effective/style.effective recomputed exactly as
-  // server.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
+  // draw-bar.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
-  test("clicking a theme/style option changes theme.effective/style.effective on the next render", () => {
+  test("clicking a theme/style option changes theme.effective/style.effective on the next render", async () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -564,7 +566,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         undefined,
         // Both `.effective` fields are renderDsl's to publish, so the payload
         // carries neither and the SELECTION is what crosses the seam — resolved
-        // over the session's picks, as src/daemon/server.ts resolves it.
+        // over the session's picks, as src/daemon/draw-bar.ts resolves it.
         selectionFor(parsed, {}, (key) => sessionState.get(SID, key)),
       );
     };
@@ -574,7 +576,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // opened (brandon-theme-swatch-8v9r) — open both with the same clicks
       // a "🍫" then "🎨 theme" tap would dispatch, so the controls this test
       // exercises render.
-      clickUrl(
+      await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           {
@@ -595,15 +597,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
             "one other resolvable theme to exercise a theme-switching click",
         );
       }
-      // The open theme picker names the current theme beside its swatch, and
-      // the style control behind its gear as `◐ ◀ name ▀▀▀ ▶`, so the name is
-      // read off the visible text, as the current value.
+      // The open theme picker names the current theme beside its swatch, so
+      // the name is read off the visible text, as the current value.
       const names = (out: string, shown: string): boolean =>
         stripAnsi(out).includes(shown);
       const before = render();
       expect(names(before, `${targetTheme} ▀▀▀`)).toBe(false);
 
-      clickUrl(
+      await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] },
         ]),
@@ -622,7 +623,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             "— need at least one other declared look to exercise a look-switching click",
         );
       }
-      clickUrl(
+      await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
           { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
@@ -630,7 +631,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ctx,
       );
       const afterStyle = render();
-      expect(names(afterStyle, `◐ ◀ ${targetStyle} ▀▀▀ ▶`)).toBe(true);
+      // The style control names the setting, so its value shows in where its
+      // ▶ steps to: the option after the style in force.
+      const styles = Object.keys(parsed.styles);
+      const after = styles[(styles.indexOf(targetStyle) + 1) % styles.length];
+      expect(names(afterStyle, "◀ ◐ style ▀▀▀ ▶")).toBe(true);
+      expect(
+        linkUrls(afterStyle).some((u) =>
+          effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === after),
+        ),
+      ).toBe(true);
       expect(afterStyle).not.toBe(afterTheme);
     } finally {
       registry.dispose();
@@ -653,6 +663,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const render = (padding: number): string => {
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -717,6 +728,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -775,6 +787,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -805,6 +818,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -912,6 +926,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -1124,7 +1139,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         variables: { ...narrowed.variables, ...variables },
       };
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", sessionState);
+      const registry = new SourceRegistry(processLauncher, store, "", sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -1243,7 +1258,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     // The arrow is one clickable region, and a click on it flips the form
     // through the same gate and verb table the daemon dispatches through.
-    test("clicking the arrow expands, and clicking it again collapses", () => {
+    test("clicking the arrow expands, and clicking it again collapses", async () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const state = new SessionState();
       recordRender(state, GIT_PAYLOAD.session_id);
@@ -1262,7 +1277,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         state,
       );
       expect(strip(collapsed)).toMatch(/▸$/);
-      clickUrl(arrow(collapsed), ctx);
+      await clickUrl(arrow(collapsed), ctx);
       expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe("expanded");
 
       const expanded = renderSegment(
@@ -1273,7 +1288,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         state,
       );
       expect(strip(expanded)).toMatch(/^\(git\) .* ◂$/);
-      clickUrl(arrow(expanded), ctx);
+      await clickUrl(arrow(expanded), ctx);
       expect(
         strip(
           renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, state),
@@ -1447,6 +1462,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore();
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -1539,6 +1555,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore();
         const registry = new SourceRegistry(
+          processLauncher,
           store,
           "",
           new SessionState(),
@@ -1618,6 +1635,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // for the session segment here, but the fixture should exercise the
       // genuinely-complete default config, not a partially-registered one.
       const registry = new SourceRegistry(
+        processLauncher,
         store,
         "",
         new SessionState(),
@@ -1718,7 +1736,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 // those branches only run when their data is present.
 //
 // [LAW:single-enforcer] Resolves through resolveEffectiveGlobals — the one
-// function server.ts and check.ts both call — so EffectiveGlobals here cannot
+// function draw-bar.ts and check.ts both call — so EffectiveGlobals here cannot
 // diverge from what a real render would compute for that preset.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];
@@ -1767,7 +1785,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not
     // from a fresh SessionState that disagrees with it about edit mode.
-    const registry = new SourceRegistry(store, "", {
+    const registry = new SourceRegistry(processLauncher, store, "", {
       get: (_sessionId, key) => sessionPick(key, name),
       revision: () => 0,
     });

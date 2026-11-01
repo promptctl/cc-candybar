@@ -18,6 +18,7 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, cellLen, RichText } from "@promptctl/rich-js";
 
@@ -205,6 +206,7 @@ describe("a fill segment fills wherever the walk places it", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),

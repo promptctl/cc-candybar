@@ -6,14 +6,15 @@
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
 // key is a no-op (an inherited define emits nothing).
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { stripAnsi } from "./helpers/ansi";
 
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   parseDslConfig,
   mergeWithDefault,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
@@ -52,7 +53,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   return { config, compiled, store, registry };
 }
@@ -242,7 +243,7 @@ describe("84s — action refs through helpers", () => {
 
   test("a picker or carousel in a helper names its unknown option action", () => {
     const message = issuesOf(`{
-      helpers: { ring: '{{ carousel "nope" }}' },
+      helpers: { ring: '{{ carousel "nope" "nope" "l" }}' },
       segments: { s: { template: '{{ template "ring" . }}' } },
       root: "s",
     }`);

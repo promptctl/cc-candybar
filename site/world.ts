@@ -6,7 +6,7 @@
 
 import { vol } from "./shims/fs";
 import { HOME } from "./shims/os";
-import { programs, type ProgramRun } from "./shims/child_process";
+import { programs, RESIDENT, type ProgramRun } from "./shims/child_process";
 
 export { HOME };
 export const REPO = `${HOME}/code/tidepool`;
@@ -66,6 +66,10 @@ export function updateRepo(next: Partial<RepoState>): void {
 }
 
 const ok = (stdout: string): ProgramRun => ({ code: 0, stdout });
+
+// The launcher's lifeline (src/proc/launch.ts) lives as long as the daemon
+// that started it, which here is the page.
+programs.set("awk", () => RESIDENT);
 
 // The process table the doctor's daemon row reads (src/doctor/edge.ts): the
 // page's daemon is no process, and none other runs on the demo machine.

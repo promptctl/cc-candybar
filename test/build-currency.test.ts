@@ -10,7 +10,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   assessBuild,
-  bakedStamp,
+  bundleStamp,
   type SourceStamp,
 } from "../src/daemon/build-currency";
 import { sourceDigest } from "../src/source-digest";
@@ -148,10 +148,10 @@ describe("assessBuild", () => {
 // the production reader says so, and through assessBuild that is the typed
 // `unchecked` — "cannot check" never reads as "current".
 test("a runtime without a baked digest cannot be compared, and says so", () => {
-  expect(() => bakedStamp()).toThrow(/no source digest/);
+  expect(() => bundleStamp(null)).toThrow(/no source digest/);
   const c = scratchCheckout();
   try {
-    const v = assessBuild(c.entryUrl, bakedStamp);
+    const v = assessBuild(c.entryUrl, () => bundleStamp(null));
     expect(v.kind).toBe("unchecked");
     if (v.kind === "unchecked") expect(v.reason).toMatch(/pnpm build/);
   } finally {

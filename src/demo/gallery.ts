@@ -22,6 +22,7 @@ import process from "node:process";
 import { resolveUserPath } from "../utils/user-path.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { prepareConfig, renderEffective } from "../check.js";
+import { homeLayer } from "../config/dsl-loader.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -43,21 +44,23 @@ const named =
 const repos = repoGateAt(process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
-  named === undefined ? [] : [named],
-  repos.plugins,
+  // The file named is explicit: no repository supplies it.
+  named === undefined ? [] : [homeLayer(named)],
+  { repo: repos.plugins },
   process.cwd(),
   warnings,
   at,
 );
 try {
   for (const w of warnings) process.stderr.write(`warning: ${w}\n`);
+  const advised = new Set<string>();
   for (const theme of THEMES) {
     const effective = resolveEffectiveGlobals(
       prepared.config,
       (key) => (key === "theme" ? theme : null),
       () => false,
     );
-    const { rendered, failures, advisories } = renderEffective(
+    const { rendered, failures, advisories } = await renderEffective(
       prepared,
       effective,
       WIDTH,
@@ -65,8 +68,15 @@ try {
     );
     for (const [label, message] of failures)
       process.stderr.write(`${theme}: ${label}: ${message}\n`);
-    for (const advisory of advisories)
+    // [LAW:one-source-of-truth] One line per advisory however many themes
+    // reach it: a source still out at the deadline is out for every row, and
+    // naming it once, under the first theme that drew without it, is the
+    // whole fact.
+    for (const advisory of advisories) {
+      if (advised.has(advisory)) continue;
+      advised.add(advisory);
       process.stderr.write(`${theme}: warning: ${advisory}\n`);
+    }
     process.stdout.write(
       rendered
         .split("\n")

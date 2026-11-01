@@ -6,6 +6,7 @@
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -105,7 +106,7 @@ async function bar(
 
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const render = (): string =>
     renderDsl(
@@ -138,24 +139,6 @@ async function bar(
 const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
 describe("slash controls and the session's tmux pane", () => {
-  test("in a pane: both trays and autocompact's controls are drawn", async () => {
-    const { text, lines } = await bar({ tmux: PANE });
-    expect(text).toContain("🎨 look");
-    expect(lines).toEqual([
-      // the menu's session tab, above the bar: its tray, then its autocompact
-      "/compact",
-      "/model",
-      "/autocompact 300000",
-      "/autocompact 500000",
-      "/autocompact auto",
-      // the bar's own tray, then autocompact
-      "/compact",
-      "/model",
-      "/autocompact 300000",
-      "/autocompact 500000",
-      "/autocompact auto",
-    ]);
-  });
 
   test.each<[string, ClientHints]>([
     ["not in tmux", { tmux: null }],

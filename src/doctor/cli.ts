@@ -13,6 +13,7 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
+import { processLauncher } from "../proc/launch.js";
 import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
@@ -52,7 +53,6 @@ import {
   sessionWidth,
   type ConfigLoad,
   type InstallEdge,
-  type ConfigOrigin,
   type DoctorEdge,
 } from "./edge.js";
 import {
@@ -60,7 +60,7 @@ import {
   productionHandlerProbeEdge,
   type HandlerProbeEdge,
 } from "./handler-probe.js";
-import { cliConfigTarget } from "../config-hint.js";
+import { cliConfigTarget, type RenderOrigin } from "../config-hint.js";
 import {
   fallbackState,
   loadFromDisk,
@@ -99,8 +99,9 @@ function reportLine({ check, verdict }: CheckReport): string {
 // `loadFromDisk`, run once: it has no cache entry to read, so it builds the
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
-export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
+export function loadConfigOnce(origin: RenderOrigin): ConfigLoad {
   const deps = {
+    launcher: processLauncher,
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
     signer: linkSignerFromKeyFile(),
@@ -108,7 +109,7 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   const loaded = loadFromDisk(
     origin.projectDir,
     origin.cwd,
-    origin.configFile ?? undefined,
+    origin.target.path,
     deps,
   );
   const state =
@@ -116,7 +117,10 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   state.registry.dispose();
   return {
     layers: loaded.layers,
-    error: loaded.error,
+    // [LAW:no-silent-failure] A placement the bar drew past is still the
+    // config's error.
+    error:
+      loaded.error ?? (state.dropped.map((e) => e.message).join("\n") || null),
     warning: loaded.warning,
     unused: state.unused,
     config: state.config,
@@ -245,7 +249,7 @@ export async function doctorPlan(
           cwd,
         ),
         cwd,
-        configFile: cliConfigTarget(configFile, env, cwd) ?? null,
+        target: cliConfigTarget(configFile, env, cwd),
       },
       // No session: the bar a session started here opens on.
       () => null,
@@ -346,8 +350,8 @@ export async function doctorCommandPlan(
   return parsed.kind === "usage"
     ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
     : await doctorPlan(
-        productionEdge(loadConfigOnce),
-        productionHandlerProbeEdge(),
+        productionEdge(processLauncher, loadConfigOnce),
+        productionHandlerProbeEdge(processLauncher),
         askDaemon,
         process.env,
         process.cwd(),

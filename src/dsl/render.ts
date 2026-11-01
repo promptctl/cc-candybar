@@ -56,7 +56,6 @@ import {
   type MenuFlash,
   type RowKind,
 } from "../render/effect.js";
-import { flashAt } from "../config/menu-timeout.js";
 import {
   decideEffectName,
   decideStyleName,
@@ -124,7 +123,6 @@ import {
   barRoot,
   bandRoot,
   descend,
-  paletteRole,
   textOn,
   SHADES,
   VARIATIONS,
@@ -155,8 +153,6 @@ import {
   type NodeGate,
   type NodeRenderCtx,
   type Visibility,
-  type EvaluatedSegment,
-  type PlacementParts,
 } from "./node-registry.js";
 
 // ─── Compiled config ───────────────────────────────────────────────────────────
@@ -679,7 +675,7 @@ export function compileDslConfig(
       ...actionFuncs(actionRuntime),
       ...swatchFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
-      ...carouselFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime),
       ...themePreviewFuncs(actionRuntime, activeSegment),
       ...layoutPreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
@@ -834,9 +830,11 @@ export function compileDslConfig(
   const compileNode = <N extends LayoutNode>(
     node: N,
     path: string,
+    at: AddressStep | undefined,
   ): Compiled<N> => {
     const cctx: NodeCompileCtx = {
       path,
+      at,
       when:
         node.when === undefined
           ? undefined
@@ -864,7 +862,7 @@ export function compileDslConfig(
     // The path travels WITH the tree, so a preset that stages the config's own
     // root diagnoses under `root` — the place its author actually wrote it.
     const { node, path } = presetRoot(config, name);
-    roots.set(name, compileNode(node, path));
+    roots.set(name, compileNode(node, path, undefined));
   }
 
   // [LAW:no-silent-failure] Parsed eagerly so a malformed rule is a load error
@@ -1130,19 +1128,16 @@ export interface RenderObservers {
   //
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
-  // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a globals rule, a gate or a
+  // callers listen — the daemon records each for the bar's diagnostics
+  // (src/daemon/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
   // variable that cannot refresh, so each is visible whether or not anyone is
-  // looking at a bar. Check lists
-  // a band-floor shortfall only where its own renders open a trigger — one open
-  // by default; it opens none itself, so a shortfall behind a closed trigger
-  // reaches the bar alone.
+  // looking at a bar.
   readonly onRenderWarning?: (warning: RenderWarning) => void;
 }
 
 // [LAW:types-are-the-program] A drawn frame: its bytes, and its motion
-// (brandon-doctor-v62x.tgp). `moves` is what its cells say (`DrawnRow.moves`),
-// never what the config asked for: a template's `frames` moves the bar as
+// (brandon-doctor-v62x.tgp). `moves` is a finite `nextChange`, what its cells
+// and the holds told to its draw say, never what the config asked for: a template's `frames` moves the bar as
 // surely as an effect does. `can-move` is a still frame whose config, under
 // the settings in force, can draw motion at a later render — a
 // `globals.effect` rule, placements that fade as they come and go, or a
@@ -1150,6 +1145,9 @@ export interface RenderObservers {
 // `when`, or in a closed body) — which no still cell can say.
 export interface DrawnFrame {
   readonly text: string;
+  // The moment, in wall seconds, the frame next changes without new data, or
+  // Infinity: what a feed drawing it waits for (src/daemon/frame-feed.ts).
+  readonly nextChange: number;
   readonly motion: DrawnMotion;
   // The rows an open menu added — a disclosure body, a dropped `{{ menu }}` —
   // which flash and close once the session goes idle.
@@ -1188,11 +1186,6 @@ export type RenderWarning =
       readonly error: string;
       readonly message: string;
     }
-  // A floor an open band stands short of as drawn (decor.ts `bandFor`): its
-  // trigger off the cells of the row it stands in, or its plane off its
-  // trigger. Drawn as near as it comes, and the message names the setting that
-  // clears it — a fact about the chosen look, not a fault in the config.
-  | { readonly kind: "band-floor"; readonly message: string }
   // A variable whose cache policy cannot fire — its key template throws, or
   // the OS refused its watch — so the bar draws its last value with no cell of
   // its own to say it has stopped refreshing (brandon-var-system-7wl9).
@@ -1241,12 +1234,34 @@ export type DrawSelection = Pick<
 // draw reads, and the selections its view's slots settle.
 export type RenderSelection = DrawSelection & Selections;
 
-// One frame of a fixed payload: the view drawing from `store` is bound to
-// `payload` and `selection` — at the width it is drawn at, `term.cols`, and the
-// depth `opts` names, so the writer and every contrast floor read one depth —
-// and drawn. What `cc-candybar check`, the demo and a test draw by: the seam a
-// session's view reads, given a constant. The payload is also the draw's
-// projections (DRAW_PROJECTIONS read their paths in it).
+// The view drawing from `store` bound to a fixed `payload` and `selection` —
+// at the width it is drawn at, `term.cols`, and the depth `opts` names, so the
+// writer and every contrast floor read one depth. Returns the payload as
+// bound, which is also the draw's projections (DRAW_PROJECTIONS read their
+// paths in it). [LAW:one-source-of-truth] The one composition of what a fixed
+// view reads: a source keyed on an input starts its run inside this bind, and
+// a caller that waits for that run before it draws (`cc-candybar check`)
+// draws the very object the key read.
+export function bindPayload(
+  compiled: CompiledConfig,
+  store: VariableStore,
+  registry: SourceRegistry,
+  payload: unknown,
+  opts: BuildLineOptions,
+  selection: RenderSelection,
+): unknown {
+  const drawn = {
+    ...(payload as object),
+    term: { cols: opts.width },
+    colorCompatibility: { effective: opts.colorCompatibility },
+  };
+  bindView(compiled, store, registry, fixedSource(drawn, selection));
+  return drawn;
+}
+
+// One frame of a fixed payload: bound (`bindPayload`) and drawn in one call.
+// What the demo and a test draw by: the seam a session's view reads, given a
+// constant.
 export function drawPayload(
   config: ValidatedConfig,
   compiled: CompiledConfig,
@@ -1266,12 +1281,14 @@ export function drawPayload(
     () => false,
   ),
 ): DrawnFrame {
-  const drawn = {
-    ...(payload as object),
-    term: { cols: opts.width },
-    colorCompatibility: { effective: opts.colorCompatibility },
-  };
-  bindView(compiled, store, registry, fixedSource(drawn, selection));
+  const drawn = bindPayload(
+    compiled,
+    store,
+    registry,
+    payload,
+    opts,
+    selection,
+  );
   return drawDsl(
     config,
     compiled,
@@ -1309,19 +1326,16 @@ export function drawDsl(
 ): DrawnFrame {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
-  // The band-floor shortfalls of the bands this render opens, each reported
-  // once after the walk however many triggers open a band that falls short.
-  const shortfalls = new Set<string>();
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
-  // render's instant: its templates' `frames` animate by this reading, and the
-  // effects below by the same value (brandon-menus-sjhy.nt2).
+  // render's instant: its templates' `frames` run through this timeline, and
+  // the effects below through the same one (brandon-menus-sjhy.nt2).
   const effects = selection.effects ?? new SessionEffects<RenderedLine>("");
   const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection.animationSpeed]);
   // [LAW:one-source-of-truth] The instant this render draws at, bound to the
   // engines' one clock for the walk and unbound on every exit: every time read
-  // below — a template's `now`, a `time` variable — reads the one instant.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
-  using _clock = bindClock(at, clock.anim);
+  // below — a template's `now`, a `time` variable — reads the one instant,
+  // and every hold an animation function tells the frame is heard here.
+  using drawClock = bindClock(at, clock.timeline);
   const parts = partsOf(compiled, store);
   // [LAW:one-source-of-truth] The depth the bytes are written at is the
   // view's — the one every contrast floor below is measured on.
@@ -1437,18 +1451,16 @@ export function drawDsl(
   // from this config, preset and session state — did not draw fades in, and
   // one it drew that this frame does not dissolves out as it was drawn there.
   // [LAW:one-source-of-truth] The flash counts down to the instant the
-  // daemon's timer closes the menus (`flashAt`), lit in the theme's `warning`
-  // — something is about to happen — under the text chosen for it.
-  const flashT =
+  // daemon's timer closes the menus (src/config/menu-timeout.ts), across the
+  // whole idle period, lit in the theme's `warning` — something is about to
+  // happen — under the text chosen for it.
+  const flashFill = palette.get("warning");
+  const flash: MenuFlash =
     selection.idleSince === undefined
       ? null
-      : flashAt(selection.idleSince, selection.menuTimeout, at);
-  const flashFill = paletteRole(palette, "warning");
-  const flash: MenuFlash =
-    flashT === null
-      ? null
       : {
-          t: flashT,
+          idleSince: selection.idleSince,
+          timeoutS: selection.menuTimeout,
           fill: flashFill,
           text: textOn(palette, flashFill, registry.drawnAt()),
         };
@@ -1471,21 +1483,6 @@ export function drawDsl(
   // (the loader validates it); a miss is a caller bug the segment render
   // throws on.
   const lookupSegment = (name: string) => config.segments[name];
-
-  // [LAW:no-silent-failure] Every floor an open band stands short of, from
-  // what the placement evaluated to, reported once after the walk.
-  const collected = (evaluated: EvaluatedSegment): EvaluatedSegment => {
-    for (const shortfall of evaluated.shortfalls) shortfalls.add(shortfall);
-    return evaluated;
-  };
-  const placement = (node: CompiledSegmentNode): PlacementParts => {
-    const own = parts.placement(node);
-    return {
-      gate: () => own.gate(),
-      bodyGate: () => own.bodyGate(),
-      evaluate: (palette, region) => collected(own.evaluate(palette, region)),
-    };
-  };
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
   // (serialization deferred to the root). The driver owns the cross-cutting
@@ -1527,18 +1524,16 @@ export function drawDsl(
       region,
       perSegmentSink,
       onSegmentError,
-      placement,
+      placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
-        collected(
-          evaluateOnce(
-            compiled.activeSegment,
-            node,
-            palette,
-            region,
-            registry.drawnAt(),
-            body,
-            scope,
-          ),
+        evaluateOnce(
+          compiled.activeSegment,
+          node,
+          palette,
+          region,
+          registry.drawnAt(),
+          body,
+          scope,
         ),
       lookupSegment,
       renderChild: (child, held, step: AddressStep) =>
@@ -1609,10 +1604,11 @@ export function drawDsl(
   motion.drawn();
   record.commit();
   const menuRows = rendered.filter((row) => row.kind === "menu").length;
-  // What the frame arms under the settings in force, drawn or not: an open
-  // menu, which flashes before it closes on its own, an effect rule, fades, or a placement of this preset — hidden by its `when` or a
-  // closed body right now — wearing an effect of its own. Asked only of a
-  // frame no row of which moves.
+  // What the frame arms under the settings in force, drawn or not: a menu this
+  // frame is the first to draw, whose idle period — and the flash before it
+  // closes on its own — begins with it, an effect rule, fades, or a placement
+  // of this preset — hidden by its `when` or a closed body right now — wearing
+  // an effect of its own. Asked only of a frame nothing on which will change.
   const armed = (): boolean =>
     menuRows > 0 ||
     parts.selections().effect.kind === "expression" ||
@@ -1621,12 +1617,19 @@ export function drawDsl(
       ({ settings }) =>
         settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR,
     );
-  const frameMotion: DrawnMotion = rendered.some((row) => row.moves)
+  // [LAW:one-source-of-truth] A frame next changes when the soonest of its
+  // rows does, or of the holds its templates told the draw without a cell to
+  // stamp (`bindClock`): rich-js's hold of a frame is both. Its motion is that
+  // one value read as a word, so the two cannot disagree.
+  const nextChange = Math.min(
+    drawClock.heard(),
+    ...rendered.map((row) => row.nextChange),
+  );
+  const frameMotion: DrawnMotion = Number.isFinite(nextChange)
     ? "moves"
     : armed()
       ? "can-move"
       : "still";
-  for (const message of shortfalls) warn({ kind: "band-floor", message });
   // Read after the walk: the payload this render pushed is what a key reads.
   for (const [variable, fault] of registry.cachePolicyFaults())
     warn({
@@ -1637,6 +1640,7 @@ export function drawDsl(
     });
   return {
     text: rendered.map((row) => row.text).join("\n"),
+    nextChange,
     motion: frameMotion,
     menuRows,
     evaluated: parts.evaluated - evaluatedBefore,

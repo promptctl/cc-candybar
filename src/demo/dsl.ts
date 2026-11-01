@@ -9,12 +9,12 @@
 // [LAW:single-enforcer] One faked hook event, with the hints a statusline
 // client reports from this terminal (detectClientHints), goes through the
 // functions the daemon runs for a real one — parseClientHints,
-// buildRenderState, openView over the daemon's session source, settlePayload,
+// loadChain, openView over the daemon's session source, settlePayload,
 // drawDsl — over the providers the daemon builds (createPayloadProviders).
 // There is no demo-only payload: a field the daemon's payload gains is in the
 // demo's.
 // The config is the one file named here, loaded or refused; the daemon's
-// search for a config and its diagnostic strip are not part of the demo.
+// search for a config and its diagnostics viewer are not part of the demo.
 //
 // [LAW:dataflow-not-control-flow] The body is straight-line: load → frames →
 // dispose. The config file and the hook event are data; swapping either
@@ -33,15 +33,22 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
-import { ConfigError } from "../config/loader/diagnostics.js";
 import {
-  buildRenderState,
+  ConfigError,
+  DroppedPlacements,
+} from "../config/loader/diagnostics.js";
+import { homeLayer, refuseDrops } from "../config/dsl-loader.js";
+import {
+  loadChain,
   openView,
   UNOWNED_STORAGE,
+  type DslRenderState,
 } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
+import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
+import { processLauncher } from "../proc/launch.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
@@ -98,7 +105,10 @@ const warn = (message: string): void => log("warn", message);
 
 const watchers = new WatcherRegistry({ logger: log });
 const providers = createPayloadProviders({
+  launcher: processLauncher,
   watchers,
+  // The demo holds no folder and watches nothing.
+  fileEvents: NO_FILE_EVENTS,
   logger: log,
   ledger: new RefreshLedger(log),
 });
@@ -110,30 +120,46 @@ const sessionState = new SessionState();
 // The demo renders the file it was given or nothing. The advisories a file
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
-function loadState(): ReturnType<typeof buildRenderState> {
+function loadState(): DslRenderState {
   const repos = repoGateAt(cwd);
-  const advisories: Array<string | null> = [...repoGateLines(repos)];
-  try {
-    return buildRenderState(
-      cwd,
-      { layers: [configPath], home: configPath, repo: repos.plugins },
-      advisories,
-      {
-        sessionState,
-        storage: UNOWNED_STORAGE,
-        signer: linkSignerFromKeyFile(),
-      },
-    );
-  } catch (err) {
-    if (err instanceof ConfigError) advisories.push(...err.warnings);
-    throw err;
-  } finally {
-    advisories.filter((a) => a !== null).forEach(warn);
-  }
+  // The file it was given is named explicitly: no repository supplies it.
+  const chain = {
+    layers: [homeLayer(configPath)],
+    home: configPath,
+    repo: repos.plugins,
+  };
+  // [LAW:single-enforcer] The daemon's own load and settle: the advisories
+  // come out of the one place every load composes them.
+  const loaded = loadChain(
+    {
+      repos,
+      advisories: repoGateLines(repos),
+      started: performance.now(),
+    },
+    cwd,
+    chain,
+    {
+      launcher: processLauncher,
+      sessionState,
+      storage: UNOWNED_STORAGE,
+      signer: linkSignerFromKeyFile(),
+    },
+  );
+  if (loaded.warning !== null) warn(loaded.warning);
+  if (loaded.state === null) throw loaded.cause;
+  return loaded.state;
 }
 
 async function renderFrames(): Promise<void> {
   const state = loadState();
+  // [LAW:no-silent-failure] The daemon draws past a placement of an undeclared
+  // segment; the demo, like `check`, refuses it with the loader's message.
+  try {
+    refuseDrops(state.dropped);
+  } catch (e) {
+    state.registry.dispose();
+    throw e;
+  }
   // The session's view of the state, as the daemon opens one per session,
   // declared with the one request the demo's frames draw by.
   const view = openView(
@@ -218,7 +244,8 @@ try {
 } catch (err) {
   // A refused config is the demo's one expected failure: the loader's message
   // is the whole report. Anything else is a defect and keeps its stack.
-  if (!(err instanceof ConfigError)) throw err;
+  if (!(err instanceof ConfigError || err instanceof DroppedPlacements))
+    throw err;
   process.stderr.write(`error: ${err.message}\n`);
   process.exitCode = 1;
 } finally {

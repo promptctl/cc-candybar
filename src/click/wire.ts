@@ -43,8 +43,6 @@ export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-export const VERB_SHOW_CONFIG_ERROR = "show-config-error";
-export const VERB_SHOW_CONFIG_WARNING = "show-config-warning";
 // [LAW:effects-at-boundaries] A daemon-global config override: the verb writes
 // the override path (or clears it with an empty value); the render pipeline
 // reads it at the cache-lookup boundary. Clicking a different config is a
@@ -157,6 +155,14 @@ export const VERB_RUN = "run";
 // approved or declined, and `mac` signs the session, directory and answer
 // (src/daemon/repo-configs.ts), so only an answer the bar drew is recorded.
 export const VERB_REPO_CONFIG = "repo-config";
+
+// Copy what a diagnostic message copies (src/render/diagnostics.ts): its text,
+// or the prompt that fixes what it reports. Args: `[sessionId, by, key]` — the
+// renderer that drew the link and the key the viewer opens the message by, so a
+// frame's bytes never grow with what it copies; the text is read at click time
+// from that renderer's last delivered frame, and a message no longer listed is
+// refused loudly.
+export const VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 
 // [LAW:types-are-the-program] What a `run` link carries of the draw's
 // evaluation: the argv, program first, and the variables laid over the

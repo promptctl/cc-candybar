@@ -1,8 +1,8 @@
 // [LAW:verifiable-goals] candybar-settings-ui-aok.2's headline acceptance,
-// measured the only way it means anything: a REAL daemon, a REAL user config
-// file, two REAL sessions on one socket. The in-process suite
-// (test/session-globals.test.ts) proves the resolvers; this proves the wiring
-// they had to be threaded into — server.ts reads SessionState for `autoWrap`
+// measured the only way it means anything: the daemon's own request handling,
+// a REAL user config file, two REAL sessions on one daemon. The suite in
+// test/session-globals.test.ts proves the resolvers; this proves the wiring
+// they had to be threaded into — draw-bar.ts reads SessionState for `autoWrap`
 // and `padding`, which is the line that was missing and the reason a click on
 // either did nothing for the clicking session before this ticket.
 //
@@ -21,18 +21,9 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import {
-  click,
-  killAndWait,
-  render,
-  stripAnsi,
-  urlWriting,
-} from "./helpers/daemon-e2e";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
-} from "./helpers/spawn-isolated-daemon";
+import { click, render, stripAnsi, urlWriting } from "./helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 
@@ -94,11 +85,7 @@ function rows(rendered: string): string[] {
 
 describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () => {
   test("a click moves the clicking session's bar, leaves other sessions alone, and survives a daemon restart", async () => {
-    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
-      // Short on purpose — the socket path this becomes has to fit in
-      // sockaddr_un (prepareIsolatedDaemonEnv enforces it).
-      "ccb-sess-globals",
-    );
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-sess-globals");
     const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
     mkdirSync(configDir, { recursive: true });
     const configPath = path.join(configDir, "config.json5");
@@ -110,22 +97,22 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
     const CLICKER = "session-globals-clicker";
     const WRAPPER = "session-globals-wrapper";
     const BYSTANDER = "session-globals-bystander";
-    let daemon: RunningDaemon | undefined;
+    let daemon: InWorkerDaemon | undefined;
     try {
-      daemon = await spawnDaemonWithEnv(env);
+      daemon = startDaemon(env);
 
       // Both sessions start on the config file's padding: 1.
-      const clickerBefore = await render(sockPath, CLICKER, projectDir);
-      const bystanderBefore = await render(sockPath, BYSTANDER, projectDir);
+      const clickerBefore = await render(daemon, CLICKER, projectDir);
+      const bystanderBefore = await render(daemon, BYSTANDER, projectDir);
       expect(barInk(clickerBefore)).toBe(barInk(bystanderBefore));
 
       await click(
-        sockPath,
+        daemon,
         urlWriting(clickerBefore, "padding", String(PADDING_WIDE)),
       );
 
-      const clickerAfter = await render(sockPath, CLICKER, projectDir);
-      const bystanderAfter = await render(sockPath, BYSTANDER, projectDir);
+      const clickerAfter = await render(daemon, CLICKER, projectDir);
+      const bystanderAfter = await render(daemon, BYSTANDER, projectDir);
       // Wider cells everywhere, so the bar carries strictly more characters.
       expect(barInk(clickerAfter)).toBeGreaterThan(barInk(clickerBefore));
       // ...and the session that did not click is byte-identical. This is the
@@ -137,33 +124,30 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
       // the config value for both. Observed as row count rather than width:
       // the filler makes the row overflow the daemon's assumed columns, so the
       // config default (wrap on) is a multi-row bar.
-      const wrapperBefore = await render(sockPath, WRAPPER, projectDir);
+      const wrapperBefore = await render(daemon, WRAPPER, projectDir);
       expect(rows(wrapperBefore).length).toBeGreaterThan(1);
 
-      await click(sockPath, urlWriting(wrapperBefore, "autoWrap", "false"));
+      await click(daemon, urlWriting(wrapperBefore, "autoWrap", "false"));
 
-      expect(rows(await render(sockPath, WRAPPER, projectDir))).toHaveLength(1);
-      expect(stripAnsi(await render(sockPath, BYSTANDER, projectDir))).toBe(
+      expect(rows(await render(daemon, WRAPPER, projectDir))).toHaveLength(1);
+      expect(stripAnsi(await render(daemon, BYSTANDER, projectDir))).toBe(
         stripAnsi(bystanderBefore),
       );
 
-      // A cold restart, through the signal path a real one takes. SessionState
-      // is disk-backed on purpose (server.ts binds FileSessionStorage and
-      // flushes it in `shutdown()`), so a click is not lost when the RSS
-      // backstop recycles the daemon mid-session — the session halves come
-      // back exactly as theme/endcaps/style do, and the bystander is still
-      // untouched.
-      const clickerWide = stripAnsi(
-        await render(sockPath, CLICKER, projectDir),
-      );
-      await killAndWait(daemon, "SIGTERM");
-      daemon = await spawnDaemonWithEnv(env);
+      // A cold restart, through the close a real one takes. SessionState is
+      // disk-backed on purpose (the daemon's close flushes FileSessionStorage),
+      // so a click is not lost when the RSS backstop recycles the daemon
+      // mid-session — the session halves come back exactly as
+      // theme/endcaps/style do, and the bystander is still untouched.
+      const clickerWide = stripAnsi(await render(daemon, CLICKER, projectDir));
+      await daemon.stop();
+      daemon = startDaemon(env);
 
-      expect(stripAnsi(await render(sockPath, CLICKER, projectDir))).toBe(
+      expect(stripAnsi(await render(daemon, CLICKER, projectDir))).toBe(
         clickerWide,
       );
-      expect(rows(await render(sockPath, WRAPPER, projectDir))).toHaveLength(1);
-      expect(stripAnsi(await render(sockPath, BYSTANDER, projectDir))).toBe(
+      expect(rows(await render(daemon, WRAPPER, projectDir))).toHaveLength(1);
+      expect(stripAnsi(await render(daemon, BYSTANDER, projectDir))).toBe(
         stripAnsi(bystanderBefore),
       );
 
@@ -173,7 +157,7 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
         USER_CONFIG,
       );
     } finally {
-      if (daemon) await killAndWait(daemon);
+      if (daemon) await daemon.stop();
       removeTmpDirs();
       rmSync(projectDir, { recursive: true, force: true });
     }

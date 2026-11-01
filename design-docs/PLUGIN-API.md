@@ -74,7 +74,7 @@ A program that wants to show something per session should not have to invent a f
 <plugin folder>/session/<session id>.json
 ```
 
-The plugin's program writes that file, whole, by writing a temporary file beside it and renaming it into place, whenever what it knows changes. cc-candybar does the rest. It creates the scope's folder when it first loads the plugin, watches the folder once for as long as a loaded config declares the plugin (and writes a probe file there each period, so a watch the OS has stopped feeding shows as a failure rather than a quiet folder), reads only the file that changed and only if a session holds it, and removes files that have gone untouched for 30 days and that no session holds. A `file` source with no path reads this file.
+The plugin's program writes that file, whole, by writing a temporary file beside it and renaming it into place, whenever what it knows changes. cc-candybar does the rest. It creates the scope's folder when it first loads the plugin, watches the folder once for as long as a loaded config declares the plugin (a watch the OS has stopped feeding shows as a failure rather than a quiet folder), reads only the file that changed and only if a session holds it, and removes files that have gone untouched for 30 days and that no session holds. A `file` source with no path reads this file.
 
 `session` is the scope the API stores first. The other scopes store the same way when a plugin needs one: a key that is not a safe file name is stored under the hex SHA-256 of the key.
 

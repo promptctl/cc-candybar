@@ -19,7 +19,7 @@
 // three call, so a synthesized global menu and a hand-authored group are
 // indistinguishable to the render walk.
 //
-// WHY THIS RUNS FROM validateConfig, BEFORE synthesizeEditChrome — the two
+// WHY THIS RUNS FROM validateRenderable, BEFORE synthesizeEditChrome — the two
 // passes both rewrite every preset root, so their order is a real decision:
 //   • It cannot run at parse time (loader/*.ts) like group/menu synthesis,
 //     because the tree it must splice into only exists after merge: a file's
@@ -76,7 +76,12 @@ import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
-import { SETTINGS_ANCHOR, SETTINGS_OPEN, SETTINGS_REF } from "./door.js";
+import {
+  DIAGNOSTICS_VIEWING,
+  SETTINGS_ANCHOR,
+  SETTINGS_OPEN,
+  SETTINGS_REF,
+} from "./door.js";
 import {
   SETTINGS,
   type SettingName,
@@ -132,12 +137,10 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 // a time, its body dropped below the strip. A tab strip is an accordion: every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
-// open trigger. Closing the door returns it to the first tab, as it returns
-// everything inside the door (src/config/disclosure-nest.ts), so the menu
-// always reopens at its top level.
+// open trigger. The key starts closed, and closing the door returns it there, as
+// it returns everything inside the door (src/config/disclosure-nest.ts), so the
+// menu always opens at its top level and a tab's body appears only when clicked.
 const TAB_KEY = `${SETTINGS_NS}tab`;
-// The tab a fresh session opens the menu on.
-const FIRST_TAB: TabName = "session";
 const tabSeg = (tab: TabName): string => `${TAB_KEY}.${tab}`;
 // A tab's own open/close cycle, fired by the tab's click beside the disarms.
 const tabToggle = (tab: TabName): string => `${tabSeg(tab)}.toggle`;
@@ -310,12 +313,15 @@ const controlResettable = (name: string): string =>
   `${SETTINGS_NS}resettable.${name}`;
 // What a marked trigger carries after its label.
 const DRIFT_MARK = " •";
-// A boolean `or` over the named controls' resettable flags — `false` over none,
-// so a tab holding no control is never marked.
-const anyResettable = (names: readonly string[]): string =>
-  names.length === 0
+// A boolean `or` over the controls' resettable flags, each only while its
+// control is offered to the session — `false` over none, so a tab holding no
+// control is never marked, and a mark never points at a control not drawn.
+const anyResettable = (
+  controls: ReadonlyArray<Pick<MenuControl, "name" | "shown">>,
+): string =>
+  controls.length === 0
     ? "false"
-    : `(or ${names.map((n) => `.${controlResettable(n)}`).join(" ")})`;
+    : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
 
 // ─── The animation lanes' toggles (brandon-menus-sjhy.amf) ────────────────
 //
@@ -328,7 +334,7 @@ const anyResettable = (names: readonly string[]): string =>
 // `(?)` says what the lane is and what turning it on does, from the help
 // corpus `--help` prints.
 const laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].setting, lane] as const,
+  (lane) => [LANES[lane].switch.setting, lane] as const,
 );
 
 // The `(?)` laid after a control, and the artifacts it declares.
@@ -338,15 +344,10 @@ const HELP_ARTIFACTS: HelpArtifacts = {
   segments: {},
 };
 const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [
-    setting,
-    declareHelp(
-      `${SETTINGS_NS}help.${setting}`,
-      LANE_HELP[lane],
-      [],
-      HELP_ARTIFACTS,
-    ),
-  ]),
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
+  }),
 );
 
 // One control of the menu: its setting's row of SETTINGS and what the
@@ -355,6 +356,9 @@ interface MenuControl extends SettingProjection {
   readonly name: SettingName;
   readonly control: Affordance;
   readonly beneath: readonly SegmentDecl[];
+  // What the menu lays right after it: its help, and the submenus beside it.
+  readonly help: readonly LayoutNode[];
+  readonly submenus: readonly SubmenuName[];
 }
 
 // [LAW:nothing-unseen] While a lane is on, its toggle says what its frames are
@@ -377,32 +381,49 @@ const laneReadout = (lane: Lane): string => {
     " ",
   );
   return (
-    `{{ if .${SETTINGS[LANES[lane].setting].effectiveVar} }} ` +
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} ` +
     `{{ if ${feed("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed("fps")} }} fps` +
     `{{ if not ${feed("shown")} }} · off screen{{ end }}` +
     `{{ else }}no subscriber{{ end }}{{ end }}`
   );
 };
 // [LAW:nothing-unseen] Every bar says how it is redrawn, in the cell beside the
-// door. On a frame the feed drew: how fast the feed draws it, the moving rate
-// while it moves where someone can see it, one a second while it is still or
-// unseen. On a request's answer: that Claude Code polls it. A polled bar has no
-// rate to show, since its redraws are Claude Code's, and the requests that
-// carry them cannot tell its timer from its event redraws or a daemon stall.
+// door. On a frame the feed drew: the most frames a second the feed draws it
+// at — the moving rate while its pane is on a screen, one a second while it
+// is not — written `≤`, since the feed draws a bar only as often as it
+// changes, and a still bar on a screen is drawn once a second. On a request's
+// answer: that Claude Code polls it. A polled bar has no rate to show, since
+// its redraws are Claude Code's, and the requests that carry them cannot tell
+// its timer from its event redraws or a daemon stall.
 // [LAW:dataflow-not-control-flow] The one branch is Drawing's own
 // discriminator. Both forms are padded to the wider of `polled` and the
-// fastest pace, MOVING_FPS, so a bar starting, stopping or losing its lane
+// fastest ceiling, MOVING_FPS, so a bar starting, stopping or losing its lane
 // moves no cell after it.
+// [LAW:single-enforcer] Every error and warning a draw owes its reader is one
+// indicator, a second click region in the door's own cell, so it sits beside
+// the door wherever an author put it and no layout can leave it out. It reads
+// the draw's `diagnostics` projection, the same list the viewer pages
+// (src/render/diagnostics.ts); its click opens the viewer on the first
+// message, by that message's key. Nothing to show is an empty label, which draws nothing.
+const DIAGNOSTICS_INDICATOR =
+  `{{ if .diagnostics.label }} ` +
+  `{{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}` +
+  `{{ end }}`;
+
 const FPS_SEG = `${SETTINGS_NS}fps`;
 export const POLLED = "polled";
+const AT_MOST = "≤";
 const FPS_UNIT = " fps";
 const RATE_WIDTH = Math.max(
   POLLED.length,
-  String(MOVING_FPS).length + FPS_UNIT.length,
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length,
 );
 const FRAME_RATE =
   `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }}` +
-  `{{ printf "%${RATE_WIDTH - FPS_UNIT.length}d" (int .${drawingVar("fps")}) }}${FPS_UNIT}` +
+  `{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}` +
   `{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
 
 // What a control shows after itself: a lane's toggle its readout.
@@ -417,31 +438,40 @@ const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
 // generator configure mode uses for a placement's settings. Every apply
 // action is a session `set`: a draft until the save cell commits it. A field
 // no control shape fits is a `text` row, which is no setting at all.
-const CONTROLS: readonly MenuControl[] = (
-  Object.keys(SETTINGS) as SettingName[]
-).map((name) => {
+// The submenus laid right after a setting's control.
+const submenusBeside = (name: SettingName): SubmenuName[] =>
+  SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+const menuControl = (name: SettingName): MenuControl => {
   const row: SettingProjection = SETTINGS[name];
-  const domain = settingControlDomain(row.configKey);
-  const control = settingControl(
-    { label: row.label, domain },
-    row.sessionKey,
-    row.effectiveVar,
-    controlApply(name),
-    accordionOf(PLACE[name]),
-  );
+  const place = PLACE[name];
   return {
     ...row,
     name,
-    control,
+    place,
+    control: settingControl(
+      {
+        label: row.label,
+        domain: settingControlDomain(row.configKey),
+      },
+      row.sessionKey,
+      row.effectiveVar,
+      controlApply(name),
+      accordionOf(place),
+    ),
     beneath: row.previews.map((preview) => PREVIEWS[preview]),
+    help: [HELP[name]].filter((h) => h !== undefined),
+    submenus: submenusBeside(name),
   };
-});
+};
+const CONTROLS: readonly MenuControl[] = (
+  Object.keys(SETTINGS) as SettingName[]
+).map(menuControl);
 
 const controlsIn = (place: Place): readonly MenuControl[] =>
-  CONTROLS.filter((c) => PLACE[c.name] === place);
+  CONTROLS.filter((c) => c.place === place);
 // What a place holds, the controls inside its submenus included.
 const controlsUnder = (place: Place): readonly MenuControl[] =>
-  CONTROLS.filter((c) => within(PLACE[c.name], place));
+  CONTROLS.filter((c) => within(c.place, place));
 // [LAW:one-source-of-truth] A trigger that opens a place — a tab, a submenu —
 // is marked `•` while a control inside it would change on reset
 // (brandon-menu-ia-q30.nk8), open or closed, so drift is findable without
@@ -451,21 +481,22 @@ const markedDisplay =
   (place: Place) =>
   (text: string): string =>
     `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-      controlsUnder(place).map((c) => c.name),
+      controlsUnder(place),
     )}))`;
-// The submenus laid right after a setting's control.
-const submenusBeside = (name: SettingName): SubmenuName[] =>
-  SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
 // The controls in `place`, each followed by the submenus laid beside it, whose
 // bodies are laid the same way.
+// [LAW:single-enforcer] Everything laid at a control — the control, its `(?)`,
+// its submenus — is offered where the control is, by the control's one gate.
 const controlsAt = (place: Place): LayoutNode[] =>
-  controlsIn(place).flatMap((c) => [
-    controlNode(c),
-    ...[HELP[c.name]].filter((h) => h !== undefined),
-    ...submenusBeside(c.name).map((s) =>
-      disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
-    ),
-  ]);
+  controlsIn(place).flatMap((c) =>
+    [
+      controlNode(c),
+      ...c.help,
+      ...c.submenus.map((s) =>
+        disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
+      ),
+    ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` })),
+  );
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -480,10 +511,15 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
 );
 
+// [LAW:single-enforcer] `⟲` resets the controls the session it is drawn in is
+// offered, by the same gate each control is drawn by and the `•` counts it by:
+// a control offered only to some sessions (the renderer, inside tmux) is reset
+// where it is drawn, and never by a reset-all clicked where it is not, since
+// the sessions share the setting.
 const RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "⟲", confirm: "⟲ reset all?" },
-  CONTROLS.map((c) => controlReset(c.name)),
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown })),
 );
 
 // ─── The save cell ──────────────────────────────────────────────────────────
@@ -518,7 +554,7 @@ const SAVE_PARTS: readonly SavePart[] = [
   counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
     body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS.map((c) => c.name))} ${RESET_ALL.armed})`,
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`,
   },
 ];
 // The parts present, one space between each: `$sep` is empty until the first
@@ -624,13 +660,29 @@ function prependAnchor(node: LayoutNode): LayoutNode {
           children: [anchorRef, node],
         };
   }
-  return node.kind === "container" && node.when === undefined
-    ? { ...node, children: [anchorRef, ...node.children] }
-    : {
-        kind: "container",
-        direction: "horizontal",
-        children: [anchorRef, node],
-      };
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node],
+    };
+  }
+  if (node.when === undefined) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  // [LAW:one-source-of-truth] A gated row is led from outside its gate: it
+  // stays the row, now led by the door, and only its gate moves in, onto a
+  // container around its cells. A row nested in a row places nothing, so
+  // whatever makes it a row (its distribution) stays on the row its cells are
+  // laid on, as an ungated row's places the door beside its cells.
+  const { when, children, ...row } = node;
+  return {
+    ...row,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row.direction, when, children },
+    ],
+  };
 }
 
 // [LAW:parse-dont-validate] The checkpoint: in, a tree that may or may not name
@@ -744,8 +796,9 @@ function placeBody(place: Place): ContainerNode {
 //
 // [LAW:single-enforcer] The anchor is the one position every bar is
 // guaranteed, so what every bar carries hangs on it: the door and, beside it,
-// how the bar is redrawn (FRAME_RATE). One unit, so the two share the door's
-// band, and no preset or authored root has to remember the rate.
+// how the bar is redrawn (FRAME_RATE). One node, so no preset or authored root
+// has to remember the rate; a plain horizontal one, so the two take two places
+// of the row and differ in shade as any two cells side by side do.
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
@@ -818,9 +871,15 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   const artifacts: MenuArtifacts = {
     variables: {
       [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+      [DIAGNOSTICS_VIEWING]: {
+        kind: "state",
+        key: DIAGNOSTICS_VIEWING,
+        default: "0",
+      },
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
       [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       ...TOOLBAR.actions,
@@ -850,18 +909,22 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ is the theme's `DOOR_CLOSE_ROLE` exactly as the theme gives it,
-      // with no contrast floor: a floor moves its lightness until the red no
-      // longer reads as red on the state colour, and the ✖ must be red on
-      // every theme. `keptOn` only stops the terminal's rounding from costing
-      // it the contrast it has. Closed, the author's glyph keeps the cell's
-      // own text.
+      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
+      // gives it (`roleTextOn`): the theme's text-red where that reads on the
+      // pressed state, otherwise the role's own red or the nearest rung of its
+      // ladder out toward the pole the pressed state stands farther from that
+      // does, and where none does, the named red standing farthest off. It
+      // never slides lightness: a slid red stops reading as red, and the ✖
+      // must be red on every theme. `keptOn` only stops the terminal's
+      // rounding from costing it the contrast it has. Closed, the author's
+      // glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
-          `{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}` +
-          `{{ else }}{{ $door }}{{ end }}`,
+          `{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}` +
+          `{{ else }}{{ $door }}{{ end }}` +
+          DIAGNOSTICS_INDICATOR,
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -920,7 +983,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   // [LAW:composability] A tab click is its cycle and the disarm of every
   // confirm a tab holds, as one `do` (the door's shape): the tab is the click's
   // face, and switching tabs drops a half-made confirm it took out of view.
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
   for (const { member, label } of TABS) {
     artifacts.actions[tabToggle(member)] = disclosureCycleAction(
       TAB_KEY,
@@ -995,11 +1058,9 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // of the config file a save can write (resetLayers,
 // src/daemon/setting-drafts.ts), keyed by the config field a save writes so
 // the two can never name different settings — and its segments. An inline
-// control is one cell, the ↺ beside it; a picker is its setting's label, then
-// `◀ value ▶` naming the value the bar renders with (the control's
-// `effectiveVar`, whatever rung produced it) whose name opens its list on the
-// shared accordion key, then the ↺; the rows beneath it are segments of their
-// own.
+// control is one cell, the ↺ beside it; a picker is `◀ label ▶`, whose label
+// opens its list on the shared accordion key, then the ↺; the rows beneath it
+// are segments of their own.
 //
 // A pick leaves the list open (brandon-theme-picker-bgw.etd): choosing a theme
 // is trying several, so each try must not cost a reopen; ✕ closes. That holds for a preset pick too,
@@ -1021,6 +1082,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
+    // Whom a control is offered to gates where it is laid (`controlsAt`); its
+    // list hangs on it, so hiding it hides the list.
     artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
     };
@@ -1064,7 +1127,7 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from
-// validateConfig after cross-ref/cycle checks pass and before edit chrome.
+// validateRenderable after cross-ref/cycle checks pass and before edit chrome.
 // Every declared preset — the floor `default` included — gets an explicit
 // `presets[name].root` carrying its anchored, expanded tree; `config.root`
 // itself is left untouched, exactly as synthesizeEditChrome leaves it, because

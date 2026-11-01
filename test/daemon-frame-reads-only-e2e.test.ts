@@ -1,4 +1,4 @@
-// brandon-unfiled-3248.8ro6, measured on a REAL daemon: every input refreshes
+// brandon-unfiled-3248.8ro6, measured on a daemon: every input refreshes
 // on its own clock, and drawing a frame only reads. A feed draws a moving bar
 // many times a second between a session's statusline requests; across those
 // frames no source refreshes but the ones whose own period fell due, so a
@@ -10,16 +10,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { openFrameStream, type FrameStream } from "../src/daemon/client-frames";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import type { StatsSnapshot } from "../src/daemon/stats";
 import type { SourceRecord } from "../src/utils/refresh-ledger";
-import { killAndWait, render } from "./helpers/daemon-e2e";
-import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { render } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
+import { startDaemon, statsOf, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
@@ -38,7 +34,7 @@ describe("drawing a frame only reads", () => {
   let removeTmpDirs: () => void;
   let projectDir: string;
   let runs: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-reads-only-e2e");
@@ -66,24 +62,15 @@ describe("drawing a frame only reads", () => {
         root: { h: ['shell', 'lanes'] },
       }`,
     );
-    daemon = await spawnDaemonWithEnv(prepared.env);
+    daemon = startDaemon(prepared.env);
+    await daemon.listen(sockPath);
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
-
-  const stats = async (): Promise<StatsSnapshot> => {
-    const resp = await sendDaemonRequest(
-      sockPath,
-      { v: PROTOCOL_VERSION, kind: "stats" },
-      5000,
-    );
-    if (!resp.ok || !("stats" in resp)) throw new Error(JSON.stringify(resp));
-    return resp.stats;
-  };
 
   test("a feed's frames between requests refresh no source; a 5 s ttl shell runs once per 5 s", async () => {
     const args = ["cc-candybar", "--config", path.join(projectDir, "bar.json5")];
@@ -111,11 +98,11 @@ describe("drawing a frame only reads", () => {
     stream = open();
     try {
       await until(() => frames > 0, "the feed's first frame");
-      const before = await stats();
+      const before = await statsOf(daemon.daemon);
       // One period of the shell, and a second beyond it: the bar is drawn many
       // times a second throughout, and no request arrives.
       await sleep((TTL_S + 1) * 1000);
-      const after = await stats();
+      const after = await statsOf(daemon.daemon);
 
       const drawn = after.frameFeeds.drawn - before.frameFeeds.drawn;
       // 30 a second while the bar moves; a fifth of that leaves room for a

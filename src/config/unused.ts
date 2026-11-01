@@ -79,6 +79,10 @@ function* templatesOf(config: DslConfig): IterableIterator<string> {
 export function unusedDeclarations(
   raw: RawDslConfig,
   config: DslConfig,
+  // The segment every layer's insert entry names. An entry places its
+  // segment as surely as a row, even where it draws nothing because its
+  // anchor's plugin is absent here.
+  inserted: Iterable<string>,
 ): readonly UnusedDecl[] {
   const fold = valueReadsOf(config);
   const read = new Set<string>();
@@ -110,7 +114,7 @@ export function unusedDeclarations(
   // A clicked `set` reads its key's current value back through the `state`
   // variable on that key (a cycle's successor, a picker's current mark).
   const writtenKeys = new Set<string>();
-  const placed = new Set<string>();
+  const placed = new Set<string>(inserted);
   for (const name of clicked) {
     const action = config.actions[name];
     if (action === undefined) continue;

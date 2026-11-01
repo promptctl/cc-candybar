@@ -81,9 +81,14 @@ export interface ResolvedDomain {
   readonly members: readonly string[];
   readonly paletteOf?: OptionPalette;
   readonly library?: DomainLibrary;
+  readonly labelOf?: OptionLabel;
 }
 
-// [LAW:types-are-the-program] The other thing a domain may know about itself:
+// What a list shows for a member, whose value is what a click writes. Absent,
+// a member shows as itself.
+export type OptionLabel = (option: string) => string;
+
+// [LAW:types-are-the-program] Another thing a domain may know about itself:
 // that its members are a CATALOGUE — each with a group it belongs to and a line
 // saying what it is — so a picker can lay it out as a library (grouped pages,
 // one described row per member) instead of a grid of bare names. `library`'s
@@ -107,6 +112,8 @@ interface DomainEntry {
   readonly permanent: boolean;
   readonly resolve: OptionDomainResolver;
   readonly paletteOf?: OptionPalette;
+  readonly library?: DomainLibrary;
+  readonly labelOf?: OptionLabel;
 }
 
 const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
@@ -114,9 +121,9 @@ const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
 function registerBuiltinDomain(
   name: string,
   resolve: OptionDomainResolver,
-  paletteOf?: OptionPalette,
+  facets: Pick<DomainEntry, "paletteOf" | "library" | "labelOf"> = {},
 ): void {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, paletteOf });
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
 }
 
 // [LAW:one-source-of-truth] "themes"/"endcaps" become ORDINARY registrations —
@@ -131,20 +138,18 @@ function registerBuiltinDomain(
 // cell and the bar it would produce cannot come from two constructions. The
 // render's CURRENT style is deliberately not composed in: the cell shows the
 // theme being chosen, and the style control beside it shows the style.
-registerBuiltinDomain(
-  "themes",
-  () => listResolvablePaletteNames(),
-  (option) => paletteForThemeName(option),
-);
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option),
+});
 // [LAW:one-source-of-truth] What a placement's `theme` setting may hold —
 // the bar's theme or any installed one — named so configure mode's picker
 // and the click gate derive from the same members. An option paints in what
 // the placement would render in: `bar` in the palette the bar is drawn in, a
 // theme in its own, through the one `placementPalette` the walk uses.
 export const PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, (option, render) =>
-  placementPalette(option, render.palette),
-);
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render) => placementPalette(option, render.palette),
+});
 // [LAW:one-source-of-truth] Every globals row that names its closed list of
 // words (`endcaps`, `variations`, `shades`, `colorCompatibilities`) is a domain
 // an author's `from:` may name — the exact list the loader validates the field
@@ -152,9 +157,11 @@ registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, (option, render) =>
 // never enumerate a value the render would reject. None is colour-valued in
 // the `paletteOf` sense: a variation chooses which of the palette's roles each
 // row wears, a shade which of a role's own shades each cell wears, and neither
-// puts another palette in force.
-for (const { name, members } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members);
+// puts another palette in force. A row that describes its members (the
+// renderers) registers them as a catalogue, so its picker lays them out as
+// the add-segment menu does.
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
 }
 
 // [LAW:no-silent-failure] A built-in domain can never be re-claimed — a
@@ -262,7 +269,14 @@ export function resolveOptionDomain(
   const local = perConfigDomains.get(from);
   if (local) return local;
   const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) return { members: entry.resolve(), paletteOf: entry.paletteOf };
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf,
+    };
+  }
   throw new Error(unknownOptionDomain(from, perConfigDomains));
 }
 

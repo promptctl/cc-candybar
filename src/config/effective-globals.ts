@@ -28,7 +28,7 @@ import {
 import { themeDefaultsOf, underThemeDefault } from "./theme-defaults.js";
 
 // [LAW:one-source-of-truth] Each of these is resolved exactly ONCE per render,
-// here: by the daemon (server.ts, before both the payload build and renderDsl's
+// here: by the daemon (draw-bar.ts, before both the payload build and renderDsl's
 // BuildLineOptions), and by drawDsl itself for a caller that hands it no
 // selection — so the value a trigger label displays and the value that
 // actually shaped the render can never disagree.
@@ -83,9 +83,20 @@ export type EffectiveGlobals = ValuedGlobals & {
 };
 
 // Which lanes a session's settings switch on — each lane's toggle as the
-// resolution resolved it.
-export const laneSwitches = (effective: EffectiveGlobals): LaneSwitches =>
-  perLane((lane) => effective[LANES[lane].setting]);
+// resolution resolved it, on while its switch's setting holds the value that
+// turns it on, and, for a switch that is `inTmux`, while the session's client
+// reports it in a tmux pane.
+// [LAW:single-enforcer] The one place "outside tmux ignores the renderer"
+// is decided: the draw, the feed and a click's before/after all read lanes
+// here, so no setup ever runs for a lane a session cannot have.
+export const laneSwitches = (
+  effective: EffectiveGlobals,
+  inTmux: boolean,
+): LaneSwitches =>
+  perLane((lane) => {
+    const { setting, on, inTmux: needsTmux } = LANES[lane].switch;
+    return effective[setting] === on && (inTmux || !needsTmux);
+  });
 
 // [LAW:one-type-per-behavior] THE fold for one valued field: the staged
 // fragment over the session's pick over the config default over the row's
@@ -124,7 +135,7 @@ export function presetOf(
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
 // chain has one implementation rather than one per caller. It previously stood
-// as two structurally identical struct literals (the daemon's, in server.ts,
+// as two structurally identical struct literals (the daemon's, in draw-bar.ts,
 // and `cc-candybar check`'s), which is two clocks: the check command's job is
 // to render what the daemon would render, and a rung added to one copy is a
 // rung silently missing from the other. The callers differ only in WHERE a

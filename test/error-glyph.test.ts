@@ -8,8 +8,8 @@ import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/pr
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
-// implementation. The Rust mirror (rust-client/src/error_glyph.rs) carries an
-// equivalent unit test that pins byte-identical output for the same causes.
+// implementation. Each cause's exact glyph is in the one table both runtimes
+// assert (test/diagnostic-text-cases.test.ts).
 
 const OPEN = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
 const TAIL = "\x1b[0m\n";
@@ -44,73 +44,6 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       expect(glyph.split("\n").length).toBe(2);
       expect(glyph.endsWith("\n")).toBe(true);
     }
-  });
-
-  test("version_mismatch carries client and daemon versions in visible text", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "version_mismatch",
-      clientV: CLIENT_V,
-      daemonV: OTHER_V,
-    });
-    expect(glyph).toContain(
-      `protocol mismatch (client v${CLIENT_V} ≠ daemon v${OTHER_V})`,
-    );
-  });
-
-  test("version_mismatch with daemonV=0 renders as 'unknown' (older daemons)", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "version_mismatch",
-      clientV: CLIENT_V,
-      daemonV: 0,
-    });
-    expect(glyph).toContain(`client v${CLIENT_V} ≠ daemon unknown`);
-    expect(glyph).not.toContain("daemon v0");
-  });
-
-  test("bad_request message is included verbatim when short", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "bad_request",
-      message: "unknown kind",
-    });
-    expect(glyph).toContain("daemon rejected request: unknown kind");
-  });
-
-  test("render_failed message is included verbatim when short", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "render_failed",
-      message: "segments threw",
-    });
-    expect(glyph).toContain("render failed: segments threw");
-  });
-
-  test("malformed_response message is included verbatim when short", () => {
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "malformed_response",
-      message: "stats response to render/click",
-    });
-    expect(glyph).toContain(
-      "malformed daemon response: stats response to render/click",
-    );
-  });
-
-  test("long messages are truncated to a single-line budget", () => {
-    const long = "x".repeat(200);
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "render_failed",
-      message: long,
-    });
-    // 60-char budget: 59 x's then an ellipsis. The full 200 must not appear.
-    expect(glyph).not.toContain("x".repeat(200));
-    expect(glyph).toContain("…");
-    // Body fits well under any reasonable statusline width.
-    const body = glyph.slice(OPEN.length, -TAIL.length);
-    expect(body.length).toBeLessThan(100);
   });
 
   // [LAW:one-type-per-behavior] The single-line glyph contract documented in
@@ -184,41 +117,6 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       expect(body).not.toMatch(/[\n\r]/);
       // Each part appears, in order, separated by exactly one space.
       expect(body).toContain(parts.join(" "));
-    }
-  });
-
-  // [LAW:one-type-per-behavior] Truncation must count Unicode scalar values,
-  // not UTF-16 code units. Astral characters (each 2 UTF-16 units / 1 code
-  // point) would otherwise truncate at a different boundary than the Rust
-  // mirror, and the byte-identical contract this module advertises would only
-  // hold for ASCII input. Rocket (U+1F680) is a single emoji that exercises
-  // surrogate-pair handling specifically.
-  test("truncation counts code points, not UTF-16 units (astral-safe)", () => {
-    const rockets = "🚀".repeat(100); // 100 code points, 200 UTF-16 units
-    const glyph = formatPermanentGlyph({
-      kind: "permanent",
-      cause: "render_failed",
-      message: rockets,
-    });
-    const body = glyph.slice(OPEN.length + PREFIX.length, -TAIL.length);
-    // After "render failed: " prefix in the body, the message is truncated
-    // to exactly MAX_MESSAGE_LEN code points (59 rockets + ellipsis).
-    const message = body.slice("render failed: ".length);
-    expect([...message].length).toBe(60);
-    expect(message.endsWith("…")).toBe(true);
-    // Critically, no lone surrogate ever appears in the output.
-    for (let i = 0; i < glyph.length; i++) {
-      const code = glyph.charCodeAt(i);
-      const isHigh = code >= 0xd800 && code <= 0xdbff;
-      const isLow = code >= 0xdc00 && code <= 0xdfff;
-      if (isHigh) {
-        const next = glyph.charCodeAt(i + 1);
-        expect(next >= 0xdc00 && next <= 0xdfff).toBe(true);
-      }
-      if (isLow) {
-        const prev = glyph.charCodeAt(i - 1);
-        expect(prev >= 0xd800 && prev <= 0xdbff).toBe(true);
-      }
     }
   });
 });

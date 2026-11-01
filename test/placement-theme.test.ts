@@ -11,6 +11,7 @@
 //     colour of the palette picking them would put on the placement, all on
 //     one ground, and save writes the pick into the placement.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
@@ -81,7 +82,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   durable.seedOrigin(sessionState, SID);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   let sink = new Map<string, readonly RichText[]>();
   const render = (barTheme = BAR_A): string => {
@@ -118,11 +119,11 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
     },
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
   };
   return { config, compiled, store, registry, sessionState, render, bgOf, click, ctx };
 }
@@ -232,7 +233,7 @@ describe("load errors", () => {
 });
 
 describe("configure mode picks a placement's theme", () => {
-  test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", () => {
+  test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", async () => {
     durable.write(TWO);
     const rt = buildRuntime(TWO);
     configurePlacement(rt.sessionState, SID, "default", "tag");
@@ -246,7 +247,7 @@ describe("configure mode picks a placement's theme", () => {
       ),
     );
     expect(open).toBeDefined();
-    rt.click(open!);
+    await rt.click(open!);
     const out = rt.render(BAR_A);
     // Every swatch of the row applies the theme it stands for, gated by the
     // theme domain.
@@ -282,7 +283,7 @@ describe("configure mode picks a placement's theme", () => {
     ).toEqual([]);
 
     const pinnedBefore = rt.bgOf("pinned");
-    rt.click(writing(first!)[0]!);
+    await rt.click(writing(first!)[0]!);
     rt.sessionState.set(SID, EDIT_MODE_KEY, "closed");
     rt.render(BAR_A);
     const following = buildRuntime(
@@ -293,9 +294,9 @@ describe("configure mode picks a placement's theme", () => {
     expect(rt.bgOf("pinned")).toBe(pinnedBefore);
 
     const logged: string[] = [];
-    VERBS.get(VERB_SAVE)!(SID, {
+    await VERBS.get(VERB_SAVE)!(SID, {
       ...rt.ctx,
-      dlog: (_level, message) => logged.push(message),
+      log: (_level, message) => logged.push(message),
     });
     // The save's one event names the theme it wrote.
     expect(logged).toHaveLength(1);

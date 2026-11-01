@@ -29,6 +29,7 @@
 // `if-shell -F '#{@cc-candybar-status-prior}'`, which the restore removes, so
 // a draw landing after it does nothing.
 
+import { LANES } from "../config/lanes.js";
 import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
@@ -44,8 +45,7 @@ import {
   type TmuxStatusBar,
 } from "../tmux-status/frames.js";
 
-// tmux draws at most five status rows (`status` takes on, off, 2…5).
-export const MAX_STATUS_ROWS = 5;
+export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
 export const WROTE_OPTION = "@cc-candybar-status-wrote";
 export const BINDING_OPTION = "@cc-candybar-binding-prior";

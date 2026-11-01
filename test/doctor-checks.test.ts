@@ -38,9 +38,13 @@ const inside = (
 const LOADED: ConfigFacts = {
   kind: "loaded",
   layers: ["/p/.cc-candybar.json5"],
+  target: { source: "search" },
   warnings: [],
   unused: [],
 };
+
+// How LOADED reads, in front of whatever the check says of it.
+const JUDGED = "/p/.cc-candybar.json5 (searched)";
 
 const SETTINGS_PATH = "/home/u/.claude/settings.json";
 const USER = { scope: "user", path: SETTINGS_PATH } as const;
@@ -312,16 +316,59 @@ describe("config probe", () => {
   const config = (c: ConfigFacts) =>
     checkByName("config")!.probe(facts({ kind: "outside" }, {}, c));
 
-  test("a config that loaded with nothing to say is ok — the bundled default included", () => {
-    expect(config(LOADED)).toEqual({ ok: true });
-    expect(config({ ...LOADED, layers: [] })).toEqual({ ok: true });
+  test("a pass names what it judged and what named it", () => {
+    expect(config(LOADED)).toEqual({ ok: true, note: JUDGED });
+    expect(
+      config({ ...LOADED, layers: ["/home/.cc-candybar.json5", "/p/x.json5"] }),
+    ).toEqual({
+      ok: true,
+      note: "/home/.cc-candybar.json5 < /p/x.json5 (searched)",
+    });
+  });
+
+  test("a search that found nothing reads as check reads it", () => {
+    expect(config({ ...LOADED, layers: [] })).toEqual({
+      ok: true,
+      note: "bundled default (no config file loaded)",
+    });
+  });
+
+  test.each([
+    ["argument", "/x.json5 (command argument)"],
+    ["environment", "/x.json5 ($CC_CANDYBAR_CONFIG)"],
+    ["pick", "/x.json5 (load-config pick)"],
+    ["unknown", "/x.json5 (source unknown)"],
+  ] as const)("a file named by %s reads %s", (source, judged) => {
+    const named = { ...LOADED, target: { source, path: "/x.json5" } };
+    expect(config(named)).toEqual({ ok: true, note: judged });
+    expect(config({ ...named, warnings: ["an advisory"] })).toEqual({
+      ok: false,
+      reason: `${judged}: an advisory`,
+      more: [],
+    });
+  });
+
+  test("a named file reads as itself when it has no layers, never as the bundled default", () => {
+    expect(
+      config({
+        ...LOADED,
+        layers: [],
+        target: { source: "environment", path: "/gone.json5" },
+        warnings: ["/gone.json5 does not exist"],
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "/gone.json5 ($CC_CANDYBAR_CONFIG): /gone.json5 does not exist",
+      more: [],
+    });
   });
 
   test("an advisory the load earned fails it, in the load's own words", () => {
     const warning = '/p/.cc-candybar.json5:3: duplicate key "x"';
     expect(config({ ...LOADED, warnings: [warning] })).toEqual({
       ok: false,
-      reason: warning,
+      reason: `${JUDGED}: ${warning}`,
       more: [],
     });
   });
@@ -339,7 +386,7 @@ describe("config probe", () => {
       }),
     ).toEqual({
       ok: false,
-      reason: 'variable "v" is never read',
+      reason: `${JUDGED}: variable "v" is never read`,
       more: [
         'action "a" is never clicked',
         'helper "h" is never called',
@@ -353,16 +400,43 @@ describe("config probe", () => {
       config({
         kind: "failed",
         layers: ["/p/.cc-candybar.json5"],
+        target: { source: "search" },
         warnings: ["an advisory"],
         error:
           "Invalid config in /p/.cc-candybar.json5 (1 issue):\n  [line 2 • root] root references unknown segment",
       }),
     ).toEqual({
       ok: false,
-      reason: "Invalid config in /p/.cc-candybar.json5 (1 issue):",
+      reason: `${JUDGED}: Invalid config in /p/.cc-candybar.json5 (1 issue):`,
       more: ["[line 2 • root] root references unknown segment", "an advisory"],
     });
   });
+
+  test.each([
+    ["a searched target", { source: "search" }, JUDGED],
+    [
+      "a named target",
+      { source: "argument", path: "/x.json5" },
+      "/x.json5 (command argument)",
+    ],
+  ] as const)(
+    "a failed load with no text fails, on %s",
+    (_name, target, judged) => {
+      expect(
+        config({
+          kind: "failed",
+          layers: ["/p/.cc-candybar.json5"],
+          target,
+          warnings: [],
+          error: " \n ",
+        }),
+      ).toEqual({
+        ok: false,
+        reason: `${judged}: the config failed to load`,
+        more: [],
+      });
+    },
+  );
 
   test("config is a CHECKS entry, so the menu and the CLI both run it", () => {
     expect(CHECKS.map((c) => c.name)).toContain("config");
@@ -394,7 +468,7 @@ describe("config probe", () => {
 // whether Claude Code redraws it every second is what its settings files say.
 describe("effectRefresh probe", () => {
   const MOVES = drew("moves");
-  const MOVING = "the bar moves (an effect, a fade, or an animated segment)";
+  const MOVING = "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
   const ELSEWHERE =
     'the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": 1 beside its command there';
   const ok = (value: readonly SettingsSource[]) =>

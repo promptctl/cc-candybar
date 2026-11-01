@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -10,6 +11,7 @@ import {
   type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
@@ -19,7 +21,7 @@ import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
-import { setLaunchStats } from "../src/proc/launch";
+import { createLauncher, type Launcher } from "../src/proc/launch";
 import { answerRepo } from "./helpers/repo-approval";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
@@ -47,15 +49,17 @@ function makeCache(
     log?: (line: string) => void;
     declare?: Declare;
   } = {},
+  launcher: Launcher = processLauncher,
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0, dirWatchesOpened: 0, dirWatchesClosed: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+    { launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -81,9 +85,13 @@ const runs = (name: string): number => {
 const counted = (name: string, out: string): string =>
   `echo run >> ${JSON.stringify(path.join(dir, `${name}.runs`))}; echo ${out}`;
 
-function configure(cwd: string): void {
+// `edition` moves a literal no template reads, so configuring again with a
+// new one is an edit a reload builds a state for: a reload of unchanged
+// inputs keeps the state it serves.
+function configure(cwd: string, edition = 0): void {
   const config = {
     variables: {
+      edition: { kind: "literal", value: String(edition) },
       sid: { kind: "input", path: "session_id" },
       // Re-runs when the session it is keyed on changes.
       perSession: {
@@ -216,7 +224,8 @@ test("a reload opens each of the entry's views anew on the new state, and retire
   configure(dir);
   const { cache, lines } = makeCache();
   const before = await render(cache, "s-a");
-  cache.reload(dir, dir, undefined);
+  configure(dir, 1);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   // The successor is open — declared, so the next frame draws a view that
   // holds what it reads — before any render (brandon-unfiled-3248.8ro6, 4a).
   expect(cache.stats.views).toBe(1);
@@ -255,7 +264,8 @@ test("a reload keeps whether the session's view was read: a view idle before it 
   // A sweep with no render since: the view is unread, and kept once more.
   cache.releaseIdle();
   expect(cache.stats.views).toBe(1);
-  cache.reload(dir, dir, undefined);
+  configure(dir, 1);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   cache.releaseIdle();
   expect(cache.stats.views).toBe(0);
   expect(lines).toContainEqual(
@@ -321,7 +331,8 @@ test("a view held by a render in flight is disposed only when the render returns
   configure(dir);
   const { cache, lines } = makeCache();
   const held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
-  cache.reload(dir, dir, undefined);
+  configure(dir, 1);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
@@ -430,7 +441,8 @@ test("a view that fails to open releases the state hold it was opened under", ()
     "log boom",
   );
   // Retired by the reload and held by nothing, the state is reclaimed now.
-  cache.reload(dir, dir, undefined);
+  configure(dir, 1);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.stats.retired).toBe(0);
 });
 
@@ -479,14 +491,16 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  setLaunchStats({
-    onStart: (c) => {
-      if (c === "user-shell") shells++;
+  const launcher = createLauncher({
+    stats: {
+      onStart: (c) => {
+        if (c === "user-shell") shells++;
+      },
+      onEnd: () => {},
+      onRefused: () => {},
     },
-    onEnd: () => {},
   });
-  cleanups.push(() => setLaunchStats(null));
-  const { cache } = makeCache();
+  const { cache } = makeCache({}, launcher);
 
   const entry = cache.getOrCreate(dir, dir, undefined);
   expect(entry.lastError).toBeNull();
@@ -504,4 +518,39 @@ test("a config load starts no view's source, and still names a session value tha
     expect([name, runs(name)]).toEqual([name, 1]);
   }
   expect(shells).toBe(5);
+});
+
+test("a copy click reads the frame its own renderer last delivered, not another's", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  await render(cache, "s-copy");
+  // One key, two surfaces whose frames list it with different text: the
+  // statusline's answer from before a fix, the feed's from after.
+  cache.delivered("s-copy", "request", new Map([["7", "before the fix"]]));
+  cache.delivered("s-copy", "feed", new Map([["7", "after the fix"]]));
+  expect(cache.drawnCopy("s-copy", "request", "7")).toBe("before the fix");
+  expect(cache.drawnCopy("s-copy", "feed", "7")).toBe("after the fix");
+  expect(cache.drawnCopy("s-copy", "request", "8")).toBeUndefined();
+  // A feed that stops drawing takes its list with it.
+  cache.stopDrawing("s-copy", "feed");
+  expect(cache.drawnCopy("s-copy", "feed", "7")).toBeUndefined();
+  expect(cache.drawnCopy("s-copy", "request", "7")).toBe("before the fix");
+});
+
+test("a frame on screen stays copyable across a reload's successor view, and goes when the session closes", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  await render(cache, "s-copy");
+  cache.delivered("s-copy", "request", new Map([["7", "the message"]]));
+  configure(dir, 1);
+  cache.reload(dir, dir, undefined, { kind: "write" });
+  expect(cache.drawnCopy("s-copy", "request", "7")).toBe("the message");
+  // Unread across two sweeps, the session's view closes, and its frames.
+  cache.releaseIdle();
+  cache.releaseIdle();
+  expect(cache.stats.views).toBe(0);
+  expect(cache.drawnCopy("s-copy", "request", "7")).toBeUndefined();
+  // A session with no view keeps nothing it delivers.
+  cache.delivered("s-copy", "request", new Map([["7", "the message"]]));
+  expect(cache.drawnCopy("s-copy", "request", "7")).toBeUndefined();
 });

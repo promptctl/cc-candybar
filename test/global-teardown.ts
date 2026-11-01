@@ -3,7 +3,7 @@
 // leftover jest daemon-pool cruft on a clean run — "a leftover
 // cc-candybar-jest-* socket dir after a clean run is a test failure, not
 // silent debris" (brandon-daemon-lifecycle-gad.1). Never touches a directory
-// a live process still holds, so it's safe to run even while another
+// a live worker still owns, so it's safe to run even while another
 // concurrent worktree's suite is mid-run against the SAME shared pool dir —
 // the two-worktrees-don't-multiply-the-peak guarantee depends on the pool dir
 // itself surviving between runs; only provably-dead entries are removed.
@@ -13,60 +13,79 @@ import os from "node:os";
 import path from "node:path";
 
 import { DEFAULT_POOL_DIR, daemonPool } from "./helpers/daemon-pool";
-import { readLease } from "../src/daemon/socket-lease";
-import { leasePathFor } from "../src/daemon/paths";
-import { readStartTime, sameLiveProcess } from "../src/daemon/process-fingerprint";
+import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
+import {
+  HELPER_START_CEILING,
+  LEDGER_ENV,
+  judgeDaemonStarts,
+  parseLedger,
+} from "./helpers/process-tier.cjs";
 import { pidAlive } from "../src/daemon/parent-watchdog";
 
-const JEST_TMP_PREFIX = "cc-candybar-jest-";
-
-// [LAW:one-source-of-truth] Liveness for a dir under this prefix is decided
-// the SAME way the daemon itself decides socket ownership — the (pid,
-// start-time) lease, never a raw connect() probe. A connect probe is the
-// exact false-dead trap `src/daemon/socket-lease.ts` exists to close: a live
-// daemon whose accept backlog is briefly full returns ECONNREFUSED,
-// indistinguishable from dead, which would delete a live daemon's tmpdir out
-// from under it.
-function isLive(dir: string): boolean {
-  const lease = readLease(leasePathFor(path.join(dir, "socket")));
-  if (lease.kind !== "owned") return false;
-  return sameLiveProcess(lease.pid, lease.startTime, {
-    readStartTime,
-    pidAlive,
-  });
+// [LAW:one-source-of-truth] A directory under this prefix is in use while the
+// worker its name carries is alive: another run's daemons and in-worker cases
+// write there, a log among them. The sweeper's own pid is the exception. Run in
+// band, the worker is this process, whose tests have ended, and in a pool jest
+// ends every worker before this runs.
+function inUse(name: string, sweeper: number): boolean {
+  const owner = jestTmpOwner(name);
+  return owner !== null && owner !== sweeper && pidAlive(owner);
 }
 
-export default function globalTeardown(): void {
-  // The shared pool's own bookkeeping: drop slot files whose recorded owner
-  // is provably dead.
-  daemonPool.sweepStale();
-
-  // Generic sweep for any `cc-candybar-jest-*` tmpdir entry — covers
-  // `test/setup.ts`'s per-file CC_CANDYBAR_SOCKET assignment, dormant today
-  // (every real-daemon-spawning test file overrides it with its own tmp
-  // path) but the exact shape the parent epic's storm mechanism describes.
-  // A single readdirSync + in-memory prefix filter, run once per full
-  // `pnpm test` invocation (not per-file, not per-test): the alternative
-  // (a hand-maintained cleanup-list file every dir-creating test must
-  // remember to append to) trades this self-describing scan for a second,
-  // independently-maintained source of truth that silently drifts the
-  // moment one caller forgets to register — worse than the scan it would
-  // save microseconds against.
+// A single readdirSync + in-memory prefix filter, run once per full `pnpm test`
+// invocation (not per-file, not per-test): the alternative (a hand-maintained
+// cleanup-list file every dir-creating test must remember to append to) trades
+// this self-describing scan for a second, independently-maintained source of
+// truth that silently drifts the moment one caller forgets to register — worse
+// than the scan it would save microseconds against.
+export function sweepJestTmp(root: string, sweeper: number): void {
   let entries: string[];
   try {
-    entries = fs.readdirSync(os.tmpdir());
+    entries = fs.readdirSync(root);
   } catch {
     return;
   }
   for (const name of entries) {
     if (!name.startsWith(JEST_TMP_PREFIX)) continue;
-    const dir = path.join(os.tmpdir(), name);
-    if (dir === DEFAULT_POOL_DIR) continue; // the shared pool persists — swept above, never removed
-    if (isLive(dir)) continue;
+    const dir = path.join(root, name);
+    if (dir === DEFAULT_POOL_DIR) continue; // the shared pool persists — swept by `sweepStale`, never removed
+    if (inUse(name, sweeper)) continue;
     try {
       fs.rmSync(dir, { recursive: true, force: true });
     } catch {
       // best-effort
     }
+  }
+}
+
+// [LAW:no-silent-failure] Global setup made the ledger, so a read that fails is a
+// lost meter, not a run that started nothing, and it throws like a verdict does.
+// [LAW:nothing-unseen] The counts print on every run, zero included.
+//
+// [LAW:no-ambient-temporal-coupling] exception: a client's kick is detached, so
+// one made as a run's last act can land just after this read. Nothing says a kick
+// is still coming, so there is no state to wait on, and a sleep here would be a
+// bet. Such a start outlives no test: the sweep below takes its ledger, or the
+// worker's death ends it.
+function reportDaemonStarts(): void {
+  const ledger = fs.readFileSync(process.env[LEDGER_ENV]!, "utf8");
+  const verdict = judgeDaemonStarts(parseLedger(ledger), HELPER_START_CEILING);
+  console.log(
+    `daemon starts: ${verdict.helper} of ${HELPER_START_CEILING} by the helper, ${verdict.client} by a client`,
+  );
+  if (verdict.problems.length > 0) {
+    throw new Error(`process tier:\n${verdict.problems.join("\n")}`);
+  }
+}
+
+export default function globalTeardown(): void {
+  try {
+    reportDaemonStarts();
+  } finally {
+    // The shared pool's own bookkeeping: drop slot files whose recorded owner
+    // is provably dead.
+    daemonPool.sweepStale();
+
+    sweepJestTmp(os.tmpdir(), process.pid);
   }
 }

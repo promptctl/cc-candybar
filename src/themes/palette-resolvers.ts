@@ -144,7 +144,7 @@ function namedTheme(name: string): DecidedTheme | null {
 // with nothing to point at [LAW:no-silent-failure]. It is reported rather than
 // thrown because the value is DATA-driven: an expression can be correct for a
 // week and then name nothing when a threshold moves, and a throw would take the
-// whole statusline away (the strip alone, no bar) at exactly that moment.
+// whole statusline away (the error alone, no bar) at exactly that moment.
 //
 // [LAW:effects-at-boundaries] `onUnresolvable` is a capability the caller hands
 // in — the message belongs to this domain, the channel does not. The one return

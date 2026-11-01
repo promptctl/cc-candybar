@@ -110,6 +110,10 @@ export const settingsByPlace = (): readonly PlaceSettings[] =>
     }))
     .filter(({ names }) => names.length > 0);
 
-// Why a subscriber of `lane` is refused, naming the switch that admits it.
-export const laneOffReason = (lane: Lane): string =>
-  `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(LANES[lane].setting)}, or set globals.${LANES[lane].setting}: true`;
+// Why a subscriber of `lane` is refused, naming everything that admits it: the
+// switch, and for a lane that needs tmux, a session inside a tmux pane — the
+// refusal does not know which one failed, so it names both.
+export const laneOffReason = (lane: Lane): string => {
+  const { setting, on, inTmux } = LANES[lane].switch;
+  return `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on)}${inTmux ? "; it runs only for a session inside a tmux pane" : ""}`;
+};

@@ -11,6 +11,7 @@ import type { RenderCacheStats } from "./cache/render";
 import type { GitCacheStats } from "./cache/git";
 import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
+import type { FileEventsStats } from "./cache/file-events";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -19,7 +20,6 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
-import { bakedDigest } from "./build-currency";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -57,17 +57,10 @@ export interface SourceSnapshots {
   // How many entries of each keyed source a view holds now.
   readonly held: Readonly<Record<HeldSource, number>>;
   // Every plugin's managed storage: the folders watched now, watch faults by
-  // cause, folders found gone or replaced, probes written and failed, and
-  // folders whose watch is stalled now and every move into a stall.
+  // cause, and folders found gone or replaced.
   readonly pluginStorage: Pick<
     ManagedStorageStats,
-    | "folders"
-    | "faults"
-    | "lost"
-    | "probes"
-    | "probeFailures"
-    | "stalled"
-    | "stalls"
+    "folders" | "faults" | "lost"
   >;
 }
 
@@ -107,6 +100,9 @@ export interface StatsSnapshot {
     sweeps: number;
   };
   sources: SourceSnapshots;
+  // [LAW:nothing-unseen] Whether the OS is delivering file events, and since
+  // when the daemon cannot vouch that it heard every one.
+  fileEvents: FileEventsStats;
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
   // reads, bytes off disk, lines longer than the fold window read whole and
   // the longest of them — what bounds a fold's memory beyond its window
@@ -147,18 +143,23 @@ export interface StatsSnapshot {
   tmuxStatus: TmuxStatusStats;
   // Watch slots: open now, opened with every target watched, closed, opened
   // with a target the OS refused, and errors watches reported after opening.
+  // `dirs`: the OS directory watches the slots share, open now, opened and
+  // closed, a reopen counting one of each; on macOS each open or close
+  // rebuilds the one FSEvents stream, so this is the churn that costs.
   watchers: {
     active: number;
     opened: number;
     closed: number;
     refused: number;
     errors: number;
+    dirs: { active: number; opened: number; closed: number };
   };
   subprocesses: {
     total: number;
     inFlight: number;
     lastMinute: number;
     byCategory: Record<string, number>;
+    refused: Record<string, number>;
     p50DurationMs: Record<string, number>;
     p99DurationMs: Record<string, number>;
   };
@@ -201,12 +202,17 @@ export class RuntimeStats {
   watchersClosed = 0;
   watchRefusals = 0;
   watchErrors = 0;
+  dirWatchesOpened = 0;
+  dirWatchesClosed = 0;
 
   // [LAW:dataflow-not-control-flow] Subprocess metering. Every launch carries
   // its category through one boundary; the per-category state below is a
   // function of that data, not of which call site fired.
   subprocessTotal = 0;
   subprocessInFlight = 0;
+  // Launches asked for that started nothing: the launcher had closed, the
+  // category's interval had not passed, or the caller had aborted first.
+  private readonly subprocessRefusals = new Map<LaunchCategory, number>();
   private readonly subprocessCount = new Map<LaunchCategory, number>();
   private readonly subprocessHistogram = new Map<LaunchCategory, number[]>();
   private readonly subprocessHistogramRotator = new Map<
@@ -216,9 +222,15 @@ export class RuntimeStats {
   private readonly rollingTimestamps: number[] = [];
   private rollingHead = 0;
 
+  // Readable off the value because a closed daemon's work is still refused, and
+  // no request reads a closed daemon.
+  get subprocessRefused(): ReadonlyMap<LaunchCategory, number> {
+    return this.subprocessRefusals;
+  }
+
   // [LAW:one-source-of-truth] The same object that owns the counters also
-  // exposes the metering handle. The launch primitive calls these two
-  // methods; nothing else mutates subprocess state.
+  // exposes the metering handle. The launch primitive calls these methods;
+  // nothing else mutates subprocess state.
   readonly launchStats: LaunchStatsHandle = {
     onStart: (category) => {
       this.subprocessTotal++;
@@ -232,6 +244,12 @@ export class RuntimeStats {
     onEnd: (category, durationMs) => {
       this.subprocessInFlight = Math.max(0, this.subprocessInFlight - 1);
       this.recordDuration(category, durationMs);
+    },
+    onRefused: (category) => {
+      this.subprocessRefusals.set(
+        category,
+        (this.subprocessRefusals.get(category) ?? 0) + 1,
+      );
     },
   };
 
@@ -300,6 +318,7 @@ export class RuntimeStats {
       inFlight: this.subprocessInFlight,
       lastMinute,
       byCategory,
+      refused: Object.fromEntries(this.subprocessRefused),
       p50DurationMs: p50,
       p99DurationMs: p99,
     };
@@ -337,11 +356,14 @@ export class RuntimeStats {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },
           lost: 0,
-          probes: 0,
-          probeFailures: 0,
-          stalled: 0,
-          stalls: 0,
         },
+      },
+      fileEvents: {
+        delivery: { kind: "delivering", unreported: [], missedSince: null },
+        stalls: 0,
+        catchUps: 0,
+        probes: 0,
+        probeFailures: 0,
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -370,9 +392,11 @@ export class RuntimeStats {
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 0,
+      dirWatchesActive: 0,
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      sourceDigest: null,
       daemon: {
         pid: 0,
         memory: { kind: "unmeasured" },
@@ -391,6 +415,7 @@ export class RuntimeStats {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
     sources: SourceSnapshots;
+    fileEvents: FileEventsStats;
     transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
@@ -400,10 +425,12 @@ export class RuntimeStats {
     frameFeeds: FeedStats;
     tmuxStatus: TmuxStatusStats;
     watchersActive: number;
+    dirWatchesActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
     clients: readonly RenderSighting[];
     bundle: string;
+    sourceDigest: string | null;
     daemon: ServingDaemon;
     doctorStores: StoresRead;
   }): StatsSnapshot {
@@ -411,7 +438,7 @@ export class RuntimeStats {
     return {
       pid: process.pid,
       version: PACKAGE_VERSION,
-      sourceDigest: bakedDigest(),
+      sourceDigest: extras.sourceDigest,
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),
@@ -430,6 +457,7 @@ export class RuntimeStats {
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
       sources: extras.sources,
+      fileEvents: extras.fileEvents,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
@@ -444,6 +472,11 @@ export class RuntimeStats {
         closed: this.watchersClosed,
         refused: this.watchRefusals,
         errors: this.watchErrors,
+        dirs: {
+          active: extras.dirWatchesActive,
+          opened: this.dirWatchesOpened,
+          closed: this.dirWatchesClosed,
+        },
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,

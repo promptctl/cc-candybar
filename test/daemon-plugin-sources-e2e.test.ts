@@ -1,43 +1,38 @@
 // [LAW:nothing-unseen] A plugin's session source and its `run` action,
-// measured on a REAL daemon: the bar a request draws before and after the
-// plugin's program writes the session's file, the bar while a clicked program
-// runs and after it exits, a forged link's refusal in the bar, the daemon's
-// request and run counts, the config-load event's `sources=`, and the render
-// event's `sources=`/`sourcesPending=` — the daemon's own wiring of the storage
-// owner into the render states and the views' declarations, and of the run
-// owner into the click.
+// measured on a daemon: the bar a request draws before and after the
+// plugin's program writes the session's file, a clicked program's write in the
+// bar, a forged link's refusal in the bar, the daemon's run counts, the
+// supersede's refresh event, the config-load event's `sources=`, and the render
+// event's `sources=`/`sourcesPending=` — the daemon's own wiring of the storage owner
+// into the render states and the views' declarations, and of the run owner into
+// the click. What a run does to a bar while it runs is test/run-action.test.ts's,
+// over a launch the test holds.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { hookData, killAndWait, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { click, hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
+import { startDaemon, statsOf, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { loggedWhen, renderLines } from "./helpers/daemon-log";
-import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { valueOf } from "../src/utils/logfmt";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_RUN } from "../src/click/wire";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import type { StatsSnapshot } from "../src/daemon/stats";
-import { LOADING_GLYPH } from "../src/dsl/node-registry";
+
+import { viewerLink } from "./helpers/diagnostics-viewer";
 
 jest.setTimeout(30_000);
 
 const SESSION = "sources-e2e-0001";
-// Longer than a request's whole budget, so a request waiting on the run would
-// time out.
-const PROGRAM_SLEEPS_S = 2;
 
-// The fixture program, in the plugin's folder: after `DELAY` seconds it writes
-// the session's file whole, by rename, and exits.
+// The fixture program, in the plugin's folder: it writes the session's file
+// whole, by rename, and exits.
 const PROGRAM = `#!/bin/sh
-sleep "$DELAY"
 mkdir -p session
 printf '{"home":"%s"}' "$HOME_VALUE" > "session/.$1.tmp"
 mv "session/.$1.tmp" "session/$1.json"
@@ -45,17 +40,16 @@ mv "session/.$1.tmp" "session/$1.json"
 
 describe("a daemon reads a plugin's session source and runs its program", () => {
   let env: NodeJS.ProcessEnv;
-  let sockPath: string;
   let removeTmpDirs: () => void;
   let projectDir: string;
   let dataHome: string;
   let config: string;
   let storage: string;
-  let daemon: RunningDaemon | undefined;
+  let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-sources-e2e");
-    ({ sockPath, env, removeTmpDirs } = prepared);
+    ({ env, removeTmpDirs } = prepared);
     projectDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-sources-e2e-")));
     // The plugin is INSTALLED: a folder in the user's plugin root, listed by
     // no config.
@@ -74,7 +68,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
         actions: {
           go: {
             run: ["./write.sh", "{{ .session.id }}"],
-            env: { HOME_VALUE: "/h/ran", DELAY: "${PROGRAM_SLEEPS_S}" },
+            env: { HOME_VALUE: "/h/ran" },
             refreshes: ["status"],
           },
         },
@@ -86,11 +80,11 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated", "plugins.p.go"] } }`,
     );
     storage = path.join(fs.realpathSync(folder), "session");
-    daemon = await spawnDaemonWithEnv({ ...prepared.env, XDG_DATA_HOME: dataHome });
+    daemon = startDaemon({ ...prepared.env, XDG_DATA_HOME: dataHome });
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    await daemon?.stop();
     fs.rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -103,21 +97,8 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   });
 
   // A render as the client asks for one, retried on TIMEOUT: the bytes it drew.
-  const renderRaw = (): Promise<string> => renderRequest(sockPath, body());
+  const renderRaw = (): Promise<string> => renderRequest(daemon, body());
   const render = async (): Promise<string> => stripAnsi(await renderRaw());
-
-  // ONE render, not retried: a request that timed out fails here.
-  const renderOnce = async (): Promise<string> => {
-    const resp = await sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "render", ...body() });
-    if (!resp.ok || !("output" in resp)) throw new Error(`render failed: ${JSON.stringify(resp)}`);
-    return stripAnsi(resp.output);
-  };
-
-  const stats = async (): Promise<StatsSnapshot> => {
-    const resp = await sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
-    if (!resp.ok || !("stats" in resp)) throw new Error(`stats failed: ${JSON.stringify(resp)}`);
-    return resp.stats as StatsSnapshot;
-  };
 
   // Renders until the bar (escapes stripped) shows what is waited for; the
   // bytes of that render.
@@ -172,31 +153,22 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     );
   });
 
-  test("a click runs the drawn program; while it runs the source draws its loading cell and no request times out; then its write", async () => {
+  test("a click runs the drawn program through the storage owner's supersede; then its write", async () => {
     const link = runLink(await renderUntil((b) => b.includes("home=/h/before"), "the value before the click"));
-    const before = await stats();
+    const before = await statsOf(daemon.daemon);
 
-    const clicked = await sendClick(sockPath, link);
-    expect(clicked).toMatchObject({ ok: true });
-
-    // The program sleeps past a request's budget before it writes. A request
-    // now neither waits for it nor draws the value from before the click.
-    const during = await renderOnce();
-    expect(during).toContain(LOADING_GLYPH);
-    expect(during).not.toContain("home=/h/before");
-    expect(during).not.toContain("home=/h/ran");
-    const whileRunning = await stats();
-    expect(whileRunning.requests.timedOut).toBe(before.requests.timedOut);
-    expect(whileRunning.runs).toMatchObject({ started: before.runs.started + 1, running: 1 });
+    await click(daemon, link);
 
     await renderUntil((b) => b.includes("home=/h/ran"), "the program's write");
-    const after = await stats();
+    const after = await statsOf(daemon.daemon);
     expect(after.runs).toMatchObject({ started: before.runs.started + 1, running: 0, failed: 0, timedOut: 0 });
-    expect(after.requests.timedOut).toBe(before.requests.timedOut);
+    const file = path.join(storage, `${SESSION}.json`);
     await loggedWhen(
       env,
-      (lines) => lines.some((l) => l.includes(`run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `)),
-      "the run's event",
+      (lines) =>
+        lines.some((l) => l.includes(`run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `)) &&
+        lines.some((l) => l.includes(`plugin storage refresh file=${valueOf(file)} `) && l.includes(" stored=Y by=supersede outcome=ok ")),
+      "the run's event, and the read its resume started of this session's file",
     );
   });
 
@@ -207,12 +179,20 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const forged = effectsUrl([
       { verb: VERB_RUN, args: [sid, action, evaluated.replace("/h/ran", "/h/forged"), run.args[3]!] },
     ]);
-    const before = await stats();
+    const before = await statsOf(daemon.daemon);
 
-    const refused = await sendClick(sockPath, forged);
+    const refused = await sendClick(daemon, forged);
     expect(refused).toMatchObject({ ok: false });
-    expect((await stats()).runs).toMatchObject({ started: before.runs.started, refused: before.runs.refused + 1 });
-    await renderUntil((b) => b.includes("signature does not match"), "the forged link's refusal");
+    expect((await statsOf(daemon.daemon)).runs).toMatchObject({ started: before.runs.started, refused: before.runs.refused + 1 });
+    // The refusal is the bar's one message: the indicator counts it, and the
+    // viewer it opens shows it.
+    const bar = await renderUntil((b) => b.includes("⚠ 1"), "the forged link's refusal");
+    const open = viewerLink(bar, "open")!;
+    expect((await sendClick(daemon, open.url)).ok).toBe(true);
+    const shown = stripAnsi(await renderRaw());
+    expect(shown).toContain("signature does not match");
+    expect(shown).not.toContain("/h/forged");
+    expect((await sendClick(daemon, viewerLink(await renderRaw(), "✕")!.url)).ok).toBe(true);
     expect(await render()).not.toContain("/h/forged");
   });
 });

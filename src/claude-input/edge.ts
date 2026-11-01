@@ -10,7 +10,7 @@
 // into whatever window has focus is exactly what this must never do.
 
 import type { ClientHints } from "../daemon/protocol.js";
-import type { LaunchCategory } from "../proc/launch.js";
+import type { LaunchCategory, Launcher } from "../proc/launch.js";
 import { runTmux, type TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { promptState, REFUSALS, type PaneSnapshot } from "./prompt-screen.js";
@@ -78,18 +78,19 @@ const THEN = ";";
 const BUFFER = "cc-candybar-slash";
 
 function tmux(
+  launcher: Launcher,
   hint: TmuxHint,
   category: LaunchCategory,
   args: string[],
   stdinInput?: string,
 ): Exclude<TmuxRun, { kind: "failed" }> {
-  const run = runTmux(hint, category, args, stdinInput);
+  const run = runTmux(launcher, hint, category, args, stdinInput);
   if (run.kind === "failed") throw new Error(run.reason);
   return run;
 }
 
-function read(hint: TmuxHint): PaneSnapshot {
-  const run = tmux(hint, "claude-input.read", [
+function read(launcher: Launcher, hint: TmuxHint): PaneSnapshot {
+  const run = tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -143,8 +144,9 @@ export function pasteLineArgs(
 
 // ctrl+s stashes a draft (a no-op on an empty input) and Claude Code restores
 // it after the submit.
-function type(hint: TmuxHint, line: SlashLine): Typed {
+function type(launcher: Launcher, hint: TmuxHint, line: SlashLine): Typed {
   const run = tmux(
+    launcher,
     hint,
     "claude-input.type",
     pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
@@ -158,6 +160,9 @@ function type(hint: TmuxHint, line: SlashLine): Typed {
       };
 }
 
-export function productionClaudeInputEdge(): ClaudeInputEdge {
-  return { read, type };
+export function productionClaudeInputEdge(launcher: Launcher): ClaudeInputEdge {
+  return {
+    read: (hint) => read(launcher, hint),
+    type: (hint, line) => type(launcher, hint, line),
+  };
 }

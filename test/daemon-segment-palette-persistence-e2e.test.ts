@@ -2,7 +2,7 @@
 // proven the SAME way 71o.5 proved the epic's headline composition (click,
 // gate, persistent write, watcher reload, re-render, daemon restart, fresh
 // session) — but over `segments.directory.palette` instead of a Globals
-// field, against a REAL `cc-candybar daemon` subprocess over a REAL socket:
+// field, against the daemon's own request handling:
 // "a user picks a different bundled palette for one specific segment via a
 // menu; the choice persists across a daemon restart and appears in new
 // sessions, and every other segment's palette is unaffected." The bundled
@@ -18,12 +18,10 @@ import path from "node:path";
 import JSON5 from "json5";
 import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { startDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
-import { waitForExit } from "./helpers/daemon-wire";
 // [LAW:one-source-of-truth] The shared transient contract: a render retried
 // on TIMEOUT and on an answer that drew a source pending.
 // [LAW:no-ambient-temporal-coupling] A persist's synchronous write completing
@@ -35,15 +33,9 @@ import { linkUrls, withoutLinks } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
 
-async function killAndWait(daemon: RunningDaemon): Promise<void> {
-  const exited = waitForExit(daemon.child);
-  daemon.killTree();
-  await exited;
-}
-
-describe("candybar-config-engine-71o.6: real-daemon segment-palette click → persist → restart", () => {
-  test("a user's directory-palette menu, clicked over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
-    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+describe("candybar-config-engine-71o.6: a daemon's segment-palette click → persist → restart", () => {
+  test("a user's directory-palette menu, clicked, survives a cold restart and leaves every other segment's palette untouched", async () => {
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-seg-palette-e2e",
     );
     const projectDir = mkdtempSync(
@@ -72,14 +64,13 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
     });
     writeFileSync(userConfigPath, userConfigBody);
 
-    let daemon: RunningDaemon | undefined;
+    let daemon = startDaemon(env);
     try {
-      daemon = await spawnDaemonWithEnv(env);
       const SID = "seg-e2e-session-1";
 
       // Warm the cache entry (derives + registers the click gates) before
       // the baseline render this test diffs against.
-      const before = await render(sockPath, SID, projectDir);
+      const before = await render(daemon, SID, projectDir);
       // The status row (model/context/cacheTimer/block/weekly) never reads
       // `directory`'s palette — the untouched baseline every "other segment
       // unaffected" assertion below compares against. The rows stack
@@ -110,9 +101,9 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
         }
       });
       expect(menuToggleUrl).toBeDefined();
-      await click(sockPath, menuToggleUrl!);
+      await click(daemon, menuToggleUrl!);
 
-      const opened = await render(sockPath, SID, projectDir);
+      const opened = await render(daemon, SID, projectDir);
       const openedUrls = linkUrls(opened);
 
       const targetPalette = listResolvablePaletteNames().find(
@@ -144,7 +135,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       });
       expect(applyUrl).toBeDefined();
 
-      await click(sockPath, applyUrl!);
+      await click(daemon, applyUrl!);
 
       // Live re-render, same session, no daemon restart — the persisted
       // palette rides the config file's own watcher, which reloads
@@ -159,7 +150,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // config file was written (asserted below): a broken reload of
       // the file's own declaration would time out here.
       const afterClick = await renderUntil(
-        sockPath,
+        daemon,
         SID,
         projectDir,
         (b) => b !== opened,
@@ -188,10 +179,10 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       });
       const afterFirstWrite = readFileSync(userConfigPath, "utf8");
 
-      // Kill this daemon and start a FRESH one against the SAME config file
-      // — a real cold restart, not an in-process cache rebuild.
-      await killAndWait(daemon);
-      daemon = await spawnDaemonWithEnv(env);
+      // Stop this daemon and build a FRESH one against the SAME config file,
+      // the only place a saved value lives.
+      await daemon.stop();
+      daemon = startDaemon(env);
 
       // A brand-new session that never clicked anything — the persisted
       // segment palette is baked into the config DEFAULT every session
@@ -200,14 +191,14 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // shift nothing content-derived, and directory's own row differs by
       // construction — the status row is the untouched control).
       const FRESH_SID = "seg-e2e-session-2-fresh";
-      const freshOut = await render(sockPath, FRESH_SID, projectDir);
+      const freshOut = await render(daemon, FRESH_SID, projectDir);
       expect(statusRow(freshOut)).toBe(statusRowBefore);
 
       // The file is STILL exactly what the click wrote — a restart reads it,
       // never rewrites it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(afterFirstWrite);
     } finally {
-      if (daemon) daemon.killTree();
+      await daemon.stop();
       removeTmpDirs();
       rmSync(projectDir, { recursive: true, force: true });
     }

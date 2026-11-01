@@ -36,6 +36,7 @@ import {
   loadConfigChain,
   type ConfigHome,
   type LoadedChain,
+  homeLayer,
 } from "../config/dsl-loader.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
@@ -455,24 +456,31 @@ function commit(
   home: ConfigHome,
   before: string | null,
   after: string,
-  refuse: (home: ConfigHome, before: string | null, will: LoadedChain) => void,
+  refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
 ): void {
-  refuse(home, before, loadOrRefuse(home, after));
+  const will = loadOrRefuse(home, after);
+  // [LAW:one-source-of-truth] The file before the click is loaded at most
+  // once, and only by a refusal that reads it; every refusal judges against
+  // that one load.
+  let held: { readonly chain: LoadedChain | null } | undefined;
+  const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
+  refuseNewDrops(home, was, will);
+  refuse(home, was, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
 
+// The chain the file before a click loads to, loaded when first asked; null
+// when that file does not load.
+type Was = () => LoadedChain | null;
+
 // A write the home takes and a layer above hides would change the file and
 // not the bar — refused, naming the layer that holds it.
-function refuseHidden(
-  home: ConfigHome,
-  before: string | null,
-  will: LoadedChain,
-): void {
-  const hidden = hiddenBy(home, before, will);
+function refuseHidden(home: ConfigHome, was: Was, will: LoadedChain): void {
+  const hidden = hiddenBy(home, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
+      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
     );
   }
 }
@@ -488,7 +496,7 @@ function homeOnly<T>(home: ConfigHome, read: () => T): T {
   } catch (e) {
     if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} — or it is declared by ${home.above.join(", ")}, which the bar does not edit`,
+      `${e.message} — or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`,
     );
   }
 }
@@ -499,10 +507,9 @@ function homeOnly<T>(home: ConfigHome, read: () => T): T {
 // repairs it compares against no prior chain and hides nothing.
 function hiddenBy(
   home: ConfigHome,
-  before: string | null,
+  was: LoadedChain | null,
   will: LoadedChain,
 ): string[] {
-  const was = loadedOrNull(home, before);
   if (was === null) return [];
   const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
   return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
@@ -527,9 +534,9 @@ function loadedOrNull(
 // layer whatever it holds.
 function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   return loadConfigChain(
-    text !== null ? [home.path, ...home.above] : home.above,
+    text !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
-    { entered: () => {}, warned: () => {} },
+    { warned: () => {} },
     { repo: home.repo, cwd: home.cwd },
     (p) =>
       p === home.path && text !== null ? text : fs.readFileSync(p, "utf8"),
@@ -575,6 +582,34 @@ function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
       `refused: the config file would not load after this click — ${e.message}`,
+    );
+  }
+}
+
+// [LAW:no-silent-failure] The bar draws past a placement of a segment nothing
+// declares, but a click never writes one: a write whose result drops a
+// placement the file before it did not is refused with the loader's own
+// diagnosis. A drop the file already held is the author's, and refusing every
+// click over it would lock the bar's own controls. A file that does not load
+// now has drops nobody can know — the bar runs on its last good load, as
+// hiddenBy reads it — so a click that repairs it is not blamed for them.
+function refuseNewDrops(home: ConfigHome, was: Was, will: LoadedChain): void {
+  if (will.dropped.length === 0) return;
+  const prior = was();
+  if (prior === null) return;
+  const issuesOf = (chain: LoadedChain) =>
+    chain.dropped.flatMap((e) =>
+      e.issues.map((issue) => ({ file: e.file, issue })),
+    );
+  const held = new Set(
+    issuesOf(prior).map(({ file, issue }) => `${file}\0${issue.message}`),
+  );
+  const added = issuesOf(will).filter(
+    ({ file, issue }) => !held.has(`${file}\0${issue.message}`),
+  );
+  if (added.length > 0) {
+    throw new BadVerbArgs(
+      `refused: this click would leave a placement of a segment nothing declares — ${added.map(({ file, issue }) => new ConfigError(file, [issue]).message).join("\n")}`,
     );
   }
 }
@@ -752,9 +787,9 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
       ...presetKeys(doc),
       // Each layer above as the loader reads it (JSON5, duplicate keys and
       // all) — the editor refuses files the loader renders.
-      ...home.above.flatMap((p) =>
+      ...home.above.flatMap((l) =>
         Object.keys(
-          (JSON5.parse(fs.readFileSync(p, "utf8")) as { presets?: object })
+          (JSON5.parse(fs.readFileSync(l.path, "utf8")) as { presets?: object })
             .presets ?? {},
         ),
       ),

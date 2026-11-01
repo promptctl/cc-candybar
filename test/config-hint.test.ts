@@ -39,13 +39,28 @@ describe("cliConfigTarget (the file a CLI run checks)", () => {
   const ENV = { CC_CANDYBAR_CONFIG: "env.json5" };
 
   test("no argument, or an empty one, falls to $CC_CANDYBAR_CONFIG", () => {
-    expect(cliConfigTarget(undefined, ENV, CWD)).toBe("/work/proj/env.json5");
-    expect(cliConfigTarget("", ENV, CWD)).toBe("/work/proj/env.json5");
-    expect(cliConfigTarget("", {}, CWD)).toBeUndefined();
+    const environment = { source: "environment", path: "/work/proj/env.json5" };
+    expect(cliConfigTarget(undefined, ENV, CWD)).toEqual(environment);
+    expect(cliConfigTarget("", ENV, CWD)).toEqual(environment);
+  });
+
+  test("with neither, the run searches", () => {
+    expect(cliConfigTarget("", {}, CWD)).toEqual({ source: "search" });
+    expect(cliConfigTarget(undefined, {}, CWD)).toEqual({ source: "search" });
   });
 
   test("a named file outranks the variable and is resolved against cwd", () => {
-    expect(cliConfigTarget("mine.json5", ENV, CWD)).toBe("/work/proj/mine.json5");
-    expect(cliConfigTarget("/etc/bar.json5", ENV, CWD)).toBe("/etc/bar.json5");
+    expect(cliConfigTarget("mine.json5", ENV, CWD)).toEqual({
+      source: "argument",
+      path: "/work/proj/mine.json5",
+    });
+    expect(cliConfigTarget("/etc/bar.json5", ENV, CWD)).toEqual({
+      source: "argument",
+      path: "/etc/bar.json5",
+    });
+  });
+
+  test("the argument wins by source even where the variable names the same file", () => {
+    expect(cliConfigTarget("env.json5", ENV, CWD).source).toBe("argument");
   });
 });

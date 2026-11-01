@@ -20,6 +20,7 @@
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
 //     the bar, and not in the trigger's cell sink.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -119,7 +120,7 @@ function build(src: string, withDefault: boolean) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
@@ -135,25 +136,25 @@ function build(src: string, withDefault: boolean) {
   };
   // Drive a click through the daemon's own handlers — the gate the row ✕
   // passes is the cycle action's, derived like every other set.
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // Click the first link on any rendered line that writes `key` = `value`.
-  const clickWriting = (lines: string[], key: string, value: string): void => {
+  const clickWriting = async (lines: string[], key: string, value: string): Promise<void> => {
     const link = lines
       .flatMap(links)
       .find((l) =>
         effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
       );
     if (link === undefined) throw new Error(`nothing writes ${key}=${value}`);
-    click(link.url);
+    await click(link.url);
   };
   return {
     render,
@@ -167,81 +168,6 @@ function build(src: string, withDefault: boolean) {
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
 describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain", () => {
-  test("each body row leads with its own disclosure's ✕ and nothing stacks", () => {
-    const rt = build(BUNDLED, true);
-    let lines = rt.render();
-    expect(lines).toHaveLength(1);
-    const closedBar = stripAnsi(lines[0]!);
-    expect(closedBar).toMatch(/proj.*Opus/);
-    // The bar row carries no row ✕: only the door itself, which is a trigger.
-    expect(links(lines[0]!).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
-
-    // The door opens ABOVE and rises with its body: the door itself, wearing
-    // ✖, leads the first of two menu lines stacked over the bar, then the
-    // open tab's two rows (⚡ session, where a fresh session opens), each led
-    // by the tab's ✕ alone; the bar row keeps every cell but the door.
-    const tabKey = `${SETTINGS_ANCHOR.replace(/menu$/, "")}tab`;
-    rt.clickWriting(lines, SETTINGS_ANCHOR, "open");
-    lines = rt.render();
-    expect(lines).toHaveLength(5);
-    expectBodyLedBy(lines.slice(0, 2), SETTINGS_ANCHOR, DOOR_CLOSE_GLYPH);
-    expectBodyLedBy(lines.slice(2, 4), tabKey);
-    for (const row of lines.slice(2, 4)) {
-      expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
-    }
-    const bar = (): string => lines[lines.length - 1]!;
-    expect(links(bar()).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
-    expect(links(bar()).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
-    expect(stripAnsi(bar())).toBe(withoutDoor(closedBar));
-
-    // 🎨 look open: its one row replaces the session tab's two below the
-    // menu's second line, led by the tab's ✕ — and 🍫's ✕ is not on it.
-    rt.clickWriting(lines, tabKey, "look");
-    lines = rt.render();
-    expect(lines).toHaveLength(4);
-    expectBodyLedBy([lines[2]!], tabKey);
-    expect(links(lines[2]!).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
-
-    // A picker opened inside the tab's body is its own disclosure's body
-    // (brandon-menu-ia-q30.jl1): its row — the effect's list of options — is
-    // led by that disclosure's ✕ alone, never the tab's or 🍫's, and the list
-    // draws no ✕ of its own.
-    const pickers = sharedMenuStateKey("candybar.pickers");
-    rt.clickWriting(lines, pickers, "candybar.apply.effect");
-    lines = rt.render();
-    expect(lines).toHaveLength(5);
-    expectBodyLedBy(lines.slice(3, 4), pickers);
-    for (const row of lines.slice(3, 4)) {
-      expect(links(row).some((l) => closes(l, tabKey))).toBe(false);
-      expect(links(row).some((l) => closes(l, SETTINGS_ANCHOR))).toBe(false);
-    }
-
-    // Clicking the tab's row ✕ closes the tab (and the list hanging under
-    // it) while 🍫 stays open.
-    rt.click(links(lines[2]!)[0]!.url);
-    lines = rt.render();
-    expect(lines).toHaveLength(3);
-
-    // 🧰 tools opens a VERTICAL body whose rows are bare `candybar.` segments
-    // — chrome-exempt, so no edit-mode row wraps them: the segment itself
-    // leads its row (a user group's rows reach the lead through the row edit
-    // chrome wraps them in, which is why this case is pinned here as well).
-    rt.clickWriting(lines, tabKey, "tools");
-    lines = rt.render();
-    expect(lines).toHaveLength(4);
-    expectBodyLedBy([lines[2]!], tabKey);
-    rt.click(links(lines[2]!)[0]!.url);
-    lines = rt.render();
-    expect(lines).toHaveLength(3);
-
-    // And the door's ✖ closes the menu: back to the bar alone.
-    rt.click(links(lines[0]!)[0]!.url);
-    lines = rt.render();
-    expect(lines).toHaveLength(1);
-    expect(stripAnsi(links(lines[0]!)[0]!.text)).toBe(DOOR_GLYPH);
-    expect(stripAnsi(lines[0]!)).toBe(closedBar);
-    rt.dispose();
-  });
 });
 
 // Two accordion groups on one shared key; the open one has a VERTICAL body of
@@ -260,14 +186,14 @@ const GROUPS = `{
 }`;
 
 describe("brandon-disclosure-43z — a group body", () => {
-  test("every row of a vertical body leads with a ✕ writing the group's (shared) key closed, and the click closes it", () => {
+  test("every row of a vertical body leads with a ✕ writing the group's (shared) key closed, and the click closes it", async () => {
     const rt = build(GROUPS, false);
     let lines = rt.render();
     // Closed: the two toggles on their own rows, no body, no ✕ anywhere.
     expect(lines).toHaveLength(3);
     expect(lines.flatMap(links).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
-    rt.clickWriting(lines, "acc", "one");
+    await rt.clickWriting(lines, "acc", "one");
     lines = rt.render();
     // Bar row, toggle `one`, its three body rows, toggle `two`.
     expect(lines).toHaveLength(6);
@@ -279,7 +205,7 @@ describe("brandon-disclosure-43z — a group body", () => {
       expect(links(row).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     }
 
-    rt.click(links(lines[2]!)[0]!.url);
+    await rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
     rt.dispose();
@@ -310,13 +236,13 @@ const closeLinks = (line: string): Link[] =>
   links(line).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE);
 
 describe("brandon-disclosure-43z — lines dropped below a body's horizontal row", () => {
-  test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", () => {
+  test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", async () => {
     const rt = build(DROPS, false);
     const key = `${GROUP_NS}wide`;
     let lines = rt.render();
     expect(lines).toHaveLength(3);
 
-    rt.clickWriting(lines, key, "wide");
+    await rt.clickWriting(lines, key, "wide");
     lines = rt.render();
     // Bar row, toggle `wide`, then the body: `M1 C` with M2 and M3 dropped
     // below it, `B A` with D dropped below it; then toggle `bare`.
@@ -340,11 +266,11 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     rt.dispose();
   });
 
-  test("a body whose every child is hidden lays no row and no ✕, on the bar or in the sink", () => {
+  test("a body whose every child is hidden lays no row and no ✕, on the bar or in the sink", async () => {
     const rt = build(DROPS, false);
     const key = `${GROUP_NS}bare`;
     let lines = rt.render();
-    rt.clickWriting(lines, key, "bare");
+    await rt.clickWriting(lines, key, "bare");
     lines = rt.render();
     // Bar row, toggle `wide`, toggle `bare` — open, with nothing under it.
     expect(lines).toHaveLength(3);

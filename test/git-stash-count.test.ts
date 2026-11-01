@@ -9,6 +9,7 @@
 // gitdir, which never holds that reflog: a linked worktree would have reported
 // zero stashes, silently, for a repo that has them.
 
+import { processLauncher } from "../src/proc/launch";
 import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,7 +34,7 @@ function stashOnce(cwd: string, marker: string): void {
 }
 
 describe("stash count reads the refs/stash reflog", () => {
-  const git = new GitService();
+  const git = new GitService(processLauncher);
   let root: string;
   let repo: string;
   let worktree: string;

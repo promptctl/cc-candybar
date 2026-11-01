@@ -10,37 +10,33 @@ All colour arithmetic (palettes, references, mixing, contrast, OKLCH) lives in r
 
 A closed cell's colour depends on where it sits. The row picks the hue: a decorative role chosen by the variation. The cell picks a shade from the window the shade dial is turned to. So neighbouring cells differ by shade, and the hue changes only at a new row or at the end of a run. A new hue in every cell reads as team colours.
 
-No colour is synthesised. A closed cell wears its role at its shade exactly as the theme names it. A test checks that every background the bundled closed bar draws is close to a colour its palette names.
+No colour is synthesised. A closed cell wears its role at its shade exactly as the theme names it. A test checks that every background the bar draws, closed or with the settings menu open, is a colour its palette names.
 
-Anything nested inside a cell wears that cell's hue and shade. That's why edit mode's chrome is spliced in as one unit with the cell it edits. Spliced in as siblings, it would take positions and recolour the row.
+A cell is a leaf of its row. A horizontal group nested in a row is layout, not a colour unit, because its cells sit side by side with the row's other cells, and neighbours must differ: each of its leaves takes its own place on the line, as the settings door and its frame-rate cell do. Edit mode's chrome is the one exception. It is spliced in as one unit with the cell it edits, sharing that cell's place, because entering edit mode must not recolour the bar. Spliced in as siblings, it would take positions and recolour the row.
 
 Because colour follows address, hiding a sibling recolours nothing.
 
-The shade dial is a table, so a new position or a wider window is one more row. Tones within a window are ordered so the default distribution walks a row up and down one rung at a time, and turning the dial one step moves every cell exactly one rung. The shade is picked by nearest point, not by bin, because bins put neighbouring cells on the same shade.
+The shade dial is a table, so a new position or a wider window is one more row. Tones within a window are ordered so the default distribution walks a row up and down one rung at a time, and, where the depth draws every rung apart, turning the dial one step moves every cell exactly one rung. The rule that reads a placement as a tone belongs to the distribution, not the window, because whether neighbours ever share a tone is a property of the pair: the default keeps them apart only read by halves, golden angle by equal bins, and the even spreads ramp evenly and in order only by equal bins. Every position deals at least two tones, the muted one included, because a one-tone position puts every pair of neighbours on one shade.
+
+A window is per depth because a terminal is sent colours, not names: two rungs a depth rounds to one entry or slot are one colour there, so the window keeps the rungs the depth draws apart and widens along the ladder toward as many tones as its position names, because that count is what the distributions keep neighbours apart over (golden angle holds only over three). It never takes the last colour of a ladder that draws more than two, because the button pressed in that hue stands beside every tone of its band's window and needs a colour none of them wears; a press drawn like its neighbour puts two neighbours on one colour, while a third closed tone is only look. So at ansi a three-slot ladder's window holds two, and golden-angle neighbours can meet there. That reservation is per hue: a press also stands beside the bar's other hues and the band above, which a window cannot see, so a press can still find no rung. Two tones is the floor. Alike means identical once rounded, never near, so nothing measures a distance between two colours.
 
 In some themes the accent is the warning colour, so their accent cells read as orange. That's the theme's own choice, and it's accepted.
 
-## Open triggers and bands
+## Open menus
 
-An open trigger wears the accent role. It stands apart from the closed cells of its own row by contrast, not by hue alone. Its colour is found by sliding the hue along its own OKLCH lightness toward white and toward black, keeping its angle and chroma, until it clears the floor. Sliding toward the theme's own light and dark ends would grey the hue instead. The search never throws, because the settings door is itself a trigger: a throw there would leave no way to change the setting back. Where nothing clears, it takes the candidate that stands furthest off and reports a shortfall.
+The segment whose menu is open is a pressed button, and like every other cell it selects a named shade: its menu's hue at the shade the dial names for the pressed state, which the ✕ and blank leads of that menu's rows wear too. Where a depth draws that shade as the colour of something the layout puts beside it (its band's items, the cells beside its trigger, the press a depth up), it moves along the ladder the way a window widens; at sixteen colours a ladder can have nothing left, and the joiner shows that seam. What it keeps apart from on the bar is the tones the windows deal, because a band's colours cannot depend on where its trigger stands. A cell a hue turn moves past its window is not among those tones, so that cell keeps off the press instead, wherever its ladder has a rung to give: every trigger on the bar opens the same band, so the press is one colour a cell can know from its own address. The rows sit on the theme's surface. Both are named shades so that nothing on the bar is a synthesised colour, and the joiner guarantees every seam, so nothing here predicts a join or measures one cell against another. Where a theme names two neighbours alike, the seam is the joiner's to show.
 
-A trigger's ground is the set of colours its row's cells actually wear. It is computed per row, because no single colour can stand off the whole bar at once.
-
-A band is a plane hung under the trigger that opened it, not a position in the tree. A trigger takes its colour from what it opens. Depth is the number of enclosing bodies and is never stored. A nested trigger stands off the plane and the state colour of the band it sits in, not off the bar row. Held off the bar row, nested states drift to the same end of the lightness axis as their parent's and merge with it.
-
-Band items alternate by cell parity, so neighbouring items never need the joiner's thin divider.
-
-Band colours are computed unrounded from one settled candidate and rounded once. They are never blended from a colour that was already rounded.
+A band is a plane hung under the trigger that opened it, not a position in the tree. Its items are the header's hue at the tones of the dial's window, so a menu reads as a variation on the colour of the header that opened it. A trigger takes its colour from what it opens. Depth is the number of enclosing bodies and is never stored. The plane is the backing behind a band's rows, the same at every depth: a nested band is told by its leads and its hue, not by its backing.
 
 ## Every floor is measured as drawn
 
-Every contrast floor is measured on the colours the terminal will actually draw at the configured depth, composited over black, never on raw RGBA. At 256 colours, text and background round independently, so a colour that loses its floor after rounding is swapped for the nearest one that clears it. At ansi depth, colours are measured as the VGA palette rich-js assumes. The SGR writer still rounds each colour itself, which keeps a powerline arrow exactly the colour of its cell. Between bands, floors are measured as ΔE in OKLab, because a contrast ratio can't separate two hues at the same lightness.
+Every contrast floor is measured on the colours the terminal will actually draw at the configured depth, composited over black, never on raw RGBA. At 256 colours, text and background round independently, so a colour that loses its floor after rounding is swapped for the nearest one that clears it. At ansi depth, colours are measured as the VGA palette rich-js assumes. The SGR writer still rounds each colour itself, so an arrow is drawn exactly in its cell's colour wherever that colour stands off the next cell's as drawn; where it doesn't, rich-js's joiner lifts the arrow's ink off the next cell's, so a join never vanishes and is never a divider.
 
 ## Text
 
 Text with no authored colour clears WCAG AA (4.5:1) on its background in every region. A fixed foreground fails on pale bands, and the terminal's own text fails whenever the terminal's light/dark polarity differs from the theme's. `bg: "none"` draws on the terminal's own background with no text colour either, because the detached daemon can't see that background.
 
-The settings door's open ✖ uses the theme's own error colour. In truecolor it isn't adjusted for contrast, so it reads as that theme's red. At lower depths it keeps the contrast it had in truecolor, so rounding doesn't cost it.
+The settings door's open ✖ stays red on every theme because it only ever selects among the reds the theme names for its error role and never slides lightness: a red slid until it reads stops reading as red. Where none of those reds reads on the pressed state, it wears the one standing farthest off and reads below the text floor, and that is accepted rather than slid. At lower depths it keeps the contrast it had in truecolor, so rounding doesn't cost it.
 
 ## Authored bg is meaning
 

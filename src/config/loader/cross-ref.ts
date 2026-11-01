@@ -24,6 +24,7 @@ import {
   AXIS_OF,
   bodyPath,
   childPath,
+  walkNodePaths,
   type DslConfig,
   type LayoutNode,
   type PresetDecl,
@@ -82,10 +83,17 @@ import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
 import {
+  otherScopeHint,
+  ownedBy,
+  pluginNs,
+  type SegmentPresence,
+} from "./plugin-scope.js";
+import {
   retiredReadHint,
   retiredVariableMessage,
 } from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
+import { reportable } from "./unplaced.js";
 import { type ValidateCtx } from "./validate-core.js";
 import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
@@ -98,16 +106,17 @@ import {
 } from "./refs.js";
 import { payloadPathOf, valueReadsOf, type ValueRead } from "./value-reads.js";
 
-// Where a distribution nothing reads sits: inside a cell, on a bar vertical
-// container whose rows stack further in, or on a body's vertical container.
-type UnreadDistribution = "cell" | "bar" | "band";
+// Where a distribution nothing reads sits: on a container nested inside a
+// row, on a bar vertical container whose rows stack further in, or on a body's
+// vertical container.
+type UnreadDistribution = "nested" | "bar" | "band";
 // What each distribution nothing reads says, at the node it was found on.
 const UNREAD_DISTRIBUTION: Record<
   UnreadDistribution,
   (nodePath: string) => string
 > = {
-  cell: (nodePath) =>
-    `${nodePath} sets "distribution" on a container inside a cell — everything inside a cell wears that cell's colour, so it would place nothing. Set it on the row whose children are the cells (the horizontal container), or, on the bar, on the root, which places the rows.`,
+  nested: (nodePath) =>
+    `${nodePath} sets "distribution" on a container inside a row — the row's own container places every cell along it, through any { h } or { v } nested in it, so this one would place nothing. Set it on the row (the outermost horizontal container), or, on the bar, on the root, which places the rows.`,
   bar: (nodePath) =>
     `${nodePath} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container — a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
   band: (nodePath) =>
@@ -162,10 +171,74 @@ function presetIdentCollisions(
   }
 }
 
+// Where a file's own layout places `name`: the layout key (`root`, or a
+// preset's) and the node's path under it; none when it places no such entry.
+export function authoredPlacement(
+  raw: RawDslConfig,
+  name: string,
+): { readonly layoutKey: string; readonly path: string } | undefined {
+  const layouts: Array<readonly [string, RootFragment | undefined]> = [
+    ["root", raw.root],
+    ...Object.entries(raw.presets ?? {}).map(
+      ([preset, p]) => [`presets.${preset}.root`, p.root] as const,
+    ),
+  ];
+  for (const [layoutKey, fragment] of layouts) {
+    if (fragment === undefined) continue;
+    for (const [node, path] of fragmentNodePaths(fragment, layoutKey)) {
+      if (node.kind === "segment" && node.name === name)
+        return { layoutKey, path };
+    }
+  }
+  return undefined;
+}
+
+// The message a placement of an undeclared segment is reported with, at the
+// layout key that places it. One under a plugin that renders here names the
+// file that won and what it declares, so the fix is in reach of the error.
+export const unplacedMessage = (
+  layoutKey: string,
+  name: string,
+  segments: DslConfig["segments"],
+  presence: SegmentPresence,
+): string =>
+  presence.kind === "plugin"
+    ? `${layoutKey} entry "${name}" does not match any segment plugin "${pluginNs(presence.definition)}" declares — the plugin loaded from ${presence.definition.path} declares: ${pluginDeclares(pluginNs(presence.definition), segments)}${missingSegmentHint(name, segments)}`
+    : `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+
+// Each segment a plugin's namespace declares, sorted, with the settings a
+// placement may set on it (the theme and effect every placement has go
+// unsaid).
+function pluginDeclares(ns: string, segments: DslConfig["segments"]): string {
+  const owned = Object.keys(segments).filter(ownedBy(ns)).sort();
+  if (owned.length === 0) return "no segments";
+  return owned
+    .map((seg) => {
+      const settings = Object.keys(segments[seg]!.settings ?? {});
+      return `${seg} (${settings.length === 0 ? "no settings" : `settings: ${settings.join(", ")}`})`;
+    })
+    .join(", ");
+}
+
+// Why a placed name is missing, when the config can say: a built-in segment
+// renamed, or a plugin segment declared under the other plugin scope.
+function missingSegmentHint(
+  name: string,
+  segments: Readonly<Record<string, unknown>>,
+): string {
+  return (
+    renamedHint(name) +
+    otherScopeHint(name, (other) => Object.hasOwn(segments, other))
+  );
+}
+
 export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
   authored: RawDslConfig,
+  // [LAW:single-enforcer] What a placed name is in the session the config
+  // renders for (unplaced.ts presenceOf).
+  presence: (name: string) => SegmentPresence,
 ): void {
   // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
   // block (a user's default may be a bundled style — same reason every cross-ref
@@ -328,9 +401,12 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
+    // A placement of an undeclared segment is dropped, not drawn, so it owns
+    // no id: one bad name costs its own cell and is reported as a drop.
     const byId = new Map<string, SegmentNode[]>();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment") continue;
+      if (node.kind !== "segment" || presence(node.name).kind !== "declared")
+        continue;
       const id = placementId(node);
       byId.set(id, [...(byId.get(id) ?? []), node]);
     }
@@ -347,18 +423,20 @@ export function validateCrossReferences(
   };
   // [LAW:no-silent-failure] A `distribution` is honoured only where something
   // reads the steps it places. The bar reads two steps of an address — the
-  // innermost row, and the cell of that row — and a band one, the cell
-  // (rowAndCell, both). So nothing reads a distribution inside a cell, on the
-  // bar or in a body, nor one on a vertical container whose rows pick nothing:
-  // on the bar, one whose every row is itself a vertical container; in a body,
-  // any. Each would be accepted and ignored; each is refused at its node.
+  // innermost row, and the cell's place on that row's line — and a band one,
+  // the cell (rowAndCell, both). A row places every leaf along its line by its
+  // own distribution, through whatever it nests (placeChildren), so nothing
+  // reads one on a container inside a row, on the bar or in a body, nor one on
+  // a vertical container whose rows pick nothing: on the bar, one whose every
+  // row is itself a vertical container; in a body, any. Each would be
+  // accepted and ignored; each is refused at its node.
   function unreadAt(
     node: LayoutNode,
     where: UnreadDistribution,
   ): UnreadDistribution | undefined {
     if (node.kind === "segment" || node.distribution === undefined)
       return undefined;
-    if (where === "cell") return "cell";
+    if (where === "nested") return "nested";
     const placesRows =
       where === "bar" &&
       node.children.some(
@@ -367,8 +445,8 @@ export function validateCrossReferences(
       );
     return AXIS_OF[node.direction] === "row" && !placesRows ? where : undefined;
   }
-  // Where a node's children sit: a segment's body is a band, a horizontal
-  // container's children are cells.
+  // Where a node's children sit: a segment's body is a band, and everything
+  // under a horizontal container is inside its row.
   const whereBelow = (
     node: LayoutNode,
     where: UnreadDistribution,
@@ -376,7 +454,7 @@ export function validateCrossReferences(
     node.kind === "segment"
       ? "band"
       : AXIS_OF[node.direction] === "cell"
-        ? "cell"
+        ? "nested"
         : where;
   // A node's children with their diagnostic paths (walkNodePaths' spelling).
   const childPaths = (
@@ -400,10 +478,11 @@ export function validateCrossReferences(
   }
   // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
   // fragment at this key, never the merged root — so a node is reported at
-  // the path, and on the line, the author would look for it, and a row they
-  // inherited is not theirs to be told about. The tree that renders is checked
-  // below (placement counts); an inherited row names only bundled segments,
-  // which no file can remove.
+  // the path, and on the line, the author would look for it. The tree that
+  // renders is checked below: placement counts, and a placement a lower layer
+  // wrote that names no declared segment. The undeclared names reported, so
+  // each is told once.
+  const reported = new Set<string>();
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root)
@@ -446,10 +525,12 @@ export function validateCrossReferences(
         }
         continue;
       }
-      if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
-        ctx.issues.push({
+      const placed = presence(node.name);
+      if (reportable(placed)) {
+        reported.add(node.name);
+        ctx.unplaced.push({
           path,
-          message: `${layoutKey} entry "${node.name}" does not match any declared segment${renamedHint(node.name)}`,
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed),
           line,
         });
       }
@@ -473,6 +554,31 @@ export function validateCrossReferences(
   }
   for (const [key, tree] of rendered) {
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
+  }
+  // [LAW:no-silent-failure] Every placement the bar drops (loader/unplaced.ts)
+  // is reported: one this file wrote above, at its own line; one a layer below
+  // wrote, here, for the loader to report against the file that wrote it
+  // (validateRenderable) — a home config's typo is still the user's to fix
+  // when a repo config sits above it. Its issue under the tree that renders it
+  // stands when no file wrote it.
+  for (const [key, tree] of rendered) {
+    for (const [node] of walkNodePaths(tree, key)) {
+      if (node.kind !== "segment" || reported.has(node.name)) continue;
+      const placed = presence(node.name);
+      if (!reportable(placed)) continue;
+      reported.add(node.name);
+      ctx.inherited.push({
+        name: node.name,
+        path: key,
+        message: unplacedMessage(
+          `${key} inherits from a config layer below whose`,
+          node.name,
+          cfg.segments,
+          placed,
+        ),
+        line: findKeyLine(ctx.source, key.split(".")),
+      });
+    }
   }
 
   validateDeclarations(ctx, cfg, templateScope, () => true);
@@ -1280,7 +1386,7 @@ export function validateDeclarations(
       if (decl?.kind === "source") continue;
       ctx.issues.push({
         path: `actions.${name}.refreshes`,
-        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, plugins.<plugin>.<source>; a plugin names its own sources bare)`,
+        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, <scope>.<plugin>.<source> where the scope is plugins or repo; a plugin names its own sources bare)`,
         line: findKeyLine(ctx.source, ["actions", name, "refreshes"]),
       });
     }

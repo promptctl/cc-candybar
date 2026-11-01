@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] `{{ layoutPreview }}` — the arrangement the bar is
 // in, drawn small (brandon-theme-picker-bgw.x2m): one line per row of the
 // active preset's layout, each segment a labelled block in the tint its place
-// in that layout deals it, under the preset carousel.
+// in that layout deals it, under the preset control.
 //
 // Nothing here chooses a segment, a row or a colour. The rows are
 // `layoutRows` of the compiled tree the render is walking, under the walk's

@@ -57,7 +57,19 @@
             "accent",
             "duo",
             "mono",
-            "alt"
+            "alt",
+            "door-primary",
+            "door-secondary",
+            "door-alternate",
+            "start-primary",
+            "start-secondary",
+            "start-alternate",
+            "end-primary",
+            "end-secondary",
+            "end-alternate",
+            "ends-primary",
+            "ends-secondary",
+            "ends-alternate"
           ]
         },
         "shade": {
@@ -67,7 +79,11 @@
             "deeper",
             "middle",
             "brighter",
-            "brightest"
+            "brightest",
+            "wide",
+            "widest",
+            "pair",
+            "pair-wide"
           ]
         },
         "transitions": {
@@ -77,6 +93,7 @@
           "enum": [
             "1x",
             "5x",
+            "10x",
             "20x"
           ]
         },
@@ -93,8 +110,14 @@
         },
         "menuTimeout": {
           "type": "integer",
-          "minimum": 10,
+          "minimum": 15,
           "maximum": 600
+        },
+        "renderer": {
+          "enum": [
+            "claude",
+            "tmux"
+          ]
         },
         "experimentalBand": {
           "type": "boolean"
@@ -103,9 +126,6 @@
           "type": "boolean"
         },
         "experimentalPane": {
-          "type": "boolean"
-        },
-        "experimentalTmuxStatus": {
           "type": "boolean"
         },
         "colorCompatibility": {
@@ -589,9 +609,6 @@
         "commands": {
           "$ref": "#/definitions/SegmentDelta"
         },
-        "themeSwitcher": {
-          "$ref": "#/definitions/SegmentDelta"
-        },
         "session": {
           "$ref": "#/definitions/SegmentDelta"
         },
@@ -635,6 +652,45 @@
     },
     "root": {
       "$ref": "#/definitions/RootFragment"
+    },
+    "insert": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seg": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seg"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "before"
+            ]
+          },
+          {
+            "required": [
+              "after"
+            ]
+          }
+        ]
+      },
+      "description": "Cells this file adds beside placements the bar it merges over already has: each { seg, id?, before | after: <placement id> }"
     },
     "actions": {
       "type": "object",
@@ -1229,7 +1285,19 @@
               "accent",
               "duo",
               "mono",
-              "alt"
+              "alt",
+              "door-primary",
+              "door-secondary",
+              "door-alternate",
+              "start-primary",
+              "start-secondary",
+              "start-alternate",
+              "end-primary",
+              "end-secondary",
+              "end-alternate",
+              "ends-primary",
+              "ends-secondary",
+              "ends-alternate"
             ]
           },
           "shade": {
@@ -1239,7 +1307,11 @@
               "deeper",
               "middle",
               "brighter",
-              "brightest"
+              "brightest",
+              "wide",
+              "widest",
+              "pair",
+              "pair-wide"
             ]
           }
         },
@@ -1307,7 +1379,19 @@
                   "accent",
                   "duo",
                   "mono",
-                  "alt"
+                  "alt",
+                  "door-primary",
+                  "door-secondary",
+                  "door-alternate",
+                  "start-primary",
+                  "start-secondary",
+                  "start-alternate",
+                  "end-primary",
+                  "end-secondary",
+                  "end-alternate",
+                  "ends-primary",
+                  "ends-secondary",
+                  "ends-alternate"
                 ]
               },
               "shade": {
@@ -1317,7 +1401,11 @@
                   "deeper",
                   "middle",
                   "brighter",
-                  "brightest"
+                  "brightest",
+                  "wide",
+                  "widest",
+                  "pair",
+                  "pair-wide"
                 ]
               },
               "transitions": {
@@ -1327,6 +1415,7 @@
                 "enum": [
                   "1x",
                   "5x",
+                  "10x",
                   "20x"
                 ]
               },
@@ -1343,8 +1432,14 @@
               },
               "menuTimeout": {
                 "type": "integer",
-                "minimum": 10,
+                "minimum": 15,
                 "maximum": 600
+              },
+              "renderer": {
+                "enum": [
+                  "claude",
+                  "tmux"
+                ]
               },
               "experimentalBand": {
                 "type": "boolean"
@@ -1353,9 +1448,6 @@
                 "type": "boolean"
               },
               "experimentalPane": {
-                "type": "boolean"
-              },
-              "experimentalTmuxStatus": {
                 "type": "boolean"
               },
               "colorCompatibility": {
@@ -1445,7 +1537,19 @@
             "accent",
             "duo",
             "mono",
-            "alt"
+            "alt",
+            "door-primary",
+            "door-secondary",
+            "door-alternate",
+            "start-primary",
+            "start-secondary",
+            "start-alternate",
+            "end-primary",
+            "end-secondary",
+            "end-alternate",
+            "ends-primary",
+            "ends-secondary",
+            "ends-alternate"
           ]
         },
         "shade": {
@@ -1455,7 +1559,11 @@
             "deeper",
             "middle",
             "brighter",
-            "brightest"
+            "brightest",
+            "wide",
+            "widest",
+            "pair",
+            "pair-wide"
           ]
         },
         "transitions": {
@@ -1465,6 +1573,7 @@
           "enum": [
             "1x",
             "5x",
+            "10x",
             "20x"
           ]
         },
@@ -1481,8 +1590,14 @@
         },
         "menuTimeout": {
           "type": "integer",
-          "minimum": 10,
+          "minimum": 15,
           "maximum": 600
+        },
+        "renderer": {
+          "enum": [
+            "claude",
+            "tmux"
+          ]
         },
         "experimentalBand": {
           "type": "boolean"
@@ -1491,9 +1606,6 @@
           "type": "boolean"
         },
         "experimentalPane": {
-          "type": "boolean"
-        },
-        "experimentalTmuxStatus": {
           "type": "boolean"
         },
         "colorCompatibility": {

@@ -1,13 +1,18 @@
+import { processLauncher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
 import { shellGate } from "./helpers/shell-gate";
 import { until } from "./helpers/until";
+import { handDelivery } from "./helpers/hand-delivery";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
+import { EventEmitter } from "events";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   VariableStore,
   SourceRegistry,
@@ -17,6 +22,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
+import { createLauncher } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
@@ -52,8 +58,11 @@ afterEach(() => {
   for (const registry of live) registry.dispose();
   live.clear();
 });
-function registryOver(...args: ConstructorParameters<typeof SourceRegistry>): SourceRegistry {
-  const registry = new SourceRegistry(...args);
+type AfterLauncher<T> = T extends [unknown, ...infer Rest] ? Rest : never;
+function registryOver(
+  ...args: AfterLauncher<ConstructorParameters<typeof SourceRegistry>>
+): SourceRegistry {
+  const registry = new SourceRegistry(processLauncher, ...args);
   live.add(registry);
   return registry;
 }
@@ -506,6 +515,21 @@ describe("SourceRegistry — shell: basic", () => {
     expect(err!.timestamp).toBeGreaterThanOrEqual(before);
   });
 
+  it("a read its launcher refused is a failed read, not the registry's abort", async () => {
+    const closing = new AbortController();
+    closing.abort(new Error("the daemon closed"));
+    const registry = new SourceRegistry(
+      createLauncher({ signal: closing.signal }),
+      new VariableStore(),
+    );
+    live.add(registry);
+    registry.declareShell("val", "echo x", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    await ran(registry);
+    expect(registry.getLastError("val")!.message).toBe(
+      `shell "echo x" aborted: the daemon closed in ${process.cwd()}`,
+    );
+  });
+
   it("runs the command in its declared cwd, and every failure names that cwd", async () => {
     const a = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-a-")));
     const b = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-cwd-b-")));
@@ -769,6 +793,8 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
     }
   });
 });
+
+const STALLED_AT = Date.parse("2026-10-27T04:00:00.000Z");
 
 // ─── shell — watch_file cache policy ─────────────────────────────────────────
 
@@ -1395,6 +1421,437 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     } finally {
       cleanup();
     }
+  });
+
+  it("a catch-up re-reads every watch_file source, in a view too, as if its watch had reported; a disposed registry hears none", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      // The watched file is never written: only the catch-up can trigger.
+      const watchedFile = path.join(dir, "watched");
+      const f = path.join(dir, "f");
+      fs.writeFileSync(watchedFile, "w");
+      fs.writeFileSync(f, "v1");
+      const events = handDelivery();
+      const store = new VariableStore();
+      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
+      const view = registry.view();
+      live.add(view);
+      registry.declareFile("home", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      view.declareFile("own", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      await ran(registry);
+      await ran(view);
+      expect(store.read("home")).toBe("v1");
+      expect(view.variableStore.read("own")).toBe("v1");
+
+      fs.writeFileSync(f, "v2");
+      events.notify({ kind: "caught-up", since: STALLED_AT });
+      await until(
+        () => store.read("home") === "v2" && view.variableStore.read("own") === "v2",
+        "both registries re-reading v2",
+      );
+
+      view.dispose();
+      registry.dispose();
+      expect(events.listening()).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  // A stall is the delivery owner's one fact, so every watch_file variable
+  // reads it there. The watched file is never written in these: only the
+  // owner's word can move them, and no OS watcher has to break.
+  describe("while file events are stalled", () => {
+    const STALL = "file events stopped at 2026-10-27T04:00:00.000Z";
+    const stalled: Delivery = { kind: "stalled", missedSince: STALLED_AT };
+    const delivering: Delivery = { kind: "delivering", unreported: [], missedSince: null };
+
+    function rig(dir: string) {
+      const watched = path.join(dir, "watched");
+      const data = path.join(dir, "data");
+      fs.writeFileSync(watched, "w");
+      fs.writeFileSync(data, "before");
+      const events = handDelivery();
+      const store = new VariableStore();
+      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
+      const cache = { kind: "watch_file", path: watched } as const;
+      return { watched, data, events, store, registry, cache };
+    }
+
+    it("every watch_file variable, in a view too, says so with the span's start; a ttl variable does not", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { watched, data, events, store, registry, cache } = rig(dir);
+        const view = registry.view();
+        live.add(view);
+        registry.declareFile("file", data, { parse: TEXT, cache });
+        registry.declareShell("shell", `cat ${data}`, { cwd: process.cwd(), parse: TEXT, cache });
+        registry.declareFile("timed", data, { parse: TEXT, cache: { kind: "ttl", durationMs: 60_000 } });
+        view.declareFile("own", data, { parse: TEXT, cache });
+        await ran(registry);
+        await ran(view);
+        expect(view.cachePolicyFaults().size).toBe(0);
+        const before = registry.published();
+
+        events.set(stalled, { kind: "moved" });
+
+        const faults = view.cachePolicyFaults();
+        expect([...faults.keys()].sort()).toEqual(["file", "own", "shell"]);
+        for (const fault of faults.values()) {
+          expect(fault.message).toBe(
+            `watch_file ${watched}: ${STALL}; the OS has delivered none since, not even for a file the daemon wrote to test it`,
+          );
+        }
+        // What wakes a session's feed, so the bar draws it without a request.
+        expect(registry.published()).not.toEqual(before);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("a variable declared during a stall says so at once", () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry, cache } = rig(dir);
+        events.set(stalled, { kind: "moved" });
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        expect(registry.getLastError("val")?.message).toContain(STALL);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("the catch-up clears the fault, and what was edited during the stall lands", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, store, registry, cache } = rig(dir);
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        await ran(registry);
+        events.set(stalled, { kind: "moved" });
+        await ran(registry);
+
+        fs.writeFileSync(data, "edited");
+        events.set(delivering, { kind: "caught-up", since: STALLED_AT });
+
+        expect(registry.cachePolicyFaults().size).toBe(0);
+        await until(() => store.read("val") === "edited", "the edit landing");
+      } finally {
+        cleanup();
+      }
+    });
+
+    // No variable drops the fault without reading again, and a span still open
+    // cannot be left to close it: `end()` never does.
+    it("a stall that moves to unmeasured clears the fault by re-reading, with no catch-up", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, store, registry, cache } = rig(dir);
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        await ran(registry);
+        events.set(stalled, { kind: "moved" });
+        await ran(registry);
+
+        fs.writeFileSync(data, "edited");
+        events.set(
+          { kind: "unmeasured", since: STALLED_AT + 60_000, reason: "disk full", missedSince: STALLED_AT },
+          { kind: "moved" },
+        );
+
+        expect(registry.cachePolicyFaults().size).toBe(0);
+        await until(() => store.read("val") === "edited", "the edit landing");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("one stall is one publish of a registry, however many variables it faults", () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry, cache } = rig(dir);
+        registry.declareFile("one", data, { parse: TEXT, cache });
+        registry.declareFile("two", data, { parse: TEXT, cache });
+        registry.declareFile("three", data, { parse: TEXT, cache });
+        let publishes = 0;
+        const stop = reaction(
+          () => registry.published(),
+          () => publishes++,
+        );
+
+        events.set(stalled, { kind: "moved" });
+        stop();
+
+        expect(registry.cachePolicyFaults().size).toBe(3);
+        expect(publishes).toBe(1);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("a second notice in one stall keeps the fault's record", () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry, cache } = rig(dir);
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        events.set(stalled, { kind: "moved" });
+        const record = registry.cachePolicyFaults().get("val");
+
+        events.notify({ kind: "moved" });
+
+        expect(registry.cachePolicyFaults().get("val")).toBe(record);
+      } finally {
+        cleanup();
+      }
+    });
+  });
+
+  // A linked path changes wherever any link in its chain is re-pointed, and
+  // where the file at its end is replaced or first appears; each lives in a
+  // directory of its own here, so only the watch on that directory can hear it.
+  // One owner opens, counts and logs every directory watch in the daemon:
+  // a directory home and its session's view watching one path hold one slot
+  // on one handle, which closes with the last of them.
+  it("a watch_file watch is the watcher registry's, shared by a directory home and its view", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1");
+      const counters = {
+        watchersOpened: 0,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+        dirWatchesOpened: 0,
+        dirWatchesClosed: 0,
+      };
+      const watchers = new WatcherRegistry({ counters, logger: () => {} });
+      const home = registryOver(new VariableStore(), "", undefined, null, new RefreshLedger(), undefined, watchers);
+      const view = home.view();
+      live.add(view);
+      home.declareFile("a", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      view.declareFile("b", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
+      await ran(home);
+      await ran(view);
+      expect(watchers.size()).toBe(1);
+      expect(counters).toMatchObject({ watchersOpened: 1, dirWatchesOpened: 1 });
+      view.dispose();
+      expect(counters).toMatchObject({ watchersClosed: 0, dirWatchesClosed: 0 });
+      home.dispose();
+      expect(counters).toMatchObject({ watchersClosed: 1, dirWatchesClosed: 1 });
+      expect(watchers.size()).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  describe("through a chain of links", () => {
+    // `ln -sfn`: a new link renamed over the old one.
+    const relink = (link: string, to: string) => {
+      fs.symlinkSync(to, `${link}.new`);
+      fs.renameSync(`${link}.new`, link);
+    };
+
+    // dir/a → dir/hop/b → dir/one/state
+    function chain(dir: string) {
+      for (const d of ["hop", "one", "two"]) fs.mkdirSync(path.join(dir, d));
+      const a = path.join(dir, "a");
+      const b = path.join(dir, "hop", "b");
+      fs.symlinkSync(b, a);
+      fs.symlinkSync(path.join(dir, "one", "state"), b);
+      return { a, b };
+    }
+
+    it("re-pointing a link partway along the chain re-reads the var", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { a, b } = chain(dir);
+        fs.writeFileSync(path.join(dir, "one", "state"), "v1");
+        fs.writeFileSync(path.join(dir, "two", "state"), "v2");
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        await repeatUntil(
+          registry,
+          () => store.read("val") === "v2",
+          () => relink(b, path.join(dir, "two", "state")),
+          "the store reading v2",
+        );
+        expect(store.read("val")).toBe("v2");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("replacing the file at the chain's end re-reads the var", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { a } = chain(dir);
+        const state = path.join(dir, "one", "state");
+        fs.writeFileSync(state, "v1");
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        await repeatUntil(
+          registry,
+          () => store.read("val") === "v2",
+          () => {
+            fs.writeFileSync(`${state}.new`, "v2");
+            fs.renameSync(`${state}.new`, state);
+          },
+          "the store reading v2",
+        );
+        expect(store.read("val")).toBe("v2");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("a dangling chain's file appearing re-reads the var", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { a } = chain(dir);
+        const { store, registry } = make();
+        registry.declareFile("val", a, { parse: text("(none)"), cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("(none)");
+        await repeatUntil(
+          registry,
+          () => store.read("val") === "v1",
+          () => fs.writeFileSync(path.join(dir, "one", "state"), "v1"),
+          "the store reading v1",
+        );
+        expect(store.read("val")).toBe("v1");
+      } finally {
+        cleanup();
+      }
+    });
+
+    // A shell source never reads its trigger path, so only the watch can say
+    // the chain cannot be walked; it says so for as long as that holds.
+    it("a trigger chain that loops is the variable's refresh fault until it is broken", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const x = path.join(dir, "x");
+        const y = path.join(dir, "y");
+        fs.symlinkSync(y, x);
+        fs.symlinkSync(x, y);
+        fs.writeFileSync(path.join(dir, "real"), "");
+        const { registry } = make();
+        registry.declareShell("val", "echo hi", {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache: { kind: "watch_file", path: x },
+        });
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/symbolic links/);
+        await repeatUntil(
+          registry,
+          () => !registry.cachePolicyFaults().has("val"),
+          () => relink(y, path.join(dir, "real")),
+          "the loop's fault clearing",
+        );
+        expect(registry.cachePolicyFaults().has("val")).toBe(false);
+      } finally {
+        cleanup();
+      }
+    });
+
+    // No real directory can be made to fail its watch on demand, so each
+    // directory's handle is a stand-in the test can make fail. A failed
+    // directory is the watcher registry's period to open again: an event on
+    // another directory of the watch re-derives and re-reads, and keeps the
+    // failed one as it is.
+    it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      const opened: Array<{ dir: string; handle: EventEmitter; listener: (event: string, changed: string | null) => void }> = [];
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
+        const handle = Object.assign(new EventEmitter(), { close: () => {} });
+        opened.push({ dir: d, handle, listener });
+        return handle;
+      }) as unknown as typeof fs.watch);
+      try {
+        const real = fs.realpathSync(dir);
+        fs.mkdirSync(path.join(dir, "one"));
+        const state = path.join(dir, "one", "state");
+        const a = path.join(dir, "a");
+        fs.writeFileSync(state, "v1");
+        fs.symlinkSync(state, a);
+        const watchers = new WatcherRegistry({ logger: () => {} });
+        const store = new VariableStore();
+        const registry = registryOver(store, undefined, undefined, null, new RefreshLedger(), undefined, watchers);
+        registry.declareFile("val", a, { parse: TEXT, cache: { kind: "watch_file", path: a } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+        const one = path.join(real, "one");
+        expect(opensOf(one)).toHaveLength(1);
+        expect(registry.cachePolicyFaults().has("val")).toBe(false);
+
+        fs.writeFileSync(state, "v2");
+        opensOf(one)[0]!.handle.emit("error", new Error("EMFILE: too many open files"));
+        await until(() => store.read("val") === "v2", "the store reading v2");
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
+        expect(opensOf(one)).toHaveLength(1);
+
+        // An event on the link's own directory re-derives and re-reads, and
+        // the failed directory stays as it is.
+        fs.writeFileSync(state, "v3");
+        opensOf(real)[0]!.listener("rename", "a");
+        await until(() => store.read("val") === "v3", "the store reading v3");
+        expect(opensOf(one)).toHaveLength(1);
+        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(/watching .*one failed — EMFILE/);
+
+        // The period's judgment opens it again, and the fault clears.
+        watchers.judge();
+        expect(opensOf(one)).toHaveLength(2);
+        await until(() => !registry.cachePolicyFaults().has("val"), "the fault cleared");
+      } finally {
+        watch.mockRestore();
+        cleanup();
+      }
+    });
+
+    // Linux's inotify follows the inode, so a handle on a directory removed
+    // and made again at its path hears nothing more, with no error to say so;
+    // the stand-in handles let every platform see that the watch moves to the
+    // new directory, and hears the file through it.
+    it("a watched directory removed and made again is watched again", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      const opened: Array<{ dir: string; closed: boolean; listener: (event: string, changed: string | null) => void }> = [];
+      const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string, _opts: unknown, listener: (event: string, changed: string | null) => void) => {
+        const record = { dir: d, closed: false, listener };
+        opened.push(record);
+        return Object.assign(new EventEmitter(), { close: () => void (record.closed = true) });
+      }) as unknown as typeof fs.watch);
+      try {
+        const one = path.join(fs.realpathSync(dir), "one");
+        fs.mkdirSync(one);
+        const state = path.join(one, "state");
+        fs.writeFileSync(state, "v1");
+        const { store, registry } = make();
+        registry.declareFile("val", state, { parse: TEXT, cache: { kind: "watch_file", path: state } });
+        await ran(registry);
+        expect(store.read("val")).toBe("v1");
+        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+        expect(opensOf(one)).toHaveLength(1);
+
+        // `rm -rf one && mkdir one`: the handle reports its own directory's name.
+        fs.rmSync(one, { recursive: true });
+        fs.mkdirSync(one);
+        opensOf(one)[0]!.listener("rename", "one");
+        await until(() => opensOf(one).length === 2, "the directory watched again");
+        expect(opensOf(one)).toHaveLength(2);
+        expect(opensOf(one)[0]!.closed).toBe(true);
+
+        fs.writeFileSync(state, "v2");
+        opensOf(one)[1]!.listener("rename", "state");
+        await until(() => store.read("val") === "v2", "the store reading v2");
+        expect(store.read("val")).toBe("v2");
+      } finally {
+        watch.mockRestore();
+        cleanup();
+      }
+    });
   });
 });
 

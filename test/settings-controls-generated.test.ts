@@ -10,6 +10,7 @@
 //   - a global the menu has never seen — a throwaway enum — gets a working
 //     control from the same generator, with its option domain and its gate.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -120,15 +121,13 @@ describe("each controlled field's control is generated from its declared domain"
           max: schema.maximum,
         });
       }
-      // One control per setting — a ring's action ranges the declared domain
-      // — and a ↺ that resets its config field.
+      // A control per setting — its ring's action ranging the declared
+      // domain — and a ↺ that resets its config field.
       const writers = writersOf(config, row.sessionKey);
       expect(writers.length).toBeGreaterThan(0);
       if (typeof domain === "object" && !("min" in domain)) {
-        expect(writers).toContainEqual({
-          set: row.sessionKey,
-          from: "from" in domain ? domain.from : domain.themes,
-        });
+        const declared = "from" in domain ? domain.from : domain.themes;
+        expect(writers).toContainEqual({ set: row.sessionKey, from: declared });
       }
       expect(
         Object.values(config.actions).some(
@@ -193,7 +192,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
   });
 
-  test("the picker names the current member between its arrows, lists every member, and its gate admits exactly them", () => {
+  test("the picker names the current member between its arrows, lists every member, and its gate admits exactly them", async () => {
     if (control.kind !== "picker") throw new Error("not a picker");
     // The list is a row of the body the control opens; here it is laid as the
     // next row, open, so both render.
@@ -222,7 +221,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const render = () =>
       renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
@@ -231,13 +230,13 @@ describe("a global the menu has never seen gets its control from the generator",
     expect(gate.validate("zoom", "max").ok).toBe(false);
     const out = render();
     const [trigger, list] = stripAnsi(out).split("\n");
-    // No neighbours beside the arrows: the list is where the members are.
-    expect(trigger).toContain("◀ mid ▶");
+    // The control names the setting; the list is where the members are.
+    expect(trigger).toContain("◀ 🧪 ▶");
     expect(trigger).not.toMatch(/low|high/);
     expect(list).toMatch(/low mid high/);
     // The list draws no ✕ of its own: the body it is a row of closes it.
     expect(list).not.toContain("✕");
-    // The name is the list's toggle: open here, so its click closes it.
+    // The label is the list's toggle: open here, so its click closes it.
     expect(
       linkUrls(out).some((u) =>
         effectsOf(u).some(
@@ -249,7 +248,7 @@ describe("a global the menu has never seen gets its control from the generator",
       effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
     );
     recordRender(sessionState, "s1");
-    clickUrl(high!, testVerbContext(sessionState, undefined, config));
+    await clickUrl(high!, testVerbContext(sessionState, undefined, config));
     expect(sessionState.get("s1", "zoom")).toBe("high");
   });
 });

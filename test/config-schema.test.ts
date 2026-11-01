@@ -16,10 +16,10 @@ import path from "node:path";
 import JSON5 from "json5";
 import Ajv from "ajv";
 import type { ValidateFunction } from "ajv";
+import { validateConfig } from "./helpers/parse-and-validate";
 import {
   inheritableSegmentNames,
   parseDslConfig,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { mergeWithDefault } from "../src/config/loader/merge";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";

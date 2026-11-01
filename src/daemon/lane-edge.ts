@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
-import { launch, type LaunchResult } from "../proc/launch.js";
+import type { LaunchResult, Launcher } from "../proc/launch.js";
 import { runTmux, runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
@@ -36,8 +36,13 @@ const EXIT_POLL_MS = 100;
 // How long a shell has to take its terminal back once Claude Code exited.
 const SHELL_PATIENCE_MS = 2000;
 
-function tmux(hint: TmuxHint, args: string[], stdinInput?: string): string {
-  const run = runTmux(hint, "lane.tmux", args, stdinInput);
+function tmux(
+  launcher: Launcher,
+  hint: TmuxHint,
+  args: string[],
+  stdinInput?: string,
+): string {
+  const run = runTmux(launcher, hint, "lane.tmux", args, stdinInput);
   if (run.kind !== "ok") throw new Error(run.reason);
   return run.stdout;
 }
@@ -140,7 +145,7 @@ interface ProcessImage {
   readonly env: string[];
 }
 
-async function imageOf(pid: number): Promise<ProcessImage> {
+async function imageOf(launcher: Launcher, pid: number): Promise<ProcessImage> {
   if (process.platform === "linux") {
     return {
       executable: await fs.promises.readlink(`/proc/${pid}/exe`),
@@ -154,7 +159,7 @@ async function imageOf(pid: number): Promise<ProcessImage> {
   }
   const out = ran(
     `reading process ${pid}'s arguments`,
-    await launch({
+    await launcher.launch({
       bin: "python3",
       args: ["-c", PROCARGS2, String(pid)],
       timeoutMs: 5000,
@@ -165,10 +170,14 @@ async function imageOf(pid: number): Promise<ProcessImage> {
 }
 
 // One `ps` over the process table, off the daemon's loop.
-async function ps(what: string, args: string[]): Promise<string> {
+async function ps(
+  launcher: Launcher,
+  what: string,
+  args: string[],
+): Promise<string> {
   return ran(
     what,
-    await launch({
+    await launcher.launch({
       bin: "ps",
       args,
       timeoutMs: 2000,
@@ -181,12 +190,15 @@ async function ps(what: string, args: string[]): Promise<string> {
 // first process, the directory of the job that holds its terminal, and that
 // job — the process group its terminal hands input to, whose leader is the
 // program the shell started (every process on a terminal answers the same).
-async function paneForeground(hint: TmuxHint): Promise<{
+async function paneForeground(
+  launcher: Launcher,
+  hint: TmuxHint,
+): Promise<{
   readonly panePid: number;
   readonly cwd: string;
   readonly foreground: number;
 }> {
-  const display = await runTmuxAsync(hint, "lane.tmux", [
+  const display = await runTmuxAsync(launcher, hint, "lane.tmux", [
     "display",
     "-p",
     "-t",
@@ -196,7 +208,7 @@ async function paneForeground(hint: TmuxHint): Promise<{
   if (display.kind !== "ok") throw new Error(display.reason);
   const [panePid = "", cwd = ""] = display.stdout.trimEnd().split("\t");
   const foreground = (
-    await ps(`asking pane ${hint.pane}'s foreground job`, [
+    await ps(launcher, `asking pane ${hint.pane}'s foreground job`, [
       "-o",
       "tpgid=",
       "-p",
@@ -206,10 +218,21 @@ async function paneForeground(hint: TmuxHint): Promise<{
   return { panePid: Number(panePid), cwd, foreground: Number(foreground) };
 }
 
-async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
-  const { panePid, cwd, foreground: pid } = await paneForeground(hint);
-  const table = await ps("listing processes", ["-A", "-o", "pid=,ppid=,args="]);
-  const image = await imageOf(pid);
+async function paneClaude(
+  launcher: Launcher,
+  hint: TmuxHint,
+): Promise<PaneClaude> {
+  const {
+    panePid,
+    cwd,
+    foreground: pid,
+  } = await paneForeground(launcher, hint);
+  const table = await ps(launcher, "listing processes", [
+    "-A",
+    "-o",
+    "pid=,ppid=,args=",
+  ]);
+  const image = await imageOf(launcher, pid);
   const parent = processTable(table).get(pid)?.ppid;
   if (parent === undefined) {
     throw new Error(`pane ${hint.pane}'s foreground job ${pid} is gone`);
@@ -233,21 +256,27 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
 const FOLLOW_POLL_MS = 200;
 
 // `following` is the daemon's FrameFeeds' answer: the lanes whose subscribers
-// follow a session's frames now.
+// follow a session's frames now. `closing` ends what is no launch, as the
+// daemon's launcher ends what is: a poll's wait, and the one signal sent
+// directly.
 export function productionLaneEdge(
+  launcher: Launcher,
   following: (sessionId: string) => ReadonlySet<Lane>,
+  closing: AbortSignal,
 ): LaneEdge {
+  const wait = (ms: number): Promise<void> =>
+    sleep(ms, undefined, { signal: closing });
   return {
-    claudeInput: productionClaudeInputEdge(),
+    claudeInput: productionClaudeInputEdge(launcher),
     barPanes: (hint) =>
       taggedBarPanes(
-        tmux(hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
+        tmux(launcher, hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
         hint.pane,
       ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
     openBarPane: (hint, argv, env) => {
-      const opened = tmux(hint, [
+      const opened = tmux(launcher, hint, [
         "split-window",
         "-d",
         "-v",
@@ -261,7 +290,7 @@ export function productionLaneEdge(
         ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
         ...argv,
       ]).trim();
-      tmux(hint, [
+      tmux(launcher, hint, [
         "set-option",
         "-p",
         "-t",
@@ -271,14 +300,15 @@ export function productionLaneEdge(
       ]);
       return opened;
     },
-    closePane: (hint, pane) => void tmux(hint, ["kill-pane", "-t", pane]),
+    closePane: (hint, pane) =>
+      void tmux(launcher, hint, ["kill-pane", "-t", pane]),
     // [LAW:single-enforcer] The session's process environment: the
     // session's facts, never those of whichever shell spawned this detached
     // daemon.
     claude: async (args, session) =>
       void ran(
         `claude ${args.join(" ")}`,
-        await launch({
+        await launcher.launch({
           bin: "claude",
           args: [...args],
           env: sessionEnv(process.env, session),
@@ -288,7 +318,7 @@ export function productionLaneEdge(
       ),
     fileExists: (file) => fs.existsSync(file),
     presence,
-    paneClaude,
+    paneClaude: (hint) => paneClaude(launcher, hint),
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
@@ -299,7 +329,7 @@ export function productionLaneEdge(
     paneDir: async (hint, shell) => {
       const until = Date.now() + SHELL_PATIENCE_MS;
       for (;;) {
-        const pane = await paneForeground(hint);
+        const pane = await paneForeground(launcher, hint);
         if (pane.foreground === shell) {
           // tmux prints an empty path when it cannot read the shell's
           // directory.
@@ -313,7 +343,7 @@ export function productionLaneEdge(
             `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
           );
         }
-        await sleep(EXIT_POLL_MS);
+        await wait(EXIT_POLL_MS);
       }
     },
     launcherNode: (pathVariable) =>
@@ -332,13 +362,13 @@ export function productionLaneEdge(
       const until = Date.now() + withinMs;
       while (!following(sessionId).has(lane)) {
         if (Date.now() > until) return false;
-        await sleep(FOLLOW_POLL_MS);
+        await wait(FOLLOW_POLL_MS);
       }
       return true;
     },
     // In a child: the reader holds the whole binary (~200 MB) in memory.
     moduleGraph: async (node, reader, executable) => {
-      const result = await launch({
+      const result = await launcher.launch({
         bin: node,
         args: [reader, executable],
         timeoutMs: 20_000,
@@ -356,6 +386,7 @@ export function productionLaneEdge(
     // [LAW:no-silent-failure] A kill the OS refuses says which process it was
     // sent to, not a bare `kill ESRCH`.
     terminate: (pid) => {
+      closing.throwIfAborted();
       try {
         process.kill(pid, "SIGTERM");
       } catch (err) {
@@ -368,13 +399,18 @@ export function productionLaneEdge(
       const until = Date.now() + withinMs;
       while (pidAlive(pid)) {
         if (Date.now() > until) return false;
-        await sleep(EXIT_POLL_MS);
+        await wait(EXIT_POLL_MS);
       }
       return true;
     },
     // Typed as a slash command is, but with no ctrl+s first: in a shell that
     // stops the terminal's output.
     typeShellLine: (hint, line) =>
-      void tmux(hint, pasteLineArgs(hint.pane, SHELL_BUFFER, []), line),
+      void tmux(
+        launcher,
+        hint,
+        pasteLineArgs(hint.pane, SHELL_BUFFER, []),
+        line,
+      ),
   };
 }

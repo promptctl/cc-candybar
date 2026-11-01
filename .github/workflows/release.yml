@@ -35,11 +35,22 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # The committed schema is what editors fetch from main; nothing in this
+      # job may regenerate it before the guard reads it.
+      - name: Schema drift guard
+        run: pnpm run check:schema
+
+      # [LAW:verifiable-goals] Before the build, so a test outside the process
+      # tier that comes to need one fails here. The two steps are the whole suite:
+      # one run ignores exactly what the other selects.
+      - name: Test outside the process tier
+        run: pnpm test:worker
+
       - name: Build
         run: pnpm run build
 
-      - name: Test
-        run: pnpm test
+      - name: Test the process tier
+        run: pnpm test:process
 
       - name: Protocol-version guard
         run: pnpm run check:protocol

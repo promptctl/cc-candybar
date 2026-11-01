@@ -3,7 +3,7 @@
 // reshape lives in the daemon's PER-RENDER strip-style resolution
 // (resolveEffectiveGlobals -> renderOpts.endcaps), OUTSIDE renderDsl — the exact twin
 // of how a theme click recolors via basePalette (see dsl-theme-picker-recolor).
-// This test replicates that resolution exactly as src/daemon/server.ts does, so
+// This test replicates that resolution exactly as src/daemon/draw-bar.ts does, so
 // it proves the end-to-end loop: a set-state `style` click changes the bytes the
 // joiner emits between cells.
 //
@@ -12,6 +12,7 @@
 // resolveEffectiveGlobals the daemon calls. No parallel rig, no hand-built
 // joiner.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -51,14 +52,14 @@ function buildRuntime() {
   const config = parseAndValidate("<reshape>", SRC, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = paletteForThemeName(BASE_THEME);
 
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
   // daemon does — the session's clicked style over the config default over the
   // "powerline" floor. Freezing it would silently pass while the real daemon
-  // reshapes. (server.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
+  // reshapes. (draw-bar.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
   const render = (): string =>
     renderDsl(config, compiled, store, registry, { session_id: SID }, instantOf(new Date()), {
       endcaps: globalsFor(config, (key) => sessionState.get(SID, key)).endcaps,
@@ -69,28 +70,28 @@ function buildRuntime() {
   return { config, sessionState, render };
 }
 
-function clickEndcaps(
+async function clickEndcaps(
   { config, sessionState }: ReturnType<typeof buildRuntime>,
   style: string,
-): void {
+): Promise<void> {
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]);
   recordRender(sessionState, SID);
-  clickUrl(url, testVerbContext(sessionState, undefined, config));
+  await clickUrl(url, testVerbContext(sessionState, undefined, config));
 }
 
 describe("DSL style picker — live reshape", () => {
-  test("clicking a style changes the bytes the joiner emits between cells", () => {
+  test("clicking a style changes the bytes the joiner emits between cells", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
 
     const powerline = render(); // default: SessionState unset -> "powerline" floor
     expect(powerline.length).toBeGreaterThan(0);
 
-    clickEndcaps(rt, "capsule");
+    await clickEndcaps(rt, "capsule");
     const capsule = render();
 
-    clickEndcaps(rt, "plain");
+    await clickEndcaps(rt, "plain");
     const plain = render();
 
     // [LAW:verifiable-goals] The reshape IS the contract: each strip style yields
@@ -101,12 +102,12 @@ describe("DSL style picker — live reshape", () => {
     expect(plain).not.toBe(capsule);
   });
 
-  test("every ENDCAPS_SHAPES member resolves to a renderable, distinct bar", () => {
+  test("every ENDCAPS_SHAPES member resolves to a renderable, distinct bar", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
     const seen = new Map<string, string>();
     for (const style of ENDCAPS_SHAPES) {
-      clickEndcaps(rt, style);
+      await clickEndcaps(rt, style);
       const out = render();
       expect(out.length).toBeGreaterThan(0);
       seen.set(style, out);

@@ -5,6 +5,7 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import {
@@ -90,7 +91,7 @@ function renderer(
   compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg), TEST_SIGNER),
 ) {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(processLauncher, store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {
     endcaps: "powerline" as const,

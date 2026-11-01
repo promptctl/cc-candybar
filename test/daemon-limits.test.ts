@@ -1,3 +1,4 @@
+import { processLauncher } from "../src/proc/launch";
 import {
   makeLimits,
   type LimitsDeps,
@@ -488,7 +489,7 @@ describe("the charge is the verdict", () => {
             ),
         }),
       );
-      const armed = limits.arm(1000);
+      limits.arm(1000);
       expect(answers).toHaveLength(1);
       // A probe slower than the interval delays the next, never overlaps it.
       await jest.advanceTimersByTimeAsync(5000);
@@ -498,7 +499,7 @@ describe("the charge is the verdict", () => {
       expect(answers).toHaveLength(1);
       await jest.advanceTimersByTimeAsync(1);
       expect(answers).toHaveLength(2);
-      armed.disarm();
+      limits.disarm();
       answers[1]!();
       await jest.advanceTimersByTimeAsync(5000);
       expect(answers).toHaveLength(2);
@@ -646,14 +647,43 @@ describe("post-mortems", () => {
     const prev = process.env.XDG_STATE_HOME;
     try {
       process.env.XDG_STATE_HOME = path.join(root, "absent");
-      expect(realLimitsDeps(0, () => {}).listArtifacts()).toEqual([]);
+      expect(realLimitsDeps(0, () => {}, {
+        launcher: processLauncher,
+        log: () => {},
+      }).listArtifacts()).toEqual([]);
       fs.writeFileSync(path.join(root, "file"), "");
       process.env.XDG_STATE_HOME = path.join(root, "file");
-      expect(() => realLimitsDeps(0, () => {}).listArtifacts()).toThrow(/ENOTDIR/);
+      expect(() => realLimitsDeps(0, () => {}, {
+        launcher: processLauncher,
+        log: () => {},
+      }).listArtifacts()).toThrow(/ENOTDIR/);
     } finally {
       if (prev === undefined) delete process.env.XDG_STATE_HOME;
       else process.env.XDG_STATE_HOME = prev;
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+// [LAW:no-ambient-temporal-coupling] A reading out when the daemon closes lands
+// on a daemon that is gone.
+describe("a breach landing after disarm", () => {
+  test("writes nothing and asks for no exit", async () => {
+    const rec = newRec();
+    let answer!: (charge: MemoryCharge) => void;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 100,
+        memoryCharge: () => new Promise((resolve) => (answer = resolve)),
+      }),
+    );
+    limits.arm();
+    limits.disarm();
+    answer({ kind: "charged", measure: "rss", bytes: 10_000 });
+    await limits.check();
+
+    expect(rec.reportsWritten).toEqual([]);
+    expect(rec.snapshotsWritten).toEqual([]);
+    expect(rec.shutdownCalls).toEqual([]);
   });
 });

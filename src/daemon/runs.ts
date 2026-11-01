@@ -6,7 +6,7 @@
 // the click's.
 
 import path from "node:path";
-import type { launch as launchProgram, LaunchResult } from "../proc/launch.js";
+import type { LaunchResult, Launcher } from "../proc/launch.js";
 import type { SessionId } from "./session-id.js";
 import type { StorageKey } from "./cache/managed-storage.js";
 import type { Resume } from "../utils/keyed-source.js";
@@ -58,7 +58,7 @@ export interface RunStats {
 export interface RunsDeps {
   // [LAW:one-source-of-truth] The storage owner's one supersede.
   readonly supersede: (storage: StorageKey, sessionId: SessionId) => Resume;
-  readonly launch: typeof launchProgram;
+  readonly launch: Launcher["launch"];
   // The daemon's session state, where a failed run's error is held for the
   // session's bar — not a click's journal, which committed long before.
   readonly state: SessionStateRW;

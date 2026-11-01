@@ -4,7 +4,12 @@
 // what the config-file editor would refuse. Changes here are display/source-
 // mapping changes; the schema validators never touch this file.
 
-import { Json5EditError, parseDocument } from "../json5-edit.js";
+import {
+  entryOf,
+  Json5EditError,
+  parseDocument,
+  type Node,
+} from "../json5-edit.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -38,6 +43,35 @@ export class ConfigError extends Error {
   }
 }
 
+// [LAW:types-are-the-program] One file's dropped placements, and the prompt a
+// click on its ⚠ copies: pasted into Claude, it names the file to edit and
+// carries the error, whose plugin placements name the file that won and what
+// it declares, so the fix needs nothing the prompt does not hold.
+export class DroppedFileError extends ConfigError {
+  readonly prompt: string;
+
+  constructor(file: string, issues: readonly ConfigIssue[]) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file.",
+    ].join("\n\n");
+  }
+}
+
+// [LAW:types-are-the-program] What `check` and the demo refuse that the bar
+// draws past: every placement it dropped, as each writing file's own error.
+// An author's refusal like ConfigError, but over several files.
+export class DroppedPlacements extends Error {
+  constructor(readonly errors: readonly DroppedFileError[]) {
+    super(errors.map((e) => e.message).join("\n"));
+    this.name = "DroppedPlacements";
+  }
+}
+
 // ─── Best-effort source-line lookup ──────────────────────────────────────────
 
 // Walk source forward, finding each path component as a JSON5 key in turn.
@@ -51,6 +85,43 @@ export function findKeyLine(
   source: string,
   pathParts: readonly string[],
 ): number | undefined {
+  return keyLocator(source)(pathParts);
+}
+
+// findKeyLine over one source, for a caller that looks up several paths in
+// it: the document is parsed at most once, and only if a path needs it.
+export function keyLocator(
+  source: string,
+): (pathParts: readonly string[]) => number | undefined {
+  let parsed: { readonly node: Node | undefined } | undefined;
+  const document = (): Node | undefined => {
+    parsed ??= { node: parseOrUndefined(source) };
+    return parsed.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+
+function parseOrUndefined(source: string): Node | undefined {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return undefined;
+    throw e;
+  }
+}
+
+function keyLine(
+  source: string,
+  document: () => Node | undefined,
+  pathParts: readonly string[],
+): number | undefined {
+  // [LAW:single-enforcer] A path through an array (`insert.1.seg`) is placed
+  // by the config editor's own document model, which knows where element 1
+  // starts; the key scanner below cannot count elements.
+  const indexed = pathParts.some((p) => /^\d+$/.test(p))
+    ? elementPathLine(source, document(), pathParts)
+    : undefined;
+  if (indexed !== undefined) return indexed;
   let cursor = 0;
   let foundCursor: number | undefined;
   for (const part of pathParts) {
@@ -67,6 +138,38 @@ export function findKeyLine(
   return foundCursor !== undefined
     ? lineFromOffset(source, foundCursor)
     : undefined;
+}
+
+// The line of the deepest node the path reaches through the parsed document,
+// or undefined when the path indexes no array on the way there (the key
+// scanner places that), the document does not parse, or its first step is
+// absent. A numeric part indexes an array only where the node is one; on an
+// object it is a key like any other (`themeDefaults: { "16": … }`).
+function elementPathLine(
+  source: string,
+  document: Node | undefined,
+  pathParts: readonly string[],
+): number | undefined {
+  if (document === undefined) return undefined;
+  let node = document;
+  let reached: Node | undefined;
+  let indexed = false;
+  for (const part of pathParts) {
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next: Node | undefined =
+      node.kind === "array"
+        ? element
+          ? node.elements[Number(part)]
+          : undefined
+        : entryOf(node, part)?.value;
+    if (next === undefined) break;
+    indexed ||= element;
+    node = next;
+    reached = next;
+  }
+  return reached === undefined || !indexed
+    ? undefined
+    : lineFromOffset(source, reached.span.start);
 }
 
 function findKeyOccurrence(source: string, from: number, key: string): number {

@@ -24,13 +24,15 @@ A render in flight holds the state it draws with. Eviction and reload swap the m
 
 In the stats, a retired count that climbs while the cache size holds steady means a render never returned.
 
+A reload whose resolved inputs are the ones the served state was built from keeps that state, because a rebuilt state reopens every session view and restarts its sources, and a save is always followed by its watch's reload of the same bytes. The key is typed over every input a build resolves from the config's files and folders, a plugin folder's generation included, so a folder's recovery still rebuilds, and an input added later fails to compile until it is keyed. What else a build reads belongs to the daemon and is the same for every load, so it is not keyed: anything there that starts to vary per load has to join the key, or a reload keeps a state built from its old value. A test that reloads to drive a build has to change what the config loads first.
+
 ## Dispose releases every MobX subscription
 
 Disposing a store has to release its computeds' subscriptions. A keepAlive computed never unsubscribes on its own. If it read session state, it stays among the observers of the daemon-wide session-state atom for the daemon's lifetime, and it keeps the whole disposed store alive. The stats report that atom's observer count beside the session count. An observer count that climbs while the cache size holds steady is this leak. A test checks that the count drops back after a dispose.
 
 ## There is always a bar
 
-Each cache entry starts with the bundled default's state. A config that fails its very first load still renders a bar, settings menu included, under the error strip.
+Each cache entry starts with the bundled default's state. A config that fails its very first load still renders a bar, settings menu included, with its error behind the indicator beside the door.
 
 ## Tests
 

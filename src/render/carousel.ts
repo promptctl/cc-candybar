@@ -1,19 +1,18 @@
-// [LAW:one-type-per-behavior] A `{{ carousel "applyAction" }}` is the picker's
-// other shape over the SAME thing: one option-domain action, its resolved
-// members, its gated click (brandon-theme-picker-bgw.ef6). The picker lays the
-// domain out as a grid of pages; the carousel lays it out as a ring centred on
-// the value the action's key holds now —
+// [LAW:one-type-per-behavior] A `{{ carousel "apply" "open" "label" }}` is the
+// picker's other shape over the SAME thing: one option-domain action, its
+// resolved members, its gated click (brandon-theme-picker-bgw.ef6). It is the
+// closed face of a choice —
 //
-//     prev₂ prev₁ ◀ CURRENT ▶ next₁ next₂
+//     ◀ label ▶
 //
-// — and every cell it draws, arrow or name, APPLIES the option it points at.
-// Rotating is therefore picking: one click recolours the bar, and there is no
-// highlight that moves ahead of the applied value waiting for a second click.
+// — where the label says what is being set, the arrows apply the option either
+// side of the value in force, and a click on the label fires `open`, which
+// expands the list of every option.
 //
-// [LAW:one-source-of-truth] The carousel owns no position. Its centre IS the
-// action's current value, read through the action's own `stateVar` (for the
-// settings menu's controls, the `.effective` projection the bar rendered
-// with), so the centre and the bar cannot disagree, and there is no cursor key
+// [LAW:one-source-of-truth] The carousel owns no position. Its ring is centred
+// on the action's current value, read through the action's own `stateVar` (for
+// the settings menu's controls, the `.effective` projection the bar rendered
+// with), so the arrows and the bar cannot disagree, and there is no cursor key
 // to gate, reset, or leave stale. Each click writes through `realize` — the
 // same fold `{{ action }}` and the picker's option cells use.
 //
@@ -23,7 +22,6 @@
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { effectsUrl } from "../click/wire.js";
-import { placedBy } from "../themes/decor.js";
 import {
   bindsTemplateValue,
   linkFragment,
@@ -34,19 +32,8 @@ import {
   renderLook,
   type ActionRuntime,
 } from "./action.js";
-import {
-  requireActiveSegment,
-  type ActiveSegmentRef,
-} from "./active-segment.js";
-import { optionPaint, valuePaint, type ItemPaint } from "./option-paint.js";
-import { refuseSurplus } from "../template-engine/optional-tail.js";
-import {
-  assemble,
-  cellWidth,
-  ledRowBudget,
-  requireOptionKind,
-  type OptionAction,
-} from "./picker.js";
+import { labelPaint } from "./option-paint.js";
+import { assemble, requireOptionKind, type OptionAction } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
 export const CAROUSEL_NEXT = "▶";
@@ -67,45 +54,12 @@ export function ringAround(
   return (offset) => (((centre + offset) % count) + count) % count;
 }
 
-// [LAW:dataflow-not-control-flow] How many neighbours each side gets is a pure
-// function of widths: whole symmetric levels are added while the row still
-// fits, never more than the ring holds without showing one option twice, and
-// never more than the author's `cap` (Infinity when none was asked for).
-// `width(d)` is the drawn width of the option d steps from the centre
-// (negative = before it). Exported for unit testing.
-export function neighbourLevels(
-  width: (offset: number) => number,
-  count: number,
-  base: number,
-  available: number,
-  cap: number,
-): number {
-  const most = Math.min(Math.floor((count - 1) / 2), cap);
-  let used = base;
-  let levels = 0;
-  while (levels < most) {
-    const next = used + width(-(levels + 1)) + 1 + width(levels + 1) + 1;
-    if (next > available) break;
-    used = next;
-    levels += 1;
-  }
-  return levels;
-}
-
 export function renderCarousel(
   applyName: string,
   apply: OptionAction,
+  openName: string,
+  label: string,
   runtime: ActionRuntime,
-  itemPaint: ItemPaint,
-  neighbours: number,
-  // What a click on the centre does. Absent, it applies the current option
-  // again; given, it fires that declared action instead — the settings menu's
-  // controls open the list of every option there, so a click on the name
-  // opens the choices and only the arrows step. The centre's TEXT is the
-  // carousel's own current option either way, so the name the arrows step
-  // from and the name the click shows cannot disagree (an unknown current
-  // value shows the first option, the one ▶ steps from).
-  centreAction?: string,
 ): RichText {
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
   // a structural insert (layout-op-option) holds none, and a key no variable
@@ -126,22 +80,13 @@ export function renderCarousel(
   const declared = runtime.compiled.get(applyName)!;
   const sessionId = readVar(store, "session.id");
   const { options } = apply;
-  const count = options.length;
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.
-  if (count === 0) return assemble([], true);
-  const current = readVar(store, apply.stateVar);
-  // The centre is an option, not the value — which is why "current" below is
-  // the picker's own comparison, never "is the centre".
-  const indexAt = ringAround(options, current);
+  if (options.length === 0) return assemble([], true);
+  const indexAt = ringAround(options, readVar(store, apply.stateVar));
   const ring = (offset: number): string => options[indexAt(offset)]!;
-  // Each offset's click is realized once: the arrow and the neighbour name
-  // beside it write the same option.
-  const urls = new Map<number, string>();
-  const url = (offset: number): string => {
-    const known = urls.get(offset);
-    if (known !== undefined) return known;
-    const made = effectsUrl(
+  const step = (offset: number): string =>
+    effectsUrl(
       realize(
         declared,
         ring(offset),
@@ -151,160 +96,68 @@ export function renderCarousel(
         runtime.signer,
       ).effects,
     );
-    urls.set(offset, made);
-    return made;
-  };
-  const face = (offset: number): RichText =>
-    itemPaint(
-      { index: indexAt(offset), count },
-      ring(offset),
-      ring(offset),
-      ring(offset) === current,
-    );
-  // Each offset's cell is drawn once: measured to fit the ring, then laid.
-  const cells = new Map<number, RichText>();
-  const option = (offset: number): RichText => {
-    const known = cells.get(offset);
-    if (known !== undefined) return known;
-    const made = linkOver(face(offset), url(offset));
-    cells.set(offset, made);
-    return made;
-  };
-
-  const middle =
-    centreAction === undefined
-      ? option(0)
-      : linkOver(
-          // Drawn as the arrows are, in the segment's own colours: the name
-          // is the control's text, not an option laid out for picking
-          // (Brandon: "The name loses its styling"), its swatch beside it
-          // when the domain is colour-valued.
-          valuePaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
-            { index: indexAt(0), count },
-            ring(0),
-            ring(0),
-            false,
-          ),
-          effectsUrl(
-            realize(
-              runtime.compiled.get(centreAction)!,
-              ring(0),
-              undefined,
-              store,
-              sessionId,
-              runtime.signer,
-            ).effects,
-          ),
-        );
-  const base =
-    cellWidth(CAROUSEL_PREV) +
-    1 +
-    middle.cellLength +
-    1 +
-    cellWidth(CAROUSEL_NEXT);
-  const levels = neighbourLevels(
-    (offset) => option(offset).cellLength,
-    count,
-    base,
-    ledRowBudget(runtime),
-    neighbours,
-  );
-  const side = (sign: number): RichText[] =>
-    Array.from({ length: levels }, (_, i) => option(sign * (i + 1)));
 
   return assemble(
     [
-      ...side(-1).reverse(),
-      linkFragment(CAROUSEL_PREV, url(-1), false),
-      middle,
-      linkFragment(CAROUSEL_NEXT, url(1), false),
-      ...side(1),
+      linkFragment(CAROUSEL_PREV, step(-1), false),
+      linkOver(
+        // Drawn as the arrows are, in the segment's own colours (Brandon: "The
+        // name loses its styling"), beside the swatch of the value in force
+        // when the domain is colour-valued.
+        labelPaint(
+          renderLook(runtime, "{{ carousel }}"),
+          apply.paletteOf,
+          ring(0),
+          label,
+        ),
+        effectsUrl(
+          realize(
+            runtime.compiled.get(openName)!,
+            ring(0),
+            undefined,
+            store,
+            sessionId,
+            runtime.signer,
+          ).effects,
+        ),
+      ),
+      linkFragment(CAROUSEL_NEXT, step(1), false),
     ],
     true,
   );
 }
 
-// [LAW:one-type-per-behavior] Options are drawn by the ONE rule every picker
-// shape shares (`optionPaint`): a colour-valued domain writes each name beside
-// the swatch of the palette it would apply, any other domain places it in the
-// band.
-export function carouselFuncs(
-  runtime: ActionRuntime,
-  activeSegment: ActiveSegmentRef,
-): FuncMap {
+export function carouselFuncs(runtime: ActionRuntime): FuncMap {
   return {
     carousel: {
-      // `neighbours` caps how many options each side of the centre may show;
-      // width still decides within the cap. `0` is the bare stepper
-      // `◀ CURRENT ▶` — the shape a bar cell wants, since the ring's
-      // neighbours are what makes it wide. Omitted = as many as fit. `centre`
-      // names a declared action the current option's cell fires instead of
-      // applying itself (`{{ carousel "a" 0 "openList" }}`: arrows step, the
-      // name opens).
-      //
-      // [LAW:parse-dont-validate] The slots differ in type and the engine
-      // repeats only the trailing one, so the tail arrives as values and is
-      // parsed here: a whole number ≥ 0, then one action name, then nothing.
-      fn: (applyName: string, ...tail: unknown[]) => {
-        const [neighbours, centre, ...extra] = tail;
-        refuseSurplus(
-          `carousel "${applyName}"`,
-          ["neighbours", "centre"],
-          extra,
-        );
-        if (
-          neighbours !== undefined &&
-          !(Number.isInteger(neighbours) && (neighbours as number) >= 0)
-        ) {
+      fn: (applyName: string, openName: string, label: string) => {
+        // [LAW:no-silent-failure] A computed label can come up empty, and a
+        // control with no name says nothing and leaves no text to click.
+        if (label.trim() === "") {
+          throw new Error(`carousel "${applyName}": label is empty`);
+        }
+        if (!runtime.compiled.has(openName)) {
           throw new Error(
-            `carousel "${applyName}": neighbours must be a whole number ≥ 0 (0 shows only ◀ CURRENT ▶), got ${String(neighbours)}`,
+            `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`,
           );
         }
-        if (
-          centre !== undefined &&
-          !(typeof centre === "string" && runtime.compiled.has(centre))
-        ) {
+        // The label fires with nothing bound, so an action that writes a bound
+        // value would write the option the ring sits on instead.
+        if (bindsTemplateValue(runtime.compiled.get(openName)!)) {
           throw new Error(
-            `carousel "${applyName}": centre must name a declared action, got ${JSON.stringify(centre)}`,
-          );
-        }
-        // The centre fires with nothing bound, so an action that writes a
-        // bound value would write the centre's text instead.
-        if (
-          centre !== undefined &&
-          bindsTemplateValue(runtime.compiled.get(centre)!)
-        ) {
-          throw new Error(
-            `carousel "${applyName}": centre "${centre}" writes a value the template binds, and the centre binds none — name an action that writes a fixed value, a cycle, or a do of them`,
-          );
-        }
-        const cap = (neighbours as number | undefined) ?? Infinity;
-        const apply = requireOptionKind(runtime, applyName, "carousel");
-        const active = requireActiveSegment(activeSegment, "{{ carousel }}");
-        if (active.bg === undefined) {
-          throw new Error(
-            `{{ carousel }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a carousel is drawn on that background`,
+            `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none — name an action that writes a fixed value, a cycle, or a do of them`,
           );
         }
         return renderCarousel(
           applyName,
-          apply,
+          requireOptionKind(runtime, applyName, "carousel"),
+          openName,
+          label,
           runtime,
-          // Its options sit on the segment's own background, inline in it.
-          optionPaint(
-            active,
-            placedBy(undefined),
-            renderLook(runtime, "{{ carousel }}"),
-            apply.paletteOf,
-            activeSegment.drawnAt(),
-            active.bg,
-          ),
-          cap,
-          centre as string | undefined,
         );
       },
-      argTypes: ["string", "value"],
-      arity: { kind: "variadic" },
+      argTypes: ["string", "string", "string"],
+      arity: { kind: "exact" },
       returnType: "T",
     },
   };

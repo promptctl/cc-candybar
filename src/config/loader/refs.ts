@@ -6,6 +6,7 @@
 // fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
 // fold over it, never a second walker, or it is blind to helpers again.
 
+import { ownedBy } from "./plugin-scope.js";
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
 const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
@@ -18,16 +19,25 @@ const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 // the same way, and left out of the block: it is neither code nor a literal,
 // and an apostrophe in it opens nothing. An unclosed action yields nothing:
 // it is the engine's parse error to report. Every extractor below reads its
-// blocks from here.
-function* templateBlocks(template: string): IterableIterator<string> {
+// blocks from here, and each block says where each of its characters sits in
+// the template, so a rewrite lands on the template's own text.
+interface Block {
+  readonly text: string;
+  readonly at: (index: number) => number;
+}
+
+function* templateBlocks(template: string): IterableIterator<Block> {
   let open = template.indexOf("{{");
   while (open !== -1) {
     let block = "";
     let i = open + 2;
+    // [block index, template index] at the start of each run of kept text.
+    const spans: Array<readonly [number, number]> = [[0, i]];
     while (i < template.length && !template.startsWith("}}", i)) {
       if (template.startsWith("/*", i)) {
         const close = template.indexOf("*/", i + 2);
         i = close === -1 ? template.length : close + 2;
+        spans.push([block.length, i]);
         continue;
       }
       const start = i;
@@ -42,7 +52,14 @@ function* templateBlocks(template: string): IterableIterator<string> {
       block += template.slice(start, i);
     }
     if (i >= template.length) return;
-    yield block;
+    yield {
+      text: block,
+      at: (index) => {
+        let [from, to] = spans[0]!;
+        for (const [b, t] of spans) if (b <= index) [from, to] = [b, t];
+        return to + index - from;
+      },
+    };
     open = template.indexOf("{{", i + 2);
   }
 }
@@ -79,10 +96,10 @@ const KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
 function* scopedBlocks(
   template: string,
   root: Dot,
-): IterableIterator<{ code: string; dot: Dot }> {
+): IterableIterator<{ code: string; dot: Dot; block: Block }> {
   const stack: Dot[] = [root];
-  for (const raw of templateBlocks(template)) {
-    const code = raw.replace(/^-(?=\s)/, "").trim();
+  for (const block of templateBlocks(template)) {
+    const code = block.text.replace(/^-(?=\s)/, "").trim();
     const [, keyword = "", rest = ""] = KEYWORD_RE.exec(code) ?? [];
     const top = stack[stack.length - 1]!;
     const outer = stack.length > 1 ? stack[stack.length - 2]! : top;
@@ -91,13 +108,13 @@ function* scopedBlocks(
       continue;
     }
     if (keyword === "else") {
-      yield { code, dot: outer };
+      yield { code, dot: outer, block };
       const chained = /^with\b([\s\S]*)$/.exec(rest);
       stack[stack.length - 1] =
         chained === null ? outer : operandAt(chained[1]!, outer, root);
       continue;
     }
-    yield { code, dot: top };
+    yield { code, dot: top, block };
     if (keyword === "if") stack.push(top);
     if (keyword === "with") stack.push(operandAt(rest, top, root));
     if (keyword === "range" || keyword === "define" || keyword === "block")
@@ -114,7 +131,7 @@ function* helperCalls(
   code: string,
   dot: Dot,
   root: Dot,
-): IterableIterator<{ name: string; at: Dot }> {
+): IterableIterator<{ name: string; at: Dot; index: number }> {
   let cursor = 0;
   for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
     const end = s.index + s[0].length;
@@ -122,6 +139,7 @@ function* helperCalls(
       yield {
         name: s[0].slice(1, -1),
         at: operandAt(code.slice(end), dot, root),
+        index: s.index,
       };
     }
     cursor = end;
@@ -260,18 +278,17 @@ export type ActionSite = "action" | "options";
 // `menu` binds ONLY its apply action (`{{ menu "applyTheme" (dict …) }}`) —
 // its page cursor is synthesized from identity, and the dict's option-name
 // literals must never be misread as action refs — and a `carousel` binds its
-// apply action and, when it names one, the action its centre fires
-// (`{{ carousel "applyTheme" 0 "openThemes" }}`: the neighbour cap between
-// them is a number, so the centre action is the call's second string literal).
+// (apply, open) pair the same way (`{{ carousel "applyTheme" "openThemes"
+// "theme" }}`).
 // A `swatches` row binds (apply, page) as a picker does; a `swatch` binds only
 // its apply action — the literal after it names an option, not an action —
 // and a `themePreview` binds the apply action it is named, when it is.
 // One scan arms on any keyword with that keyword's own arg count
-// [LAW:single-enforcer], and a name is a literal among the call's OWN
-// arguments: one inside a parenthesised argument belongs to that expression,
-// and the call ends at its closing `)` or a `|`, so an optional name left out
-// is never filled from whatever follows. A keyword after `.` or `$` is a field
-// read (`eq .menu "open"`), never a call.
+// [LAW:single-enforcer], and names are the unbroken run of literals straight
+// after it: any other token (a computed argument, a variable, a closing `)`, a
+// `|`) ends the run, so what follows a computed or omitted name, such as a
+// carousel's spelled label, is never misread as one. A keyword after `.` or
+// `$` is a field read (`eq .menu "open"`), never a call.
 const BINDING_KEYWORD_RE =
   /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
 const NAME_ARGS: Readonly<Record<string, number>> = {
@@ -285,27 +302,21 @@ const NAME_ARGS: Readonly<Record<string, number>> = {
 };
 function* actionBindings(
   code: string,
-): IterableIterator<{ name: string; site: ActionSite }> {
+): IterableIterator<{ name: string; site: ActionSite; index: number }> {
   let cursor = 0;
   let pending = 0; // remaining name args to capture for the current call
-  let depth = 0; // parentheses open inside the current call's argument list
   let site: ActionSite = "action";
   for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
     const between = code.slice(cursor, s.index);
     const kw = BINDING_KEYWORD_RE.exec(between);
     if (kw !== null) {
       pending = NAME_ARGS[kw[1]!]!;
-      depth = 0;
       site = kw[1] === "action" ? "action" : "options";
-    } else {
-      for (const ch of between) {
-        if (ch === "(") depth++;
-        if (ch === ")") depth--;
-        if (depth < 0 || (ch === "|" && depth === 0)) pending = 0;
-      }
+    } else if (between.trim() !== "") {
+      pending = 0;
     }
-    if (pending > 0 && depth === 0) {
-      yield { name: s[0].slice(1, -1), site };
+    if (pending > 0) {
+      yield { name: s[0].slice(1, -1), site, index: s.index };
       pending--;
     }
     cursor = s.index + s[0].length;
@@ -338,12 +349,18 @@ export function templateActionRefs(
 
 // Whether a template — through its own text or any helper it calls — binds an
 // action by a name it computes (`{{ action $name "x" }}`, `{{ menu .which }}`)
-// rather than spells: a binding keyword whose first argument is no literal.
+// rather than spells: a binding keyword with a name argument that is no literal,
+// the second of the pairs included.
 // `templateActionRefs` reads only spelled names, so such a template may bind
 // any declared action. A keyword with no argument (`{{ themePreview }}`)
 // binds none.
-const COMPUTED_BINDING_RE =
-  /(?<![\w.$])(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+(?=[^\s"`)|}])/;
+const namesTaking = (min: number): string =>
+  Object.keys(NAME_ARGS)
+    .filter((keyword) => NAME_ARGS[keyword]! >= min)
+    .join("|");
+const COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`,
+);
 export function bindsComputedAction(
   template: string,
   helpers: Readonly<Record<string, string>>,
@@ -404,6 +421,43 @@ export function templateHelperCalls(
     for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;
+}
+
+// [LAW:single-enforcer] A template with every reference it spells to `self`
+// bound to `ns`: a read whose path starts `self` from the template's root
+// (`.self.data` where the dot is the root, or `$.self.data` anywhere), and a
+// helper or action named `self.…` where a call names one (`template
+// "self.state"`, `action "self.raise"`, a picker's pair). Found by the same
+// lexer and dot tracking every question above asks, so a string literal that
+// only displays `self`, a field `self` of a `range` element or a `with` value,
+// and a longer name (`.selfish`) are left as written.
+const SELF_REF_RE = (self: string): RegExp =>
+  new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self}(?![A-Za-z0-9_])`, "g");
+export function bindSelf(template: string, self: string, ns: string): string {
+  const refRe = SELF_REF_RE(self);
+  const named = ownedBy(self);
+  const starts: number[] = [];
+  for (const { dot, block } of scopedBlocks(template, "")) {
+    const code = block.text.replace(STRING_LITERAL_RE, (s) =>
+      " ".repeat(s.length),
+    );
+    for (const r of code.matchAll(refRe)) {
+      const base = r[1] === "$" ? "" : dot;
+      if (base === "") starts.push(block.at(r.index + r[1]!.length + 1));
+    }
+    for (const { name, index } of [
+      ...helperCalls(block.text, dot, ""),
+      ...actionBindings(block.text),
+    ]) {
+      if (named(name)) starts.push(block.at(index + 1));
+    }
+  }
+  return [...new Set(starts)]
+    .sort((a, b) => b - a)
+    .reduce(
+      (t, start) => t.slice(0, start) + ns + t.slice(start + self.length),
+      template,
+    );
 }
 
 // Every variable the config declares, under the name the store holds it by

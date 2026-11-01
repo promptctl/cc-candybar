@@ -156,8 +156,8 @@ export function leasePath(): string {
   return leasePathFor(socketPath());
 }
 
-export function sessionStatePath(): string {
-  return path.join(stateDir(), "session-state.json");
+export function sessionStatePath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(stateDir(env), "session-state.json");
 }
 
 // [LAW:one-source-of-truth] Each session's undo/redo history over every
@@ -215,13 +215,10 @@ export function spawnBackoffPath(): string {
   return path.join(stateDir(), SPAWN_BACKOFF_FILE);
 }
 
-// [LAW:one-source-of-truth] Where the daemon dumps each session's complete
-// diagnostic text (src/daemon/diagnostic-dump.ts) so the bar's strip can
-// link it as a plain `file://` URL. Daemon-owned runtime state beside
-// session-state.json; wiped on daemon start like every other cold-rebuilt
-// cache, so it holds only sessions that have errored since.
-export function diagnosticsDir(): string {
-  return path.join(stateDir(), "diagnostics");
+// The daemon's own folder for testing its file watch: never the state
+// directory itself, where the log writes on every request.
+export function watchProbeDir(): string {
+  return path.join(stateDir(), "watch-probe");
 }
 
 export function logPath(env: NodeJS.ProcessEnv = process.env): string {

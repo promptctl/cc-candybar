@@ -9,13 +9,23 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
-import { launch } from "../proc/launch";
+import type { Launcher } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
-import { watch as fsWatch, type FSWatcher } from "fs";
-import { realpathSync, statSync } from "fs";
-import path from "path";
-import { nearestWatchTarget } from "../utils/watch-target.js";
+import {
+  WatcherRegistry,
+  watchFault,
+  watchTargetsOf,
+  type BoundWatch,
+  type Invalidation,
+  type PathsWatch,
+} from "../daemon/cache/watchers.js";
+import {
+  NO_FILE_EVENTS,
+  stallReason,
+  type DeliveryNotice,
+  type FileEvents,
+} from "../daemon/cache/file-events.js";
 import { setInterval, clearInterval } from "timers";
 import {
   computed,
@@ -194,6 +204,7 @@ interface SourceReader {
 }
 
 function shellReader(
+  launcher: Launcher,
   command: string,
   cwd: string,
   signal: AbortSignal,
@@ -204,14 +215,17 @@ function shellReader(
     // no-match, JSON parse — names where it ran.
     where: `output of "${command}" in ${cwd}`,
     read: async () => {
-      const r = await launch({
+      const r = await launcher.launch({
         bin: "/bin/sh",
         args: ["-c", command],
         cwd,
         category: "user-shell",
         signal,
       });
-      if (!r.ok && r.reason === "aborted") throw signal.reason;
+      // Only the source's own abort ends a run. The launcher's is a daemon
+      // closing under a live source: a failed read, like any other.
+      if (!r.ok && r.reason === "aborted" && signal.aborted)
+        throw signal.reason;
       if (r.ok) return ok(r.stdout);
       const why =
         r.exitCode === null
@@ -292,158 +306,164 @@ function firstThenChange(
   };
 }
 
-// ─── WatchManager ─────────────────────────────────────────────────────────────
+// ─── PathWatches ──────────────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One fs.watch handle per path regardless of subscriber
-// count.  Multiple shell/file variables can share one watcher on the same path.
-//
-// A file is watched through its DIRECTORY, filtered to its name: a watch on
-// the file itself binds its inode, so it never sees a file created after it
-// (an app that has not written yet) and goes deaf after the first atomic
-// rename (write-then-rename, the safe way to rewrite a file). A directory
-// that does not exist yet is watched through its nearest existing ancestor
-// (`nearestWatchTarget`), and each directory that appears re-arms the watch
-// one level deeper.
-function resolvedPath(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    // Absent: watched by name until it appears.
-    return p;
-  }
-}
-
-export function isDirectory(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    // Absent (or unreadable): watched as a file that may appear.
-    return false;
-  }
-}
-
-// What one subscription watches right now: the directory itself when the
-// path is one, else the (dir, name) tuple of its nearest existing ancestor.
-// `leaf` is true once the watch reaches the path's own directory — only then
-// can an event be about the path itself.
-interface WatchTarget {
-  readonly dir: string;
-  readonly name: string | null;
-  readonly leaf: boolean;
-}
-
-function watchTargetOf(filePath: string): WatchTarget {
-  // A symlink is followed: the writes land on its target.
-  const target = resolvedPath(filePath);
-  return isDirectory(target)
-    ? { dir: target, name: null, leaf: true }
-    : nearestWatchTarget(target);
-}
-
-const targetKey = (t: WatchTarget): string => `${t.dir}\0${t.name ?? ""}`;
-
-// A watch the OS refused (ENOSPC on inotify, EMFILE, EACCES, the directory
-// removed under the walk): reported to every subscriber, never thrown — a
-// throw out of a watcher callback would take the daemon down.
-type WatchFailed = (message: string) => void;
+// What a watch says to each subscriber: why it may be missing changes to its
+// path right now, or `null` when it hears every place the path can change.
+type WatchFault = (fault: string | null) => void;
 
 interface WatchEntry {
-  // null while the OS refuses the watch; `failure` then says why.
-  watcher: FSWatcher | null;
-  failure: string;
-  target: WatchTarget;
-  // Each subscriber's update, and where its watch failures are recorded.
-  readonly subscribers: Map<() => void, WatchFailed>;
+  // Where the path can change, as last derived from disk, and the watcher
+  // registry's watch on it.
+  bound: BoundWatch;
+  // Each subscriber's update, and where it hears the watch's fault.
+  readonly subscribers: Map<() => void, WatchFault>;
 }
 
-class WatchManager {
-  private readonly watchers = new Map<string, WatchEntry>();
+// [LAW:single-enforcer] One watch per path regardless of subscriber count:
+// several shell/file variables can share it. The directory watches are the
+// watcher registry's, which opens, shares, counts and logs every one in the
+// daemon; this follows each path's spec and fans its windows out.
+//
+// A path is watched wherever it can change (`watchTargetsOf`, the rule the
+// config watcher shares): each directory through which its link chain passes,
+// filtered to the names there, and the path itself when it is a directory. A
+// directory, never a file, because a watch on a file binds its inode: it
+// never sees a file created after it (an app that has not written yet) and
+// goes deaf after the first atomic rename (write-then-rename, the safe way to
+// rewrite a file). A directory that does not exist yet is watched through its
+// nearest existing ancestor, and each one that appears moves the watch one
+// level deeper.
+class PathWatches {
+  private readonly entries = new Map<string, WatchEntry>();
+  private readonly releaseDelivery: () => void;
+
+  constructor(
+    private readonly watchers: WatcherRegistry,
+    private readonly fileEvents: FileEvents,
+  ) {
+    this.releaseDelivery = fileEvents.subscribe((notice) =>
+      this.noticed(notice),
+    );
+  }
 
   subscribe(
     filePath: string,
     callback: () => void,
-    onFailed: WatchFailed,
+    onFault: WatchFault,
   ): () => void {
-    const entry = this.watchers.get(filePath) ?? this.arm(filePath);
-    entry.subscribers.set(callback, onFailed);
-    if (entry.watcher === null) onFailed(entry.failure);
+    const entry = this.entries.get(filePath) ?? this.arm(filePath);
+    entry.subscribers.set(callback, onFault);
+    onFault(this.faultOf(filePath, entry));
     return () => this.unsubscribe(filePath, callback);
   }
 
   private arm(filePath: string): WatchEntry {
+    const watch = derived(filePath);
     const entry: WatchEntry = {
-      watcher: null,
-      failure: "",
-      target: watchTargetOf(filePath),
+      bound: {
+        derived: watch,
+        held: this.watchers.follow(null, watch, (heard) =>
+          this.heard(filePath, entry, heard),
+        ).watch,
+      },
       subscribers: new Map(),
     };
-    entry.watcher = this.open(filePath, entry, entry.target);
-    this.watchers.set(filePath, entry);
+    this.entries.set(filePath, entry);
     return entry;
   }
 
-  // An event under the watched ancestor may mean a missing directory
-  // appeared (or the watched one vanished): re-derive the target ONCE, and
-  // move the watch when it moved. The new watch opens before the old one
-  // closes, so a refusal leaves the old watch listening for the next event.
-  private rearm(filePath: string, entry: WatchEntry): void {
-    const target = watchTargetOf(filePath);
-    if (entry.watcher !== null && targetKey(target) === targetKey(entry.target))
-      return;
-    const watcher = this.open(filePath, entry, target);
-    if (watcher === null) return;
-    entry.watcher?.close();
-    entry.watcher = watcher;
-    entry.target = target;
+  // Derive where the path can change, follow it, and say the watch's fault.
+  // A new key acquires its watch, keeping every directory both keys name.
+  private rederive(filePath: string, entry: WatchEntry): void {
+    const paths = derived(filePath);
+    const { watch } = this.watchers.follow(entry.bound.held, paths, (heard) =>
+      this.heard(filePath, entry, heard),
+    );
+    entry.bound = { derived: paths, held: watch };
+    this.report(filePath, entry);
   }
 
-  private open(
+  // A window re-derives and re-reads.
+  private heard(
     filePath: string,
     entry: WatchEntry,
-    target: WatchTarget,
-  ): FSWatcher | null {
-    const { dir, name } = target;
-    const self = path.basename(dir);
-    try {
-      return fsWatch(dir, (_event, changed) => {
-        // A platform that reports no name could be reporting anything here.
-        const aboutName = changed === null || name === null || changed === name;
-        // The watched directory's own removal or rename reports its own name.
-        if (!aboutName && changed !== self) return;
-        const wasLeaf = entry.target.leaf;
-        this.rearm(filePath, entry);
-        // Ancestor churn on the way DOWN is not a change to the path; a move
-        // up from the leaf is its removal, which the subscribers must read.
-        if (!wasLeaf && !entry.target.leaf) return;
-        for (const cb of entry.subscribers.keys()) cb();
-      });
-    } catch (e) {
-      const message = `watch_file ${filePath}: cannot watch ${dir} — ${e instanceof Error ? e.message : String(e)}`;
-      entry.failure = message;
-      for (const report of entry.subscribers.values()) report(message);
-      return null;
+    heard: Invalidation,
+  ): void {
+    const wasLeaf = entry.bound.derived.reached;
+    this.rederive(filePath, entry);
+    // Ancestor churn on the way DOWN is not a change to the path; a move
+    // up from the leaf is its removal, which the subscribers must read. A
+    // failed directory may have missed a change, so its window always reads.
+    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
+      return;
+    for (const cb of entry.subscribers.keys()) cb();
+  }
+
+  private report(filePath: string, entry: WatchEntry): void {
+    const fault = this.faultOf(filePath, entry);
+    for (const onFault of entry.subscribers.values()) onFault(fault);
+  }
+
+  // The watch's fault, derived from what it holds now and whether the OS is
+  // delivering what it would hear. A stall is every watch's: it rides the
+  // delivery owner's one stream.
+  private faultOf(filePath: string, entry: WatchEntry): string | null {
+    return watchFault(
+      `watch_file ${filePath}`,
+      entry.bound,
+      stallReason(this.fileEvents.delivery()),
+    );
+  }
+
+  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
+  // may have missed events: each watch re-derives where its path can change,
+  // since a directory may have appeared unheard, which says its fault, and
+  // every subscriber re-reads as if its own watch had reported. Both together,
+  // so no variable drops a stall's fault without reading again, and in one
+  // action, so one change of delivery is one publish of this registry's.
+  private noticed(notice: DeliveryNotice): void {
+    switch (notice.kind) {
+      case "period":
+        return;
+      case "moved":
+      case "caught-up":
+        runInAction(() => {
+          for (const [filePath, entry] of this.entries) {
+            this.rederive(filePath, entry);
+            for (const cb of entry.subscribers.keys()) cb();
+          }
+        });
+        return;
     }
   }
 
   private unsubscribe(filePath: string, callback: () => void): void {
-    const entry = this.watchers.get(filePath);
+    const entry = this.entries.get(filePath);
     if (!entry) return;
     entry.subscribers.delete(callback);
     if (entry.subscribers.size === 0) {
-      entry.watcher?.close();
-      this.watchers.delete(filePath);
+      entry.bound.held.handle.release();
+      this.entries.delete(filePath);
     }
   }
 
   dispose(): void {
-    for (const { watcher } of this.watchers.values()) watcher?.close();
-    this.watchers.clear();
+    this.releaseDelivery();
+    for (const entry of this.entries.values())
+      entry.bound.held.handle.release();
+    this.entries.clear();
   }
 
   size(): number {
-    return this.watchers.size;
+    return this.entries.size;
   }
 }
+
+// Where the path can change: every hop of its link chain by name, and the
+// path itself when it is a directory.
+const derived = (filePath: string): PathsWatch =>
+  watchTargetsOf({ named: [filePath], whole: [filePath] });
 
 // ─── TtlBucketManager ────────────────────────────────────────────────────────
 
@@ -614,8 +634,9 @@ export class SourceRegistry {
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A watch the OS
-  // refused lives until the registry does; a key template that throws lives
+  // source will ever run again, so no read outcome clears it. A watch that
+  // cannot hear every place its path changes lives until it can again (its
+  // own re-derive says so); a key template that throws lives
   // until the key evaluates again. One map, since a variable has one policy.
   // Observable, since the bar draws each fault as a refresh warning.
   private readonly policyFaults = observable.map<string, LastError>(undefined, {
@@ -623,7 +644,7 @@ export class SourceRegistry {
   });
 
   // Triggers for shell/file cache policies and the time source's tick:
-  private readonly watchMgr = new WatchManager();
+  private readonly watchMgr: PathWatches;
   private readonly ttlMgr = new TtlBucketManager();
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
@@ -701,6 +722,8 @@ export class SourceRegistry {
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
+    // Who a shell source's program belongs to.
+    private readonly launcher: Launcher,
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
     sessionState?: SessionStateReader,
@@ -709,8 +732,17 @@ export class SourceRegistry {
     // [LAW:single-enforcer] The daemon's one ledger, which every source's
     // refreshes are recorded in; a registry outside the daemon keeps its own.
     private readonly ledger: RefreshLedger = new RefreshLedger(),
+    // [LAW:one-source-of-truth] The daemon's one word on whether the OS is
+    // delivering file events, which its `watch_file` sources' watches ride.
+    // Only the daemon measures delivery.
+    private readonly fileEvents: FileEvents = NO_FILE_EVENTS,
+    // [LAW:single-enforcer] The daemon's one watcher registry, which holds
+    // every directory watch its `watch_file` sources need; a registry outside
+    // the daemon keeps its own.
+    private readonly watchers: WatcherRegistry = new WatcherRegistry(),
   ) {
     this.sessionState = sessionState;
+    this.watchMgr = new PathWatches(watchers, fileEvents);
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home
@@ -723,11 +755,14 @@ export class SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view(): SourceRegistry {
     return new SourceRegistry(
+      this.launcher,
       new VariableStore(this.store),
       this.defaultEmptyValue,
       this.sessionState,
       this,
       this.ledger,
+      this.fileEvents,
+      this.watchers,
     );
   }
 
@@ -854,7 +889,7 @@ export class SourceRegistry {
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
-      shellReader(command, opts.cwd, this.abort.signal),
+      shellReader(this.launcher, command, opts.cwd, this.abort.signal),
       clampShellCache(name, opts.cache),
       opts.parse,
     );
@@ -1076,14 +1111,18 @@ export class SourceRegistry {
   // is for is out (`awaited`), or when `signal` aborts — and then holds
   // nothing, so a run that never ends keeps no waiter behind it. A run one of
   // them triggers (a `depends_on` reaction fires inside a publish) is marked
-  // before the run that triggered it ends, so it is waited out too.
-  async inFlight(signal: AbortSignal): Promise<void> {
+  // before the run that triggered it ends, so it is waited out too. Resolves
+  // to the names still awaited: empty when all settled, the stragglers when
+  // the signal ended the wait. A signal already aborted ends it at once, so a
+  // caller holding one deadline over many waits pays it once.
+  async inFlight(signal: AbortSignal): Promise<readonly string[]> {
     try {
       await when(() => this.awaited().length === 0, { signal });
     } catch (e) {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
     }
+    return this.awaited();
   }
 
   // The sources a wait on this registry is for: the runs out here and in the
@@ -1095,12 +1134,10 @@ export class SourceRegistry {
   }
 
   // The names still awaited once every run has ended or `withinMs` has
-  // passed: empty when all settled. This is the state a one-shot render
-  // (`cc-candybar check`) awaits so it renders what those sources yielded,
-  // never a guessed delay.
-  async settled(withinMs: number): Promise<readonly string[]> {
-    await this.inFlight(AbortSignal.timeout(withinMs));
-    return this.awaited();
+  // passed: empty when all settled. The state a one-shot render awaits so it
+  // renders what those sources yielded, never a guessed delay.
+  settled(withinMs: number): Promise<readonly string[]> {
+    return this.inFlight(AbortSignal.timeout(withinMs));
   }
 
   // template: a variable whose value is derived by evaluating a go-template
@@ -1361,7 +1398,11 @@ export class SourceRegistry {
         const unsub = this.watchMgr.subscribe(
           policy.path,
           () => update("re-read", "change"),
-          (message) => this.notePolicy(name, failed(message)),
+          (fault) =>
+            this.notePolicy(
+              name,
+              fault === null ? ok(undefined) : failed(fault),
+            ),
         );
         this.cleanups.push(unsub);
         break;

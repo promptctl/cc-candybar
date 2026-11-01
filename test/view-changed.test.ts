@@ -4,6 +4,7 @@
 // that differs from the one stored; a re-read that finds what is stored moves
 // nothing, so a still source under a fast period wakes no feed.
 
+import { processLauncher } from "../src/proc/launch";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,11 +13,13 @@ import {
   SOURCES_NOTHING,
   RenderCache,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
+import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
 
 const sleep = (ms: number): Promise<void> =>
@@ -63,6 +66,8 @@ function setUp() {
       watchersClosed: 0,
       watchRefusals: 0,
       watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
     },
     logger: () => {},
   });
@@ -72,8 +77,10 @@ function setUp() {
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
     {
+      launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -90,7 +97,8 @@ function setUp() {
   cleanups.push(() => cache.close());
   const open = (sid: string) =>
     cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
-  const reload = (): void => cache.reload(dir, dir, configFile);
+  const reload = (): void =>
+    cache.reload(dir, dir, configFile, { kind: "write" });
   return { status, changed, reloads, writeConfig, reload, open };
 }
 
@@ -116,7 +124,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   // Twenty periods of re-reads of the same text.
   await sleep(1000);
   expect(changed).toHaveLength(settled);
-  fs.writeFileSync(status, "red");
+  writeAtomic(status, "red");
   await until(() => held.view.store.read("status") === "red", "the new value");
   expect(changed).toHaveLength(settled + 1);
   await sleep(300);
@@ -142,15 +150,24 @@ test("a reload names the sessions that drew from its entry, whether or not it lo
 test("a view a reload retired says nothing more while a render still holds it", async () => {
   const { status, changed, writeConfig, reload, open } = setUp();
   using old = open("s");
-  await until(() => old.view.store.read("status") === "green", "the first read");
+  await until(
+    () => old.view.store.read("status") === "green",
+    "the first read",
+  );
+  // An edit, and the save's reload of it. The config's watch hears the write
+  // too, and its reload of the same bytes, which can land inside the window
+  // counted below, keeps the state and opens no view.
   writeConfig("{{ .status }}!");
   reload();
   using now = open("s");
   expect(now.view).not.toBe(old.view);
-  await until(() => now.view.store.read("status") === "green", "the successor's first read");
+  await until(
+    () => now.view.store.read("status") === "green",
+    "the successor's first read",
+  );
   await sleep(200);
   const settled = changed.length;
-  fs.writeFileSync(status, "red");
+  writeAtomic(status, "red");
   await until(
     () =>
       old.view.store.read("status") === "red" &&

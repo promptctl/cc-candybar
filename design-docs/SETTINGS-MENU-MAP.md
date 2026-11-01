@@ -9,7 +9,7 @@ The menu opens above the bar and leaves the bar as it was: "Opening the candy me
 The menu is two lines, then the body of the open tab. The first line holds the theme picker and its `⚙`, the preset control, `✎ arrange` and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✖  ◁  🎨 theme ▀▀▀  ⚙  ▦ ◀ default ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
+✖  ◁  🎨 theme ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
 host  directory  gitaculous             ← the bar, less the door
@@ -18,16 +18,16 @@ host  directory  gitaculous             ← the bar, less the door
 A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row. An `above` body's trigger rises with it: the door, wearing ✖, leads the menu's first line, followed by `◁` back, and the bar row closes up where it was.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
-- **Theme and arrange** are top-level beside it (brandon-menus-sjhy.ek7): "Make theme and arrange top-level menus, next to preset." The theme picker's `⚙` comes with it and holds style, variation and shade, then `⤓ default for <theme>` while the look differs from the theme's default, since that saves exactly those three. A closed `⚙` is marked `•` while one of them would change on reset, as a tab is.
+- **Theme and arrange** are top-level beside it (brandon-menus-sjhy.ek7): "Make theme and arrange top-level menus, next to preset." The theme picker's `⚙` comes with it and holds style, variation and shade, with the trial tunings of the accent variation and the wider jumps in the `🎼` and `🔆` lists, each marked 🧪 — then `⤓ default for <theme>` while the look differs from the theme's default, since that saves exactly those three. A closed `⚙` is marked `•` while one of them would change on reset, as a tab is.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."
 - **Save, undo, redo, reset all** follow the preset as one cell, `💾 save 3 ↶ ↷ ⟲`. Each part shows on its own condition, as today: save when there are drafts, undo and redo when there is history, `⟲` when a reset would change something (a draft or a config-file value). A fresh session over a customized config file shows `⟲` alone (brandon-save-undo-bwi.hpi, .jby, .wt5).
 
 | Tab | Holds |
 |---|---|
 | `⚡ session` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
-| `🎨 look` | Effect, endcaps, fade in/out and animation speed (1x / 5x / 20x, nt2) |
+| `🎨 look` | Effect, endcaps, fade in/out and animation speed (nt2) |
 | `📐 layout` | `+ preset` (bwi.o6u) |
-| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other place holds: `☑ wrap`, `◀ padding ▶` ("Move padding and wrap from the layout menu to config", ek7), `☑ update notice`, then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). Each setting's row in `src/config/globals-fields.ts` names its place — the first line, a tab, or a submenu — so a control lands in exactly one place |
+| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other place holds: `☑ wrap`, `◀ padding ▶` ("Move padding and wrap from the layout menu to config", ek7), `☑ update notice`, `renderer ◀ claude ▶` (offered inside tmux only; open, one aligned row per renderer), then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). Each setting's row in `src/config/globals-fields.ts` names its place — the first line, a tab, or a submenu — so a control lands in exactly one place |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
 
 `📐` replaces `▦` on the layout tab because `▦` is the preset control's glyph.
@@ -80,7 +80,7 @@ look
 🎨 ◀ tokyo-night ▶  ◐ ◀ none ▶  ✦ ◀ powerline ▶  🎼 ◀ accent ▶
 ```
 
-Each selector is one widget with two click regions. The arrows select the previous or next value, as the `themeSwitcher` segment does today. The value opens a menu. Each selector keeps its setting's label: Brandon's pickers proposal (`design-docs/PROPOSAL-ui-pickers.md`, 09-29) names every field, which supersedes "we won't actually see that in the menu" (09-28).
+Each selector is one widget with two click regions. The arrows select the previous or next value. The label opens a menu. Each selector keeps its setting's label: Brandon's pickers proposal (`design-docs/PROPOSAL-ui-pickers.md`, 09-29) names every field, which supersedes "we won't actually see that in the menu" (09-28).
 
 The menu a name opens is "a regular menu, no carousel": the full row of choices, paged to the width, with the preview rows under it. Every choice sits on the same menu background: "Only the foreground should be in the themes colors, it looks like shit when the backgrounds are drawn differently, very messy." That reverses what brandon-picker-31z shipped, where each theme option is drawn on its own theme's background.
 
@@ -88,8 +88,8 @@ The theme selector became the proposal's theme picker (brandon-theme-swatch-8v9r
 
 ```
 look
-🎨 theme ▀▀▀  ⚙  ✨ ◀ none ▶  ✦ ◀ powerline ▶  ☐ fade in/out
-⚙ open:  ◐ ◀ none ▀▀▀ ▶  🎼 ◀ accent ▶  🔆 ◀ middle ▶
+🎨 theme ▀▀▀  ⚙  ◀ ✨ effect ▶  ◀ ✦ endcaps ▶  ☐ fade in/out
+⚙ open:  ◀ ◐ style ▀▀▀ ▶  ◀ 🎼 variation ▶  ◀ 🔆 shade ▶
 ```
 
 ## Renames

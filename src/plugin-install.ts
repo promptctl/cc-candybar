@@ -14,9 +14,9 @@ import {
   REPO_PLUGIN_DIR,
   userPluginRoot,
 } from "./config/loader/plugin-folders.js";
-import { DEFINITION_FILE } from "./config/loader/plugins.js";
-import { launchSync } from "./proc/launch.js";
-import { isDirectory } from "./var-system/sources.js";
+import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
+import { processLauncher } from "./proc/launch.js";
+import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
 // [LAW:types-are-the-program] What a source argument names, decided once.
@@ -90,7 +90,12 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // every call acts on the clone. `shown` stands for `url` in messages.
 function cloneRepo(url: string, shown: string, into: string): void {
   const git = (env: NodeJS.ProcessEnv, ...args: string[]): string => {
-    const run = launchSync({ bin: "git", args, env, category: "plugin.git" });
+    const run = processLauncher.launchSync({
+      bin: "git",
+      args,
+      env,
+      category: "plugin.git",
+    });
     if (!run.ok)
       throw new Error(
         `git ${args.map((a) => (a === url ? shown : a)).join(" ")} failed (${run.reason}): ${run.stderr.trim() || run.error || ""}`,
@@ -221,7 +226,10 @@ export function installFromRepo(
       return folder;
     });
     const problems = definitionProblems(
-      staged.map((f) => path.join(f, DEFINITION_FILE)),
+      // Installed into the user's root, where it becomes `plugins.<name>`.
+      staged.map((f) =>
+        pluginDefinition(path.join(f, DEFINITION_FILE), "plugins"),
+      ),
       DEFAULT_DSL_CONFIG,
       { root: repo, git: false },
     );
@@ -269,7 +277,11 @@ export function runPlugin(argv: readonly string[]): number {
     console.error(USAGE);
     return 2;
   }
-  const source = parsePluginSource(arg, process.cwd(), isDirectory);
+  const source = parsePluginSource(
+    arg,
+    process.cwd(),
+    (p) => canonicalDirectory(p) !== null,
+  );
   if ("error" in source) {
     console.error(`plugin install: ${source.error}`);
     return 2;

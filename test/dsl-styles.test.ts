@@ -12,11 +12,12 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
+import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import { ownValidators } from "./helpers/ambient-chrome";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -29,7 +30,6 @@ import {
   mergeWithDefault,
   parseDslConfig,
   unauthored,
-  validateConfig,
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
@@ -161,6 +161,31 @@ describe("the renamed keys refuse their old spellings", () => {
   test("globals.progression names `variation` and the new value names", () => {
     expect(issues(`{ globals: { progression: "primary" } }`)).toContain(
       'globals.progression was removed: it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+    );
+  });
+
+  // candybar-plugins-vf6g.qzx: the tmux status line's toggle became a value
+  // of the renderer setting.
+  test.each([
+    ["globals", `{ globals: { experimentalTmuxStatus: true } }`],
+    [
+      "presets.p.globals",
+      `{ presets: { p: { globals: { experimentalTmuxStatus: true } } } }`,
+    ],
+    ["editGlobals", `{ editGlobals: { experimentalTmuxStatus: true } }`],
+  ])("%s.experimentalTmuxStatus names renderer: \"tmux\"", (at, src) => {
+    expect(issues(src)).toContain(
+      `${at}.experimentalTmuxStatus was removed: it became the renderer setting — write renderer: "tmux"`,
+    );
+  });
+
+  test("an action persisting experimentalTmuxStatus names renderer: \"tmux\"", () => {
+    expect(
+      issues(
+        `{ actions: { t: { persist: "experimentalTmuxStatus", to: "true" } }, segments: { a: { template: '{{ action "t" "x" }}' } }, root: { h: ['a'] } }`,
+      ),
+    ).toContain(
+      'actions.t: the globals field "experimentalTmuxStatus" was removed: it became the renderer setting — write renderer: "tmux"',
     );
   });
 
@@ -298,6 +323,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),
@@ -329,7 +355,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
 
 // ─── Live recolor: the whole loop, composing with the theme ───────────────────
 
-// Mirrors the daemon's per-render resolution verbatim (server.ts): basePalette
+// Mirrors the daemon's per-render resolution verbatim (draw-bar.ts): basePalette
 // from resolveThemeSelection, the style ThemeKey from effectiveStyleName →
 // styleKeyByName, threaded into renderDsl. The click drives the REAL wire.
 describe("style click — live whole-bar recolor over the active theme", () => {
@@ -353,7 +379,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -380,12 +406,12 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     return { config, sessionState, render, dispose };
   }
 
-  const clickStyle = (
+  const clickStyle = async (
     config: DslConfig,
     sessionState: SessionState,
     look: string,
-  ): void => {
-    clickUrl(
+  ): Promise<void> => {
+    await clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]),
       testVerbContext(sessionState, undefined, config),
     );
@@ -403,28 +429,28 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     return m![1]!;
   };
 
-  test("clicking a style recolors an ordinary segment; clicking none restores", () => {
+  test("clicking a style recolors an ordinary segment; clicking none restores", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "◆ here");
-      clickStyle(config, sessionState, "inverted");
+      await clickStyle(config, sessionState, "inverted");
       const adapted = bgOf(render(), "◆ here");
       // The inverted style flips lightness — the surface color must move.
       expect(adapted).not.toBe(before);
       // "none" is the identity style, not a special case: byte-exact restore
       // (rich-js isIdentityKey fast-paths the identity transposition).
-      clickStyle(config, sessionState, "none");
+      await clickStyle(config, sessionState, "none");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
       dispose();
     }
   });
 
-  test("an explicit per-segment palette: pin IGNORES the style", () => {
+  test("an explicit per-segment palette: pin IGNORES the style", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "▣ pinned");
-      clickStyle(config, sessionState, "inverted");
+      await clickStyle(config, sessionState, "inverted");
       // The pinned segment's colors are frozen by author intent — the style
       // adapts everything else (the plain segment moved; asserted above).
       expect(bgOf(render(), "▣ pinned")).toBe(before);
@@ -459,7 +485,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
 //
 // The rig mirrors the daemon verbatim: `resolveStyleSelection` over the three
 // rungs, threaded into renderDsl as `RenderSelection.style`, exactly as
-// payloadOf → server.ts does.
+// payloadOf → draw-bar.ts does.
 describe("globals.style as an expression — a style chosen by data", () => {
   // The expression reads a payload field, which is the point: `.context.pct` is
   // stand-in for the rate-limit/idle facts the ticket names. Two declared styles
@@ -494,7 +520,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const config = parseAndValidate("<looks-expr>", src, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(processLauncher, store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -725,6 +751,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(
+      processLauncher,
       store,
       "",
       new SessionState(),

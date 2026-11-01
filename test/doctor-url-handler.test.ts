@@ -426,7 +426,7 @@ describe("the daemon's side of the round trip", () => {
       arrival,
       probes,
       clients,
-      dlog: (_level, message) => logs.push(message),
+      log: (_level, message) => logs.push(message),
       doctorStores: emptyStores(),
       doctor: {
         install: HEALTHY_INSTALL_EDGE,
@@ -452,32 +452,32 @@ describe("the daemon's side of the round trip", () => {
         }),
       },
     };
-    const click = (verb: string, value: string): void =>
-      VERBS.get(verb)!(value, ctx);
+    const click = async (verb: string, value: string): Promise<void> =>
+      await VERBS.get(verb)!(value, ctx);
     return { sessionState, probes, logs, click };
   }
 
-  test("a probe link records its nonce and the handler that delivered it", () => {
+  test("a probe link records its nonce and the handler that delivered it", async () => {
     const d = daemon(link("1.2.3"));
-    d.click(VERB_DOCTOR_PROBE, NONCE);
+    await d.click(VERB_DOCTOR_PROBE, NONCE);
     expect(d.probes.list()).toEqual([{ nonce: NONCE, handler: "1.2.3" }]);
     expect(d.logs).toEqual([
       `doctor-probe: arrived nonce=${NONCE} handler=1.2.3`,
     ]);
   });
 
-  test("a probe from a handler that reports no version is recorded as such", () => {
+  test("a probe from a handler that reports no version is recorded as such", async () => {
     const d = daemon(link(null));
-    d.click(VERB_DOCTOR_PROBE, NONCE);
+    await d.click(VERB_DOCTOR_PROBE, NONCE);
     expect(d.probes.list()).toEqual([{ nonce: NONCE, handler: null }]);
     expect(d.logs).toEqual([
       `doctor-probe: arrived nonce=${NONCE} handler=unreported`,
     ]);
   });
 
-  test("a value that is not a probe nonce is refused and records nothing", () => {
+  test("a value that is not a probe nonce is refused and records nothing", async () => {
     const d = daemon(link("1.2.3"));
-    expect(() => d.click(VERB_DOCTOR_PROBE, "../../etc")).toThrow(BadVerbArgs);
+    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
 
@@ -492,13 +492,13 @@ describe("the daemon's side of the round trip", () => {
   });
 
   // In the bar, the doctor's own click is the link that came back.
-  function doctorRow(arrival: ClickArrival) {
+  async function doctorRow(arrival: ClickArrival) {
     const d = daemon(arrival);
     recordRender(d.sessionState, "s1");
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
     d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, claudeConfigDir: process.env.CLAUDE_CONFIG_DIR, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148 }));
-    d.click(VERB_DOCTOR_RUN, "s1");
+    await d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {
       verdict: d.sessionState.get("s1", keys.verdict),
@@ -507,38 +507,38 @@ describe("the daemon's side of the round trip", () => {
     };
   }
 
-  test("a doctor click delivered by this version's handler: the row is ok", () => {
-    const row = doctorRow(link(PACKAGE_VERSION));
+  test("a doctor click delivered by this version's handler: the row is ok", async () => {
+    const row = await doctorRow(link(PACKAGE_VERSION));
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
-  test("a doctor click delivered by an older handler: the row names both versions", () => {
-    const row = doctorRow(link("0.0.1"));
+  test("a doctor click delivered by an older handler: the row names both versions", async () => {
+    const row = await doctorRow(link("0.0.1"));
     expect(row.verdict).toBe("failed");
     expect(row.reason).toBe(
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0 transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
   // Review of PR #405: tmux runs a status-line click itself, so it proves
   // neither the handler nor that the terminal draws links.
-  test("a doctor click from the tmux status line proves neither the handler nor links, and files no terminal", () => {
-    const row = doctorRow({ via: "tmux-status" });
+  test("a doctor click from the tmux status line proves neither the handler nor links, and files no terminal", async () => {
+    const row = await doctorRow({ via: "tmux-status" });
     expect(row.verdict).toBe("failed");
     expect(row.reason).toContain("asked from the tmux status line");
     expect(row.logs).toHaveLength(1);
     expect(row.logs[0]).toContain(" clicked=no ");
   });
 
-  test("a probe cannot arrive from the tmux status line", () => {
+  test("a probe cannot arrive from the tmux status line", async () => {
     const d = daemon({ via: "tmux-status" });
-    expect(() => d.click(VERB_DOCTOR_PROBE, NONCE)).toThrow(BadVerbArgs);
+    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
 

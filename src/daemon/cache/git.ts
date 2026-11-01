@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  GitService,
+  type GitService,
   gitInfoFailures,
   type GitInfo,
   type GitInfoOptions,
@@ -38,7 +38,7 @@ import {
 import type { Holds, Release } from "../../utils/holds";
 
 // Logger callable for cache refresh / eviction events.
-// Daemon passes `dlog` so these land in daemon.log at the right level for
+// Daemon passes its log so these land in daemon.log at the right level for
 // ops/debugging; a test constructing the provider alone takes the default
 // debug-routed logger, which touches no daemon log file.
 // [LAW:no-defensive-null-guards] Default is non-null; injection replaces
@@ -254,19 +254,7 @@ function optionsKey(options: GitOptions): string {
 // key. Every pass derives the spec again, so a recreated repo is heard within
 // one period, and a layout change at the same path (a clone replaced by a
 // worktree) is the same case.
-//
-// `unbound`: a directory the spec names is not there, or cannot be stat'd, so
-// there is nothing to bind yet.
-interface RepoWatchSpec {
-  readonly spec: WatchSpec;
-  readonly unbound: boolean;
-}
-
-function watchSpec(
-  root: string,
-  gitDir: string,
-  commonDir: string,
-): RepoWatchSpec {
+function watchSpec(root: string, gitDir: string, commonDir: string): WatchSpec {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
@@ -274,7 +262,8 @@ function watchSpec(
   const bounds = dirs.map((d) => boundOf(d.path));
   const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
   return {
-    spec: { key: `git:${root}:${named.join("|")}`, targets: { dirs } },
+    key: `git:${root}:${named.join("|")}`,
+    targets: { dirs },
     unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b),
   };
 }
@@ -340,20 +329,18 @@ export class GitDataProvider {
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
 
-  constructor(
-    opts: {
-      periodMs?: number;
-      maxRepos?: number;
-      inner?: GitService;
-      watchers?: WatcherRegistry;
-      // [LAW:single-enforcer] One injection point. Daemon passes `dlog`;
-      // non-daemon consumers leave the default (debug-routed, quiet
-      // unless CC_CANDYBAR_DEBUG is set).
-      logger?: GitProviderLogger;
-      ledger?: RefreshLedger;
-    } = {},
-  ) {
-    this.inner = opts.inner ?? new GitService();
+  constructor(opts: {
+    periodMs?: number;
+    maxRepos?: number;
+    inner: GitService;
+    watchers?: WatcherRegistry;
+    // [LAW:single-enforcer] One injection point. Daemon passes its log;
+    // non-daemon consumers leave the default (debug-routed, quiet
+    // unless CC_CANDYBAR_DEBUG is set).
+    logger?: GitProviderLogger;
+    ledger?: RefreshLedger;
+  }) {
+    this.inner = opts.inner;
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
@@ -503,7 +490,8 @@ export class GitDataProvider {
     };
   }
 
-  // A watch fire: the repo changed since any read in flight began.
+  // A watch's window, whatever it says: the repo changed since any read in
+  // flight began.
   changed(root: string): void {
     const state = this.repos.get(root);
     if (!state) return;
@@ -554,19 +542,15 @@ export class GitDataProvider {
     held: HeldWatch | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
-    const { spec, unbound } = watchSpec(
+    const spec = watchSpec(
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir),
     );
-    // A directory that is gone, or cannot be stat'd this pass (a mount's
-    // transient fault), binds nothing yet. The pass that lands between a
-    // worktree's removal and its re-add (the removal fires the watch) keeps
-    // the watch it holds rather than trade it for a slot the OS refuses:
-    // FSEvents keeps a held watch on its path, and the period rebinds once the
-    // path names a directory again, whose key differs. The build holds
-    // nothing, and takes the refused slot the period refreshes.
-    if (held !== null && unbound) return { watch: held, move: "kept" };
+    // A pass between a worktree's removal and its re-add keeps the watch it
+    // holds (`follow`), and the period rebinds once the path names a
+    // directory again. The build holds nothing, and a slot the OS refused is
+    // the registry's period to retry.
     const followed = this.watchers.follow(held, spec, () => this.changed(root));
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
@@ -574,7 +558,7 @@ export class GitDataProvider {
     if (followed.move === "rebound") {
       this.logger(
         "info",
-        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} refused=${followed.watch.handle.refused.length}`,
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} deaf=${followed.watch.handle.deaf.length}`,
       );
     }
     return followed;

@@ -20,7 +20,7 @@ cc-candybar renders Claude Code's statusline. A small client runs on every statu
 ## Rules for every task
 
 - pnpm is the package manager. Don't add an npm or yarn lockfile.
-- Publishing runs lint, typecheck, the TS↔Rust protocol check and the build, in that order. Any failure blocks the publish. Fix the cause and never bypass a step.
+- Publishing runs lint, typecheck, the TS↔Rust protocol check, the schema drift check and the build, in that order. Any failure blocks the publish. Fix the cause and never bypass a step.
 - **The project publishes 1.x only.** Four things enforce the pin: a major-version guard in the release scripts, a release config that ships breaking commits as minors, a GitHub tag ruleset, and a project hook that refuses agent edits to those three. Don't work around any of them. If a task seems to need a 2.0, stop and ask.
 - The Rust crate's version stays 0.0.0. The npm version is the source of truth, and CI writes it into the crate at build time.
 - The wire contract is spelled in both runtimes. Change a mirrored constant in both in the same commit, or publish fails.
@@ -35,7 +35,7 @@ How they show up here:
 - **One render path.** The daemon, the check command, the demo and the tests all draw through the same functions. There is no parallel renderer and no fallback computation.
 - **One store.** The variable store (MobX) is the single source of truth for derived values. Don't add a cache beside it.
 - **Variability lives in data.** The payload carries every value a template reads. Segments show and hide by `when` over values, not by branches in code.
-- **Errors are loud.** A bad config draws a red or amber strip above the bar, and nothing a config authors can make a render throw. Don't add a silent default that hides a broken state.
+- **Errors are loud.** Every error and warning shows as a `⚠ N` indicator beside the settings door, red or amber, whose click opens a viewer with the message in full. Nothing a config authors can make a render throw. Don't add a silent default that hides a broken state.
 
 ## Memory
 

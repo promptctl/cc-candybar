@@ -3,10 +3,16 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { processLauncher } from "../../src/proc/launch";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
+import { JournalTurns } from "../../src/daemon/journal-turns";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
-import { HEALTHY_INSTALL_EDGE, HEALTHY_SERVING, noManagedSettings } from "./doctor-facts";
+import {
+  HEALTHY_INSTALL_EDGE,
+  HEALTHY_SERVING,
+  noManagedSettings,
+} from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   VERBS,
@@ -20,6 +26,7 @@ import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { RenderSightings } from "../../src/daemon/render-sightings";
 import { PACKAGE_VERSION } from "../../src/version";
+import { instantOf } from "../../src/utils/instant";
 import {
   laneSwitches,
   resolveEffectiveGlobals,
@@ -32,11 +39,18 @@ const NO_LANES = Object.fromEntries(
 
 // The record a session's render leaves behind, which a click resolves its
 // config from: a session only clicks links its own render drew.
-export function recordRender(sessionState: SessionStateRW, sessionId: string): void {
+export function recordRender(
+  sessionState: SessionStateRW,
+  sessionId: string,
+): void {
   sessionState.set(
     sessionId,
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null }),
+    encodeRenderOrigin({
+      projectDir: "/tmp/proj",
+      cwd: "/tmp/proj",
+      target: { source: "search" },
+    }),
   );
 }
 
@@ -56,7 +70,15 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    dlog: () => {},
+    journalTurns: new JournalTurns({
+      log: () => {},
+      monotonic: () => performance.now(),
+    }),
+    clickLanded: () => {},
+    turnWaited: () => {},
+    log: () => {},
+    launcher: processLauncher,
+    now: () => instantOf(new Date()),
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");
     },
@@ -163,7 +185,8 @@ export function testVerbContext(
     // A click of a session that has rendered measures its lane switches over
     // that same config, as the daemon's does; a test that handed in none
     // switches no lane on. No lane owner runs here: a test that reads what a
-    // click set up hands in its own `clicked`.
+    // click set up hands in its own `clicked`. A session here rendered in a
+    // tmux pane, so the tmux status line is its to switch.
     lanes: {
       of: (_origin, sid) =>
         config === undefined
@@ -174,11 +197,14 @@ export function testVerbContext(
                 (key) => sessionState.get(sid, key),
                 () => false,
               ),
+              true,
             ),
       clicked: () => {},
     },
     // No render cache here, so no session has a view to move.
     views: { follow: () => {} },
+    // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
+    diagnosticCopy: () => undefined,
   };
 }
 
@@ -187,9 +213,9 @@ export { effectsOf, type DecodedEffect } from "../../src/click/read";
 export { boldUrls } from "./ansi";
 
 // Drive a rendered click URL through the real parse → dispatch path.
-export function clickUrl(url: string, ctx: VerbContext): void {
+export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = parseHandlerUrl(url);
   const handler = VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  handler(value, ctx);
+  await handler(value, ctx);
 }

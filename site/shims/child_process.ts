@@ -9,7 +9,9 @@ export interface ProgramRun {
   readonly stdout: string;
   readonly stderr?: string;
 }
-export type Program = (args: readonly string[], cwd: string | undefined) => ProgramRun;
+// A program that answers RESIDENT runs as long as the page does: no answer, no exit.
+export const RESIDENT = "resident";
+export type Program = (args: readonly string[], cwd: string | undefined) => ProgramRun | typeof RESIDENT;
 export const programs = new Map<string, Program>();
 
 const enoent = (cmd: string) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
@@ -24,6 +26,7 @@ class Stream extends EventEmitter {
   end() {}
   write() { return true; }
   resume() { return this; }
+  unref() { return this; }
 }
 
 let nextPid = 5000;
@@ -48,6 +51,7 @@ export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: s
       return;
     }
     const run = program(args, opts.cwd);
+    if (run === RESIDENT) return;
     if (run.stdout) child.stdout.chunk(run.stdout);
     if (run.stderr) child.stderr.chunk(run.stderr);
     child.exitCode = run.code;
@@ -63,6 +67,7 @@ export function spawnSync(cmd: string, args: readonly string[] = [], opts: { cwd
   const program = programs.get(cmd.split("/").pop()!);
   if (program === undefined) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
   const run = program(args, opts.cwd);
+  if (run === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
   return { pid: nextPid++, status: run.code, signal: null, stdout: run.stdout, stderr: run.stderr ?? "", output: [null, run.stdout, run.stderr ?? ""] };
 }
 
