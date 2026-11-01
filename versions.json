@@ -4,15 +4,22 @@
     {
       "version": "pr-545",
       "ref": "refs/pull/545/merge",
-      "sha": "637fd16f185c7f6e7e48b3c90685900697fe67f7",
-      "timestamp": "2026-11-01T09:10:10.698Z",
+      "sha": "557508c37208204f9213341d345d9319aee744c5",
+      "timestamp": "2026-11-01T09:12:17.043Z",
       "commits": [
         {
-          "sha": "637fd16f185c7f6e7e48b3c90685900697fe67f7",
+          "sha": "557508c37208204f9213341d345d9319aee744c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T09:09:13Z",
-          "message": "Merge 991e2896ce59e642ddaa1269e4ffdefe1565915c into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
+          "timestamp": "2026-11-01T09:11:23Z",
+          "message": "Merge 09a7fcb5eac51f12ff5a9e4f7cd58f827a32975c into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
+        },
+        {
+          "sha": "09a7fcb5eac51f12ff5a9e4f7cd58f827a32975c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:11:12-07:00",
+          "message": "test(launch): a timed-out launch says it timed out (candybar-launch-q7o7.gp7)\n"
         },
         {
           "sha": "991e2896ce59e642ddaa1269e4ffdefe1565915c",
