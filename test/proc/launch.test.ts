@@ -239,16 +239,15 @@ describe("launch (async)", () => {
   });
 
   it("a group the launcher cannot signal settles as signal-refused — nothing rejects or escapes a timer", async () => {
-    // process.kill refuses the group and its leader (EPERM: a child that
-    // changed its real uid). The child ends on its own soon after, so nothing
-    // is orphaned.
+    // process.kill refuses the group (EPERM: a child that changed its real
+    // uid). The child ends on its own soon after, so nothing is orphaned.
     const spy = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("EPERM"), { code: "EPERM" });
     });
     try {
       const r = await launch({
         bin: "/bin/sh",
-        args: ["-c", "sleep 0.4"],
+        args: ["-c", "sleep 1"],
         timeoutMs: 50,
         category: "user-shell",
       });
@@ -263,22 +262,28 @@ describe("launch (async)", () => {
     }
   });
 
-  it("a child that exited before its abort, not yet reaped, is no refusal", async () => {
-    const controller = new AbortController();
-    const run = launch({
-      bin: "/usr/bin/true",
-      args: [],
-      category: "user-shell",
-      signal: controller.signal,
+  it("a child that ends within the grace of a refused signal is no refusal", async () => {
+    // Darwin answers EPERM for a group of only zombies, so a refused signal
+    // says nothing yet about the child.
+    const spy = jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("EPERM"), { code: "EPERM" });
     });
-    // The event loop held past the exit, so the child is a zombie at the abort.
-    const until = Date.now() + 150;
-    while (Date.now() < until);
-    controller.abort();
-    await expect(run).resolves.toMatchObject({
-      reason: "aborted",
-      exitCode: 0,
-    });
+    try {
+      const controller = new AbortController();
+      const run = launch({
+        bin: "/bin/sh",
+        args: ["-c", "exit 0"],
+        category: "user-shell",
+        signal: controller.signal,
+      });
+      controller.abort();
+      await expect(run).resolves.toMatchObject({
+        reason: "aborted",
+        exitCode: 0,
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("an already-aborted signal spawns nothing", async () => {

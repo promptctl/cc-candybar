@@ -101,6 +101,7 @@ describe("a launcher settles", () => {
   test("naming a launch the OS would not let it end, until that child exits", async () => {
     const { closing, launcher } = scope();
     const pidFile = path.join(dir, "refused");
+    const controller = new AbortController();
     const run = launcher.launch({
       bin: "/bin/sh",
       args: [
@@ -108,13 +109,17 @@ describe("a launcher settles", () => {
         `echo $$ > '${pidFile}.tmp'; mv '${pidFile}.tmp' '${pidFile}'; exec sleep 30`,
       ],
       category: "user-shell",
+      signal: controller.signal,
     });
     await until(() => existsSync(pidFile), "the child started");
     const refuse = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
     });
-    closing.abort(new Error("closed"));
+    // The launch's own abort first: the scope's close ends the lifeline, which
+    // would end the child within the grace without process.kill.
+    controller.abort();
     await expect(run).resolves.toMatchObject({ reason: "signal-refused" });
+    closing.abort(new Error("closed"));
     await expect(launcher.settled()).resolves.toEqual({
       unreaped: ["user-shell"],
     });
