@@ -4,15 +4,22 @@
     {
       "version": "pr-555",
       "ref": "refs/pull/555/merge",
-      "sha": "622999b242e4136b4447ad1593d96cf20fae28f9",
-      "timestamp": "2026-11-01T20:35:07.163Z",
+      "sha": "972dd1d1e194db2423b3bf0f70376cf7878519b1",
+      "timestamp": "2026-11-01T20:45:30.832Z",
       "commits": [
         {
-          "sha": "622999b242e4136b4447ad1593d96cf20fae28f9",
+          "sha": "972dd1d1e194db2423b3bf0f70376cf7878519b1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T20:34:21Z",
-          "message": "Merge 18c91a511745e1bf4466b1beda686242a423419c into 0f7fe27408eeb8aff9fb34f60ac781cd84668866\n"
+          "timestamp": "2026-11-01T20:44:39Z",
+          "message": "Merge 07a894878178619f59db5dc4c75a93bf8e38c8aa into 0f7fe27408eeb8aff9fb34f60ac781cd84668866\n"
+        },
+        {
+          "sha": "07a894878178619f59db5dc4c75a93bf8e38c8aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T13:44:29-07:00",
+          "message": "fix(render): a piece opening a line past a dropped blank keeps its padding (candybar-isolated-daemon-bfab.pe6)\n\nThe blank filter ran before padding read a piece's index, so when a cell's left\npadding split off as a blank piece, the piece that actually opened the line\ncounted as first and went unpadded. Two comments this change made false now say\nwhat happens.\n"
         },
         {
           "sha": "18c91a511745e1bf4466b1beda686242a423419c",

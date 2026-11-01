@@ -71990,10 +71990,12 @@ function dividedToLine(item, line, before, options) {
   if (fits(item.owner, line, options)) return [item];
   const text4 = item.owner.copy().expandTabs();
   const indent2 = takenOnLine(before, options);
-  return text4.divide(wrapOffsets(text4.plain, line, indent2)).filter(({ plain }, _, { length }) => length === 1 || plain.trim() !== "").map((piece, i) => ({
+  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i) => ({
     ...item,
     owner: piece.truncate(line, { marker: "" }).padLeft(i > 0 ? options.padding : 0)
-  }));
+  })).filter(
+    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
+  );
 }
 function fitRow(row2, options) {
   const line = Math.max(
