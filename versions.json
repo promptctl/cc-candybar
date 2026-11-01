@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-536",
+      "ref": "refs/pull/536/merge",
+      "sha": "420a9f401077023e0a7804e889a86bba07c8ae7a",
+      "timestamp": "2026-11-01T04:00:43.365Z",
+      "commits": [
+        {
+          "sha": "420a9f401077023e0a7804e889a86bba07c8ae7a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:59:45Z",
+          "message": "Merge bab29ae2ba49c3d565203aa537195b0edf049b8a into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
+        },
+        {
+          "sha": "bab29ae2ba49c3d565203aa537195b0edf049b8a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:59:35-06:00",
+          "message": "test(diagnostics): the refused watch clears at a drawn bar, and its failed-load event counts the load error (brandon-unfiled-3248.fyvh)\n"
+        },
+        {
+          "sha": "1c08e3be0ea4bda04f9e1459834bf83bdbdbabe8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:49:17-06:00",
+          "message": "test(diagnostics): a refused watch's event holds on every attempt of every bar, and a refused retry stays deaf (brandon-unfiled-3248.fyvh)\n"
+        },
+        {
+          "sha": "c3416f26e9bec9e36cb50c9974fe3fee347703a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:36:53-06:00",
+          "message": "test(diagnostics): a config folder the OS refuses shows on every bar drawn from its entry (brandon-unfiled-3248.fyvh)\n\ncandybar-plugins-vf6g.8uk (#507) carried a refused config directory to the\nindicator, but only the link-chain half was proven at a drawn bar. This\ndrives a refusal through the daemon's own render to the ⚠, the viewer and\nthe render event, over a failed load too.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-535",
       "ref": "refs/pull/535/merge",
       "sha": "18636fc6a3fcd7dc0af1edf2178a4174dcba33f0",
@@ -34,35 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T21:35:11-06:00",
           "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-536",
-      "ref": "refs/pull/536/merge",
-      "sha": "8bc22c95c906476628345caf40ff0fad93e5960f",
-      "timestamp": "2026-11-01T03:50:24.347Z",
-      "commits": [
-        {
-          "sha": "8bc22c95c906476628345caf40ff0fad93e5960f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:49:28Z",
-          "message": "Merge 1c08e3be0ea4bda04f9e1459834bf83bdbdbabe8 into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
-        },
-        {
-          "sha": "1c08e3be0ea4bda04f9e1459834bf83bdbdbabe8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:49:17-06:00",
-          "message": "test(diagnostics): a refused watch's event holds on every attempt of every bar, and a refused retry stays deaf (brandon-unfiled-3248.fyvh)\n"
-        },
-        {
-          "sha": "c3416f26e9bec9e36cb50c9974fe3fee347703a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:36:53-06:00",
-          "message": "test(diagnostics): a config folder the OS refuses shows on every bar drawn from its entry (brandon-unfiled-3248.fyvh)\n\ncandybar-plugins-vf6g.8uk (#507) carried a refused config directory to the\nindicator, but only the link-chain half was proven at a drawn bar. This\ndrives a refusal through the daemon's own render to the ⚠, the viewer and\nthe render event, over a failed load too.\n"
         }
       ]
     },
