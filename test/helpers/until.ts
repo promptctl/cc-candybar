@@ -14,13 +14,6 @@ const TICK_MS = 50;
 export const nameOf = (what: What): string =>
   typeof what === "string" ? what : what();
 
-// How a wait ended: the condition held, or the budget expired. At expiry a
-// probe may still be in flight; it is handed back so the caller decides what
-// its late answer means.
-export type Ending =
-  | { kind: "held" }
-  | { kind: "expired"; inFlight: Promise<void> | null };
-
 // [LAW:no-ambient-temporal-coupling] The budget is one real sleep, never a
 // deadline read off a clock. Jest's fake timers freeze Date, hrtime and
 // performance, and sinon would fake node:timers/promises too were the clock
@@ -32,15 +25,16 @@ export type Ending =
 // budget so one that never answers (a connect to a bound socket nobody
 // accepts) still ends the wait at its budget, but the outcome is read off
 // what the probe wrote, not off which promise won: an answer that landed is
-// honoured whichever settled first, and only a probe still in flight at
-// expiry is handed back.
+// honoured whichever settled first, and a probe still in flight at expiry
+// is left behind. [LAW:no-silent-failure] exception: its late answer is
+// unread; the caller's wait ends loudly by name.
 // [LAW:one-source-of-truth] THE poll loop: both named waits below, and the
-// watch-liveness retry's rounds, are one loop with the two outcomes named, so
-// no test file keeps a copy that answers false at its deadline.
+// watch-liveness retry's rounds, are one loop, so no test
+// file keeps a copy that answers false at its deadline.
 export async function holdsWithin(
   reached: Condition,
   budgetMs: number,
-): Promise<Ending> {
+): Promise<boolean> {
   const stop = new AbortController();
   let expired = false;
   const expiry = sleep(budgetMs, undefined, { signal: stop.signal }).then(
@@ -51,7 +45,6 @@ export async function holdsWithin(
     for (;;) {
       const result = reached();
       const seen: { answer?: boolean; failure?: { error: unknown } } = {};
-      let inFlight: Promise<void> | null = null;
       if (typeof result === "boolean") seen.answer = result;
       else {
         const probe = result.then(
@@ -60,14 +53,9 @@ export async function holdsWithin(
         );
         await Promise.race([probe, expiry]);
         if (seen.failure) throw seen.failure.error;
-        if (seen.answer === undefined)
-          inFlight = probe.then(() => {
-            if (seen.failure) throw seen.failure.error;
-          });
       }
-      if (seen.answer) return { kind: "held" };
-      if (seen.answer === undefined) return { kind: "expired", inFlight };
-      if (expired) return { kind: "expired", inFlight: null };
+      if (seen.answer) return true;
+      if (seen.answer === undefined || expired) return false;
       await sleep(TICK_MS);
     }
   } finally {
@@ -77,31 +65,29 @@ export async function holdsWithin(
 
 // A named condition, polled until it holds or loudly failed at its budget —
 // never a sleep standing in for it, and never a silent give-up that leaves
-// the next assertion to fail without the cause. A probe left in flight is
-// dropped: the wait has already failed by name, so its late answer is moot.
+// the next assertion to fail without the cause.
+// [LAW:no-silent-failure] exception: a probe's throw after this wait failed by
+// name goes unread; the failure is already loud and names what was waited on.
 export async function until(
   reached: Condition,
   what: What,
   budgetMs = 5_000,
 ): Promise<void> {
-  const ending = await holdsWithin(reached, budgetMs);
-  if (ending.kind === "held") return;
-  ending.inFlight?.catch(() => undefined);
+  if (await holdsWithin(reached, budgetMs)) return;
   throw new Error(`${nameOf(what)} did not hold within ${budgetMs}ms`);
 }
 
 // The complement: a named condition that must keep holding for the whole
 // budget. "It never happened within the budget" is a real answer a test
 // asserts (a blocked spawn stays blocked), so it has its own loud name
-// rather than a false read out of `until`. Expiry is the pass here, so a
-// probe left in flight is not swallowed: its late throw stays unhandled and
-// loud rather than hidden under a pass. [LAW:no-silent-failure]
+// rather than a false read out of `until`. [LAW:types-are-the-program] `holds`
+// is synchronous because expiry is the pass here: an unanswered probe would
+// pass without having answered.
 export async function throughout(
-  holds: Condition,
+  holds: () => boolean,
   what: What,
   budgetMs: number,
 ): Promise<void> {
-  const ending = await holdsWithin(async () => !(await holds()), budgetMs);
-  if (ending.kind === "held")
+  if (await holdsWithin(() => !holds(), budgetMs))
     throw new Error(`${nameOf(what)} stopped holding within ${budgetMs}ms`);
 }
