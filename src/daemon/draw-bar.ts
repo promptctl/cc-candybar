@@ -1,5 +1,6 @@
 // One render of a session, a request's or a frame's, and what it records.
 
+import path from "node:path";
 import { checkoutLocation } from "../utils/git-root.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
@@ -305,7 +306,8 @@ export function setUpRender(
     ...arrived,
     hookData: {
       ...arrived.hookData,
-      ...(dir !== undefined && { location: checkoutLocation(dir) }),
+      ...(dir !== undefined &&
+        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
     },
   };
   const sessionId = req.sessionId;

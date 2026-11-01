@@ -57,6 +57,12 @@ const AUTOCOMPACT = autocompactControl(
 // Factored out of the segments' `template` fields where a TypeScript value is
 // the only way to share one string between several fields.
 
+const GIT_INIT = confirmStep(
+  "gitInit",
+  { arm: "init", confirm: "init ✓ confirm" },
+  [{ action: "gitInit.run", when: "true" }],
+);
+
 // (`directory` is unaware of worktrees; `gitPath` is the worktree-aware location.)
 // Directory: ~ collapse under $HOME, project-relative under workspace.project_dir,
 // else raw. Inline-recomputes the project-relative path because the DSL has no
@@ -88,12 +94,6 @@ const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 // (3) The abbreviation hides the full path, so the cell is one `copyDir` link:
 // clicking it copies `.current_dir` whole. The click lives in this template,
 // so an override keeps the `action "copyDir"` wrap or loses the click.
-const GIT_INIT = confirmStep(
-  "gitInit",
-  { arm: "init", confirm: "init ✓ confirm" },
-  [{ action: "gitInit.run", when: "true" }],
-);
-
 const DIR_TEMPLATE =
   "{{ $dir := .current_dir }}" +
   '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}' +
@@ -734,10 +734,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         '{{ if and (eq .git.location "path") .location.gitPending }}{{ template "gitPath" . }}' +
         '{{ else if eq .git.branch "" }}{{ template "gitPath" . }}' +
-        `{{ if .location.noRepo }} ${GIT_INIT.template}{{ end }}` +
         '{{ else }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}' +
         '{{ else }}{{ template "gitCollapsed" . }}{{ end }}' +
-        ' {{ action "gitDetail" "▸" "◂" }}{{ end }}',
+        ' {{ action "gitDetail" "▸" "◂" }}{{ end }}' +
+        // Armed stays shown wherever the session goes, so a confirm is never
+        // hidden one click from firing.
+        `{{ if or .location.noRepo ${GIT_INIT.armed} }} ${GIT_INIT.template}{{ end }}`,
       fg: GIT_QUIET_FG,
       // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
       // (brandon-segment-settings-i4n.u36): each is read by its own piece

@@ -550,7 +550,7 @@ compose these named `helpers`, each called as `{{ template "<name>" . }}`:
 
 | helper | renders |
 |--------|---------|
-| `gitBranch` | `⎇ main` — always present (the segment hides without a branch) |
+| `gitBranch` | `⎇ main` — present whenever git names a branch |
 | `gitPath` | `~/c/cc-candybar/src (⊫ my-worktree)` — the main checkout, the subdirectory, and the linked worktree's name; click copies the full path |
 | `gitRepo` | ` cc-candybar` — replaces `gitPath` when the variable `git.location` is `"repo"` |
 | `gitOperation` | ` [rebase]` |

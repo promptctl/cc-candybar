@@ -165,8 +165,8 @@ export function worktreeLink(dir: string): WorktreeLink {
 // Where a directory sits in its repository, for display. `main` is the main
 // checkout's root ("" in no repository), `worktree` the linked worktree's name
 // ("" otherwise), `subpath` the directory below the checkout root ("/src", or
-// ""). An unproven link reads as a checkout of its own: its root is real, and
-// a repository to name it from is what could not be proven.
+// ""). [LAW:no-silent-failure] exception: an unproven link reads as a checkout
+// of its own, since its root is real and the git cell reports the broken repo.
 export interface CheckoutLocation {
   readonly main: string;
   readonly worktree: string;

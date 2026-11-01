@@ -53,10 +53,10 @@ describe("checkoutLocation", () => {
   });
 });
 
-function draw(payload: Record<string, unknown>): string {
+function draw(payload: Record<string, unknown>, variables: object = {}): string {
   const config = parseAndValidate(
     "<user>",
-    JSON.stringify({ root: { h: ["gitaculous"] } }),
+    JSON.stringify({ variables, root: { h: ["gitaculous"] } }),
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
@@ -117,5 +117,13 @@ test("a directory with no repo beside a live git answer keeps the git state", ()
       location: { main: "", worktree: "", subpath: "", noRepo: true, gitPending: false },
       git: { branch: "main" },
     }),
-  ).toBe("/t/x ⎇ main ▸");
+  ).toBe("/t/x ⎇ main ▸ init");
+});
+
+test("git.location repo restores the repo name in expanded and drops the path", () => {
+  const out = draw(
+    { git: { branch: "main", repoName: "repo" }, location: { main: "/r", worktree: "", subpath: "", noRepo: false, gitPending: false } },
+    { "git.location": { kind: "literal", value: "repo" }, "git.detail": { kind: "state", key: "git-detail", default: "expanded" } },
+  );
+  expect(out).toContain("(git) repo ");
 });
