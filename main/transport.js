@@ -35560,10 +35560,10 @@ var RichText = class _RichText {
       words2.pop();
     const gaps = words2.length - 1;
     const spaces = new Array(gaps).fill(1);
-    let filled = words2.reduce((total, word) => total + cellLen(word), 0) + gaps;
-    for (let turn = 0; filled < maxWidth && gaps > 0; turn = (turn + 1) % gaps) {
+    let filled2 = words2.reduce((total, word) => total + cellLen(word), 0) + gaps;
+    for (let turn = 0; filled2 < maxWidth && gaps > 0; turn = (turn + 1) % gaps) {
       spaces[gaps - 1 - turn] += 1;
-      filled += 1;
+      filled2 += 1;
     }
     const cuts = [];
     let edge = 0;
@@ -35600,10 +35600,10 @@ var RichText = class _RichText {
    * cuts as `"crop"` does, as the reference's `truncate` does.
    */
   *_fitLine(line, maxWidth, overflow, ellipsis) {
-    const lineWidth = Segment.getLineLength(line);
-    const contentWidth = lineWidth - hangingWhitespace(line);
+    const lineWidth2 = Segment.getLineLength(line);
+    const contentWidth = lineWidth2 - hangingWhitespace(line);
     if (contentWidth <= maxWidth) {
-      yield* Segment.adjustLineLength(line, Math.min(lineWidth, maxWidth), void 0, false);
+      yield* Segment.adjustLineLength(line, Math.min(lineWidth2, maxWidth), void 0, false);
       return;
     }
     if (overflow === "ellipsis" && maxWidth > 0) {
@@ -51841,9 +51841,9 @@ var GLOBAL_FIELDS = {
     "1x",
     control("speed", "look")
   ),
-  // Whether FlexStrip soft-wraps a root row that exceeds the usable width
-  // (the legacy display.autoWrap). False renders each row as one unbounded
-  // line, overflow off-screen.
+  // Whether a root row that exceeds the usable width soft-wraps, between
+  // cells and through a cell wider than a line (the legacy display.autoWrap).
+  // False renders each row as one unbounded line, overflow off-screen.
   autoWrap: boolSetting(true, control("wrap", "config")),
   // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
   // the bg fill — the legacy display.padding). Templates author content; this
@@ -53275,14 +53275,14 @@ var ColorSpecError = class extends Error {
 function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
   const { palette, tint, text: text4 } = active2;
   const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled = bgSpec !== NO_FILL;
-  const bgColor = !filled ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
   active2.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
   const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled ? chosen(bgColor) : void 0;
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
   return new Style({
-    ...filled && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
     ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
   });
 }
@@ -54166,10 +54166,18 @@ function stripPrivateGlyphs(options) {
   const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
   return privateGlyphsIn(plainOf2(lines2.flat()));
 }
+var WIDEST_GLYPH_COLS = 2;
+function lineWidth(options) {
+  return options.wrap ? options.width : Infinity;
+}
+function wrappedLines(plain, width) {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
+  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
+}
 function drawStripCells(cells, options, motion = STILL3) {
   if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
-  const flex = options.wrap && Number.isFinite(options.width);
+  const flex = Number.isFinite(lineWidth(options));
   const drawn = {
     colorSystem: options.colorCompatibility,
     ...flex ? { width: options.width } : {}
@@ -65596,7 +65604,7 @@ function channelRows(message, opts, trailing) {
     color: message.severity.colors.fg
   });
   const styled = (link) => link === null ? base : base.withLink(link);
-  const fold = asCellCol(Math.max(2, opts.width - 1));
+  const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message.lines.flatMap((line, i) => {
     const prefix = cell(i === 0 ? message.severity.glyph : ISSUE_INDENT, base);
     const cells = line.flatMap(
@@ -71950,7 +71958,59 @@ function applySegmentLayout(cells, options) {
 }
 
 // src/render/fill.ts
-function resolveFill(row2, options) {
+function wrapOffsets(plain, line, indent2) {
+  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
+  const wrapping = held + plain;
+  const offsets = [];
+  let at = 0;
+  wrappedLines(wrapping, line).forEach((wrapped) => {
+    const content = wrapped.trimEnd();
+    const start = wrapping.indexOf(content, at);
+    if (content !== "" && start > held.length)
+      offsets.push(start - held.length);
+    at = start + content.length;
+  });
+  return offsets;
+}
+function takenOnLine(before, options) {
+  if (before.length === 0) return 0;
+  const { lines: lines2 } = drawStripCells(
+    before.map(({ owner }) => owner),
+    options
+  );
+  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
+  return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
+}
+function fits(cell3, line, options) {
+  if (cell3.cellLength <= line) return true;
+  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
+  return cellLen(plainOf2(lines2.flat())) <= options.width;
+}
+function dividedToLine(item, line, before, options) {
+  if (fits(item.owner, line, options)) return [item];
+  const text4 = item.owner.copy().expandTabs();
+  const indent2 = takenOnLine(before, options);
+  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i) => ({
+    ...item,
+    owner: piece.truncate(line, { marker: "" }).padLeft(i > 0 ? options.padding : 0)
+  })).filter(
+    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
+  );
+}
+function fitRow(row2, options) {
+  const line = Math.max(
+    WIDEST_GLYPH_COLS,
+    lineWidth(options) - stripChromeCols(options) - options.padding
+  );
+  return filled(row2, options).reduce(
+    (fitted, item) => [
+      ...fitted,
+      ...dividedToLine(item, line, fitted, options)
+    ],
+    []
+  );
+}
+function filled(row2, options) {
   const items = () => row2.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
   const demands = [];
   row2.forEach(({ fill }, at) => {
@@ -72918,14 +72978,14 @@ function gridPages(widths, available, navReserve) {
   const firstPass = paginate(widths, available, navReserve);
   return (firstPass.length > 1 ? paginate(widths, available, navReserve + arrowReserve) : firstPass).map((cells) => [{ label: "", indices: cells }]);
 }
-function assemble(frags, paged) {
+function assemble(frags) {
   const spaced = [];
   for (const frag of frags) {
     if (spaced.length > 0) spaced.push(new RichText(" "));
     spaced.push(frag);
   }
   const assembled = RichText.fromFragments(spaced);
-  assembled.overflow = paged ? "ignore" : void 0;
+  assembled.overflow = "ignore";
   assembled.end = "";
   return assembled;
 }
@@ -73036,21 +73096,20 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
   if (catalogue === void 0) {
     const indices = pageSections.flatMap((section) => section.indices);
     return [
-      assemble(
-        [...nav, ...indices.map((i) => optionCell(gridFaces[i], i)), ...next],
-        paged
-      )
+      assemble([
+        ...nav,
+        ...indices.map((i) => optionCell(gridFaces[i], i)),
+        ...next
+      ])
     ];
   }
   const bold = new Style({ bold: true });
   const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
   const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
-  const lines2 = [assemble([...nav, ...where, ...next], paged)];
+  const lines2 = [assemble([...nav, ...where, ...next])];
   for (const section of pageSections) {
     if (pageSections.length > 1) {
-      lines2.push(
-        assemble([new RichText(section.label, { style: bold })], paged)
-      );
+      lines2.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
       ...section.indices.map((i) => cellWidth2(labelOf(apply.options[i])))
@@ -73062,10 +73121,7 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
       const row2 = description === void 0 ? name : `${name}${gap}${description}`;
       lines2.push(
-        assemble(
-          [optionCell(optionFace(i, fitCells(row2, available)), i)],
-          paged
-        )
+        assemble([optionCell(optionFace(i, fitCells(row2, available)), i)])
       );
     }
   }
@@ -73161,7 +73217,7 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = readVar(store, "session.id");
   const { options } = apply;
-  if (options.length === 0) return assemble([], true);
+  if (options.length === 0) return assemble([]);
   const indexAt = ringAround(options, readVar(store, apply.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => effectsUrl(
@@ -73174,34 +73230,31 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
       runtime.signer
     ).effects
   );
-  return assemble(
-    [
-      linkFragment(CAROUSEL_PREV, step4(-1), false),
-      linkOver(
-        // Drawn as the arrows are, in the segment's own colours (Brandon: "The
-        // name loses its styling"), beside the swatch of the value in force
-        // when the domain is colour-valued.
-        labelPaint(
-          renderLook(runtime, "{{ carousel }}"),
-          apply.paletteOf,
-          ring(0),
-          label2
-        ),
-        effectsUrl(
-          realize(
-            runtime.compiled.get(openName),
-            ring(0),
-            void 0,
-            store,
-            sessionId2,
-            runtime.signer
-          ).effects
-        )
+  return assemble([
+    linkFragment(CAROUSEL_PREV, step4(-1), false),
+    linkOver(
+      // Drawn as the arrows are, in the segment's own colours (Brandon: "The
+      // name loses its styling"), beside the swatch of the value in force
+      // when the domain is colour-valued.
+      labelPaint(
+        renderLook(runtime, "{{ carousel }}"),
+        apply.paletteOf,
+        ring(0),
+        label2
       ),
-      linkFragment(CAROUSEL_NEXT, step4(1), false)
-    ],
-    true
-  );
+      effectsUrl(
+        realize(
+          runtime.compiled.get(openName),
+          ring(0),
+          void 0,
+          store,
+          sessionId2,
+          runtime.signer
+        ).effects
+      )
+    ),
+    linkFragment(CAROUSEL_NEXT, step4(1), false)
+  ]);
 }
 function carouselFuncs(runtime) {
   return {
@@ -73458,11 +73511,11 @@ function labelBudget(rows, available) {
   const widths = rows.map(
     (row2) => row2.map(({ name }) => cellWidth2(blockLabel(name)))
   );
-  const fits = (most2) => widths.every(
+  const fits2 = (most2) => widths.every(
     (row2) => row2.reduce((sum, w) => sum + Math.min(w, most2) + 2, 0) <= available
   );
   let most = Math.max(1, ...widths.flat());
-  while (most > 1 && !fits(most)) most -= 1;
+  while (most > 1 && !fits2(most)) most -= 1;
   return most;
 }
 function renderLayoutPreview(rows, decor, drawnAt, available) {
@@ -73609,14 +73662,14 @@ init_globals();
 // src/template-engine/gauge.ts
 init_globals();
 function renderGauge(spec) {
-  const { value, max: max2, width, filled, empty: empty2, colourAt } = spec;
+  const { value, max: max2, width, filled: filled2, empty: empty2, colourAt } = spec;
   const lit = litCells(value, max2, width);
   const cells = [];
   for (let i = 0; i < width; i++) {
     const isLit = i < lit;
     const hex3 = isLit && colourAt !== void 0 ? colourAt(i * max2 / width) : void 0;
     cells.push(
-      new RichText(isLit ? filled : empty2, {
+      new RichText(isLit ? filled2 : empty2, {
         style: hex3 === void 0 ? void 0 : new Style({ color: hex3 })
       })
     );
@@ -73689,13 +73742,13 @@ function segmentColorFuncs(ref) {
     () => requireActiveSegment(ref, "{{ color }} / {{ ramp }} / {{ gauge }}").palette
   );
   const gauge = {
-    fn: ((value, max2, width, filled, empty2, easing, ...stops) => {
+    fn: ((value, max2, width, filled2, empty2, easing, ...stops) => {
       const ramped = easing === void 0 ? void 0 : [easing, ...flattenStops(stops)];
       return renderGauge({
         value,
         max: max2,
         width,
-        filled,
+        filled: filled2,
         empty: empty2,
         colourAt: ramped === void 0 ? void 0 : (position) => String(
           palette.ramp.fn(position, ...ramped)
@@ -75462,10 +75515,11 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       );
     }
     const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row: row2 }) => {
-      const items = resolveFill(line.cells, drawOpts);
+      const items = fitRow(line.cells, drawOpts);
       const kind = line.band === "deeper" ? "menu" : "bar";
       return {
         kind,
+        cellBreaks: items.length - line.cells.length,
         ...drawStripCells(
           items.map((item) => item.owner),
           drawOpts,
@@ -75501,6 +75555,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         pending: [...waited].sort()
       },
       evaluated: parts.evaluated - evaluatedBefore,
+      cellBreaks: rendered.reduce((sum, row2) => sum + row2.cellBreaks, 0),
       rules
     };
   } catch (_) {
@@ -75691,6 +75746,7 @@ var FrameFeeds = class {
       pushed: 0,
       drawMs: 0,
       evaluated: 0,
+      cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
       coalesced: 0,
       summarizedAt: now2,
@@ -75772,6 +75828,7 @@ var FrameFeeds = class {
     feed.drawn++;
     feed.drawMs += finished - started2;
     feed.evaluated += frame2.evaluated;
+    feed.cellBreaks += frame2.cellBreaks;
     if (this.feeds.get(feed.sessionId) !== feed) return;
     this.countFailure(feed, frame2);
     this.push(feed, frame2, at);
@@ -75912,7 +75969,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`
     );
     feed.summarizedAt = now2;
   }
@@ -76000,10 +76057,11 @@ function renderFrame(parts, sessionId2, fps, at) {
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, delivered, lanes } = drawRender(parts, setup, {
-        by: "feed",
-        fps
-      });
+      const { drawn, evaluated: evaluated2, cellBreaks, delivered, lanes } = drawRender(
+        parts,
+        setup,
+        { by: "feed", fps }
+      );
       const answer2 = RENDER_ANSWERS.ansi(drawn.body);
       const statusline = statuslineOf(
         sessionId2,
@@ -76016,6 +76074,7 @@ function renderFrame(parts, sessionId2, fps, at) {
         // Mostly the bar itself, and one frame encodes once.
         statusline: statusline === drawn.body ? answer2 : RENDER_ANSWERS.ansi(statusline),
         evaluated: evaluated2,
+        cellBreaks,
         delivered,
         failure: null
       };
@@ -76038,6 +76097,7 @@ function renderFrame(parts, sessionId2, fps, at) {
       resp: failed2,
       statusline: failed2,
       evaluated: 0,
+      cellBreaks: 0,
       delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` }
     };
@@ -76283,7 +76343,7 @@ function drawRender(parts, setup, drawing2) {
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
   const idleSince = menuIdle.since(sessionId2, at);
-  const { frame: frame2, evaluated: evaluated2, rules } = drawDsl(
+  const { frame: frame2, evaluated: evaluated2, cellBreaks, rules } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -76388,6 +76448,8 @@ function drawRender(parts, setup, drawing2) {
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(evaluated2),
+    // How many strip items dividing cells too wide for a line added.
+    cellBreaks: String(cellBreaks),
     // The sources it drew as not answered yet; `-` for none.
     pending: body.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
@@ -76414,6 +76476,7 @@ function drawRender(parts, setup, drawing2) {
       geometry
     },
     evaluated: evaluated2,
+    cellBreaks,
     clickShown,
     delivered,
     lanes
@@ -81568,7 +81631,7 @@ var RenderCache = class {
   // — never `served`, the entry the change was for, which a render is about
   // to draw.
   fit(served) {
-    const fits = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
+    const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
     const pinned = new Set(
       [...this.pins.keys()].flatMap((sessionId2) => {
         const view = this.views.get(sessionId2);
@@ -81576,11 +81639,11 @@ var RenderCache = class {
       })
     );
     for (const [key, evicted] of this.entries) {
-      if (fits()) return;
+      if (fits2()) return;
       if (evicted === served || pinned.has(evicted.state)) continue;
       this.drop(key, evicted, "evict");
     }
-    if (!fits())
+    if (!fits2())
       this.log(
         "warn",
         `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
