@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-539",
+      "ref": "refs/pull/539/merge",
+      "sha": "192580f7f7fd7aed88eceb77c4a836b7a8837c83",
+      "timestamp": "2026-11-01T04:58:23.260Z",
+      "commits": [
+        {
+          "sha": "192580f7f7fd7aed88eceb77c4a836b7a8837c83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:57:30-06:00",
+          "message": "Merge fddf6eaf5537684a04db07485ade81b6ed291d8c into e98fef8ecc1558cc8cdf59993c8534b6d584d2fd\n"
+        },
+        {
+          "sha": "fddf6eaf5537684a04db07485ade81b6ed291d8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:57:18-06:00",
+          "message": "fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8)\n\nWhile the OS isn't delivering file events, a watch_file variable showed its\nold value as current. It now carries the stall as its standing fault, read\nfrom the delivery owner, and drops the fault only by re-reading.\n\n`SourceRegistry` takes `FileEvents`, the type ManagedStorage already reads,\nin place of the one-caller `CatchUps` adapter. `RenderDeps.fileEvents` is\nrequired, so a daemon that doesn't wire it doesn't compile. `stallReason`\nholds the rule and the wording for every consumer, and `end()` says\n\"restart the daemon\" once for all of its reasons.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-538",
       "ref": "refs/pull/538/merge",
       "sha": "5bfb99bbe289cf5a366d7ec1c9a2805ffec310cd",
