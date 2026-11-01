@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-529",
+      "ref": "refs/pull/529/merge",
+      "sha": "6bcbe7b4dc66ec7f20f8c174f52cfd851d47c82b",
+      "timestamp": "2026-11-01T00:13:32.920Z",
+      "commits": [
+        {
+          "sha": "6bcbe7b4dc66ec7f20f8c174f52cfd851d47c82b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:12:47-06:00",
+          "message": "Merge 46b0f7793f53880e02492dd1b09ae493b110e87a into 3439d4a05a61f8cd02c3099414d573b8e8e1cffc\n"
+        },
+        {
+          "sha": "46b0f7793f53880e02492dd1b09ae493b110e87a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:12:37-06:00",
+          "message": "fix(test): a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3439d4a05a61f8cd02c3099414d573b8e8e1cffc",
