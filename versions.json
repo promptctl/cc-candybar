@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-552",
+      "ref": "refs/pull/552/merge",
+      "sha": "63141bdaf16a9ed1e4d143ce573b0faf16bdfd41",
+      "timestamp": "2026-11-01T14:33:51.169Z",
+      "commits": [
+        {
+          "sha": "63141bdaf16a9ed1e4d143ce573b0faf16bdfd41",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T07:33:00-07:00",
+          "message": "Merge 89dfbe592a8f5d5a3900da4bed0211e00413e593 into 09301ac9bc6ac05841560bc1972b974b3305916f\n"
+        },
+        {
+          "sha": "89dfbe592a8f5d5a3900da4bed0211e00413e593",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T07:32:41-07:00",
+          "message": "refactor(render): band and tmux encode Frames, nothing in src decodes ANSI (candybar-isolated-daemon-bfab.2nq)\n\nThe band and tmux status lanes read the drawn Frame instead of decoding the\nbytes the render wrote. Every FeedFrame has a bar: a failed render's is the\ndiagnostic Frame, in the words of the statusline's error glyph, so a lane\nholds no failure branch and planOutcome leaves every surface the daemon draws.\n\nSink carries the bar beside the lane's JSON, and feed.last holds it once per\npush for a late joiner. mergedRuns joins neighbouring runs of one look, as the\ndecoder did, so one tmux link stays one range. laneEncoded is the one refusal\npoint, replacing both catch arms. nextChange and motion leave FeedFrame and\ndrawRender's return, because the Frame states them.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "09301ac9bc6ac05841560bc1972b974b3305916f",
