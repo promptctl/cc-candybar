@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.173.0";
+var PACKAGE_VERSION = "1.173.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35571,6 +35571,7 @@ var inspect = (v) => {
 };
 
 // src/proc/launch.ts
+init_timers();
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
   const code = err.code;
@@ -35627,6 +35628,11 @@ function rateLimitedResult(category, minIntervalMs, sinceLastMs) {
     error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`
   };
 }
+function track(state, work) {
+  const entry = work.finally(() => state.ending.delete(entry));
+  state.ending.add(entry);
+  return entry;
+}
 function admit(state, category, signal) {
   const refusal = refusalOf(state, category, signal);
   if (refusal !== null) {
@@ -35652,6 +35658,7 @@ function setFault(state, next2) {
 function lose(state, line, reason) {
   if (state.lifeline?.process !== line) return;
   state.lifeline = null;
+  line.ref();
   setFault(state, reason);
 }
 function lifelineWarnings(state) {
@@ -35685,6 +35692,7 @@ function spawnLifeline(state) {
   line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  void track(state, new Promise((closed) => line.once("close", closed)));
   line.unref();
   pipe.unref();
   for (const group of state.liveGroups) pipe.write(`+ ${group}
@@ -35705,6 +35713,7 @@ function unguard(state, group) {
 function endLifeline(state) {
   const line = state.lifeline;
   state.lifeline = null;
+  line?.process.ref();
   line?.pipe.end();
 }
 function signalGroup(pid2, sig) {
@@ -35744,6 +35753,7 @@ async function launchWaited(state, opts) {
     }
     const group = child.pid;
     if (group !== void 0) guard(state, group);
+    const exited = new Promise((end) => child.once("exit", end));
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
@@ -35770,6 +35780,7 @@ async function launchWaited(state, opts) {
       try {
         signalGroup(pid2, sig);
       } catch (err) {
+        state.unreaped.set(child, opts.category);
         settle3({
           ok: false,
           reason: "signal-refused",
@@ -35787,10 +35798,15 @@ async function launchWaited(state, opts) {
       unlisten();
       const pid2 = child.pid;
       if (pid2 !== void 0) {
-        killTimer = setTimeout(
-          () => signal(pid2, "SIGKILL"),
-          TIMEOUT_KILL_GRACE_MS
-        );
+        killTimer = setTimeout(() => {
+          signal(pid2, "SIGKILL");
+          void exited.then(
+            () => setImmediate(() => {
+              child.stdout?.destroy();
+              child.stderr?.destroy();
+            })
+          );
+        }, TIMEOUT_KILL_GRACE_MS);
         signal(pid2, "SIGTERM");
       }
     };
@@ -35812,6 +35828,7 @@ async function launchWaited(state, opts) {
       });
     });
     child.on("close", (code, signal2) => {
+      state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
           ok: false,
@@ -36056,11 +36073,18 @@ function endJob(pid2, status, end) {
 }
 function createLauncher(owner) {
   const launcher = {
-    launch: (opts) => launchWaited(state, opts),
+    launch: (opts) => track(state, launchWaited(state, opts)),
     launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
+    settled: async () => {
+      await Promise.all(state.ending);
+      const running = [...state.unreaped].filter(
+        ([child]) => child.exitCode === null && child.signalCode === null
+      );
+      return { unreaped: running.map(([, category]) => category) };
+    },
     __lifelineForTest: () => {
       const line = state.lifeline;
       return {
@@ -36084,7 +36108,9 @@ function createLauncher(owner) {
     inFlight: /* @__PURE__ */ new Set(),
     liveGroups: /* @__PURE__ */ new Set(),
     lifeline: null,
-    fault: null
+    fault: null,
+    ending: /* @__PURE__ */ new Set(),
+    unreaped: /* @__PURE__ */ new Map()
   };
   state.scope.signal.addEventListener(
     "abort",
@@ -40726,11 +40752,11 @@ var ComputedValue = class {
     }
     return changed;
   }
-  computeValue_(track) {
+  computeValue_(track2) {
     this.isComputing = true;
     const prev = __MOBX_DEV__ ? allowStateChangesStart(false) : false;
     let res;
-    if (track) {
+    if (track2) {
       res = trackDerivedFunction(this, this.derivation, this.scope_);
     } else {
       if (globalState.disableErrorBoundaries === true) {
@@ -83962,6 +83988,7 @@ function createDaemon(inputs) {
         }
       }
       closed = true;
+      return launcher.settled();
     }
   };
 }

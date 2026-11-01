@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "d189b5c56cbf38da7151f2400b2ae226f8331328",
+      "timestamp": "2026-11-01T02:21:06.619Z",
+      "commits": [
+        {
+          "sha": "d189b5c56cbf38da7151f2400b2ae226f8331328",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:20:16-06:00",
+          "message": "feat(daemon): close says when the launches it ended have ended (candybar-testing-0x6u.keo) (#532)\n\n* feat(daemon): close says when the launches it ended have ended (candybar-testing-0x6u.keo)\n\n* fix(daemon): settled holds the loop, and its tests wait on the child they mean (candybar-testing-0x6u.keo)\n\n* fix(proc): unreaped reads the child's own end, and a lost lifeline holds the loop too (candybar-testing-0x6u.keo)\n\n* fix(proc): the pipes of a killed launch go after its end, with its output read (candybar-testing-0x6u.keo)\n\n* test(proc): the busy-loop case blocks where timers run next (candybar-testing-0x6u.keo)\n\n* fix(proc): setImmediate comes from node:timers (candybar-testing-0x6u.keo)"
+        },
+        {
+          "sha": "4586d75e3c1833a97abca0a05d27d96b736553e7",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T01:51:46Z",
+          "message": "chore(release): set `package.json` to 1.173.1 [skip ci]\n\n## [1.173.1](https://github.com/promptctl/cc-candybar/compare/v1.173.0...v1.173.1) (2026-11-01)\n\n### Bug Fixes\n\n* **test:** a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj) ([#531](https://github.com/promptctl/cc-candybar/issues/531)) ([7b77d5f](https://github.com/promptctl/cc-candybar/commit/7b77d5fab04cc3822fa430e086169ef7f984b873))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-533",
       "ref": "refs/pull/533/merge",
       "sha": "16729e6c1290745407ff5e015eac6f6e215876b4",
@@ -20,78 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:19:01-06:00",
           "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-532",
-      "ref": "refs/pull/532/merge",
-      "sha": "22ed84ce9f6c7d25c960ad4d8865812bd9b3f38d",
-      "timestamp": "2026-11-01T02:13:37.657Z",
-      "commits": [
-        {
-          "sha": "22ed84ce9f6c7d25c960ad4d8865812bd9b3f38d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:12:33-06:00",
-          "message": "Merge c577dc5280837326074e708ae6a5f17b8347b354 into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
-        },
-        {
-          "sha": "c577dc5280837326074e708ae6a5f17b8347b354",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:12:13-06:00",
-          "message": "fix(proc): setImmediate comes from node:timers (candybar-testing-0x6u.keo)\n"
-        },
-        {
-          "sha": "a4544fa682f598c060b83ae4d69922bfae065490",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:08:54-06:00",
-          "message": "test(proc): the busy-loop case blocks where timers run next (candybar-testing-0x6u.keo)\n"
-        },
-        {
-          "sha": "dbc1864602b3dabc6ce792a7db8fdea5dae23f0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:08:27-06:00",
-          "message": "fix(proc): the pipes of a killed launch go after its end, with its output read (candybar-testing-0x6u.keo)\n"
-        },
-        {
-          "sha": "be8b74cb8d885af594a682c6c4f1a74d1ee8d14c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:59:49-06:00",
-          "message": "fix(proc): unreaped reads the child's own end, and a lost lifeline holds the loop too (candybar-testing-0x6u.keo)\n"
-        },
-        {
-          "sha": "14abd12973eb32d966d94be3639534448a06402d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:54:39-06:00",
-          "message": "fix(daemon): settled holds the loop, and its tests wait on the child they mean (candybar-testing-0x6u.keo)\n"
-        },
-        {
-          "sha": "ea633e403ca041c8563679a727baba4d8b596e48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:46:07-06:00",
-          "message": "feat(daemon): close says when the launches it ended have ended (candybar-testing-0x6u.keo)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7b77d5fab04cc3822fa430e086169ef7f984b873",
-      "timestamp": "2026-11-01T01:44:30.365Z",
-      "commits": [
-        {
-          "sha": "7b77d5fab04cc3822fa430e086169ef7f984b873",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:43:34-06:00",
-          "message": "fix(test): a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj) (#531)\n\n* fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n\n* fix(test): the held program waits at the shared gate, and the proof reads its own render's event (brandon-unfiled-3248.2ywj)\n\nThe fixture carried a private copy of `shellGate`'s hold. The proof scanned\nthe log for any attempt, a timed-out one included, and a failed wait named\nonly the bar. `renderAnswer` hands back the event of the answer it returned,\nso the bytes and the proof are one render, and a failed wait names how that\nrender ended.\n\nThe hold is bounded by the run's own timeout; the comment says so.\n\n* fix(test): a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj)\n\n\"While the program runs\" was proved on a daemon with a real shell, a file\npoll, a render poll and log events, so it measured the machine. `Runs` already\ntakes `launch` as a port, so run-action now holds the run in a fake: no\nprocess, no sleep, no wall-clock bound. The rule that no request waits on a\nsuperseded lane stays where it was pinned, in render-payload-outcomes, over a\nlane that never lands.\n\nThe daemon test is a wiring check: a click runs the real program through the\nstorage owner's supersede, and its write draws. `renderAnswer` and the gate are\ngone with the hold they served.\n\n* fix(test): a held run is observed across real turns, and a supersede is read by its file (brandon-unfiled-3248.2ywj)\n\nThe held test looked at the bar in the click's own tick, so a source resumed\nearly passed. It now holds through real turns with the program's write on\ndisk.\n\nThe e2e counted supersede refreshes across all of plugin storage, so a\nsupersede of another session's key passed. It now reads the refresh event of\nthis session's file, which removes the ledger helper.\n\nEvery in-worker stats read goes through statsOf, past the connection's 200 ms\nguard, so these files no longer fail on a slow stats reply.\n\n* fix(test): the doctor's stats reads go past the guard, and a fake launch asserts only what it can fail (brandon-unfiled-3248.2ywj)\n\nThe doctor e2e's in-worker stats reads move to statsOf, which removes their\ncasts and the connection's 200 ms guard.\n\n`failed: 0` and the empty click error go back to the real-launch test: a\nheld launch only resolves ok, so neither could fail there.\n\nThe refresh event's expected file is spelled by valueOf, as the daemon logs\nit, so a temp path with a space still matches."
         }
       ]
     },
