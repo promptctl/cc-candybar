@@ -445,14 +445,6 @@ export function viewerRows(
   }
 }
 
-// Every row of one message, unpaged: what the viewer pages.
-export function messageRows(
-  message: DiagnosticMessage,
-  geometry: DiagnosticGeometry,
-): readonly Row[] {
-  return channelRows(message, viewerOptions(geometry), []);
-}
-
 // [LAW:single-enforcer] The statusline's handoff line (src/daemon/lane-handoff.ts)
 // with the indicator after it: the bar it hands off carries the indicator
 // beside its door, and the statusline is what a person reads when that bar is

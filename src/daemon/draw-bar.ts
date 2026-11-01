@@ -668,7 +668,9 @@ export function drawRender(
           })
         : [],
     ),
-    colorCompatibility: effective.colorCompatibility,
+    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
+    // the depth the frame is encoded at.
+    colorCompatibility: frame.depth,
   };
   // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
   // place: open only while the message it was opened on is in this list.
@@ -679,11 +681,12 @@ export function drawRender(
   // [LAW:one-source-of-truth] The body says when it next changes. The viewer
   // in the bar's place is still text, so a feed drawing it waits a still
   // period, not the hidden bar's beat; that bar can move again once it closes.
+  // It drew none of that bar's sources, so none of them are pending in it.
   const body: Frame =
     viewing === null
       ? frame
       : {
-          ...frame,
+          depth: frame.depth,
           rows: viewerRows(
             diagnostics,
             viewing,
@@ -693,6 +696,7 @@ export function drawRender(
           ),
           nextChange: Infinity,
           motion: frame.motion === "still" ? "still" : "can-move",
+          pending: [],
         };
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -813,7 +817,7 @@ interface DrawnBar {
 }
 
 // The response's bar.
-function composeBar(body: Frame): string {
+function composeBar(body: Pick<Frame, "depth" | "rows">): string {
   return ansiOf(body) + "\n";
 }
 
@@ -1030,7 +1034,7 @@ function statuslineOf(
   return first === undefined || drawn.viewerOpen
     ? output
     : composeBar({
-        ...drawn.body,
+        depth: drawn.body.depth,
         rows: handoffRows(
           laneHandoff(sessionId, [first, ...rest]),
           drawn.diagnostics,

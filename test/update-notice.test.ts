@@ -4,7 +4,11 @@
 // and how the act's state changes the row — measured on the channels and on
 // the composed strip, by what each click DOES.
 
-import { messageRows, UPDATE_SEVERITY } from "../src/render/diagnostics";
+import {
+  collectDiagnostics,
+  UPDATE_SEVERITY,
+  viewerRows,
+} from "../src/render/diagnostics";
 import { plainOf } from "../src/render/frame";
 import {
   describeStamp,
@@ -210,11 +214,18 @@ describe("updateNotice", () => {
 
   test("drawn: the row reads as the sentence and its three clicks, each linked to its own effect", () => {
     const [message] = updateNotice(SOURCE, { kind: "idle" }, ctx());
-    const rows = messageRows(message!, {
-      width: 200,
-      rows: 20,
-      colorCompatibility: "truecolor",
-    });
+    const list = collectDiagnostics("s", "request", [], [message!], []);
+    const [, ...rows] = viewerRows(
+      list,
+      { index: 1, page: 0 },
+      "s",
+      "request",
+      {
+        width: 200,
+        rows: 20,
+        colorCompatibility: "truecolor",
+      },
+    );
     expect(rows.map((row) => plainOf(row.runs))).toEqual([
       "⬆ Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456]. [rebuild] [dismiss] [disable] ",
     ]);

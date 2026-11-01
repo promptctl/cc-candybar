@@ -148,7 +148,7 @@ export function encodeAnsi(
     .join("\n");
 }
 
-export function ansiOf(frame: Frame): string {
+export function ansiOf(frame: Pick<Frame, "depth" | "rows">): string {
   return encodeAnsi(
     frame.rows.map((row) => row.runs),
     frame.depth,
