@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-534",
+      "ref": "refs/pull/534/merge",
+      "sha": "54d49c19bf2b133d891cdf88048dec50d6b772d7",
+      "timestamp": "2026-11-01T02:23:42.187Z",
+      "commits": [
+        {
+          "sha": "54d49c19bf2b133d891cdf88048dec50d6b772d7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:22:45-06:00",
+          "message": "Merge adfc75a8721a472f4c733033e023605d542515e2 into d189b5c56cbf38da7151f2400b2ae226f8331328\n"
+        },
+        {
+          "sha": "adfc75a8721a472f4c733033e023605d542515e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:22:35-06:00",
+          "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d189b5c56cbf38da7151f2400b2ae226f8331328",
