@@ -4,46 +4,53 @@
     {
       "version": "pr-532",
       "ref": "refs/pull/532/merge",
-      "sha": "462f0f81cd9596f18124a9bc4967369e2320c08c",
-      "timestamp": "2026-11-01T02:10:06.579Z",
+      "sha": "22ed84ce9f6c7d25c960ad4d8865812bd9b3f38d",
+      "timestamp": "2026-11-01T02:13:37.657Z",
       "commits": [
         {
-          "sha": "462f0f81cd9596f18124a9bc4967369e2320c08c",
+          "sha": "22ed84ce9f6c7d25c960ad4d8865812bd9b3f38d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:09:04Z",
-          "message": "Merge 72a819c5867c1c0d2ae0bfb57c408403298df3da into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
+          "timestamp": "2026-10-31T20:12:33-06:00",
+          "message": "Merge c577dc5280837326074e708ae6a5f17b8347b354 into 4586d75e3c1833a97abca0a05d27d96b736553e7\n"
         },
         {
-          "sha": "72a819c5867c1c0d2ae0bfb57c408403298df3da",
+          "sha": "c577dc5280837326074e708ae6a5f17b8347b354",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:12:13-06:00",
+          "message": "fix(proc): setImmediate comes from node:timers (candybar-testing-0x6u.keo)\n"
+        },
+        {
+          "sha": "a4544fa682f598c060b83ae4d69922bfae065490",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:08:54-06:00",
           "message": "test(proc): the busy-loop case blocks where timers run next (candybar-testing-0x6u.keo)\n"
         },
         {
-          "sha": "b3eec2baeb509984be1806524f8649d02334da21",
+          "sha": "dbc1864602b3dabc6ce792a7db8fdea5dae23f0e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:08:27-06:00",
           "message": "fix(proc): the pipes of a killed launch go after its end, with its output read (candybar-testing-0x6u.keo)\n"
         },
         {
-          "sha": "37292f7254a6e45872d1d5e00a858ce11d8af826",
+          "sha": "be8b74cb8d885af594a682c6c4f1a74d1ee8d14c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:59:49-06:00",
           "message": "fix(proc): unreaped reads the child's own end, and a lost lifeline holds the loop too (candybar-testing-0x6u.keo)\n"
         },
         {
-          "sha": "4ce21e67938d8a4fbc19294a6a3816f3062af31f",
+          "sha": "14abd12973eb32d966d94be3639534448a06402d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:54:39-06:00",
           "message": "fix(daemon): settled holds the loop, and its tests wait on the child they mean (candybar-testing-0x6u.keo)\n"
         },
         {
-          "sha": "6003a9b0dc34204e936a4b64e570bdf2be11b9c8",
+          "sha": "ea633e403ca041c8563679a727baba4d8b596e48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:46:07-06:00",

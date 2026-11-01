@@ -35571,6 +35571,7 @@ var inspect = (v) => {
 };
 
 // src/proc/launch.ts
+init_timers();
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
   const code = err.code;
