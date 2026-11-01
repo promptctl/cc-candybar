@@ -107,13 +107,15 @@ function dividedToLine(
   const indent = takenOnLine(before, options);
   return text
     .divide(wrapOffsets(text.plain, line, indent))
-    .filter(({ plain }, _, { length }) => length === 1 || plain.trim() !== "")
     .map((piece, i) => ({
       ...item,
       owner: piece
         .truncate(line, { marker: "" })
         .padLeft(i > 0 ? options.padding : 0),
-    }));
+    }))
+    .filter(
+      ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== "",
+    );
 }
 
 /**
@@ -128,7 +130,8 @@ function dividedToLine(
  *
  * `stripChromeCols` is a painted cell's caps, the most a cell costs, so a piece
  * fits however it is painted. An unpainted cell that does divide wraps two
- * columns early and its pieces can share a line with no seam between them.
+ * columns early and its pieces can share a line with no seam between them, so
+ * a piece cropped of its word gap can touch the next.
  */
 export function fitRow(
   row: readonly LaidCell[],

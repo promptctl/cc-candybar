@@ -94,7 +94,7 @@ export function ledRowBudget(runtime: ActionRuntime): number {
 // [LAW:dataflow-not-control-flow] A pure function of (item widths, available
 // width, reserved width): greedy fill into pages, each reserving room for the
 // ←/→/✕ affordances. The `page` value selects the slice; an oversized lone item
-// gets its own page (it can't be split). Infinite width = one page (the wrap
+// gets its own page, which its row divides. Infinite width = one page (the wrap
 // case — everything in one cell, which its row divides). Exported for unit testing.
 export function paginate(
   widths: readonly number[],

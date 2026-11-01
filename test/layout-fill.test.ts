@@ -288,6 +288,15 @@ describe("a cell wider than a line wraps across lines", () => {
     expect(lines.some((line) => squeezed(line).startsWith(word))).toBe(true);
   });
 
+  test("a piece that moves past the open line keeps the cell's padding", () => {
+    const items = fitRow(
+      [painted(" dir "), painted(` feature/${"y".repeat(48)} `)],
+      opts({ width: 30, padding: 1 }),
+    );
+    expect(items.length).toBeGreaterThan(2);
+    items.forEach(({ owner }) => expect(owner.plain.startsWith(" ")).toBe(true));
+  });
+
   test("a line a piece opens wears the cell's padding", () => {
     const text = " alpha bravo charlie delta echo foxtrot golf hotel india ";
     const items = fitRow(
