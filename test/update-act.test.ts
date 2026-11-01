@@ -286,16 +286,7 @@ describe("claimAct: one act per bundle", () => {
 
   test("a claim starts the job, and every daemon reading the bundle sees it running, then its verdict", async () => {
     const dir = dirOf();
-    const claim = claimAct(
-      processLauncher,
-      dir,
-      null,
-      "id-1",
-      SLEEP,
-      60_000,
-      Date.now(),
-      sameLeader,
-    );
+    const claim = claimAct(processLauncher, dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
     expect(claim).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
     const running = reader.read()!;
@@ -317,29 +308,11 @@ describe("claimAct: one act per bundle", () => {
 
   test("a claim onto an act that exists loses, and its program never runs", async () => {
     const dir = dirOf();
-    const first = claimAct(
-      processLauncher,
-      dir,
-      null,
-      "id-1",
-      SLEEP,
-      60_000,
-      Date.now(),
-      sameLeader,
-    );
+    const first = claimAct(processLauncher, dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
     expect(first.ok).toBe(true);
     ended.push(makeActReader(dir, sameLeader).read()!.record.pid);
     // A second daemon that judged the bundle idle from the same empty read.
-    const second = claimAct(
-      processLauncher,
-      dir,
-      null,
-      "id-1",
-      TOUCH(marker()),
-      60_000,
-      Date.now(),
-      sameLeader,
-    );
+    const second = claimAct(processLauncher, dir, null, "id-1", TOUCH(marker()), 60_000, Date.now(), sameLeader);
     expect(second).toEqual({
       ok: false,
       reason: "another act claimed this bundle first",
@@ -376,16 +349,7 @@ describe("claimAct: one act per bundle", () => {
   test("a new act after an ended one takes the next number and removes the ended", async () => {
     const dir = dirOf();
     expect(
-      claimAct(
-        processLauncher,
-        dir,
-        null,
-        "id-1",
-        TOUCH(marker()),
-        60_000,
-        Date.now(),
-        sameLeader,
-      ),
+      claimAct(processLauncher, dir, null, "id-1", TOUCH(marker()), 60_000, Date.now(), sameLeader),
     ).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
     await until(
@@ -393,16 +357,7 @@ describe("claimAct: one act per bundle", () => {
       "the first act to succeed",
     );
     expect(
-      claimAct(
-        processLauncher,
-        dir,
-        1,
-        "id-2",
-        TOUCH(marker()),
-        60_000,
-        Date.now(),
-        sameLeader,
-      ),
+      claimAct(processLauncher, dir, 1, "id-2", TOUCH(marker()), 60_000, Date.now(), sameLeader),
     ).toEqual({ ok: true, act: 2 });
     expect(fs.readdirSync(dir)).toEqual(["2"]);
     await until(
@@ -440,16 +395,7 @@ describe("claimAct: one act per bundle", () => {
 
   test("a job started before this boot is not the recorded one, whatever holds its pid", () => {
     const dir = dirOf();
-    claimAct(
-      processLauncher,
-      dir,
-      null,
-      "id-1",
-      SLEEP,
-      60_000,
-      Date.now(),
-      sameLeader,
-    );
+    claimAct(processLauncher, dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
     const { record } = makeActReader(dir, sameLeader).read()!;
     ended.push(record.pid);
     expect(isRecordedJob(record, sameLeader)).toBe(true);
@@ -488,32 +434,14 @@ describe("claimAct: one act per bundle", () => {
 
   test("an act number claimed again names the new act, not the one this reader knew", async () => {
     const dir = dirOf();
-    claimAct(
-      processLauncher,
-      dir,
-      null,
-      "id-1",
-      TOUCH(marker()),
-      60_000,
-      Date.now(),
-      sameLeader,
-    );
+    claimAct(processLauncher, dir, null, "id-1", TOUCH(marker()), 60_000, Date.now(), sameLeader);
     const reader = makeActReader(dir, sameLeader);
     await until(
       () => judgeAct(reader.read()).kind === "succeeded",
       "the first act to succeed",
     );
     fs.rmSync(dir, { recursive: true });
-    claimAct(
-      processLauncher,
-      dir,
-      null,
-      "id-2",
-      SLEEP,
-      60_000,
-      Date.now(),
-      sameLeader,
-    );
+    claimAct(processLauncher, dir, null, "id-2", SLEEP, 60_000, Date.now(), sameLeader);
     const again = reader.read()!;
     ended.push(again.record.pid);
     expect(again.record.identity).toBe("id-2");
@@ -564,7 +492,9 @@ describe("claimAct: one act per bundle", () => {
       onApplied: () => {},
       log: () => {},
     });
-    const gate = (): string[] => [...stateGate(DEFAULT_DSL_CONFIG).listKeys()];
+    const gate = (): string[] => [
+      ...stateGate(DEFAULT_DSL_CONFIG).listKeys(),
+    ];
     watch.arm();
     expect(gate()).toContain(UPDATE_DISMISSED_KEY);
 
