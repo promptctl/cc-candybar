@@ -1,3 +1,9 @@
+## [1.176.0](https://github.com/promptctl/cc-candybar/compare/v1.175.0...v1.176.0) (2026-11-01)
+
+### Features
+
+* **landscape:** captured bars play in the explorer, with capture tooling and the live-bar link ([#544](https://github.com/promptctl/cc-candybar/issues/544)) ([22a4d97](https://github.com/promptctl/cc-candybar/commit/22a4d977fc08426311fbc21d544a5c130ec8183b)), closes [#472](https://github.com/promptctl/cc-candybar/issues/472)
+
 ## [1.175.0](https://github.com/promptctl/cc-candybar/compare/v1.174.7...v1.175.0) (2026-11-01)
 
 ### Features
