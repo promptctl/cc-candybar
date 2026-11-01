@@ -18,7 +18,7 @@
 // [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
 // operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
 // reaped before the caller resumes, so it cannot outlive its frame (the one
-// exception is a child that outlives a refused signal: `signal-refused`).
+// exception is a group the launcher was refused to signal: `signal-refused`).
 // `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
 // outliving its caller — the daemon-handoff escape hatch, used only by the
 // daemon-acquisition path. `launchJobSync` is the *job*: it outlives its
@@ -257,8 +257,8 @@ export type LaunchResult =
       // the child started; "rate-limited" means the primitive refused to
       // spawn because the per-category minimum interval was not yet elapsed
       // — no child process was launched. "signal-refused" means the OS
-      // refused the termination signal and the child outlived the grace
-      // (EPERM: it changed its real uid), so it is NOT reaped; `error` carries the errno.
+      // refused the termination signal (EPERM: the child changed its real
+      // uid), so the child is NOT reaped; `error` carries the errno.
       reason:
         | "timeout"
         | "aborted"
@@ -525,12 +525,29 @@ type Terminated = "timeout" | "aborted";
 
 // Signal a waited child's whole process group (it leads its own; see the
 // header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
-// — the state this call exists to reach; any other failure propagates.
+// — the state this call exists to reach; any other failure propagates, but for
+// a group's EPERM that its leader does not back.
 function signalGroup(pid: number, sig: NodeJS.Signals): void {
   try {
     process.kill(-pid, sig);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid))) {
+      throw err;
+    }
+  }
+}
+
+// Darwin answers EPERM for a group with nothing left to signal: its members
+// are zombies, or still in their exit teardown. That is the same answer as a
+// refusal, so the leader tells them apart: only one that changed its real uid
+// refuses signal 0. An ended leader answers it as a zombie, or is gone.
+function leaderRefuses(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -601,32 +618,23 @@ async function launchWaited(
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
-    // [LAW:one-type-per-behavior] A child the group's EPERM left running (it
-    // changed its real uid) is this run's result like any other failure — a
-    // `LaunchResult` arm, never a rejection or a throw out of a timer callback,
-    // so the single-enforcer primitive stays total. EPERM alone proves nothing:
-    // darwin answers it for a group of only zombies, an ended child not yet
-    // reaped, so the verdict waits for the escalation, when the child's end has
-    // had the grace to arrive.
-    // [LAW:no-ambient-temporal-coupling] A stalled loop runs this timer with
-    // that end still undelivered; `setImmediate` follows the poll phase that
-    // delivers it, so `exitCode` and `signalCode` are current at the verdict.
-    const escalate = (pid: number) => {
+    // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM:
+    // the child changed its real uid) is this run's result like any other
+    // failure — a `LaunchResult` arm, never a rejection or a throw out of a
+    // timer callback, so the single-enforcer primitive stays total.
+    const signal = (pid: number, sig: NodeJS.Signals) => {
       try {
-        signalGroup(pid, "SIGKILL");
+        signalGroup(pid, sig);
       } catch (err) {
-        setImmediate(() => {
-          if (child.exitCode !== null || child.signalCode !== null) return;
-          state.unreaped.set(child, opts.category);
-          settle({
-            ok: false,
-            reason: "signal-refused",
-            stdout,
-            stderr,
-            exitCode: null,
-            signal: null,
-            error: err instanceof Error ? err.message : String(err),
-          });
+        state.unreaped.set(child, opts.category);
+        settle({
+          ok: false,
+          reason: "signal-refused",
+          stdout,
+          stderr,
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err),
         });
       }
     };
@@ -648,12 +656,13 @@ async function launchWaited(
       unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
+        // Escalation armed first, so a refused SIGTERM's cleanup clears it.
         // [LAW:no-ambient-temporal-coupling] The pipes go a turn after the
         // child's end, once what it wrote is read: a descendant that left the
         // group could otherwise hold them open, and keep this launch from ever
         // resolving.
         killTimer = setTimeout(() => {
-          escalate(pid);
+          signal(pid, "SIGKILL");
           void exited.then(() =>
             setImmediate(() => {
               child.stdout?.destroy();
@@ -661,12 +670,7 @@ async function launchWaited(
             }),
           );
         }, TIMEOUT_KILL_GRACE_MS);
-        try {
-          signalGroup(pid, "SIGTERM");
-        } catch {
-          // [LAW:no-silent-failure] exception: the escalation asks again and
-          // owns the verdict; see `escalate`.
-        }
+        signal(pid, "SIGTERM");
       }
     };
 
@@ -1020,7 +1024,7 @@ export function readJobEnd(status: string): JobEnd | null {
 // outlives its leader while the program runs, so a sh killed on its own does
 // not read as an ended job. A job runs as its launcher's user, so a group the
 // launcher may not signal (EPERM) is someone else's under a recycled id, or
-// on darwin holds only zombies; neither is the job running.
+// on darwin holds nothing left running; neither is the job running.
 export function jobGroupAlive(pid: number): boolean {
   try {
     process.kill(-pid, 0);

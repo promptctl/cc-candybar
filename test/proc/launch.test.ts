@@ -239,15 +239,16 @@ describe("launch (async)", () => {
   });
 
   it("a group the launcher cannot signal settles as signal-refused — nothing rejects or escapes a timer", async () => {
-    // process.kill refuses the group (EPERM: a child that changed its real
-    // uid). The child ends on its own soon after, so nothing is orphaned.
+    // process.kill refuses the group and its leader (EPERM: a child that
+    // changed its real uid). The child ends on its own soon after, so nothing
+    // is orphaned.
     const spy = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("EPERM"), { code: "EPERM" });
     });
     try {
       const r = await launch({
         bin: "/bin/sh",
-        args: ["-c", "sleep 1"],
+        args: ["-c", "sleep 0.4"],
         timeoutMs: 50,
         category: "user-shell",
       });
@@ -262,11 +263,14 @@ describe("launch (async)", () => {
     }
   });
 
-  it("a child that ended before a stalled loop heard of it is no refusal", async () => {
-    // Darwin answers EPERM for a group of only zombies. The stall outlasts the
-    // grace and runs into the timers phase with the exit still undelivered.
-    const spy = jest.spyOn(process, "kill").mockImplementation(() => {
-      throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+  it("a group's EPERM its leader does not back is no refusal", async () => {
+    // Darwin's answer for a group of only zombies, or members still exiting.
+    const realKill = process.kill.bind(process);
+    const spy = jest.spyOn(process, "kill").mockImplementation((pid, sig) => {
+      if (typeof pid === "number" && pid < 0) {
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      }
+      return realKill(pid, sig);
     });
     try {
       const controller = new AbortController();
@@ -276,10 +280,7 @@ describe("launch (async)", () => {
         category: "user-shell",
         signal: controller.signal,
       });
-      setImmediate(() => {
-        controller.abort();
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400);
-      });
+      controller.abort();
       await expect(run).resolves.toMatchObject({
         reason: "aborted",
         exitCode: 0,
