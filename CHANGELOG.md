@@ -1,3 +1,9 @@
+## [1.171.0](https://github.com/promptctl/cc-candybar/compare/v1.170.1...v1.171.0) (2026-10-31)
+
+### Features
+
+* **carousel:** the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr) ([#518](https://github.com/promptctl/cc-candybar/issues/518)) ([e0b1483](https://github.com/promptctl/cc-candybar/commit/e0b1483c0864fe01633d47904d1f453e411b8da2))
+
 ## [1.170.1](https://github.com/promptctl/cc-candybar/compare/v1.170.0...v1.170.1) (2026-10-31)
 
 ### Bug Fixes
