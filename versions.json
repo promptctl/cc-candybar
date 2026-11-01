@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-530",
+      "ref": "refs/pull/530/merge",
+      "sha": "4fffde2d7a8c92cb91decd6e21ee91b48c696f13",
+      "timestamp": "2026-11-01T00:49:03.479Z",
+      "commits": [
+        {
+          "sha": "4fffde2d7a8c92cb91decd6e21ee91b48c696f13",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:48:04-06:00",
+          "message": "Merge 7a59ead583ed04ad13db6329cf2a2aed06888b4b into 516c3eb319a548c706d04da1795e462774d057a7\n"
+        },
+        {
+          "sha": "7a59ead583ed04ad13db6329cf2a2aed06888b4b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:47:46-06:00",
+          "message": "test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "516c3eb319a548c706d04da1795e462774d057a7",
