@@ -1074,9 +1074,9 @@ function signalJob(pid: number, sig: NodeJS.Signals | 0): boolean {
   }
 }
 
-// Whether anything of the job's process group is still running. The group
-// outlives its leader while the program runs, so a sh killed on its own does
-// not read as an ended job.
+// Whether anything of the job's process group the launcher can still signal is
+// running. The group outlives its leader while the program runs, so a sh killed
+// on its own does not read as an ended job.
 export function jobGroupAlive(pid: number): boolean {
   return signalJob(pid, 0);
 }
