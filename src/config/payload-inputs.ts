@@ -207,6 +207,28 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     default: "",
   },
 
+  // Where the session is, as the daemon read it from the checkout on the
+  // request, so these answer before the git lane does. `noRepo` is a read that found none.
+  "location.main": { kind: "input", path: "location.main", default: "" },
+  "location.worktree": {
+    kind: "input",
+    path: "location.worktree",
+    default: "",
+  },
+  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
+  "location.noRepo": {
+    kind: "input",
+    path: "location.noRepo",
+    type: "boolean",
+    default: false,
+  },
+  "location.gitPending": {
+    kind: "input",
+    path: "location.gitPending",
+    type: "boolean",
+    default: false,
+  },
+
   // The repo's browsable web page, transposed from its remote by the daemon.
   // "" is the genuine "no remote a browser can open" (local-only repo, bare
   // path remote) — the quick-action tray's link reads that value, not a flag.

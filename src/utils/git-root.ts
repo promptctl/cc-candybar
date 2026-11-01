@@ -161,3 +161,34 @@ export function worktreeLink(dir: string): WorktreeLink {
       : realCommon.value;
   return { kind: "linked", main: path.join(main, path.relative(root, dir)) };
 }
+
+// Where a directory sits in its repository, for display. `main` is the main
+// checkout's root ("" in no repository), `worktree` the linked worktree's name
+// ("" otherwise), `subpath` the directory below the checkout root ("/src", or
+// ""). [LAW:no-silent-failure] exception: an unproven link reads as a checkout
+// of its own, since its root is real and the git cell reports the broken repo.
+export interface CheckoutLocation {
+  readonly main: string;
+  readonly worktree: string;
+  readonly subpath: string;
+  readonly noRepo: boolean;
+}
+
+export function checkoutLocation(dir: string): CheckoutLocation {
+  const real = realDir(dir);
+  const at = real.kind === "ok" ? real.value : path.resolve(dir);
+  const root = gitRootOf(at);
+  if (root === undefined)
+    return { main: "", worktree: "", subpath: "", noRepo: true };
+  const sub = path.relative(root, at);
+  const subpath = sub === "" ? "" : `/${sub.split(path.sep).join("/")}`;
+  const link = worktreeLink(at);
+  return link.kind === "linked"
+    ? {
+        main: path.resolve(link.main, path.relative(at, root)),
+        worktree: path.basename(root),
+        subpath,
+        noRepo: false,
+      }
+    : { main: root, worktree: "", subpath, noRepo: false };
+}

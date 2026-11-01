@@ -122,7 +122,7 @@ touched; the payload is `check`'s own fixture, which is why the numbers below
 are the same on every machine:
 
 ```render
- 🍫   polled  ⇄ tester@tester-box  ~/c/c/src  ⎇ main +2/-1 SU? ▸ 
+ 🍫   polled  ⇄ tester@tester-box  ~/c/c/src  ~/c/c/src ⎇ main +2/-1 SU? ▸ 
  ✱ Opus 4.8 󰶼  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
@@ -550,8 +550,9 @@ compose these named `helpers`, each called as `{{ template "<name>" . }}`:
 
 | helper | renders |
 |--------|---------|
-| `gitBranch` | `⎇ main` — always present (the segment hides without a branch) |
-| `gitRepo` | ` cc-candybar` |
+| `gitBranch` | `⎇ main` — present whenever git names a branch |
+| `gitPath` | `~/c/cc-candybar/src (⊫ my-worktree)` — the main checkout, the subdirectory, and the linked worktree's name; click copies the full path |
+| `gitRepo` | ` cc-candybar` — replaces `gitPath` when the variable `git.location` is `"repo"` |
 | `gitOperation` | ` [rebase]` |
 | `gitSha` | ` abc1234` |
 | `gitFlags` | ` SU?!1` — staged, unstaged, untracked, conflicts |
@@ -560,7 +561,11 @@ compose these named `helpers`, each called as `{{ template "<name>" . }}`:
 | `gitStash` | ` (1 stashed)` |
 | `gitAge` | ` ◷ 13m` — time since the last commit |
 
-Every piece except `gitBranch` renders with its own leading space, or renders
+The worktree mark is the literal variable `glyph.worktree`. Outside a repo the
+segment shows the plain path and a two-click `init` that runs `git init` in the
+session's directory. While git is loading it shows the path alone.
+
+Every piece except `gitBranch` and `gitPath` renders with its own leading space, or renders
 nothing when its fact is absent, so pieces drop and reorder without leaving a
 doubled space. Each fact's colour is a variable holding a palette name —
 `git.color.branch`, `.staged`, `.unstaged`, `.untracked`, `.conflicts`,
@@ -600,7 +605,7 @@ default. The arrow still collapses it for the session that clicks:
 ```
 
 ```render
- 🍫   polled  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
+ 🍫   polled  (git) ~/c/c/src [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
 ```
 
 Hide one fact — override its piece with an empty body. A piece is shared, so
@@ -614,11 +619,11 @@ the fact leaves both forms:
 ```
 
 ```render
- 🍫   polled  ⎇ main +2/-1 ▸ 
+ 🍫   polled  ~/c/c/src ⎇ main +2/-1 ▸ 
 ```
 
 Hide a fact from one copy only — each optional piece also reads a setting of
-the placement it renders in (`aheadBehind`, `flags`, `operation`, `repo`,
+the placement it renders in (`aheadBehind`, `flags`, `operation`, `repo` (shown when `git.location` is `"repo"`),
 `sha`, `stash`, `upstream`, `age`; every one defaults to `true`; `upstream`
 off takes its bracket and the ahead/behind inside it), so two copies of the
 segment can show different facts in either form, and configure mode changes
@@ -633,7 +638,7 @@ it does not):
 ```
 
 ```render
- 🍫   polled  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
+ 🍫   polled  ~/c/c/src ⎇ main +2/-1 SU? ▸  ~/c/c/src ⎇ main ▸ 
 ```
 
 Recolour one fact — override its colour variable (any palette name or hex),
@@ -648,7 +653,7 @@ or re-spell it by overriding its piece:
 ```
 
 ```render
- 🍫   polled  on main +2/-1 SU? ▸ 
+ 🍫   polled  ~/c/c/src on main +2/-1 SU? ▸ 
 ```
 
 ## One segment, many placements: settings

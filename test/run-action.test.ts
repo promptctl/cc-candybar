@@ -433,13 +433,13 @@ describe("a run's declaration", () => {
   test("a run in a text no file holds is refused: it has no directory to run in", () => {
     let thrown: unknown;
     try {
-      parseDslConfig("<default>", `{ actions: { mine: { run: ["true"] } } }`);
+      parseDslConfig("<text>", `{ actions: { mine: { run: ["true"] } } }`);
     } catch (e) {
       thrown = e;
     }
     expect(thrown).toBeInstanceOf(ConfigError);
     expect(String((thrown as Error).message)).toContain(
-      "a run action runs in the directory of the file that declares it, and <default> is no file",
+      "a run action runs in the directory of the file that declares it, and <text> is no file",
     );
   });
 });

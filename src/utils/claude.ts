@@ -1,3 +1,4 @@
+import type { CheckoutLocation } from "./git-root.js";
 import { existsSync } from "node:fs";
 // [LAW:single-enforcer] readdir and the forward read come from the gated
 // transcript-fs owner, not node:fs/promises — the in-flight-I/O bound lives at
@@ -41,6 +42,9 @@ export interface ClaudeHookData {
     // Absent when not inside a linked git worktree
     git_worktree?: string;
   };
+
+  // The daemon's, never Claude Code's: read once per request from the checkout.
+  location?: CheckoutLocation & { gitPending?: boolean };
 
   // Optional per Anthropic schema (listed under "Fields that may be absent")
   session_name?: string;
