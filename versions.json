@@ -2,53 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-554",
-      "ref": "refs/pull/554/merge",
-      "sha": "26250797b218eee03a3c948ed4f212ca91876817",
-      "timestamp": "2026-11-01T18:16:50.188Z",
-      "commits": [
-        {
-          "sha": "26250797b218eee03a3c948ed4f212ca91876817",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T18:15:53Z",
-          "message": "Merge 512785765bba8d6122b11d90f68f65493d1b70c2 into 7636ce26043a3cb0640f9fa33ff75084e9b1af7a\n"
-        },
-        {
-          "sha": "512785765bba8d6122b11d90f68f65493d1b70c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T11:15:43-07:00",
-          "message": "fix(test): draws compare by rows, and a reader finds the run under its text (candybar-isolated-daemon-bfab.bzq)\n\nTests that compared draws through the encoder now compare rows, as the testing memory says. runUnder matches a needle exactly where a search of spaceless characters matched across gaps. A failed click's error on Claude Code's bar is pinned with the statusline lane followed. The real client's literals read what it printed, rather than one draw equalling another. The fit test uses a fixed bar, since a cell wider than the width cannot wrap and a branch name is one.\n"
-        },
-        {
-          "sha": "85d878d26c1d197d63c9d49e78a7f94d186fed9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T11:05:09-07:00",
-          "message": "fix(test): tests name what they pin, and comments name who binds (candybar-isolated-daemon-bfab.bzq)\n\nReview of the Frame migration. A failed click's error on Claude Code's bar is pinned in a session no lane follows, since a followed session's render answers the handoff row. A render's fit to its size is pinned where the Frame is held. truecolorOf refuses a colour the terminal owns, and runAt and backgroundsOf replace local copies. Comments that said drawDsl binds a payload, settles a selection or resolves an omitted one now name the view and the bind.\n"
-        },
-        {
-          "sha": "8aebbd0a1d6f8bbcc77ca1651d80cc66add37bd8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T10:49:15-07:00",
-          "message": "refactor(test): tests read the Frame, and nothing decodes rendered ANSI (candybar-isolated-daemon-bfab.bzq)\n\nThe epic's last slice. A reader outside src now holds the Frame a draw\nreturned, so ANSI is written once, for terminals, and never read back.\n\ntest/helpers/ansi.ts is gone, with the SGR state machines in\ntest/helpers/seams.ts and proto-looks/build.mjs and about twenty local\ndecoders. Colour reads Run.fg, Run.bg and attrs. renderDsl, buildLineStrip\nand toCell leave src, since only tests called them, and drawPayload moves\nto a test helper. check's outcome holds the Frame; encoding sits at what\nprints or weighs it.\n\nComparing draws is by value on rows, because two draws are two objects and\neach frame carries its own wall-clock moment. A byte test keeps ansiOf;\nonly the files that pin an encoder hold escapes.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f41741ee3454a3f31d5d7a2e4dc195a17c786319",
-      "timestamp": "2026-11-01T16:29:28.832Z",
+      "sha": "0f7fe27408eeb8aff9fb34f60ac781cd84668866",
+      "timestamp": "2026-11-01T18:24:58.958Z",
       "commits": [
         {
-          "sha": "f41741ee3454a3f31d5d7a2e4dc195a17c786319",
+          "sha": "0f7fe27408eeb8aff9fb34f60ac781cd84668866",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T09:28:37-07:00",
-          "message": "feat(daemon): a one-shot reader asks for the Frame, scripts and site decode nothing (candybar-isolated-daemon-bfab.dnr) (#553)\n\n* feat(daemon): a one-shot reader asks for the Frame, scripts and site decode nothing (candybar-isolated-daemon-bfab.dnr)\n\nWith decoding ruled out, a script or harness holding one render's answer had\nno other way to read the bar. A render request can now state `encoding`, `ansi`\nor `frame`. Absent is `ansi`, and the shipped clients never send it, so\n`RenderRequest` stays what they send, key for key, and the protocol check needs\nno exemption; `ReaderRenderRequest` adds the field. A bad value is refused at\nthe checkpoint, and `encoding` lands on the render event.\n\nThe answer is encoded inside the draw's turn, so `drew`, which DRAW_RESERVE_MS\nis held to, still times the bytes. `statuslineOf` returns a Frame, and the\nhandoff line and the diagnostics viewer share one stand-in, since both draw\nstill text over a bar that can move again.\n\n`linksOf` replaces `links` and `drawnLinks` in src/click/read.ts, and\nsite/transport.ts, scripts/bar-web/server.ts, scripts/drive-bar.ts and the bench\nlink lookup read Frames. Bench ticks stay on the client's own request. src holds\nno reader of rendered bytes now: src/render/ansi.ts goes, and the byte readers\ntests still use move to test/helpers/ansi.ts until the epic's last ticket.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* test(daemon): a handoff over a moving bar can move, and comments say what a feed answers (candybar-isolated-daemon-bfab.dnr)\n\nAnswers the plan review of #553. A reader's `encoding: \"frame\"` request on a\nfollowed session is the request the feed draws by, and nothing on the feed path\nreads `encoding`, so three comments claiming a feed frame is that request's\nanswer go. The handoff's stand-in was shown only on a still bar, where a literal\n`still` reads the same, so a case runs it over a moving one. The encoding e2e\nnow asserts backgrounds and attributes crossed the wire, and that depth `none`\ncarries neither.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* refactor(daemon): a feed frame's answer is named once, and comments say what no feed and no script does (candybar-isolated-daemon-bfab.dnr)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(daemon): the setting bench reads link and baseline from one Frame, and the event test sends each render once (candybar-isolated-daemon-bfab.dnr)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
+          "timestamp": "2026-11-01T11:24:00-07:00",
+          "message": "refactor(test): tests read the Frame, and nothing decodes rendered ANSI (candybar-isolated-daemon-bfab.bzq) (#554)\n\n* refactor(test): tests read the Frame, and nothing decodes rendered ANSI (candybar-isolated-daemon-bfab.bzq)\n\nThe epic's last slice. A reader outside src now holds the Frame a draw\nreturned, so ANSI is written once, for terminals, and never read back.\n\ntest/helpers/ansi.ts is gone, with the SGR state machines in\ntest/helpers/seams.ts and proto-looks/build.mjs and about twenty local\ndecoders. Colour reads Run.fg, Run.bg and attrs. renderDsl, buildLineStrip\nand toCell leave src, since only tests called them, and drawPayload moves\nto a test helper. check's outcome holds the Frame; encoding sits at what\nprints or weighs it.\n\nComparing draws is by value on rows, because two draws are two objects and\neach frame carries its own wall-clock moment. A byte test keeps ansiOf;\nonly the files that pin an encoder hold escapes.\n\n* fix(test): tests name what they pin, and comments name who binds (candybar-isolated-daemon-bfab.bzq)\n\nReview of the Frame migration. A failed click's error on Claude Code's bar is pinned in a session no lane follows, since a followed session's render answers the handoff row. A render's fit to its size is pinned where the Frame is held. truecolorOf refuses a colour the terminal owns, and runAt and backgroundsOf replace local copies. Comments that said drawDsl binds a payload, settles a selection or resolves an omitted one now name the view and the bind.\n\n* fix(test): draws compare by rows, and a reader finds the run under its text (candybar-isolated-daemon-bfab.bzq)\n\nTests that compared draws through the encoder now compare rows, as the testing memory says. runUnder matches a needle exactly where a search of spaceless characters matched across gaps. A failed click's error on Claude Code's bar is pinned with the statusline lane followed. The real client's literals read what it printed, rather than one draw equalling another. The fit test uses a fixed bar, since a cell wider than the width cannot wrap and a branch name is one."
+        },
+        {
+          "sha": "7636ce26043a3cb0640f9fa33ff75084e9b1af7a",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T16:38:43Z",
+          "message": "chore(release): set `package.json` to 1.178.0 [skip ci]\n\n## [1.178.0](https://github.com/promptctl/cc-candybar/compare/v1.177.2...v1.178.0) (2026-11-01)\n\n### Features\n\n* **daemon:** a one-shot reader asks for the Frame, scripts and site decode nothing (candybar-isolated-daemon-bfab.dnr) ([#553](https://github.com/promptctl/cc-candybar/issues/553)) ([f41741e](https://github.com/promptctl/cc-candybar/commit/f41741ee3454a3f31d5d7a2e4dc195a17c786319))\n"
         }
       ]
     },

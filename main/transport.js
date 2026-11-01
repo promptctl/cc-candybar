@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.177.2";
+var PACKAGE_VERSION = "1.178.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -36112,7 +36112,7 @@ var Recolored = class {
     const shown = shownAt(animation, this.t, options);
     return { segments: this._recolored(walked, shown.value, depth), hold: holdOf(shown, this.t) };
   }
-  *_recolored(walked, frame, depth) {
+  *_recolored(walked, frame2, depth) {
     const drawings = walked.map(({ look, glyphs }) => {
       if (look === void 0)
         return void 0;
@@ -36121,7 +36121,7 @@ var Recolored = class {
         return { joined };
       const from = { fg: look.pair.fg, bg: look.pair.bg, attributes: look.attributes };
       const { terminal, reverse: reverse2 } = look.pair;
-      return { painted: glyphs.map(({ cell: cell3 }) => cell3 === void 0 ? from : returned(frame(from, { ...cell3, seed: cellSeed(this.key, cell3.row, cell3.col), terminal, reverse: reverse2 }))) };
+      return { painted: glyphs.map(({ cell: cell3 }) => cell3 === void 0 ? from : returned(frame2(from, { ...cell3, seed: cellSeed(this.key, cell3.row, cell3.col), terminal, reverse: reverse2 }))) };
     });
     const beside2 = edgesBeside(walked, drawings);
     for (const [i, { segment, look, glyphs }] of walked.entries()) {
@@ -36129,7 +36129,7 @@ var Recolored = class {
       if (look === void 0 || drawing2 === void 0)
         yield segment;
       else if ("joined" in drawing2)
-        yield this._rejoined(segment, look, drawing2.joined, glyphs, beside2, frame, depth);
+        yield this._rejoined(segment, look, drawing2.joined, glyphs, beside2, frame2, depth);
       else
         yield* this._repainted(segment, look, glyphs, drawing2.painted, depth);
     }
@@ -36171,7 +36171,7 @@ var Recolored = class {
    * nothing of keeps the edge the cell was drawn from, so with neither moved
    * the cell is as it was drawn.
    */
-  _rejoined(segment, look, joined, glyphs, beside2, frame, depth) {
+  _rejoined(segment, look, joined, glyphs, beside2, frame2, depth) {
     const cells = glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3]);
     const [at] = cells;
     if (at === void 0)
@@ -36193,7 +36193,7 @@ var Recolored = class {
       const wire2 = edge.drawnColors(depth);
       const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
       const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
-      return moved(slots2, returned(frame({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+      return moved(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
     };
     const moveOf = (side) => {
       const read2 = joined.reads[side];
@@ -36393,7 +36393,7 @@ function confined(effect, ...owners) {
     return false;
   };
   const narrowed = (drawn) => ({ ...drawn, all: () => drawn.all().filter(owned), cells: () => drawn.cells().filter(owned) });
-  return (drawn) => Animation.map(effect(narrowed(drawn)), (frame) => (look, cell3) => owned(cell3) ? frame(look, cell3) : look);
+  return (drawn) => Animation.map(effect(narrowed(drawn)), (frame2) => (look, cell3) => owned(cell3) ? frame2(look, cell3) : look);
 }
 function onScreen(slots, reverse2) {
   return reverse2 ? { fg: slots.bg, bg: slots.fg } : slots;
@@ -37299,14 +37299,14 @@ function placeGlyphs(segments, key) {
   const placed2 = walkGlyphs(segments).map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => ({ glyph, cell: cell3 && { ...cell3, glyph, index: index++, seed: cellSeed(key, cell3.row, cell3.col) } })));
   return { placed: placed2, cells: placed2.flatMap((glyphs) => glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3])) };
 }
-function showGlyphs(placed2, frame) {
-  const shown = placed2.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame, cell3)));
+function showGlyphs(placed2, frame2) {
+  const shown = placed2.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame2, cell3)));
   standsApart(placed2.flat(), shown.flat());
   return shown;
 }
 function reglyphText(text4, effect, options) {
   const { placed: placed2, cells } = placeGlyphs([new Segment(text4.plain)], options.key);
-  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame) => rewritten(text4, placed2[0], showGlyphs(placed2, frame)[0]));
+  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame2) => rewritten(text4, placed2[0], showGlyphs(placed2, frame2)[0]));
 }
 function rewritten(text4, glyphs, shown) {
   if (shown.every((s, i) => s === glyphs[i].glyph))
@@ -37329,8 +37329,8 @@ function rewritten(text4, glyphs, shown) {
   return result;
 }
 var BREAKS = pattern(/[\n\t]/);
-function shows(frame, cell3) {
-  const text4 = frame(cell3);
+function shows(frame2, cell3) {
+  const text4 = frame2(cell3);
   if (text4 === cell3.glyph)
     return text4;
   if (cellLen(text4) !== cellLen(cell3.glyph) || BREAKS.test(text4) || stripControlChars(text4) !== text4) {
@@ -37373,8 +37373,8 @@ function arrived(n, p2) {
 }
 function stepped(seconds) {
   const pace = beat([seconds]);
-  return (frame, still) => Animation.of({
-    at: (t2) => frame(Math.round(pace.lastChange(t2) / seconds)),
+  return (frame2, still) => Animation.of({
+    at: (t2) => frame2(Math.round(pace.lastChange(t2) / seconds)),
     nextChange: (t2) => pace.nextChange(t2),
     lastChange: (t2) => pace.lastChange(t2),
     reduced: () => Animation.constant(still)
@@ -37532,8 +37532,8 @@ var FrameSequence = class {
   // Each frame as it draws: a line fragment padded to `width`, made once.
   _shown;
   constructor(frames) {
-    this.beat = beat(frames.map((frame) => frame.seconds));
-    const texts = frames.map((frame) => setIntoLine(frame.text.copy()));
+    this.beat = beat(frames.map((frame2) => frame2.seconds));
+    const texts = frames.map((frame2) => setIntoLine(frame2.text.copy()));
     const widths = texts.map((text4) => text4.cellLength);
     this.width = Math.max(...widths);
     this._shown = texts.map((text4, i) => {
@@ -49253,11 +49253,11 @@ function glyphEffect(name) {
   }
   return GLYPH_EFFECTS[name];
 }
-function animationFuncs(frame, options = {}) {
+function animationFuncs(frame2, options = {}) {
   const timeline = options.timeline ?? (() => HOST_CLOCK);
   const drawing2 = (what, animation, at) => [Timeline.run(timeline(), animation), finiteTime(what, at.time)];
   const now2 = (what, animation) => {
-    const at = frame();
+    const at = frame2();
     const [drawn, t2] = drawing2(what, animation, at);
     const shown = shownAt(drawn, t2, at);
     at.onHold?.(holdOf(shown, t2));
@@ -49267,7 +49267,7 @@ function animationFuncs(frame, options = {}) {
   const framesFunc = {
     fn: ((...tail) => {
       const frames = pairs("frame", tail, asFragment).map(({ seconds, value }) => ({ seconds, text: value }));
-      const at = frame();
+      const at = frame2();
       return textFrameAt(...drawing2("frames", new FrameSequence(frames), at), at);
     }),
     argTypes: ["float", "liftable"],
@@ -49300,7 +49300,7 @@ function animationFuncs(frame, options = {}) {
       const make = glyphEffect(name);
       const fragment = asFragment(child);
       const key = fragment.plain;
-      const at = frame();
+      const at = frame2();
       const reglyphed = reglyphText(fragment, make({ z: cellSeed(key, 0, 0) }), { key, asciiOnly: at.asciiOnly === true });
       return textFrameAt(...drawing2("glyphs", startedAt(start, reglyphed), at), at);
     }),
@@ -49711,9 +49711,9 @@ var CLOCK = {
   frame: () => drawInProgress("frame").frame,
   timeline: () => drawInProgress("timeline").timeline
 };
-function animationPair(frame, timeline) {
+function animationPair(frame2, timeline) {
   const { frames, stepped: stepped2 } = animationFuncs(
-    frame,
+    frame2,
     timeline === void 0 ? {} : { timeline }
   );
   if (frames === void 0 || stepped2 === void 0) {
@@ -52010,7 +52010,7 @@ var PAYLOAD_INPUTS = {
   config_path: { kind: "input", path: "configPath", default: "" },
   // [LAW:one-source-of-truth] The value every setting and config-only global
   // renders with, whichever rung produced it — the theme, style and effect as
-  // renderDsl settles them, every other one as the daemon resolved it. A
+  // the view settles them, every other one as the daemon resolved it. A
   // trigger's label and a picker's current-selection mark read it back, so
   // the label and the bar trace to one resolution. The daemon always provides
   // each; the default is the unreachable-absence floor.
@@ -52074,12 +52074,12 @@ var PAYLOAD_INPUTS = {
     ])
   ),
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
-  // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
-  // it into the payload from its own `opts.width`, the value a row fits to
-  // (RenderBinding.width) and the strip wraps to, so a template reading it
-  // and the wrap algebra can never disagree. Never cached: a resize is just a
-  // new value on the same path, re-read every render. The default only
-  // applies to compile-only callers that render without injecting a width.
+  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
+  // carries it, the same width a draw's `opts.width` holds: the value a row
+  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
+  // it and the wrap algebra can never disagree. Never cached: a resize is just
+  // a new value on the same path, re-read every render. The default only
+  // applies to compile-only callers that render without a bound width.
   "term.cols": {
     kind: "input",
     path: "term.cols",
@@ -52546,7 +52546,7 @@ function perConfigDomainsFor(config2) {
         members: Object.keys(config2.styles),
         // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
         // construction of an adapted palette is transposedPalette — the same
-        // call renderDsl makes for the style actually in force. One
+        // call drawDsl makes for the style actually in force. One
         // transposition of the BASE, never a second over an already-styled
         // palette (see OptionPalette).
         // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
@@ -53692,7 +53692,7 @@ var SessionEffects = class {
     const passages = /* @__PURE__ */ new Map();
     const fading = [];
     const leaving = [];
-    const frame = {
+    const frame2 = {
       effect: name,
       t: bar.t,
       speed: clock.timeline.rate,
@@ -53766,7 +53766,7 @@ var SessionEffects = class {
         part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
       );
       const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
-      frame[reuse ? "reused" : "made"]++;
+      frame2[reuse ? "reused" : "made"]++;
       row3.set(part.scope, { name: part.name, effect });
       return effect;
     };
@@ -53852,7 +53852,7 @@ var SessionEffects = class {
         this.placements = placements;
         this.made = made;
         this.passages = basis === "off" ? null : passages;
-        this.frame = frame;
+        this.frame = frame2;
       }
     };
   }
@@ -53968,12 +53968,12 @@ function describe2(outcome) {
 function parseFrame(wire) {
   return { ...wire, nextChange: wire.nextChange ?? Infinity };
 }
-function standIn(frame, rows) {
+function standIn(frame2, rows) {
   return {
-    depth: frame.depth,
+    depth: frame2.depth,
     rows,
     nextChange: Infinity,
-    motion: frame.motion === "still" ? "still" : "can-move",
+    motion: frame2.motion === "still" ? "still" : "can-move",
     pending: []
   };
 }
@@ -53994,9 +53994,9 @@ function renderFailedFrame(message) {
     DIAGNOSTIC_ERROR_COLORS
   );
 }
-function laneEncoded(encode2, frame) {
+function laneEncoded(encode2, frame2) {
   try {
-    return encode2(frame);
+    return encode2(frame2);
   } catch (error) {
     const why2 = error instanceof Error ? error.message : String(error);
     return encode2(
@@ -54046,14 +54046,14 @@ function encodeAnsi(lines2, depth) {
   const destination = resolveDestination(depth);
   return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
 }
-function ansiOf(frame) {
+function ansiOf(frame2) {
   return encodeAnsi(
-    frame.rows.map((row2) => row2.runs),
-    frame.depth
+    frame2.rows.map((row2) => row2.runs),
+    frame2.depth
   );
 }
-function composeBar(frame) {
-  return ansiOf(frame) + "\n";
+function composeBar(frame2) {
+  return ansiOf(frame2) + "\n";
 }
 var sameLook = (a, b) => a.fg === b.fg && a.bg === b.bg && a.link === b.link && a.attrs?.join() === b.attrs?.join();
 function mergedRuns({ runs }) {
@@ -65763,9 +65763,9 @@ var inScope = (scope, sightings) => sightings.filter(
   (s) => scope.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope.sessionId
 );
 var barsOf = (scope, sightings) => inScope(scope, sightings).map(
-  ({ role, frame, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
+  ({ role, frame: frame2, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
     role,
-    frame,
+    frame: frame2,
     projectDir,
     claudeConfigDir: claudeConfigDir2
   })
@@ -69202,7 +69202,7 @@ function settingsChains(originAt, bars) {
   const chain2 = (at, its) => ({
     at,
     sources: readSettings(at),
-    bars: its.map(({ role, frame }) => ({ role, frame }))
+    bars: its.map(({ role, frame: frame2 }) => ({ role, frame: frame2 }))
   });
   return {
     origin: chain2(originAt, atOrigin),
@@ -75269,18 +75269,18 @@ function parseExpressionSlot(parse3, path40, source) {
 var unreachable = (message) => {
   throw new Error(`a slot settled on a name its domain refuses: ${message}`);
 };
-function evalRule(slot, rule, parts, warn, frame) {
-  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame);
-  frame.settled(slot, name);
+function evalRule(slot, rule, parts, warn, frame2) {
+  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame2);
+  frame2.settled(slot, name);
   return name;
 }
-function ruleName(slot, rule, outcome, warn, frame) {
+function ruleName(slot, rule, outcome, warn, frame2) {
   switch (outcome.kind) {
     case "named":
       return outcome.name;
     case "pending":
-      frame.waited(outcome.variable);
-      return frame.held(slot) ?? SLOT_FLOORS[slot];
+      frame2.waited(outcome.variable);
+      return frame2.held(slot) ?? SLOT_FLOORS[slot];
     case "failed":
       warn({
         kind: "rule",
@@ -75756,12 +75756,12 @@ var FrameFeeds = class {
     }
   }
   step(feed, started2, moment2, at) {
-    const frame = this.deps.render(
+    const frame2 = this.deps.render(
       feed.sessionId,
       paceOf(this.spacingOf(feed)),
       at
     );
-    if (frame === null) {
+    if (frame2 === null) {
       feed.noView++;
       feed.phase = { kind: "waiting" };
       return;
@@ -75771,14 +75771,14 @@ var FrameFeeds = class {
     this.drawn++;
     feed.drawn++;
     feed.drawMs += finished - started2;
-    feed.evaluated += frame.evaluated;
+    feed.evaluated += frame2.evaluated;
     if (this.feeds.get(feed.sessionId) !== feed) return;
-    this.countFailure(feed, frame);
-    this.push(feed, frame, at);
+    this.countFailure(feed, frame2);
+    this.push(feed, frame2, at);
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
-    this.schedule(feed, frame, at);
+    this.schedule(feed, frame2, at);
   }
   // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
   // next changes, measured from the instant this one was drawn for — no
@@ -75789,9 +75789,9 @@ var FrameFeeds = class {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
-  schedule(feed, frame, at) {
+  schedule(feed, frame2, at) {
     const { moving, still } = this.deps.periods;
-    const until2 = ((frame?.bar.nextChange ?? Infinity) - at) * 1e3;
+    const until2 = ((frame2?.bar.nextChange ?? Infinity) - at) * 1e3;
     const shownPeriod = Math.min(Math.max(until2, moving), still);
     const shown = this.shown(feed);
     if (shownPeriod < still && shown) feed.moving++;
@@ -75842,10 +75842,10 @@ var FrameFeeds = class {
     const noted = this.requests.get(feed.sessionId);
     return noted === void 0 || this.deps.shown(noted.req);
   }
-  countFailure(feed, frame) {
-    if (frame.failure !== null) feed.failed++;
+  countFailure(feed, frame2) {
+    if (frame2.failure !== null) feed.failed++;
   }
-  push(feed, frame, at) {
+  push(feed, frame2, at) {
     const lanes = this.deps.lanes(feed.sessionId);
     if (lanes !== null) {
       for (const sub2 of [...feed.followers.keys()]) {
@@ -75855,19 +75855,19 @@ var FrameFeeds = class {
       }
     }
     if (feed.followers.size === 0) return;
-    frame.delivered();
+    frame2.delivered();
     const answers = {
-      resp: JSON.stringify(frame.resp),
-      statusline: JSON.stringify(frame.statusline)
+      resp: JSON.stringify(frame2.resp),
+      statusline: JSON.stringify(frame2.statusline)
     };
     if (feed.last?.answers.resp === answers.resp && feed.last.answers.statusline === answers.statusline)
       return;
     const before = feed.last?.answers ?? null;
-    feed.last = { bar: frame.bar, answers };
+    feed.last = { bar: frame2.bar, answers };
     this.pushed++;
     feed.pushed++;
-    if (frame.failure !== null)
-      this.deps.log(frame.failure.level, frame.failure.line);
+    if (frame2.failure !== null)
+      this.deps.log(frame2.failure.level, frame2.failure.line);
     for (const [lane, rate] of feed.rates)
       if (before === null || answerOf3(before, lane) !== answerOf3(answers, lane))
         noteSent(rate, at);
@@ -75988,8 +75988,8 @@ var renderFailed = (err) => ({
   daemonV: PROTOCOL_VERSION
 });
 var RENDER_ANSWERS = {
-  ansi: (frame) => ({ ok: true, output: composeBar(frame) }),
-  frame: (frame) => ({ ok: true, frame })
+  ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
+  frame: (frame2) => ({ ok: true, frame: frame2 })
 };
 function renderFrame(parts, sessionId2, fps, at) {
   const { clock, frameFeeds } = parts;
@@ -76283,7 +76283,7 @@ function drawRender(parts, setup, drawing2) {
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
   const idleSince = menuIdle.since(sessionId2, at);
-  const { frame, evaluated: evaluated2, rules } = drawDsl(
+  const { frame: frame2, evaluated: evaluated2, rules } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -76313,7 +76313,7 @@ function drawRender(parts, setup, drawing2) {
   menuIdle.observe(
     sessionId2,
     at,
-    frame.rows.some((row2) => row2.kind === "menu"),
+    frame2.rows.some((row2) => row2.kind === "menu"),
     effective.menuTimeout
   );
   const menusSince = menuIdle.since(sessionId2, at);
@@ -76339,14 +76339,14 @@ function drawRender(parts, setup, drawing2) {
     ),
     // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
     // the depth the frame is encoded at.
-    colorCompatibility: frame.depth
+    colorCompatibility: frame2.depth
   };
   const viewing = viewedIndex(
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
-  const body = viewing === null ? frame : standIn(
-    frame,
+  const body = viewing === null ? frame2 : standIn(
+    frame2,
     viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
   );
   const g = payloadProviders.gitProvider.getStats();
@@ -77071,7 +77071,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const facts = [];
     const order2 = ++stats.requestsTotal;
     const checked = checkRenderRequest(req, stats, parts.log);
-    const sighted = (req2, frame) => renderSightings.see(
+    const sighted = (req2, frame2) => renderSightings.see(
       req2.sessionId,
       {
         client: req2.hints.client ?? null,
@@ -77080,7 +77080,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         claudeConfigDir: claudeConfigDir(req2.hints.claudeConfigDir),
         projectDir: req2.requested.projectDir,
         transcript: transcriptSaid(req2.hookData),
-        frame
+        frame: frame2
       },
       at,
       order2
@@ -80990,15 +80990,15 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(frame, chain2, resolveWarnings, attempt4) {
+function settle2(frame2, chain2, resolveWarnings, attempt4) {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home,
-    repos: frame.repos,
-    ms: Math.round(performance.now() - frame.started)
+    repos: frame2.repos,
+    ms: Math.round(performance.now() - frame2.started)
   };
-  const warning = (own2) => joinWarnings([...frame.advisories, ...resolveWarnings, ...own2]);
+  const warning = (own2) => joinWarnings([...frame2.advisories, ...resolveWarnings, ...own2]);
   switch (attempt4.kind) {
     case "built":
     case "kept":
@@ -81020,11 +81020,11 @@ function settle2(frame, chain2, resolveWarnings, attempt4) {
       };
   }
 }
-function loadChain(frame, cwd2, chain2, deps, served = null) {
+function loadChain(frame2, cwd2, chain2, deps, served = null) {
   const resolved = resolveLoad(cwd2, chain2, deps.storage);
-  if (resolved.kind === "failed") return settle2(frame, chain2, [], resolved);
+  if (resolved.kind === "failed") return settle2(frame2, chain2, [], resolved);
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(frame, chain2, resolved.warnings, attempt4);
+  return settle2(frame2, chain2, resolved.warnings, attempt4);
 }
 function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const started2 = performance.now();
@@ -82154,7 +82154,7 @@ function directive({ fg, bg, attrs = [] }) {
   });
   return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
-function encode(frame) {
+function encode(frame2) {
   const links2 = {};
   const drawn = (run3) => {
     const text4 = directive(run3) + escaped(run3.text);
@@ -82163,11 +82163,11 @@ function encode(frame) {
     links2[range] = run3.link;
     return `#[range=user|${range}]${text4}#[norange]`;
   };
-  const rows = frame.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
+  const rows = frame2.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
   return { rows, links: links2 };
 }
-function tmuxStatusFrame(frame) {
-  return laneEncoded(encode, frame);
+function tmuxStatusFrame(frame2) {
+  return laneEncoded(encode, frame2);
 }
 
 // src/daemon/tmux-status.ts
@@ -84919,7 +84919,7 @@ async function daemon2(request2) {
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
 }
-async function render2(size) {
+async function frame(size) {
   const resp = await daemon2({
     v: PROTOCOL_VERSION,
     kind: "render",
@@ -84933,8 +84933,11 @@ async function render2(size) {
     claudeConfigDir: CLAUDE_DIR
   });
   if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
-  const frame = parseFrame(resp.frame);
-  return { ansi: composeBar(frame), links: linksOf(frame).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
+  return parseFrame(resp.frame);
+}
+async function render2(size) {
+  const drawn = await frame(size);
+  return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text4) {
   let writing;
@@ -84998,6 +85001,7 @@ startAt(0);
 var transport = {
   about: `This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>'s own daemon, compiled for the browser and running in this page against a simulated machine. The bar replays a few turns of a Claude Code session. Every click is real: open the \u{1F36B} menu, switch themes, arrange segments.`,
   landscape: "landscape/",
+  frame,
   render: render2,
   click: click2,
   // A new session over the bundled config: what the visitor's clicks wrote is
