@@ -6,7 +6,7 @@
   } from 'd3-force';
   import { onMount } from 'svelte';
   import type { Explorer, GraphEdge, GraphNode, NodeId } from './explorer.svelte';
-  import { members, projectById, traitById } from './model';
+  import { projectById, traitById } from './model';
   import { SECTIONS } from './traits';
 
   // The simulation owns positions; cytoscape only draws them. Each frame the simulation's
@@ -54,12 +54,12 @@
   function definition(id: NodeId): ElementDefinition {
     if (id.startsWith('t:')) {
       const t = traitById.get(id.slice(2))!;
-      const n = members.get(t.id)!.length;
+      const n = explorer.pool(t.id).length;
       return { data: { id, label: `${t.label} · ${n}`, colour: SECTIONS[t.section].colour, size: 16 + Math.sqrt(n) * 2.2 }, classes: 'trait' };
     }
     if (id.startsWith('more:')) {
       const t = id.slice(5);
-      const left = members.get(t)!.length - (explorer.pages.get(t) ?? 0);
+      const left = explorer.pool(t).length - (explorer.pages.get(t) ?? 0);
       return { data: { id, label: `+${left} more`, size: 12 }, classes: 'more' };
     }
     const p = projectById.get(id)!;
