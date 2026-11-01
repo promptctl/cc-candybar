@@ -33,6 +33,7 @@ import {
 
 import {
   encodeAnsi,
+  mergedRuns,
   plainOf,
   runLines,
   type Attribute,
@@ -278,9 +279,33 @@ describe("a run", () => {
     expect(run.bg).toMatch(/^#[0-9a-f]{6}$/);
   });
 
-  test("holds a standard colour by its name at truecolor", () => {
+  test("holds a standard colour as the terminal's at truecolor", () => {
     const named = new Segment("x", new Style({ color: "red" }));
-    expect(runLines([named], truecolor)).toEqual([[{ text: "x", fg: "red" }]]);
+    expect(runLines([named], truecolor)).toEqual([
+      [{ text: "x", fg: "color(1)" }],
+    ]);
+  });
+
+  test("holds one spelling of a drawn colour, so runs drawn alike are one look", () => {
+    const { colorSystem: ansi } = resolveDestination("ansi");
+    const runs = runLines(
+      ["#800000", "red", "color(1)"].map(
+        (color) => new Segment("x", new Style({ color, link: LINK })),
+      ),
+      ansi,
+    )[0] as Run[];
+    expect(mergedRuns({ kind: "diagnostic", runs })).toEqual([
+      { text: "xxx", fg: "color(1)", link: LINK },
+    ]);
+  });
+
+  test("holds a link as RichText admitted it, clean of what ends an OSC 8", () => {
+    const cell = new RichText("x", {
+      style: new Style({ link: `${LINK}\x1b]0;evil\x07` }),
+    });
+    const segments = drawn(cell, resolveDestination("truecolor"), 0, 10);
+    const [[run]] = runLines(segments, truecolor) as [[Run]];
+    expect(run.link).toBe(`${LINK}]0;evil`);
   });
 
   test("holds only the attributes that are on", () => {

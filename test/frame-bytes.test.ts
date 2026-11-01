@@ -18,10 +18,10 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { stripAnsi } from "./helpers/ansi";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig, drawPayload } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { LANE_FRAMES } from "../src/daemon/lane-frames";
-import type { Response } from "../src/daemon/protocol";
+import { ansiOf, renderFailedFrame, type Frame } from "../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
@@ -51,15 +51,16 @@ const PAYLOAD = {
   },
 };
 
-// What a subscriber of each decoding lane receives for a bar. `resp` is the
-// response the daemon sends: a bar and its newline (`composeBar`).
-function lanes(ansi: string) {
-  const resp: Response = { ok: true, output: `${ansi}\n` };
-  const json = JSON.stringify(resp);
+// What a subscriber of each lane that draws runs receives for a bar, beside the
+// bar's bytes. `json` is the response the daemon sends: a bar and its newline
+// (`composeBar`).
+function lanes(frame: Frame) {
+  const ansi = ansiOf(frame);
+  const json = JSON.stringify({ ok: true, output: `${ansi}\n` });
   return {
     ansi,
-    band: LANE_FRAMES.band(resp, json),
-    tmuxStatus: LANE_FRAMES.tmuxStatus(resp, json),
+    band: LANE_FRAMES.band(frame, json),
+    tmuxStatus: LANE_FRAMES.tmuxStatus(frame, json),
   };
 }
 
@@ -87,8 +88,8 @@ function rig(
   const effects = new SessionEffects<RenderedLine>(SID);
   return {
     effects,
-    draw: (seconds: number, payload: object = PAYLOAD): string =>
-      renderDsl(
+    draw: (seconds: number, payload: object = PAYLOAD): Frame =>
+      drawPayload(
         config,
         compiled,
         store,
@@ -98,7 +99,7 @@ function rig(
         { ...opts, colorCompatibility: depth },
         undefined,
         selectionFor(config, { effects }),
-      ),
+      ).frame,
     openMenus: () => sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN),
     dispose: () => registry.dispose(),
   };
@@ -156,8 +157,13 @@ function reachFrames(depth: ColorCompatibility) {
   const run = rig(REACH, REACH_OPTS, depth);
   const frames = REACH_FRAMES.map((frame) => {
     if ("open" in frame) run.openMenus();
-    const ansi = run.draw(frame.seconds, { ...PAYLOAD, shown: frame.shown });
-    return { ...frame, ansi, passing: run.effects.lastFrame() };
+    const drawn = run.draw(frame.seconds, { ...PAYLOAD, shown: frame.shown });
+    return {
+      ...frame,
+      drawn,
+      ansi: ansiOf(drawn),
+      passing: run.effects.lastFrame(),
+    };
   });
   run.dispose();
   return frames;
@@ -224,25 +230,22 @@ describe.each(DEPTHS)("the bytes of every lane at %s", (depth) => {
   });
 
   test("the reach config, frame by frame", () => {
-    for (const { seconds, ansi } of reachFrames(depth)) {
-      expect(lanes(ansi)).toMatchSnapshot(`+${seconds}s`);
+    for (const { seconds, drawn } of reachFrames(depth)) {
+      expect(lanes(drawn)).toMatchSnapshot(`+${seconds}s`);
     }
   });
 });
 
 describe("a render that failed", () => {
-  const resp: Response = {
-    ok: false,
-    error: "the draw threw",
-    code: "RENDER_FAILED",
-  };
-  const json = JSON.stringify(resp);
+  const error = "the draw threw";
+  const bar = renderFailedFrame(error);
+  const json = JSON.stringify({ ok: false, error, code: "RENDER_FAILED" });
 
   test("the band draws the statusline's error glyph", () => {
-    expect(LANE_FRAMES.band(resp, json)).toMatchSnapshot();
+    expect(LANE_FRAMES.band(bar, json)).toMatchSnapshot();
   });
 
   test("the tmux status line draws it too", () => {
-    expect(LANE_FRAMES.tmuxStatus(resp, json)).toMatchSnapshot();
+    expect(LANE_FRAMES.tmuxStatus(bar, json)).toMatchSnapshot();
   });
 });

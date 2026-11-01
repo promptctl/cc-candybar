@@ -12,19 +12,26 @@ import {
   type ColorSpec,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility } from "../themes/policy.js";
-import type { DiagnosticColors } from "./diagnostic-style.js";
+import {
+  DIAGNOSTIC_ERROR_COLORS,
+  type DiagnosticColors,
+} from "./diagnostic-style.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import type { DrawnMotion } from "./drawn-motion.js";
 import type { RowKind } from "./effect.js";
+import { permanentGlyphText } from "./error-glyph.js";
 
 export type Attribute = keyof Attributes;
 
 // [LAW:types-are-the-program] Text in one look. `fg` and `bg` are the colours
-// drawn at the frame's depth, not the ones a config asked for: a hex for a
-// drawn truecolor colour, else what rich-js names it (`red`, `color(17)`), so a
-// standard colour keeps its name at truecolor too. `attrs` holds only the
-// attributes that are on. At depth `none` a run has no look and keeps its link,
-// which is what the encoder writes there.
+// drawn at the frame's depth, not the ones a config asked for, in one spelling
+// each: a hex for a drawn truecolor colour, else `color(n)`, so runs drawn alike
+// are one look and a standard colour stays the terminal's at truecolor too.
+// `attrs` holds only the attributes that are on. At depth `none` a run has no
+// look and keeps its link, which is what the encoder writes there.
+// [LAW:single-enforcer] `link` is clean as RichText admitted it. That admission
+// is the only check on a link a lane writes past rich-js's encoder, so a run
+// comes only from segments a RichText drew.
 export interface Run {
   readonly text: string;
   readonly fg?: string;
@@ -76,14 +83,47 @@ export function diagnosticFrame(text: string, colors: DiagnosticColors): Frame {
   };
 }
 
+// [LAW:one-source-of-truth] A render that failed, in the words of the glyph the
+// statusline's client draws for it, so every lane says what the statusline says.
+export function renderFailedFrame(message: string): Frame {
+  return diagnosticFrame(
+    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
+    DIAGNOSTIC_ERROR_COLORS,
+  );
+}
+
+// [LAW:single-enforcer] The one place a lane refuses a frame: an attribute its
+// encoder cannot draw throws, and each lane's exported encoder comes through
+// here, so no caller sees the throw.
+// [LAW:no-silent-failure] The lane draws a frame saying why instead, in the
+// diagnostics' colours. The stream goes on, so the next frame it can draw takes
+// its place, as the statusline's next render replaces its error glyph: a config
+// fixed brings the lane back.
+export function laneEncoded<Encoded>(
+  encode: (frame: Frame) => Encoded,
+  frame: Frame,
+): Encoded {
+  try {
+    return encode(frame);
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    return encode(
+      diagnosticFrame(`⚠ cc-candybar ${why}`, DIAGNOSTIC_ERROR_COLORS),
+    );
+  }
+}
+
 // [LAW:one-source-of-truth] A drawn colour is concrete by its type: a TRUECOLOR
 // spec is its value — a ColorBlend is one, with its mix in `value`, so a blend
-// is no case here — and anything else is its name, which reads back as itself.
+// is no case here — and one of the terminal's is its number, whichever name
+// drew it, since `red` and a hex downgraded to it are one colour. Only `default`
+// has no number. Each reads back as itself.
 // The spec must be one `Style.drawnColors` returned: a style's own would keep
 // every byte the same, since the encoder downgrades it again, while the run
 // held a colour never drawn.
 function drawnColor(spec: ColorSpec): string {
-  return spec.type === ColorDepth.TRUECOLOR ? spec.value!.hex : spec.name;
+  if (spec.type === ColorDepth.TRUECOLOR) return spec.value!.hex;
+  return spec.number === undefined ? spec.name : `color(${spec.number})`;
 }
 
 // Every attribute a style can hold, as rich-js names them. `style.attributes`
@@ -153,6 +193,27 @@ export function ansiOf(frame: Pick<Frame, "depth" | "rows">): string {
     frame.rows.map((row) => row.runs),
     frame.depth,
   );
+}
+
+const sameLook = (a: Run, b: Run): boolean =>
+  a.fg === b.fg &&
+  a.bg === b.bg &&
+  a.link === b.link &&
+  a.attrs?.join() === b.attrs?.join();
+
+// A row with neighbouring runs of one look joined, for a lane that draws runs
+// rather than cells: an effect's row is a run per cell, and one link split
+// across runs is one tmux range per run. ANSI never merges: `encodeAnsi` writes
+// each run alone.
+export function mergedRuns({ runs }: Row): Run[] {
+  const merged: Run[] = [];
+  for (const run of runs) {
+    const last = merged.at(-1);
+    if (last !== undefined && sameLook(last, run))
+      merged[merged.length - 1] = { ...last, text: last.text + run.text };
+    else merged.push(run);
+  }
+  return merged;
 }
 
 // A line's text.

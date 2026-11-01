@@ -41,7 +41,7 @@ import {
 } from "../click/wire.js";
 import {
   RANGE_PREFIX,
-  tmuxStatusResponse,
+  tmuxStatusFrame,
   type TmuxStatusBar,
 } from "../tmux-status/frames.js";
 
@@ -564,8 +564,8 @@ export class TmuxStatusLines {
     // a request's other refreshes do: started in its turn, awaited in none.
     entry.unsubscribe = this.deps.subscribe(sessionId, {
       lane: "tmuxStatus",
-      frame: (resp) => {
-        entry.frame = tmuxStatusResponse(resp);
+      frame: (bar) => {
+        entry.frame = tmuxStatusFrame(bar);
         this.reconcile(entry.socket);
       },
       refused: (resp) => {

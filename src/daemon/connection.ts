@@ -179,8 +179,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     const write = newestWins(sock);
     const unsubscribe = daemon.subscribe(sessionId, {
       lane,
-      frame: (resp, json) =>
-        write(encodeJsonFrame(LANE_FRAMES[lane](resp, json))),
+      frame: (bar, json) =>
+        write(encodeJsonFrame(LANE_FRAMES[lane](bar, json))),
       // A refused subscription is over: its refusal ends the stream, and a
       // frame still waiting for the socket to drain is dropped, as
       // newest-wins drops any frame a newer one replaces.
