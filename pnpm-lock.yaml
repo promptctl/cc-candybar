@@ -112,17 +112,17 @@ importers:
         version: 5.9.3
     optionalDependencies:
       '@promptctl/cc-candybar-darwin-arm64':
-        specifier: 1.174.6
-        version: 1.174.6
+        specifier: 1.174.7
+        version: 1.174.7
       '@promptctl/cc-candybar-darwin-x64':
-        specifier: 1.174.6
-        version: 1.174.6
+        specifier: 1.174.7
+        version: 1.174.7
       '@promptctl/cc-candybar-linux-arm64':
-        specifier: 1.174.6
-        version: 1.174.6
+        specifier: 1.174.7
+        version: 1.174.7
       '@promptctl/cc-candybar-linux-x64':
-        specifier: 1.174.6
-        version: 1.174.6
+        specifier: 1.174.7
+        version: 1.174.7
 
 packages:
 
@@ -1021,23 +1021,23 @@ packages:
     resolution: {integrity: sha512-h104Kh26rR8tm+a3Qkc5S4VLYint3FE48as7+/5oCEcKR2idC/pF1G6AhIXKI+eHPJa/3J9i5z0Al47IeGHPkA==}
     engines: {node: '>=12'}
 
-  '@promptctl/cc-candybar-darwin-arm64@1.174.6':
-    resolution: {integrity: sha512-o3rCmTW3tOx4MAU5HW5Ngf+aMqgYIBVNNDyeAEDFkLTB6dwPghOlAzUZhNEpAruLmQ01i4qXmvDoSPYw5snYYg==}
+  '@promptctl/cc-candybar-darwin-arm64@1.174.7':
+    resolution: {integrity: sha512-nPypTTJa0MiCyCOuCg/QGdeTVZ4Oe/u0VeVfgRF8hWe3ee0qrI90GPKjuZCG/Yi/ob3Ecu0bmADmtWszE8EOUA==}
     cpu: [arm64]
     os: [darwin]
 
-  '@promptctl/cc-candybar-darwin-x64@1.174.6':
-    resolution: {integrity: sha512-AcjND4T+iIvQxglCqoRhy97+FW5qrGUe9BLjBcit858Eaj0lYvqJ8jDSyd383n+WIs+nOq2RdEn7pIMPdkIf1A==}
+  '@promptctl/cc-candybar-darwin-x64@1.174.7':
+    resolution: {integrity: sha512-vWGiYV5rPR+EVZhVha2A6SE8Mr+rwa6Z+LgoNX6hjqdRcaS9lCWG9oVCgnOrbX4M0sc98eGNWc4N7iuDjTpAkw==}
     cpu: [x64]
     os: [darwin]
 
-  '@promptctl/cc-candybar-linux-arm64@1.174.6':
-    resolution: {integrity: sha512-NyW/dmS7zYfEpzKcrpCl4l78OCLN0QYfxsU3na/cvpQ3hoeJxrRO+0I/1f4wVflNuCILY8UxBiG4GcWyigXZEQ==}
+  '@promptctl/cc-candybar-linux-arm64@1.174.7':
+    resolution: {integrity: sha512-T4vzhq0rmwJtCMydRHEsbHubitze3Ra8Z5JfCX4yReTMK/nBbE+QTezNcsqd6k0ll4A8NRC6tkT0zZakT0WMsw==}
     cpu: [arm64]
     os: [linux]
 
-  '@promptctl/cc-candybar-linux-x64@1.174.6':
-    resolution: {integrity: sha512-FFuyD7YydzjnWRgCbbwfF27rXl8ln6CZqcwZhbE+CA5hk1ZqKSgusUVXyQ5QLC4lAW0k+cMwatG0uzPqHEwDwQ==}
+  '@promptctl/cc-candybar-linux-x64@1.174.7':
+    resolution: {integrity: sha512-RmaHKRVHmDMcsOWvWUR/Gdxu2dTB7wZSwFO2nJtU1i6pNa4Y1ts9N1iKx1+CvKPOvEMWrfzneITr5ICdAVEVzQ==}
     cpu: [x64]
     os: [linux]
 
@@ -4515,16 +4515,16 @@ snapshots:
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
 
-  '@promptctl/cc-candybar-darwin-arm64@1.174.6':
+  '@promptctl/cc-candybar-darwin-arm64@1.174.7':
     optional: true
 
-  '@promptctl/cc-candybar-darwin-x64@1.174.6':
+  '@promptctl/cc-candybar-darwin-x64@1.174.7':
     optional: true
 
-  '@promptctl/cc-candybar-linux-arm64@1.174.6':
+  '@promptctl/cc-candybar-linux-arm64@1.174.7':
     optional: true
 
-  '@promptctl/cc-candybar-linux-x64@1.174.6':
+  '@promptctl/cc-candybar-linux-x64@1.174.7':
     optional: true
 
   '@promptctl/go-template-js@0.10.0':

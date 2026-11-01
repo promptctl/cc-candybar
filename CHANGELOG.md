@@ -1,3 +1,9 @@
+## [1.174.7](https://github.com/promptctl/cc-candybar/compare/v1.174.6...v1.174.7) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) ([#541](https://github.com/promptctl/cc-candybar/issues/541)) ([63c79c5](https://github.com/promptctl/cc-candybar/commit/63c79c571fe30da5a6ba1df1c66e3c0610a95c03))
+
 ## [1.174.6](https://github.com/promptctl/cc-candybar/compare/v1.174.5...v1.174.6) (2026-11-01)
 
 ### Bug Fixes
