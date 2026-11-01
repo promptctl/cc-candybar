@@ -690,15 +690,11 @@ async function launchWaited(
     // wrong target (verified: it can terminate the caller), so escalation is
     // gated on the pid actually existing.
     const terminate = (cause: Terminated) => {
-      // A group that ended between polls did not time out, and its id may no
-      // longer be the launch's to signal. An abort stands whatever the group did.
+      // A group that ended between polls has nothing left to signal, and its id
+      // may no longer be the launch's. It did not time out; an abort still stands.
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (
-        cause === "timeout" &&
-        ended &&
-        group !== undefined &&
-        groupGone(group)
-      ) {
+      if (ended && group !== undefined && groupGone(group)) {
+        terminated = cause === "aborted" ? cause : null;
         setImmediate(concludeWithGroup);
         return;
       }
