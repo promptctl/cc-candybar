@@ -8,7 +8,6 @@ import {
   Segment,
   render,
   resolveDestination,
-  segmentsToString,
   type Joiner,
   type SeamForm,
   type Renderable,
@@ -17,6 +16,7 @@ import {
 import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
 import { STILL, type RowMotion } from "./effect.js";
+import { encodeAnsi, plainOf, runLines, type Run } from "./frame.js";
 
 // rich-js `renderToString`'s width when it is handed none: what an unbounded
 // Strip is drawn at, so a row drawn here is the bytes it always was.
@@ -26,7 +26,8 @@ const UNBOUNDED_DRAW_WIDTH = 80;
 // nothing on it to read, so the frame's `time` is the only time in it.
 const ROW_HOST = {};
 
-// [LAW:types-are-the-program] A drawn row: its bytes, and the moment, in wall
+// [LAW:types-are-the-program] A drawn row: its lines of runs, one for a row
+// that fit and several for one FlexStrip wrapped, and the moment, in wall
 // seconds, at which something on it next changes without new data — a looping
 // effect, a transition in flight, the closing flash, a template's `frames` —
 // or Infinity when nothing will. Read off what was drawn (rich-js
@@ -35,7 +36,7 @@ const ROW_HOST = {};
 // exactly as an effect does. Every animation on a row is drawn on the host
 // clock (`FrameClock`), so its cells, whatever drew them, say one time.
 export interface DrawnRow {
-  readonly text: string;
+  readonly lines: ReadonlyArray<readonly Run[]>;
   readonly nextChange: number;
 }
 
@@ -43,7 +44,7 @@ export interface DrawnRow {
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
 // through before the render — so the two agree by construction rather than by
 // each call site remembering the option. The segments are drawn once and read
-// twice: encoded as bytes, and asked when they next change. A row drawn under
+// twice: as lines of runs, and asked when they next change. A row drawn under
 // motion is drawn for its frame's `time`, the one moment rich-js hands every
 // animation placed in it; a still row is drawn for none.
 // [LAW:one-source-of-truth] rich-js's hold of a frame is its cells' holds and
@@ -80,7 +81,7 @@ function draw(
     }),
   ];
   return {
-    text: segmentsToString(segments, destination),
+    lines: runLines(segments, destination),
     nextChange: Math.min(Segment.nextChange(segments), told),
   };
 }
@@ -193,13 +194,10 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
       overflow: "ignore",
       style: new Style({ bgcolor }),
     });
-  const width = (cells: RichText[]): number =>
-    new RichText(
-      draw(new Strip(cells, joiner), { colorSystem: null }).text.replace(
-        /\n$/,
-        "",
-      ),
-    ).cellLength;
+  const width = (cells: RichText[]): number => {
+    const { lines } = draw(new Strip(cells, joiner), { colorSystem: null });
+    return new RichText(plainOf(lines.flat())).cellLength;
+  };
   const one = width([cell("#101010")]);
   const geometry = {
     chrome: one - 1,
@@ -246,8 +244,8 @@ export function stripPrivateGlyphs(options: StripShape): string {
   const cell = (bgcolor: string): RichText =>
     new RichText("x", { end: "", style: new Style({ bgcolor }) });
   const cells = [cell("#101010"), cell("#202020")];
-  const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(drawn.text);
+  const { lines } = draw(new Strip(cells, joiner), { colorSystem: null });
+  return privateGlyphsIn(plainOf(lines.flat()));
 }
 
 function toCell(seg: RenderedSegmentLike, padding: number): RichText {
@@ -264,10 +262,10 @@ function toCell(seg: RenderedSegmentLike, padding: number): RichText {
 }
 
 /**
- * [LAW:single-enforcer] The one place RichText cells become an ANSI byte
- * string. Every render path (DSL RichText[] via the template-engine
- * pipeline, buildLineStrip's input-shape adapter, debug per-segment
- * serialization) flows through here. The wrap dispatch lives here too:
+ * [LAW:single-enforcer] The one place RichText cells become lines of runs.
+ * Every render path (DSL RichText[] via the template-engine pipeline,
+ * buildLineStrip's input-shape adapter, debug per-segment serialization)
+ * flows through here. The wrap dispatch lives here too:
  * wrap enabled at a finite width → FlexStrip (rich-js owns the wrap
  * algebra); otherwise → Strip, one unbounded line.
  *
@@ -275,13 +273,17 @@ function toCell(seg: RenderedSegmentLike, padding: number): RichText {
  * branches: `wrap` (the globals.autoWrap policy) gates whether the finite
  * width acts as a break limit. An infinite width has nothing to break at,
  * so it renders unbounded regardless of `wrap`.
+ *
+ * Strip and FlexStrip each end their own last line, which `runLines` reads as
+ * that line's end, so a row is its lines' content and no more. A row of no
+ * cells draws nothing and is still a row: one line of no runs.
  */
 export function drawStripCells(
   cells: readonly RichText[],
   options: BuildLineOptions,
   motion: RowMotion = STILL,
 ): DrawnRow {
-  if (cells.length === 0) return { text: "", nextChange: Infinity };
+  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
@@ -294,19 +296,9 @@ export function drawStripCells(
   // [LAW:single-enforcer] An effect wraps the whole composed strip, here, so a
   // powerline seam's ink — its left cell's fill — moves with that cell. The
   // effect reads the row's width off the frame it draws.
-  const out =
-    motion.kind === "still"
-      ? draw(strip, drawn)
-      : draw(motion.wrap(strip), { ...drawn, time: motion.time });
-  // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
-  // block renderable's contract in rich-js); a row here is a line's CONTENT —
-  // the caller joins rows with "\n" — so the one terminator comes off here.
-  if (!out.text.endsWith("\n")) {
-    throw new Error(
-      "drawStripCells: rich-js strip output did not end its last line",
-    );
-  }
-  return { text: out.text.slice(0, -1), nextChange: out.nextChange };
+  return motion.kind === "still"
+    ? draw(strip, drawn)
+    : draw(motion.wrap(strip), { ...drawn, time: motion.time });
 }
 
 // A row's bytes alone, for a caller that draws no motion.
@@ -314,7 +306,10 @@ export function renderStripCells(
   cells: readonly RichText[],
   options: BuildLineOptions,
 ): string {
-  return drawStripCells(cells, options).text;
+  return encodeAnsi(
+    drawStripCells(cells, options).lines,
+    options.colorCompatibility,
+  );
 }
 
 /**

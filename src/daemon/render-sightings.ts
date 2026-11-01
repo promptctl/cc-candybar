@@ -76,7 +76,7 @@ export function transcriptSaid(
 }
 
 // [LAW:types-are-the-program] What the session's bar drew, read off the frame
-// itself (`DrawnFrame`, src/dsl/render.ts): whether anything on it changes
+// itself (`Frame`, src/render/frame.ts): whether anything on it changes
 // without new data — an effect, a transition, a template's `frames` — so the
 // doctor asks Claude Code for a redraw a second exactly when the bar needs one
 // (brandon-doctor-v62x.tgp). A render that threw drew nothing.

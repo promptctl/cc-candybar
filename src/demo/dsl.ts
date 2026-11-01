@@ -64,6 +64,7 @@ import { SessionState } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { drawDsl } from "../dsl/render.js";
 import { SessionEffects } from "../render/effect.js";
+import { ansiOf } from "../render/frame.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { debug } from "../utils/logger.js";
@@ -208,7 +209,7 @@ async function renderFrames(): Promise<void> {
         at,
         new Map(),
       );
-      const { text: line } = drawDsl(
+      const { frame: drawn } = drawDsl(
         state.config,
         state.compiled,
         view.store,
@@ -224,7 +225,7 @@ async function renderFrames(): Promise<void> {
         { ...effective, effects },
       );
       process.stdout.write(
-        line
+        ansiOf(drawn)
           .split("\n")
           .map((row) => `  ${row}\n`)
           .join(""),

@@ -45,6 +45,7 @@ import {
 } from "../src/config/menu-timeout";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import { selectionFor } from "./helpers/selection";
+import { ansiOf, type Frame } from "../src/render/frame";
 
 const at = (s: number): Instant => s as Instant;
 
@@ -329,7 +330,7 @@ function buildRuntime(src: string) {
       OPTS,
       { perSegmentSink: sink },
       selectionFor(config, idleSince === undefined ? {} : { idleSince }),
-    );
+    ).frame;
   };
   sessionState.set(
     SID,
@@ -347,7 +348,7 @@ function buildRuntime(src: string) {
     log: (_level, line) => logged.push(line),
   };
   const clickWriting = async (key: string, value: string): Promise<void> => {
-    const url = linkUrls(draw(instantOf(new Date())).text).find((u) =>
+    const url = linkUrls(ansiOf(draw(instantOf(new Date())))).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
@@ -359,6 +360,9 @@ function buildRuntime(src: string) {
     sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
   return { config, draw, clickWriting, held, logged, ctx };
 }
+
+const menuRows = (frame: Frame): number =>
+  frame.rows.filter((row) => row.kind === "menu").length;
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
 const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
@@ -384,11 +388,11 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     await rt.clickWriting(library, "edit.default.insert.0");
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
-    expect(rt.draw(instantOf(new Date())).menuRows).toBeGreaterThan(0);
+    expect(menuRows(rt.draw(instantOf(new Date())))).toBeGreaterThan(0);
     await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(library)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
-    expect(rt.draw(instantOf(new Date())).menuRows).toBe(0);
+    expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
     expect(rt.logged).toContain(
       `menu-idle: closed=${library} idle=30.0s timeout=30s (session=${SID})`,
     );
@@ -412,7 +416,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     expect(rt.held("groups.more")).toBe("more");
     await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held("groups.more")).toBe(DISCLOSURE_CLOSED);
-    expect(rt.draw(instantOf(new Date())).menuRows).toBe(0);
+    expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
   });
 
   test("with nothing open it writes nothing, and says so", async () => {
@@ -439,28 +443,28 @@ describe("the flash on the bar", () => {
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     const calm = rt.draw(LIT);
     const lit = rt.draw(LIT, SINCE);
-    expect(calm.menuRows).toBeGreaterThan(0);
-    const bar = rows(calm.text).length - calm.menuRows;
+    expect(menuRows(calm)).toBeGreaterThan(0);
+    const bar = calm.rows.filter((row) => row.kind === "bar").length;
     // The risen door's rows stack over the bar's: the bar is the last rows.
-    expect(rows(lit.text).slice(-bar)).toEqual(rows(calm.text).slice(-bar));
+    expect(rows(ansiOf(lit)).slice(-bar)).toEqual(rows(ansiOf(calm)).slice(-bar));
     const menu = (text: string) => rows(text).slice(0, -bar);
-    expect(menu(lit.text)).not.toEqual(menu(calm.text));
+    expect(menu(ansiOf(lit))).not.toEqual(menu(ansiOf(calm)));
     // Light changes colour, never the words.
-    expect(stripAnsi(lit.text)).toBe(stripAnsi(calm.text));
+    expect(stripAnsi(ansiOf(lit))).toBe(stripAnsi(ansiOf(calm)));
     expect(lit.motion).toBe("moves");
     // Lit, a menu row is one colour: every cell on the flash's fill.
     const grounds = (row: string): Set<string> =>
       new Set([...row.matchAll(/48;2;(\d+;\d+;\d+)m/g)].map((m) => m[1]!));
-    for (const row of menu(lit.text)) expect(grounds(row).size).toBe(1);
-    expect(grounds(menu(calm.text)[0]!).size).toBeGreaterThan(1);
+    for (const row of menu(ansiOf(lit))) expect(grounds(row).size).toBe(1);
+    expect(grounds(menu(ansiOf(calm))[0]!).size).toBeGreaterThan(1);
   });
 
   test("dark between flashes, and before the flash begins, the bar is as it was", async () => {
     const rt = buildRuntime(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    expect(rt.draw(DARK, SINCE).text).toBe(rt.draw(DARK).text);
+    expect(ansiOf(rt.draw(DARK, SINCE))).toBe(ansiOf(rt.draw(DARK)));
     const waiting = rt.draw(BEFORE, SINCE);
-    expect(waiting.text).toBe(rt.draw(BEFORE).text);
+    expect(ansiOf(waiting)).toBe(ansiOf(rt.draw(BEFORE)));
     // Drawn as it was, yet it says when it changes: the flash's first lit hold
     // (candybar-animation-wbxz.014), so a feed drawing it is drawn then.
     expect(waiting.motion).toBe("moves");
@@ -496,8 +500,8 @@ describe("the flash on the bar", () => {
   test("a bar with no menu open draws no menu rows, and never flashes", () => {
     const rt = buildRuntime(BUNDLED);
     const frame = rt.draw(LIT, SINCE);
-    expect(frame.menuRows).toBe(0);
-    expect(frame.text).toBe(rt.draw(LIT).text);
+    expect(menuRows(frame)).toBe(0);
+    expect(ansiOf(frame)).toBe(ansiOf(rt.draw(LIT)));
     expect(frame.motion).toBe("still");
   });
 });

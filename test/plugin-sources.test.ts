@@ -46,6 +46,7 @@ import { ABSENT, ok, PENDING } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
+import { ansiOf } from "../src/render/frame";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
@@ -179,7 +180,7 @@ function draw(view: SessionView<SessionSource>): {
 } {
   const effective = view.source.effective();
   const errors: string[] = [];
-  const frame = drawDsl(
+  const { frame } = drawDsl(
     view.state.config,
     view.state.compiled,
     view.store,
@@ -190,7 +191,7 @@ function draw(view: SessionView<SessionSource>): {
     { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
     effective,
   );
-  return { text: stripAnsi(frame.text), errors };
+  return { text: stripAnsi(ansiOf(frame)), errors };
 }
 
 // The view of session `sid`, held as a render holds it, released at cleanup.
