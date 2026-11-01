@@ -477,7 +477,7 @@ export function handoffRows(
           cell(
             label,
             new Style({ bgcolor: bg, color: fg }).withLink(
-              viewerLink(sessionId, open),
+              viewerLink(sessionId, open, "open diagnostics"),
             ),
           ),
         ];
@@ -485,7 +485,7 @@ export function handoffRows(
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
-function viewerLink(sessionId: string, key: string, says?: string): string {
+function viewerLink(sessionId: string, key: string, says: string): string {
   return effectsUrl(
     [{ verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] }],
     says,

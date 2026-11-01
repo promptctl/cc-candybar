@@ -72,6 +72,7 @@ import {
 } from "./menu-keys.js";
 import {
   DISCLOSURE_CLOSED,
+  DISCLOSURE_OPEN,
   DISCLOSURE_GLYPH_CLOSE,
   escapeTemplateLiteral,
   disclosureCycleAction,
@@ -110,7 +111,7 @@ const TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
 const EDIT_LIVE_REF: DisclosureRef = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
-  member: "open",
+  member: DISCLOSURE_OPEN,
 };
 // Configuring a placement shows the live output too: its settings change what
 // it draws, and a name cannot show that.

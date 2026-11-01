@@ -133,6 +133,14 @@ describe("a link says in words what its click does", () => {
       "close pickers",
     ],
     [
+      { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
+      "open candybar.menu",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "my.menus.x", "closed"] },
+      "close my.menus.x",
+    ],
+    [
       { verb: VERB_SET_STATE, args: [SID, "menupages.menus.pickers", "2"] },
       "turn pickers to page 3",
     ],
@@ -203,7 +211,7 @@ describe("a link says in words what its click does", () => {
     [{ verb: VERB_RUN, args: [SID, "deploy", "{}", MAC] }, "run deploy"],
     [
       { verb: VERB_REPO_CONFIG, args: [SID, "/tmp/repo", "approved", MAC] },
-      "approved config in /tmp/repo",
+      "mark config in /tmp/repo approved",
     ],
   ])("%j says %s", (effect, text) => {
     expect(does([effect])).toBe(text);
@@ -225,6 +233,12 @@ describe("a link says in words what its click does", () => {
           verb: VERB_SET_STATE,
           args: [SID, "commands.clear.armed", "disarmed"],
         },
+        { verb: VERB_SLASH, args: [SID, "/clear"] },
+      ]),
+    ).toBe("type /clear and 1 more");
+    expect(
+      does([
+        { verb: VERB_STEP_STATE, args: [SID, "padding", "1"] },
         { verb: VERB_SLASH, args: [SID, "/clear"] },
       ]),
     ).toBe("type /clear and 1 more");

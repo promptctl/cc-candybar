@@ -33,6 +33,7 @@ import type {
 } from "./dsl-types.js";
 import {
   DISCLOSURE_CLOSED,
+  DISCLOSURE_OPEN,
   DISCLOSURE_GLYPH_CLOSE,
   disclosureCycleAction,
   disclosureGate,
@@ -58,7 +59,7 @@ export const HELP_GLYPH_CLOSED = "(?)";
 
 // The open member of a help disclosure's binary key: it holds this or the shared
 // CLOSED sentinel, like every other binary disclosure in the bar.
-const HELP_OPEN = "open";
+const HELP_OPEN = DISCLOSURE_OPEN;
 
 // [LAW:one-source-of-truth] The declarations a `(?)` contributes, keyed by final
 // name — the same accumulator shape `ChromeArtifacts`/`MenuArtifacts` already

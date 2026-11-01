@@ -30,7 +30,7 @@
 
 import { URLSearchParams } from "node:url";
 
-import { DISCLOSURE_CLOSED } from "../config/disclosure.js";
+import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { MENU_NS, MENU_PAGE_NS } from "../config/loader/reserved-namespace.js";
 
@@ -197,39 +197,11 @@ export interface Effect {
   readonly args: readonly string[];
 }
 
-// [LAW:types-are-the-program] Every verb a click can fire: VERB_DISPATCH is the
-// list these ride in, and doctor-probe and tmux-status-click arrive as whole
-// URLs from outside a draw, so none of those three is ever an effect.
-export type EffectVerb =
-  | typeof VERB_SET_STATE
-  | typeof VERB_STEP_STATE
-  | typeof VERB_COPY
-  | typeof VERB_OPEN_VSCODE
-  | typeof VERB_TOOLBAR_TOGGLE
-  | typeof VERB_LOAD_CONFIG
-  | typeof VERB_SET_CONFIG
-  | typeof VERB_STEP_CONFIG
-  | typeof VERB_SAVE
-  | typeof VERB_SAVE_PRESET
-  | typeof VERB_SAVE_THEME_DEFAULT
-  | typeof VERB_DELETE_PRESET
-  | typeof VERB_RESET_CONFIG
-  | typeof VERB_APPLY_LAYOUT_OP
-  | typeof VERB_UNDO
-  | typeof VERB_REDO
-  | typeof VERB_BACK
-  | typeof VERB_REWIND
-  | typeof VERB_APPLY_UPDATE
-  | typeof VERB_DOCTOR_RUN
-  | typeof VERB_DOCTOR_FIX
-  | typeof VERB_DOCTOR_MARK
-  | typeof VERB_SLASH
-  | typeof VERB_RUN
-  | typeof VERB_REPO_CONFIG
-  | typeof VERB_COPY_DIAGNOSTIC;
-
 const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+
+const withoutNs = (key: string, ns: string): string =>
+  key.startsWith(ns) ? key.slice(ns.length) : key;
 
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar
@@ -237,16 +209,18 @@ const sayStep = (key: string, by: string): string =>
 // message's identity, which no reader can use, so its write says what it opens.
 function sayWrite(key: string, value: string): string {
   if (key === DIAGNOSTICS_VIEWING) return "open diagnostics";
-  const menu = key.replace(MENU_PAGE_NS, "").replace(MENU_NS, "");
+  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
   if (key.startsWith(MENU_PAGE_NS))
     return `turn ${menu} to page ${Number(value) + 1}`;
   if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
+  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
   return key.startsWith(MENU_NS) ? `open ${value}` : `set ${key} to ${value}`;
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Copied
-// text is the one thing a click can carry without bound. Both ends stay, by code
-// point: a path differs at its end, and half a surrogate pair cannot be encoded.
+// text is the one free text a click carries; the rest are names and paths. Both
+// ends stay, by code point: a path differs at its end, and half a surrogate pair
+// cannot be encoded.
 const COPIED_LENGTH = 60;
 const ELISION = "...";
 function saidCopy(text: string): string {
@@ -257,10 +231,12 @@ function saidCopy(text: string): string {
     : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
 }
 
-// [LAW:one-source-of-truth] What each verb does, in words, read off the args the
-// click carries, so the text cannot say anything the click does not do. A verb
-// says a phrase per write. Record keeps a new verb from riding unsaid.
-const SAYS: Record<EffectVerb, (args: readonly string[]) => string[]> = {
+// [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
+// words, read off the args the click carries, so the text cannot say anything
+// the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
+// list these ride in, and doctor-probe and tmux-status-click arrive as whole
+// URLs from outside a draw, so none of those three is ever an effect.
+const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
     pairs.flatMap((key, i) =>
       i % 2 === 0 ? [sayWrite(key, pairs[i + 1]!)] : [],
@@ -288,9 +264,13 @@ const SAYS: Record<EffectVerb, (args: readonly string[]) => string[]> = {
   [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
   [VERB_SLASH]: ([, line]) => [`type ${line}`],
   [VERB_RUN]: ([, action]) => [`run ${action}`],
-  [VERB_REPO_CONFIG]: ([, dir, answer]) => [`${answer} config in ${dir}`],
+  [VERB_REPO_CONFIG]: ([, dir, answer]) => [`mark config in ${dir} ${answer}`],
   [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"],
-};
+} satisfies Record<string, (args: readonly string[]) => string[]>;
+
+// [LAW:types-are-the-program] A verb the table does not say is no effect, so a
+// new verb cannot ride unsaid.
+export type EffectVerb = keyof typeof SAYS;
 
 // [LAW:single-enforcer] Form encoding, with `/` and `:` left as themselves so a
 // path or a layout op reads as it is written. Every character of the words
@@ -305,9 +285,11 @@ const spell = (text: string): string =>
 // are the bar's own housekeeping, so whatever else the click does is its face:
 // a confirm disarms first, but what it does is what it fires.
 function clickDoes(effects: readonly Effect[]): string {
+  const writesSession = (e: Effect): boolean =>
+    e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
   const [face = "nothing", ...rest] = [
-    ...effects.filter((e) => e.verb !== VERB_SET_STATE),
-    ...effects.filter((e) => e.verb === VERB_SET_STATE),
+    ...effects.filter((e) => !writesSession(e)),
+    ...effects.filter(writesSession),
   ].flatMap((e) => SAYS[e.verb](e.args));
   return rest.length > 0 ? `${face} and ${rest.length} more` : face;
 }

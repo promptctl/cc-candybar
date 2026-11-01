@@ -179,7 +179,9 @@ describe.each([
 
   test("a click that acts beyond the session never reads as a session write", () => {
     const acting = links.filter((l) =>
-      effectsOf(l.url).some((e) => e.verb !== "set-state"),
+      effectsOf(l.url).some(
+        (e) => e.verb !== "set-state" && e.verb !== "step-state",
+      ),
     );
     expect(acting.length).toBeGreaterThan(0);
     expect(
