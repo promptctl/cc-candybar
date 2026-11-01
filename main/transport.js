@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.175.0";
+var PACKAGE_VERSION = "1.176.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35586,7 +35586,7 @@ var RATE_LIMITS = {
   // for any human click cadence.
   "click.pbcopy": 1e3,
   "click.open": 1e3,
-  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
+  // A click's probe, which holds the journal's turn for up to its 2 s timeout.
   "doctor.tmux": 1e3,
   "doctor.font": 1e3,
   "doctor.process": 1e3,
@@ -64169,6 +64169,18 @@ var BadVerbArgs = class extends Error {
     this.name = "BadVerbArgs";
   }
 };
+var DaemonClosing = class extends Error {
+  constructor(verb) {
+    super(`the daemon closed: ${verb} refused`);
+    this.name = "DaemonClosing";
+  }
+};
+var ClickAbandoned = class extends Error {
+  constructor(verb) {
+    super(`the client left: ${verb} not run`);
+    this.name = "ClickAbandoned";
+  }
+};
 function decodeWire(decode) {
   try {
     return decode();
@@ -68607,8 +68619,8 @@ function run(argv) {
   );
 }
 `;
-function jxa(launcher, args) {
-  const run3 = launcher.launchSync({
+async function jxa(launcher, args) {
+  const run3 = await launcher.launch({
     bin: "osascript",
     args: ["-l", "JavaScript", "-e", JXA, ...args],
     timeoutMs: 3e3,
@@ -68632,13 +68644,11 @@ function jxa(launcher, args) {
 }
 var glyphsOf2 = (points) => points.map((p2) => String.fromCodePoint(parseInt(p2, 16)));
 var pointsArg = (glyphs) => [...glyphs].map(hex).join(",");
-function macCoverage(launcher, ref, glyphs) {
-  const answer2 = jxa(launcher, [
-    "font",
-    ref.kind,
-    ref.name,
-    pointsArg(glyphs)
-  ]);
+async function macCoverage(launcher, ref, glyphs) {
+  const answer2 = await jxa(
+    launcher,
+    ["font", ref.kind, ref.name, pointsArg(glyphs)]
+  );
   if (answer2.kind === "failed") return answer2;
   const { lacks } = answer2.value;
   return {
@@ -68691,12 +68701,12 @@ function itermFontInUse(profiles, wanted2, version) {
     }
   };
 }
-function itermFont(launcher, version, env2, glyphs) {
+async function itermFont(launcher, version, env2, glyphs) {
   if (process_default.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
   const wanted2 = env2.ITERM_PROFILE ?? null;
-  const answer2 = jxa(launcher, ["iterm", wanted2 ?? "", pointsArg(glyphs)]);
+  const answer2 = await jxa(launcher, ["iterm", wanted2 ?? "", pointsArg(glyphs)]);
   if (answer2.kind === "failed") return answer2;
   const profiles = answer2.value.profiles.map((p2) => ({
     ...p2,
@@ -68730,8 +68740,8 @@ function fcMatchCoverage(output, glyphs) {
   return { kind: "ok", value: { font: fonts[0].family, lacks } };
 }
 var fcEscape = (value) => value.replace(/[\\:,=-]/g, "\\$&");
-function fcCoverage(launcher, family, glyphs) {
-  const run3 = launcher.launchSync({
+async function fcCoverage(launcher, family, glyphs) {
+  const run3 = await launcher.launch({
     bin: "fc-match",
     args: [
       "--sort",
@@ -68808,7 +68818,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   return { kind: "ok", value: found };
 }
-function alacrittyFont(launcher, env2, glyphs) {
+async function alacrittyFont(launcher, env2, glyphs) {
   const home = os_default.homedir();
   const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
     (p2) => fs_default.existsSync(p2)
@@ -68817,7 +68827,11 @@ function alacrittyFont(launcher, env2, glyphs) {
   if (named3.kind === "failed") return named3;
   const family = named3.value?.family ?? alacrittyDefaultFamily(process_default.platform);
   const from = named3.value?.from ?? (config2 === void 0 ? "Alacritty's default, no config file" : `Alacritty's default, ${config2} sets none`);
-  const drawn = coverage(launcher, { kind: "family", name: family }, glyphs);
+  const drawn = await coverage(
+    launcher,
+    { kind: "family", name: family },
+    glyphs
+  );
   if (drawn.kind === "failed") return drawn;
   const { font, lacks } = drawn.value;
   return {
@@ -68944,8 +68958,8 @@ function descendsFromRemoteLogin(table, pid2) {
   }
   return { kind: "ok", value: false };
 }
-function remoteLogin(launcher, pid2) {
-  const run3 = launcher.launchSync({
+async function remoteLogin(launcher, pid2) {
+  const run3 = await launcher.launch({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
     timeoutMs: 2e3,
@@ -68987,8 +69001,8 @@ function ownsEntry(entry) {
   const root = DAEMON_ENTRY.exec(real)?.[1];
   return root !== void 0 && fs_default.existsSync(import_node_path30.default.join(root, "bin", "cc-candybar"));
 }
-function daemons(launcher) {
-  const run3 = launcher.launchSync({
+async function daemons(launcher) {
+  const run3 = await launcher.launch({
     bin: "ps",
     args: [
       "-U",
@@ -69009,8 +69023,8 @@ function daemons(launcher) {
   }
   return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
 }
-function probeTmux(launcher, hint) {
-  const run3 = runTmux(launcher, hint, "doctor.tmux", [
+async function probeTmux(launcher, hint) {
+  const run3 = await runTmuxAsync(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
@@ -69079,10 +69093,10 @@ var FORGE_PROBE = {
     nonZero: "failed"
   }
 };
-function forgeLogin(launcher, cwd2) {
+async function forgeLogin(launcher, cwd2) {
   if (gitRootOf(cwd2) === void 0) return { kind: "ok", value: null };
   const remotes = remotesOf(
-    launcher.launchSync({
+    await launcher.launch({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd: cwd2,
@@ -69099,7 +69113,7 @@ function forgeLogin(launcher, cwd2) {
   const cli = FORGE_CLI[forge];
   const probe2 = FORGE_PROBE[forge];
   const host = probe2.loginHost(remoteHost(url));
-  const run3 = launcher.launchSync({
+  const run3 = await launcher.launch({
     bin: cli,
     args: [...probe2.args(host)],
     cwd: cwd2,
@@ -69163,10 +69177,10 @@ function settingsChains(originAt, bars) {
     elsewhere: [...others.values()].map(({ at, bars: its }) => chain2(at, its))
   };
 }
-function tmuxFacts(edge, hint) {
+async function tmuxFacts(edge, hint) {
   if (hint === void 0) return { kind: "unreported" };
   if (hint === null) return { kind: "outside" };
-  return { kind: "inside", hint, client: edge.probeTmux(hint) };
+  return { kind: "inside", hint, client: await edge.probeTmux(hint) };
 }
 function terminalIdentity(tmux3, env2) {
   switch (tmux3.kind) {
@@ -69190,7 +69204,7 @@ function terminalIdentity(tmux3, env2) {
     }
   }
 }
-function terminalFacts(edge, identity3, hints, glyphs) {
+async function terminalFacts(edge, identity3, hints, glyphs) {
   if (identity3.kind !== "seen") return identity3;
   const { identified, tmuxClient: client } = identity3;
   const env2 = hints.terminalEnv;
@@ -69199,7 +69213,7 @@ function terminalFacts(edge, identity3, hints, glyphs) {
   if (isBundling(name)) return { kind: "bundling", name, version };
   if (!isConfigured(name)) return { kind: "unread", name, version };
   const { ITERM_PROFILE: startedIn, ...unattached } = env2 ?? {};
-  const remote = client === null ? { kind: "ok", value: hints.ssh === true } : edge.remoteLogin(client.pid);
+  const remote = client === null ? { kind: "ok", value: hints.ssh === true } : await edge.remoteLogin(client.pid);
   return {
     kind: "configured",
     name,
@@ -69212,7 +69226,7 @@ function terminalFacts(edge, identity3, hints, glyphs) {
     } : remote.value ? {
       kind: "failed",
       reason: "the terminal is on the far side of a remote login, so its font is on the machine it runs on"
-    } : edge.fontInUse(
+    } : await edge.fontInUse(
       { name, version },
       client === null ? env2 ?? {} : unattached,
       glyphs
@@ -69234,14 +69248,14 @@ function clickArrived(arrival) {
       };
   }
 }
-function need(segments, fact) {
+async function need(segments, fact) {
   const [first2, ...rest2] = segments;
-  return first2 === void 0 ? { kind: "unneeded" } : { kind: "needed", segments: [first2, ...rest2], fact: fact() };
+  return first2 === void 0 ? { kind: "unneeded" } : { kind: "needed", segments: [first2, ...rest2], fact: await fact() };
 }
-function segmentDataFacts(edge, needs, origin, rateLimits) {
+async function segmentDataFacts(edge, needs, origin, rateLimits) {
   return {
-    pullRequests: need(needs.pullRequests, () => edge.forge(origin.cwd)),
-    rateLimits: need(needs.rateLimits, () => rateLimits)
+    pullRequests: await need(needs.pullRequests, () => edge.forge(origin.cwd)),
+    rateLimits: await need(needs.rateLimits, () => rateLimits)
   };
 }
 function sessionWidth(sessionId2, said) {
@@ -69257,14 +69271,14 @@ function sessionWidth(sessionId2, said) {
     }
   };
 }
-function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits, transcripts, sighted, bars, width, stores) {
+async function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits, transcripts, sighted, bars, width, stores) {
   const load = edge.loadConfig(origin);
   const globals = resolveEffectiveGlobals(
     load.config,
     sessionPick,
     () => false
   );
-  const tmux3 = tmuxFacts(edge, hints.tmux);
+  const tmux3 = await tmuxFacts(edge, hints.tmux);
   const terminal = terminalIdentity(tmux3, hints.terminalEnv);
   const glyphs = [
     .../* @__PURE__ */ new Set([
@@ -69272,33 +69286,38 @@ function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits, tran
       ...privateGlyphsIn(JSON.stringify(load.config))
     ])
   ].join("");
+  const [nerdFont2, processes, data] = await Promise.all([
+    // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
+    // union: none to draw is the arm with no terminal to read.
+    glyphs === "" ? { kind: "none" } : terminalFacts(edge, terminal, hints, glyphs).then((read2) => ({
+      kind: "glyphs",
+      glyphs,
+      terminal: read2
+    })),
+    edge.daemons(),
+    segmentDataFacts(
+      edge,
+      dataNeeds(load.config, globals.preset),
+      origin,
+      rateLimits
+    )
+  ]);
   return {
     tmux: tmux3,
     width,
     terminal,
-    // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
-    // union: none to draw is the arm with no terminal to read.
-    nerdFont: glyphs === "" ? { kind: "none" } : {
-      kind: "glyphs",
-      glyphs,
-      terminal: terminalFacts(edge, terminal, hints, glyphs)
-    },
+    nerdFont: nerdFont2,
     marks: stores.marks,
     clicked: stores.clicked,
     daemon: {
       serving,
-      processes: edge.daemons(),
+      processes,
       read: stores.postMortemsRead
     },
     config: configFacts(load, origin.target),
     sighted,
     frames: bars.kind === "failed" ? bars : { kind: "read" },
-    data: segmentDataFacts(
-      edge,
-      dataNeeds(load.config, globals.preset),
-      origin,
-      rateLimits
-    ),
+    data,
     transcripts: transcriptReads2(edge, transcripts),
     claudeSettings: settingsChains(
       {
@@ -69540,6 +69559,7 @@ var RuntimeStats = class _RuntimeStats {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -69600,6 +69620,7 @@ var RuntimeStats = class _RuntimeStats {
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
+      journalTurns: extras.journalTurns,
       runs: extras.runs,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
@@ -69697,26 +69718,26 @@ function tmuxPaneOf(tmux3) {
   }
   return { kind: "pane", hint: tmux3 };
 }
-function typeSlash(edge, hint, line) {
+async function typeSlash(edge, hint, line) {
   const pane = tmuxPaneOf(hint);
   if (pane.kind === "refused") return pane;
   const tmux3 = pane.hint;
-  const state = promptState(edge.read(tmux3));
+  const state = promptState(await edge.read(tmux3));
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };
   }
-  const typed = edge.type(tmux3, line);
+  const typed = await edge.type(tmux3, line);
   return typed.kind === "typed" ? { kind: "typed", pane: tmux3.pane } : typed;
 }
 var THEN = ";";
 var BUFFER = "cc-candybar-slash";
-function tmux(launcher, hint, category, args, stdinInput) {
-  const run3 = runTmux(launcher, hint, category, args, stdinInput);
+async function tmux(launcher, hint, category, args, stdinInput) {
+  const run3 = await runTmuxAsync(launcher, hint, category, args, stdinInput);
   if (run3.kind === "failed") throw new Error(run3.reason);
   return run3;
 }
-function read(launcher, hint) {
-  const run3 = tmux(launcher, hint, "claude-input.read", [
+async function read(launcher, hint) {
+  const run3 = await tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -69754,8 +69775,8 @@ function pasteLineArgs(pane, buffer, before) {
     "Enter"
   ];
 }
-function type2(launcher, hint, line) {
-  const run3 = tmux(
+async function type2(launcher, hint, line) {
+  const run3 = await tmux(
     launcher,
     hint,
     "claude-input.type",
@@ -69791,24 +69812,35 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
-function clickLaunch(launcher, opts, what, log) {
-  const result = launcher.launchSync(opts);
+var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
+async function clickLaunch(launcher, opts, what, log) {
+  const result = await launcher.launch({
+    ...opts,
+    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
+  });
   if (result.ok) return;
   if (result.reason === "rate-limited") {
     log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
+  if (result.reason === "aborted") throw new DaemonClosing(what);
   const said = result.error ?? result.stderr.trim();
   throw new Error(
     `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`
   );
 }
 function pbcopy(text4, ctx) {
-  clickLaunch(
-    ctx.launcher,
-    { bin: "/usr/bin/pbcopy", stdinInput: text4, category: "click.pbcopy" },
-    "pbcopy",
-    ctx.log
+  return ctx.landed(
+    clickLaunch(
+      ctx.launcher,
+      {
+        bin: "/usr/bin/pbcopy",
+        stdinInput: text4,
+        category: "click.pbcopy"
+      },
+      "pbcopy",
+      ctx.log
+    )
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -69821,7 +69853,7 @@ function requireDrawer(by) {
     throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
   return by;
 }
-var copyDiagnostic = (value, ctx) => {
+var copyDiagnostic = async (value, ctx) => {
   const [sessionId2 = "", by = "", key = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -69831,25 +69863,27 @@ var copyDiagnostic = (value, ctx) => {
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
     );
-  pbcopy(text4, ctx);
+  await pbcopy(text4, ctx);
 };
-var openVscode = (value, ctx) => clickLaunch(
-  ctx.launcher,
-  {
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", oneArg(value)],
-    category: "click.open"
-  },
-  'open -a "Visual Studio Code"',
-  ctx.log
+var openVscode = (value, ctx) => ctx.landed(
+  clickLaunch(
+    ctx.launcher,
+    {
+      bin: "/usr/bin/open",
+      args: ["-a", "Visual Studio Code", oneArg(value)],
+      category: "click.open"
+    },
+    'open -a "Visual Studio Code"',
+    ctx.log
+  )
 );
-var toolbarToggle = (value, ctx) => {
+var toolbarToggle = async (value, ctx) => {
   const sessionId2 = requireSessionId(oneArg(value));
   const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
   if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
   else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
 };
-var setState = (rawValue, ctx) => {
+var setState = async (rawValue, ctx) => {
   const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId2);
   const gate2 = stateGate(sessionConfig(ctx, sid));
@@ -69889,7 +69923,7 @@ function stepWithin(current, by, min2, max2) {
   if (n < min2) return current === min2 ? max2 : min2;
   return n;
 }
-var stepState = (rawValue, ctx) => {
+var stepState = async (rawValue, ctx) => {
   const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -70043,7 +70077,7 @@ function editStore(ctx, sid) {
     logger: ctx.log
   };
 }
-var setConfig = (rawValue, ctx) => {
+var setConfig = async (rawValue, ctx) => {
   const [sessionId2 = "", key = "", incoming = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -70071,7 +70105,7 @@ var setConfig = (rawValue, ctx) => {
     `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
   );
 };
-var stepConfig = (rawValue, ctx) => {
+var stepConfig = async (rawValue, ctx) => {
   const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -70119,7 +70153,7 @@ var stepConfig = (rawValue, ctx) => {
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
 };
-var save = (value, ctx) => {
+var save = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -70162,7 +70196,7 @@ function gatePlacements(verb, gate2, placements) {
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
-var savePreset = (value, ctx) => {
+var savePreset = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -70200,7 +70234,7 @@ var savePreset = (value, ctx) => {
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
 };
-var saveThemeDefault = (value, ctx) => {
+var saveThemeDefault = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -70230,7 +70264,7 @@ var saveThemeDefault = (value, ctx) => {
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
 };
-var deletePreset2 = (value, ctx) => {
+var deletePreset2 = async (value, ctx) => {
   const [sessionId2 = "", name = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   if (!name) {
@@ -70246,7 +70280,7 @@ var deletePreset2 = (value, ctx) => {
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
-var resetConfig = (value, ctx) => {
+var resetConfig = async (value, ctx) => {
   const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -70293,7 +70327,7 @@ function endedSessionKeys(ended, configuring) {
     ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
   ]);
 }
-var applyLayoutOp2 = (rawValue, ctx) => {
+var applyLayoutOp2 = async (rawValue, ctx) => {
   const [sessionId2 = "", key = "", opToken = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -70327,7 +70361,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
-var undo = (value, ctx) => {
+var undo = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   ctx.journal.commit();
@@ -70335,7 +70369,7 @@ var undo = (value, ctx) => {
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
-var back = (value, ctx) => {
+var back = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
@@ -70345,7 +70379,7 @@ var back = (value, ctx) => {
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
-var rewind = (value, ctx) => {
+var rewind = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
   const restored = ctx.history.rewind(sid);
@@ -70355,7 +70389,7 @@ var rewind = (value, ctx) => {
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
 };
-var redo = (value, ctx) => {
+var redo = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   ctx.journal.commit();
@@ -70363,7 +70397,7 @@ var redo = (value, ctx) => {
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var applyUpdate = (value, ctx) => {
+var applyUpdate = async (value, ctx) => {
   requireSessionId(oneArg(value));
   ctx.applyUpdate();
 };
@@ -70394,7 +70428,7 @@ function writeReport(ctx, sid, facts) {
     `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
 }
-function clickFacts(ctx, sid) {
+async function clickFacts(ctx, sid) {
   const scope = {
     kind: "clicked",
     sessionId: sid,
@@ -70403,18 +70437,20 @@ function clickFacts(ctx, sid) {
   const said = ctx.clients.ofSession(sid, ctx.now());
   let gathered;
   try {
-    gathered = gatherFacts(
-      ctx.doctor,
-      sessionHints(ctx, sid),
-      sessionOrigin(ctx, sid),
-      (key) => ctx.sessionState.get(sid, key),
-      { kind: "ok", value: ctx.serving() },
-      { kind: "ok", value: said.map((s) => s.rateLimits) },
-      { kind: "ok", value: said.map((s) => s.transcript) },
-      scope,
-      { kind: "ok", value: barsOf(scope, said) },
-      sessionWidth(sid, said),
-      readStores(ctx.doctorStores)
+    gathered = await ctx.landed(
+      gatherFacts(
+        ctx.doctor,
+        sessionHints(ctx, sid),
+        sessionOrigin(ctx, sid),
+        (key) => ctx.sessionState.get(sid, key),
+        { kind: "ok", value: ctx.serving() },
+        { kind: "ok", value: said.map((s) => s.rateLimits) },
+        { kind: "ok", value: said.map((s) => s.transcript) },
+        scope,
+        { kind: "ok", value: barsOf(scope, said) },
+        sessionWidth(sid, said),
+        readStores(ctx.doctorStores)
+      )
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -70448,11 +70484,11 @@ function clickedFrom(ctx, { terminal, clicked }) {
     return clicked;
   }
 }
-var doctorRun = (value, ctx) => {
+var doctorRun = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  writeReport(ctx, sid, clickFacts(ctx, sid));
+  writeReport(ctx, sid, await clickFacts(ctx, sid));
 };
-var doctorProbe = (value, ctx) => {
+var doctorProbe = async (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
     throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
@@ -70466,7 +70502,7 @@ var doctorProbe = (value, ctx) => {
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`
   );
 };
-var doctorFix = (value, ctx) => {
+var doctorFix = async (value, ctx) => {
   const [sessionId2 = "", checkName = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -70475,7 +70511,7 @@ var doctorFix = (value, ctx) => {
   if (check === void 0) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
-  const facts = clickFacts(ctx, sid);
+  const facts = await clickFacts(ctx, sid);
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === void 0) {
     throw new BadVerbArgs(
@@ -70492,7 +70528,7 @@ var doctorFix = (value, ctx) => {
   );
   writeReport(ctx, sid, after.value);
 };
-var doctorMark = (value, ctx) => {
+var doctorMark = async (value, ctx) => {
   const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -70506,7 +70542,7 @@ var doctorMark = (value, ctx) => {
       `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
     );
   }
-  const facts = clickFacts(ctx, sid);
+  const facts = await clickFacts(ctx, sid);
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.sighting === void 0) {
     throw new BadVerbArgs(
@@ -70529,7 +70565,7 @@ var doctorMark = (value, ctx) => {
     marks
   });
 };
-var slash = (value, ctx) => {
+var slash = async (value, ctx) => {
   const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const declared = Object.values(
@@ -70541,10 +70577,8 @@ var slash = (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
-  const result = typeSlash(
-    ctx.claudeInput,
-    sessionHints(ctx, sid).tmux,
-    action2.slash
+  const result = await ctx.landed(
+    typeSlash(ctx.claudeInput, sessionHints(ctx, sid).tmux, action2.slash)
   );
   if (result.kind === "refused") {
     ctx.log(
@@ -70605,7 +70639,7 @@ function runOf([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) 
     }))
   };
 }
-var run2 = (value, ctx) => {
+var run2 = async (value, ctx) => {
   let named3 = { sessionId: "-", action: "-" };
   let request2;
   try {
@@ -70620,7 +70654,7 @@ var run2 = (value, ctx) => {
   }
   ctx.runs.start(request2);
 };
-var repoConfig = (value, ctx) => {
+var repoConfig = async (value, ctx) => {
   const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -70643,7 +70677,7 @@ var repoConfig = (value, ctx) => {
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
 var SESSION_CONFIG_OVERRIDE_KEY = "config-override";
-var loadConfig2 = (value, ctx) => {
+var loadConfig2 = async (value, ctx) => {
   const slash2 = value.indexOf("/");
   if (slash2 === -1) {
     throw new BadVerbArgs(
@@ -70771,6 +70805,11 @@ var dispatch = async (rawValue, ctx) => {
     try {
       await handler(value, ctx);
     } catch (e) {
+      if (e instanceof DaemonClosing) {
+        if (errors2.length > 0)
+          ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
+        throw e;
+      }
       if (!(e instanceof BadVerbArgs)) operational = true;
       errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -70796,7 +70835,7 @@ function throwAll(failures) {
     );
   }
 }
-function journaled(verb, handler, sessionOf, turnWaited) {
+function journaled(verb, handler, sessionOf, asker) {
   const inTurn = async (value, ctx, turn) => {
     const sid = sessionOf(value);
     const lanes = sid === null ? null : laneMeter(ctx, sid);
@@ -70824,7 +70863,8 @@ function journaled(verb, handler, sessionOf, turnWaited) {
         ...ctx,
         sessionState: closing(journal.sessionState),
         journal,
-        navigating: closing(navigation.sessionState)
+        navigating: closing(navigation.sessionState),
+        landed: turn.landed
       });
     } catch (e) {
       failures.push(e);
@@ -70852,11 +70892,7 @@ function journaled(verb, handler, sessionOf, turnWaited) {
     }
     throwAll(failures);
   };
-  return (value, ctx) => ctx.journalTurns.take(
-    verb,
-    (ms) => turnWaited(ctx, ms),
-    (turn) => inTurn(value, ctx, turn)
-  );
+  return (value, ctx) => ctx.journalTurns.take(verb, asker(ctx), (turn) => inTurn(value, ctx, turn));
 }
 var VERBS = new Map(
   [...LEAF_VERBS, [VERB_DISPATCH, dispatch]].map(([verb, handler]) => {
@@ -70877,7 +70913,7 @@ var VERBS = new Map(
           }
         },
         sessionOf,
-        (ctx, ms) => ctx.turnWaited(ms)
+        (ctx) => ({ waited: ctx.turnWaited, gone: ctx.clientGone })
       )
     ];
   })
@@ -70888,11 +70924,12 @@ var VERB_NAMES = Object.freeze([
 function closeIdleMenus(sid, idle, ctx) {
   return journaled(
     "menu-idle",
-    (_value, c) => {
+    async (_value, c) => {
       if (!idle.stillIdle()) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
       }
+      idle.closed();
       const roots = openRoots(
         nestOf(c, sid),
         (key) => c.navigating.get(sid, key)
@@ -70907,7 +70944,10 @@ function closeIdleMenus(sid, idle, ctx) {
       );
     },
     () => sid,
-    (c, ms) => c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`)
+    (c) => ({
+      waited: (ms) => c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
+      gone: () => false
+    })
   )("", ctx);
 }
 
@@ -75783,7 +75823,9 @@ function noteFacts(facts, learned) {
 var LEVEL = {
   ok: "info",
   "bad-request": "warn",
-  threw: "error"
+  threw: "error",
+  closing: "info",
+  abandoned: "info"
 };
 function detailOf(outcome) {
   switch (outcome.kind) {
@@ -75793,6 +75835,10 @@ function detailOf(outcome) {
       return [["problems", outcome.problems.join("; ")]];
     case "threw":
       return [["error", inspect(outcome.error)]];
+    case "closing":
+      return [["closing", outcome.error.message]];
+    case "abandoned":
+      return [["abandoned", "1"]];
   }
 }
 function requestEvent(kind, facts, outcome, tookMs) {
@@ -76770,7 +76816,7 @@ function subscription(req) {
     );
   return { kind: "subscribe", sessionId: sessionId2.id, lane };
 }
-async function handleRequest(parts, req, timedOut, accepted) {
+async function handleRequest(parts, req, timedOut, accepted, clientLeft) {
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse3("BAD_REQUEST", "malformed request");
   }
@@ -76804,9 +76850,9 @@ async function handleRequest(parts, req, timedOut, accepted) {
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse3("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(parts, req, timedOut, accepted));
+  return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
-async function replyTo(parts, req, timedOut, accepted) {
+async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   const {
     stats,
     clock,
@@ -76817,6 +76863,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     runs,
     effectSessions,
     menuIdle,
+    journalTurns,
     sessionState,
     tmuxStatusLines,
     watcherRegistry,
@@ -76863,6 +76910,7 @@ async function replyTo(parts, req, timedOut, accepted) {
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
         menuIdle: menuIdle.getStats(),
+        journalTurns: journalTurns.getStats(),
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),
@@ -76952,6 +77000,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N",
       queued: `${queuedMs}ms`
     });
     const { level, line } = requestEvent(
@@ -76970,8 +77019,16 @@ async function replyTo(parts, req, timedOut, accepted) {
   if (req.kind === "click") {
     const t0 = clock.monotonic();
     const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(parts, req, facts);
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const outcome = await clickOutcome(
+      parts,
+      req,
+      facts,
+      () => timedOut() || clientLeft()
+    );
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N"
+    });
     const { level, line } = requestEvent(
       "click",
       facts,
@@ -77076,7 +77133,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
   }
   return out;
 }
-async function clickOutcome(parts, req, facts) {
+async function clickOutcome(parts, req, facts, clientGone) {
   const { verb, value } = req;
   if (typeof verb !== "string" || typeof value !== "string") {
     return {
@@ -77092,21 +77149,26 @@ async function clickOutcome(parts, req, facts) {
       verb,
       value,
       { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
-      facts
+      facts,
+      clientGone
     );
   } catch (error) {
-    return error instanceof BadVerbArgs ? { kind: "bad-request", problems: [error.message] } : { kind: "threw", error };
+    if (error instanceof BadVerbArgs)
+      return { kind: "bad-request", problems: [error.message] };
+    if (error instanceof DaemonClosing) return { kind: "closing", error };
+    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
+    return { kind: "threw", error };
   }
 }
 var VERB_FACT = {
   link: "verb",
   "tmux-status": "linkVerb"
 };
-async function handleClick(parts, verb, value, arrival, facts) {
+async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   const { clock, menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
-    return statusLineClick(parts, value, facts);
+    return statusLineClick(parts, value, facts, clientGone);
   }
   const handler = VERBS.get(verb);
   if (!handler) {
@@ -77122,7 +77184,8 @@ async function handleClick(parts, verb, value, arrival, facts) {
   await handler(value, {
     ...verbCtx,
     arrival,
-    turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` })
+    turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+    clientGone
   });
   return { kind: "ok" };
 }
@@ -77138,10 +77201,12 @@ function clickReply(outcome) {
         daemonV: PROTOCOL_VERSION
       };
     case "threw":
+    case "closing":
+    case "abandoned":
       return renderFailed(outcome.error);
   }
 }
-async function statusLineClick(parts, value, facts) {
+async function statusLineClick(parts, value, facts, clientGone) {
   const { tmuxStatusLines } = parts;
   const refused = (problem) => ({
     kind: "bad-request",
@@ -77159,10 +77224,11 @@ async function statusLineClick(parts, value, facts) {
       parsed2.verb,
       parsed2.value,
       { via: "tmux-status" },
-      facts
+      facts,
+      clientGone
     );
   }
-  clickLaunch(
+  await clickLaunch(
     parts.launcher,
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
@@ -82929,7 +82995,7 @@ function paneOf(session) {
 }
 var LANE_SETUP = {
   band: {
-    on: (session, host, edge) => {
+    on: async (session, host, edge) => {
       const checkout = sourceCheckoutOf(host.bundle);
       if (checkout === null) {
         throw new BadVerbArgs(
@@ -82950,10 +83016,10 @@ var LANE_SETUP = {
     },
     // The installed mod draws nothing while the lane is off: the daemon
     // refuses its subscriber, and it hands the band on.
-    off: () => done("nothing to stop: the band mod draws nothing while the lane is off")
+    off: async () => done("nothing to stop: the band mod draws nothing while the lane is off")
   },
   statusline: {
-    on: (session, host, edge) => {
+    on: async (session, host, edge) => {
       const tmux3 = paneOf(session);
       const launcher = attachLauncherOf(host.preload);
       const missing = [host.preload, launcher].find(
@@ -82977,20 +83043,20 @@ var LANE_SETUP = {
     },
     // Lane off, the attached statusline is refused frames and shows its
     // command's output, as a stock one does.
-    off: () => done(
+    off: async () => done(
       "nothing to stop: the attached statusline draws its command's output while the lane is off"
     )
   },
   pane: {
-    on: (session, host, edge) => {
+    on: async (session, host, edge) => {
       const tmux3 = paneOf(session);
-      const open2 = edge.barPanes(tmux3);
+      const open2 = await edge.barPanes(tmux3);
       if (open2.length > 0) {
         return done(
           `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`
         );
       }
-      const opened = edge.openBarPane(
+      const opened = await edge.openBarPane(
         tmux3,
         [...host.node, host.bundle, "bar-pane", tmux3.pane],
         { CC_CANDYBAR_SOCKET: host.socket }
@@ -82999,14 +83065,14 @@ var LANE_SETUP = {
     },
     // Off is "no bar pane draws this session's bar", which a session with no
     // tmux pane already is.
-    off: (session, _host, edge) => {
+    off: async (session, _host, edge) => {
       const pane = tmuxPaneOf(session.hints.tmux);
       if (pane.kind === "refused") {
         return done(`no bar pane to close: ${pane.reason}`);
       }
       const tmux3 = pane.hint;
-      const open2 = edge.barPanes(tmux3);
-      for (const pane2 of open2) edge.closePane(tmux3, pane2);
+      const open2 = await edge.barPanes(tmux3);
+      for (const pane2 of open2) await edge.closePane(tmux3, pane2);
       return done(
         open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
       );
@@ -83016,11 +83082,11 @@ var LANE_SETUP = {
   // switch is on (src/daemon/tmux-status.ts), so there is nothing to start or
   // stop — only a session outside tmux to tell why nothing will be drawn.
   tmuxStatus: {
-    on: (session) => {
+    on: async (session) => {
       const tmux3 = paneOf(session);
       return done(`the daemon draws ${tmux3.pane}'s bar in its status line`);
     },
-    off: () => done(
+    off: async () => done(
       "nothing to stop: the daemon puts the status line back once the lane is off"
     )
   }
@@ -83033,7 +83099,11 @@ async function installBand(session, checkout, edge) {
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = typeSlash(edge.claudeInput, session.hints.tmux, RELOAD_PLUGINS);
+  const typed = await typeSlash(
+    edge.claudeInput,
+    session.hints.tmux,
+    RELOAD_PLUGINS
+  );
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -83079,7 +83149,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
       `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`
     );
   }
-  const loses = endingLoses(edge.claudeInput.read(tmux3));
+  const loses = endingLoses(await edge.claudeInput.read(tmux3));
   if (loses !== null) {
     throw new Error(
       `Claude Code in ${tmux3.pane} was left running: ${loses} \u2014 then turn ${LANES.statusline.label} off and on again`
@@ -83142,7 +83212,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
     );
   }
   try {
-    edge.typeShellLine(tmux3, line);
+    await edge.typeShellLine(tmux3, line);
   } catch (e) {
     throw stranded(
       `the line could not be typed into its pane (${e.message})`,
@@ -83268,7 +83338,7 @@ var LaneSetups = class {
     );
   }
   // Resolves once the setup has finished, however it ended.
-  sync(session, lane, on2, by) {
+  async sync(session, lane, on2, by) {
     const where = `by=${by} (session=${session.sessionId})`;
     const failed2 = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
@@ -83277,26 +83347,25 @@ var LaneSetups = class {
     };
     let outcome;
     try {
-      outcome = LANE_SETUP[lane][on2 ? "on" : "off"](
+      outcome = await LANE_SETUP[lane][on2 ? "on" : "off"](
         session,
         this.deps.host,
         this.deps.edge
       );
     } catch (error) {
       failed2(error);
-      return Promise.resolve();
+      return;
     }
     this.deps.log(
       "info",
       `lane: ${lane} ${on2 ? "on" : "off"} \u2014 ${outcome.said} ${where}`
     );
     if (outcome.kind === "underway") {
-      return outcome.finished.then(
+      await outcome.finished.then(
         (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
         failed2
       );
     }
-    return Promise.resolve();
   }
 };
 
@@ -83363,8 +83432,8 @@ function launcherNode(pathVariable, isExecutable, canonical2) {
 var SHELL_BUFFER = "cc-candybar-lane";
 var EXIT_POLL_MS = 100;
 var SHELL_PATIENCE_MS = 2e3;
-function tmux2(launcher, hint, args, stdinInput) {
-  const run3 = runTmux(launcher, hint, "lane.tmux", args, stdinInput);
+async function tmux2(launcher, hint, args, stdinInput) {
+  const run3 = await runTmuxAsync(launcher, hint, "lane.tmux", args, stdinInput);
   if (run3.kind !== "ok") throw new Error(run3.reason);
   return run3.stdout;
 }
@@ -83496,14 +83565,19 @@ function productionLaneEdge(launcher, following, closing) {
   const wait = (ms) => setTimeout2(ms, void 0, { signal: closing });
   return {
     claudeInput: productionClaudeInputEdge(launcher),
-    barPanes: (hint) => taggedBarPanes(
-      tmux2(launcher, hint, ["list-panes", "-a", "-F", PANE_TAGS_FORMAT]),
+    barPanes: async (hint) => taggedBarPanes(
+      await tmux2(launcher, hint, [
+        "list-panes",
+        "-a",
+        "-F",
+        PANE_TAGS_FORMAT
+      ]),
       hint.pane
     ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
-    openBarPane: (hint, argv2, env2) => {
-      const opened = tmux2(launcher, hint, [
+    openBarPane: async (hint, argv2, env2) => {
+      const split2 = await tmux2(launcher, hint, [
         "split-window",
         "-d",
         "-v",
@@ -83516,8 +83590,9 @@ function productionLaneEdge(launcher, following, closing) {
         "#{pane_id}",
         ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
         ...argv2
-      ]).trim();
-      tmux2(launcher, hint, [
+      ]);
+      const opened = split2.trim();
+      await tmux2(launcher, hint, [
         "set-option",
         "-p",
         "-t",
@@ -83527,7 +83602,7 @@ function productionLaneEdge(launcher, following, closing) {
       ]);
       return opened;
     },
-    closePane: (hint, pane) => void tmux2(launcher, hint, ["kill-pane", "-t", pane]),
+    closePane: async (hint, pane) => void await tmux2(launcher, hint, ["kill-pane", "-t", pane]),
     // [LAW:single-enforcer] The session's process environment: the
     // session's facts, never those of whichever shell spawned this detached
     // daemon.
@@ -83625,7 +83700,7 @@ function productionLaneEdge(launcher, following, closing) {
     },
     // Typed as a slash command is, but with no ctrl+s first: in a shell that
     // stops the terminal's output.
-    typeShellLine: (hint, line) => void tmux2(
+    typeShellLine: async (hint, line) => void await tmux2(
       launcher,
       hint,
       pasteLineArgs(hint.pane, SHELL_BUFFER, []),
@@ -83705,20 +83780,42 @@ var JournalTurns = class {
   queue = new KeyedSerialQueue();
   open = true;
   inFlight = null;
-  // Runs `body` in its turn; `waited` hears how many ms the turn took to come.
-  take(verb, waited, body) {
+  holder = null;
+  queued = 0;
+  // Runs `body` in its turn, unless the daemon closed or the asker left while
+  // it waited: a click whose client took a TIMEOUT never lands, so clicking
+  // again cannot revert a toggle.
+  take(verb, { waited, gone }, body) {
     const asked2 = this.deps.monotonic();
+    this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
-      if (!this.open) throw new Error(`the daemon closed: ${verb} refused`);
-      waited(Math.round(this.deps.monotonic() - asked2));
-      return body({
-        holds: (commit3) => {
-          const held = { verb, commit: commit3 };
-          this.inFlight = held;
-          return () => this.commit(held);
-        }
-      });
+      this.queued--;
+      this.refuseClosed(verb);
+      if (gone()) throw new ClickAbandoned(verb);
+      const since = this.deps.monotonic();
+      waited(Math.round(since - asked2));
+      this.holder = { verb, since };
+      try {
+        return await body({
+          holds: (commit3) => {
+            const held = { verb, commit: commit3 };
+            this.inFlight = held;
+            return () => this.commit(held);
+          },
+          landed: (p2) => p2.finally(() => this.refuseClosed(verb))
+        });
+      } finally {
+        this.holder = null;
+      }
     });
+  }
+  getStats() {
+    const { holder, queued } = this;
+    return {
+      holder: holder?.verb ?? null,
+      heldMs: holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
+      queued
+    };
   }
   close() {
     this.open = false;
@@ -83728,6 +83825,9 @@ var JournalTurns = class {
       `journal: ${this.inFlight.verb} cut off by close, committing what landed`
     );
     this.commit(this.inFlight);
+  }
+  refuseClosed(verb) {
+    if (!this.open) throw new DaemonClosing(verb);
   }
   commit(held) {
     if (this.inFlight !== held) return false;
@@ -83794,7 +83894,8 @@ var MenuIdle = class {
       timeoutS: 0,
       shown: false,
       drawnAt: at,
-      timer: null
+      timer: null,
+      closing: false
     };
     this.sessions.delete(sessionId2);
     this.sessions.set(sessionId2, idle);
@@ -83808,7 +83909,7 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
+    const due = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -83831,7 +83932,9 @@ var MenuIdle = class {
   // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
   // among the journals, so whether the session is still idle is read in that
   // turn: a click since this firing, or one landing ahead of it, keeps what
-  // it opened.
+  // it opened. The record follows that decision (`closed`), and until the
+  // close settles no frame arms another. A close that failed waits a timeout
+  // too, so it is retried at that pace and not at every frame.
   fire(sessionId2) {
     const idle = this.sessions.get(sessionId2);
     idle.timer = null;
@@ -83841,11 +83944,20 @@ var MenuIdle = class {
       idleS: now2 - idle.since,
       timeoutS: idle.timeoutS,
       // An evicted record stops counting, so its session is no longer known idle.
-      stillIdle: () => this.sessions.get(sessionId2) === idle && idle.clicks === lastClick
+      stillIdle: () => this.sessions.get(sessionId2) === idle && idle.clicks === lastClick,
+      closed: () => {
+        idle.since = now2;
+        idle.shown = false;
+      }
     };
-    idle.since = now2;
-    idle.shown = false;
-    this.deps.close(sessionId2, closing).catch((e) => this.deps.failed(sessionId2, e));
+    idle.closing = true;
+    this.deps.close(sessionId2, closing).catch((e) => {
+      closing.closed();
+      this.deps.failed(sessionId2, e);
+    }).finally(() => {
+      idle.closing = false;
+      if (this.sessions.get(sessionId2) === idle) this.settle(sessionId2);
+    });
   }
 };
 
@@ -83929,7 +84041,7 @@ function createDaemon(inputs) {
     now: instant,
     close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
     failed: (sessionId2, error) => log(
-      "error",
+      error instanceof DaemonClosing ? "info" : "error",
       `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
     )
   });
@@ -83980,8 +84092,8 @@ function createDaemon(inputs) {
   const frameFeeds = new FrameFeeds({
     render: (sessionId2, fps, at) => renderFrame(parts, sessionId2, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn, so a click's whole run of writes and its
-    // journal commit land before a frame of it is drawn.
+    // which fires in a later turn. A click that awaits gives up the loop, so a
+    // frame may show its writes ahead of its commit; the step stays whole.
     watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
     lanes: (sessionId2) => viewLanes(parts, sessionId2),
     // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
@@ -84197,6 +84309,7 @@ function createDaemon(inputs) {
     sessionState,
     effectSessions,
     menuIdle,
+    journalTurns,
     linkSigner: linkSigner2,
     runs,
     laneSetups,
@@ -84220,13 +84333,13 @@ function createDaemon(inputs) {
     // the way in. A click that got in holds or waits for a journal's turn, and
     // close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
-    handle: async (req, timedOut, accepted) => {
+    handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted);
+      return handleRequest(parts, req, timedOut, accepted, clientLeft);
     },
-    reply: async (req, timedOut, accepted) => {
+    reply: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted);
+      return replyTo(parts, req, timedOut, accepted, clientLeft);
     },
     subscribe: (sessionId2, subscriber) => {
       closing.signal.throwIfAborted();
@@ -84705,7 +84818,7 @@ function hookData() {
   };
 }
 async function daemon2(request2) {
-  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic());
+  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic(), () => false);
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";

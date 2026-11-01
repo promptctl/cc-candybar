@@ -2,81 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-545",
-      "ref": "refs/pull/545/merge",
-      "sha": "6624a292bad041675d6f65f157c7a2d333808436",
-      "timestamp": "2026-11-01T09:23:30.019Z",
-      "commits": [
-        {
-          "sha": "6624a292bad041675d6f65f157c7a2d333808436",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T09:22:42Z",
-          "message": "Merge d149b9c1178632e8f22c632a36c1f00ffd5989a4 into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
-        },
-        {
-          "sha": "d149b9c1178632e8f22c632a36c1f00ffd5989a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:21:08-07:00",
-          "message": "fix(daemon): a launch keeps the program's own words, clickLaunch's bound cannot be passed (candybar-launch-q7o7.gp7)\n"
-        },
-        {
-          "sha": "0fdfb0fa0fbb3f1a488dadfd075e3fcb12313851",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:11:12-07:00",
-          "message": "test(launch): a timed-out launch says it timed out (candybar-launch-q7o7.gp7)\n"
-        },
-        {
-          "sha": "a7da8bc4cec0d769b4bd973634696438932aba9c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:09:03-07:00",
-          "message": "fix(daemon): clickLaunch owns its bound, a terminated launch says why, stats print the journal's turn (candybar-launch-q7o7.gp7)\n"
-        },
-        {
-          "sha": "4f845d197fab63539509f317c4876fbf28da4a82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:59:53-07:00",
-          "message": "fix(daemon): clientLeft is its own fact, an aborted click launch is closing, doctor probes run together (candybar-launch-q7o7.gp7)\n"
-        },
-        {
-          "sha": "9592506ea2c77c8979104f39927266b47ea4f4e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:36:53-07:00",
-          "message": "feat(daemon): click-rooted launches go async, and a click cut by close goes no further (candybar-launch-q7o7.gp7)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "22a4d977fc08426311fbc21d544a5c130ec8183b",
-      "timestamp": "2026-11-01T08:57:05.255Z",
+      "sha": "ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0",
+      "timestamp": "2026-11-01T09:31:44.383Z",
       "commits": [
         {
-          "sha": "22a4d977fc08426311fbc21d544a5c130ec8183b",
+          "sha": "ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:56:16-07:00",
-          "message": "feat(landscape): captured bars play in the explorer, with capture tooling and the live-bar link (#544)\n\n* Survey: the 1,000 most-committed Claude Code statuslines — clones, new ideas, why so many\n\nRanks the styling survey's 9,558 projects by commits, reads the top 1,000\nfrom source with haiku agents, fingerprints their code for copies, and\nanswers whether they are clones, what is new in them, and why there are\nso many. README.md has the answers; projects.md and projects.tsv hold one\nentry per project; tools/ holds the scripts and agent briefs.\n\n* Survey: 3,002 more statuslines read below the top 1,000, compared by commit band\n\nREADME answers the three questions for all 4,002 read projects and the\n7,046-project clone measure; projects-tail.md holds the new sections and\nprojects.tsv the tail rows. tools/ gains the tail scripts and briefs.\n\n* Survey: landscape.html, a graph explorer of the 4,002 statuslines by functional characteristic\n\n* Survey: explorer graph on a live force simulation, with readable labels\n\n* Survey: explorer graph on a live force simulation, with readable labels\n\n* Survey: explorer text grows near the cursor, and the sidebar folds away\n\n* Survey: explorer text-size slider, and a short lens ramp to full size\n\n* Survey: explorer text-size slider, zoom-stable labels, lens ramp, and labels that push each other apart\n\n* Survey: capture 1,143 statuslines in a sandbox and replay them in the explorer\n\nA risk triage stamps every project from a read of its statusline files; the\nsafe tier runs under sandbox-exec against one fake session at three widths,\nand the explorer draws the selected project's bar along the bottom in xterm.js.\n\n* Survey: bars play through a two-minute mock conversation, with speed, deep-link history and live markers\n\nThe capture runner walks every safe project through a fixture timeline of sixty\nticks (hook JSON, transcript, working tree) at 80, 120 and 160 columns and keeps\neach frame the output changed to. The page inflates the frames from a gzip blob\nand plays them off one shared clock with a speed control. Projects with a bar\nare marked teal in the graph, the search and the lists. Each opened node is a\nhistory entry so back walks through them. Links pull in proportion to degree so\na crowded characteristic is held rather than hauled into a knot.\n\nThe sandbox now also denies /tmp and the user temp directory, the fixture ships\na real git so Apple's xcrun shim does not stall, and scrub.py rewrites the host's\nuser, host and run path out of every captured frame.\n\n* Survey: capture process doc, dependency fetch, better entry guessing, review tier runs\n\nresolve.py ranks the survey's files by reading stdin and entry-like names, runs a\nmodule inside a Python package as a module, reads a shebang for an extensionless\nfile, keeps the author's runner when they named one, and takes the tiers to run as\narguments. deps.py fetches npm and Python dependencies on the host without running\nany package code. run.py ends each tick's process group. The README in\ntools/capture is the process: order, traps, decisions, and where the sweeps stand.\n\n* Survey capture: venv on the sandbox's python, manifest entries as fallback, no wait on escaped daemons\n\ndeps.py builds venvs on the Homebrew python3, since uv's managed interpreter lives\nunder the home directory the sandbox denies. resolve.py uses a package.json bin or\nmain as a fallback entry, mapping an unbuilt dist path to its src, and weights a\nstatusline-named file above cli or index. run.py stops a timeline whose ticks\naverage over three seconds, and after a timeout closes the pipes instead of\nwaiting on them, which hung a worker for an hour when a bar's daemon had made its\nown session.\n\n* Survey capture: each project runs in its own child runner with a hard limit\n\nA bar's helper put the runner into an uninterruptible wait that no pipe handling\ninside the process could escape, and three escaped daemons from one project\noutlived their sweep by an hour. With no slugs given, the runner now drives a\nchild per project in its own session, kills it at fifteen minutes, and records the\nproject as having stalled.\n\n* Survey: 2,091 bars from the safe and review tiers; top 300 from 61 to 125\n\nThe review tier runs under the same sandbox, since every signal that put a project\nthere is one the sandbox and fake home contain. Dependencies fetched for 331\nfailing safe projects and the entry guessing reworked recovered 201 more. The\nprocess README records what the sweeps taught.\n\n* Landscape page: bars and project detail load per bundle, one build script\n\nThe page is 2.7 MB (from 10.8 MB). Bar frames and each project's long text are written as\nscript bundles beside the page and loaded when a project is opened. explorer/build.sh runs the\nexport, type check and bundle in order.\n\n* Landscape: committed page data, Pages ships the explorer\n\nThe survey's export output is committed, so CI builds the page from the repo alone. The page\nderives the GitHub link and the kind label instead of storing them: the page is 2.3 MB from 2.7.\nThe Pages workflow builds the explorer and publishes it under /landscape/ beside the main site.\n\n* Pages: one site through gh-pages-multiplexer, with PR previews\n\nMain and landscape publish together as one version per ref: main/ on main, pr-<n>/ per pull request,\nwith the landscape under landscape/ inside each. The sticky preview comment links the PR's version.\n\n* Landscape: bundles resolve against the page, not a deploy's base tag\n\nThe multiplexer injects a base tag at the version root, so the bar and detail bundles, which sit\nbeside the landscape page, resolved to a folder that does not exist and no bar played.\n\n* Landscape: a bar plays on load, a caption names it, and an only-with-bars filter\n\nThe bar strip shows the selected project's bar, or a featured one when nothing with a bar is selected.\nA checkbox limits every characteristic's list to projects whose bar was captured.\n\n* docs(landscape): the README points at the explorer on the Pages site, not the deleted landscape.html\n\nlandscape.html was removed when the explorer moved to the one Pages site (#472); the README still linked it.\n\n* fix(landscape): the bar's load errors show again, and the panel lists only what the graph pages through\n\nThe merge took the branch's side of the explorer and lost main's bundle and bar-load error handling; restored it. Trait and characteristic lists and counts go through the same pool as the graph under only-with-bars, and the band shares still count every member.\n\n* fix(landscape): the graph's trait counts and +N more labels count the pool it pages through\n\nUnder only-with-bars these read the unfiltered members, so the label promised projects the graph never shows."
+          "timestamp": "2026-11-01T02:30:42-07:00",
+          "message": "feat(daemon): click-rooted launches go async (candybar-launch-q7o7.gp7) (#545)\n\n* feat(daemon): click-rooted launches go async, and a click cut by close goes no further (candybar-launch-q7o7.gp7)\n\n* fix(daemon): clientLeft is its own fact, an aborted click launch is closing, doctor probes run together (candybar-launch-q7o7.gp7)\n\n* fix(daemon): clickLaunch owns its bound, a terminated launch says why, stats print the journal's turn (candybar-launch-q7o7.gp7)\n\n* test(launch): a timed-out launch says it timed out (candybar-launch-q7o7.gp7)\n\n* fix(daemon): a launch keeps the program's own words, clickLaunch's bound cannot be passed (candybar-launch-q7o7.gp7)"
         },
         {
-          "sha": "fec05491377abffd799132f533084c045f92d4ed",
-          "author_name": "GitHub Action",
-          "author_email": "action@github.com",
-          "timestamp": "2026-11-01T08:47:42Z",
-          "message": "chore: update pricing data 2026-11-01 [skip ci]\n"
-        },
-        {
-          "sha": "9609332f9a9c2241f95596ea95225dae70482e95",
+          "sha": "38c5c173ef1558a6bd85ec48336591cc57874b90",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T08:39:00Z",
-          "message": "chore(release): set `package.json` to 1.175.0 [skip ci]\n\n## [1.175.0](https://github.com/promptctl/cc-candybar/compare/v1.174.7...v1.175.0) (2026-11-01)\n\n### Features\n\n* **daemon:** journals take turns so click handlers can await (candybar-launch-q7o7.rs0) ([#542](https://github.com/promptctl/cc-candybar/issues/542)) ([e7c7caa](https://github.com/promptctl/cc-candybar/commit/e7c7caacfb9c807a1424dde9d75a66559451e5ed))\n* **git:** gitaculous shows a worktree-aware location, and offers init outside a repo ([#543](https://github.com/promptctl/cc-candybar/issues/543)) ([52c69be](https://github.com/promptctl/cc-candybar/commit/52c69beb5b01d9c842ae7f38fbb59f0c64086cb1))\n"
+          "timestamp": "2026-11-01T09:06:01Z",
+          "message": "chore(release): set `package.json` to 1.176.0 [skip ci]\n\n## [1.176.0](https://github.com/promptctl/cc-candybar/compare/v1.175.0...v1.176.0) (2026-11-01)\n\n### Features\n\n* **landscape:** captured bars play in the explorer, with capture tooling and the live-bar link ([#544](https://github.com/promptctl/cc-candybar/issues/544)) ([22a4d97](https://github.com/promptctl/cc-candybar/commit/22a4d977fc08426311fbc21d544a5c130ec8183b)), closes [#472](https://github.com/promptctl/cc-candybar/issues/472)\n"
         }
       ]
     },
