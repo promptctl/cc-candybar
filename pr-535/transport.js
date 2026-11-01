@@ -35832,7 +35832,8 @@ async function launchWaited(state, opts) {
     }
     const terminate = (cause) => {
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (cause === "timeout" && ended && group !== void 0 && groupGone(group)) {
+      if (ended && group !== void 0 && groupGone(group)) {
+        terminated = cause === "aborted" ? cause : null;
         setImmediate(concludeWithGroup);
         return;
       }

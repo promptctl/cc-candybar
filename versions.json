@@ -4,15 +4,22 @@
     {
       "version": "pr-535",
       "ref": "refs/pull/535/merge",
-      "sha": "7793f1f24370947cbca5f6c90721e4816eaeea91",
-      "timestamp": "2026-11-01T04:01:10.606Z",
+      "sha": "3ca3c1c9b506cc781fc6a6dde2aad3e39b741b7c",
+      "timestamp": "2026-11-01T04:02:17.302Z",
       "commits": [
         {
-          "sha": "7793f1f24370947cbca5f6c90721e4816eaeea91",
+          "sha": "3ca3c1c9b506cc781fc6a6dde2aad3e39b741b7c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:00:19Z",
-          "message": "Merge ce7e96b2db3dd1da7a510085d699169698dfd07c into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
+          "timestamp": "2026-11-01T04:01:34Z",
+          "message": "Merge 41175606ded0f80217f6b3ec1bb57616670e2b18 into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
+        },
+        {
+          "sha": "41175606ded0f80217f6b3ec1bb57616670e2b18",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:01:23-06:00",
+          "message": "fix(proc): an abort of an ended group signals nothing (candybar-testing-0x6u.425)\n"
         },
         {
           "sha": "ce7e96b2db3dd1da7a510085d699169698dfd07c",
