@@ -4,15 +4,22 @@
     {
       "version": "pr-542",
       "ref": "refs/pull/542/merge",
-      "sha": "d303dc524764030bd16144f0faebccb8e24d598f",
-      "timestamp": "2026-11-01T07:22:58.761Z",
+      "sha": "8a5d31c7b2e432b4c262ba6ccd3ca7aea0db2c36",
+      "timestamp": "2026-11-01T07:44:12.359Z",
       "commits": [
         {
-          "sha": "d303dc524764030bd16144f0faebccb8e24d598f",
+          "sha": "8a5d31c7b2e432b4c262ba6ccd3ca7aea0db2c36",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:22:15-06:00",
-          "message": "Merge 35d4cc45f83d7461386e291f12118c786701bd58 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+          "timestamp": "2026-11-01T07:43:25Z",
+          "message": "Merge ee879949c296a1794e75f4f64a54212b9ae57330 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+        },
+        {
+          "sha": "ee879949c296a1794e75f4f64a54212b9ae57330",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:43:15-06:00",
+          "message": "fix(daemon): a turn's commits both run, and an evicted idle record is not idle (candybar-launch-q7o7.rs0)\n\nStep 10 fixes. navigation.commit throwing no longer skips the journal commit. inFlight clears at commit, replacing the committed flag, so close never reports a finished click as cut off. Tests now exercise the live gate.\n"
         },
         {
           "sha": "35d4cc45f83d7461386e291f12118c786701bd58",

@@ -70717,6 +70717,14 @@ var dispatch = async (rawValue, ctx) => {
     throw operational ? new Error(message) : new BadVerbArgs(message);
   }
 };
+function throwAll(failures) {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new Error(
+      failures.map((e) => String(e.message ?? e)).join("; ")
+    );
+  }
+}
 function journaled(verb, handler, sessionOf, turnWaited) {
   const inTurn = async (value, ctx, turn) => {
     const sid = sessionOf(value);
@@ -70724,8 +70732,15 @@ function journaled(verb, handler, sessionOf, turnWaited) {
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
     const commit3 = turn.holds(() => {
-      navigation.commit();
-      journal.commit();
+      const failed2 = [];
+      for (const step4 of [navigation, journal]) {
+        try {
+          step4.commit();
+        } catch (e) {
+          failed2.push(e);
+        }
+      }
+      throwAll(failed2);
     });
     const failures = [];
     const closing = (store) => closingView(
@@ -70764,12 +70779,7 @@ function journaled(verb, handler, sessionOf, turnWaited) {
         failures.push(e);
       }
     }
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) {
-      throw new Error(
-        failures.map((e) => String(e.message ?? e)).join("; ")
-      );
-    }
+    throwAll(failures);
   };
   return (value, ctx) => ctx.journalTurns.take(
     verb,
@@ -83621,17 +83631,13 @@ var JournalTurns = class {
     return this.queue.run(DAEMON_WIDE, async () => {
       if (!this.open) throw new Error(`the daemon closed: ${verb} refused`);
       waited(Math.round(this.deps.monotonic() - asked2));
-      try {
-        return await body({
-          holds: (commit3) => {
-            const held = { verb, commit: commit3, committed: false };
-            this.inFlight = held;
-            return () => this.commit(held);
-          }
-        });
-      } finally {
-        this.inFlight = null;
-      }
+      return body({
+        holds: (commit3) => {
+          const held = { verb, commit: commit3 };
+          this.inFlight = held;
+          return () => this.commit(held);
+        }
+      });
     });
   }
   close() {
@@ -83644,8 +83650,8 @@ var JournalTurns = class {
     this.commit(this.inFlight);
   }
   commit(held) {
-    if (held.committed) return false;
-    held.committed = true;
+    if (this.inFlight !== held) return false;
+    this.inFlight = null;
     held.commit();
     return true;
   }
@@ -83754,7 +83760,8 @@ var MenuIdle = class {
     const closing = {
       idleS: now2 - idle.since,
       timeoutS: idle.timeoutS,
-      stillIdle: () => idle.clicks === lastClick
+      // An evicted record stops counting, so its session is no longer known idle.
+      stillIdle: () => this.sessions.get(sessionId2) === idle && idle.clicks === lastClick
     };
     idle.since = now2;
     idle.shown = false;
