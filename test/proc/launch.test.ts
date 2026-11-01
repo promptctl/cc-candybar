@@ -100,11 +100,7 @@ afterEach(() => {
 
 describe("launch (async)", () => {
   it("captures stdout from a zero-exit binary", async () => {
-    const r = await launch({
-      bin: "/bin/echo",
-      args: ["hi"],
-      category: "user-shell",
-    });
+    const r = await launch({ bin: "/bin/echo", args: ["hi"], category: "user-shell" });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("hi");
@@ -129,11 +125,7 @@ describe("launch (async)", () => {
   });
 
   it("reports non-zero exits as data, not throws", async () => {
-    const r = await launch({
-      bin: "/bin/sh",
-      args: ["-c", "exit 7"],
-      category: "user-shell",
-    });
+    const r = await launch({ bin: "/bin/sh", args: ["-c", "exit 7"], category: "user-shell" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.reason).toBe("non-zero");
@@ -142,10 +134,7 @@ describe("launch (async)", () => {
   });
 
   it("reports spawn-error for a nonexistent binary", async () => {
-    const r = await launch({
-      bin: "/nonexistent/binary-x9k7",
-      category: "user-shell",
-    });
+    const r = await launch({ bin: "/nonexistent/binary-x9k7", category: "user-shell" });
     expect(r.ok).toBe(false);
   });
 
@@ -194,18 +183,14 @@ describe("launch (async)", () => {
       await until(() => fs.existsSync(marker), "the child's SIGTERM handler");
       controller.abort();
       const r = await pending;
-      expect(r).toMatchObject({
-        ok: false,
-        reason: "aborted",
-        signal: "SIGKILL",
-      });
+      expect(r).toMatchObject({ ok: false, reason: "aborted", signal: "SIGKILL" });
       expect(sent).toEqual(["SIGTERM", "SIGKILL"]);
     } finally {
       restore();
     }
   });
 
-  it('aborting the signal terminates the child\'s whole group and reports "aborted" once it is reaped', async () => {
+  it("aborting the signal terminates the child's whole group and reports \"aborted\" once it is reaped", async () => {
     // `sh` stays the parent of a two-statement command, so the `sleep` is a
     // grandchild: only a process-group signal reaches it. The marker names
     // the sh; the per-run duration names the sleep (both computed here, so
@@ -295,9 +280,8 @@ describe("launch (async)", () => {
     }
   });
 
-  it("a refused child's later output is drained unread, and writing it does not kill the child", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "launch-refused-"));
-    const survived = path.join(dir, "survived");
+  it("a refused child's later output is drained unread, past a pipe's buffer on both streams", async () => {
+    const survived = path.join(scratch, "refused-survived");
     const kill = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("EPERM"), { code: "EPERM" });
     });
@@ -307,7 +291,9 @@ describe("launch (async)", () => {
         bin: "/bin/sh",
         args: [
           "-c",
-          `i=0; while [ $i -lt 30 ]; do echo x; sleep 0.02; i=$((i+1)); done; : > ${survived}`,
+          'sleep 0.2; head -c 300000 /dev/zero; head -c 300000 /dev/zero >&2; : > "$1"',
+          "sh",
+          survived,
         ],
         timeoutMs: 50,
         category: "user-shell",
@@ -322,7 +308,6 @@ describe("launch (async)", () => {
     } finally {
       decoded.mockRestore();
       kill.mockRestore();
-      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
@@ -412,11 +397,7 @@ describe("launch (async)", () => {
 
 describe("launchSync", () => {
   it("captures stdout from a zero-exit binary", () => {
-    const r = launchSync({
-      bin: "/bin/echo",
-      args: ["sync"],
-      category: "user-shell",
-    });
+    const r = launchSync({ bin: "/bin/echo", args: ["sync"], category: "user-shell" });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("sync");
@@ -424,11 +405,7 @@ describe("launchSync", () => {
   });
 
   it("reports non-zero exits as data", () => {
-    const r = launchSync({
-      bin: "/bin/sh",
-      args: ["-c", "exit 3"],
-      category: "user-shell",
-    });
+    const r = launchSync({ bin: "/bin/sh", args: ["-c", "exit 3"], category: "user-shell" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.exitCode).toBe(3);
@@ -861,10 +838,7 @@ describe("a launcher's scope", () => {
     await launch({ bin: "/bin/echo", category: "user-shell" });
 
     expect(lifeline().pid).toBeUndefined();
-    await until(
-      () => spawnSync("kill", ["-0", String(pid)]).status !== 0,
-      "the lifeline exiting",
-    );
+    await until(() => spawnSync("kill", ["-0", String(pid)]).status !== 0, "the lifeline exiting");
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });
@@ -889,12 +863,7 @@ describe("launch input a child does not read", () => {
       args: ["-c", "echo refused >&2; exit 1"],
       stdinInput: unread,
     });
-    expect(r).toMatchObject({
-      ok: false,
-      reason: "non-zero",
-      exitCode: 1,
-      stderr: "refused\n",
-    });
+    expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1, stderr: "refused\n" });
     expect(r).not.toHaveProperty("error");
   });
 
@@ -912,31 +881,13 @@ describe("launch input a child does not read", () => {
 
   it("gives the blocking launch the same verdicts", () => {
     const run = (script: string) =>
-      launchSync({
-        category: "user-shell",
-        bin: "sh",
-        args: ["-c", script],
-        stdinInput: unread,
-      });
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
     expect(run("exit 0").ok).toBe(true);
-    expect(run("exit 1")).toMatchObject({
-      ok: false,
-      reason: "non-zero",
-      exitCode: 1,
-    });
+    expect(run("exit 1")).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1 });
     expect(run("head -c 1 >/dev/null").ok).toBe(true);
     expect(
-      launchSync({
-        category: "user-shell",
-        bin: "sh",
-        args: ["-c", "kill -TERM $$"],
-        timeoutMs: 5000,
-      }),
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", "kill -TERM $$"], timeoutMs: 5000 }),
     ).toMatchObject({ ok: false, reason: "signal", signal: "SIGTERM" });
-    expect(run("kill -KILL $$")).toMatchObject({
-      ok: false,
-      reason: "signal",
-      signal: "SIGKILL",
-    });
+    expect(run("kill -KILL $$")).toMatchObject({ ok: false, reason: "signal", signal: "SIGKILL" });
   });
 });

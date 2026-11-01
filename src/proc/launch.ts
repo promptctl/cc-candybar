@@ -558,16 +558,24 @@ function leaderRefuses(pid: number): boolean {
   }
 }
 
-// Decodes a stream as it reads; the returned read flushes, once, at settle. An
-// owned decoder, not setEncoding: a launch can end before EOF, and only this
-// one can be flushed then, so a character cut short still shows as U+FFFD.
+// Decodes a stream until the returned read, at settle, which flushes and ends
+// the capture: later output is drained unread and the text is released, whatever
+// outlives the launch. An owned decoder, not setEncoding: a launch can end before
+// EOF, and only this one can be flushed then, so a character cut short still
+// shows as U+FFFD.
 function capture(stream: Readable | null): () => string {
   const decoder = new StringDecoder("utf8");
   let text = "";
-  stream?.on("data", (chunk: Buffer) => {
+  const read = (chunk: Buffer) => {
     text += decoder.write(chunk);
-  });
-  return () => text + decoder.end();
+  };
+  stream?.on("data", read);
+  return () => {
+    stream?.off("data", read);
+    const whole = text + decoder.end();
+    text = "";
+    return whole;
+  };
 }
 
 async function launchWaited(
@@ -637,12 +645,10 @@ async function launchWaited(
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
-      // The result already holds the output. Whatever outlives the launch — a
-      // refused child, a descendant that left the group — keeps its pipes,
-      // drained: a destroyed one would kill it with SIGPIPE at its next write,
-      // for as long as the launcher lives to read them.
+      // Whatever outlives the launch — a refused child, a descendant that left
+      // the group — keeps its pipes: a destroyed one would kill it with SIGPIPE
+      // at its next write, for as long as the launcher lives to read them.
       for (const pipe of [child.stdout, child.stderr]) {
-        pipe?.removeAllListeners("data").resume();
         (pipe as Socket | null)?.unref();
       }
       deliver();
@@ -657,6 +663,7 @@ async function launchWaited(
         signalGroup(pid, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
+        void exited.then(() => state.unreaped.delete(child));
         settle({
           ok: false,
           reason: "signal-refused",
@@ -669,11 +676,8 @@ async function launchWaited(
     };
 
     // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
-    // what was written before it is read. Nothing of the launch is left, so it
-    // concludes on the child's exit.
-    const concludeWithGroup = () => {
-      conclude(child.exitCode, child.signalCode);
-    };
+    // what was written before it is read. It concludes on the child's exit.
+    const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
     // While a member of the group lives the launch waits for it, guarded, so
     // SIGKILL still reaches it. The OS has no event for a group's end, so it is
     // polled, with exponential backoff.
@@ -742,7 +746,6 @@ async function launchWaited(
     });
 
     const conclude = (code: number | null, signal: NodeJS.Signals | null) => {
-      state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
