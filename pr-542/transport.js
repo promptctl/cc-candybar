@@ -70819,7 +70819,7 @@ function closeIdleMenus(sid, idle, ctx) {
     "menu-idle",
     (_value, c) => {
       if (!idle.stillIdle()) {
-        c.log("info", `menu-idle: a click came first, kept (session=${sid})`);
+        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
       }
       const roots = openRoots(

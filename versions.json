@@ -4,15 +4,22 @@
     {
       "version": "pr-542",
       "ref": "refs/pull/542/merge",
-      "sha": "8a5d31c7b2e432b4c262ba6ccd3ca7aea0db2c36",
-      "timestamp": "2026-11-01T07:44:12.359Z",
+      "sha": "2c4e355c7dc797415b023083bcf4709520b3e015",
+      "timestamp": "2026-11-01T07:57:38.866Z",
       "commits": [
         {
-          "sha": "8a5d31c7b2e432b4c262ba6ccd3ca7aea0db2c36",
+          "sha": "2c4e355c7dc797415b023083bcf4709520b3e015",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:43:25Z",
-          "message": "Merge ee879949c296a1794e75f4f64a54212b9ae57330 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+          "timestamp": "2026-11-01T07:56:52Z",
+          "message": "Merge 79557950b4255425e8c2a40d1343aed978aab832 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+        },
+        {
+          "sha": "79557950b4255425e8c2a40d1343aed978aab832",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:56:44-06:00",
+          "message": "fix(daemon): an idle close skipped for eviction no longer blames a click (candybar-launch-q7o7.rs0)\n"
         },
         {
           "sha": "ee879949c296a1794e75f4f64a54212b9ae57330",
