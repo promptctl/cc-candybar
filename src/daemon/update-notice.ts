@@ -61,7 +61,7 @@ import {
 import { readStartTime } from "./process-fingerprint";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
-import { BadVerbArgs } from "./verb-error";
+import { BadVerbArgs, DaemonClosing } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";
 
@@ -375,7 +375,13 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // honestly unchecked — a notice asked for before arm() renders nothing.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
-  const readStart = (pid: number) => readStartTime(pid, launcher.launch);
+  // [LAW:single-enforcer] A `ps` the close aborted says nothing about the job,
+  // so no caller gets to judge it.
+  const readStart = async (pid: number) => {
+    const read = await readStartTime(pid, launcher.launch);
+    if (closed) throw new DaemonClosing("apply-update");
+    return read;
+  };
   const acts = makeActReader(actsDir, readStart);
   // [LAW:one-source-of-truth] The act as last read, for the notice's render
   // and for noticing an end; null until the first read. Every decision — a
@@ -457,6 +463,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       unreadable = null;
       return { ok: true, value };
     } catch (err) {
+      if (err instanceof DaemonClosing) {
+        return { ok: false, error: err.message };
+      }
       unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
@@ -546,6 +555,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         }
         const facts = factsOf(update);
         const read = await touchActs(() => acts.read());
+        if (closed) throw new DaemonClosing("apply-update");
         if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
         const newest = read.value;
         if (judgeAct(newest).kind === "running") {
@@ -562,7 +572,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           ACT_TIMEOUT_MS,
           Date.now(),
           readStart,
-          () => closed,
         );
         if (!claim.ok) {
           throw new BadVerbArgs(`apply-update: ${claim.reason}`);

@@ -13,7 +13,7 @@ const PROCESS_TIER_PATTERN = "\\.process\\.test\\.ts$";
 // [LAW:verifiable-goals] The pin on a run's daemons, over the cases that spawn
 // one through the helper. It is a maximum: a filtered run starts fewer, and a
 // platform can skip a case. Raising it is a one-line diff, which is the point.
-const HELPER_START_CEILING = 30;
+const HELPER_START_CEILING = 31;
 
 const LEDGER_ENV = "CC_CANDYBAR_TEST_DAEMON_LEDGER";
 const TEST_FILE_ENV = "CC_CANDYBAR_TEST_FILE";

@@ -165,6 +165,8 @@ export default [
     files: [
       "src/daemon/**/*.ts",
       "src/claude-input/**/*.ts",
+      "src/segments/**/*.ts",
+      "src/var-system/**/*.ts",
       "src/doctor/edge.ts",
       "src/doctor/font-edge.ts",
     ],

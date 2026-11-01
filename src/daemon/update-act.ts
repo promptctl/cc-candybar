@@ -272,6 +272,25 @@ export function makeActReader(
   };
 }
 
+// [LAW:no-ambient-temporal-coupling] Synchronous, so no exit lands between the
+// staging directory and its removal: nothing sweeps a stranded one. False when
+// the act already exists.
+function stakeClaim(dir: string, actDir: string, record: ActRecord): boolean {
+  fs.mkdirSync(dir, { recursive: true });
+  const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
+  try {
+    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
+    fs.renameSync(staging, actDir);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOTEMPTY" || code === "EEXIST") return false;
+    throw err;
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
+}
+
 export type Claim =
   | { readonly ok: true; readonly act: number }
   | { readonly ok: false; readonly reason: string };
@@ -284,8 +303,7 @@ export type Claim =
 // a claimer that loses, or dies, never runs the program. The winner lists the
 // acts again before releasing: a claimer stalled mid-claim can land on a
 // number already pruned while a later act runs, and it withdraws. A daemon
-// that closed during the job's `ps` withdraws too: that `ps` was aborted, so a
-// release would land an act with no fingerprint from a daemon on its way out.
+// closing during the job's `ps` throws from `read`, which withdraws too.
 export async function claimAct(
   launcher: Launcher,
   dir: string,
@@ -295,24 +313,17 @@ export async function claimAct(
   timeoutMs: number,
   now: number,
   read: (pid: number) => Promise<StartTimeRead>,
-  closed: () => boolean,
 ): Promise<Claim> {
   const act = (after ?? 0) + 1;
   const actDir = path.join(dir, String(act));
-  fs.mkdirSync(dir, { recursive: true });
-  const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
   // The job writes where the act will be, once released.
   const job = launcher.launchJobSync(command, filesOf(actDir));
-  if (!job.ok) {
-    fs.rmSync(staging, { recursive: true, force: true });
-    throw new Error(`apply-update: ${job.error}`);
-  }
+  if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   // [LAW:single-enforcer] The gate opens on a standing claim and on nothing
   // else: every other way out, a throw included, shuts it unopened.
   let stood = false;
   try {
     const start = await read(job.pid);
-    if (closed()) return DAEMON_CLOSED;
     const record: ActRecord = {
       identity,
       pid: job.pid,
@@ -320,14 +331,7 @@ export async function claimAct(
       started: now,
       deadline: now + timeoutMs,
     };
-    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
-    try {
-      fs.renameSync(staging, actDir);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOTEMPTY" || code === "EEXIST") return CLAIMED_FIRST;
-      throw err;
-    }
+    if (!stakeClaim(dir, actDir, record)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act)) {
       removeAct(dir, act);
       return CLAIMED_FIRST;
@@ -336,7 +340,6 @@ export async function claimAct(
   } finally {
     if (stood) job.release();
     else job.withdraw();
-    fs.rmSync(staging, { recursive: true, force: true });
   }
   for (const n of actNumbers(dir).filter((n) => n < act)) {
     removeAct(dir, n);
@@ -348,8 +351,6 @@ const CLAIMED_FIRST: Claim = {
   ok: false,
   reason: "another act claimed this bundle first",
 };
-
-const DAEMON_CLOSED: Claim = { ok: false, reason: "the daemon closed" };
 
 // Ends an act whose group its reader saw alive past its deadline, with a
 // `timeout` verdict unless the job's own landed first: a live read already

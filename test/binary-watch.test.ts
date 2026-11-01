@@ -103,7 +103,10 @@ const refusing = (refused: () => boolean) => (p: string) => {
 
 test("a bundle the daemon cannot read says nothing about the bundle: it warns and runs on", async () => {
   let refused = false;
-  const w = watch([bundle], refusing(() => refused));
+  const w = watch(
+    [bundle],
+    refusing(() => refused),
+  );
   refused = true;
   await w.checkNow();
   expect(exits).toBe(0);
@@ -119,7 +122,10 @@ test("a bundle unreadable at boot is reported once, when the watch arms, and not
   jest.useFakeTimers();
   try {
     let refused = true;
-    const w = watch([bundle], refusing(() => refused));
+    const w = watch(
+      [bundle],
+      refusing(() => refused),
+    );
     refused = false;
     w.arm();
     const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
@@ -171,27 +177,41 @@ test("a bundle rebuilt while an update runs restarts the daemon once the update 
 });
 
 test("two checks at once exit once", async () => {
-  let answer!: (held: boolean) => void;
-  let asked = 0;
+  const answers: Array<(held: boolean) => void> = [];
   const w = makeBinaryWatch({
     targets: [bundle],
     intervalMs: 60_000,
     stat: fs.statSync,
-    held: () => {
-      asked++;
-      return new Promise((resolve) => (answer = resolve));
-    },
+    held: () => new Promise((resolve) => answers.push(resolve)),
     exit: () => exits++,
     log: (level, msg) => lines.push([level, msg]),
   });
   fs.rmSync(bundle);
   const both = [w.checkNow(), w.checkNow()];
   await new Promise((resolve) => setImmediate(resolve));
-  expect(asked).toBe(1);
-  answer(false);
+  answers.forEach((answer) => answer(false));
   await Promise.all(both);
   expect(exits).toBe(1);
-  expect(asked).toBe(1);
+});
+
+test("a close during the hold's answer exits nothing", async () => {
+  let answer!: (held: boolean) => void;
+  let exits = 0;
+  const w = makeBinaryWatch({
+    targets: [bundle],
+    intervalMs: 60_000,
+    stat: fs.statSync,
+    held: () => new Promise((resolve) => (answer = resolve)),
+    exit: () => exits++,
+    log: () => {},
+  });
+  fs.rmSync(bundle);
+  const checking = w.checkNow();
+  await new Promise((resolve) => setImmediate(resolve));
+  w.close();
+  answer(false);
+  await checking;
+  expect(exits).toBe(0);
 });
 
 test("a check that fails is logged, and the next one still decides", async () => {

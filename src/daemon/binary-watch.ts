@@ -8,13 +8,11 @@
 // for the moment the daemon itself changed the bundle (the update notice's
 // rebuild) and need not wait a minute to notice.
 //
-// [LAW:no-ambient-temporal-coupling] A sample awaits `held`, so samples take
-// turns on a queue of the watch's own: two cannot both pass the guard. The
-// update watch's act queue is where `held` waits, and a turn there starts this
-// check without awaiting it, so neither queue ever waits on itself.
+// [LAW:no-ambient-temporal-coupling] A sample awaits `held`, which waits on the
+// update watch's act queue, so `ended` is read after that await: of two samples
+// overlapping there, or one the close landed on, none exits twice or late.
 
 import { changeLogger, type DaemonLogger } from "../utils/logger";
-import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 /** `fs.statSync`'s shape: the edge the watch reads the disk through. */
@@ -70,10 +68,8 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   // so it can neither match nor move the stamp.
   const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
   let timer: NodeJS.Timeout | null = null;
-  // [LAW:no-ambient-temporal-coupling] Ended by the exit or the close: a check
-  // queued behind either has nothing left to decide.
+  // Ended by the exit or the close: a check after either decides nothing.
   let ended = false;
-  const checks = new KeyedSerialQueue<"check">();
   const end = (): void => {
     ended = true;
     if (timer) clearInterval(timer);
@@ -88,7 +84,9 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       }
       if (!sameStamp(stamp, now)) {
         const what = `binary ${now.kind === "absent" ? "gone" : "changed"} (${path})`;
-        if (await held()) {
+        const waiting = await held();
+        if (ended) return;
+        if (waiting) {
           logHeld([
             "info",
             `${what}; the restart waits for the running update`,
@@ -106,7 +104,7 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   // holds is the daemon's death (server.ts): a check that failed is logged, and
   // the next one looks again.
   const check = (): Promise<void> =>
-    checks.run("check", sample).catch((e: unknown) => {
+    sample().catch((e: unknown) => {
       log("error", `binary check failed: ${(e as Error).message}`);
     });
   return {

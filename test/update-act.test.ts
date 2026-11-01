@@ -36,7 +36,7 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
-import { BadVerbArgs } from "../src/daemon/verb-error";
+import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { until } from "./helpers/until";
 
 let scratch: string;
@@ -65,7 +65,6 @@ const sameLeader = async (): Promise<StartTimeRead> => ({
   kind: "start",
   token: "t",
 });
-const notClosed = (): boolean => false;
 
 describe("judgeAct: the act as every daemon sees it", () => {
   test.each([
@@ -326,14 +325,16 @@ describe("claimAct: one act per bundle", () => {
       SLEEP,
       60_000,
       Date.now(),
-      sameLeader, notClosed,
+      sameLeader,
     );
     expect(claim).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
     const running = (await reader.read())!;
     ended.push(running.record.pid);
     expect(judgeAct(running)).toEqual({ kind: "running", act: 1 });
-    expect((await makeActReader(dir, sameLeader).read())!.record.identity).toBe("id-1");
+    expect((await makeActReader(dir, sameLeader).read())!.record.identity).toBe(
+      "id-1",
+    );
 
     expect(
       endJob(running.record.pid, path.join(dir, "1", "status"), {
@@ -357,7 +358,7 @@ describe("claimAct: one act per bundle", () => {
       SLEEP,
       60_000,
       Date.now(),
-      sameLeader, notClosed,
+      sameLeader,
     );
     expect(first.ok).toBe(true);
     ended.push((await makeActReader(dir, sameLeader).read())!.record.pid);
@@ -370,7 +371,7 @@ describe("claimAct: one act per bundle", () => {
       TOUCH(marker()),
       60_000,
       Date.now(),
-      sameLeader, notClosed,
+      sameLeader,
     );
     expect(second).toEqual({
       ok: false,
@@ -397,7 +398,7 @@ describe("claimAct: one act per bundle", () => {
       TOUCH(marker()),
       60_000,
       Date.now(),
-      sameLeader, notClosed,
+      sameLeader,
     );
     expect(stale.ok).toBe(false);
     await new Promise((r) => setTimeout(r, 200));
@@ -416,7 +417,7 @@ describe("claimAct: one act per bundle", () => {
         TOUCH(marker()),
         60_000,
         Date.now(),
-        sameLeader, notClosed,
+        sameLeader,
       ),
     ).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
@@ -425,7 +426,16 @@ describe("claimAct: one act per bundle", () => {
       "the first act to succeed",
     );
     expect(
-      await claimAct(processLauncher, dir, 1, "id-2", TOUCH(marker()), 60_000, Date.now(), sameLeader, notClosed),
+      await claimAct(
+        processLauncher,
+        dir,
+        1,
+        "id-2",
+        TOUCH(marker()),
+        60_000,
+        Date.now(),
+        sameLeader,
+      ),
     ).toEqual({ ok: true, act: 2 });
     expect(fs.readdirSync(dir)).toEqual(["2"]);
     await until(
@@ -449,7 +459,7 @@ describe("claimAct: one act per bundle", () => {
         TOUCH(marker()),
         60_000,
         Date.now(),
-        unreadable, notClosed,
+        unreadable,
       ),
     ).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, unreadable);
@@ -463,11 +473,22 @@ describe("claimAct: one act per bundle", () => {
 
   test("a job started before this boot is not the recorded one, whatever holds its pid", async () => {
     const dir = dirOf();
-    await claimAct(processLauncher, dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader, notClosed);
+    await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
     const { record } = (await makeActReader(dir, sameLeader).read())!;
     ended.push(record.pid);
     expect(await isRecordedJob(record, sameLeader)).toBe(true);
-    expect(await isRecordedJob({ ...record, started: 0 }, sameLeader)).toBe(false);
+    expect(await isRecordedJob({ ...record, started: 0 }, sameLeader)).toBe(
+      false,
+    );
   });
 
   test("an act pruned under a read gives way to the newer act that pruned it", async () => {
@@ -510,7 +531,7 @@ describe("claimAct: one act per bundle", () => {
       TOUCH(marker()),
       60_000,
       Date.now(),
-      sameLeader, notClosed,
+      sameLeader,
     );
     const reader = makeActReader(dir, sameLeader);
     await until(
@@ -518,7 +539,16 @@ describe("claimAct: one act per bundle", () => {
       "the first act to succeed",
     );
     fs.rmSync(dir, { recursive: true });
-    await claimAct(processLauncher, dir, null, "id-2", SLEEP, 60_000, Date.now(), sameLeader, notClosed);
+    await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-2",
+      SLEEP,
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
     const again = (await reader.read())!;
     ended.push(again.record.pid);
     expect(again.record.identity).toBe("id-2");
@@ -569,9 +599,7 @@ describe("claimAct: one act per bundle", () => {
       onApplied: () => {},
       log: () => {},
     });
-    const gate = (): string[] => [
-      ...stateGate(DEFAULT_DSL_CONFIG).listKeys(),
-    ];
+    const gate = (): string[] => [...stateGate(DEFAULT_DSL_CONFIG).listKeys()];
     watch.arm();
     expect(gate()).toContain(UPDATE_DISMISSED_KEY);
 
@@ -696,7 +724,6 @@ describe("the update watch: one turn at a time on the act files", () => {
       60_000,
       Date.now(),
       read,
-      notClosed,
     );
     expect(claim.ok).toBe(true);
     const { pid } = (await makeActReader(dir, read).read())!.record;
@@ -834,7 +861,6 @@ describe("the update watch: one turn at a time on the act files", () => {
       60_000,
       Date.now(),
       sameLeader,
-      notClosed,
     );
     expect(second.ok).toBe(true);
     await h.asked(2);
@@ -866,11 +892,10 @@ describe("the update watch: one turn at a time on the act files", () => {
     h.watch.close();
     h.ps[0]!(PS_ABORTED);
 
-    await expect(acting).rejects.toThrow(BadVerbArgs);
-    await expect(acting).rejects.toThrow("the daemon closed");
+    await expect(acting).rejects.toThrow(DaemonClosing);
     await until(() => !jobGroupAlive(pid), "the gated job to end");
     expect(fs.existsSync(h.ran)).toBe(false);
-    expect(fs.readdirSync(h.dir)).toEqual([]);
+    expect(fs.existsSync(h.dir)).toBe(false);
   });
 
   test("an act refused is a BadVerbArgs rejection, for the verb to answer with", async () => {

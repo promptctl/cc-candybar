@@ -35,7 +35,7 @@ import {
 } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { dlog } from "./log";
-import { processLauncher } from "../proc/launch";
+import { processLauncher, type Launcher } from "../proc/launch";
 import { runTmux } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
 import {
@@ -421,8 +421,10 @@ function writeLeaseFile(sockPath: string): void {
 // outside `launch`'s settle-at-exit path. Serving has stopped and shutdown is
 // synchronous, so no loop is held from anything. A holder of tmux's stdout can
 // hold this restore, bounded by shutdown's SIGKILL backstop only once it returns.
-const tmuxAtExit: TmuxAtExit = (socket, args, stdin) =>
-  runTmux(processLauncher, { socket }, "tmux-status", args, stdin);
+const tmuxAtExit =
+  (launcher: Launcher): TmuxAtExit =>
+  (socket, args, stdin) =>
+    runTmux(launcher, { socket }, "tmux-status", args, stdin);
 
 let shuttingDown = false;
 function shutdown(code: number): void {
@@ -464,7 +466,7 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  serving?.close(tmuxAtExit);
+  serving?.close(tmuxAtExit(serving.launcher));
   // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
   // displaced daemon (socket stolen, thief wrote its own lease) must not delete
   // the live owner's lease on its way out, or the next EADDRINUSE would read

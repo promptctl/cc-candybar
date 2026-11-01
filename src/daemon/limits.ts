@@ -340,7 +340,9 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // where the post-mortem will look for it.
     await attempt(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity);
-      deps.writeMemoryReport(file, await deps.captureMemoryReport());
+      const report = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report);
       deps.log("info", `memory report written: ${file}`);
     });
     // [LAW:no-ambient-temporal-coupling] The close may have landed during the

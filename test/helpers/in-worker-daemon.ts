@@ -118,14 +118,14 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
   });
 }
 
-// The daemon's counts from its request handling, past the connection: the 200 ms
-// guard is the connection's, and a busy machine is no fact about them.
 // A worker's daemon lays out no tmux status line, so nothing is put back.
 export const NO_TMUX_AT_EXIT: TmuxAtExit = () => ({
   kind: "failed",
   reason: "no tmux at this daemon's exit",
 });
 
+// The daemon's counts from its request handling, past the connection: the 200 ms
+// guard is the connection's, and a busy machine is no fact about them.
 export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
   const { resp } = await daemon.reply(
     { v: PROTOCOL_VERSION, kind: "stats" },
