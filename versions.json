@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1435f5c909561280b02fc77cc21e462541e582fb",
+      "timestamp": "2026-11-01T05:21:29.634Z",
+      "commits": [
+        {
+          "sha": "1435f5c909561280b02fc77cc21e462541e582fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:20:37-06:00",
+          "message": "fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8) (#539)\n\n* fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8)\n\nWhile the OS isn't delivering file events, a watch_file variable showed its\nold value as current. It now carries the stall as its standing fault, read\nfrom the delivery owner, and drops the fault only by re-reading.\n\n`SourceRegistry` takes `FileEvents`, the type ManagedStorage already reads,\nin place of the one-caller `CatchUps` adapter. `RenderDeps.fileEvents` is\nrequired, so a daemon that doesn't wire it doesn't compile. `stallReason`\nholds the rule and the wording for every consumer, and `end()` says\n\"restart the daemon\" once for all of its reasons.\n\n* fix(var-sources): a stall is one publish, and PathWatches owns what it hears (brandon-unfiled-3248.fme8)\n\nAnswers the first review of #539.\n\n- One change of delivery is one action, so a stall that faults every\n  `watch_file` variable publishes once, not once per variable.\n- `PathWatches` subscribes to the delivery owner and releases it itself, as\n  ManagedStorage does, so the registry no longer forwards notices.\n- `watchFault`'s `beyond` is required, so a consumer leaving out the stall says\n  so at its call site.\n- The unmeasured row leads with `since`, so a reason ending in \"restart the\n  daemon\" ends the sentence.\n- The claim is that a variable reads again when it drops the fault: the read\n  it starts is in flight like any refresh's.\n- Every terminal reason is tested, and a failed probe write says no restart.\n- The `[LAW:single-enforcer]` marker returns at the wire in daemon.ts.\n\n* docs(var-sources): the stall fault's claims match what it does (brandon-unfiled-3248.fme8)\n\nAnswers the second review of #539.\n\n- A batch is one publish of a registry, not of the daemon: each registry\n  hears the notice on its own.\n- data-sources.md no longer says a stale value never reads as current.\n- segment-authoring.md lists the stall among what a `watch_file` reports.\n- The demo reads `NO_FILE_EVENTS` in place of a never-started owner, so one\n  stand-in says \"nothing measured\"."
+        },
+        {
+          "sha": "47f89057d4df0fa92b35e70ce11e0149b138bb7d",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T05:06:20Z",
+          "message": "chore(release): set `package.json` to 1.174.4 [skip ci]\n\n## [1.174.4](https://github.com/promptctl/cc-candybar/compare/v1.174.3...v1.174.4) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e) ([#537](https://github.com/promptctl/cc-candybar/issues/537)) ([e98fef8](https://github.com/promptctl/cc-candybar/commit/e98fef8ecc1558cc8cdf59993c8534b6d584d2fd))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-538",
       "ref": "refs/pull/538/merge",
       "sha": "e06578bb45ea7f8ff1b74d6909c8125d3a0bcc47",
@@ -62,71 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T22:56:55-06:00",
           "message": "fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-539",
-      "ref": "refs/pull/539/merge",
-      "sha": "89438b0db5f92a3c75b991b4294a71dcacbe677f",
-      "timestamp": "2026-11-01T05:13:43.559Z",
-      "commits": [
-        {
-          "sha": "89438b0db5f92a3c75b991b4294a71dcacbe677f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:12:56-06:00",
-          "message": "Merge 53683b89faadc3f6615636accbb57df1d431efce into 47f89057d4df0fa92b35e70ce11e0149b138bb7d\n"
-        },
-        {
-          "sha": "53683b89faadc3f6615636accbb57df1d431efce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:12:54-06:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.fme8"
-        },
-        {
-          "sha": "f33c74190580d070fca54e6858f8363a870aada2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:11:56-06:00",
-          "message": "docs(var-sources): the stall fault's claims match what it does (brandon-unfiled-3248.fme8)\n\nAnswers the second review of #539.\n\n- A batch is one publish of a registry, not of the daemon: each registry\n  hears the notice on its own.\n- data-sources.md no longer says a stale value never reads as current.\n- segment-authoring.md lists the stall among what a `watch_file` reports.\n- The demo reads `NO_FILE_EVENTS` in place of a never-started owner, so one\n  stand-in says \"nothing measured\".\n"
-        },
-        {
-          "sha": "57eb87d11724497118c8230214ab54e51f4636d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:07:23-06:00",
-          "message": "fix(var-sources): a stall is one publish, and PathWatches owns what it hears (brandon-unfiled-3248.fme8)\n\nAnswers the first review of #539.\n\n- One change of delivery is one action, so a stall that faults every\n  `watch_file` variable publishes once, not once per variable.\n- `PathWatches` subscribes to the delivery owner and releases it itself, as\n  ManagedStorage does, so the registry no longer forwards notices.\n- `watchFault`'s `beyond` is required, so a consumer leaving out the stall says\n  so at its call site.\n- The unmeasured row leads with `since`, so a reason ending in \"restart the\n  daemon\" ends the sentence.\n- The claim is that a variable reads again when it drops the fault: the read\n  it starts is in flight like any refresh's.\n- Every terminal reason is tested, and a failed probe write says no restart.\n- The `[LAW:single-enforcer]` marker returns at the wire in daemon.ts.\n"
-        },
-        {
-          "sha": "fddf6eaf5537684a04db07485ade81b6ed291d8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:57:18-06:00",
-          "message": "fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8)\n\nWhile the OS isn't delivering file events, a watch_file variable showed its\nold value as current. It now carries the stall as its standing fault, read\nfrom the delivery owner, and drops the fault only by re-reading.\n\n`SourceRegistry` takes `FileEvents`, the type ManagedStorage already reads,\nin place of the one-caller `CatchUps` adapter. `RenderDeps.fileEvents` is\nrequired, so a daemon that doesn't wire it doesn't compile. `stallReason`\nholds the rule and the wording for every consumer, and `end()` says\n\"restart the daemon\" once for all of its reasons.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e98fef8ecc1558cc8cdf59993c8534b6d584d2fd",
-      "timestamp": "2026-11-01T04:55:24.593Z",
-      "commits": [
-        {
-          "sha": "e98fef8ecc1558cc8cdf59993c8534b6d584d2fd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:54:34-06:00",
-          "message": "fix(proc): input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e) (#537)\n\n* fix(proc): input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e)\n\n* fix(proc): a child's exit explains itself, and the blocking launch agrees (candybar-testing-0x6u.47e)\n\n* test(proc): unread input keeps the signal, timeout and partial-read verdicts (candybar-testing-0x6u.47e)\n\n* fix(proc): a blocking launch calls only its own timeout a timeout (candybar-testing-0x6u.47e)"
-        },
-        {
-          "sha": "ab694786f5e409c493d08be50100cc1251f6ff70",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T04:31:18Z",
-          "message": "chore(release): set `package.json` to 1.174.3 [skip ci]\n\n## [1.174.3](https://github.com/promptctl/cc-candybar/compare/v1.174.2...v1.174.3) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425) ([#535](https://github.com/promptctl/cc-candybar/issues/535)) ([043f443](https://github.com/promptctl/cc-candybar/commit/043f44379d2c1a27622f7b48535a323be7a59242))\n"
         }
       ]
     },
