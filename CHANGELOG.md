@@ -1,3 +1,9 @@
+## [1.178.0](https://github.com/promptctl/cc-candybar/compare/v1.177.2...v1.178.0) (2026-11-01)
+
+### Features
+
+* **daemon:** a one-shot reader asks for the Frame, scripts and site decode nothing (candybar-isolated-daemon-bfab.dnr) ([#553](https://github.com/promptctl/cc-candybar/issues/553)) ([f41741e](https://github.com/promptctl/cc-candybar/commit/f41741ee3454a3f31d5d7a2e4dc195a17c786319))
+
 ## [1.177.2](https://github.com/promptctl/cc-candybar/compare/v1.177.1...v1.177.2) (2026-11-01)
 
 ### Bug Fixes
