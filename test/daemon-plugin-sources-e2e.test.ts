@@ -11,14 +11,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { click, hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { click, hookData, linkUrls, renderAnswer, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
 } from "./helpers/spawn-isolated-daemon";
-import { loggedWhen, logLines, renderEventsOf, renderLines } from "./helpers/daemon-log";
+import { loggedWhen, renderLines } from "./helpers/daemon-log";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_RUN } from "../src/click/wire";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
@@ -26,17 +26,16 @@ import type { StatsSnapshot } from "../src/daemon/stats";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 
 import { viewerLink } from "./helpers/diagnostics-viewer";
+import { shellGate } from "./helpers/shell-gate";
 
 jest.setTimeout(30_000);
 
 const SESSION = "sources-e2e-0001";
 
-// The fixture program, in the plugin's folder: once `RELEASE` exists it writes
+// The fixture program, in the plugin's folder: past the test's gate it writes
 // the session's file whole, by rename, and exits.
-// [LAW:no-ambient-temporal-coupling] The test releases it, so "the program is
-// running" is a state the test owns, not a bet on how long a sleep outlasts it.
-const PROGRAM = `#!/bin/sh
-until [ -e "$RELEASE" ]; do sleep 0.02; done
+const program = (hold: string): string => `#!/bin/sh
+${hold}
 mkdir -p session
 printf '{"home":"%s"}' "$HOME_VALUE" > "session/.$1.tmp"
 mv "session/.$1.tmp" "session/$1.json"
@@ -49,7 +48,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   let dataHome: string;
   let config: string;
   let storage: string;
-  let release: string;
+  let gate: ReturnType<typeof shellGate>;
   let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
@@ -59,11 +58,13 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     // The plugin is INSTALLED: a folder in the user's plugin root, listed by
     // no config.
     dataHome = path.join(projectDir, "data");
-    // A folder of its own, so no config watch sees the release land.
-    release = path.join(fs.mkdtempSync(path.join(projectDir, "release-")), "go");
     const folder = path.join(dataHome, "cc-candybar", "plugins", "p");
     fs.mkdirSync(folder, { recursive: true });
-    fs.writeFileSync(path.join(folder, "write.sh"), PROGRAM, { mode: 0o755 });
+    // A folder of its own, so no config watch sees the gate move.
+    const gates = path.join(projectDir, "gates");
+    fs.mkdirSync(gates);
+    gate = shellGate(path.join(gates, "program"));
+    fs.writeFileSync(path.join(folder, "write.sh"), program(gate.hold), { mode: 0o755 });
     fs.writeFileSync(
       path.join(folder, "plugin.json5"),
       `{
@@ -75,7 +76,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
         actions: {
           go: {
             run: ["./write.sh", "{{ .session.id }}"],
-            env: { HOME_VALUE: "/h/ran", RELEASE: ${JSON.stringify(release)} },
+            env: { HOME_VALUE: "/h/ran" },
             refreshes: ["status"],
           },
         },
@@ -121,16 +122,22 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     return handled.resp.stats as StatsSnapshot;
   };
 
-  // Renders until the bar (escapes stripped) shows what is waited for; the
-  // bytes of that render.
-  const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<string> => {
-    let raw = "";
+  // Renders until an answer, its bar (escapes stripped) and its render event,
+  // shows what is waited for; the bytes of that render.
+  const renderUntil = async (
+    shows: (bar: string, event: string) => boolean,
+    what: string,
+  ): Promise<string> => {
+    let last = { output: "", event: "" };
     await until(
-      async () => shows(stripAnsi((raw = await renderRaw()))),
-      () => `the bar showing ${what}; last:\n${stripAnsi(raw)}`,
+      async () => {
+        last = await renderAnswer(daemon, body());
+        return shows(stripAnsi(last.output), last.event);
+      },
+      () => `the bar showing ${what}; last:\n${stripAnsi(last.output)}\n${last.event}`,
       10_000,
     );
-    return raw;
+    return last.output;
   };
 
   // The run link the bar drew, read out of its bytes.
@@ -178,19 +185,21 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const link = runLink(await renderUntil((b) => b.includes("home=/h/before"), "the value before the click"));
     const before = await stats();
 
+    gate.close();
     await click(daemon, link);
 
-    // The program runs until it is released, so a wait that ended `answered`
-    // over its superseded source did not wait on it: one that did could not
-    // end so, however long it had. Load can end any one wait at its deadline
-    // instead, so one such answer among the renders is the proof.
+    // The program is held at the gate, so a wait that ended `answered` over
+    // its superseded source did not wait on it: one that did could not end so,
+    // however long it had. Load can end any one wait at its deadline instead,
+    // so one such answer among the renders is the proof. The run's own timeout
+    // is the hold's bound: a proof that takes longer fails here or at the
+    // assertions below, by name, and is never forged, since a run that ended
+    // supersedes nothing.
     const during = stripAnsi(
       await renderUntil(
-        () =>
-          renderEventsOf(logLines(env), SESSION).some(
-            (l) => l.includes(" ended=answered") && l.includes(" sourcesPending=plugins.p.status:superseded"),
-          ),
-        "a render answered with the run's source superseded",
+        (_bar, event) =>
+          event.includes(" ended=answered") && event.includes(" sourcesPending=plugins.p.status:superseded"),
+        "an answer that did not wait on the run",
       ),
     );
     // Nor does it draw the value from before the click.
@@ -199,7 +208,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     expect(during).not.toContain("home=/h/ran");
     expect((await stats()).runs).toMatchObject({ started: before.runs.started + 1, running: 1 });
 
-    fs.writeFileSync(release, "");
+    gate.open();
     await renderUntil((b) => b.includes("home=/h/ran"), "the program's write");
     const after = await stats();
     expect(after.runs).toMatchObject({ started: before.runs.started + 1, running: 0, failed: 0, timedOut: 0 });
