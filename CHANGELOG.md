@@ -1,3 +1,9 @@
+## [1.174.2](https://github.com/promptctl/cc-candybar/compare/v1.174.1...v1.174.2) (2026-11-01)
+
+### Bug Fixes
+
+* **daemon:** a request's timers run on its clock, and the deadline case holds them (brandon-unfiled-3248.a5k3) ([#533](https://github.com/promptctl/cc-candybar/issues/533)) ([4814ee7](https://github.com/promptctl/cc-candybar/commit/4814ee778a28c55a7193789772cc2d681d409ab0))
+
 ## [1.174.1](https://github.com/promptctl/cc-candybar/compare/v1.174.0...v1.174.1) (2026-11-01)
 
 ### Bug Fixes
