@@ -171,9 +171,14 @@ export interface BoundWatch {
 
 // [LAW:single-enforcer] Why a watch may be missing changes, for every
 // consumer that shows it: each path whose link chain it could not walk, and
-// each directory the OS is not listening to (read live from the handle).
-// `null` while it hears every place its paths can change.
-export function watchFault(label: string, watch: BoundWatch): string | null {
+// each directory the OS is not listening to (read live from the handle), and
+// `beyond`, a reason the watch cannot know of itself. `null` while it hears
+// every place its paths can change.
+export function watchFault(
+  label: string,
+  watch: BoundWatch,
+  beyond: string | null = null,
+): string | null {
   const reasons = [
     ...watch.derived.unresolved.map(
       // Every reason names the path it stopped at, the kernel's and the loop's.
@@ -184,6 +189,7 @@ export function watchFault(label: string, watch: BoundWatch): string | null {
         ? `cannot watch ${d.path} — ${d.reason}`
         : `watching ${d.path} failed — ${d.reason}`,
     ),
+    ...(beyond === null ? [] : [beyond]),
   ];
   return reasons.length === 0 ? null : `${label}: ${reasons.join("; ")}`;
 }

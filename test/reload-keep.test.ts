@@ -9,6 +9,7 @@ import {
   type LoadCause,
   type Settled,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -58,6 +59,7 @@ function rig() {
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

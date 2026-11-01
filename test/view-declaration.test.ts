@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { GitDataProvider, PR_PERIOD } from "../src/daemon/cache/git";
 import { SOURCES_NOTHING, RenderCache } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
@@ -113,6 +114,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
     { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -244,6 +246,7 @@ function gitCache() {
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
     { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

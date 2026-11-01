@@ -313,7 +313,7 @@ describe("FileEventDelivery", () => {
         kind: "unmeasured",
         since: at,
         reason: expect.stringMatching(
-          /^the OS refused the probe folder's watch: .*EMFILE/,
+          /^the OS refused the probe folder's watch: .*EMFILE.*; restart the daemon$/,
         ),
         missedSince: at,
       });
@@ -331,7 +331,7 @@ describe("FileEventDelivery", () => {
       await until(() => kind(r) === "unmeasured", "the end");
       expect(r.events.delivery()).toMatchObject({
         reason: expect.stringMatching(
-          /^the probe folder's watch failed: .*EIO: i\/o error/,
+          /^the probe folder's watch failed: .*EIO: i\/o error.*; restart the daemon$/,
         ),
       });
       await staysEnded(r, () => watches[0]!.listener("change", PROBE_FILE));
@@ -474,7 +474,7 @@ describe("the bar's row and daemon-stats' line", () => {
         kind: "file-events",
         state: "stalled",
         message:
-          "file events stopped at 2026-10-27T04:00:00.000Z: the OS has delivered no file event since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume",
+          "file events stopped at 2026-10-27T04:00:00.000Z; the OS has delivered none since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume",
       },
     ]);
     const diagnostics = collectDiagnostics(

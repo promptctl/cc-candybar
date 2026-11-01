@@ -895,6 +895,18 @@ describe("watchFault", () => {
     expect(fault).toContain(`config: cannot follow a link chain — ${x}: more than 40 symbolic links`);
     expect(fault).toContain("; cannot watch /r — EMFILE; watching /f failed — gone");
   });
+
+  test("a reason beyond the watch's own is the watch's fault too", () => {
+    const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
+    expect(watchFault("config", { derived, held: held([]) }, "the OS stopped")).toBe("config: the OS stopped");
+    expect(
+      watchFault(
+        "config",
+        { derived, held: held([{ kind: "refused", path: "/r", reason: "EMFILE" }]) },
+        "the OS stopped",
+      ),
+    ).toBe("config: cannot watch /r — EMFILE; the OS stopped");
+  });
 });
 
 describe("GitDataProvider + watchers integration", () => {

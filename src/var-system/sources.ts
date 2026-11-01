@@ -20,6 +20,13 @@ import {
   type Invalidation,
   type PathsWatch,
 } from "../daemon/cache/watchers.js";
+import {
+  NO_FILE_EVENTS,
+  stallReason,
+  type Delivery,
+  type DeliveryNotice,
+  type FileEvents,
+} from "../daemon/cache/file-events.js";
 import { setInterval, clearInterval } from "timers";
 import {
   computed,
@@ -331,7 +338,10 @@ interface WatchEntry {
 class PathWatches {
   private readonly entries = new Map<string, WatchEntry>();
 
-  constructor(private readonly watchers: WatcherRegistry) {}
+  constructor(
+    private readonly watchers: WatcherRegistry,
+    private readonly fileEvents: FileEvents,
+  ) {}
 
   subscribe(
     filePath: string,
@@ -340,7 +350,7 @@ class PathWatches {
   ): () => void {
     const entry = this.entries.get(filePath) ?? this.arm(filePath);
     entry.subscribers.set(callback, onFault);
-    onFault(faultOf(filePath, entry));
+    onFault(faultOf(filePath, entry, this.fileEvents.delivery()));
     return () => this.unsubscribe(filePath, callback);
   }
 
@@ -387,18 +397,26 @@ class PathWatches {
   }
 
   private report(filePath: string, entry: WatchEntry): void {
-    const fault = faultOf(filePath, entry);
+    const fault = faultOf(filePath, entry, this.fileEvents.delivery());
     for (const onFault of entry.subscribers.values()) onFault(fault);
   }
 
-  // [LAW:no-silent-failure] Events the watches may have missed: each watch
-  // re-derives where its path can change, since a directory may have
-  // appeared unheard, and every subscriber re-reads as if its own watch had
-  // reported.
-  caughtUp(): void {
-    for (const [filePath, entry] of this.entries) {
-      this.rederive(filePath, entry);
-      for (const cb of entry.subscribers.keys()) cb();
+  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
+  // may have missed events: each watch re-derives where its path can change,
+  // since a directory may have appeared unheard, which says its fault, and
+  // every subscriber re-reads as if its own watch had reported. Both together,
+  // so no variable drops a stall's fault still holding a value from before it.
+  noticed(notice: DeliveryNotice): void {
+    switch (notice.kind) {
+      case "period":
+        return;
+      case "moved":
+      case "caught-up":
+        for (const [filePath, entry] of this.entries) {
+          this.rederive(filePath, entry);
+          for (const cb of entry.subscribers.keys()) cb();
+        }
+        return;
     }
   }
 
@@ -428,9 +446,15 @@ class PathWatches {
 const derived = (filePath: string): PathsWatch =>
   watchTargetsOf({ named: [filePath], whole: [filePath] });
 
-// The watch's fault, derived from what it holds now.
-const faultOf = (filePath: string, entry: WatchEntry): string | null =>
-  watchFault(`watch_file ${filePath}`, entry.bound);
+// The watch's fault, derived from what it holds now and whether the OS is
+// delivering what it would hear. A stall is every watch's: it rides the
+// delivery owner's one stream.
+const faultOf = (
+  filePath: string,
+  entry: WatchEntry,
+  delivery: Delivery,
+): string | null =>
+  watchFault(`watch_file ${filePath}`, entry.bound, stallReason(delivery));
 
 // ─── TtlBucketManager ────────────────────────────────────────────────────────
 
@@ -587,12 +611,6 @@ function zeroValue(type: VarType): VarValue {
 
 // ─── SourceRegistry ───────────────────────────────────────────────────────────
 
-// Subscribes to the end of each span in which the OS may have dropped file
-// events, returning the unsubscribe. Only the daemon measures delivery; a
-// registry outside it hears none.
-export type CatchUps = (caughtUp: () => void) => () => void;
-const NO_CATCH_UPS: CatchUps = () => () => {};
-
 // [LAW:single-enforcer] One SourceRegistry per daemon, sharing one
 // VariableStore. Multiple registries on the same store would produce
 // duplicate box definitions for input-kind variables.
@@ -705,17 +723,20 @@ export class SourceRegistry {
     // [LAW:single-enforcer] The daemon's one ledger, which every source's
     // refreshes are recorded in; a registry outside the daemon keeps its own.
     private readonly ledger: RefreshLedger = new RefreshLedger(),
-    // The daemon's file-event catch-ups, which its `watch_file` sources
-    // re-read on, since their watches ride the same OS stream.
-    private readonly catchUps: CatchUps = NO_CATCH_UPS,
+    // [LAW:one-source-of-truth] The daemon's one word on whether the OS is
+    // delivering file events, which its `watch_file` sources' watches ride.
+    // Only the daemon measures delivery.
+    private readonly fileEvents: FileEvents = NO_FILE_EVENTS,
     // [LAW:single-enforcer] The daemon's one watcher registry, which holds
     // every directory watch its `watch_file` sources need; a registry outside
     // the daemon keeps its own.
     private readonly watchers: WatcherRegistry = new WatcherRegistry(),
   ) {
     this.sessionState = sessionState;
-    this.watchMgr = new PathWatches(watchers);
-    this.cleanups.push(catchUps(() => this.watchMgr.caughtUp()));
+    this.watchMgr = new PathWatches(watchers, fileEvents);
+    this.cleanups.push(
+      fileEvents.subscribe((notice) => this.watchMgr.noticed(notice)),
+    );
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home
@@ -734,7 +755,7 @@ export class SourceRegistry {
       this.sessionState,
       this,
       this.ledger,
-      this.catchUps,
+      this.fileEvents,
       this.watchers,
     );
   }

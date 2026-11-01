@@ -5,12 +5,14 @@ import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
 import { shellGate } from "./helpers/shell-gate";
 import { until } from "./helpers/until";
+import { handDelivery } from "./helpers/hand-delivery";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 import { EventEmitter } from "events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   VariableStore,
   SourceRegistry,
@@ -792,6 +794,8 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
   });
 });
 
+const STALLED_AT = Date.parse("2026-10-27T04:00:00.000Z");
+
 // ─── shell — watch_file cache policy ─────────────────────────────────────────
 
 describe("SourceRegistry — shell: watch_file cache policy", () => {
@@ -1427,13 +1431,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(watchedFile, "w");
       fs.writeFileSync(f, "v1");
-      const listeners = new Set<() => void>();
-      const catchUp = () => [...listeners].forEach((l) => l());
+      const events = handDelivery();
       const store = new VariableStore();
-      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), (caughtUp) => {
-        listeners.add(caughtUp);
-        return () => void listeners.delete(caughtUp);
-      });
+      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
       const view = registry.view();
       live.add(view);
       registry.declareFile("home", f, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
@@ -1444,7 +1444,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       expect(view.variableStore.read("own")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      catchUp();
+      events.notify({ kind: "caught-up", since: STALLED_AT });
       await until(
         () => store.read("home") === "v2" && view.variableStore.read("own") === "v2",
         "both registries re-reading v2",
@@ -1452,10 +1452,133 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
 
       view.dispose();
       registry.dispose();
-      expect(listeners.size).toBe(0);
+      expect(events.listening()).toBe(0);
     } finally {
       cleanup();
     }
+  });
+
+  // A stall is the delivery owner's one fact, so every watch_file variable
+  // reads it there. The watched file is never written in these: only the
+  // owner's word can move them, and no OS watcher has to break.
+  describe("while file events are stalled", () => {
+    const STALL = "file events stopped at 2026-10-27T04:00:00.000Z";
+    const stalled: Delivery = { kind: "stalled", missedSince: STALLED_AT };
+    const delivering: Delivery = { kind: "delivering", unreported: [], missedSince: null };
+
+    function rig(dir: string) {
+      const watched = path.join(dir, "watched");
+      const data = path.join(dir, "data");
+      fs.writeFileSync(watched, "w");
+      fs.writeFileSync(data, "before");
+      const events = handDelivery();
+      const store = new VariableStore();
+      const registry = registryOver(store, "", undefined, null, new RefreshLedger(), events);
+      const cache = { kind: "watch_file", path: watched } as const;
+      return { watched, data, events, store, registry, cache };
+    }
+
+    it("every watch_file variable, in a view too, says so with the span's start; a ttl variable does not", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { watched, data, events, store, registry, cache } = rig(dir);
+        const view = registry.view();
+        live.add(view);
+        registry.declareFile("file", data, { parse: TEXT, cache });
+        registry.declareShell("shell", `cat ${data}`, { cwd: process.cwd(), parse: TEXT, cache });
+        registry.declareFile("timed", data, { parse: TEXT, cache: { kind: "ttl", durationMs: 60_000 } });
+        view.declareFile("own", data, { parse: TEXT, cache });
+        await ran(registry);
+        await ran(view);
+        expect(view.cachePolicyFaults().size).toBe(0);
+        const before = registry.published();
+
+        events.set(stalled, { kind: "moved" });
+
+        const faults = view.cachePolicyFaults();
+        expect([...faults.keys()].sort()).toEqual(["file", "own", "shell"]);
+        for (const fault of faults.values()) {
+          expect(fault.message).toBe(
+            `watch_file ${watched}: ${STALL}; the OS has delivered none since, not even for a file the daemon wrote to test it`,
+          );
+        }
+        // What wakes a session's feed, so the bar draws it without a request.
+        expect(registry.published()).not.toEqual(before);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("a variable declared during a stall says so at once", () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry, cache } = rig(dir);
+        events.set(stalled, { kind: "moved" });
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        expect(registry.getLastError("val")?.message).toContain(STALL);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("the catch-up clears the fault, and what was edited during the stall lands", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, store, registry, cache } = rig(dir);
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        await ran(registry);
+        events.set(stalled, { kind: "moved" });
+        await ran(registry);
+
+        fs.writeFileSync(data, "edited");
+        events.set(delivering, { kind: "caught-up", since: STALLED_AT });
+
+        expect(registry.cachePolicyFaults().size).toBe(0);
+        await until(() => store.read("val") === "edited", "the edit landing");
+      } finally {
+        cleanup();
+      }
+    });
+
+    // No variable drops the fault still holding a value from before the stall,
+    // and a span still open cannot be left to close it: `end()` never does.
+    it("a stall that moves to unmeasured clears the fault by re-reading, with no catch-up", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, store, registry, cache } = rig(dir);
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        await ran(registry);
+        events.set(stalled, { kind: "moved" });
+        await ran(registry);
+
+        fs.writeFileSync(data, "edited");
+        events.set(
+          { kind: "unmeasured", since: STALLED_AT + 60_000, reason: "disk full", missedSince: STALLED_AT },
+          { kind: "moved" },
+        );
+
+        expect(registry.cachePolicyFaults().size).toBe(0);
+        await until(() => store.read("val") === "edited", "the edit landing");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("a second notice in one stall keeps the fault's record", () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry, cache } = rig(dir);
+        registry.declareFile("val", data, { parse: TEXT, cache });
+        events.set(stalled, { kind: "moved" });
+        const record = registry.cachePolicyFaults().get("val");
+
+        events.notify({ kind: "moved" });
+
+        expect(registry.cachePolicyFaults().get("val")).toBe(record);
+      } finally {
+        cleanup();
+      }
+    });
   });
 
   // A linked path changes wherever any link in its chain is re-pointed, and
