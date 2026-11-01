@@ -18,7 +18,7 @@
 // [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
 // operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
 // reaped before the caller resumes, so it cannot outlive its frame (the one
-// exception is a group the launcher was refused to signal: `signal-refused`).
+// exception is a child that outlives a refused signal: `signal-refused`).
 // `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
 // outliving its caller — the daemon-handoff escape hatch, used only by the
 // daemon-acquisition path. `launchJobSync` is the *job*: it outlives its
@@ -606,22 +606,27 @@ async function launchWaited(
     // `LaunchResult` arm, never a rejection or a throw out of a timer callback,
     // so the single-enforcer primitive stays total. EPERM alone proves nothing:
     // darwin answers it for a group of only zombies, an ended child not yet
-    // reaped, so the verdict waits for the escalation, when the child's own end
-    // has had the grace to arrive.
+    // reaped, so the verdict waits for the escalation, when the child's end has
+    // had the grace to arrive.
+    // [LAW:no-ambient-temporal-coupling] A stalled loop runs this timer with
+    // that end still undelivered; `setImmediate` follows the poll phase that
+    // delivers it, so `exitCode` and `signalCode` are current at the verdict.
     const escalate = (pid: number) => {
       try {
         signalGroup(pid, "SIGKILL");
       } catch (err) {
-        if (child.exitCode !== null || child.signalCode !== null) return;
-        state.unreaped.set(child, opts.category);
-        settle({
-          ok: false,
-          reason: "signal-refused",
-          stdout,
-          stderr,
-          exitCode: null,
-          signal: null,
-          error: err instanceof Error ? err.message : String(err),
+        setImmediate(() => {
+          if (child.exitCode !== null || child.signalCode !== null) return;
+          state.unreaped.set(child, opts.category);
+          settle({
+            ok: false,
+            reason: "signal-refused",
+            stdout,
+            stderr,
+            exitCode: null,
+            signal: null,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
       }
     };

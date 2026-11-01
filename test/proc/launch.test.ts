@@ -262,9 +262,9 @@ describe("launch (async)", () => {
     }
   });
 
-  it("a child that ends within the grace of a refused signal is no refusal", async () => {
-    // Darwin answers EPERM for a group of only zombies, so a refused signal
-    // says nothing yet about the child.
+  it("a child that ended before a stalled loop heard of it is no refusal", async () => {
+    // Darwin answers EPERM for a group of only zombies. The stall outlasts the
+    // grace and runs into the timers phase with the exit still undelivered.
     const spy = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("EPERM"), { code: "EPERM" });
     });
@@ -276,7 +276,10 @@ describe("launch (async)", () => {
         category: "user-shell",
         signal: controller.signal,
       });
-      controller.abort();
+      setImmediate(() => {
+        controller.abort();
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400);
+      });
       await expect(run).resolves.toMatchObject({
         reason: "aborted",
         exitCode: 0,
