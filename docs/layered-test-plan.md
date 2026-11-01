@@ -81,19 +81,19 @@ Only Brandon raises the cap or allows another assertion. Both live in one sign-o
 
 This table is the target, read from `DaemonParts`, `verbCtx` and the imports on `main`. Dependencies run one way: a piece uses only the rows above it, and where a lower piece has to start something higher, it takes a callback the root wires. No table can stay true by being reviewed, so each piece ticket adds an import rule that enforces its row, and a ticket that finds an edge the table missed corrects the table in the same change. [LAW:one-way-deps]
 
-| Piece | What moves into it | Ports its tests fake | Boot tests that move down |
-|---|---|---|---|
-| Foundations | Session keys, the gates (`stateGate`, `configGate`), `encodeRenderOrigin`, `roleOf`, `answeredOf`, the link signer | Signing key | None |
-| Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle` | Session store, clock | None |
-| Config | Resolving and parsing a load | Watched store | None |
-| Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data | `daemon-plugin-sources-e2e`, `daemon-plugin-fit-e2e`, `daemon-pr-state-e2e`, 3 cases of `plugins` |
-| Watchdogs | `updateWatch`, `binaryWatch`, `limits` | Launcher, clock, a file stat, the release port | `daemon-build-currency-e2e` |
-| Drawing | `RenderCache` with its entries, state, reload and eviction, `sessionSource`, `draw-bar`, `RenderWarningRecords`, `EffectSessions` | Launcher, clock, watched store | `daemon-render-event-e2e`, `daemon-render-warnings-e2e`, `daemon-render-encoding-e2e`, `daemon-effect-e2e`, `daemon-render-instant-e2e`, `daemon-frame-reads-only-e2e`, `bar-web`, `drive-bar`, `daemon-broken-config-e2e`, `repo-configs-e2e`, `daemon-config-env-e2e`, `daemon-theme-rule-e2e`, `daemon-prompt-count-e2e`, `daemon-session-globals-e2e` |
-| Feeds | `FrameFeeds`, `renderFrame`, `PaneVisibility`, `TmuxStatusLines`, `LaneSetups` | tmux, Claude input, launcher, process table, watched store, clock | `daemon-frame-feed-e2e`, `daemon-lane-setup-e2e`, `daemon-tmux-restore` |
-| Doctor | Doctor edge, stores, `ProbeArrivals`, `RenderSightings` | Launcher, watched store | `daemon-doctor-e2e` |
-| Actions | Verbs, `Runs`, `closeIdleMenus` | Launcher, Claude input | `click-does`, `daemon-restart-launch`, `daemon-config-persistence-e2e`, `daemon-settings-menu-e2e`, `daemon-segment-palette-persistence-e2e` |
-| Requests | `handleRequest`, `replyTo`, `handleConnection`, `RuntimeStats`, the order of a render | Client connection, clock | `daemon-connection`, `session-id`, `daemon-request-limits` |
-| Lifetime | Socket lease, boot refusal, parent watchdog, shutdown order | Clock, process table | `daemon-value`, `daemon-socket-lease`, `daemon-boot-refusal`, `daemon-parent-watchdog`, `daemon-shutdown`, `daemon-fork-bomb-ceiling`, `daemon-launch-lifeline-e2e`, `daemon-acquire`, `spawn-isolated-daemon`, `in-worker-daemon` |
+| Piece | What moves into it | Ports its tests fake |
+|---|---|---|
+| Foundations | Session keys, the gates (`stateGate`, `configGate`), `encodeRenderOrigin`, `roleOf`, `answeredOf`, the link signer | Signing key |
+| Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle` | Session store, clock |
+| Config | Resolving and parsing a load | Watched store |
+| Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data |
+| Watchdogs | `updateWatch`, `binaryWatch`, `limits` | Launcher, clock, watched store, a file stat, the release port |
+| Drawing | `RenderCache` with its entries, state, reload and eviction, `sessionSource`, `draw-bar`, `RenderWarningRecords`, `EffectSessions` | Launcher, clock, watched store |
+| Feeds | `FrameFeeds`, `renderFrame`, `PaneVisibility`, `TmuxStatusLines`, `LaneSetups` | tmux, Claude input, launcher, process table, watched store, clock |
+| Doctor | Doctor edge, stores, `ProbeArrivals`, `RenderSightings` | Launcher, watched store |
+| Actions | Verbs, `Runs`, `closeIdleMenus` | Launcher, Claude input |
+| Requests | `handleRequest`, `replyTo`, `handleConnection`, `RuntimeStats`, the order of a render | Client connection, clock |
+| Lifetime | Socket lease, boot refusal, parent watchdog, shutdown order | Clock, process table |
 
 Three knots need more than a move.
 
@@ -110,9 +110,9 @@ Every piece ticket delivers the same things in one change:
 - One constructor whose purpose fits one sentence, taking typed inputs.
 - A new entry in the import rule, so the piece reaches only the rows above it.
 - A fake of the piece's own interface where the piece below it would otherwise pull in real ports, kept in `src` with a contract suite like any port's.
-- Its boot tests moved onto the piece and its fakes. Each behaviour they protected still fails a test when deliberately broken.
+- The booting cases it can reach moved onto the piece and its fakes. Each behaviour they protected still fails a test when deliberately broken. A case that crosses into a later piece, such as one that clicks, is named on that later ticket.
 - The closures that reached past it replaced by a value or an event that flows one way.
-- The ratchet from ticket 2 lowered by what moved, in the same change. Config and Sessions move no boot test of their own: they exist so Drawing and Actions can be built alone.
+- The ratchet from ticket 2 lowered by what moved, in the same change. Config and Sessions may move none: they exist so Drawing and Actions can be built alone.
 
 Lifetime's real-process behaviour is tested against a small child program that is not the daemon: lease, watchdog and shutdown decisions are pure, and one adapter test proves signals and sockets behave as the adapter says.
 
@@ -141,7 +141,7 @@ Each row is tested once, at its adapter.
 **1. Every CI run stores one record per test file.** A record holds file, layer, count, duration and outcome, and is kept as a run artifact. The shape report, the flake rate and the budget checks are all views over it, so each fact has one home. Every file in a project emits a record, so a file that ran zero tests and a file that never ran read differently. The report also tracks time-to-diagnose, from a red run to the ticket naming its cause. [LAW:nothing-unseen] [LAW:one-source-of-truth]
 Done when a CI run shows count and time per layer, covering every file, plus pre-merge wall time.
 
-**2. Every test that boots the daemon is counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route and records the test that booted, so it counts tests, which is what the cap is about. `HELPER_START_CEILING` becomes a transitional ratchet over this count outside `test/e2e/`, set to today's number, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts the tests still being moved, a different fact from the cap in ticket 3, and ticket 35 deletes it. This lands first because it stops new boots while the cutting runs. [LAW:single-enforcer]
+**2. Every test that boots the daemon is counted, and the count only falls.** The ledger behind `judgeDaemonStarts` gains a harness route and records the test that booted, so it counts tests, which is what the cap is about. It is also the one list of what still boots, so each piece ticket takes its cases from it, because the unit that moves is a case and not a file. `HELPER_START_CEILING` becomes a transitional ratchet over this count outside `test/e2e/`, set to today's number, and `judgeDaemonStarts` stops suggesting a raise. A CI step compares the number with `main` and fails any rise. It counts the tests still being moved, a different fact from the cap in ticket 3, and ticket 35 deletes it. This lands first because it stops new boots while the cutting runs. [LAW:single-enforcer]
 Done when a new test that boots through the harness fails CI, a raised ratchet fails CI, and every later ticket lowers the number.
 
 **3. The cap and the assertion limit are enforced.** Creates `test/e2e/`, the sign-off file and the run-time assertion check from "The five end-to-end tests". The cap counts the tests in `test/e2e/`. The refusal is a new hook of its own that also refuses edits to itself, because `.claude/hooks/release-pin.mjs` says every refusal is about the 1.x pin. Hooks are wired in `.claude/settings.json`, which that pin refuses agents, so Brandon adds that one entry.
@@ -161,7 +161,7 @@ Done when a test can be quarantined by one line and an expired line fails CI. `l
 ### Stage 2: the composition root
 
 **8. `createDaemon` takes every adapter and every path as an input.** `DaemonInputs` gains a paths value and the adapters it builds today: launcher, stores, edges, the logger, the link key, `fetch` and the file stat. Entry points read `paths.ts` once and pass the value down. That settles the conflict with the comment on `DaemonInputs`, which goes. The keyspaces become one value here. The Foundations row moves out of `verbs` and the other rows so every piece can reach it, and the import rule starts with it. `site/transport.ts` is the other caller and supplies the same inputs. It keeps the real adapters, because its `node:fs` and `node:child_process` are already the simulated machine under `site/`. [LAW:effects-at-boundaries] [LAW:escape-local-minima]
-Done when nothing under `src/daemon` except the entry point `server.ts` constructs an adapter or reads `paths.ts`, fake ports leave the real state directory untouched, and `pnpm site:build` still passes.
+Done when nothing `createDaemon` reaches constructs an adapter or reads `paths.ts`, fake ports leave the real state directory untouched, and `pnpm site:build` still passes.
 
 **9. Configuration is parsed once at the root and passed down as a value.** `src` reads the environment only at entry points (45 reads today), and tests stop writing `process.env` (187 writes today). Daemon-side facts about a session keep arriving as hints from the client. Depends on 8.
 Done when no test writes `process.env` and a lint rule keeps env reads at entry points.
@@ -213,11 +213,11 @@ Done when literal sleeps are gone and `until`, `renderUntil`, `untilHeard` and l
 
 ### Stage 4: the pieces
 
-Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need not land in table order, because most lower pieces are already classes a test can assemble over fake ports. The draw and the verbs are functions over `DaemonParts` and `VerbContext`, which only `createDaemon` builds, so anything that needs them waits for tickets 22 and 25. Among the tickets that are ready, take the one that lowers the ratchet most.
+Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need not land in table order, because most lower pieces are already classes a test can assemble over fake ports. The draw and the verbs are functions over `DaemonParts` and `VerbContext`, which only `createDaemon` builds, so anything that needs them waits for tickets 22 and 25. Among the tickets that are ready, take the one that lowers the ratchet most, as ticket 2's list reads then.
 
-**21. Feeds.** The most booting cases of any piece: `daemon-frame-feed-e2e` alone has 27. `FrameFeeds` already takes its draw as an input, so the fake draw needs no other piece. Depends on 11, 12, 14 and 17.
+**21. Feeds.** `daemon-frame-feed-e2e` is the largest booting file, with 27 cases. `FrameFeeds` already takes its draw as an input, so the fake draw needs no other piece. Depends on 11, 12, 14 and 17.
 
-**22. Drawing.** Offers setup and draw as above. `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects, unit-test it, and delete the file. Depends on 8, 11 to 19, 23 and 28.
+**22. Drawing.** Offers setup and draw as above. `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects and unit-test it. Its click-event and `BAD_REQUEST` cases are written by `reply.ts`, so they go to ticket 29. Depends on 8, 11 to 19, 23 and 28.
 
 **23. Config.** A load resolves and parses to a plain value that `RenderCache` takes, and reload stays in the cache. Depends on 14.
 
@@ -251,8 +251,8 @@ Done when the decisions have unit tests with no process, and the shell has no br
 **34. Tests run in random order.** An order-dependent failure is a bug in the test.
 Done when random order is the default in CI and the suite passes on repeated seeds.
 
-**35. The five end-to-end tests run on the packed artifact.** Each runs from `pnpm pack` installed into a temp prefix, with the native binary from `release.yml`'s `build-rust` job. `test/helpers/in-worker-daemon.ts`, `test/daemon-boots/` and every file left in it are gone. The ratchet reaches zero and is deleted, which leaves the sign-off cap as the only number. Depends on 21 to 30 and 36.
-Done when ticket 2's count reads 5, all of them in `test/e2e/`, and break 7 holds.
+**35. The five end-to-end tests run on the packed artifact.** Each runs from `pnpm pack` installed into a temp prefix, with the native binary from `release.yml`'s `build-rust` job. `test/helpers/in-worker-daemon.ts` goes. The ratchet reaches zero and is deleted, which leaves the sign-off cap as the only number. Depends on 21 to 30 and 36.
+Done when ticket 2's count reads 5, all of them in `test/e2e/`, break 7 holds, and `test/daemon-boots/` is empty because its cases moved. A case is deleted only with the lower test that now proves its behaviour named on the ticket.
 
 **36. Measurements stop booting the daemon where they can.** `draw-reserve` measures the drawing piece in a small process of its own, and moves to the scheduled tier. Takes `tl8u`, and depends on `candybar-launch-q7o7.qjw` and 22. The Load gate and the Feed criterion are measured on the built daemon by their nature, and they are covered under Decisions.
 Done when no jest test outside `test/e2e/` boots the daemon.
