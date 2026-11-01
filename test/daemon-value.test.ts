@@ -42,6 +42,7 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
+const CHILD = new Set(["PROCESSWRAP", "PIPEWRAP"]);
 const live = new Map<number, Error>();
 const resources = createHook({
   init: (id, type) => {
@@ -353,13 +354,6 @@ describe("the daemon is a value", () => {
 
     await until(() => !pidAlive(claudePid), "the claude stub ended", 2_000);
     await midWait;
-    // A launch counts as ended once its kill timer is cleared, and a closed
-    // launcher starts no more, so zero is the end of the launches' resources.
-    await until(
-      () => daemon.stats.subprocessInFlight === 0,
-      "the launches ended",
-    );
-
     const leftover = () =>
       [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
     const origins = (held: Error[]) => held.map(({ stack }) => stack);
@@ -367,6 +361,15 @@ describe("the daemon is a value", () => {
     // Read in a turn of its own, so what ended has landed its destroy.
     const turn = () => new Promise((resolve) => setImmediate(resolve));
 
+    // A launch's handles close after its result lands, so its end is read off
+    // the ledger itself.
+    await until(
+      () =>
+        !leftover().some(
+          (held) => CHILD.has(held.message) && !isLifeline(held),
+        ),
+      () => `the launches ended: ${origins(leftover()).join("\n")}`,
+    );
     // Only what is live at this read shows: a timer that already fired is gone.
     await turn();
     expect(origins(leftover().filter((held) => !isLifeline(held)))).toEqual([]);
