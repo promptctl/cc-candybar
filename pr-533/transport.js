@@ -76698,15 +76698,17 @@ async function replyTo(parts, req, timedOut, accepted) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const waitEndsAt = (req2) => t0 + waitBudgetMs(req2.deadline, accepted, {
-      epochMs: started2.getTime(),
-      monoMs: t0
-    });
     const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(
       parts,
       checked.req,
       at,
-      waitEndsAt(checked.req),
+      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+      // fixed at its arrival: early enough before its client hangs up to
+      // draw (src/daemon/request-deadline.ts).
+      t0 + waitBudgetMs(checked.req.deadline, accepted, {
+        epochMs: started2.getTime(),
+        monoMs: t0
+      }),
       facts
     ).then(
       ({ answer: answer2, motion, clickShown, delivered }) => {

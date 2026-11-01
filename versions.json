@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-533",
+      "ref": "refs/pull/533/merge",
+      "sha": "605492d304d2f276256bcd9f5936bb2dbc4ad7fd",
+      "timestamp": "2026-11-01T03:03:30.418Z",
+      "commits": [
+        {
+          "sha": "605492d304d2f276256bcd9f5936bb2dbc4ad7fd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:02:45Z",
+          "message": "Merge c5af182c1a81ed478db38f0f7a422128e328198d into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+        },
+        {
+          "sha": "c5af182c1a81ed478db38f0f7a422128e328198d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:01:07-06:00",
+          "message": "fix(daemon): a held clock fires as a real one does, and an answered request's backstop is cleared (brandon-unfiled-3248.a5k3)\n"
+        },
+        {
+          "sha": "4812527bb563fe3900700c1cc27214610743e2d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:30:38-06:00",
+          "message": "fix(daemon): a request's timers run on its clock, so a held daemon holds them (brandon-unfiled-3248.a5k3)\n\nA budget was figured from DaemonClock while the wait and the backstop ran on\nreal setTimeout, so a held clock could not own a request's time. `after` on the\nclock gives both one owner: the deadline case holds its daemon and advances to\nexact figures, a stall in the worker can no longer reach the backstop first, and\narming the wait with anything but its budget fails the case.\n\nFrom the high review: RequestWait goes, since `stated` was req.deadline.kind, and\nthe process file's one case stops carrying shared fixtures.\n"
+        },
+        {
+          "sha": "ad9d2fb0fe3cb5c4c79c354636f66cd1b13d7e53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:19:01-06:00",
+          "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-534",
       "ref": "refs/pull/534/merge",
       "sha": "e4de1469335144d2ad65fcafbf63c545d44976ca",
@@ -48,35 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T20:22:35-06:00",
           "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-533",
-      "ref": "refs/pull/533/merge",
-      "sha": "f0555a0317e2cf4a056c6484c9cd418995227e31",
-      "timestamp": "2026-11-01T02:52:13.222Z",
-      "commits": [
-        {
-          "sha": "f0555a0317e2cf4a056c6484c9cd418995227e31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:51:07Z",
-          "message": "Merge 4812527bb563fe3900700c1cc27214610743e2d4 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
-        },
-        {
-          "sha": "4812527bb563fe3900700c1cc27214610743e2d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:30:38-06:00",
-          "message": "fix(daemon): a request's timers run on its clock, so a held daemon holds them (brandon-unfiled-3248.a5k3)\n\nA budget was figured from DaemonClock while the wait and the backstop ran on\nreal setTimeout, so a held clock could not own a request's time. `after` on the\nclock gives both one owner: the deadline case holds its daemon and advances to\nexact figures, a stall in the worker can no longer reach the backstop first, and\narming the wait with anything but its budget fails the case.\n\nFrom the high review: RequestWait goes, since `stated` was req.deadline.kind, and\nthe process file's one case stops carrying shared fixtures.\n"
-        },
-        {
-          "sha": "ad9d2fb0fe3cb5c4c79c354636f66cd1b13d7e53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:19:01-06:00",
-          "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
         }
       ]
     },
