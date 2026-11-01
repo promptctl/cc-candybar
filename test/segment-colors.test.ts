@@ -11,6 +11,7 @@
 import { TEST_ENGINE } from "./helpers/test-engine";
 import {
   Palette,
+  getThemePalette,
   parseRgbHex,
   ColorRgba,
   Oklch,
@@ -42,26 +43,33 @@ import {
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
+import type { PaletteRole, RichText, Style, ThemeKey } from "@promptctl/rich-js";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 
 // ─── Test palette ─────────────────────────────────────────────────────────────
 
+// Hand-spelled roles laid over a bundled theme's complete set, as `buildPalette`
+// would re-derive from them and move the colours each case measures on paper.
+const withRoles = (name: string, stated: ReadonlyMap<PaletteRole, ColorRgba>): Palette =>
+  new Palette(
+    name,
+    true,
+    getThemePalette("nord").mapRoles((colour, role) => stated.get(role) ?? colour),
+  );
+
 function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
-  const vars = new Map<string, ColorRgba>([
+  const vars = new Map<PaletteRole, ColorRgba>([
     ["primary", parseRgbHex(primaryHex)],
     ["error", parseRgbHex("ff4444")],
-    ["info", parseRgbHex("44aaff")],
+    ["secondary", parseRgbHex("44aaff")],
     ["success", parseRgbHex("44cc88")],
     ["surface", parseRgbHex("1a1a2e")],
     ["text", parseRgbHex("eeeeee")],
     // The two poles `textOn` chooses an unauthored foreground between.
     ["foreground", parseRgbHex("eeeeee")],
-    // transposePalette derives the dark flag from "background" (required for
-    // any non-identity key); real registry palettes always carry it.
     ["background", parseRgbHex("12121a")],
   ]);
-  return new Palette(name, true, vars);
+  return withRoles(name, vars);
 }
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
@@ -231,7 +239,7 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
 describe("roleTextOn: a role's text on a ground is a colour the theme names for the role, never a synthesised one", () => {
   // A role whose text colour and ladder are spelled by hand, so each answer
   // below is one entry, measured on paper against the ground it is asked for.
-  const RED = new Map<string, ColorRgba>([
+  const RED = new Map<PaletteRole, ColorRgba>([
     ["text-error", parseRgbHex("c86464")],
     ["error", parseRgbHex("a03c3c")],
     ["error-lighten-1", parseRgbHex("b45050")],
@@ -241,12 +249,12 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
     ["error-darken-2", parseRgbHex("641414")],
     ["error-darken-3", parseRgbHex("460000")],
   ]);
-  const on = (ground: string, palette = new Palette("reds", true, RED)): string => {
+  const on = (ground: string, palette = withRoles("reds", RED), role = "error"): string => {
     const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
     const engine = createCcCandybarEngine({ ...TEST_ENGINE, extraFuncs: segmentColorFuncs(ref) });
     openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
     return engine
-      .parse(`{{ roleTextOn "error" "${ground}" }}`)
+      .parse(`{{ roleTextOn "${role}" "${ground}" }}`)
       .evaluate({})
       .map((f) => f.plain)
       .join("");
@@ -276,9 +284,8 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
   });
 
   test("a role the palette names no full ladder for fails loudly, naming the missing entry, even where the text colour reads", () => {
-    const partial = new Map(RED);
-    partial.delete("error-darken-3");
-    expect(() => on("#000000", new Palette("partial", true, partial))).toThrow(/error-darken-3/);
+    // nord's text-muted reads on black, and no theme has a muted ladder.
+    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(/"muted" did not resolve/);
   });
 });
 
@@ -328,7 +335,7 @@ describe("conditional bg template", () => {
   const h = makeHarness();
   const palette = makeTestPalette();
   const bgTpl = h.parse(
-    "{{ if gt .percent 90.0 }}error{{ else if gt .percent 75.0 }}info{{ else }}success{{ end }}",
+    "{{ if gt .percent 90.0 }}error{{ else if gt .percent 75.0 }}secondary{{ else }}success{{ end }}",
   );
 
   test("percent > 90 → error color", () => {
@@ -336,7 +343,7 @@ describe("conditional bg template", () => {
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
-  test("percent 76–90 → info color", () => {
+  test("percent 76–90 → secondary color", () => {
     const style = resolve(h, palette, bgTpl, undefined, { percent: 80 });
     expect(style.bgcolor?.value?.hex).toBe("#44aaff");
   });
@@ -570,7 +577,7 @@ describe("both bg and fg resolved", () => {
 // [LAW:behavior-not-structure] The hue behavior is a property of the palette
 // handed to resolveSegmentColors, not an option of it. These assert the
 // observable: resolved hex through a transposed palette. The anchor rule itself
-// (error/success/warning hue-locked, info NOT) is owned + exhaustively tested in
+// (error/success/warning hue-locked, the rest not) is owned + exhaustively tested in
 // rich-js (transposePalette / ANCHORED_ROOTS); here we assert only that
 // cc-candybar wires it through correctly.
 // ────────────────────────────────────────────────────────────────────────────
@@ -621,12 +628,10 @@ describe("per-segment hue via palette transposition", () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
-    // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
-    // does not. This is the drift the reshaping removed.
+  test("hueShift 30 → a role rich-js does not anchor transposes", () => {
     const shifted = transposedPalette(base, hueKey(30));
     expect(
-      maxChannelDelta(shifted.get("info")!, base.get("info")!),
+      maxChannelDelta(shifted.get("secondary"), base.get("secondary")),
     ).toBeGreaterThan(5);
   });
 
@@ -654,7 +659,7 @@ describe("per-segment hue via palette transposition", () => {
     const h = makeHarness();
     const shifted = transposedPalette(base, hueKey(60));
     const bgTpl = h.parse("surface");
-    const fgTpl = h.parse("info");
+    const fgTpl = h.parse("secondary");
     const style = resolve(h, shifted, bgTpl, fgTpl);
     const baseStyle = resolve(h, base, bgTpl, fgTpl);
     expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);

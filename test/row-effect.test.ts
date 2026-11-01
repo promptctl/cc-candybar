@@ -13,6 +13,7 @@ import {
   RichText,
   ColorDepth,
   Segment,
+  decodeAnsi,
   render as drawSegments,
 } from "@promptctl/rich-js";
 
@@ -33,6 +34,7 @@ import {
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { resolvedStyle } from "../src/render/rich-theme";
 
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
@@ -296,6 +298,53 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     } finally {
       closed.dispose();
       opened.dispose();
+    }
+  });
+});
+
+// [LAW:verifiable-goals] brandon-menus-sjhy.ju8: a segment's turn depends on
+// where it sits. Near neighbours pace nearly alike, so the three here stand
+// far apart, a different fill between them.
+describe("the wheel paces each segment by where it sits", () => {
+  const SEGMENTS = ["AAAA", "BBBB", "CCCC"];
+  const WHEELED = parseAndValidate(
+    "<test>",
+    `{
+      segments: {
+        a: { template: 'AAAA', bg: '#336699' },
+        gap1: { template: '${"-".repeat(30)}', bg: '#996633' },
+        b: { template: 'BBBB', bg: '#336699' },
+        gap2: { template: '${"-".repeat(30)}', bg: '#996633' },
+        c: { template: 'CCCC', bg: '#336699' },
+      },
+      root: { rows: { wheeled: { h: ["a", "gap1", "b", "gap2", "c"] } } },
+    }`,
+    undefined,
+    DEFAULT_DSL_CONFIG,
+  );
+
+  const fillOf = (rendered: string, word: string): string => {
+    const line = rendered.split("\n").find((l) => stripAnsi(l).includes(word));
+    if (line === undefined) throw new Error(`no line draws ${word}`);
+    const text = decodeAnsi(line);
+    const at = text.plain.indexOf(word);
+    const span = text.spans.find(({ start, end }) => start <= at && at < end);
+    const bgcolor = span === undefined ? undefined : resolvedStyle(span.style).bgcolor;
+    if (bgcolor === undefined) throw new Error(`${word} is drawn without its own ground`);
+    return bgcolor.getTruecolor().hex;
+  };
+
+  test("segments of one fill at different places turn to different colours, from the frame they all began in", () => {
+    const { render, dispose } = renderer(WHEELED);
+    try {
+      const effects = new SessionEffects<RenderedLine>("s");
+      const first = render("wheel", at(5), effects);
+      expect(first).toBe(render("none", at(5)));
+      expect(new Set(SEGMENTS.map((word) => fillOf(first, word))).size).toBe(1);
+      const later = render("wheel", at(65), effects);
+      expect(new Set(SEGMENTS.map((word) => fillOf(later, word))).size).toBe(SEGMENTS.length);
+    } finally {
+      dispose();
     }
   });
 });

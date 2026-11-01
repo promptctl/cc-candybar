@@ -26,7 +26,6 @@ import {
   decorEntryColour,
   decorEntryFor,
   decorationFor,
-  paletteRole,
   textOn,
   TEXT_MIN_CONTRAST,
   type Decor,
@@ -75,7 +74,7 @@ describe("done-when: a decorated cell's text clears the text floor on every them
               }
               // Its role's own text, slid by rich-js until it reads — the hue
               // kept, the lightness moved — and untouched where it already does.
-              const own = paletteRole(palette, `text-${hue}`);
+              const own = palette.get(`text-${hue}`);
               const slid = ensureContrast(own, tint, TEXT_MIN_CONTRAST, drawnAt);
               if (text.hex !== slid.hex) wrong.push(`${where}: ${text.hex}, not its own ${own.hex} slid to the floor (${slid.hex})`);
               else if (slid.hex === own.hex) kept++;
@@ -97,7 +96,7 @@ describe("done-when: a decorated cell's text clears the text floor on every them
 describe("done-when: text on a state cell is contrast-chosen and clears the text floor on every pair", () => {
   test("is the theme pole on the side contrastFor names, slid that way only when it misses the floor", () => {
     for (const palette of REGISTRY) {
-      const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
+      const poles = [palette.get("background"), palette.get("foreground")];
       for (const shade of SHADE_NAMES) {
         for (const hue of DECOR_HUES) {
           const { state } = bandFor(palette, { decor: openIn(hue, shade), depth: 0 }, ColorDepth.TRUECOLOR);
@@ -136,7 +135,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
   test("descends from the side's own pole: same chroma and hue, on every shade and band colour", () => {
     const hueGap = (a: number, b: number): number => Math.abs(((a - b + 540) % 360) - 180);
     for (const palette of REGISTRY) {
-      const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
+      const poles = [palette.get("background"), palette.get("foreground")];
       const cells = [
         ...SHADE_NAMES.flatMap((shade) =>
           [...VARIATIONS.duo.hues, ...VARIATIONS.accent.hues]

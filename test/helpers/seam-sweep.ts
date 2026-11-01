@@ -46,7 +46,6 @@ import {
   VARIATIONS,
   bandFor,
   hueOf,
-  paletteRole,
   shadeRole,
   type Decor,
   type DecorHue,
@@ -99,7 +98,7 @@ const FRAMES: ReadonlyArray<readonly [string, (bar: SessionBar) => void]> = [
 // Every shade of a role of `palette`, as the palette names it, whose whole
 // ladder `drawnAt` draws as one colour.
 function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> {
-  const named = (hue: DecorHue, shade: RoleShade) => paletteRole(palette, shadeRole(hue, shade));
+  const named = (hue: DecorHue, shade: RoleShade) => palette.get(shadeRole(hue, shade));
   return new Set(
     DECOR_HUES.flatMap((hue) =>
       new Set(LADDER.map((rung) => drawnColour(named(hue, rung), drawnAt).hex)).size === 1
@@ -116,7 +115,7 @@ function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> 
 export function pressHasNoneToGive(palette: Palette, decor: Decor, depth: number, drawnAt: ColorDepth): boolean {
   const hue = hueOf({ decor, depth });
   const taken = besidePress(palette, decor, depth, drawnAt);
-  return LADDER.every((rung) => taken.has(drawnColour(paletteRole(palette, shadeRole(hue, rung)), drawnAt).hex));
+  return LADDER.every((rung) => taken.has(drawnColour(palette.get(shadeRole(hue, rung)), drawnAt).hex));
 }
 
 // Every pressed shade under `decor`, as the palette names it, that has none to
@@ -172,7 +171,7 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
       const palette = getThemePalette(theme)!;
       const flat = flatShades(palette, drawnAt);
       const noneToGive = pressesWithNoneToGive(palette, decor, drawnAt);
-      const alerts = new Set((["warning", "error"] as const).map((role) => paletteRole(palette, role).hex));
+      const alerts = new Set((["warning", "error"] as const).map((role) => palette.get(role).hex));
       bar.pick("theme", theme);
       for (const [frame, show] of FRAMES) {
         show(bar);

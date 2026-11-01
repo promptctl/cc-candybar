@@ -2029,9 +2029,11 @@ rule there could never be evaluated.
 `globals.effect` sets a looping effect the whole bar wears: `none` (the
 default), `shimmer` (a band of light crossing the bar), `pulse` (a slow
 breath), `sparkle` (short lit strokes) or `wheel` (every hue drifting round, far
-too slowly to see move). An effect changes colours only: the text, the links
-and every click target stay exactly as they are. The settings menu's
-`🎨 look` tab has a `✨` control for it, and `💾 save` writes your pick here.
+too slowly to see move, each segment at a pace set by where it sits, so one that
+changes place takes that place's colour at once). An effect changes colours
+only: the text, the links and every click target stay exactly as they are. The
+settings menu's `🎨 look` tab has a `✨` control for it, and `💾 save` writes your
+pick here.
 
 ```json5 check:pass
 { globals: { effect: "pulse" } }

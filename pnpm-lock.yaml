@@ -18,8 +18,8 @@ importers:
         specifier: ^0.10.0
         version: 0.10.0
       '@promptctl/rich-js':
-        specifier: ^0.25.1
-        version: 0.25.1(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)
+        specifier: ^0.27.0
+        version: 0.27.0(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@25.0.3(typescript@5.9.3))
@@ -1042,8 +1042,8 @@ packages:
     resolution: {integrity: sha512-yi4RcDJ8cTsSpL1qSIUJDjfXYpqVfZFO6BeWwiJ1R/wuoWVn7uI3MnHA6kpmeT4apYStlU6sDl7nSexnQiDvjA==}
     engines: {node: '>=20.19.0'}
 
-  '@promptctl/rich-js@0.25.1':
-    resolution: {integrity: sha512-CWbgPj+imRk8vkjF7ws1dx7YtR5J8Rary3d3HPI2aTdqmiI4nyQVm+CmHI+BLveuWRLDIC1jGczwfuYN8TDpvg==}
+  '@promptctl/rich-js@0.27.0':
+    resolution: {integrity: sha512-tEzTXvRQbN8N5wW+/5dyDEEqFtn/hcEPLHbRVTAV6Ka1RLVW3LmwE1VljFuo4Nt0CnT0HOTZzXvXqlP7LggsrQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@promptctl/go-template-js': ^0.10.0
@@ -4528,7 +4528,7 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.25.1(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)':
+  '@promptctl/rich-js@0.27.0(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)':
     optionalDependencies:
       '@promptctl/go-template-js': 0.10.0
       mobx: 7.0.6

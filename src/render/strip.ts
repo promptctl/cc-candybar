@@ -22,6 +22,10 @@ import { STILL, type RowMotion } from "./effect.js";
 // Strip is drawn at, so a row drawn here is the bytes it always was.
 const UNBOUNDED_DRAW_WIDTH = 80;
 
+// The identity rich-js's `HostFrame.host` asks for: what drew a frame, with
+// nothing on it to read, so the frame's `time` is the only time in it.
+const ROW_HOST = {};
+
 // [LAW:types-are-the-program] A drawn row: its bytes, and the moment, in wall
 // seconds, at which something on it next changes without new data — a looping
 // effect, a transition in flight, the closing flash, a template's `frames` —
@@ -63,9 +67,7 @@ function draw(
       asciiOnly: false,
       theme: RENDER_THEME,
       colorSystem: destination.colorSystem,
-      ...(time === undefined
-        ? {}
-        : { frame: { time, host: { frameTime: time } } }),
+      ...(time === undefined ? {} : { frame: { time, host: ROW_HOST } }),
       // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
       // as no style at all; a name the theme lacks is a broken config, so it
       // throws here exactly as the cell splitter throws on it.

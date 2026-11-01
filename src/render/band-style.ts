@@ -14,7 +14,6 @@ import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import { DISCLOSURE_CLOSE_ROLE } from "../config/disclosure.js";
 import {
   bandItem,
-  paletteRole,
   TEXT_MIN_CONTRAST,
   textOn,
   type Decoration,
@@ -72,7 +71,7 @@ export function closeOn(
   return new Style({
     color: ColorSpec.fromRgba(
       ensureContrast(
-        paletteRole(palette, DISCLOSURE_CLOSE_ROLE),
+        palette.get(DISCLOSURE_CLOSE_ROLE),
         ground,
         TEXT_MIN_CONTRAST,
         drawnAt,

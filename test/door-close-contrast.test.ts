@@ -88,10 +88,10 @@ const FARTHEST: Readonly<Partial<Record<(typeof THEMES)[number], Partial<Record<
     "secondary-lighten-2": ["error-darken-3", "3.53"],
   },
   cyberpunk: {
-    "accent-muted": ["text-error", "2.76"],
-    "primary-muted": ["text-error", "3.12"],
+    "accent-muted": ["text-error", "2.68"],
+    "primary-muted": ["text-error", "3.03"],
     "secondary-lighten-2": ["error-darken-3", "2.44"],
-    "secondary-muted": ["text-error", "4.48"],
+    "secondary-muted": ["text-error", "4.35"],
   },
   default: {
     "accent-muted": ["text-error", "3.84"],

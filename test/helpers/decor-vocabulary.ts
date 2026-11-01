@@ -14,7 +14,6 @@ import {
   VARIATIONS,
   bandFor,
   hueOf,
-  paletteRole,
   shadeRole,
   windowAt,
   type AddressStep,
@@ -74,7 +73,7 @@ export const TODAY: Decor = { variation: VARIATIONS[floorOf("variation")], shade
 export function besidePress(palette: Palette, decor: Decor, depth: number, drawnAt: ColorDepth): ReadonlySet<string> {
   const { variation, shade } = decor;
   const dealt = (hue: DecorHue): string[] =>
-    windowAt(palette, hue, shade, drawnAt).map((tone) => drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex);
+    windowAt(palette, hue, shade, drawnAt).map((tone) => drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex);
   const keystone: readonly DecorHue[] = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
   const up = { decor, depth: depth - 1 };
   const beside =
