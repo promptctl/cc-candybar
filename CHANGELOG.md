@@ -1,3 +1,9 @@
+## [1.172.0](https://github.com/promptctl/cc-candybar/compare/v1.171.0...v1.172.0) (2026-11-01)
+
+### Features
+
+* **settings:** a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt) ([#527](https://github.com/promptctl/cc-candybar/issues/527)) ([3439d4a](https://github.com/promptctl/cc-candybar/commit/3439d4a05a61f8cd02c3099414d573b8e8e1cffc))
+
 ## [1.171.0](https://github.com/promptctl/cc-candybar/compare/v1.170.1...v1.171.0) (2026-10-31)
 
 ### Features
