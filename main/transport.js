@@ -35649,6 +35649,8 @@ function refusalOf(state, category, signal) {
   return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
 }
 var TIMEOUT_KILL_GRACE_MS = 250;
+var GROUP_END_POLL_MIN_MS = 25;
+var GROUP_END_POLL_MAX_MS = 1e3;
 var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
 function setFault(state, next2) {
   if (next2 === state.fault) return;
@@ -35770,6 +35772,7 @@ async function launchWaited(state, opts) {
     let settled3 = false;
     let timer = null;
     let killTimer = null;
+    let groupEndTimer = null;
     let terminated = null;
     const onAbort = () => terminate("aborted");
     const unlisten = () => {
@@ -35781,6 +35784,7 @@ async function launchWaited(state, opts) {
       settled3 = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      if (groupEndTimer) clearTimeout(groupEndTimer);
       unlisten();
       if (group !== void 0) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
@@ -35803,7 +35807,36 @@ async function launchWaited(state, opts) {
         });
       }
     };
+    const concludeWithGroup = () => {
+      for (const pipe of [child.stdout, child.stderr]) {
+        pipe?.removeAllListeners("data").resume();
+        pipe?.unref();
+      }
+      conclude(child.exitCode, child.signalCode);
+    };
+    if (group !== void 0) {
+      const awaitGroupEnd = (delayMs) => {
+        if (settled3) return;
+        if (groupGone(group)) {
+          setImmediate(concludeWithGroup);
+          return;
+        }
+        groupEndTimer = setTimeout(
+          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
+          delayMs
+        );
+      };
+      void exited.then(
+        () => setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
+      );
+    }
     const terminate = (cause) => {
+      const ended = child.exitCode !== null || child.signalCode !== null;
+      if (ended && group !== void 0 && groupGone(group)) {
+        terminated = cause === "aborted" ? cause : null;
+        setImmediate(concludeWithGroup);
+        return;
+      }
       terminated = cause;
       if (timer) clearTimeout(timer);
       unlisten();
@@ -35811,12 +35844,7 @@ async function launchWaited(state, opts) {
       if (pid2 !== void 0) {
         killTimer = setTimeout(() => {
           signal(pid2, "SIGKILL");
-          void exited.then(
-            () => setImmediate(() => {
-              child.stdout?.destroy();
-              child.stderr?.destroy();
-            })
-          );
+          void exited.then(() => setImmediate(concludeWithGroup));
         }, TIMEOUT_KILL_GRACE_MS);
         signal(pid2, "SIGTERM");
       }
@@ -35838,7 +35866,7 @@ async function launchWaited(state, opts) {
         error: spawnErrorText(err, opts.cwd)
       });
     });
-    child.on("close", (code, signal2) => {
+    const conclude = (code, signal2) => {
       state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
@@ -35864,7 +35892,8 @@ async function launchWaited(state, opts) {
         exitCode: code,
         signal: signal2
       });
-    });
+    };
+    child.on("close", conclude);
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
@@ -36058,6 +36087,14 @@ function jobGroupAlive(pid2) {
     const code = err.code;
     if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
+  }
+}
+function groupGone(pid2) {
+  try {
+    process_default.kill(-pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "ESRCH";
   }
 }
 function endJob(pid2, status, end) {
