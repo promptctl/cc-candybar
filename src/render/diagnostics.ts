@@ -362,8 +362,6 @@ export function viewerRows(
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg,
   });
-  const go = (key: string, says: string): string =>
-    viewerLink(sessionId, key, says);
   const button = (text: string, link: string | null): RichText =>
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
@@ -373,7 +371,8 @@ export function viewerRows(
       ? button(" ", null)
       : button(
           glyph,
-          go(
+          viewerLink(
+            sessionId,
             viewerKey(list, to.index - 1, to.page),
             `show diagnostic ${to.index} of ${list.length} page ${to.page + 1}`,
           ),

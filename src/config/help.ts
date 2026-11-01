@@ -57,10 +57,6 @@ import {
 // always be read, exactly as it is for the `+` beside it.
 export const HELP_GLYPH_CLOSED = "(?)";
 
-// The open member of a help disclosure's binary key: it holds this or the shared
-// CLOSED sentinel, like every other binary disclosure in the bar.
-const HELP_OPEN = DISCLOSURE_OPEN;
-
 // [LAW:one-source-of-truth] The declarations a `(?)` contributes, keyed by final
 // name — the same accumulator shape `ChromeArtifacts`/`MenuArtifacts` already
 // thread through their synthesis passes, so a caller merges one more set of
@@ -95,12 +91,16 @@ export function declareHelp(
   within: readonly DisclosureRef[],
   out: HelpArtifacts,
 ): SegmentNode {
-  const self: DisclosureRef = { variable: name, key: name, member: HELP_OPEN };
+  const self: DisclosureRef = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN,
+  };
   out.variables[name] = {
     ...disclosureStateVar(name, DISCLOSURE_CLOSED),
     ...(within.length > 0 && { within }),
   };
-  out.actions[name] = disclosureCycleAction(name, HELP_OPEN);
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
   out.segments[name] = {
     template: disclosureTrigger(
       name,

@@ -225,10 +225,10 @@ function sayWrite(key: string, value: string): string {
   return key.startsWith(MENU_NS) ? `open ${value}` : set;
 }
 
-// How much of a copied text a link says, and the mark where it was cut. Copied
-// text is the one free text a click evaluates; the rest are names, paths and
-// what an author wrote. Both ends stay, by code point: a path differs at its end,
-// and half a surrogate pair cannot be encoded.
+// How much of a copied text a link says, and the mark where it was cut. Only a
+// copy is cut, because it alone has no natural length: the rest are names, paths
+// and what an author wrote. Both ends stay, by code point: a path differs at its
+// end, and half a surrogate pair cannot be encoded.
 const COPIED_LENGTH = 60;
 const ELISION = "...";
 function saidCopy(text: string): string {

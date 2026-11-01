@@ -19,7 +19,7 @@ import {
 } from "../src/daemon/render-payload";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
-import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { stripAnsi } from "../test/helpers/ansi";
 import { perSetting } from "../src/config/setting-projections";
