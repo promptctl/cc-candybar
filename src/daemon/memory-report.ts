@@ -28,7 +28,7 @@ export interface MemoryProbe {
   // How the report names what answered (or what did not) — a command line or a
   // path, so a reader can re-run it by hand.
   readonly name: string;
-  readonly read: () => ProbeOutcome;
+  readonly read: () => Promise<ProbeOutcome>;
 }
 
 // The capture runs on a path where the daemon is already dying, so it gets a
@@ -41,10 +41,12 @@ const PROBE_TIMEOUT_MS = 5000;
 // returns an empty string, because an empty post-mortem file is
 // indistinguishable from a probe that silently did nothing, which is the exact
 // blind spot this artifact exists to remove.
-export function memoryReport(probes: readonly MemoryProbe[]): string {
+export async function memoryReport(
+  probes: readonly MemoryProbe[],
+): Promise<string> {
   const refusals: string[] = [];
   for (const probe of probes) {
-    const outcome = probe.read();
+    const outcome = await probe.read();
     if (outcome.kind === "text") {
       return `# memory report from: ${probe.name}\n${outcome.text}`;
     }
@@ -189,12 +191,12 @@ function commandProbe(
 ): MemoryProbe {
   return {
     name: `${bin} ${args.join(" ")}`,
-    read: () => {
-      // [LAW:single-enforcer] Through `launchSync` like every other spawn in
-      // this codebase: it is the one place that carries the timeout, the
-      // category accounting, and a TOTAL result — a raw execFileSync here would
-      // be both an unaccounted child and a throw on the death path.
-      const result = launcher.launchSync({
+    read: async () => {
+      // [LAW:single-enforcer] Through `launch` like every other spawn in this
+      // codebase: it is the one place that carries the timeout, the category
+      // accounting, and a TOTAL result — a raw child_process call here would be
+      // both an unaccounted child and a throw on the death path.
+      const result = await launcher.launch({
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
@@ -220,7 +222,7 @@ function commandProbe(
 function fileProbe(path: string): MemoryProbe {
   return {
     name: path,
-    read: () => {
+    read: async () => {
       try {
         const text = fs.readFileSync(path, "utf8");
         return text.trim().length > 0

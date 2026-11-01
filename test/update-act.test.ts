@@ -9,9 +9,12 @@ import path from "node:path";
 
 import {
   endJob,
+  jobGroupAlive,
   processLauncher,
   readJobEnd,
   type JobFiles,
+  type LaunchResult,
+  type Launcher,
 } from "../src/proc/launch";
 import {
   actsDir,
@@ -22,13 +25,18 @@ import {
   type ActFacts,
   type ActRecord,
 } from "../src/daemon/update-act";
-import type { StartTimeRead } from "../src/daemon/process-fingerprint";
+import {
+  readStartTime,
+  type StartTimeRead,
+} from "../src/daemon/process-fingerprint";
 import {
   makeUpdateWatch,
   UPDATE_DISMISSED_KEY,
 } from "../src/daemon/update-notice";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { stateGate } from "../src/daemon/verbs/state-validators";
+import { makeBinaryWatch } from "../src/daemon/binary-watch";
+import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { until } from "./helpers/until";
 
 let scratch: string;
@@ -53,7 +61,10 @@ const facts = (over: Partial<ActFacts>): ActFacts => ({
   ...over,
 });
 // The fingerprint is not under test here: every leader reads as the recorded one.
-const sameLeader = (): StartTimeRead => ({ kind: "start", token: "t" });
+const sameLeader = async (): Promise<StartTimeRead> => ({
+  kind: "start",
+  token: "t",
+});
 
 describe("judgeAct: the act as every daemon sees it", () => {
   test.each([
@@ -223,7 +234,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     expect(readJobEnd(files.status)).toEqual({ kind: "exit", code: 0 });
   });
 
-  test("a group that refuses SIGTERM is reported, not thrown, and gets no SIGKILL", () => {
+  test("a group that refuses SIGTERM is reported, not thrown, and gets no SIGKILL", async () => {
     const files = jobFiles();
     const kill = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
@@ -242,7 +253,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     }
   });
 
-  test("a group that takes SIGTERM and refuses the SIGKILL does not throw from the timer", () => {
+  test("a group that takes SIGTERM and refuses the SIGKILL does not throw from the timer", async () => {
     const files = jobFiles();
     const kill = jest.spyOn(process, "kill").mockImplementation((_, sig) => {
       if (sig === "SIGTERM") return true;
@@ -262,7 +273,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     }
   });
 
-  test("ending a job whose files are gone is a no-op, not an error", () => {
+  test("ending a job whose files are gone is a no-op, not an error", async () => {
     const status = path.join(scratch, "gone", "status");
     expect(endJob(process.pid, status, { kind: "timeout" })).toEqual({
       stands: false,
@@ -270,7 +281,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     });
   });
 
-  test("a status this module did not write is an error, not an end", () => {
+  test("a status this module did not write is an error, not an end", async () => {
     const files = jobFiles();
     fs.writeFileSync(files.status, "done\n");
     expect(() => readJobEnd(files.status)).toThrow(/not a job verdict/);
@@ -306,7 +317,7 @@ describe("claimAct: one act per bundle", () => {
 
   test("a claim starts the job, and every daemon reading the bundle sees it running, then its verdict", async () => {
     const dir = dirOf();
-    const claim = claimAct(
+    const claim = await claimAct(
       processLauncher,
       dir,
       null,
@@ -318,10 +329,12 @@ describe("claimAct: one act per bundle", () => {
     );
     expect(claim).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
-    const running = reader.read()!;
+    const running = (await reader.read())!;
     ended.push(running.record.pid);
     expect(judgeAct(running)).toEqual({ kind: "running", act: 1 });
-    expect(makeActReader(dir, sameLeader).read()!.record.identity).toBe("id-1");
+    expect((await makeActReader(dir, sameLeader).read())!.record.identity).toBe(
+      "id-1",
+    );
 
     expect(
       endJob(running.record.pid, path.join(dir, "1", "status"), {
@@ -329,15 +342,15 @@ describe("claimAct: one act per bundle", () => {
       }),
     ).toMatchObject({ stands: true, signalled: true });
     await until(
-      () => judgeAct(reader.read()).kind === "failed",
+      async () => judgeAct(await reader.read()).kind === "failed",
       "the timeout verdict",
     );
-    expect(judgeAct(reader.read())).toMatchObject({ reason: "timeout" });
+    expect(judgeAct(await reader.read())).toMatchObject({ reason: "timeout" });
   });
 
   test("a claim onto an act that exists loses, and its program never runs", async () => {
     const dir = dirOf();
-    const first = claimAct(
+    const first = await claimAct(
       processLauncher,
       dir,
       null,
@@ -348,9 +361,9 @@ describe("claimAct: one act per bundle", () => {
       sameLeader,
     );
     expect(first.ok).toBe(true);
-    ended.push(makeActReader(dir, sameLeader).read()!.record.pid);
+    ended.push((await makeActReader(dir, sameLeader).read())!.record.pid);
     // A second daemon that judged the bundle idle from the same empty read.
-    const second = claimAct(
+    const second = await claimAct(
       processLauncher,
       dir,
       null,
@@ -377,7 +390,7 @@ describe("claimAct: one act per bundle", () => {
       JSON.stringify(RECORD),
     );
     // A claimer that read act 2 as newest before act 5 was claimed.
-    const stale = claimAct(
+    const stale = await claimAct(
       processLauncher,
       dir,
       2,
@@ -396,7 +409,7 @@ describe("claimAct: one act per bundle", () => {
   test("a new act after an ended one takes the next number and removes the ended", async () => {
     const dir = dirOf();
     expect(
-      claimAct(
+      await claimAct(
         processLauncher,
         dir,
         null,
@@ -409,27 +422,36 @@ describe("claimAct: one act per bundle", () => {
     ).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, sameLeader);
     await until(
-      () => judgeAct(reader.read()).kind === "succeeded",
+      async () => judgeAct(await reader.read()).kind === "succeeded",
       "the first act to succeed",
     );
     expect(
-      claimAct(processLauncher, dir, 1, "id-2", TOUCH(marker()), 60_000, Date.now(), sameLeader),
+      await claimAct(
+        processLauncher,
+        dir,
+        1,
+        "id-2",
+        TOUCH(marker()),
+        60_000,
+        Date.now(),
+        sameLeader,
+      ),
     ).toEqual({ ok: true, act: 2 });
     expect(fs.readdirSync(dir)).toEqual(["2"]);
     await until(
-      () => judgeAct(reader.read()).kind === "succeeded",
+      async () => judgeAct(await reader.read()).kind === "succeeded",
       "the second act to succeed",
     );
   });
 
   test("a job `ps` can't fingerprint runs, recorded with no start time", async () => {
     const dir = dirOf();
-    const unreadable = (): StartTimeRead => ({
+    const unreadable = async (): Promise<StartTimeRead> => ({
       kind: "unavailable",
       detail: "ps timeout",
     });
     expect(
-      claimAct(
+      await claimAct(
         processLauncher,
         dir,
         null,
@@ -441,24 +463,35 @@ describe("claimAct: one act per bundle", () => {
       ),
     ).toEqual({ ok: true, act: 1 });
     const reader = makeActReader(dir, unreadable);
-    expect(reader.read()!.record.startTime).toBeNull();
+    expect((await reader.read())!.record.startTime).toBeNull();
     await until(
-      () => judgeAct(reader.read()).kind === "succeeded",
+      async () => judgeAct(await reader.read()).kind === "succeeded",
       "the act to succeed",
     );
     expect(fs.existsSync(marker())).toBe(true);
   });
 
-  test("a job started before this boot is not the recorded one, whatever holds its pid", () => {
+  test("a job started before this boot is not the recorded one, whatever holds its pid", async () => {
     const dir = dirOf();
-    claimAct(processLauncher, dir, null, "id-1", SLEEP, 60_000, Date.now(), sameLeader);
-    const { record } = makeActReader(dir, sameLeader).read()!;
+    await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
+    const { record } = (await makeActReader(dir, sameLeader).read())!;
     ended.push(record.pid);
-    expect(isRecordedJob(record, sameLeader)).toBe(true);
-    expect(isRecordedJob({ ...record, started: 0 }, sameLeader)).toBe(false);
+    expect(await isRecordedJob(record, sameLeader)).toBe(true);
+    expect(await isRecordedJob({ ...record, started: 0 }, sameLeader)).toBe(
+      false,
+    );
   });
 
-  test("an act pruned under a read gives way to the newer act that pruned it", () => {
+  test("an act pruned under a read gives way to the newer act that pruned it", async () => {
     const dir = dirOf();
     const write = (act: number, status: string) => {
       fs.mkdirSync(path.join(dir, String(act)), { recursive: true });
@@ -483,14 +516,14 @@ describe("claimAct: one act per bundle", () => {
       }
       return real(file, ...rest);
     }) as typeof fs.readFileSync);
-    const facts = makeActReader(dir, sameLeader).read()!;
+    const facts = (await makeActReader(dir, sameLeader).read())!;
     expect(facts.act).toBe(2);
     expect(facts.record.identity).toBe("id-2");
   });
 
   test("an act number claimed again names the new act, not the one this reader knew", async () => {
     const dir = dirOf();
-    claimAct(
+    await claimAct(
       processLauncher,
       dir,
       null,
@@ -502,18 +535,27 @@ describe("claimAct: one act per bundle", () => {
     );
     const reader = makeActReader(dir, sameLeader);
     await until(
-      () => judgeAct(reader.read()).kind === "succeeded",
+      async () => judgeAct(await reader.read()).kind === "succeeded",
       "the first act to succeed",
     );
     fs.rmSync(dir, { recursive: true });
-    claimAct(processLauncher, dir, null, "id-2", SLEEP, 60_000, Date.now(), sameLeader);
-    const again = reader.read()!;
+    await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-2",
+      SLEEP,
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
+    const again = (await reader.read())!;
     ended.push(again.record.pid);
     expect(again.record.identity).toBe("id-2");
     expect(judgeAct(again)).toEqual({ kind: "running", act: 1 });
   });
 
-  test("act files that can't be read are an error the watch shows, and hold no restart", () => {
+  test("act files that can't be read are an error the watch shows, and hold no restart", async () => {
     const dir = dirOf();
     fs.mkdirSync(path.join(dir, "1"), { recursive: true });
     fs.writeFileSync(path.join(dir, "1", "record.json"), "{ torn");
@@ -530,14 +572,14 @@ describe("claimAct: one act per bundle", () => {
       onApplied: () => {},
       log: (_level, msg) => logged.push(msg),
     });
-    expect(watch.running()).toBe(false);
+    expect(await watch.running()).toBe(false);
     expect(watch.error()).toMatch(/update act files .*JSON/);
     expect(logged).toEqual([watch.error()]);
     fs.writeFileSync(
       path.join(dir, "1", "record.json"),
       JSON.stringify({ ...RECORD, started: Date.now() }),
     );
-    expect(watch.running()).toBe(false);
+    expect(await watch.running()).toBe(false);
     expect(watch.error()).toBeNull();
   });
 
@@ -557,9 +599,7 @@ describe("claimAct: one act per bundle", () => {
       onApplied: () => {},
       log: () => {},
     });
-    const gate = (): string[] => [
-      ...stateGate(DEFAULT_DSL_CONFIG).listKeys(),
-    ];
+    const gate = (): string[] => [...stateGate(DEFAULT_DSL_CONFIG).listKeys()];
     watch.arm();
     expect(gate()).toContain(UPDATE_DISMISSED_KEY);
 
@@ -573,9 +613,292 @@ describe("claimAct: one act per bundle", () => {
     ).toEqual([]);
   });
 
-  test("acts are kept per bundle", () => {
+  test("acts are kept per bundle", async () => {
     expect(actsDir(scratch, "/a/index.mjs")).not.toBe(
       actsDir(scratch, "/b/index.mjs"),
     );
+  });
+});
+
+// [LAW:behavior-not-structure] The act files take turns: what follows is the
+// watch as the daemon runs it, with each `ps` of the fingerprint held open by
+// the test, so a read in flight is a state the test can stand in.
+describe("the update watch: one turn at a time on the act files", () => {
+  const PS_OK: LaunchResult = {
+    ok: true,
+    stdout: "t",
+    stderr: "",
+    exitCode: 0,
+  };
+  const PS_ABORTED: LaunchResult = {
+    ok: false,
+    reason: "aborted",
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    signal: null,
+    error: "the daemon closed",
+  };
+  const jobs: number[] = [];
+  const closers: Array<() => void> = [];
+  afterEach(() => {
+    closers.splice(0).forEach((close) => close());
+    for (const pid of jobs.splice(0)) {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {}
+    }
+  });
+
+  // A job that runs until `stop` exists, then exits 0.
+  const untilFile = (stop: string) => ({
+    bin: "/bin/sh",
+    args: ["-c", `while [ ! -e ${stop} ]; do sleep 0.02; done`],
+    category: "update.apply" as const,
+  });
+
+  function harness() {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    const ps: Array<(answer: LaunchResult) => void> = [];
+    const logged: string[] = [];
+    const ran = marker("ran");
+    let applied = 0;
+    const launcher: Launcher = {
+      ...processLauncher,
+      launch: (opts) =>
+        opts.category === "process-fingerprint"
+          ? new Promise((answer) => ps.push(answer))
+          : processLauncher.launch(opts),
+      // What a click starts is this test's, not `pnpm dlx`.
+      launchJobSync: (_opts, files) => {
+        const job = processLauncher.launchJobSync(
+          { bin: "/usr/bin/touch", args: [ran], category: "update.apply" },
+          files,
+        );
+        if (job.ok) jobs.push(job.pid);
+        return job;
+      },
+    };
+    const watch = makeUpdateWatch({
+      launcher,
+      digest: null,
+      entryUrl: "file:///some/bundle/index.mjs",
+      actsDir: dir,
+      intervalMs: 60_000,
+      releaseIntervalMs: 60_000,
+      registryUrl: "http://127.0.0.1:1",
+      fetchImpl: async () => Response.json({ latest: "999.0.0" }),
+      onApplied: () => applied++,
+      log: (_level, msg) => logged.push(msg),
+    });
+    closers.push(() => watch.close());
+    const notice = () =>
+      watch.notice({ sessionId: "s", dismissed: null, enabled: true });
+    return {
+      dir,
+      ps,
+      logged,
+      ran,
+      watch,
+      notice,
+      applied: () => applied,
+      asked: (n: number) => until(() => ps.length >= n, `${n} ps in flight`),
+      known: () => until(() => notice().length > 0, "the newer release"),
+    };
+  }
+
+  const marker = (name: string) => path.join(scratch, name);
+
+  // An act already on the bundle, running until `stop` exists.
+  async function running(
+    dir: string,
+    stop: string,
+    read: (pid: number) => Promise<StartTimeRead> = sameLeader,
+  ): Promise<number> {
+    const claim = await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      untilFile(stop),
+      60_000,
+      Date.now(),
+      read,
+    );
+    expect(claim.ok).toBe(true);
+    const { pid } = (await makeActReader(dir, read).read())!.record;
+    jobs.push(pid);
+    return pid;
+  }
+
+  test("a read slower than the poll keeps one read in flight", async () => {
+    const h = harness();
+    await running(h.dir, marker("stop"));
+    h.watch.arm();
+    await h.asked(1);
+    await new Promise((resolve) => setTimeout(resolve, 2_300));
+    expect(h.ps).toHaveLength(1);
+  });
+
+  test("a tick straddling act() logs no false success and fires no onApplied", async () => {
+    const h = harness();
+    const stop = marker("stop");
+    const pid = await running(h.dir, stop);
+    h.watch.arm();
+    await h.known();
+    await h.asked(1);
+
+    // The tick holds a read from before the claim; the click arrives behind it.
+    const acting = h.watch.act();
+    fs.writeFileSync(stop, "");
+    await until(() => !jobGroupAlive(pid), "the first act to end");
+    h.ps[0]!(PS_OK);
+    await h.asked(2);
+    h.ps[1]!(PS_OK);
+    await acting;
+
+    expect(h.logged.filter((l) => /succeeded/.test(l))).toEqual([]);
+    expect(h.applied()).toBe(0);
+  });
+
+  test("running() during a tick reads in its own turn, and a restart waits on the act", async () => {
+    const h = harness();
+    const stop = marker("stop");
+    const pid = await running(h.dir, stop);
+    h.watch.arm();
+    await h.asked(1);
+
+    let exits = 0;
+    const target = marker("bundle");
+    fs.writeFileSync(target, "");
+    const binary = makeBinaryWatch({
+      targets: [target],
+      intervalMs: 60_000,
+      stat: fs.statSync,
+      held: () => h.watch.running(),
+      exit: () => exits++,
+      log: () => {},
+    });
+    fs.utimesSync(target, new Date(1), new Date(1));
+    const held = binary.checkNow();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.ps).toHaveLength(1);
+
+    h.ps[0]!(PS_OK);
+    await held;
+    expect(exits).toBe(0);
+
+    fs.writeFileSync(stop, "");
+    await until(() => !jobGroupAlive(pid), "the act to end");
+    await binary.checkNow();
+    expect(exits).toBe(1);
+  });
+
+  test("a success restarts through the binary watch, which waits on the same queue", async () => {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    const stop = marker("stop");
+    // The real `ps` reads this watch's fingerprint, so the record's must be real.
+    await running(dir, stop, (pid) =>
+      readStartTime(pid, processLauncher.launch),
+    );
+    const logged: string[] = [];
+    let exits = 0;
+    const target = marker("bundle");
+    fs.writeFileSync(target, "");
+    const binary = makeBinaryWatch({
+      targets: [target],
+      intervalMs: 60_000,
+      stat: fs.statSync,
+      held: () => watch.running(),
+      exit: () => exits++,
+      log: () => {},
+    });
+    const watch = makeUpdateWatch({
+      launcher: processLauncher,
+      digest: null,
+      entryUrl: "file:///some/bundle/index.mjs",
+      actsDir: dir,
+      intervalMs: 60_000,
+      releaseIntervalMs: 60_000,
+      registryUrl: "http://127.0.0.1:1",
+      fetchImpl: fetch,
+      onApplied: () => void binary.checkNow(),
+      log: (_level, msg) => logged.push(msg),
+    });
+    closers.push(() => watch.close());
+    watch.arm();
+    await until(
+      () => logged.some((l) => /is running; watching it/.test(l)),
+      "the watch to see the act",
+    );
+    fs.utimesSync(target, new Date(1), new Date(1));
+    fs.writeFileSync(stop, "");
+    await until(() => exits === 1, "the restart after the act's success");
+  });
+
+  test("a tick in flight at close judges nothing and arms no next tick", async () => {
+    const h = harness();
+    const first = await running(h.dir, marker("stop"));
+    h.watch.arm();
+    await h.asked(1);
+    h.ps[0]!(PS_OK);
+    await until(
+      () => h.logged.some((l) => /is running; watching it/.test(l)),
+      "the watch to see the act",
+    );
+
+    // Another daemon's act replaces it, so the next tick costs a `ps` and would
+    // judge running -> succeeded.
+    const stop2 = marker("stop2");
+    process.kill(-first, "SIGKILL");
+    await until(() => !jobGroupAlive(first), "the first act to end");
+    const second = await claimAct(
+      processLauncher,
+      h.dir,
+      1,
+      "id-2",
+      untilFile(stop2),
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
+    expect(second.ok).toBe(true);
+    await h.asked(2);
+    const { pid } = (await makeActReader(h.dir, sameLeader).read())!.record;
+    jobs.push(pid);
+    fs.writeFileSync(stop2, "");
+    await until(() => !jobGroupAlive(pid), "the second act to end");
+
+    h.watch.close();
+    h.ps[1]!(PS_ABORTED);
+
+    // A torn act the next tick would report, if there were one.
+    fs.mkdirSync(path.join(h.dir, "9"));
+    fs.writeFileSync(path.join(h.dir, "9", "record.json"), "{ torn");
+    await new Promise((resolve) => setTimeout(resolve, 2_300));
+    expect(h.applied()).toBe(0);
+    expect(h.logged.filter((l) => /succeeded/.test(l))).toEqual([]);
+    expect(h.watch.error()).toBeNull();
+  });
+
+  test("a claim whose `ps` close aborted withdraws, and its program never runs", async () => {
+    const h = harness();
+    h.watch.arm();
+    await h.known();
+
+    const acting = h.watch.act();
+    await h.asked(1);
+    const pid = jobs.at(-1)!;
+    h.watch.close();
+    h.ps[0]!(PS_ABORTED);
+
+    await expect(acting).rejects.toThrow(DaemonClosing);
+    await until(() => !jobGroupAlive(pid), "the gated job to end");
+    expect(fs.existsSync(h.ran)).toBe(false);
+    expect(fs.existsSync(h.dir)).toBe(false);
+  });
+
+  test("an act refused is a BadVerbArgs rejection, for the verb to answer with", async () => {
+    await expect(harness().watch.act()).rejects.toThrow(BadVerbArgs);
   });
 });

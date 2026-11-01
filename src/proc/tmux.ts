@@ -48,7 +48,7 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
   return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
 }
 
-// Holds the daemon's loop until tmux answers: for what must finish before the
+// Holds the caller's loop until tmux answers: for what must finish before the
 // process does, the status lines put back at exit, where no later turn comes.
 export function runTmux(
   launcher: Launcher,

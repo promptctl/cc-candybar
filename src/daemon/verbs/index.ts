@@ -191,7 +191,7 @@ export interface DaemonContext {
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
-  readonly applyUpdate: () => void;
+  readonly applyUpdate: () => Promise<void>;
   // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/edge.ts): the
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
@@ -285,9 +285,9 @@ export interface VerbContext extends DaemonContext {
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
-// `typing` or `gather`, each bound to the turn, so it cannot await one the
+// `typing`, `gather` or `applyUpdate`, each bound to the turn, so it cannot await one the
 // daemon's close would not stop it after.
-type TurnBound = "launcher" | "doctor" | "claudeInput";
+type TurnBound = "launcher" | "doctor" | "claudeInput" | "applyUpdate";
 
 // What a helper reads, from either side of the turn.
 type Unbound = Omit<VerbContext, TurnBound>;
@@ -296,7 +296,7 @@ type Unbound = Omit<VerbContext, TurnBound>;
 export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
-  // [LAW:single-enforcer] Every await of a handler is one of these three: the
+  // [LAW:single-enforcer] Every await of a handler is one of these four: the
   // click's turn answers whether it may go on (JournalTurn.landed).
   readonly launch: (
     opts: Omit<LaunchOpts, "timeoutMs">,
@@ -306,6 +306,7 @@ export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
     hint: ClientHints["tmux"],
     line: SlashLine,
   ) => ReturnType<typeof typeSlash>;
+  readonly applyUpdate: () => Promise<void>;
   // Read-only work in the turn, over what the click has written so far.
   readonly gather: <T>(work: (ctx: C) => Promise<T>) => Promise<T>;
 };
@@ -1362,7 +1363,7 @@ const redo: VerbHandler = async (value, ctx) => {
 // its own provenance, so no command or version ever arrives from a URL.
 const applyUpdate: VerbHandler = async (value, ctx) => {
   requireSessionId(oneArg(value));
-  ctx.applyUpdate();
+  await ctx.applyUpdate();
 };
 
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
@@ -2161,10 +2162,14 @@ async function journaled<C extends DaemonContext>(
     journal,
     navigating: closing(navigation.sessionState),
   };
-  const launches: Pick<Journaled<DaemonContext>, "launch" | "typing"> = {
+  const launches: Pick<
+    Journaled<DaemonContext>,
+    "launch" | "typing" | "applyUpdate"
+  > = {
     launch: (opts, what) =>
       turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
     typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
+    applyUpdate: () => turn.landed(ctx.applyUpdate()),
   };
   try {
     await handler({

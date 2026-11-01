@@ -35,7 +35,9 @@ import {
 } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { dlog } from "./log";
-import { processLauncher } from "../proc/launch";
+import { processLauncher, type Launcher } from "../proc/launch";
+import { runTmux } from "../proc/tmux";
+import type { TmuxAtExit } from "./tmux-status";
 import {
   createDaemon,
   SYSTEM_CLOCK,
@@ -98,7 +100,7 @@ export function runDaemon(): void {
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
   // [LAW:single-enforcer] Registered FIRST, before any of the startup calls
-  // below that can throw synchronously (admitDaemon's ensureDirSafe/writeEntry,
+  // below that can throw (admitDaemon's ensureDirSafe/writeEntry,
   // ensureSocketParentSafe) — otherwise an early throw is a raw unhandled
   // exception (stack trace to stderr, bypassing the clean shutdown(1) log +
   // SIGKILL backstop) rather than funneling through the same death path as
@@ -119,18 +121,17 @@ export function runDaemon(): void {
   }
 
   // [LAW:single-enforcer] Refused through the same death funnel as every other
-  // boot failure. A synchronous throw in the boot is NOT uncaught — it lands in
-  // index.ts's catch, whose stderr the detached spawn discards — so the one
-  // line that says why the daemon never came up would go nowhere.
-  try {
-    boot();
-  } catch (err) {
-    dlog("error", `refusing to boot: ${inspect(err)}`);
-    shutdown(1);
-  }
+  // boot failure: the detached spawn discards stderr, so the one line that says
+  // why the daemon never came up would otherwise go nowhere.
+  boot().catch(refuseBoot);
 }
 
-function boot(): void {
+function refuseBoot(err: unknown): void {
+  dlog("error", `refusing to boot: ${inspect(err)}`);
+  shutdown(1);
+}
+
+async function boot(): Promise<void> {
   // [LAW:effects-at-boundaries] The memory budget is parsed here, before any
   // resource is committed — a malformed override is refused before the breaker
   // registers us, before the bind, before the lease, and before a `daemon up`
@@ -145,10 +146,10 @@ function boot(): void {
   // must be read first: it is both this check's identity and the lease's
   // fingerprint later, so it is read exactly once and threaded through both
   // (see realBreakerDeps' doc comment).
-  myStartTime = readOwnStartTime(process.pid, (pid) =>
-    readStartTime(pid, processLauncher.launchSync),
+  myStartTime = await readOwnStartTime(process.pid, (pid) =>
+    readStartTime(pid, processLauncher.launch),
   );
-  const admission = admitDaemon(realBreakerDeps(myStartTime));
+  const admission = await admitDaemon(realBreakerDeps(myStartTime));
   if (!admission.decision.allow) {
     dlog(
       "warn",
@@ -234,7 +235,7 @@ function bindOrAttachAndExit(
       process.exit(0);
       return;
     }
-    handleAddressInUse(daemon, server, sockPath);
+    handleAddressInUse(daemon, server, sockPath).catch(refuseBoot);
   });
   server.listen(sockPath, () => onListening(daemon, sockPath));
 }
@@ -242,27 +243,28 @@ function bindOrAttachAndExit(
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
 // pid lease, NEVER a connect probe. The path already exists (a live daemon, or
 // a stale file from a crashed one); the lease's owner pid + kill(pid,0) decides
-// which. This is fully synchronous — reading the lease and testing liveness are
-// both sync — so there is no await gap for a concurrent recoverer to race
-// through (the old async probe had two such gaps and a hand-rolled re-check).
+// which. A concurrent recoverer is another process, so no liveness read was ever
+// atomic with the unlink, and this runs once per bind attempt in one daemon, so
+// the await on `ps` adds no in-process entrant and needs no re-check: the lease
+// and the ownership self-check are what recover a lost race.
 //
-// [LAW:effects-at-boundaries] The decision is the pure arbitrateSocket fold
+// [LAW:effects-at-boundaries] The decision is the arbitrateSocket fold
 // over the lease read + injected pidAlive; the kill / unlink / rebind effects
 // are performed here at the edge.
-function handleAddressInUse(
+async function handleAddressInUse(
   daemon: Daemon,
   server: net.Server,
   sockPath: string,
-): void {
+): Promise<void> {
   // [LAW:one-source-of-truth] Derive the lease from the SAME sockPath threaded
   // through unlink + rebind below, not the re-derived global — one identity
   // source for the whole arbitration.
-  const decision = arbitrateSocket(
+  const decision = await arbitrateSocket(
     readLease(leasePathFor(sockPath)),
     (pid, startTime) =>
       sameLiveProcess(pid, startTime, {
         readStartTime: (candidate) =>
-          readStartTime(candidate, daemon.launcher.launchSync),
+          readStartTime(candidate, daemon.launcher.launch),
         pidAlive,
       }),
   );
@@ -413,6 +415,15 @@ function writeLeaseFile(sockPath: string): void {
 
 // --- shutdown ---
 
+// [LAW:single-enforcer] exception: the one launch a daemon holds its loop for,
+// outside `launch`'s settle-at-exit path. Serving has stopped and shutdown is
+// synchronous, so no loop is held from anything. A holder of tmux's stdout can
+// hold this restore, bounded by shutdown's SIGKILL backstop only once it returns.
+const tmuxAtExit =
+  (launcher: Launcher): TmuxAtExit =>
+  (socket, args, stdin) =>
+    runTmux(launcher, { socket }, "tmux-status", args, stdin);
+
 let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
@@ -453,7 +464,7 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  serving?.close();
+  serving?.close(tmuxAtExit(serving.launcher));
   // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
   // displaced daemon (socket stolen, thief wrote its own lease) must not delete
   // the live owner's lease on its way out, or the next EADDRINUSE would read

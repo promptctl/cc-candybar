@@ -4,6 +4,7 @@
 // daemon in this worker with no wait between the close and the build, which is
 // the order a real process can never reach.
 
+import { NO_TMUX_AT_EXIT } from "./helpers/in-worker-daemon";
 import {
   chmodSync,
   existsSync,
@@ -119,7 +120,7 @@ esac
       .catch(() => null);
     await until(() => asked().includes("log"), "the pass's commit read");
 
-    await first.daemon.close();
+    await first.daemon.close(NO_TMUX_AT_EXIT);
     const second = start();
 
     // What says the launch was tried: a count of the calls `git` saw reads the
@@ -130,7 +131,7 @@ esac
     expect(second.daemon.stats.subprocessTotal).toBe(0);
     expect(second.daemon.stats.subprocessRefused.size).toBe(0);
 
-    await second.daemon.close();
+    await second.daemon.close(NO_TMUX_AT_EXIT);
     expect(refused()).toBe(1);
     expect(asked()).toEqual(["status", "log"]);
     for (const daemon of up.splice(0).reverse()) await daemon.stop();
@@ -145,7 +146,7 @@ esac
       reason: "rate-limited",
     });
 
-    await first.daemon.close();
+    await first.daemon.close(NO_TMUX_AT_EXIT);
     const second = start();
 
     expect(second.daemon.launcher.launchSync(open)).toMatchObject({ ok: true });
@@ -163,7 +164,7 @@ esac
       )
       .catch(() => null);
 
-    await first.daemon.close();
+    await first.daemon.close(NO_TMUX_AT_EXIT);
     const second = start();
     await answer;
 
@@ -191,7 +192,7 @@ esac
       },
     });
 
-    await first.daemon.close();
+    await first.daemon.close(NO_TMUX_AT_EXIT);
     start();
     storageLog("warn", "a write that outlived its daemon");
 

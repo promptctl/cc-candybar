@@ -423,15 +423,21 @@ function bindingRestorePlan(
 }
 
 export interface TmuxStatusEdge {
-  // One tmux invocation against the server at `socket`; `runSync` for the
-  // daemon's shutdown, which cannot wait.
+  // One tmux invocation against the server at `socket`.
   run(
     socket: string,
     args: readonly string[],
     stdin?: string,
   ): Promise<TmuxRun>;
-  runSync(socket: string, args: readonly string[], stdin?: string): TmuxRun;
 }
+
+// One tmux invocation that finishes before it returns: the daemon's shutdown
+// cannot wait, so whoever ends the process hands this to `restoreAll`.
+export type TmuxAtExit = (
+  socket: string,
+  args: readonly string[],
+  stdin?: string,
+) => TmuxRun;
 
 export interface TmuxStatusDeps {
   readonly edge: TmuxStatusEdge;
@@ -604,25 +610,30 @@ export class TmuxStatusLines {
 
   // [LAW:single-enforcer] The daemon's shutdown: everything put back, now —
   // a few synchronous tmux calls a server, whatever is in flight.
-  restoreAll(): void {
+  restoreAll(atExit: TmuxAtExit): void {
     this.closed = true;
     for (const held of this.held.values()) held.unsubscribe?.();
     this.held.clear();
     for (const [socket, server] of this.servers) {
       for (const [session, layout] of [...server.layouts]) {
         server.layouts.delete(session);
-        const answers = this.askSync(socket, RESTORE_QUERIES(session));
+        const answers = this.askSync(atExit, socket, RESTORE_QUERIES(session));
         if (answers === null) continue;
         const plan = restorePlan(session, layout.prior, answers);
-        this.writeSync(socket, plan.commands);
+        this.writeSync(atExit, socket, plan.commands);
         this.saidRestored(socket, session, plan.kept);
       }
       const binding = server.binding;
       server.binding = { kind: "none" };
       if (binding.kind === "ours" || binding.kind === "adopted") {
-        const answers = this.askSync(socket, ROOT_KEYS);
+        const answers = this.askSync(atExit, socket, ROOT_KEYS);
         if (answers === null) continue;
-        this.writeBindingRestoreSync(socket, binding.prior, answers[0] ?? "");
+        this.writeBindingRestoreSync(
+          atExit,
+          socket,
+          binding.prior,
+          answers[0] ?? "",
+        );
       }
     }
   }
@@ -999,13 +1010,14 @@ export class TmuxStatusLines {
   }
 
   private writeBindingRestoreSync(
+    atExit: TmuxAtExit,
     socket: string,
     prior: Bound | null,
     listKeys: string,
   ): void {
     const plan = bindingRestorePlan(prior, listKeys);
     for (const step of plan.steps)
-      this.writeSync(socket, [step.command], step.stdin);
+      this.writeSync(atExit, socket, [step.command], step.stdin);
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`,
@@ -1044,13 +1056,11 @@ export class TmuxStatusLines {
   }
 
   private askSync(
+    atExit: TmuxAtExit,
     socket: string,
     queries: readonly Command[],
   ): string[] | null {
-    const run = this.counted(
-      socket,
-      this.deps.edge.runSync(socket, readChain(queries)),
-    );
+    const run = this.counted(socket, atExit(socket, readChain(queries)));
     return run.kind === "ok" ? answersOf(run.stdout, queries.length) : null;
   }
 
@@ -1066,16 +1076,14 @@ export class TmuxStatusLines {
   }
 
   private writeSync(
+    atExit: TmuxAtExit,
     socket: string,
     commands: readonly Command[],
     stdin?: string,
   ): void {
     if (commands.length === 0) return;
     this.writes++;
-    this.counted(
-      socket,
-      this.deps.edge.runSync(socket, chain(commands), stdin),
-    );
+    this.counted(socket, atExit(socket, chain(commands), stdin));
   }
 }
 

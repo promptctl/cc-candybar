@@ -1,3 +1,4 @@
+import { until } from "./helpers/until";
 import { processLauncher } from "../src/proc/launch";
 import {
   makeLimits,
@@ -47,7 +48,7 @@ function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDep
     memoryBytes: () => ({ rss: rec.fakeRss, heapTotal: rec.fakeHeapTotal }),
     memoryCharge: async (rss) =>
       rec.fakeCharge ?? { kind: "charged", measure: "rss", bytes: rss },
-    captureMemoryReport: () => {
+    captureMemoryReport: async () => {
       rec.order.push("capture");
       if (rec.captureThrows) throw new Error("footprint exploded");
       return "# memory report from: footprint -p 4242\n118 MB tag 16";
@@ -154,6 +155,50 @@ describe("limits.check", () => {
     expect(rec.shutdownCalls).toEqual([0]);
     expect(rec.snapshotsWritten).toHaveLength(1);
     expect(rec.reportsWritten).toHaveLength(1);
+  });
+
+  test("the attribution completes before the snapshot starts", async () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    let answer!: (report: string) => void;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 200 * 1024 * 1024,
+        captureMemoryReport: () =>
+          new Promise((resolve) => (answer = resolve)),
+      }),
+    );
+    const checking = limits.check();
+    await until(() => answer !== undefined, "the attribution to start");
+    expect(rec.snapshotsWritten).toEqual([]);
+    answer("report");
+    expect(await checking).toBe(true);
+    expect(rec.reportsWritten).toHaveLength(1);
+    expect(rec.snapshotsWritten).toHaveLength(1);
+    expect(rec.shutdownCalls).toEqual([0]);
+  });
+
+  test("a close during the attribution writes no snapshot and does not shut down", async () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    let answer!: (report: string) => void;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 200 * 1024 * 1024,
+        captureMemoryReport: () =>
+          new Promise((resolve) => (answer = resolve)),
+      }),
+    );
+    const checking = limits.check();
+    await until(() => answer !== undefined, "the attribution to start");
+    limits.disarm();
+    answer("report");
+    expect(await checking).toBe(false);
+    expect(rec.snapshotsWritten).toEqual([]);
+    expect(rec.shutdownCalls).toEqual([]);
+    expect(rec.logs.map((l) => l.msg)).toContain(
+      "daemon closed during the breach: no snapshot, no exit",
+    );
   });
 
   test("snapshot filename is written under the injected dir, not the real daemonDir", async () => {

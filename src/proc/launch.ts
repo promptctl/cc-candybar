@@ -487,8 +487,15 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
     return null;
   }
   stats?.onEnd("lifeline", Date.now() - t0);
-  // stdio[0] is "pipe", so Node hands back a socket.
-  const pipe = line.stdin as Socket;
+  // stdio[0] is "pipe", so Node hands back a socket, unless descriptors ran out:
+  // that spawn fails with no throw and no stdin, and only its "error" says why.
+  const pipe = line.stdin as Socket | null;
+  if (pipe === null || pipe === undefined) {
+    line.once("error", (err) =>
+      setFault(state, `did not start: ${err.message}`),
+    );
+    return null;
+  }
   line.once("spawn", () => {
     if (state.lifeline?.process === line) setFault(state, null);
   });

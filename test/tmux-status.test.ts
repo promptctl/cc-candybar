@@ -328,7 +328,7 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1", "%2": "$2" }, { $1: "%1", $2: "%2" });
     await h.frame("s1", frameOf("a"));
     await h.frame("s2", frameOf("b"));
-    h.owner.restoreAll();
+    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
     expect([...session(h, "$1")]).toEqual([]);
     expect([...session(h, "$2")]).toEqual([]);
     expect(h.tmux.binding).toBe(DEFAULT_BINDING);
@@ -345,7 +345,7 @@ describe("TmuxStatusLines", () => {
     // The draw's write is in tmux's hands when the shutdown restores.
     const drawing = h.frame("s1", frameOf("two\nthree"));
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll();
+    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
     h.tmux.gate = null;
     release();
     await drawing;
@@ -449,7 +449,7 @@ describe("TmuxStatusLines", () => {
     h.tmux.gate = new Promise((resolve) => (release = resolve));
     h.owner.answered(SOCKET, { sessionOf: new Map([["%1", "$1"]]), shownBy: new Map([["$1", "%1"]]) });
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll();
+    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
     h.tmux.gate = null;
     release();
     await h.owner.settled();

@@ -257,7 +257,7 @@ export interface LimitsDeps {
   // The platform's own attribution of this process's resident memory, as text.
   // Total by contract (src/daemon/memory-report.ts): it reports which probe
   // could not answer rather than throwing, because the caller is already dying.
-  captureMemoryReport: () => string;
+  captureMemoryReport: () => Promise<string>;
   writeMemoryReport: (filePath: string, text: string) => void;
   writeHeapSnapshot: (filePath: string) => string;
   // What the log holds, written before the loop blocks (log.ts).
@@ -338,12 +338,20 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // [LAW:no-silent-failure] Each artifact is attempted on its own: one
     // failing must not cost the other, and either failure is named in the log
     // where the post-mortem will look for it.
-    attempt(deps.log, "memory report", () => {
+    await attempt(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity);
-      deps.writeMemoryReport(file, deps.captureMemoryReport());
+      const report = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report);
       deps.log("info", `memory report written: ${file}`);
     });
-    attempt(deps.log, "heap snapshot", () => {
+    // [LAW:no-ambient-temporal-coupling] The close may have landed during the
+    // attribution, and `disarmed`'s rule holds past that await too.
+    if (disarmed) {
+      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
+      return false;
+    }
+    await attempt(deps.log, "heap snapshot", () => {
       // [LAW:no-ambient-temporal-coupling] The snapshot holds the loop for
       // seconds and can double the heap, which can draw the OS's kill with no
       // exit event: what the log holds about this breach is on disk first.
@@ -354,14 +362,16 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
         `heap snapshot written: ${deps.writeHeapSnapshot(file)}`,
       );
     });
-    attempt(deps.log, "artifact rotation", () => {
+    await attempt(deps.log, "artifact rotation", async () => {
       // Each eviction its own attempt: a file that will not go is logged,
       // and every other evicts anyway.
       for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
         keep,
       )) {
         for (const file of Object.values(artifacts)) {
-          attempt(deps.log, `evicting ${file}`, () => deps.removeFile(file));
+          await attempt(deps.log, `evicting ${file}`, () =>
+            deps.removeFile(file),
+          );
         }
       }
     });
@@ -444,9 +454,13 @@ function readingFields(
 // fails say which thing failed and carry on to the next". Swallowing would leave
 // a breach with no artifacts and no explanation; throwing would skip the
 // shutdown.
-function attempt(log: DaemonLogger, what: string, body: () => void): void {
+async function attempt(
+  log: DaemonLogger,
+  what: string,
+  body: () => void | Promise<void>,
+): Promise<void> {
   try {
-    body();
+    await body();
   } catch (e) {
     log("warn", `${what} failed: ${(e as Error).message}`);
   }

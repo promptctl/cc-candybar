@@ -82,7 +82,7 @@ export function testVerbContext(
     log: () => {},
     launcher: processLauncher,
     now: () => instantOf(new Date()),
-    applyUpdate: () => {
+    applyUpdate: async () => {
       throw new Error("apply-update: no update watch in this test");
     },
     // Same posture for the doctor's edge: a test that drives a doctor click

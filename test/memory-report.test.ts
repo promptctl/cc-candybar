@@ -24,17 +24,17 @@ import type { LaunchResult } from "../src/proc/launch";
 
 const answering = (name: string, text: string): MemoryProbe => ({
   name,
-  read: () => ({ kind: "text", text }),
+  read: async () => ({ kind: "text", text }),
 });
 
 const refusing = (name: string, reason: string): MemoryProbe => ({
   name,
-  read: () => ({ kind: "unavailable", reason }),
+  read: async () => ({ kind: "unavailable", reason }),
 });
 
 describe("memoryReport", () => {
-  test("the first probe that answers wins, and the report names it", () => {
-    const report = memoryReport([
+  test("the first probe that answers wins, and the report names it", async () => {
+    const report = await memoryReport([
       answering("footprint -p 7", "118 MB  app-specific tag 16"),
       answering("vmmap --summary 7", "SHOULD NOT BE ASKED"),
     ]);
@@ -43,8 +43,8 @@ describe("memoryReport", () => {
     expect(report).not.toContain("SHOULD NOT BE ASKED");
   });
 
-  test("a refusal falls through to the next probe", () => {
-    const report = memoryReport([
+  test("a refusal falls through to the next probe", async () => {
+    const report = await memoryReport([
       refusing("footprint -p 7", "spawn-error: ENOENT"),
       answering("vmmap --summary 7", "TOTAL  172M"),
     ]);
@@ -56,8 +56,8 @@ describe("memoryReport", () => {
   // measured, the file says which probes were tried and why each one could not
   // answer. An empty file, or a missing one, is indistinguishable from a capture
   // that silently did nothing — which is the blind spot this replaces.
-  test("when no probe answers, every reason is in the report", () => {
-    const report = memoryReport([
+  test("when no probe answers, every reason is in the report", async () => {
+    const report = await memoryReport([
       refusing("footprint -p 7", "spawn-error: ENOENT"),
       refusing("vmmap --summary 7", "non-zero: exit 1 (not permitted)"),
     ]);
@@ -68,8 +68,8 @@ describe("memoryReport", () => {
     );
   });
 
-  test("a platform with no probes still produces a readable report, not an empty one", () => {
-    const report = memoryReport([]);
+  test("a platform with no probes still produces a readable report, not an empty one", async () => {
+    const report = await memoryReport([]);
     expect(report.trim().length).toBeGreaterThan(0);
     expect(report).toContain("no probe is known for this platform");
   });
@@ -78,21 +78,21 @@ describe("memoryReport", () => {
 describe("platformProbes", () => {
   // The rows are the platform fact — asserted by the command each one would run,
   // because that string is what a human re-runs by hand from the report.
-  test("darwin prefers footprint, then vmmap, both naming the pid", () => {
+  test("darwin prefers footprint, then vmmap, both naming the pid", async () => {
     expect(platformProbes(processLauncher, "darwin", 4242).map((p) => p.name)).toEqual([
       "/usr/bin/footprint -p 4242",
       "/usr/bin/vmmap --summary 4242",
     ]);
   });
 
-  test("linux reads the rollup first, then status — no subprocess either way", () => {
+  test("linux reads the rollup first, then status — no subprocess either way", async () => {
     expect(platformProbes(processLauncher, "linux", 4242).map((p) => p.name)).toEqual([
       "/proc/self/smaps_rollup",
       "/proc/self/status",
     ]);
   });
 
-  test("an unknown platform contributes no probes rather than a wrong one", () => {
+  test("an unknown platform contributes no probes rather than a wrong one", async () => {
     expect(platformProbes(processLauncher, "win32", 4242)).toEqual([]);
   });
 });
@@ -105,8 +105,8 @@ describe("platformProbes", () => {
 const REAL = os.platform() === "darwin" || os.platform() === "linux";
 (REAL ? test : test.skip)(
   "the real probes attribute this process on this host",
-  () => {
-    const report = memoryReport(platformProbes(processLauncher, os.platform(), process.pid));
+  async () => {
+    const report = await memoryReport(platformProbes(processLauncher, os.platform(), process.pid));
     expect(report).toContain("# memory report from:");
     expect(report).not.toContain("no probe answered");
     // Whatever answered, it must carry a size — the one thing every probe on
@@ -130,7 +130,7 @@ describe("the memory charge", () => {
   ].join("\n");
   const ran = (stdout: string): LaunchResult => ({ ok: true, stdout, stderr: "", exitCode: 0 });
 
-  test("footprint's byte output is read off its phys_footprint line, never the peak", () => {
+  test("footprint's byte output is read off its phys_footprint line, never the peak", async () => {
     expect(physFootprintOf(FOOTPRINT)).toBe(224953704);
     expect(physFootprintOf("phys_footprint_peak: 9 B")).toBeNull();
     expect(physFootprintOf("phys_footprint: 216 MB")).toBeNull();

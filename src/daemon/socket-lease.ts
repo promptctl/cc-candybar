@@ -52,7 +52,7 @@ export interface LeaseRecord extends ProcessIdentity {
 }
 
 // [LAW:effects-at-boundaries][LAW:dataflow-not-control-flow] The whole
-// arbitration is a pure fold: (raw lease read, injected liveness predicate) →
+// arbitration is a fold: (raw lease read, injected liveness predicate) →
 // decision. Reading process identity is the sole effect and it is injected via
 // `isSameLiveProcess`, so every branch is exercised by input enumeration with no
 // real processes. Full input space:
@@ -79,12 +79,15 @@ export interface LeaseRecord extends ProcessIdentity {
 // Reclaiming on missing/unreadable is the availability-preferring direction — a
 // stale socket with no reclaimer is a hard no-service stall, strictly worse than
 // a transient double-serve that self-heals.
-export function arbitrateSocket(
+export async function arbitrateSocket(
   read: LeaseRead,
-  isSameLiveProcess: (pid: number, startTime: string | null) => boolean,
-): SocketArbitration {
+  isSameLiveProcess: (
+    pid: number,
+    startTime: string | null,
+  ) => Promise<boolean>,
+): Promise<SocketArbitration> {
   if (read.kind === "owned") {
-    return isSameLiveProcess(read.pid, read.startTime)
+    return (await isSameLiveProcess(read.pid, read.startTime))
       ? {
           kind: "attach-and-exit",
           reason: `live owner pid=${read.pid} holds the socket`,

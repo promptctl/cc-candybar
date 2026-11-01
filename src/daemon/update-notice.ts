@@ -59,8 +59,9 @@ import {
   type ActState,
 } from "./update-act";
 import { readStartTime } from "./process-fingerprint";
+import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
-import { BadVerbArgs } from "./verb-error";
+import { BadVerbArgs, DaemonClosing } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";
 
@@ -270,7 +271,9 @@ export interface UpdateWatchOptions {
   readonly registryUrl: string;
   readonly fetchImpl: typeof fetch;
   // Runs after a successful act: the bundle on disk has changed, and the
-  // binary watch should notice now rather than at its next tick.
+  // binary watch should notice now rather than at its next tick. Called in a
+  // turn of the act queue and not awaited, since what it starts may wait on
+  // that queue: a rejection is its own to log.
   readonly onApplied: () => void;
   readonly log: (level: LogLevel, msg: string) => void;
 }
@@ -279,13 +282,14 @@ export interface UpdateWatch {
   arm(): void;
   close(): void;
   notice(ctx: NoticeContext): DiagnosticMessage[];
-  // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
-  // to apply or an act is already running on this bundle.
-  act(): void;
+  // The apply-update verb's effect. Rejects with BadVerbArgs when there is
+  // nothing to apply or an act is already running on this bundle, and with
+  // DaemonClosing when the daemon closed before the claim stood.
+  act(): Promise<void>;
   // Whether an act may be rewriting this bundle now, whichever daemon started
   // it. False while its files can't be read: the error says so, and holding
   // every restart on a file nothing repairs would hold them for good.
-  running(): boolean;
+  running(): Promise<boolean>;
   // Why this bundle's act files can't be read, as of the last look; null when
   // they can.
   error(): string | null;
@@ -371,7 +375,13 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // honestly unchecked — a notice asked for before arm() renders nothing.
   let build: BuildCurrency = { kind: "unchecked", reason: "not sampled yet" };
   let release: Currency | null = null;
-  const readStart = (pid: number) => readStartTime(pid, launcher.launchSync);
+  // [LAW:single-enforcer] A `ps` the close aborted says nothing about the job,
+  // so no caller gets to judge it.
+  const readStart = async (pid: number) => {
+    const read = await readStartTime(pid, launcher.launch);
+    if (closed) throw new DaemonClosing("apply-update");
+    return read;
+  };
   const acts = makeActReader(actsDir, readStart);
   // [LAW:one-source-of-truth] The act as last read, for the notice's render
   // and for noticing an end; null until the first read. Every decision — a
@@ -383,8 +393,18 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
 
+  // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one owner of
+  // the act files: every read and claim is a turn here, so `known` has one
+  // writer, a claim holds its gated job across its `ps`, and a tick runs wholly
+  // before or after an act(), never judging a read older than `seen`.
+  const actQueue = new KeyedSerialQueue<"acts">();
+  const actTurn = <T>(body: () => Promise<T>): Promise<T> =>
+    actQueue.run("acts", body);
+
   // [LAW:no-ambient-temporal-coupling] A closed watch knows of no update, so a
-  // release poll landing after the close registers no gate.
+  // release poll landing after the close registers no gate, and a turn that
+  // reads this after its await judges nothing: the launches abort first, so
+  // what a closing daemon's `ps` answered says nothing.
   let closed = false;
   const armed: Array<() => void> = [];
   const every = (run: () => void, ms: number): void => {
@@ -437,12 +457,15 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     | { readonly ok: false; readonly error: string };
   let unreadable: string | null = null;
   const logUnreadable = changeLogger(log);
-  function touchActs<T>(touch: () => T): ActsTouch<T> {
+  async function touchActs<T>(touch: () => Promise<T>): Promise<ActsTouch<T>> {
     try {
-      const value = touch();
+      const value = await touch();
       unreadable = null;
       return { ok: true, value };
     } catch (err) {
+      if (err instanceof DaemonClosing) {
+        return { ok: false, error: err.message };
+      }
       unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
@@ -462,13 +485,13 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // Notices an act ending, whichever daemon started it: a success means the
   // bundle on disk changed, so the build is sampled and the binary watch asked
   // now.
-  function watchAct(): void {
-    const read = touchActs(() => {
-      const facts = acts.read();
-      endIfOverdue(facts);
+  async function watchAct(): Promise<void> {
+    const read = await touchActs(async () => {
+      const facts = await acts.read();
+      if (!closed) endIfOverdue(facts);
       return facts;
     });
-    if (!read.ok) return;
+    if (closed || !read.ok) return;
     const next = judgeAct(read.value);
     if (seen === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
@@ -486,13 +509,23 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     seen = next;
   }
 
+  // [LAW:no-ambient-temporal-coupling] Each tick scheduled only once the last
+  // has answered, as limits.ts's are: a slow read delays the next.
+  let tickTimer: NodeJS.Timeout | undefined;
+  async function tick(): Promise<void> {
+    await actTurn(watchAct);
+    if (closed) return;
+    tickTimer = setTimeout(() => void tick(), ACT_POLL_MS);
+    tickTimer.unref();
+  }
+
   return {
     arm() {
       armed.push(reserveUpdateKeys());
       sampleBuild();
       every(sampleBuild, intervalMs);
-      watchAct();
-      every(watchAct, ACT_POLL_MS);
+      armed.push(() => clearTimeout(tickTimer));
+      void tick();
       // The registry is a question only a published install asks: a checkout
       // rebuilds from the source beside it, whatever npm has.
       if (build.kind === "not-source-checkout") {
@@ -506,43 +539,51 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       armed.forEach((release) => release());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
-    running() {
-      const read = touchActs(() => acts.read());
-      return read.ok && judgeAct(read.value).kind === "running";
-    },
+    running: () =>
+      actTurn(async () => {
+        const read = await touchActs(() => acts.read());
+        return read.ok && judgeAct(read.value).kind === "running";
+      }),
     error: () => unreadable,
-    act() {
-      const update = current();
-      if (update === null) {
-        throw new BadVerbArgs("apply-update: nothing newer is known to apply");
-      }
-      const facts = factsOf(update);
-      const read = touchActs(() => acts.read());
-      if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
-      const newest = read.value;
-      if (judgeAct(newest).kind === "running") {
-        throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
-      }
-      // The child inherits the daemon's environment (PATH included): no env
-      // is passed, so nothing about the command is composed from data.
-      const claim = claimAct(
-        launcher,
-        actsDir,
-        newest === null ? null : newest.act,
-        updateIdentity(update),
-        { ...facts.command, category: "update.apply" },
-        ACT_TIMEOUT_MS,
-        Date.now(),
-        readStart,
-      );
-      if (!claim.ok) {
-        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
-      }
-      log(
-        "info",
-        `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
-      );
-      seen = { kind: "running", act: claim.act };
-    },
+    act: () =>
+      actTurn(async () => {
+        if (closed) throw new DaemonClosing("apply-update");
+        const read = await touchActs(() => acts.read());
+        if (closed) throw new DaemonClosing("apply-update");
+        if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
+        // [LAW:no-ambient-temporal-coupling] Read past the await: the sampler
+        // moves the build on timers of its own.
+        const update = current();
+        if (update === null) {
+          throw new BadVerbArgs(
+            "apply-update: nothing newer is known to apply",
+          );
+        }
+        const facts = factsOf(update);
+        const newest = read.value;
+        if (judgeAct(newest).kind === "running") {
+          throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
+        }
+        // The child inherits the daemon's environment (PATH included): no env
+        // is passed, so nothing about the command is composed from data.
+        const claim = await claimAct(
+          launcher,
+          actsDir,
+          newest === null ? null : newest.act,
+          updateIdentity(update),
+          { ...facts.command, category: "update.apply" },
+          ACT_TIMEOUT_MS,
+          Date.now(),
+          readStart,
+        );
+        if (!claim.ok) {
+          throw new BadVerbArgs(`apply-update: ${claim.reason}`);
+        }
+        log(
+          "info",
+          `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
+        );
+        seen = { kind: "running", act: claim.act };
+      }),
   };
 }

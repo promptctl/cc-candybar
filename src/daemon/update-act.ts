@@ -171,13 +171,13 @@ const bootedAt = (): number => Date.now() - os.uptime() * 1000;
 // job `ps` could not fingerprint, has no start time to tell by and is taken as
 // the job's: the sh leads it, so the program outliving it is the likelier
 // story.
-export function isRecordedJob(
+export async function isRecordedJob(
   record: ActRecord,
-  read: (pid: number) => StartTimeRead,
+  read: (pid: number) => Promise<StartTimeRead>,
   boot: number = bootedAt(),
-): boolean {
+): Promise<boolean> {
   if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
-  const leader = read(record.pid);
+  const leader = await read(record.pid);
   return (
     record.startTime === null ||
     leader.kind === "unavailable" ||
@@ -196,8 +196,10 @@ function readRecord(actDir: string): ActRecord | null {
 }
 
 export interface ActReader {
-  // The newest act on the bundle, read now.
-  read(): ActFacts | null;
+  // The newest act on the bundle, read now. Reads must not overlap: `known`
+  // spans the `ps` a new job costs, so the reader's one caller runs them in
+  // turn (the act queue, src/daemon/update-notice.ts).
+  read(): Promise<ActFacts | null>;
 }
 
 // The newest act as one reader knows it, keyed by its job, since an act's
@@ -220,17 +222,17 @@ const sameJob = (a: ActRecord, b: ActRecord): boolean =>
 // the group is gone.
 export function makeActReader(
   dir: string,
-  read: (pid: number) => StartTimeRead,
+  read: (pid: number) => Promise<StartTimeRead>,
 ): ActReader {
   let known: Known | null = null;
 
   // The act's facts, or null when the act vanished under the read.
-  function factsOf(act: number): ActFacts | null {
+  async function factsOf(act: number): Promise<ActFacts | null> {
     const actDir = path.join(dir, String(act));
     const record = readRecord(actDir);
     if (record === null) return null;
     if (known === null || !sameJob(known.record, record)) {
-      known = { record, ours: isRecordedJob(record, read), final: null };
+      known = { record, ours: await isRecordedJob(record, read), final: null };
     }
     if (known.final !== null) return known.final;
     known.ours = known.ours && jobGroupAlive(record.pid);
@@ -249,7 +251,7 @@ export function makeActReader(
   }
 
   return {
-    read() {
+    async read() {
       // An act vanishes only when a newer one's claim prunes it, so the
       // listing after a vanish names a newer act. The same act twice is a
       // numbered directory no claim made.
@@ -262,12 +264,31 @@ export function makeActReader(
             `${path.join(dir, String(act))}: an act with no record`,
           );
         }
-        const facts = factsOf(act);
+        const facts = await factsOf(act);
         if (facts !== null) return facts;
         vanished = act;
       }
     },
   };
+}
+
+// [LAW:no-ambient-temporal-coupling] Synchronous, so no exit lands between the
+// staging directory and its removal: nothing sweeps a stranded one. False when
+// the act already exists.
+function stakeClaim(dir: string, actDir: string, record: ActRecord): boolean {
+  fs.mkdirSync(dir, { recursive: true });
+  const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
+  try {
+    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
+    fs.renameSync(staging, actDir);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOTEMPTY" || code === "EEXIST") return false;
+    throw err;
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 export type Claim =
@@ -281,8 +302,9 @@ export type Claim =
 // before the rename, its gate shut, and released only once the claim stands:
 // a claimer that loses, or dies, never runs the program. The winner lists the
 // acts again before releasing: a claimer stalled mid-claim can land on a
-// number already pruned while a later act runs, and it withdraws.
-export function claimAct(
+// number already pruned while a later act runs, and it withdraws. A daemon
+// closing during the job's `ps` throws from `read`, which withdraws too.
+export async function claimAct(
   launcher: Launcher,
   dir: string,
   after: number | null,
@@ -290,23 +312,18 @@ export function claimAct(
   command: LaunchOpts,
   timeoutMs: number,
   now: number,
-  read: (pid: number) => StartTimeRead,
-): Claim {
+  read: (pid: number) => Promise<StartTimeRead>,
+): Promise<Claim> {
   const act = (after ?? 0) + 1;
   const actDir = path.join(dir, String(act));
-  fs.mkdirSync(dir, { recursive: true });
-  const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
   // The job writes where the act will be, once released.
   const job = launcher.launchJobSync(command, filesOf(actDir));
-  if (!job.ok) {
-    fs.rmSync(staging, { recursive: true, force: true });
-    throw new Error(`apply-update: ${job.error}`);
-  }
+  if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   // [LAW:single-enforcer] The gate opens on a standing claim and on nothing
   // else: every other way out, a throw included, shuts it unopened.
   let stood = false;
   try {
-    const start = read(job.pid);
+    const start = await read(job.pid);
     const record: ActRecord = {
       identity,
       pid: job.pid,
@@ -314,14 +331,7 @@ export function claimAct(
       started: now,
       deadline: now + timeoutMs,
     };
-    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
-    try {
-      fs.renameSync(staging, actDir);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOTEMPTY" || code === "EEXIST") return CLAIMED_FIRST;
-      throw err;
-    }
+    if (!stakeClaim(dir, actDir, record)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act)) {
       removeAct(dir, act);
       return CLAIMED_FIRST;
@@ -330,7 +340,6 @@ export function claimAct(
   } finally {
     if (stood) job.release();
     else job.withdraw();
-    fs.rmSync(staging, { recursive: true, force: true });
   }
   for (const n of actNumbers(dir).filter((n) => n < act)) {
     removeAct(dir, n);

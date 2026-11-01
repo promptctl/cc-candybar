@@ -78,7 +78,7 @@ describe("daemon pool", () => {
       stdio: "ignore",
     });
     const deadPid = dead.pid!;
-    const startTimeRead = readStartTime(deadPid, processLauncher.launchSync);
+    const startTimeRead = await readStartTime(deadPid, processLauncher.launch);
     const deadStartTime = startTimeRead.kind === "start" ? startTimeRead.token : null;
     dead.kill("SIGKILL");
     await new Promise<void>((resolve) => dead.once("exit", () => resolve()));
@@ -127,7 +127,7 @@ describe("daemon pool", () => {
       JSON.stringify({ pid: process.pid, startTime: null }),
     );
 
-    pool.sweepStale();
+    await pool.sweepStale();
 
     expect(fs.existsSync(path.join(pool.dir, "slot-0.json"))).toBe(false);
     expect(fs.existsSync(path.join(pool.dir, "slot-1.json"))).toBe(true);

@@ -4,6 +4,7 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
+import type { TmuxAtExit } from "../../src/daemon/tmux-status";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -116,6 +117,12 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
     }),
   });
 }
+
+// A worker's daemon lays out no tmux status line, so nothing is put back.
+export const NO_TMUX_AT_EXIT: TmuxAtExit = () => ({
+  kind: "failed",
+  reason: "no tmux at this daemon's exit",
+});
 
 // The daemon's counts from its request handling, past the connection: the 200 ms
 // guard is the connection's, and a busy machine is no fact about them.
@@ -232,7 +239,7 @@ export function startDaemon(
     // goes unread: its launches are refused, by its own launcher, and a line of
     // its says it came after the close, whichever log the env names by then.
     stop: async () => {
-      void daemon.close();
+      void daemon.close(NO_TMUX_AT_EXIT);
       for (const end of open) end.destroy();
       await Promise.all(
         servers.map((server) => new Promise((closed) => server.close(closed))),

@@ -143,7 +143,7 @@ describe("apply-update verb", () => {
     let calls = 0;
     const ctx: VerbContext = {
       ...testVerbContext(new SessionState()),
-      applyUpdate: () => {
+      applyUpdate: async () => {
         calls++;
       },
     };
@@ -153,6 +153,18 @@ describe("apply-update verb", () => {
     await expect(handler("", ctx)).rejects.toThrow(BadVerbArgs);
     await expect(handler(encodeURIComponent("../etc"), ctx)).rejects.toThrow(BadVerbArgs);
     expect(calls).toBe(1);
+  });
+
+  test("an act refused rejects through the verb, for the click to answer with", async () => {
+    const ctx: VerbContext = {
+      ...testVerbContext(new SessionState()),
+      applyUpdate: async () => {
+        throw new BadVerbArgs("apply-update: already rebuilding…");
+      },
+    };
+    await expect(
+      VERBS.get(VERB_APPLY_UPDATE)!(encodeURIComponent("sess-1"), ctx),
+    ).rejects.toThrow("already rebuilding");
   });
 });
 
