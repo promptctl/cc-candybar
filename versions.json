@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-531",
-      "ref": "refs/pull/531/merge",
-      "sha": "3ea306816954f22157ec53135af8b60ff259e636",
-      "timestamp": "2026-11-01T01:37:43.159Z",
-      "commits": [
-        {
-          "sha": "3ea306816954f22157ec53135af8b60ff259e636",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:37:01Z",
-          "message": "Merge 04e635df98046bc1a7df956a66c2df7d12799a3f into 4ef651bb79339262fca87ead8094547cec58ea68\n"
-        },
-        {
-          "sha": "04e635df98046bc1a7df956a66c2df7d12799a3f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:35:53-06:00",
-          "message": "fix(test): the doctor's stats reads go past the guard, and a fake launch asserts only what it can fail (brandon-unfiled-3248.2ywj)\n\nThe doctor e2e's in-worker stats reads move to statsOf, which removes their\ncasts and the connection's 200 ms guard.\n\n`failed: 0` and the empty click error go back to the real-launch test: a\nheld launch only resolves ok, so neither could fail there.\n\nThe refresh event's expected file is spelled by valueOf, as the daemon logs\nit, so a temp path with a space still matches.\n"
-        },
-        {
-          "sha": "961786c43d7d09bc854116f2f375c943d5980279",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:26:35-06:00",
-          "message": "fix(test): a held run is observed across real turns, and a supersede is read by its file (brandon-unfiled-3248.2ywj)\n\nThe held test looked at the bar in the click's own tick, so a source resumed\nearly passed. It now holds through real turns with the program's write on\ndisk.\n\nThe e2e counted supersede refreshes across all of plugin storage, so a\nsupersede of another session's key passed. It now reads the refresh event of\nthis session's file, which removes the ledger helper.\n\nEvery in-worker stats read goes through statsOf, past the connection's 200 ms\nguard, so these files no longer fail on a slow stats reply.\n"
-        },
-        {
-          "sha": "f2763b5bbf479bb15cf5945c478e9db560ddf646",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:14:07-06:00",
-          "message": "fix(test): a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj)\n\n\"While the program runs\" was proved on a daemon with a real shell, a file\npoll, a render poll and log events, so it measured the machine. `Runs` already\ntakes `launch` as a port, so run-action now holds the run in a fake: no\nprocess, no sleep, no wall-clock bound. The rule that no request waits on a\nsuperseded lane stays where it was pinned, in render-payload-outcomes, over a\nlane that never lands.\n\nThe daemon test is a wiring check: a click runs the real program through the\nstorage owner's supersede, and its write draws. `renderAnswer` and the gate are\ngone with the hold they served.\n"
-        },
-        {
-          "sha": "760adb03927fb79386e2717b8259c8d511dc24a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:03:55-06:00",
-          "message": "fix(test): the held program waits at the shared gate, and the proof reads its own render's event (brandon-unfiled-3248.2ywj)\n\nThe fixture carried a private copy of `shellGate`'s hold. The proof scanned\nthe log for any attempt, a timed-out one included, and a failed wait named\nonly the bar. `renderAnswer` hands back the event of the answer it returned,\nso the bytes and the proof are one render, and a failed wait names how that\nrender ended.\n\nThe hold is bounded by the run's own timeout; the comment says so.\n"
-        },
-        {
-          "sha": "a4a342de58298e100779566177efe38091166d65",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:54:50-06:00",
-          "message": "fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "4ef651bb79339262fca87ead8094547cec58ea68",
-      "timestamp": "2026-11-01T01:27:55.867Z",
+      "sha": "7b77d5fab04cc3822fa430e086169ef7f984b873",
+      "timestamp": "2026-11-01T01:44:30.365Z",
       "commits": [
         {
-          "sha": "4ef651bb79339262fca87ead8094547cec58ea68",
+          "sha": "7b77d5fab04cc3822fa430e086169ef7f984b873",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:27:05-06:00",
-          "message": "test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945) (#530)\n\n* test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945)\n\n* style(test): format daemon-value test (candybar-testing-0x6u.945)\n\n* test(daemon-value): the first read waits for the launches to end, and exempts only the lifeline (candybar-testing-0x6u.945)\n\n* test(daemon-value): the launches' end is read off the ledger, not a counter (candybar-testing-0x6u.945)\n\n* test(daemon-value): a wait's failure names only what it waited on (candybar-testing-0x6u.945)"
-        },
-        {
-          "sha": "ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T00:51:28Z",
-          "message": "chore(release): set `package.json` to 1.173.0 [skip ci]\n\n## [1.173.0](https://github.com/promptctl/cc-candybar/compare/v1.172.0...v1.173.0) (2026-11-01)\n\n### Features\n\n* **effect:** the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8) ([#528](https://github.com/promptctl/cc-candybar/issues/528)) ([8169390](https://github.com/promptctl/cc-candybar/commit/8169390eb96da95acccf40e944cb0c61f88a1f39))\n\n### Bug Fixes\n\n* **test:** a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el) ([#529](https://github.com/promptctl/cc-candybar/issues/529)) ([516c3eb](https://github.com/promptctl/cc-candybar/commit/516c3eb319a548c706d04da1795e462774d057a7))\n"
+          "timestamp": "2026-10-31T19:43:34-06:00",
+          "message": "fix(test): a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj) (#531)\n\n* fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n\n* fix(test): the held program waits at the shared gate, and the proof reads its own render's event (brandon-unfiled-3248.2ywj)\n\nThe fixture carried a private copy of `shellGate`'s hold. The proof scanned\nthe log for any attempt, a timed-out one included, and a failed wait named\nonly the bar. `renderAnswer` hands back the event of the answer it returned,\nso the bytes and the proof are one render, and a failed wait names how that\nrender ended.\n\nThe hold is bounded by the run's own timeout; the comment says so.\n\n* fix(test): a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj)\n\n\"While the program runs\" was proved on a daemon with a real shell, a file\npoll, a render poll and log events, so it measured the machine. `Runs` already\ntakes `launch` as a port, so run-action now holds the run in a fake: no\nprocess, no sleep, no wall-clock bound. The rule that no request waits on a\nsuperseded lane stays where it was pinned, in render-payload-outcomes, over a\nlane that never lands.\n\nThe daemon test is a wiring check: a click runs the real program through the\nstorage owner's supersede, and its write draws. `renderAnswer` and the gate are\ngone with the hold they served.\n\n* fix(test): a held run is observed across real turns, and a supersede is read by its file (brandon-unfiled-3248.2ywj)\n\nThe held test looked at the bar in the click's own tick, so a source resumed\nearly passed. It now holds through real turns with the program's write on\ndisk.\n\nThe e2e counted supersede refreshes across all of plugin storage, so a\nsupersede of another session's key passed. It now reads the refresh event of\nthis session's file, which removes the ledger helper.\n\nEvery in-worker stats read goes through statsOf, past the connection's 200 ms\nguard, so these files no longer fail on a slow stats reply.\n\n* fix(test): the doctor's stats reads go past the guard, and a fake launch asserts only what it can fail (brandon-unfiled-3248.2ywj)\n\nThe doctor e2e's in-worker stats reads move to statsOf, which removes their\ncasts and the connection's 200 ms guard.\n\n`failed: 0` and the empty click error go back to the real-launch test: a\nheld launch only resolves ok, so neither could fail there.\n\nThe refresh event's expected file is spelled by valueOf, as the daemon logs\nit, so a temp path with a space still matches."
         }
       ]
     },
