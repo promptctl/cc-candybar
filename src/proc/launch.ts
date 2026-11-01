@@ -714,11 +714,12 @@ async function launchWaited(
       }
     };
 
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+    // The stream's decoder holds a character split across two reads.
+    child.stdout?.setEncoding("utf8").on("data", (text: string) => {
+      stdout += text;
     });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
+    child.stderr?.setEncoding("utf8").on("data", (text: string) => {
+      stderr += text;
     });
 
     child.on("error", (err) => {
