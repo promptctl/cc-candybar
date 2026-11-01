@@ -2,6 +2,182 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-544",
+      "ref": "refs/pull/544/merge",
+      "sha": "8e0de59b5d69b41cbc6007721465258cab99eb9c",
+      "timestamp": "2026-11-01T08:26:13.092Z",
+      "commits": [
+        {
+          "sha": "8e0de59b5d69b41cbc6007721465258cab99eb9c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:25:20-07:00",
+          "message": "Merge 7fd1c3d0262894b5dbec761434e798308d94d1f4 into e7c7caacfb9c807a1424dde9d75a66559451e5ed\n"
+        },
+        {
+          "sha": "7fd1c3d0262894b5dbec761434e798308d94d1f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:25:03-07:00",
+          "message": "docs(landscape): the README points at the explorer on the Pages site, not the deleted landscape.html\n\nlandscape.html was removed when the explorer moved to the one Pages site (#472); the README still linked it.\n"
+        },
+        {
+          "sha": "aa6d952542003eb73f6d64252c0a05567edf68ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:24:43-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into worktree-statusline-landscape\n\n# Conflicts:\n#\t.github/workflows/pages.yml\n#\tdesign-docs/peer-exploration/5-landscape/README.md\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/App.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/Bar.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/Graph.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/ProjectView.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/bundles.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/data.json\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/explorer.svelte.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/traits.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/types.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/vite.config.ts\n#\tdesign-docs/peer-exploration/5-landscape/tools/capture/README.md\n#\tdesign-docs/peer-exploration/5-landscape/tools/capture/fixture.py\n#\tdesign-docs/peer-exploration/5-landscape/tools/capture/resolve.py\n#\tdesign-docs/peer-exploration/5-landscape/tools/capture/run.py\n#\tdesign-docs/peer-exploration/5-landscape/tools/capture/sandbox.sb\n#\tdesign-docs/peer-exploration/5-landscape/tools/export.py\n"
+        },
+        {
+          "sha": "2334a7b1fe504c9b973998bf9f000fed86f8801f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:53:21-06:00",
+          "message": "Landscape: a bar plays on load, a caption names it, and an only-with-bars filter\n\nThe bar strip shows the selected project's bar, or a featured one when nothing with a bar is selected.\nA checkbox limits every characteristic's list to projects whose bar was captured.\n"
+        },
+        {
+          "sha": "8e49cb1283bae5b5fdea0666527daafcf05b48e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:39:55-06:00",
+          "message": "Landscape: bundles resolve against the page, not a deploy's base tag\n\nThe multiplexer injects a base tag at the version root, so the bar and detail bundles, which sit\nbeside the landscape page, resolved to a folder that does not exist and no bar played.\n"
+        },
+        {
+          "sha": "74b40941a47e3125c038f247e5bbb5b48b0d6475",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:35:38-06:00",
+          "message": "Merge remote-tracking branch 'origin/main' into worktree-statusline-landscape\n\n# Conflicts:\n#\tdesign-docs/peer-exploration/5-landscape/README.md\n#\tdesign-docs/peer-exploration/5-landscape/explorer/.gitignore\n#\tdesign-docs/peer-exploration/5-landscape/explorer/package.json\n#\tdesign-docs/peer-exploration/5-landscape/explorer/pnpm-lock.yaml\n#\tdesign-docs/peer-exploration/5-landscape/explorer/smoke.mjs\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/App.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/Graph.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/ProjectView.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/Ref.svelte\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/global.css\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/model.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/traits.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/src/types.ts\n#\tdesign-docs/peer-exploration/5-landscape/explorer/vite.config.ts\n#\tdesign-docs/peer-exploration/5-landscape/tools/export.py\n"
+        },
+        {
+          "sha": "c4fbd3ced7363fdc6edb593e6ab432ad6f08c8b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:34:53-06:00",
+          "message": "Pages: one site through gh-pages-multiplexer, with PR previews\n\nMain and landscape publish together as one version per ref: main/ on main, pr-<n>/ per pull request,\nwith the landscape under landscape/ inside each. The sticky preview comment links the PR's version.\n"
+        },
+        {
+          "sha": "69578bce6370ac8e35a54b4b7bad87fc8d15ab92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:30:53-06:00",
+          "message": "Landscape: committed page data, Pages ships the explorer\n\nThe survey's export output is committed, so CI builds the page from the repo alone. The page\nderives the GitHub link and the kind label instead of storing them: the page is 2.3 MB from 2.7.\nThe Pages workflow builds the explorer and publishes it under /landscape/ beside the main site.\n"
+        },
+        {
+          "sha": "3b7b0dc677f4dd8f07dfaf33421c01a00ff30921",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:27:11-06:00",
+          "message": "Landscape page: bars and project detail load per bundle, one build script\n\nThe page is 2.7 MB (from 10.8 MB). Bar frames and each project's long text are written as\nscript bundles beside the page and loaded when a project is opened. explorer/build.sh runs the\nexport, type check and bundle in order.\n"
+        },
+        {
+          "sha": "a182b771a31b638a6dc7fab57b11c307dd5999e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-27T08:26:50-06:00",
+          "message": "Survey: 2,091 bars from the safe and review tiers; top 300 from 61 to 125\n\nThe review tier runs under the same sandbox, since every signal that put a project\nthere is one the sandbox and fake home contain. Dependencies fetched for 331\nfailing safe projects and the entry guessing reworked recovered 201 more. The\nprocess README records what the sweeps taught.\n"
+        },
+        {
+          "sha": "122fe76949f61b99260aa894df375d8870b0c908",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-27T07:27:06-06:00",
+          "message": "Survey capture: each project runs in its own child runner with a hard limit\n\nA bar's helper put the runner into an uninterruptible wait that no pipe handling\ninside the process could escape, and three escaped daemons from one project\noutlived their sweep by an hour. With no slugs given, the runner now drives a\nchild per project in its own session, kills it at fifteen minutes, and records the\nproject as having stalled.\n"
+        },
+        {
+          "sha": "59621ee08bc5796b345be00989c7350b0d853ca8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-27T06:41:53-06:00",
+          "message": "Survey capture: venv on the sandbox's python, manifest entries as fallback, no wait on escaped daemons\n\ndeps.py builds venvs on the Homebrew python3, since uv's managed interpreter lives\nunder the home directory the sandbox denies. resolve.py uses a package.json bin or\nmain as a fallback entry, mapping an unbuilt dist path to its src, and weights a\nstatusline-named file above cli or index. run.py stops a timeline whose ticks\naverage over three seconds, and after a timeout closes the pipes instead of\nwaiting on them, which hung a worker for an hour when a bar's daemon had made its\nown session.\n"
+        },
+        {
+          "sha": "74add49fd1782757e27b461213e6be23e8956dfd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-27T05:18:55-06:00",
+          "message": "Survey: capture process doc, dependency fetch, better entry guessing, review tier runs\n\nresolve.py ranks the survey's files by reading stdin and entry-like names, runs a\nmodule inside a Python package as a module, reads a shebang for an extensionless\nfile, keeps the author's runner when they named one, and takes the tiers to run as\narguments. deps.py fetches npm and Python dependencies on the host without running\nany package code. run.py ends each tick's process group. The README in\ntools/capture is the process: order, traps, decisions, and where the sweeps stand.\n"
+        },
+        {
+          "sha": "3edee1496cba80788f9734b1c0fcb2819a8fa28f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-27T04:44:17-06:00",
+          "message": "Survey: bars play through a two-minute mock conversation, with speed, deep-link history and live markers\n\nThe capture runner walks every safe project through a fixture timeline of sixty\nticks (hook JSON, transcript, working tree) at 80, 120 and 160 columns and keeps\neach frame the output changed to. The page inflates the frames from a gzip blob\nand plays them off one shared clock with a speed control. Projects with a bar\nare marked teal in the graph, the search and the lists. Each opened node is a\nhistory entry so back walks through them. Links pull in proportion to degree so\na crowded characteristic is held rather than hauled into a knot.\n\nThe sandbox now also denies /tmp and the user temp directory, the fixture ships\na real git so Apple's xcrun shim does not stall, and scrub.py rewrites the host's\nuser, host and run path out of every captured frame.\n"
+        },
+        {
+          "sha": "15dfe70de5bccaa84dad5dea837f6678b60ca7f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-27T01:51:02-06:00",
+          "message": "Survey: capture 1,143 statuslines in a sandbox and replay them in the explorer\n\nA risk triage stamps every project from a read of its statusline files; the\nsafe tier runs under sandbox-exec against one fake session at three widths,\nand the explorer draws the selected project's bar along the bottom in xterm.js.\n"
+        },
+        {
+          "sha": "5cbe89569f032c25398289c65f5b40997c8ee039",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T20:22:15-06:00",
+          "message": "Survey: explorer text-size slider, zoom-stable labels, lens ramp, and labels that push each other apart\n"
+        },
+        {
+          "sha": "000c686c053898d438dc8e4e8a06ea32dcb26260",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T19:14:09-06:00",
+          "message": "Survey: explorer text-size slider, and a short lens ramp to full size\n"
+        },
+        {
+          "sha": "435cc2ae66696a4bf773f1eb2135cf6b8e5ec016",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T19:11:20-06:00",
+          "message": "Survey: explorer text grows near the cursor, and the sidebar folds away\n"
+        },
+        {
+          "sha": "2292f4e8ea04740d0ba35096aa3f519db3e5ce46",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T19:08:57-06:00",
+          "message": "Survey: explorer graph on a live force simulation, with readable labels\n"
+        },
+        {
+          "sha": "3015b7d6c10eb9991f0b5ec67079a0a3d636c479",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T19:08:55-06:00",
+          "message": "Survey: explorer graph on a live force simulation, with readable labels\n"
+        },
+        {
+          "sha": "426dff26384e18073303184ec2d0fd7b9586d860",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T07:02:07-06:00",
+          "message": "Survey: landscape.html, a graph explorer of the 4,002 statuslines by functional characteristic\n"
+        },
+        {
+          "sha": "870c82de2bd6d9fd9db32596c55fc1682f66aa51",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T06:47:57-06:00",
+          "message": "Merge branch 'main' into worktree-statusline-landscape"
+        },
+        {
+          "sha": "2a69a90053d1e5d8bd3456e2bb368684e246e831",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-26T02:05:19-06:00",
+          "message": "Survey: 3,002 more statuslines read below the top 1,000, compared by commit band\n\nREADME answers the three questions for all 4,002 read projects and the\n7,046-project clone measure; projects-tail.md holds the new sections and\nprojects.tsv the tail rows. tools/ gains the tail scripts and briefs.\n"
+        },
+        {
+          "sha": "625f929dd03d1d2a5a909015c258af97874e1605",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-25T22:31:20-06:00",
+          "message": "Survey: the 1,000 most-committed Claude Code statuslines — clones, new ideas, why so many\n\nRanks the styling survey's 9,558 projects by commits, reads the top 1,000\nfrom source with haiku agents, fingerprints their code for copies, and\nanswers whether they are clones, what is new in them, and why there are\nso many. README.md has the answers; projects.md and projects.tsv hold one\nentry per project; tools/ holds the scripts and agent briefs.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-543",
       "ref": "refs/pull/543/merge",
       "sha": "40783ee6b96f457fea188673caefdba2e453fd25",
