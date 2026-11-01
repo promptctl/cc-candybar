@@ -41,15 +41,19 @@ import {
 import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
+  frameRequest,
   sendClick,
   render,
   renderBody,
+  renderRequest,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
+import { linksOf } from "../src/click/read";
+import { composeBar, textOf } from "../src/render/frame";
 import { pageOf, viewerLink } from "./helpers/diagnostics-viewer";
 import { untilHeard } from "./helpers/reload-signal";
 import { writeAtomic } from "../src/utils/atomic-write";
@@ -91,6 +95,8 @@ const CONFIGS = {
   // The band lane alone, which draws the bar elsewhere: its own file, since
   // the statusline's reset button rewrites the file it names.
   handoff: `{ globals: { experimentalBand: true }, segments: { mark: { template: 'a handed-off mark' } }, root: { h: ['mark'] } }`,
+  // The same over a bar in motion.
+  handoffMoving: `{ globals: { effect: "sparkle", experimentalBand: true }, segments: { mark: { template: 'a moving mark' } }, root: { h: ['mark'] } }`,
   // The band lane switched off, which a test switches on by rewriting the file
   // as another session's save would.
   fileLane: `{ segments: { mark: { template: 'a file-switched mark' } }, root: { h: ['mark'] } }`,
@@ -643,6 +649,30 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     };
     return { frames, ended, live };
   };
+  // A reader of the handoff line is told what the line is: still text, over a
+  // bar that can move again once its button brings it back.
+  test("the handoff line over a moving bar is a Frame that can move, and its bytes are the statusline's", async () => {
+    const sid = "feed-handoff-moving";
+    const body = renderBody(sid, projectDir, {}, args("handoffMoving"));
+    await frameRequest(sockPath, body);
+    const band = subscribeUntilEnd(sid, "band");
+    await until(() => band.live().length > 0, "the band's frame");
+    const output = await renderRequest(sockPath, body);
+    const frame = await frameRequest(sockPath, body);
+    expect(textOf(frame)).toContain(HANDOFF_BUTTON);
+    expect(frame).toMatchObject({
+      motion: "can-move",
+      nextChange: Infinity,
+      pending: [],
+    });
+    expect(composeBar(frame)).toBe(output);
+    await click(
+      sockPath,
+      linksOf(frame).find((l) => l.text.includes("⟲"))!.url,
+    );
+    await band.ended;
+  });
+
   // The daemon log's lines for `sid`: its render events, and how each of its
   // lane setups ended (src/daemon/lane-setup.ts).
   const renderEvents = (sid: string): string[] =>
@@ -690,6 +720,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
       `🧪 ${HANDOFF_BUTTON}`,
     ]);
+    // A reader asking for the Frame is answered the line the statusline shows.
+    const handoffFrame = await frameRequest(
+      sockPath,
+      renderBody(sid, projectDir, {}, args("handoff")),
+    );
+    expect(composeBar(handoffFrame)).toBe(handedOff);
+    expect(handoffFrame).toMatchObject({ nextChange: Infinity, pending: [] });
     // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
     // as one more event than a count read before the render: a retry of the
     // first render can land its event after that count is taken.

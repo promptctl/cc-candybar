@@ -3,15 +3,87 @@
 // [LAW:one-source-of-truth] Every test reads rendered bytes through here, and
 // this reads them through rich-js's `osc8Sequences`, over the OSC 8 grammar — the same one the bytes are
 // written with — so a change to how a link is written is a change in one place,
-// not in a regex copied into every file that clicks something. `links` and
-// `stripAnsi` are src/click/read.ts's, which the page in site/ reads with too.
+// not in a regex copied into every file that clicks something. Nothing in src,
+// site or scripts decodes bytes: a reader there asks the daemon for the Frame.
 import { resolvedStyle } from "../../src/render/rich-theme.js";
-import { decodeAnsi, osc8Sequences } from "@promptctl/rich-js";
-import { INVISIBLE } from "../../src/render/ansi.js";
-import { links, stripAnsi, type Link } from "../../src/click/read";
+import {
+  decodeAnsi,
+  OSC8,
+  osc8Sequences,
+  type Osc8Sequence,
+} from "@promptctl/rich-js";
 
-/** SGR + OSC 8: every escape that occupies no columns. */
-export { INVISIBLE, links, stripAnsi, type Link };
+/**
+ * Every escape in a serialized line that occupies no columns: SGR, and OSC 8
+ * hyperlink opens/closes.
+ *
+ * [LAW:one-source-of-truth] The OSC 8 half is rich-js's own grammar — the
+ * library that writes the bytes is the one that says how to read them.
+ */
+export const INVISIBLE = new RegExp(`\\x1b\\[[0-9;]*m|${OSC8.source}`, "g");
+
+export const stripAnsi = (s: string): string => s.replace(INVISIBLE, "");
+
+export interface Link {
+  readonly url: string;
+  /** The raw bytes the link wraps, SGR included. */
+  readonly text: string;
+}
+
+/**
+ * Each link in order: its URI and the bytes between its open and its close.
+ * A link the writer closes and reopens to change colour — a theme name's
+ * swatch, a cell of several runs — is one link: runs of one URI with nothing
+ * visible between them are one click target on the screen, so they are read
+ * as one.
+ */
+export function links(rendered: string): Link[] {
+  // Where each link's bytes start and where its close ends, to join a run of
+  // one URI to the one before it.
+  const out: Array<Link & { readonly from: number; readonly end: number }> = [];
+  let open: Osc8Sequence | undefined;
+  for (const seq of osc8Sequences(rendered)) {
+    if (seq.uri !== "") {
+      // Rendered bytes close every link before the next opens; an open over
+      // an open is the unclosed-link bleed, never a link to record.
+      if (open !== undefined)
+        throw new Error(
+          `OSC 8 open at ${seq.index} while ${open.uri} is still open`,
+        );
+      open = seq;
+      continue;
+    }
+    if (open === undefined)
+      throw new Error(`OSC 8 close at ${seq.index} with no open link`);
+    const from = open.index + open.length;
+    const last = out.at(-1);
+    if (
+      last !== undefined &&
+      last.url === open.uri &&
+      stripAnsi(rendered.slice(last.end, open.index)) === ""
+    ) {
+      out[out.length - 1] = {
+        url: last.url,
+        text: rendered.slice(last.from, seq.index),
+        from: last.from,
+        end: seq.index + seq.length,
+      };
+    } else {
+      out.push({
+        url: open.uri,
+        text: rendered.slice(from, seq.index),
+        from,
+        end: seq.index + seq.length,
+      });
+    }
+    open = undefined;
+  }
+  if (open !== undefined)
+    throw new Error(
+      `OSC 8 open at ${open.index} (${open.uri}) is never closed`,
+    );
+  return out.map(({ url, text }) => ({ url, text }));
+}
 
 /** The bytes with every OSC 8 open and close removed, SGR kept: what a
  *  rendered line looks like, apart from where its clicks go (a link names the

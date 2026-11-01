@@ -67,6 +67,31 @@ export interface Frame {
   readonly pending: readonly string[];
 }
 
+// A Frame as it crosses the wire: JSON writes Infinity as null.
+export type WireFrame = Omit<Frame, "nextChange"> & {
+  readonly nextChange: number | null;
+};
+
+// [LAW:parse-dont-validate] The receiving edge of a Frame. A reply that never
+// crossed a socket holds its Infinity, and reads the same way.
+export function parseFrame(wire: WireFrame): Frame {
+  return { ...wire, nextChange: wire.nextChange ?? Infinity };
+}
+
+// [LAW:one-source-of-truth] Rows drawn in `frame`'s place: the diagnostics
+// viewer, or the handoff line. They are still text, so a feed drawing them waits
+// a still period, not the hidden bar's beat, though that bar can move again once
+// it is back. They drew none of its sources, so none of them are pending here.
+export function standIn(frame: Frame, rows: readonly Row[]): Frame {
+  return {
+    depth: frame.depth,
+    rows,
+    nextChange: Infinity,
+    motion: frame.motion === "still" ? "still" : "can-move",
+    pending: [],
+  };
+}
+
 // [LAW:types-are-the-program] A frame saying one thing, with no draw behind it.
 // Its colours are hex, so it is truecolor whatever the view's depth, and it has
 // no attributes, so no lane encoder can refuse it. The text is sanitized here,
@@ -195,6 +220,11 @@ export function ansiOf(frame: Pick<Frame, "depth" | "rows">): string {
   );
 }
 
+// The bytes of a reply: the frame's, each row ending its line.
+export function composeBar(frame: Pick<Frame, "depth" | "rows">): string {
+  return ansiOf(frame) + "\n";
+}
+
 const sameLook = (a: Run, b: Run): boolean =>
   a.fg === b.fg &&
   a.bg === b.bg &&
@@ -219,4 +249,9 @@ export function mergedRuns({ runs }: Row): Run[] {
 // A line's text.
 export function plainOf(runs: readonly Run[]): string {
   return runs.map((run) => run.text).join("");
+}
+
+// A frame's text, a line per row.
+export function textOf({ rows }: Pick<Frame, "rows">): string {
+  return rows.map((row) => plainOf(row.runs)).join("\n");
 }

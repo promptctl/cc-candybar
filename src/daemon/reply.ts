@@ -325,7 +325,8 @@ export async function replyTo(
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
       // from it, brought forward as its view takes it up. Its answer is its
-      // own client's, drawn for a request, and never a frame
+      // own client's, drawn for a request and never pushed: its `encoding`
+      // says how that answer is spelled, and no feed reads it
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
     }
@@ -349,11 +350,11 @@ export async function replyTo(
             }),
           facts,
         ).then(
-          ({ answer, motion, clickShown, delivered }) => {
+          ({ resp, motion, clickShown, delivered }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
-              resp: { ok: true, output: answer } as const,
+              resp,
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
               // (src/daemon/click-error.ts).

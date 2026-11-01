@@ -8,11 +8,12 @@
 // files, no PR lookup reaches the network, and nothing here touches a daemon
 // the developer is running. A variable not named is not passed on.
 //
-// [LAW:one-source-of-truth] A render is sent through the client's own entry
+// [LAW:one-source-of-truth] A tick is sent through the client's own entry
 // points (`tryRenderViaDaemon`, `detectClientHints`, `nodeClientHint`), so a
 // request carries the hints, budgets and outcome classes a real one does; the
 // daemon's own render event, read back from its log, is the record of what it
-// did with it.
+// did with it. `frame` is a reader's lookup between samples, asking for what no
+// client asks for, so no series measures it.
 //
 // [LAW:no-shared-mutable-globals] exception: the client reads its socket from
 // `process.env.CC_CANDYBAR_SOCKET` at call time and nothing in its API can say
@@ -27,13 +28,15 @@ import path from "node:path";
 import { nodeClientHint } from "../../src/client-hint.js";
 import { detectClientHints } from "../../src/client-hints.js";
 import { daemonArgs } from "../../src/daemon/acquire.js";
-import { tryRenderViaDaemon } from "../../src/daemon/client.js";
+import { RENDER_BUDGETS, tryRenderViaDaemon } from "../../src/daemon/client.js";
 import { fetchStats } from "../../src/daemon/client-stats.js";
-import { describeFailure } from "../../src/daemon/client-transport.js";
+import { describeFailure, requestOutcome } from "../../src/daemon/client-transport.js";
 import { logLines } from "../../src/daemon/log.js";
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog.js";
+import type { ClientHints } from "../../src/daemon/protocol.js";
 import { logPath } from "../../src/daemon/paths.js";
 import type { StatsSnapshot } from "../../src/daemon/stats.js";
+import { parseFrame, type Frame } from "../../src/render/frame.js";
 import type { ClaudeHookData } from "../../src/utils/claude.js";
 import { valueOf } from "../../src/utils/logfmt.js";
 import { hookData as barHookData } from "../lib/hook-data.js";
@@ -101,6 +104,8 @@ export interface World {
   clientEnv(columns: number): NodeJS.ProcessEnv;
   /** One render, as the client sends it. */
   tick(session: Session, columns: number, n: number): Promise<Tick>;
+  /** One render's Frame: a lookup between samples, never a sample itself. */
+  frame(session: Session, columns: number, n: number): Promise<Frame>;
   /** The daemon's own counters, now. */
   stats(): Promise<StatsSnapshot>;
   /** Ticks until the daemon draws the session with nothing pending. */
@@ -272,6 +277,12 @@ export async function startWorld(config = "{}\n"): Promise<World> {
     }
   };
 
+  // What a client reports of the terminal it runs at.
+  const hintsOf = (session: Session, columns: number): ClientHints => ({
+    ...detectClientHints(terminal, session.cwd, { columns, rows: 48 }),
+    client: CLIENT,
+  });
+
   const world: World = {
     claudeDir: dirs.claude,
     configFile,
@@ -304,15 +315,31 @@ export async function startWorld(config = "{}\n"): Promise<World> {
         hookDataOf(session, n),
         [BUNDLE],
         session.cwd,
-        {
-          ...detectClientHints(terminal, session.cwd, { columns, rows: 48 }),
-          client: CLIENT,
-        },
+        hintsOf(session, columns),
       );
       const ms = performance.now() - started;
       return outcome.kind === "ok"
         ? { ok: true, ms, output: outcome.value }
         : { ok: false, ms, why: describeFailure(outcome) };
+    },
+    async frame(session, columns, n) {
+      const outcome = await requestOutcome(
+        (deadline) => ({
+          kind: "render",
+          encoding: "frame",
+          hookData: hookDataOf(session, n),
+          args: [BUNDLE],
+          cwd: session.cwd,
+          deadline,
+          ...hintsOf(session, columns),
+        }),
+        RENDER_BUDGETS,
+        (resp) => ("frame" in resp ? parseFrame(resp.frame) : undefined),
+      );
+      if (outcome.kind !== "ok") {
+        throw new Error(`a frame of ${session.id}: ${describeFailure(outcome)}`);
+      }
+      return outcome.value;
     },
     stats,
     async settle(session, columns) {

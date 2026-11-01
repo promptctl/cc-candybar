@@ -8,6 +8,7 @@ import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
 import type { Lane } from "../config/lanes";
 import type { BandBar } from "../../mod/types";
+import type { WireFrame } from "../render/frame";
 import type { TmuxStatusBar } from "../tmux-status/frames";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
@@ -20,7 +21,8 @@ import type { TmuxStatusBar } from "../tmux-status/frames";
 //   - Adding a new request `kind`. Old daemons reject the unknown kind via
 //     the existing BAD_REQUEST fallthrough; old clients never send it.
 //   - Adding a new optional field that older parsers ignore safely.
-//   - Adding a new response variant produced only in response to a new kind.
+//   - Adding a new response variant produced only in response to a new kind
+//     or a new request field.
 //
 // **Breaking** (bump):
 //   - Changing the semantics or required shape of an existing kind.
@@ -76,6 +78,22 @@ export interface RenderRequest {
   claudeConfigDir?: string;
   terminalEnv?: TerminalEnvHint;
   client?: ClientHint;
+}
+
+// [LAW:no-mode-explosion] How a render is answered: the bytes a terminal
+// prints, or the Frame. The cap is these two, and the second has no exit, since
+// a reader holding one render's answer has no other way to read the bar once
+// decoding is ruled out. A new surface is a lane (LANES, LANE_FRAMES), which
+// names its own encoding, so a subscription takes none.
+export const RENDER_ENCODINGS = ["ansi", "frame"] as const;
+export type RenderEncoding = (typeof RENDER_ENCODINGS)[number];
+
+// [LAW:types-are-the-program] A render as a script or harness asks for it.
+// `RenderRequest` stays what the shipped clients send, key for key, which
+// scripts/check-protocol.mjs diffs against the native client, and they never
+// send this: absent is `ansi`.
+export interface ReaderRenderRequest extends RenderRequest {
+  encoding?: RenderEncoding;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -359,8 +377,8 @@ export interface DebugRequest {
   what: DebugWhat;
 }
 
-// [LAW:one-type-per-behavior] A subscription's stream is a stream of the
-// responses a render request is answered with: every frame the daemon draws
+// [LAW:one-type-per-behavior] A subscription's stream is a stream of
+// responses, each in its lane's own encoding: every frame the daemon draws
 // for the session whose bytes differ from the last one sent, until the
 // subscriber closes the socket. The frames are drawn from the session's latest
 // render request (src/daemon/frame-feed.ts), so a session subscribed to before
@@ -386,7 +404,7 @@ export interface PaneSessionRequest {
 }
 
 export type Request =
-  | RenderRequest
+  | ReaderRenderRequest
   | SubscribeRequest
   | PaneSessionRequest
   | ShutdownRequest
@@ -396,6 +414,8 @@ export type Request =
 
 export type Response =
   | { ok: true; output: string }
+  // A render asked for as `encoding: "frame"`, read through `parseFrame`.
+  | { ok: true; frame: WireFrame }
   | { ok: true; stats: StatsSnapshot }
   // [LAW:types-are-the-program] DebugSnapshot is itself a discriminated union
   // on `what`, so the response type carries the requested kind through to the

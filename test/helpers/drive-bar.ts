@@ -6,8 +6,8 @@
 // [LAW:effects-at-boundaries] The daemon is the subject and a black box: an
 // isolated daemon (its own socket, XDG dirs, Claude config dir, parent
 // watchdog — never the developer's daemon or files) is driven only over its
-// wire, so a render here is the bytes Claude Code would print and a click is
-// the request the URL handler sends. Nothing is re-implemented in-process: the
+// wire, so a render here is the Frame of what Claude Code would print and a
+// click is the request the URL handler sends. Nothing is re-implemented in-process: the
 // daemon's own render request composes the payload (unsaved counts, history,
 // navigation), and its own verb table runs the click, validators included.
 //
@@ -37,16 +37,16 @@ import { cellLen } from "@promptctl/rich-js";
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
 import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
 import { withStamp } from "../../scripts/version-stamp.cjs";
-import { renderRequest, sendClick } from "./daemon-e2e";
+import { textOf, type Frame } from "../../src/render/frame";
+import { frameRequest, sendClick } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
   describeLink as describeWith,
-  drawnLinks,
   effectsOf,
   HOST_VERBS,
   isBarLink,
-  stripAnsi,
+  linksOf,
   type DrawnLink,
 } from "../../src/click/read";
 
@@ -75,14 +75,14 @@ export class NotDrawnError extends Error {}
  * nothing — the daemon refused it, or the harness did not send it.
  */
 export interface Clicked {
-  readonly rendered: string;
+  readonly rendered: Frame;
   readonly refused: string | null;
 }
 
 export interface Bar {
   /** The config file the daemon reads and every durable click writes. */
   readonly configPath: string;
-  render(): Promise<string>;
+  render(): Promise<Frame>;
   /** Report a new terminal size; every render after it is drawn at that size. */
   resize(size: TerminalSize): void;
   /**
@@ -116,7 +116,7 @@ const spawnedBarDaemon: StartBarDaemon = async (env) => {
 
 export { hookData };
 
-export { drawnLinks, type DrawnLink };
+export { linksOf, type DrawnLink };
 
 /** The effects a click on `link` fires, `verb arg…` each, `;` between. */
 export function describeLink(link: DrawnLink): string {
@@ -154,11 +154,11 @@ export async function startBar(
     removeDirs();
     throw e;
   }
-  let last = "";
+  let last: Pick<Frame, "rows"> = { rows: [] };
   let size: TerminalSize = { width: opts.width, rows: opts.rows };
 
-  const render = async (): Promise<string> =>
-    (last = await renderRequest(
+  const render = async (): Promise<Frame> => {
+    const frame = await frameRequest(
       daemon.target,
       {
         hookData: hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
@@ -171,10 +171,13 @@ export async function startBar(
         claudeConfigDir,
       },
       REPLY_BUDGET_MS,
-    ));
+    );
+    last = frame;
+    return frame;
+  };
 
   const click = async (text: string, nth = 1): Promise<Clicked> => {
-    const drawn = drawnLinks(last);
+    const drawn = linksOf(last);
     const hit = drawn.filter((l) => l.text === text)[nth - 1];
     if (hit === undefined) {
       throw new Error(
@@ -188,7 +191,7 @@ export async function startBar(
   // A URL is followed only if the last render drew it: a page showing an older
   // render would otherwise click what the bar no longer offers.
   const follow = async (url: string): Promise<Clicked> => {
-    const hit = drawnLinks(last).find((l) => l.url === url);
+    const hit = linksOf(last).find((l) => l.url === url);
     if (hit === undefined) {
       throw new NotDrawnError(`the last render drew no link to ${url}; render again and click what it drew`);
     }
@@ -228,9 +231,8 @@ export async function startBar(
 }
 
 /** `[cells] line` for each line, so a reader sees what fits a width. */
-export function printable(rendered: string): string {
-  return stripAnsi(rendered)
-    .replace(/\n$/, "")
+export function printable(frame: Pick<Frame, "rows">): string {
+  return textOf(frame)
     .split("\n")
     .map((line) => `[${cellLen(line)}] ${line}`)
     .join("\n");

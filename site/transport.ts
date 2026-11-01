@@ -2,19 +2,20 @@
 //
 // [LAW:single-enforcer] A render and a click are the daemon's own request
 // handler (`createDaemon`'s `reply`), sent the request the Rust client and the
-// URL handler send. Nothing here renders: the daemon reads the
+// URL handler send, a render asking for the Frame. Nothing here renders: the daemon reads the
 // simulated machine (world.ts) through node:fs and node:child_process, as it
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
 import { VERB_COPY } from "../src/click/wire";
-import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/read";
+import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon, SYSTEM_CLOCK } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
-import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
+import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/protocol";
 import { REGISTRY_URL } from "../src/install/currency";
 import { parseHandlerUrl } from "../src/install/index";
+import { composeBar, parseFrame } from "../src/render/frame";
 import { PACKAGE_VERSION } from "../src/version";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
@@ -162,19 +163,20 @@ function hookData(): ClaudeHookData {
   };
 }
 
-async function daemon(request: RenderRequest | ClickRequest): Promise<string> {
+async function daemon(request: ReaderRenderRequest | ClickRequest): Promise<Extract<Response, { ok: true }>> {
   // In the page there is no socket, so no reply timer to have fired, and the
   // answer in hand is the one the page draws.
   const { resp, delivered } = await pageDaemon.reply(request, () => false, pageDaemon.clock.monotonic(), () => false);
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
-  return "output" in resp ? resp.output : "";
+  return resp;
 }
 
 async function render(size: Size) {
-  const ansi = await daemon({
+  const resp = await daemon({
     v: PROTOCOL_VERSION,
     kind: "render",
+    encoding: "frame",
     hookData: hookData(),
     args: ["cc-candybar"],
     cwd: REPO,
@@ -183,7 +185,9 @@ async function render(size: Size) {
     ssh: false,
     claudeConfigDir: CLAUDE_DIR,
   });
-  return { ansi, links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
+  if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  const frame = parseFrame(resp.frame);
+  return { ansi: composeBar(frame), links: linksOf(frame).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
 }
 
 // The page's clipboard. The write starts before anything is awaited: a browser

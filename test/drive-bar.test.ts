@@ -11,9 +11,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describeLink, drawnLinks, startBar, type Bar } from "./helpers/drive-bar";
+import { describeLink, linksOf, startBar, type Bar } from "./helpers/drive-bar";
 import { DOOR_GLYPH } from "../src/config/disclosure";
-import { stripAnsi } from "./helpers/ansi";
+import { textOf } from "../src/render/frame";
 import { startBarDaemon } from "./helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
@@ -43,7 +43,7 @@ describe("drive-bar", () => {
     // line, the second the padding stepper in the config tab.
     const { rendered: out } = await bar.click("▶", 2);
     // The stepper's step is a session draft; save writes it to the config.
-    const save = drawnLinks(out).find((l) => describeLink(l).startsWith("save "));
+    const save = linksOf(out).find((l) => describeLink(l).startsWith("save "));
     expect(save).toBeDefined();
     await bar.click(save!.text);
     expect(fs.readFileSync(bar.configPath, "utf8")).toMatch(/padding/);
@@ -60,11 +60,11 @@ describe("drive-bar", () => {
     await bar.click(DOOR_GLYPH);
     await bar.click("✎ arrange");
     // ✖ #1 is the risen door; #2 removes host, #3 directory.
-    expect(stripAnsi((await bar.click("✖", 3)).rendered)).not.toContain("✖ directory");
+    expect(textOf((await bar.click("✖", 3)).rendered)).not.toContain("✖ directory");
     // Undo writes the file back; the render after it must already draw it.
     const { refused, rendered } = await bar.click("↶");
     expect(refused).toBeNull();
-    expect(stripAnsi(rendered)).toContain("✖ directory");
+    expect(textOf(rendered)).toContain("✖ directory");
   });
 
 

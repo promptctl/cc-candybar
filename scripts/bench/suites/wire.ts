@@ -12,12 +12,13 @@
 import fs from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
-import { drawnLinks } from "../../../src/click/read.js";
+import { linksOf } from "../../../src/click/read.js";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import type { StatsSnapshot } from "../../../src/daemon/stats.js";
 import { parseHandlerUrl } from "../../../src/install/index.js";
+import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";
 import { sleep } from "../measure.js";
 import { measured, type Benchmark, type Outcome } from "../types.js";
@@ -446,21 +447,21 @@ const settingClick: Benchmark = {
       const clicks: number[] = [];
       const visible: number[] = [];
       let n = 100;
-      let shown = drawn(await world.tick(session, DEFAULT_COLUMNS, n++), "menu").output;
       for (let i = 0; i < plan.samples; i++) {
-        // The stepper the open menu draws: its next preset is a link to click.
-        const step = drawnLinks(shown).find((l) => l.text === "▶");
+        // The stepper the open menu draws: its next preset is a link to click,
+        // and the bar it is read from is the one the click has to change.
+        const menu = await world.frame(session, DEFAULT_COLUMNS, n++);
+        const step = linksOf(menu).find((l) => l.text === "▶");
         if (step === undefined) {
           throw new Error("the open menu drew no ▶ preset stepper to click");
         }
         let clickMs = 0;
-        const changed = await untilChanged(world, session, shown, n, async () => {
+        const changed = await untilChanged(world, session, composeBar(menu), n, async () => {
           clickMs = await click(step.url);
         });
         n += 1000;
         clicks.push(clickMs);
         visible.push(changed.visibleMs);
-        shown = changed.output;
       }
       return measured([
         { name: "click", samples: clicks },

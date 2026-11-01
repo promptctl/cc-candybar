@@ -17,6 +17,8 @@ import {
   refusedHints,
   refusedArgsError,
   refusedHintsError,
+  type RenderEncoding,
+  type Response,
 } from "./protocol";
 import { type SessionId } from "./session-id";
 import { repoQuestions } from "./repo-configs";
@@ -36,7 +38,12 @@ import {
 import { roleOf, answeredOf } from "./render-sightings";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
-import { ansiOf, renderFailedFrame, type Frame } from "../render/frame.js";
+import {
+  composeBar,
+  renderFailedFrame,
+  standIn,
+  type Frame,
+} from "../render/frame.js";
 import {
   renderOptionsOf,
   renderWidth,
@@ -101,9 +108,20 @@ export const renderFailed = (err: unknown): Refusal => ({
   daemonV: PROTOCOL_VERSION,
 });
 
+// [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
+// by the value the checkpoint parsed. Keyed by the type, so a new encoding names
+// its answer here or fails to compile.
+const RENDER_ANSWERS: Readonly<
+  Record<RenderEncoding, (frame: Frame) => Response>
+> = {
+  ansi: (frame) => ({ ok: true, output: composeBar(frame) }),
+  frame: (frame) => ({ ok: true, frame }),
+};
+
 // One frame of a subscribed session, drawn from its latest request at this
-// instant, by the render a request gets. The response is the one that request
-// would be answered with, and the bar moves when its effects say it does.
+// instant, by the render a request gets. The response is what that request
+// would draw, in the bytes its lanes read whatever encoding it asked its own
+// answer in, and the bar moves when its effects say it does.
 // [LAW:parse-dont-validate] The request the session's view is declared with
 // crossed the checkpoint when it arrived, so a frame draws by it without
 // asking again. Null while the session has no view: a frame opens none.
@@ -130,19 +148,18 @@ export function renderFrame(
       by: "feed",
       fps,
     });
-    const output = composeBar(drawn.body);
+    const answer = RENDER_ANSWERS.ansi(drawn.body);
+    const statusline = statuslineOf(
+      sessionId,
+      drawn,
+      handedOffTo(lanes, frameFeeds.following(sessionId)),
+    );
     return {
       bar: drawn.body,
-      resp: { ok: true, output },
-      statusline: {
-        ok: true,
-        output: statuslineOf(
-          sessionId,
-          drawn,
-          output,
-          handedOffTo(lanes, frameFeeds.following(sessionId)),
-        ),
-      },
+      resp: answer,
+      // Mostly the bar itself, and one frame encodes once.
+      statusline:
+        statusline === drawn.body ? answer : RENDER_ANSWERS.ansi(statusline),
       evaluated,
       delivered,
       failure: null,
@@ -308,6 +325,7 @@ export function setUpRender(
   };
   const sessionId = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
+  noteFacts(facts, { encoding: req.encoding });
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
   // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
@@ -669,26 +687,13 @@ export function drawRender(
     sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
     diagnostics,
   );
-  // [LAW:one-source-of-truth] The body says when it next changes. The viewer
-  // in the bar's place is still text, so a feed drawing it waits a still
-  // period, not the hidden bar's beat; that bar can move again once it closes.
-  // It drew none of that bar's sources, so none of them are pending in it.
   const body: Frame =
     viewing === null
       ? frame
-      : {
-          depth: frame.depth,
-          rows: viewerRows(
-            diagnostics,
-            viewing,
-            sessionId,
-            drawing.by,
-            geometry,
-          ),
-          nextChange: Infinity,
-          motion: frame.motion === "still" ? "still" : "can-move",
-          pending: [],
-        };
+      : standIn(
+          frame,
+          viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
+        );
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
   const fx = effects.lastFrame();
@@ -805,11 +810,6 @@ interface DrawnBar {
   readonly geometry: DiagnosticGeometry;
 }
 
-// The response's bar.
-function composeBar(body: Pick<Frame, "depth" | "rows">): string {
-  return ansiOf(body) + "\n";
-}
-
 // [LAW:effects-at-boundaries] What a render request said, recorded where the
 // request arrives — never by a frame, which only draws, and which would wake
 // its own feed by writing the session's state. Compared before writing:
@@ -846,7 +846,7 @@ function recordRequest(parts: DaemonParts, req: CheckedRenderRequest): void {
 interface RequestAnswer {
   // What this request's client is answered with: the statusline's answer to
   // Claude Code's statusline, the bar to a client drawing it itself.
-  answer: string;
+  resp: Response;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
   // Records what the answer's copy clicks copy, once it reached its client.
@@ -986,49 +986,50 @@ async function drawAnswer(
     setup,
     ANSWERING,
   );
-  const output = composeBar(drawn.body);
   const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
-  const statusline = statuslineOf(sessionId, drawn, output, elsewhere);
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
+  const resp = RENDER_ANSWERS[req.encoding](
+    toStatusline ? statuslineOf(sessionId, drawn, elsewhere) : drawn.body,
+  );
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
   // how long the turn after the wait took to make the answer — what the
-  // draw's reserve is held to (DRAW_RESERVE_MS).
+  // draw's reserve is held to (DRAW_RESERVE_MS), so an `ansi` answer's bytes
+  // are encoded before this is read.
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
     drew: `${Math.round(clock.monotonic() - drawFrom)}ms`,
   });
   return {
-    answer: toStatusline ? statusline : output,
+    resp,
     motion: drawn.body.motion,
     clickShown,
     delivered,
   };
 }
 
-// What Claude Code's statusline shows of `drawn`: the bar (`output`), or —
-// while lanes draw it `elsewhere` — the handoff line, which says where, with
-// the bar's indicator after it. [LAW:one-source-of-truth] The indicator reads
-// the draw's one list, and its click opens the one viewer: while it is open
-// the statusline shows it, the same body the lanes draw.
+// What Claude Code's statusline shows of `drawn`: the bar, or — while lanes
+// draw it `elsewhere` — the handoff line, which says where, with the bar's
+// indicator after it. [LAW:one-source-of-truth] The indicator reads the draw's
+// one list, and its click opens the one viewer: while it is open the statusline
+// shows it, the same body the lanes draw.
 function statuslineOf(
   sessionId: string,
   drawn: DrawnBar,
-  output: string,
   elsewhere: readonly Lane[],
-): string {
+): Frame {
   const [first, ...rest] = elsewhere;
   return first === undefined || drawn.viewerOpen
-    ? output
-    : composeBar({
-        depth: drawn.body.depth,
-        rows: handoffRows(
+    ? drawn.body
+    : standIn(
+        drawn.body,
+        handoffRows(
           laneHandoff(sessionId, [first, ...rest]),
           drawn.diagnostics,
           sessionId,
           drawn.geometry,
         ),
-      });
+      );
 }
