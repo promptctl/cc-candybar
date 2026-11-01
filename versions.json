@@ -4,15 +4,22 @@
     {
       "version": "pr-556",
       "ref": "refs/pull/556/merge",
-      "sha": "bcc6e9ee4c91380a40287cb8876188a54586d446",
-      "timestamp": "2026-11-01T21:35:58.523Z",
+      "sha": "f594b2d50c5bbb46f6810367fd860f6fe6da5810",
+      "timestamp": "2026-11-01T21:42:50.894Z",
       "commits": [
         {
-          "sha": "bcc6e9ee4c91380a40287cb8876188a54586d446",
+          "sha": "f594b2d50c5bbb46f6810367fd860f6fe6da5810",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T21:35:08Z",
-          "message": "Merge b22720aea9e0dd22779dc4083b75294ac247e422 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+          "timestamp": "2026-11-01T21:41:57Z",
+          "message": "Merge ade1bf28b7a5b8f0601a8dc0ecafe86097a064d5 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "ade1bf28b7a5b8f0601a8dc0ecafe86097a064d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:41:47-07:00",
+          "message": "docs(testing): the unit that moves is a case, and the ledger lists them (candybar-testing-ihvy.43x)\n"
         },
         {
           "sha": "b22720aea9e0dd22779dc4083b75294ac247e422",
