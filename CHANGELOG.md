@@ -1,3 +1,10 @@
+## [1.177.0](https://github.com/promptctl/cc-candybar/compare/v1.176.0...v1.177.0) (2026-11-01)
+
+### Features
+
+* **click:** a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2) ([#546](https://github.com/promptctl/cc-candybar/issues/546)) ([1270b54](https://github.com/promptctl/cc-candybar/commit/1270b544662cfb3f1acdc49573860e38b9c3f14a))
+* **daemon:** click-rooted launches go async (candybar-launch-q7o7.gp7) ([#545](https://github.com/promptctl/cc-candybar/issues/545)) ([ccd8859](https://github.com/promptctl/cc-candybar/commit/ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0))
+
 ## [1.176.0](https://github.com/promptctl/cc-candybar/compare/v1.175.0...v1.176.0) (2026-11-01)
 
 ### Features
