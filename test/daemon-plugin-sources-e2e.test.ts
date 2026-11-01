@@ -2,8 +2,8 @@
 // measured on a daemon: the bar a request draws before and after the
 // plugin's program writes the session's file, the bar while a clicked program
 // runs and after it exits, a forged link's refusal in the bar, the daemon's
-// request and run counts, the config-load event's `sources=`, and the render
-// event's `sources=`/`sourcesPending=` — the daemon's own wiring of the storage
+// run counts, the config-load event's `sources=`, and the render event's
+// `sources=`/`sourcesPending=`/`ended=` — the daemon's own wiring of the storage
 // owner into the render states and the views' declarations, and of the run
 // owner into the click.
 
@@ -11,15 +11,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { click, hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
 } from "./helpers/spawn-isolated-daemon";
-import { loggedWhen, renderLines } from "./helpers/daemon-log";
-import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { loggedWhen, logLines, renderEventsOf, renderLines } from "./helpers/daemon-log";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_RUN } from "../src/click/wire";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
@@ -31,14 +30,13 @@ import { viewerLink } from "./helpers/diagnostics-viewer";
 jest.setTimeout(30_000);
 
 const SESSION = "sources-e2e-0001";
-// Longer than a request's whole budget, so a request waiting on the run would
-// time out.
-const PROGRAM_SLEEPS_S = 2;
 
-// The fixture program, in the plugin's folder: after `DELAY` seconds it writes
+// The fixture program, in the plugin's folder: once `RELEASE` exists it writes
 // the session's file whole, by rename, and exits.
+// [LAW:no-ambient-temporal-coupling] The test releases it, so "the program is
+// running" is a state the test owns, not a bet on how long a sleep outlasts it.
 const PROGRAM = `#!/bin/sh
-sleep "$DELAY"
+until [ -e "$RELEASE" ]; do sleep 0.02; done
 mkdir -p session
 printf '{"home":"%s"}' "$HOME_VALUE" > "session/.$1.tmp"
 mv "session/.$1.tmp" "session/$1.json"
@@ -51,6 +49,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   let dataHome: string;
   let config: string;
   let storage: string;
+  let release: string;
   let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
@@ -60,6 +59,8 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     // The plugin is INSTALLED: a folder in the user's plugin root, listed by
     // no config.
     dataHome = path.join(projectDir, "data");
+    // A folder of its own, so no config watch sees the release land.
+    release = path.join(fs.mkdtempSync(path.join(projectDir, "release-")), "go");
     const folder = path.join(dataHome, "cc-candybar", "plugins", "p");
     fs.mkdirSync(folder, { recursive: true });
     fs.writeFileSync(path.join(folder, "write.sh"), PROGRAM, { mode: 0o755 });
@@ -74,7 +75,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
         actions: {
           go: {
             run: ["./write.sh", "{{ .session.id }}"],
-            env: { HOME_VALUE: "/h/ran", DELAY: "${PROGRAM_SLEEPS_S}" },
+            env: { HOME_VALUE: "/h/ran", RELEASE: ${JSON.stringify(release)} },
             refreshes: ["status"],
           },
         },
@@ -106,17 +107,18 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   const renderRaw = (): Promise<string> => renderRequest(daemon, body());
   const render = async (): Promise<string> => stripAnsi(await renderRaw());
 
-  // ONE render, not retried: a request that timed out fails here.
-  const renderOnce = async (): Promise<string> => {
-    const resp = await sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "render", ...body() });
-    if (!resp.ok || !("output" in resp)) throw new Error(`render failed: ${JSON.stringify(resp)}`);
-    return stripAnsi(resp.output);
-  };
-
+  // The counts from the daemon's request handling, past the connection: the
+  // 200 ms guard is the connection's, and a busy machine is no fact about them.
   const stats = async (): Promise<StatsSnapshot> => {
-    const resp = await sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "stats" });
-    if (!resp.ok || !("stats" in resp)) throw new Error(`stats failed: ${JSON.stringify(resp)}`);
-    return resp.stats as StatsSnapshot;
+    const handled = await daemon.daemon.handle(
+      { v: PROTOCOL_VERSION, kind: "stats" },
+      () => false,
+      daemon.daemon.clock.monotonic(),
+    );
+    if (handled.kind !== "reply" || !handled.resp.ok || !("stats" in handled.resp)) {
+      throw new Error(`stats failed: ${JSON.stringify(handled)}`);
+    }
+    return handled.resp.stats as StatsSnapshot;
   };
 
   // Renders until the bar (escapes stripped) shows what is waited for; the
@@ -172,27 +174,35 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     );
   });
 
-  test("a click runs the drawn program; while it runs the source draws its loading cell and no request times out; then its write", async () => {
+  test("a click runs the drawn program; while it runs the source draws its loading cell and a request does not wait on it; then its write", async () => {
     const link = runLink(await renderUntil((b) => b.includes("home=/h/before"), "the value before the click"));
     const before = await stats();
 
-    const clicked = await sendClick(daemon, link);
-    expect(clicked).toMatchObject({ ok: true });
+    await click(daemon, link);
 
-    // The program sleeps past a request's budget before it writes. A request
-    // now neither waits for it nor draws the value from before the click.
-    const during = await renderOnce();
+    // The program runs until it is released, so a wait that ended `answered`
+    // over its superseded source did not wait on it: one that did could not
+    // end so, however long it had. Load can end any one wait at its deadline
+    // instead, so one such answer among the renders is the proof.
+    const during = stripAnsi(
+      await renderUntil(
+        () =>
+          renderEventsOf(logLines(env), SESSION).some(
+            (l) => l.includes(" ended=answered") && l.includes(" sourcesPending=plugins.p.status:superseded"),
+          ),
+        "a render answered with the run's source superseded",
+      ),
+    );
+    // Nor does it draw the value from before the click.
     expect(during).toContain(LOADING_GLYPH);
     expect(during).not.toContain("home=/h/before");
     expect(during).not.toContain("home=/h/ran");
-    const whileRunning = await stats();
-    expect(whileRunning.requests.timedOut).toBe(before.requests.timedOut);
-    expect(whileRunning.runs).toMatchObject({ started: before.runs.started + 1, running: 1 });
+    expect((await stats()).runs).toMatchObject({ started: before.runs.started + 1, running: 1 });
 
+    fs.writeFileSync(release, "");
     await renderUntil((b) => b.includes("home=/h/ran"), "the program's write");
     const after = await stats();
     expect(after.runs).toMatchObject({ started: before.runs.started + 1, running: 0, failed: 0, timedOut: 0 });
-    expect(after.requests.timedOut).toBe(before.requests.timedOut);
     await loggedWhen(
       env,
       (lines) => lines.some((l) => l.includes(`run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `)),
