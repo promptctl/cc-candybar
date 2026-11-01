@@ -78,13 +78,13 @@ function reportDaemonStarts(): void {
   }
 }
 
-export default function globalTeardown(): void {
+export default async function globalTeardown(): Promise<void> {
   try {
     reportDaemonStarts();
   } finally {
     // The shared pool's own bookkeeping: drop slot files whose recorded owner
     // is provably dead.
-    daemonPool.sweepStale();
+    await daemonPool.sweepStale();
 
     sweepJestTmp(os.tmpdir(), process.pid);
   }

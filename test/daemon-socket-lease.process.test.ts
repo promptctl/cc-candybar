@@ -12,8 +12,8 @@ import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
 // The real kernel start-time of a live pid, so a planted lease matches the true
 // process identity the daemon's arbitration reads back via `ps`.
-function realStartTime(pid: number): string {
-  const r = readStartTime(pid, processLauncher.launchSync);
+async function realStartTime(pid: number): Promise<string> {
+  const r = await readStartTime(pid, processLauncher.launch);
   if (r.kind !== "start") {
     throw new Error(`expected a live start-time for pid ${pid}, got ${r.kind}`);
   }
@@ -122,7 +122,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         pid: holderPid,
         version: 2,
         binPath: "/incumbent",
-        startTime: realStartTime(holderPid),
+        startTime: await realStartTime(holderPid),
       });
 
       const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);

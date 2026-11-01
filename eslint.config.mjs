@@ -157,29 +157,40 @@ export default [
   },
   prettierConfig,
   ...ownedImportBlocks(),
-  // [LAW:verifiable-goals] A click-rooted path holds the daemon's loop if it
+  // [LAW:verifiable-goals] A path the daemon serves holds its loop if it
   // launches synchronously, so these cannot name the way to. Goes with the
   // launchSync half when `Launcher` drops it (candybar-launch-q7o7.4em).
+  // server.ts is the shell: it alone names `runTmux`, for the at-exit handle.
   {
     files: [
-      "src/daemon/verbs/**/*.ts",
-      "src/daemon/reply.ts",
-      "src/daemon/lane-edge.ts",
-      "src/daemon/lane-setup.ts",
+      "src/daemon/**/*.ts",
       "src/claude-input/**/*.ts",
       "src/doctor/edge.ts",
       "src/doctor/font-edge.ts",
     ],
+    ignores: ["src/daemon/server.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
         {
           selector: "Identifier[name='launchSync']",
-          message: "A click-rooted path awaits `launch`.",
+          message: "A path the daemon serves awaits `launch`.",
         },
         {
           selector: "Identifier[name='runTmux']",
-          message: "A click-rooted path awaits `runTmuxAsync`.",
+          message: "A path the daemon serves awaits `runTmuxAsync`.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/daemon/server.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Identifier[name='launchSync']",
+          message: "A path the daemon serves awaits `launch`.",
         },
       ],
     },

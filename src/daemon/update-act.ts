@@ -171,13 +171,13 @@ const bootedAt = (): number => Date.now() - os.uptime() * 1000;
 // job `ps` could not fingerprint, has no start time to tell by and is taken as
 // the job's: the sh leads it, so the program outliving it is the likelier
 // story.
-export function isRecordedJob(
+export async function isRecordedJob(
   record: ActRecord,
-  read: (pid: number) => StartTimeRead,
+  read: (pid: number) => Promise<StartTimeRead>,
   boot: number = bootedAt(),
-): boolean {
+): Promise<boolean> {
   if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
-  const leader = read(record.pid);
+  const leader = await read(record.pid);
   return (
     record.startTime === null ||
     leader.kind === "unavailable" ||
@@ -196,8 +196,10 @@ function readRecord(actDir: string): ActRecord | null {
 }
 
 export interface ActReader {
-  // The newest act on the bundle, read now.
-  read(): ActFacts | null;
+  // The newest act on the bundle, read now. Reads must not overlap: `known`
+  // spans the `ps` a new job costs, so the reader's one caller runs them in
+  // turn (the act queue, src/daemon/update-notice.ts).
+  read(): Promise<ActFacts | null>;
 }
 
 // The newest act as one reader knows it, keyed by its job, since an act's
@@ -220,17 +222,17 @@ const sameJob = (a: ActRecord, b: ActRecord): boolean =>
 // the group is gone.
 export function makeActReader(
   dir: string,
-  read: (pid: number) => StartTimeRead,
+  read: (pid: number) => Promise<StartTimeRead>,
 ): ActReader {
   let known: Known | null = null;
 
   // The act's facts, or null when the act vanished under the read.
-  function factsOf(act: number): ActFacts | null {
+  async function factsOf(act: number): Promise<ActFacts | null> {
     const actDir = path.join(dir, String(act));
     const record = readRecord(actDir);
     if (record === null) return null;
     if (known === null || !sameJob(known.record, record)) {
-      known = { record, ours: isRecordedJob(record, read), final: null };
+      known = { record, ours: await isRecordedJob(record, read), final: null };
     }
     if (known.final !== null) return known.final;
     known.ours = known.ours && jobGroupAlive(record.pid);
@@ -249,7 +251,7 @@ export function makeActReader(
   }
 
   return {
-    read() {
+    async read() {
       // An act vanishes only when a newer one's claim prunes it, so the
       // listing after a vanish names a newer act. The same act twice is a
       // numbered directory no claim made.
@@ -262,7 +264,7 @@ export function makeActReader(
             `${path.join(dir, String(act))}: an act with no record`,
           );
         }
-        const facts = factsOf(act);
+        const facts = await factsOf(act);
         if (facts !== null) return facts;
         vanished = act;
       }
@@ -281,8 +283,10 @@ export type Claim =
 // before the rename, its gate shut, and released only once the claim stands:
 // a claimer that loses, or dies, never runs the program. The winner lists the
 // acts again before releasing: a claimer stalled mid-claim can land on a
-// number already pruned while a later act runs, and it withdraws.
-export function claimAct(
+// number already pruned while a later act runs, and it withdraws. A daemon
+// that closed during the job's `ps` withdraws too: that `ps` was aborted, so a
+// release would land an act with no fingerprint from a daemon on its way out.
+export async function claimAct(
   launcher: Launcher,
   dir: string,
   after: number | null,
@@ -290,8 +294,9 @@ export function claimAct(
   command: LaunchOpts,
   timeoutMs: number,
   now: number,
-  read: (pid: number) => StartTimeRead,
-): Claim {
+  read: (pid: number) => Promise<StartTimeRead>,
+  closed: () => boolean,
+): Promise<Claim> {
   const act = (after ?? 0) + 1;
   const actDir = path.join(dir, String(act));
   fs.mkdirSync(dir, { recursive: true });
@@ -306,7 +311,8 @@ export function claimAct(
   // else: every other way out, a throw included, shuts it unopened.
   let stood = false;
   try {
-    const start = read(job.pid);
+    const start = await read(job.pid);
+    if (closed()) return DAEMON_CLOSED;
     const record: ActRecord = {
       identity,
       pid: job.pid,
@@ -342,6 +348,8 @@ const CLAIMED_FIRST: Claim = {
   ok: false,
   reason: "another act claimed this bundle first",
 };
+
+const DAEMON_CLOSED: Claim = { ok: false, reason: "the daemon closed" };
 
 // Ends an act whose group its reader saw alive past its deadline, with a
 // `timeout` verdict unless the job's own landed first: a live read already

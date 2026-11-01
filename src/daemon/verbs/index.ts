@@ -191,7 +191,7 @@ export interface DaemonContext {
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
-  readonly applyUpdate: () => void;
+  readonly applyUpdate: () => Promise<void>;
   // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/edge.ts): the
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
@@ -1362,7 +1362,7 @@ const redo: VerbHandler = async (value, ctx) => {
 // its own provenance, so no command or version ever arrives from a URL.
 const applyUpdate: VerbHandler = async (value, ctx) => {
   requireSessionId(oneArg(value));
-  ctx.applyUpdate();
+  await ctx.applyUpdate();
 };
 
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────

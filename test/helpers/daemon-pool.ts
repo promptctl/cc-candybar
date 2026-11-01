@@ -72,7 +72,7 @@ export interface DaemonPool {
   // concurrent worktree's run in the sense that matters — it never touches
   // a slot that was already live when checked, and the rare race
   // self-corrects on the next acquire.
-  sweepStale(): void;
+  sweepStale(): Promise<void>;
 }
 
 function readSlot(p: string): SlotRecord | null {
@@ -103,9 +103,9 @@ function readSlot(p: string): SlotRecord | null {
 }
 
 const readTheStartTime = (pid: number) =>
-  readStartTime(pid, processLauncher.launchSync);
+  readStartTime(pid, processLauncher.launch);
 
-function isSlotLive(record: SlotRecord): boolean {
+function isSlotLive(record: SlotRecord): Promise<boolean> {
   return sameLiveProcess(record.pid, record.startTime, {
     readStartTime: readTheStartTime,
     pidAlive,
@@ -134,7 +134,11 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
   // this is test-only tooling guarding against a daemon storm, and the
   // failure mode is a brief 1-slot overcapacity that self-corrects on the
   // next release, not a correctness hazard.
-  function tryClaim(i: number, myPid: number, myStartTime: string | null): boolean {
+  async function tryClaim(
+    i: number,
+    myPid: number,
+    myStartTime: string | null,
+  ): Promise<boolean> {
     const p = slotPath(i);
     const payload = JSON.stringify({ pid: myPid, startTime: myStartTime });
     try {
@@ -144,7 +148,7 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     }
     const existing = readSlot(p);
-    if (existing !== null && isSlotLive(existing)) return false;
+    if (existing !== null && (await isSlotLive(existing))) return false;
     const tmp = `${p}.${myPid}.tmp`;
     fs.writeFileSync(tmp, payload, { mode: 0o600 });
     fs.renameSync(tmp, p);
@@ -156,7 +160,7 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     const timeoutMs = opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS;
     const retryIntervalMs = opts.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS;
     const myPid = process.pid;
-    const myStartTime = readOwnStartTime(myPid, readTheStartTime);
+    const myStartTime = await readOwnStartTime(myPid, readTheStartTime);
     const deadline = Date.now() + timeoutMs;
     // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
     // silently — a full pool means the caller MUST fail loudly so the
@@ -170,7 +174,7 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     let claimed: number | null = null;
     for (;;) {
       for (let i = 0; i < size; i++) {
-        if (tryClaim(i, myPid, myStartTime)) {
+        if (await tryClaim(i, myPid, myStartTime)) {
           claimed = i;
           break;
         }
@@ -204,12 +208,12 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     };
   }
 
-  function sweepStale(): void {
+  async function sweepStale(): Promise<void> {
     if (!fs.existsSync(dir)) return;
     for (let i = 0; i < size; i++) {
       const p = slotPath(i);
       const existing = readSlot(p);
-      if (existing !== null && !isSlotLive(existing)) {
+      if (existing !== null && !(await isSlotLive(existing))) {
         try {
           fs.unlinkSync(p);
         } catch {

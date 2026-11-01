@@ -3,6 +3,7 @@
 // the socket uses, closed with nothing left running, and built again over the
 // same storage to see a restart.
 
+import { NO_TMUX_AT_EXIT } from "./helpers/in-worker-daemon";
 import { createHook } from "node:async_hooks";
 import {
   chmodSync,
@@ -98,7 +99,7 @@ describe("the daemon is a value", () => {
   };
 
   const close = async (daemon: Daemon): Promise<void> => {
-    await daemon.close();
+    await daemon.close(NO_TMUX_AT_EXIT);
     open = null;
   };
 
@@ -360,7 +361,7 @@ describe("the daemon is a value", () => {
     );
 
     const sessionFile = sessionStatePath();
-    const closing = await daemon.close();
+    const closing = await daemon.close(NO_TMUX_AT_EXIT);
     open = null;
     afterClose = { armed: [], fired: [] };
     const closedWith = readFileSync(sessionFile, "utf8");

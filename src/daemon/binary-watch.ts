@@ -7,8 +7,14 @@
 // holds the process alive. `checkNow` is the same sampler the interval runs,
 // for the moment the daemon itself changed the bundle (the update notice's
 // rebuild) and need not wait a minute to notice.
+//
+// [LAW:no-ambient-temporal-coupling] A sample awaits `held`, so samples take
+// turns on a queue of the watch's own: two cannot both pass the guard. The
+// update watch's act queue is where `held` waits, and a turn there starts this
+// check without awaiting it, so neither queue ever waits on itself.
 
 import { changeLogger, type DaemonLogger } from "../utils/logger";
+import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 /** `fs.statSync`'s shape: the edge the watch reads the disk through. */
@@ -40,7 +46,7 @@ export interface BinaryWatchOptions {
   readonly intervalMs: number;
   readonly stat: BundleStat;
   /** True while something the restart would kill is rewriting the bundle. */
-  readonly held: () => boolean;
+  readonly held: () => Promise<boolean>;
   /** The daemon's one exit funnel, which owns running only once. */
   readonly exit: () => void;
   readonly log: DaemonLogger;
@@ -48,7 +54,8 @@ export interface BinaryWatchOptions {
 
 export interface BinaryWatch {
   arm(): void;
-  checkNow(): void;
+  // Settles when this check has run; never rejects, so it can be left running.
+  checkNow(): Promise<void>;
   close(): void;
 }
 
@@ -63,7 +70,16 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   // so it can neither match nor move the stamp.
   const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
   let timer: NodeJS.Timeout | null = null;
-  const sample = (): void => {
+  // [LAW:no-ambient-temporal-coupling] Ended by the exit or the close: a check
+  // queued behind either has nothing left to decide.
+  let ended = false;
+  const checks = new KeyedSerialQueue<"check">();
+  const end = (): void => {
+    ended = true;
+    if (timer) clearInterval(timer);
+  };
+  const sample = async (): Promise<void> => {
+    if (ended) return;
     for (const { path, stamp } of watched) {
       const now = mtimeOf(path, stat);
       if (now.kind === "failed") {
@@ -72,7 +88,7 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       }
       if (!sameStamp(stamp, now)) {
         const what = `binary ${now.kind === "absent" ? "gone" : "changed"} (${path})`;
-        if (held()) {
+        if (await held()) {
           logHeld([
             "info",
             `${what}; the restart waits for the running update`,
@@ -80,12 +96,19 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
           return;
         }
         log("info", `${what}; shutting down`);
-        if (timer) clearInterval(timer);
+        end();
         exit();
         return;
       }
     }
   };
+  // [LAW:no-silent-failure] Nothing awaits a check, and a rejection nobody
+  // holds is the daemon's death (server.ts): a check that failed is logged, and
+  // the next one looks again.
+  const check = (): Promise<void> =>
+    checks.run("check", sample).catch((e: unknown) => {
+      log("error", `binary check failed: ${(e as Error).message}`);
+    });
   return {
     arm() {
       for (const { path, stamp } of boot) {
@@ -96,12 +119,10 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
           );
         }
       }
-      timer = setInterval(sample, intervalMs);
+      timer = setInterval(() => void check(), intervalMs);
       timer.unref();
     },
-    checkNow: sample,
-    close() {
-      if (timer) clearInterval(timer);
-    },
+    checkNow: check,
+    close: end,
   };
 }

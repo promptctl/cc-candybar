@@ -56,7 +56,8 @@ import {
   LIST_PANES_FORMAT,
   PaneVisibility,
 } from "./pane-visibility.js";
-import { runTmux, runTmuxAsync } from "../proc/tmux.js";
+import { runTmuxAsync } from "../proc/tmux.js";
+import type { TmuxAtExit } from "./tmux-status.js";
 import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
@@ -174,8 +175,9 @@ export interface Daemon {
   // [LAW:no-ambient-temporal-coupling] After this nothing launches, no timer
   // stays armed once what was in flight has settled, and only the log is
   // written. A read already under way may finish. Its value settles when the
-  // launches and lifeline it ended have ended.
-  close(): Promise<Settled>;
+  // launches and lifeline it ended have ended. `atExit` is what puts the tmux
+  // status lines back: synchronous, because shutdown is.
+  close(atExit: TmuxAtExit): Promise<Settled>;
 }
 
 // [LAW:no-shared-mutable-globals] One daemon is live in a process at a time,
@@ -344,8 +346,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     edge: {
       run: (socket, args, stdin) =>
         runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
-      runSync: (socket, args, stdin) =>
-        runTmux(launcher, { socket }, "tmux-status", args, stdin),
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
     sessionInPane: (socket, pane) =>
@@ -685,7 +685,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       updateWatch.arm();
       limits.arm();
     },
-    close() {
+    close(atExit) {
       // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every teardown step
       // runs, each in order, and one that throws is logged by name without
       // skipping the rest: the session state still flushes after a close failed.
@@ -696,7 +696,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
         // comes before the abort that ends the daemon's launches.
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
+        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

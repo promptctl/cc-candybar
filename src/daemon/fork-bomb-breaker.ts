@@ -159,20 +159,23 @@ export function readRegistryEntry(filePath: string): ProcessIdentity | null {
   }
 }
 
-// [LAW:dataflow-not-control-flow] Pure fold over already-read entries + an
+// [LAW:dataflow-not-control-flow] A fold over already-read entries + an
 // injected liveness predicate — full branch coverage needs no fs, no real
 // processes: an empty list, an all-dead list, an all-live list, and a mixed
 // list are the entire input space. `sweepStale`, kept in the same pass rather
 // than a second read, is the effect side; the count itself never depends on
 // whether the sweep succeeds.
-export function countLiveEntries(
+export async function countLiveEntries(
   entries: readonly RegistryEntry[],
-  isSameLiveProcess: (pid: number, startTime: string | null) => boolean,
+  isSameLiveProcess: (
+    pid: number,
+    startTime: string | null,
+  ) => Promise<boolean>,
   sweepStale: (filePath: string) => void,
-): number {
+): Promise<number> {
   let count = 0;
   for (const entry of entries) {
-    if (isSameLiveProcess(entry.identity.pid, entry.identity.startTime)) {
+    if (await isSameLiveProcess(entry.identity.pid, entry.identity.startTime)) {
       count++;
     } else {
       sweepStale(entry.path);
@@ -187,7 +190,10 @@ export interface BreakerDeps {
   ceiling: number;
   pid: number;
   startTime: string | null;
-  isSameLiveProcess: (pid: number, startTime: string | null) => boolean;
+  isSameLiveProcess: (
+    pid: number,
+    startTime: string | null,
+  ) => Promise<boolean>;
   listFiles: (dir: string) => string[];
   readEntry: (filePath: string) => ProcessIdentity | null;
   removeFile: (filePath: string) => void;
@@ -208,7 +214,7 @@ export interface BreakerResult {
 // (production) daemons never touch the registry at all — not even to read
 // it — so a corrupt or unreadable registry can never affect the one instance
 // the epic requires to always boot.
-export function admitDaemon(deps: BreakerDeps): BreakerResult {
+export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
   if (!deps.isolated) {
     return { decision: decideBoot(false, 0, deps.ceiling), registryPath: null };
   }
@@ -238,7 +244,7 @@ export function admitDaemon(deps: BreakerDeps): BreakerResult {
       entries.push({ path: filePath, identity });
     }
   }
-  const liveCount = countLiveEntries(
+  const liveCount = await countLiveEntries(
     entries,
     deps.isSameLiveProcess,
     deps.removeFile,
@@ -290,7 +296,7 @@ export function realBreakerDeps(
     isSameLiveProcess: (pid, startTime) =>
       sameLiveProcess(pid, startTime, {
         readStartTime: (candidate) =>
-          readStartTime(candidate, processLauncher.launchSync),
+          readStartTime(candidate, processLauncher.launch),
         pidAlive,
       }),
     listFiles: listRegistryFiles,

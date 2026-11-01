@@ -24,12 +24,12 @@ const watch = (
     targets,
     intervalMs: 60_000,
     stat,
-    held: () => updating,
+    held: async () => updating,
     exit: () => exits++,
     log: (level, msg) => lines.push([level, msg]),
   });
 
-test("a closed watch samples no more", () => {
+test("a closed watch samples no more", async () => {
   jest.useFakeTimers();
   try {
     const closing = watch();
@@ -57,36 +57,36 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("an untouched bundle keeps the daemon running", () => {
-  watch().checkNow();
+test("an untouched bundle keeps the daemon running", async () => {
+  await watch().checkNow();
   expect(exits).toBe(0);
   expect(lines).toEqual([]);
 });
 
-test("a rebuilt bundle ends the daemon", () => {
+test("a rebuilt bundle ends the daemon", async () => {
   const w = watch();
   const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
   fs.utimesSync(bundle, later, later);
-  w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(1);
   expect(lines).toEqual([
     ["info", `binary changed (${bundle}); shutting down`],
   ]);
 });
 
-test("a deleted bundle ends the daemon", () => {
+test("a deleted bundle ends the daemon", async () => {
   const w = watch();
   fs.rmSync(dir, { recursive: true, force: true });
-  w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(1);
   expect(lines).toEqual([["info", `binary gone (${bundle}); shutting down`]]);
 });
 
-test("a bundle under a file where its directory was is gone", () => {
+test("a bundle under a file where its directory was is gone", async () => {
   const w = watch();
   fs.rmSync(path.join(dir, "dist"), { recursive: true });
   fs.writeFileSync(path.join(dir, "dist"), "not a directory");
-  w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(1);
 });
 
@@ -101,11 +101,11 @@ const refusing = (refused: () => boolean) => (p: string) => {
   return fs.statSync(p);
 };
 
-test("a bundle the daemon cannot read says nothing about the bundle: it warns and runs on", () => {
+test("a bundle the daemon cannot read says nothing about the bundle: it warns and runs on", async () => {
   let refused = false;
   const w = watch([bundle], refusing(() => refused));
   refused = true;
-  w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(0);
   expect(lines).toEqual([
     [
@@ -115,7 +115,7 @@ test("a bundle the daemon cannot read says nothing about the bundle: it warns an
   ]);
 });
 
-test("a bundle unreadable at boot is reported once, when the watch arms, and not watched", () => {
+test("a bundle unreadable at boot is reported once, when the watch arms, and not watched", async () => {
   jest.useFakeTimers();
   try {
     let refused = true;
@@ -125,7 +125,7 @@ test("a bundle unreadable at boot is reported once, when the watch arms, and not
     const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
     fs.utimesSync(bundle, later, later);
     jest.advanceTimersByTime(3 * 60_000);
-    w.checkNow();
+    await w.checkNow();
     expect(exits).toBe(0);
     expect(lines).toEqual([
       [
@@ -138,28 +138,28 @@ test("a bundle unreadable at boot is reported once, when the watch arms, and not
   }
 });
 
-test("one moved target among several ends the daemon once", () => {
+test("one moved target among several ends the daemon once", async () => {
   const other = path.join(dir, "shim");
   fs.writeFileSync(other, "#!/bin/sh");
   const w = watch([other, bundle]);
   fs.rmSync(bundle);
-  w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(1);
 });
 
 // The update's act is a launch child that dies with the daemon, so a restart
 // mid-act would leave the bundle half-written. The wait is said once, however
 // many samples it spans.
-test("a bundle rebuilt while an update runs restarts the daemon once the update ends", () => {
+test("a bundle rebuilt while an update runs restarts the daemon once the update ends", async () => {
   const w = watch();
   updating = true;
   const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
   fs.utimesSync(bundle, later, later);
-  w.checkNow();
-  w.checkNow();
+  await w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(0);
   updating = false;
-  w.checkNow();
+  await w.checkNow();
   expect(exits).toBe(1);
   expect(lines).toEqual([
     [
@@ -168,4 +168,50 @@ test("a bundle rebuilt while an update runs restarts the daemon once the update 
     ],
     ["info", `binary changed (${bundle}); shutting down`],
   ]);
+});
+
+test("two checks at once exit once", async () => {
+  let answer!: (held: boolean) => void;
+  let asked = 0;
+  const w = makeBinaryWatch({
+    targets: [bundle],
+    intervalMs: 60_000,
+    stat: fs.statSync,
+    held: () => {
+      asked++;
+      return new Promise((resolve) => (answer = resolve));
+    },
+    exit: () => exits++,
+    log: (level, msg) => lines.push([level, msg]),
+  });
+  fs.rmSync(bundle);
+  const both = [w.checkNow(), w.checkNow()];
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(asked).toBe(1);
+  answer(false);
+  await Promise.all(both);
+  expect(exits).toBe(1);
+  expect(asked).toBe(1);
+});
+
+test("a check that fails is logged, and the next one still decides", async () => {
+  let failing = true;
+  const w = makeBinaryWatch({
+    targets: [bundle],
+    intervalMs: 60_000,
+    stat: fs.statSync,
+    held: async () => {
+      if (failing) throw new Error("no answer");
+      return false;
+    },
+    exit: () => exits++,
+    log: (level, msg) => lines.push([level, msg]),
+  });
+  fs.rmSync(bundle);
+  await w.checkNow();
+  expect(lines).toEqual([["error", "binary check failed: no answer"]]);
+  expect(exits).toBe(0);
+  failing = false;
+  await w.checkNow();
+  expect(exits).toBe(1);
 });

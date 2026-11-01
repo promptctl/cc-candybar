@@ -59,17 +59,18 @@ export type StartTimeRead =
 // exercised by input enumeration with a fake launcher while the real path runs
 // the real `ps`.
 // [LAW:effects-at-boundaries][LAW:single-enforcer] The sole effect (spawning
-// `ps`) goes through the one subprocess enforcer, `launchSync`. The ONLY sound
+// `ps`) goes through the one subprocess enforcer, `launch`, off the loop: a
+// detached holder of its stdout cannot hold the daemon. The ONLY sound
 // signal `ps` gives is a printed start-time row (a live pid we could read);
 // [LAW:no-silent-failure] every other outcome — absent pid, access failure,
 // spawn-error, timeout — is `unavailable`, deferring the alive/dead call to
 // kill(pid,0) rather than risk declaring a live owner dead from a `ps` exit
 // code that cannot distinguish "gone" from "cannot read".
-export function readStartTime(
+export async function readStartTime(
   pid: number,
-  launch: Launcher["launchSync"],
-): StartTimeRead {
-  const res = launch({
+  launch: Launcher["launch"],
+): Promise<StartTimeRead> {
+  const res = await launch({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",
@@ -96,7 +97,7 @@ export function readStartTime(
 }
 
 export interface LivenessDeps {
-  readStartTime: (pid: number) => StartTimeRead;
+  readStartTime: (pid: number) => Promise<StartTimeRead>;
   pidAlive: (pid: number) => boolean;
 }
 
@@ -117,13 +118,13 @@ export interface LivenessDeps {
 // direction (declaring a live daemon dead → stealing its socket, the storm this
 // epic fights) never happens merely because `ps` could not answer. The only
 // thing forfeited when `ps` cannot answer is detecting a recycled pid.
-export function sameLiveProcess(
+export async function sameLiveProcess(
   pid: number,
   leaseToken: string | null,
   deps: LivenessDeps,
-): boolean {
+): Promise<boolean> {
   if (leaseToken === null) return deps.pidAlive(pid);
-  const read = deps.readStartTime(pid);
+  const read = await deps.readStartTime(pid);
   switch (read.kind) {
     case "start":
       return read.token === leaseToken;
@@ -136,10 +137,10 @@ export function sameLiveProcess(
 // (no `ps`) collapses to `null` — the lease records "unfingerprinted", and every
 // reader of it falls back to kill(pid,0) via sameLiveProcess. A dead result is
 // impossible for our own live pid; if it somehow occurs we also record null.
-export function readOwnStartTime(
+export async function readOwnStartTime(
   pid: number,
-  read: (pid: number) => StartTimeRead,
-): string | null {
-  const r = read(pid);
+  read: (pid: number) => Promise<StartTimeRead>,
+): Promise<string | null> {
+  const r = await read(pid);
   return r.kind === "start" ? r.token : null;
 }

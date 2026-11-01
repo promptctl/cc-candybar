@@ -26,39 +26,39 @@ function freshDir(): string {
 // exercised here with plain values, no fs, no real processes.
 
 describe("decideBoot (pure decision)", () => {
-  test("not isolated → always allow, regardless of count or ceiling", () => {
+  test("not isolated → always allow, regardless of count or ceiling", async () => {
     expect(decideBoot(false, 0, 1).allow).toBe(true);
     expect(decideBoot(false, 999, 1).allow).toBe(true);
     expect(decideBoot(false, 0, 0).allow).toBe(true);
   });
 
-  test("not isolated → reason cites exemption, not a count", () => {
+  test("not isolated → reason cites exemption, not a count", async () => {
     const d = decideBoot(false, 5, 2);
     expect(d.reason).toMatch(/exempt/);
   });
 
-  test("isolated, count below ceiling → allow", () => {
+  test("isolated, count below ceiling → allow", async () => {
     const d = decideBoot(true, 3, 16);
     expect(d.allow).toBe(true);
     expect(d.reason).toContain("3");
     expect(d.reason).toContain("16");
   });
 
-  test("isolated, count one below ceiling (boundary) → allow", () => {
+  test("isolated, count one below ceiling (boundary) → allow", async () => {
     expect(decideBoot(true, 15, 16).allow).toBe(true);
   });
 
-  test("isolated, count equal to ceiling (boundary) → deny", () => {
+  test("isolated, count equal to ceiling (boundary) → deny", async () => {
     const d = decideBoot(true, 16, 16);
     expect(d.allow).toBe(false);
     expect(d.reason).toContain("16");
   });
 
-  test("isolated, count above ceiling → deny", () => {
+  test("isolated, count above ceiling → deny", async () => {
     expect(decideBoot(true, 200, 16).allow).toBe(false);
   });
 
-  test("isolated, zero ceiling, zero count → deny (no room at all)", () => {
+  test("isolated, zero ceiling, zero count → deny (no room at all)", async () => {
     expect(decideBoot(true, 0, 0).allow).toBe(false);
   });
 });
@@ -71,34 +71,35 @@ describe("countLiveEntries (pure fold)", () => {
     identity: { pid, startTime: "st" },
   });
 
-  test("empty list → 0, no sweep calls", () => {
+  test("empty list → 0, no sweep calls", async () => {
     const sweep = jest.fn();
-    expect(countLiveEntries([], () => true, sweep)).toBe(0);
+    expect(await countLiveEntries([], async () => true, sweep)).toBe(0);
     expect(sweep).not.toHaveBeenCalled();
   });
 
-  test("all live → counts every entry, never sweeps", () => {
+  test("all live → counts every entry, never sweeps", async () => {
     const sweep = jest.fn();
     const entries = [entry(1), entry(2), entry(3)];
-    expect(countLiveEntries(entries, () => true, sweep)).toBe(3);
+    expect(await countLiveEntries(entries, async () => true, sweep)).toBe(3);
     expect(sweep).not.toHaveBeenCalled();
   });
 
-  test("all dead → counts 0, sweeps every entry", () => {
+  test("all dead → counts 0, sweeps every entry", async () => {
     const sweep = jest.fn();
     const entries = [entry(1), entry(2)];
-    expect(countLiveEntries(entries, () => false, sweep)).toBe(0);
+    expect(await countLiveEntries(entries, async () => false, sweep)).toBe(0);
     expect(sweep).toHaveBeenCalledTimes(2);
     expect(sweep).toHaveBeenCalledWith(entries[0]!.path);
     expect(sweep).toHaveBeenCalledWith(entries[1]!.path);
   });
 
-  test("mixed live/dead → counts only live, sweeps only dead", () => {
+  test("mixed live/dead → counts only live, sweeps only dead", async () => {
     const sweep = jest.fn();
     const live = entry(1);
     const dead = entry(2);
-    const isSame = (pid: number): boolean => pid === live.identity.pid;
-    expect(countLiveEntries([live, dead], isSame, sweep)).toBe(1);
+    const isSame = async (pid: number): Promise<boolean> =>
+      pid === live.identity.pid;
+    expect(await countLiveEntries([live, dead], isSame, sweep)).toBe(1);
     expect(sweep).toHaveBeenCalledTimes(1);
     expect(sweep).toHaveBeenCalledWith(dead.path);
   });
@@ -114,22 +115,22 @@ describe("daemonCeiling", () => {
     else process.env["CC_CANDYBAR_DAEMON_CEILING"] = ORIGINAL;
   });
 
-  test("defaults to 16 when unset", () => {
+  test("defaults to 16 when unset", async () => {
     delete process.env["CC_CANDYBAR_DAEMON_CEILING"];
     expect(daemonCeiling()).toBe(16);
   });
 
-  test("reads a valid positive override", () => {
+  test("reads a valid positive override", async () => {
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "3";
     expect(daemonCeiling()).toBe(3);
   });
 
-  test("falls back to default on garbage (non-numeric)", () => {
+  test("falls back to default on garbage (non-numeric)", async () => {
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "not-a-number";
     expect(daemonCeiling()).toBe(16);
   });
 
-  test("falls back to default on trailing garbage — a typo must not silently truncate (e.g. '160' fat-fingered as '16o')", () => {
+  test("falls back to default on trailing garbage — a typo must not silently truncate (e.g. '160' fat-fingered as '16o')", async () => {
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "16o";
     expect(daemonCeiling()).toBe(16);
     // Not the truncated 16 — DEFAULT_CEILING also happens to be 16, so pin a
@@ -138,7 +139,7 @@ describe("daemonCeiling", () => {
     expect(daemonCeiling()).toBe(16);
   });
 
-  test("falls back to default on zero or negative (a ceiling of 0 would refuse everything)", () => {
+  test("falls back to default on zero or negative (a ceiling of 0 would refuse everything)", async () => {
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "0";
     expect(daemonCeiling()).toBe(16);
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "-5";
@@ -158,41 +159,41 @@ describe("readRegistryEntry", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("reads a valid entry", () => {
+  test("reads a valid entry", async () => {
     const p = path.join(dir, "pid-123.json");
     fs.writeFileSync(p, JSON.stringify({ pid: 123, startTime: "st" }));
     expect(readRegistryEntry(p)).toEqual({ pid: 123, startTime: "st" });
   });
 
-  test("startTime absent → null (unfingerprinted host)", () => {
+  test("startTime absent → null (unfingerprinted host)", async () => {
     const p = path.join(dir, "pid-123.json");
     fs.writeFileSync(p, JSON.stringify({ pid: 123 }));
     expect(readRegistryEntry(p)).toEqual({ pid: 123, startTime: null });
   });
 
-  test("missing file → null", () => {
+  test("missing file → null", async () => {
     expect(readRegistryEntry(path.join(dir, "nope.json"))).toBeNull();
   });
 
-  test("corrupt JSON → null", () => {
+  test("corrupt JSON → null", async () => {
     const p = path.join(dir, "pid-123.json");
     fs.writeFileSync(p, "{not json");
     expect(readRegistryEntry(p)).toBeNull();
   });
 
-  test("non-integer pid → null", () => {
+  test("non-integer pid → null", async () => {
     const p = path.join(dir, "pid-x.json");
     fs.writeFileSync(p, JSON.stringify({ pid: 1.5 }));
     expect(readRegistryEntry(p)).toBeNull();
   });
 
-  test("zero pid → null (would signal our own process group via kill(0,0))", () => {
+  test("zero pid → null (would signal our own process group via kill(0,0))", async () => {
     const p = path.join(dir, "pid-0.json");
     fs.writeFileSync(p, JSON.stringify({ pid: 0 }));
     expect(readRegistryEntry(p)).toBeNull();
   });
 
-  test("negative pid → null", () => {
+  test("negative pid → null", async () => {
     const p = path.join(dir, "pid-neg.json");
     fs.writeFileSync(p, JSON.stringify({ pid: -7 }));
     expect(readRegistryEntry(p)).toBeNull();
@@ -208,11 +209,11 @@ describe("listRegistryFiles", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("nonexistent dir → empty list, never throws", () => {
+  test("nonexistent dir → empty list, never throws", async () => {
     expect(listRegistryFiles(dir)).toEqual([]);
   });
 
-  test("lists only .json files, full paths", () => {
+  test("lists only .json files, full paths", async () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "pid-1.json"), "{}");
     fs.writeFileSync(path.join(dir, "stray.tmp"), "junk");
@@ -242,7 +243,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     }
   });
 
-  test("default (unoverridden) registry path refuses a symlinked parent", () => {
+  test("default (unoverridden) registry path refuses a symlinked parent", async () => {
     delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
     const real = freshDir();
     fs.mkdirSync(real, { mode: 0o700 });
@@ -259,7 +260,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     }
   });
 
-  test("default (unoverridden) registry path accepts a properly-owned parent", () => {
+  test("default (unoverridden) registry path accepts a properly-owned parent", async () => {
     delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
     const root = freshDir();
     fs.mkdirSync(root, { mode: 0o700 });
@@ -273,7 +274,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     }
   });
 
-  test("overridden registry path checks only the leaf, not its parent (a test tmpdir's parent is not a boundary this breaker owns)", () => {
+  test("overridden registry path checks only the leaf, not its parent (a test tmpdir's parent is not a boundary this breaker owns)", async () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { mode: 0o700 });
     process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = dir;
@@ -296,7 +297,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
 // only collects *.json, so a stray .tmp would never be swept by anything).
 
 describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
-  test("rethrows and cleans up the tmp file when the rename target can't accept it", () => {
+  test("rethrows and cleans up the tmp file when the rename target can't accept it", async () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, "pid-123.json");
@@ -330,7 +331,7 @@ describe("admitDaemon", () => {
       ceiling: 2,
       pid: 999,
       startTime: "my-start-time",
-      isSameLiveProcess: () => true,
+      isSameLiveProcess: async () => true,
       listFiles: () => [],
       readEntry: () => null,
       removeFile: jest.fn(),
@@ -340,11 +341,11 @@ describe("admitDaemon", () => {
     };
   }
 
-  test("exempt (not isolated) → allowed, never touches the registry", () => {
+  test("exempt (not isolated) → allowed, never touches the registry", async () => {
     const ensureDirSafe = jest.fn();
     const listFiles = jest.fn(() => []);
     const writeEntry = jest.fn();
-    const result = admitDaemon(
+    const result = await admitDaemon(
       baseDeps({ isolated: false, ensureDirSafe, listFiles, writeEntry }),
     );
     expect(result.decision.allow).toBe(true);
@@ -354,13 +355,13 @@ describe("admitDaemon", () => {
     expect(writeEntry).not.toHaveBeenCalled();
   });
 
-  test("isolated, below ceiling → allowed and writes its own entry", () => {
+  test("isolated, below ceiling → allowed and writes its own entry", async () => {
     const writeEntry = jest.fn();
-    const result = admitDaemon(
+    const result = await admitDaemon(
       baseDeps({
         listFiles: () => ["/fake/registry/pid-1.json"],
         readEntry: () => ({ pid: 1, startTime: "st" }),
-        isSameLiveProcess: () => true, // the one existing entry is live
+        isSameLiveProcess: async () => true, // the one existing entry is live
         writeEntry,
       }),
     );
@@ -374,14 +375,14 @@ describe("admitDaemon", () => {
     });
   });
 
-  test("isolated, at ceiling → refused, does not write an entry", () => {
+  test("isolated, at ceiling → refused, does not write an entry", async () => {
     const writeEntry = jest.fn();
-    const result = admitDaemon(
+    const result = await admitDaemon(
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/pid-1.json"],
         readEntry: () => ({ pid: 1, startTime: "st" }),
-        isSameLiveProcess: () => true,
+        isSameLiveProcess: async () => true,
         writeEntry,
       }),
     );
@@ -390,13 +391,13 @@ describe("admitDaemon", () => {
     expect(writeEntry).not.toHaveBeenCalled();
   });
 
-  test("isolated, corrupt/unreadable entries excluded (fail-open undercount)", () => {
-    const result = admitDaemon(
+  test("isolated, corrupt/unreadable entries excluded (fail-open undercount)", async () => {
+    const result = await admitDaemon(
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/corrupt.json"],
         readEntry: () => null, // unreadable — excluded from the count entirely
-        isSameLiveProcess: () => true,
+        isSameLiveProcess: async () => true,
       }),
     );
     // The corrupt entry never enters the live count, so a ceiling of 1 still
@@ -404,14 +405,14 @@ describe("admitDaemon", () => {
     expect(result.decision.allow).toBe(true);
   });
 
-  test("isolated, dead sibling entries are swept and don't count against the ceiling", () => {
+  test("isolated, dead sibling entries are swept and don't count against the ceiling", async () => {
     const removeFile = jest.fn();
-    const result = admitDaemon(
+    const result = await admitDaemon(
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/pid-1.json"],
         readEntry: () => ({ pid: 1, startTime: "st" }),
-        isSameLiveProcess: () => false, // stale — pid 1 is gone
+        isSameLiveProcess: async () => false, // stale — pid 1 is gone
         removeFile,
       }),
     );
@@ -419,14 +420,14 @@ describe("admitDaemon", () => {
     expect(removeFile).toHaveBeenCalledWith("/fake/registry/pid-1.json");
   });
 
-  test("a pid-recycled ghost naming our OWN pid never counts as a live sibling, even when isSameLiveProcess says alive (the ps-unavailable fallback case)", () => {
+  test("a pid-recycled ghost naming our OWN pid never counts as a live sibling, even when isSameLiveProcess says alive (the ps-unavailable fallback case)", async () => {
     // Simulates: a past incarnation crashed, left pid-999.json behind with a
     // DIFFERENT startTime; the OS later recycled pid 999 to us; `ps` is
     // unavailable so isSameLiveProcess's fallback (bare pidAlive) reads our
     // own pid as alive and would misclassify this ghost as live — a genuine
     // sibling would exhaust the ceiling of 1, but the ghost must not.
-    const isSameLiveProcess = jest.fn(() => true);
-    const result = admitDaemon(
+    const isSameLiveProcess = jest.fn(async () => true);
+    const result = await admitDaemon(
       baseDeps({
         ceiling: 1,
         pid: 999,
@@ -444,7 +445,7 @@ describe("admitDaemon", () => {
 // ─── releaseRegistration: only remove if it still names us ─────────────────
 
 describe("releaseRegistration", () => {
-  test("removes the entry when it still names our pid", () => {
+  test("removes the entry when it still names our pid", async () => {
     const removeFile = jest.fn();
     releaseRegistration(
       "/fake/pid-42.json",
@@ -455,7 +456,7 @@ describe("releaseRegistration", () => {
     expect(removeFile).toHaveBeenCalledWith("/fake/pid-42.json");
   });
 
-  test("does not remove when a different pid now owns the entry", () => {
+  test("does not remove when a different pid now owns the entry", async () => {
     const removeFile = jest.fn();
     releaseRegistration(
       "/fake/pid-42.json",
@@ -466,7 +467,7 @@ describe("releaseRegistration", () => {
     expect(removeFile).not.toHaveBeenCalled();
   });
 
-  test("does not remove when the entry is unreadable/absent", () => {
+  test("does not remove when the entry is unreadable/absent", async () => {
     const removeFile = jest.fn();
     releaseRegistration("/fake/pid-42.json", 42, () => null, removeFile);
     expect(removeFile).not.toHaveBeenCalled();

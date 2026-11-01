@@ -18,37 +18,37 @@ import {
 // socket-theft fix (the integration tests below only prove the wiring).
 
 describe("arbitrateSocket (pure decision)", () => {
-  const SAME = (): boolean => true;
-  const NOT_SAME = (): boolean => false;
+  const SAME = async (): Promise<boolean> => true;
+  const NOT_SAME = async (): Promise<boolean> => false;
   const owned = (pid: number, startTime: string | null = "st"): LeaseRead => ({
     kind: "owned",
     pid,
     startTime,
   });
 
-  test("owned + same-live → attach-and-exit (a live owner holds the socket)", () => {
-    const d = arbitrateSocket(owned(4242), SAME);
+  test("owned + same-live → attach-and-exit (a live owner holds the socket)", async () => {
+    const d = await arbitrateSocket(owned(4242), SAME);
     expect(d.kind).toBe("attach-and-exit");
     expect(d.reason).toContain("4242");
   });
 
-  test("owned + not-same → reclaim (owner crashed OR pid recycled)", () => {
-    const d = arbitrateSocket(owned(4242), NOT_SAME);
+  test("owned + not-same → reclaim (owner crashed OR pid recycled)", async () => {
+    const d = await arbitrateSocket(owned(4242), NOT_SAME);
     expect(d.kind).toBe("reclaim");
     expect(d.reason).toContain("4242");
   });
 
-  test("absent → reclaim (no lease; stale socket, no live owner)", () => {
+  test("absent → reclaim (no lease; stale socket, no live owner)", async () => {
     // The liveness predicate must not even be consulted when there is no pid.
-    const isSame = jest.fn(() => true);
-    const d = arbitrateSocket({ kind: "absent" }, isSame);
+    const isSame = jest.fn(async () => true);
+    const d = await arbitrateSocket({ kind: "absent" }, isSame);
     expect(d.kind).toBe("reclaim");
     expect(isSame).not.toHaveBeenCalled();
   });
 
-  test("unreadable → reclaim (cannot prove a live owner)", () => {
-    const isSame = jest.fn(() => true);
-    const d = arbitrateSocket(
+  test("unreadable → reclaim (cannot prove a live owner)", async () => {
+    const isSame = jest.fn(async () => true);
+    const d = await arbitrateSocket(
       { kind: "unreadable", detail: "bad JSON" },
       isSame,
     );
@@ -61,9 +61,9 @@ describe("arbitrateSocket (pure decision)", () => {
   // process-identity pair that lets a recycled pid be distinguished from the
   // original owner (RESIDUAL 1). arbitrateSocket forwards them verbatim; the
   // sameLiveProcess fold (process-fingerprint) decides.
-  test("forwards pid AND startTime to the injected predicate", () => {
-    const isSame = jest.fn(() => true);
-    arbitrateSocket(owned(999, "Thu Jul  9 05:04:25 2026"), isSame);
+  test("forwards pid AND startTime to the injected predicate", async () => {
+    const isSame = jest.fn(async () => true);
+    await arbitrateSocket(owned(999, "Thu Jul  9 05:04:25 2026"), isSame);
     expect(isSame).toHaveBeenCalledWith(999, "Thu Jul  9 05:04:25 2026");
   });
 
@@ -72,10 +72,10 @@ describe("arbitrateSocket (pure decision)", () => {
   // old connect probe) is judged by process identity, which is load-independent.
   // As long as the SAME process is alive, arbitration attaches-and-exits
   // regardless of whether it is currently accepting connections.
-  test("liveness comes only from the injected predicate, never from connect", () => {
+  test("liveness comes only from the injected predicate, never from connect", async () => {
     const record = owned(999);
-    expect(arbitrateSocket(record, () => true).kind).toBe("attach-and-exit");
-    expect(arbitrateSocket(record, () => false).kind).toBe("reclaim");
+    expect((await arbitrateSocket(record, SAME)).kind).toBe("attach-and-exit");
+    expect((await arbitrateSocket(record, NOT_SAME)).kind).toBe("reclaim");
   });
 });
 
@@ -93,11 +93,11 @@ describe("lease file I/O", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("readLease: absent file → absent", () => {
+  test("readLease: absent file → absent", async () => {
     expect(readLease(leasePath)).toEqual({ kind: "absent" });
   });
 
-  test("writeLease → readLease round-trips the owner pid AND start-time", () => {
+  test("writeLease → readLease round-trips the owner pid AND start-time", async () => {
     const err = writeLease(leasePath, {
       pid: 1234,
       version: 2,
@@ -116,7 +116,7 @@ describe("lease file I/O", () => {
 
   // A host that could not fingerprint (no `ps`) writes a null start-time; the
   // reader surfaces it as null so sameLiveProcess falls back to kill(pid,0).
-  test("writeLease → readLease round-trips a null start-time (unfingerprinted)", () => {
+  test("writeLease → readLease round-trips a null start-time (unfingerprinted)", async () => {
     writeLease(leasePath, {
       pid: 1234,
       version: 2,
@@ -132,7 +132,7 @@ describe("lease file I/O", () => {
 
   // Backward-compat: an OLD lease with no startTime key reads as unfingerprinted
   // (null), NOT unreadable — so an in-place upgrade doesn't force a false reclaim.
-  test("readLease: a lease missing startTime entirely → owned with null", () => {
+  test("readLease: a lease missing startTime entirely → owned with null", async () => {
     fs.writeFileSync(leasePath, JSON.stringify({ pid: 55, version: 2 }));
     expect(readLease(leasePath)).toEqual({
       kind: "owned",
@@ -141,7 +141,7 @@ describe("lease file I/O", () => {
     });
   });
 
-  test("readLease: non-JSON → unreadable, not a crash", () => {
+  test("readLease: non-JSON → unreadable, not a crash", async () => {
     fs.writeFileSync(leasePath, "not json at all");
     const r = readLease(leasePath);
     expect(r.kind).toBe("unreadable");
@@ -160,7 +160,7 @@ describe("lease file I/O", () => {
     expect(readLease(leasePath).kind).toBe("unreadable");
   });
 
-  test("removeLeaseIfOwned: removes when the lease names us", () => {
+  test("removeLeaseIfOwned: removes when the lease names us", async () => {
     writeLease(leasePath, {
       pid: 777,
       version: 2,
@@ -174,7 +174,7 @@ describe("lease file I/O", () => {
   // [LAW:one-source-of-truth] A displaced daemon must NOT delete the current
   // owner's lease — that would cascade the theft (next EADDRINUSE reads absent
   // → reclaims the live thief's socket).
-  test("removeLeaseIfOwned: keeps a lease owned by someone else", () => {
+  test("removeLeaseIfOwned: keeps a lease owned by someone else", async () => {
     writeLease(leasePath, {
       pid: 888,
       version: 2,
@@ -189,7 +189,7 @@ describe("lease file I/O", () => {
     });
   });
 
-  test("removeLeaseIfOwned: no-op on an absent lease", () => {
+  test("removeLeaseIfOwned: no-op on an absent lease", async () => {
     expect(() => removeLeaseIfOwned(leasePath, 777)).not.toThrow();
   });
 });
