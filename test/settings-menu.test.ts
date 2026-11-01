@@ -141,23 +141,23 @@ function buildRuntime(
     ...testVerbContext(sessionState),
     configFor: () => config,
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = (out: string, key: string, value: string): void => {
+  const clickWriting = async (out: string, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
-    click(url);
+    await click(url);
   };
   return { config, sessionState, sink, render, click, clickWriting };
 }
@@ -193,14 +193,14 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(stripAnsi(render())).toContain(DOOR_GLYPH);
   });
 
-  test("the toggle opens a body carrying preset switching and the tabs", () => {
+  test("the toggle opens a body carrying preset switching and the tabs", async () => {
     const { render, clickWriting } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
     const closed = stripAnsi(render());
     expect(closed).not.toContain("⚡ session");
 
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    await clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
     // One symbol per state: the open door is the ✖, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
@@ -219,12 +219,12 @@ describe("the global settings menu is reachable from a user config", () => {
 
 
 
-  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", () => {
+  test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", async () => {
     const { render, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
-    clickWriting(render(), EDIT_MODE_KEY, "arrange");
+    await clickWriting(render(), SETTINGS_ANCHOR, "open");
+    await clickWriting(render(), EDIT_MODE_KEY, "arrange");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
     // The menu stays as it was, so its tabs and ◁ back stay in reach while
     // the bar is arranged.
@@ -237,15 +237,15 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(editing.length).toBeGreaterThan(0);
     // Leaving needs no trip back into the menu: edit mode's own `✓ done`,
     // top left, lands on the plain bar.
-    clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    await clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("the preset picker's click is admitted by the derived gate", () => {
+  test("the preset picker's click is admitted by the derived gate", async () => {
     const { render, click, clickWriting, sessionState } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
-    clickWriting(render(), SETTINGS_ANCHOR, "open");
+    await clickWriting(render(), SETTINGS_ANCHOR, "open");
     // Open the picker's own disclosure, then pick `compact` from its options.
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
@@ -255,8 +255,8 @@ describe("the global settings menu is reachable from a user config", () => {
       ),
     );
     expect(pickerUrl).toBeDefined();
-    click(pickerUrl!);
-    clickWriting(render(), "preset", "compact");
+    await click(pickerUrl!);
+    await clickWriting(render(), "preset", "compact");
     expect(sessionState.get("s1", "preset")).toBe("compact");
   });
 });
@@ -605,7 +605,7 @@ describe("the menu in a config that declares no variables", () => {
       ),
     );
 
-  test("loads, renders the door, and opens every disclosure without a ⚠", () => {
+  test("loads, renders the door, and opens every disclosure without a ⚠", async () => {
     const { config, render, click } = buildRuntime(BARE, EMPTY_DEFAULT);
     const keys = disclosureKeys(config);
     const first = stripAnsi(render());
@@ -626,7 +626,7 @@ describe("the menu in a config that declares no variables", () => {
         const id = opens.map((e) => `${e.args[1]}=${e.args[2]}`).join("&");
         if (opens.length === 0 || opened.has(id)) continue;
         opened.add(id);
-        click(url);
+        await click(url);
         const out = stripAnsi(render());
         expect(out).not.toContain("⚠");
         frontier = true;

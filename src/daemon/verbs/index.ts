@@ -215,6 +215,12 @@ export interface DaemonContext {
   // open (src/daemon/navigation-history.ts), journaled around each click
   // beside the settings history.
   readonly navigation: NavigationHistory;
+  // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
+  // (src/daemon/journal-turns.ts).
+  readonly journalTurns: Pick<JournalTurns, "take">;
+  // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
+  // turn: what an idle close queued behind it re-reads (src/daemon/menu-idle.ts).
+  readonly clickLanded: (sessionId: string) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
@@ -267,6 +273,8 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
+  // [LAW:nothing-unseen] How long THIS click waited for its turn, for its event.
+  readonly turnWaited: (ms: number) => void;
 }
 
 // A context with the journals the verb table opens around a write.
@@ -283,12 +291,17 @@ export type ClickContext = Journaled<VerbContext>;
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
 // raw wire-level `value` string and the daemon's verb context; it returns
-// nothing (clicks have no payload). User-facing failures throw an Error;
+// nothing (clicks have no payload), at once or when what it awaits has landed.
+// User-facing failures throw an Error;
 // the dispatcher in reply.ts converts that to a RENDER_FAILED response.
 // Invalid-shape inputs (e.g. missing required slash-delimited subfield)
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
-export type VerbHandler = (value: string, ctx: ClickContext) => void;
+export type VerbHandler = (
+  value: string,
+  ctx: ClickContext,
+) => void | Promise<void>;
 
+import type { JournalTurn, JournalTurns } from "../journal-turns";
 import { BadVerbArgs, decodeWire } from "../verb-error";
 import {
   parseSessionId,
@@ -1851,7 +1864,7 @@ function sessionOfEffects(
   return sid === "" ? null : parseSessionId(sid);
 }
 
-const dispatch: VerbHandler = (rawValue, ctx) => {
+const dispatch: VerbHandler = async (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
   const effects = parseEffects(rawValue);
@@ -1865,7 +1878,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
       continue;
     }
     try {
-      handler(value, ctx);
+      await handler(value, ctx);
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) operational = true;
       errors.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
@@ -1900,15 +1913,30 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // reload is synchronous. What a lane runs follows the difference, which no
 // render, frame or other session's write can make. After the commit it also
 // brings the session's view to the config its origin now resolves to.
-function journaled<C extends DaemonContext>(
-  handler: (value: string, ctx: Journaled<C>) => void,
+//
+// [LAW:single-enforcer] And it is the one place a journal's turn is taken
+// (src/daemon/journal-turns.ts), begin through view-follow, so an awaited
+// handler keeps its step whole. A turn the daemon's close cut off was committed
+// there, and the daemon is gone from under what follows the commit.
+export function journaled<C extends DaemonContext>(
+  verb: string,
+  handler: (value: string, ctx: Journaled<C>) => void | Promise<void>,
   sessionOf: (value: string) => string | null,
-): (value: string, ctx: C) => void {
-  return (value, ctx) => {
+  turnWaited: (ctx: C, ms: number) => void,
+): (value: string, ctx: C) => Promise<void> {
+  const inTurn = async (
+    value: string,
+    ctx: C,
+    turn: JournalTurn,
+  ): Promise<void> => {
     const sid = sessionOf(value);
     const lanes = sid === null ? null : laneMeter(ctx, sid);
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
+    const commit = turn.holds(() => {
+      navigation.commit();
+      journal.commit();
+    });
     const failures: unknown[] = [];
     // Both views close what a write closes, the navigating one above its
     // recording, so ◁ back restores a closed menu with what was open in it.
@@ -1919,7 +1947,7 @@ function journaled<C extends DaemonContext>(
         (line) => ctx.log("info", line),
       );
     try {
-      handler(value, {
+      await handler(value, {
         ...ctx,
         sessionState: closing(journal.sessionState),
         journal,
@@ -1928,13 +1956,13 @@ function journaled<C extends DaemonContext>(
     } catch (e) {
       failures.push(e);
     }
-    navigation.commit();
+    let live = true;
     try {
-      journal.commit();
+      live = commit();
     } catch (e) {
       failures.push(e);
     }
-    if (lanes !== null) {
+    if (live && lanes !== null) {
       try {
         ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
       } catch (e) {
@@ -1946,7 +1974,7 @@ function journaled<C extends DaemonContext>(
     // history step restoring or clearing one — moves its view: a frame opens
     // none (src/daemon/cache/render.ts `holdView`).
     // A session that has never rendered has no origin, and no view.
-    if (sid !== null) {
+    if (live && sid !== null) {
       try {
         const origin = recordedOrigin(ctx, sid);
         if (origin !== null) ctx.views.follow(sid, origin);
@@ -1961,6 +1989,12 @@ function journaled<C extends DaemonContext>(
       );
     }
   };
+  return (value, ctx) =>
+    ctx.journalTurns.take(
+      verb,
+      (ms) => turnWaited(ctx, ms),
+      (turn) => inTurn(value, ctx, turn),
+    );
 }
 
 // [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
@@ -1968,18 +2002,30 @@ function journaled<C extends DaemonContext>(
 // name a leaf verb directly still resolve here; new renders all emit `dispatch`.
 export const VERBS: ReadonlyMap<
   string,
-  (value: string, ctx: VerbContext) => void
+  (value: string, ctx: VerbContext) => Promise<void>
 > = new Map(
-  [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(
-    ([verb, handler]) =>
-      [
+  [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(([verb, handler]) => {
+    const sessionOf = (value: string): string | null => {
+      const session = clickSessionOf(verb, value);
+      return session?.ok ? session.id : null;
+    };
+    return [
+      verb,
+      journaled<VerbContext>(
         verb,
-        journaled(handler, (value) => {
-          const session = clickSessionOf(verb, value);
-          return session?.ok ? session.id : null;
-        }),
-      ] as const,
-  ),
+        async (value, ctx) => {
+          try {
+            await handler(value, ctx);
+          } finally {
+            const sid = sessionOf(value);
+            if (sid !== null) ctx.clickLanded(sid);
+          }
+        },
+        sessionOf,
+        (ctx, ms) => ctx.turnWaited(ms),
+      ),
+    ] as const;
+  }),
 );
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
@@ -1990,6 +2036,9 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 export interface IdleClose {
   readonly idleS: number;
   readonly timeoutS: number;
+  // Whether the session has made no click since the timer fired, read in the
+  // close's turn.
+  readonly stillIdle: () => boolean;
 }
 
 // [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
@@ -2002,9 +2051,14 @@ export function closeIdleMenus(
   sid: string,
   idle: IdleClose,
   ctx: DaemonContext,
-): void {
-  journaled<DaemonContext>(
+): Promise<void> {
+  return journaled<DaemonContext>(
+    "menu-idle",
     (_value, c) => {
+      if (!idle.stillIdle()) {
+        c.log("info", `menu-idle: a click came first, kept (session=${sid})`);
+        return;
+      }
       const roots = openRoots(nestOf(c, sid), (key) =>
         c.navigating.get(sid, key),
       );
@@ -2019,5 +2073,6 @@ export function closeIdleMenus(
       );
     },
     () => sid,
+    (c, ms) => c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
   )("", ctx);
 }

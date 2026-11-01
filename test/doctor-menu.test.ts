@@ -188,35 +188,35 @@ function buildRuntime(
     serving: () => serving,
     log: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
-  const clickWriting = (key: string, value: string): void => {
+  const clickWriting = async (key: string, value: string): Promise<void> => {
     const url = linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
-    click(url);
+    await click(url);
   };
   const urlOfVerb = (verb: string): string | undefined =>
     linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.verb === verb),
     );
-  const clickVerb = (verb: string): void => {
+  const clickVerb = async (verb: string): Promise<void> => {
     const url = urlOfVerb(verb);
     if (!url) throw new Error(`no affordance with verb ${verb} rendered`);
-    click(url);
+    await click(url);
   };
-  const openTools = (): void => {
-    clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    clickWriting(TAB_KEY, "tools");
+  const openTools = async (): Promise<void> => {
+    await clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await clickWriting(TAB_KEY, "tools");
   };
   return {
     sessionState,
@@ -236,10 +236,10 @@ function buildRuntime(
 }
 
 describe("🍫 › 🧰 tools › 🩺 doctor", () => {
-  test("the tools tab holds the doctor button and no report until it runs", () => {
+  test("the tools tab holds the doctor button and no report until it runs", async () => {
     const rt = buildRuntime(HINT);
     expect(rt.render()).not.toContain("🩺 doctor");
-    rt.openTools();
+    await rt.openTools();
     const out = rt.render();
     expect(out).toContain("▾ 🧰 tools");
     expect(out).toContain("🩺 doctor");
@@ -248,10 +248,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
   });
 
-  test("the doctor's report rows are the body's own rows under the tools trigger", () => {
+  test("the doctor's report rows are the body's own rows under the tools trigger", async () => {
     const rt = buildRuntime(HINT);
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     const lines = rt.render().split("\n");
     const toolsRow = lines.findIndex((l) => l.includes("▾ 🧰 tools"));
     expect(toolsRow).toBeGreaterThanOrEqual(0);
@@ -276,7 +276,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
   // brandon-doctor-v62x.e91: the config check's row, and the run's log line
   // carrying each check's verdict and how many problems a failed one found.
-  test("a config with problems: its row names the first and counts the rest, with no [fix]", () => {
+  test("a config with problems: its row names the first and counts the rest, with no [fix]", async () => {
     const rt = buildRuntime(null, {
       ...CLEAN_LOAD,
       layers: ["/p/.cc-candybar.json5"],
@@ -285,8 +285,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         { kind: "action", name: "a" },
       ],
     });
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain(
       '✗ config — /p/.cc-candybar.json5 (searched): variable "v" is never read (+1 more — run `cc-candybar doctor`)',
@@ -301,14 +301,14 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // brandon-doctor-v62x.ryu: the 🩺 click is a link the terminal drew and the
   // user clicked, so the links row is ok in a terminal the CLI would fail —
   // and the click files its terminal, for the CLI to read.
-  test("the links row is ok on a click, even in a terminal said to draw none, and the click is remembered", () => {
+  test("the links row is ok on a click, even in a terminal said to draw none, and the click is remembered", async () => {
     const rt = buildRuntime(null, CLEAN_LOAD, {
       env: { TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" },
       fontInUse: GHOSTTY.fontInUse,
     });
-    rt.openTools();
+    await rt.openTools();
     expect(rt.clicked.value()).toEqual([]);
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain("✓ links");
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
@@ -320,16 +320,16 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
   // brandon-doctor-v62x.1z2: the width is what the session's latest render
   // said — the record `cc-candybar doctor` reads too — not the persisted hints.
-  test("the width row reads the session's latest render", () => {
+  test("the width row reads the session's latest render", async () => {
     const rt = buildRuntime(null);
     rt.clients.see("s1", { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 }, instantOf(new Date()), 1);
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.logs.at(-1)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
     expect(rt.render()).toContain("✓ terminal width");
   });
 
-  test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", () => {
+  test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", async () => {
     const report = "/state/cc-candybar/memory-2026-10-19T18-01-12-345Z-77.txt";
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), { hint: healthyClient() }, {
       ...HEALTHY_SERVING,
@@ -338,13 +338,13 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         value: [{ identity: "2026-10-19T18-01-12-345Z-77", artifacts: { memoryReport: report } }],
       },
     });
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     const failed = rt.render();
     expect(failed).toContain("✗ daemon");
     expect(failed).toContain(`ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`);
     expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
-    rt.clickVerb(VERB_DOCTOR_FIX);
+    await rt.clickVerb(VERB_DOCTOR_FIX);
     expect(rt.logs).toContain(
       "doctor-fix: daemon → post-mortems-read through=2026-10-19T18-01-12-345Z-77 (session=s1)",
     );
@@ -354,10 +354,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
   // it came from — one too old to say what it is is the install's failure.
-  test("a bar drawn by a client too old to say what it is fails the install row", () => {
+  test("a bar drawn by a client too old to say what it is fails the install row", async () => {
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), {});
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain(
       "✗ install — the bar is drawn by a statusline client too old to say what it is",
     );
@@ -368,7 +368,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
   // Filing the click rides along with the run: a list that cannot be written
   // is logged, and the doctor still reports.
-  test("a clicked-terminals list that cannot be written does not stop the run, and says so in the log", () => {
+  test("a clicked-terminals list that cannot be written does not stop the run, and says so in the log", async () => {
     const unwritable = {
       ...memoryStateFile<readonly string[]>([]),
       update: () => {
@@ -376,8 +376,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       },
     };
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, unwritable);
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✓ links");
     expect(rt.logs).toContain(
       'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
@@ -385,20 +385,20 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
   });
 
-  test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
+  test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", async () => {
     const rt = buildRuntime(HINT);
     fs.writeFileSync(
       rt.settingsPath,
       `{\n  "env": { "FORCE_COLOR": "3" },\n  "model": "opus"\n}\n`,
     );
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     const failed = rt.render();
     expect(failed).toContain(
       "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux [fix]",
     );
 
-    rt.clickVerb(VERB_DOCTOR_FIX);
+    await rt.clickVerb(VERB_DOCTOR_FIX);
     // one probe for the run click, one for the fix click — the post-fix
     // report re-reads only the settings env the fix changed
     expect(rt.probes()).toBe(2);
@@ -417,30 +417,30 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // [LAW:no-silent-failure] A session the daemon never rendered has no client
   // facts; the doctor refuses loudly rather than diagnose a guessed "not in
   // tmux".
-  test("a doctor-run click for a session that never rendered is refused", () => {
+  test("a doctor-run click for a session that never rendered is refused", async () => {
     const rt = buildRuntime(HINT);
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
-    expect(() => rt.click(url)).toThrow(BadVerbArgs);
-    expect(() => rt.click(url)).toThrow(/never-rendered has not rendered yet/);
+    await expect(rt.click(url)).rejects.toThrow(BadVerbArgs);
+    await expect(rt.click(url)).rejects.toThrow(/never-rendered has not rendered yet/);
   });
 
   // [LAW:no-silent-failure] A stale `[fix]` URL (the world moved since the
   // render that drew it) is refused loudly, never a silent second write.
-  test("a second fix click is refused: nothing left to fix", () => {
+  test("a second fix click is refused: nothing left to fix", async () => {
     const rt = buildRuntime(HINT);
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     const fixUrl = rt.urlOfVerb(VERB_DOCTOR_FIX)!;
-    rt.clickVerb(VERB_DOCTOR_FIX);
+    await rt.clickVerb(VERB_DOCTOR_FIX);
     const before = fs.readFileSync(rt.settingsPath, "utf8");
-    expect(() => rt.click(fixUrl)).toThrow(BadVerbArgs);
+    await expect(rt.click(fixUrl)).rejects.toThrow(BadVerbArgs);
     expect(fs.readFileSync(rt.settingsPath, "utf8")).toBe(before);
   });
 
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: the session's bar drew
   // a moving frame under a statusLine with no interval — the row fails with
   // [fix], and the fix lands the interval beside the statusLine's keys.
-  test("a session whose bar moves, no refresh interval: failed row with [fix]; the fix lands and the row passes", () => {
+  test("a session whose bar moves, no refresh interval: failed row with [fix]; the fix lands and the row passes", async () => {
     const rt = buildRuntime(null);
     fs.writeFileSync(
       rt.settingsPath,
@@ -452,8 +452,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       instantOf(new Date()),
       1,
     );
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain(
       `✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${rt.settingsPath}) [fix]`,
     );
@@ -463,7 +463,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       / frames=1\/0\/0\/0\/0 chains=user:- truecolorEnv=unset \(session=s1\)$/,
     );
 
-    rt.clickVerb(VERB_DOCTOR_FIX);
+    await rt.clickVerb(VERB_DOCTOR_FIX);
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
       statusLine: { type: "command", command: "cc-candybar", refreshInterval: 1 },
     });
@@ -477,10 +477,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     );
   });
 
-  test("not in tmux: the check is ok", () => {
+  test("not in tmux: the check is ok", async () => {
     const rt = buildRuntime(null);
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
   });
@@ -512,10 +512,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
             ),
           );
 
-    test("a font without the glyphs: the row names it, shows the glyphs, and offers ✓ and ✗", () => {
+    test("a font without the glyphs: the row names it, shows the glyphs, and offers ✓ and ✗", async () => {
       const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
-      rt.openTools();
-      rt.clickVerb(VERB_DOCTOR_RUN);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
       const out = rt.render();
       expect(out).toContain(
         `✗ Nerd Font — iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no ${BUNDLED_GLYPHS_NAMED}`,
@@ -530,12 +530,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       ]);
     });
 
-    test("marking ✓ records the mark on this sighting and the row is ok", () => {
+    test("marking ✓ records the mark on this sighting and the row is ok", async () => {
       const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
-      rt.openTools();
-      rt.clickVerb(VERB_DOCTOR_RUN);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
       fontCalls.length = 0;
-      rt.click(markUrl(rt, "drawn")!);
+      await rt.click(markUrl(rt, "drawn")!);
       // One gathering per click: the rate-limited font spawn runs once.
       expect(fontCalls).toHaveLength(1);
       const out = rt.render();
@@ -547,34 +547,32 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
     });
 
-    test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {
+    test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", async () => {
       const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
-      rt.openTools();
-      rt.clickVerb(VERB_DOCTOR_RUN);
-      rt.click(markUrl(rt, "boxes")!);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
+      await rt.click(markUrl(rt, "boxes")!);
       const out = rt.render();
       expect(out).toContain(`✗ Nerd Font — iTerm2 3.7.2 draws ${BUNDLED_GLYPHS_NAMED} as boxes`);
       expect(markUrl(rt, "drawn")).toBeDefined();
     });
 
-    test("a mark on a check with nothing to look at is refused", () => {
+    test("a mark on a check with nothing to look at is refused", async () => {
       const rt = buildRuntime(null);
-      rt.openTools();
-      rt.clickVerb(VERB_DOCTOR_RUN);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
       expect(rt.render()).toContain("✓ Nerd Font");
       expect(markUrl(rt, "drawn")).toBeUndefined();
-      expect(() =>
-        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
-      ).toThrow(BadVerbArgs);
-      expect(() =>
-        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
-      ).toThrow(/the mark is "perhaps"/);
+      await expect(VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
+      ).rejects.toThrow(BadVerbArgs);
+      await expect(VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
+      ).rejects.toThrow(/the mark is "perhaps"/);
     });
 
-    test("a mark book that stops reading before the mark is filed refuses the click and keeps the file", () => {
+    test("a mark book that stops reading before the mark is filed refuses the click and keeps the file", async () => {
       const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
-      rt.openTools();
-      rt.clickVerb(VERB_DOCTOR_RUN);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-marks-"));
       try {
         const file = path.join(dir, "doctor-marks.json");
@@ -586,9 +584,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
           update: fileMarkBook(dir).update,
         };
         const ctx = { ...rt.ctx, doctorStores: { ...rt.ctx.doctorStores, marks } };
-        const mark = () => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
-        expect(mark).toThrow(BadVerbArgs);
-        expect(mark).toThrow(
+        const mark = async () => await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
+        await expect(mark).rejects.toThrow(BadVerbArgs);
+        await expect(mark).rejects.toThrow(
           `doctor-mark: ${file} is not JSON`,
         );
         expect(fs.readFileSync(file, "utf8")).toBe("junk");
@@ -597,7 +595,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       }
     });
 
-    test("a probe the rate limit refused refuses the click, and the report stands", () => {
+    test("a probe the rate limit refused refuses the click, and the report stands", async () => {
       const busy: TerminalFixture = {
         ...ITERM_MENLO,
         fontInUse: () => {
@@ -605,8 +603,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         },
       };
       const rt = buildRuntime(null, CLEAN_LOAD, busy);
-      rt.openTools();
-      expect(() => VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).toThrow(
+      await rt.openTools();
+      await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
         new BadVerbArgs("the doctor looked at the font less than a second ago — click again"),
       );
       expect(rt.render()).not.toContain("Nerd Font");
@@ -626,10 +624,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     });
   });
 
-  test("closing 🍫 hides the tools body even when it was left open", () => {
+  test("closing 🍫 hides the tools body even when it was left open", async () => {
     const rt = buildRuntime(HINT);
-    rt.openTools();
-    rt.clickVerb(VERB_DOCTOR_RUN);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("tmux truecolor");
     rt.sessionState.set("s1", SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
     const closed = rt.render();

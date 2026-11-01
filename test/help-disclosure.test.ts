@@ -111,8 +111,8 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
     );
   };
 
-  const click = (url: string): void =>
-    clickUrl(url, testVerbContext(sessionState, undefined, config));
+  const click = async (url: string): Promise<void> =>
+    await clickUrl(url, testVerbContext(sessionState, undefined, config));
 
   // [LAW:behavior-not-structure] Which segments are `(?)` triggers is read off
   // what they RENDER — the help glyph — so the assertions survive any renaming
@@ -124,12 +124,12 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   );
 
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = (out: string, key: string, value: string): void => {
+  const clickWriting = async (out: string, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
-    click(url);
+    await click(url);
   };
 
   // Toggle the `(?)`, whichever way it currently points. Deliberately NOT
@@ -137,7 +137,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   // its current state, so an open help offers "closed" and a closed one offers
   // "open". A helper that only found one of those would silently stop being
   // able to close what it opened.
-  const toggleHelp = (out: string): void => {
+  const toggleHelp = async (out: string): Promise<void> => {
     // A (?)'s own click writes its key and nothing else; the door's click
     // also writes every help key, folding them closed.
     const url = linkUrls(out).find((u) => {
@@ -149,7 +149,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
         "no (?) affordance rendered; effects were " +
           JSON.stringify(linkUrls(out).flatMap((u) => effectsOf(u))),
       );
-    click(url);
+    await click(url);
   };
 
   const lines = (width: number): string[] =>
@@ -166,8 +166,8 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   };
 }
 
-function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
-  rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "open");
+async function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): Promise<void> {
+  await rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, "open");
 }
 
 // The real route into edit mode from a minimal user config: the `✎ arrange`
@@ -175,9 +175,9 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
 // candybar-settings-ui-aok.1 — a user root deletes every other trigger.
 // Arranging keeps the menu open, and closing it leaves edit mode
 // (brandon-menus-sjhy.9p6), so the edit-mode bar is measured under the menu.
-function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
-  openSettingsMenu(rt);
-  rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+async function enterEditMode(rt: ReturnType<typeof buildRuntime>): Promise<void> {
+  await openSettingsMenu(rt);
+  await rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
 }
 
 // ─── 1. Identity with the corpus, not similarity ─────────────────────────────
@@ -217,16 +217,16 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
 // ─── 2. Edit mode explains itself ────────────────────────────────────────────
 
 describe("edit mode's (?)", () => {
-  test("renders closed, opens on click, and closes again", () => {
+  test("renders closed, opens on click, and closes again", async () => {
     const rt = buildRuntime();
-    enterEditMode(rt);
+    await enterEditMode(rt);
 
     const closed = stripAnsi(rt.render(200));
     expect(closed).toContain(HELP_GLYPH_CLOSED);
     // Closed help costs no content: none of its lines are on the bar.
     for (const line of EDIT_MODE_HELP) expect(closed).not.toContain(line);
 
-    rt.toggleHelp(rt.render(200));
+    await rt.toggleHelp(rt.render(200));
     const open = stripAnsi(rt.render(200));
     // The trigger now wears ✕ instead of (?) — the open state is readable in
     // plain text, which matters to a colourless client (colorCompatibility
@@ -237,7 +237,7 @@ describe("edit mode's (?)", () => {
     expect(open).toContain(DISCLOSURE_GLYPH_CLOSE);
     for (const line of EDIT_MODE_HELP) expect(open).toContain(line);
 
-    rt.toggleHelp(rt.render(200));
+    await rt.toggleHelp(rt.render(200));
     const reclosed = stripAnsi(rt.render(200));
     for (const line of EDIT_MODE_HELP) expect(reclosed).not.toContain(line);
   });
@@ -315,15 +315,15 @@ describe.each([
   [80, 2],
   [120, 1],
 ])("at %i columns, padding %i", (width, padding) => {
-  test.each([["edit mode", enterEditMode, EDIT_MODE_HELP]] as const)("open help in %s overflows no line and costs at most one row", (
+  test.each([["edit mode", enterEditMode, EDIT_MODE_HELP]] as const)("open help in %s overflows no line and costs at most one row", async (
     _name,
     open,
     corpus,
   ) => {
     const rt = buildRuntime(twoSegmentRoot(padding));
-    open(rt);
+    await open(rt);
     const before = rt.lines(width);
-    rt.toggleHelp(rt.render(width));
+    await rt.toggleHelp(rt.render(width));
     const after = rt.lines(width);
 
     // The body is REALLY there: without this the row-count bound below is
@@ -350,9 +350,9 @@ describe.each([
   // assertion, which is what makes the width one about help.
   test.each([["edit mode", enterEditMode]] as const)(
     "closed help in %s overflows no line",
-    (_name, open) => {
+    async (_name, open) => {
     const rt = buildRuntime(twoSegmentRoot(padding));
-    open(rt);
+    await open(rt);
     const shown = rt.lines(width);
 
     expect(shown.some((l) => l.includes(HELP_GLYPH_CLOSED))).toBe(true);
@@ -386,9 +386,9 @@ const triggerLines = (rt: ReturnType<typeof buildRuntime>): string[] =>
   rt.lines(WIDE).filter((l) => l.includes(HELP_GLYPH_CLOSED));
 
 describe("a closed (?) rides a row rather than adding one", () => {
-  test.each([["edit mode", enterEditMode]] as const)("in %s", (_name, open) => {
+  test.each([["edit mode", enterEditMode]] as const)("in %s", async (_name, open) => {
     const rt = buildRuntime();
-    open(rt);
+    await open(rt);
     const hosts = triggerLines(rt);
 
     expect(hosts).toHaveLength(1);
@@ -442,16 +442,16 @@ describe("edit mode's (?) survives any root shape", () => {
     ],
   ];
 
-  test.each(shapes)("%s: the trigger renders", (_name, src) => {
+  test.each(shapes)("%s: the trigger renders", async (_name, src) => {
     const rt = buildRuntime(src);
-    enterEditMode(rt);
+    await enterEditMode(rt);
 
     expect(triggerLines(rt)).toHaveLength(1);
   });
 
-  test.each(shapes)("%s: and rides a row (%p)", (_name, src, rides) => {
+  test.each(shapes)("%s: and rides a row (%p)", async (_name, src, rides) => {
     const rt = buildRuntime(src);
-    enterEditMode(rt);
+    await enterEditMode(rt);
     const [host] = triggerLines(rt);
 
     // The `(?)` trails edit mode's view toggle; the plain joiner's `|` seam

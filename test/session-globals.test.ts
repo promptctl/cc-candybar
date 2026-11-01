@@ -112,18 +112,18 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   return { config, sessionState, render, dispose };
 }
 
-function setState(
+async function setState(
   config: DslConfig,
   sessionState: SessionState,
   sid: string,
   key: string,
   value: string,
-): void {
+): Promise<void> {
   // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
   // The dispatch gates the write by the config the clicking session renders,
   // so the session's render is recorded first.
   recordRender(sessionState, sid);
-  clickUrl(
+  await clickUrl(
     effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
     testVerbContext(sessionState, undefined, config),
   );
@@ -135,7 +135,7 @@ const WIDE = 200;
 const NARROW = 12;
 
 describe("a padding click changes one session's bar", () => {
-  it("renders what the same value in the config file would, for that session only", () => {
+  it("renders what the same value in the config file would, for that session only", async () => {
     const clicked = buildRuntime();
     // The oracle: a second config whose FILE says 5. A session pick of 5 has
     // to produce those exact bytes, or the two halves resolve to different
@@ -144,7 +144,7 @@ describe("a padding click changes one session's bar", () => {
     try {
       const bystanderBefore = stripAnsi(clicked.render("s-bystander", WIDE));
 
-      setState(
+      await setState(
         clicked.config,
         clicked.sessionState,
         "s-clicker",
@@ -165,12 +165,12 @@ describe("a padding click changes one session's bar", () => {
     }
   });
 
-  it("returns to the config default when the session value goes away", () => {
+  it("returns to the config default when the session value goes away", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const atConfigDefault = stripAnsi(render("s-clear", WIDE));
 
-      setState(config, sessionState, "s-clear", "padding", "7");
+      await setState(config, sessionState, "s-clear", "padding", "7");
       expect(stripAnsi(render("s-clear", WIDE))).not.toBe(atConfigDefault);
 
       sessionState.clear("s-clear", "padding");
@@ -187,14 +187,14 @@ describe("a padding click changes one session's bar", () => {
 });
 
 describe("an autoWrap click changes one session's bar", () => {
-  it("a session pick of false beats a config default of true", () => {
+  it("a session pick of false beats a config default of true", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
       expect(config.globals.autoWrap).toBe(true);
       const wrappedRows = render("s-wrap", NARROW).split("\n").length;
       expect(wrappedRows).toBeGreaterThan(1);
 
-      setState(config, sessionState, "s-wrap", "autoWrap", "false");
+      await setState(config, sessionState, "s-wrap", "autoWrap", "false");
 
       // The regression this pins: a `false` session pick is a real answer, not
       // a missing one. Resolving with `||` instead of `??` would fall through

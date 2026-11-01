@@ -67,6 +67,7 @@ import { LaneSetups } from "./lane-setup.js";
 import { productionLaneEdge } from "./lane-edge.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
+import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
 
 // How this daemon's node runs the bundle it was loaded from.
@@ -541,8 +542,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
+  // [LAW:single-enforcer] The one queue every journal waits its turn in.
+  const journalTurns = new JournalTurns({
+    log,
+    monotonic: () => clock.monotonic(),
+  });
   const verbCtx = {
     sessionState,
+    journalTurns,
+    clickLanded: (sessionId: string) => menuIdle.clicked(sessionId, instant()),
     log,
     launcher,
     now: instant,
@@ -647,9 +655,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click runs in the turn it enters, so one that got in has
-    // landed before any close; a subscribe its request reached as the daemon
-    // closed is refused here and opens no feed.
+    // the way in. A click that got in holds or waits for a journal's turn, and
+    // close ends those (src/daemon/journal-turns.ts); a subscribe its request
+    // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted) => {
       closing.signal.throwIfAborted();
       return handleRequest(parts, req, timedOut, accepted);
@@ -678,6 +686,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       // runs, each in order, and one that throws is logged by name without
       // skipping the rest: the session state still flushes after a close failed.
       const teardown: ReadonlyArray<readonly [string, () => void]> = [
+        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
+        // the journal in flight commits what landed; none opens after.
+        ["journalTurns close", () => journalTurns.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
         // comes before the abort that ends the daemon's launches.

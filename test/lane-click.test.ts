@@ -40,8 +40,8 @@ function rig() {
         clicked.push({ sessionId, before, after }),
     },
   };
-  const toggle = (sid: string, ...lanes: Lane[]): void =>
-    clickUrl(
+  const toggle = async (sid: string, ...lanes: Lane[]): Promise<void> =>
+    await clickUrl(
       effectsUrl(
         lanes.map((lane) => ({
           verb: VERB_SET_STATE,
@@ -61,17 +61,17 @@ const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
   ...on,
 });
 
-test("a toggle's click hands over the switches before it and after its commit", () => {
+test("a toggle's click hands over the switches before it and after its commit", async () => {
   const { clicked, toggle } = rig();
-  toggle(SID, "pane");
+  await toggle(SID, "pane");
   expect(clicked).toEqual([
     { sessionId: SID, before: switches({}), after: switches({ pane: true }) },
   ]);
 });
 
-test("a click of two lane toggles is one click: measured once, both lanes moved", () => {
+test("a click of two lane toggles is one click: measured once, both lanes moved", async () => {
   const { clicked, toggle } = rig();
-  toggle(SID, "pane", "tmuxStatus");
+  await toggle(SID, "pane", "tmuxStatus");
   expect(clicked).toEqual([
     {
       sessionId: SID,
@@ -81,8 +81,8 @@ test("a click of two lane toggles is one click: measured once, both lanes moved"
   ]);
 });
 
-test("a click of a session that has never rendered measures nothing: it has no config to switch", () => {
+test("a click of a session that has never rendered measures nothing: it has no config to switch", async () => {
   const { clicked, toggle } = rig();
-  expect(() => toggle("never-rendered", "pane")).toThrow(/has not rendered yet/);
+  await expect(toggle("never-rendered", "pane")).rejects.toThrow(/has not rendered yet/);
   expect(clicked).toEqual([]);
 });

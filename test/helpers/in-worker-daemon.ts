@@ -231,7 +231,7 @@ export function startDaemon(
     // goes unread: its launches are refused, by its own launcher, and a line of
     // its says it came after the close, whichever log the env names by then.
     stop: async () => {
-      void daemon.close();
+      void await daemon.close();
       for (const end of open) end.destroy();
       await Promise.all(
         servers.map((server) => new Promise((closed) => server.close(closed))),

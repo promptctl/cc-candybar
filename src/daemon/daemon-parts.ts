@@ -55,5 +55,5 @@ export interface DaemonParts {
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
-  readonly verbCtx: Omit<VerbContext, "arrival">;
+  readonly verbCtx: Omit<VerbContext, "arrival" | "turnWaited">;
 }

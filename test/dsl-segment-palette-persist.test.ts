@@ -299,14 +299,14 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
     durable.historyFor(sessionState),
     config,
   );
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   return { config, store, render, click };
@@ -343,12 +343,12 @@ describe("segment-palette persist action click → the config file", () => {
     root: { h: ['sidebar', 'bar'] },
   }`;
 
-  test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", () => {
+  test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", async () => {
     const { render, click } = buildRuntime(SRC);
     const original = durable.text()!;
     const barBefore = fileSegments(durable).bar;
     const applyUrl = ownUrls(render())[0]!;
-    click(applyUrl);
+    await click(applyUrl);
 
     expect(fileSegments(durable).sidebar).toEqual({
       template: "sidebar-text",
@@ -372,13 +372,13 @@ describe("segment-palette persist action click → the config file", () => {
     ]);
   });
 
-  test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", () => {
+  test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", async () => {
     const { render, click } = buildRuntime(SRC);
     const [applyUrl, resetUrl] = ownUrls(render());
-    click(applyUrl!);
+    await click(applyUrl!);
     expect(fileSegments(durable).sidebar!.palette).toBe("nord");
 
-    click(resetUrl!);
+    await click(resetUrl!);
     expect(fileSegments(durable).sidebar).toEqual({
       template: "sidebar-text",
       bg: "surface",
@@ -390,11 +390,11 @@ describe("segment-palette persist action click → the config file", () => {
     expect(durable.history().past).toHaveLength(2);
   });
 
-  test("reset over a palette the file never authored changes nothing and records nothing", () => {
+  test("reset over a palette the file never authored changes nothing and records nothing", async () => {
     const { render, click } = buildRuntime(SRC);
     const original = durable.text()!;
     const resetUrl = ownUrls(render())[1]!;
-    click(resetUrl);
+    await click(resetUrl);
     expect(durable.text()).toBe(original);
     expect(existsSync(durable.historyPath)).toBe(false);
   });
@@ -403,7 +403,7 @@ describe("segment-palette persist action click → the config file", () => {
   // the first pin on a bundled segment writes exactly one key path — a
   // delta the loader lays over the bundled declaration — and the reset that
   // empties it prunes it, leaving the file byte-identical to before the pin.
-  test("pinning a segment the file does not declare writes exactly `directory: { palette }`; reset restores the file byte-for-byte", () => {
+  test("pinning a segment the file does not declare writes exactly `directory: { palette }`; reset restores the file byte-for-byte", async () => {
     const SRC_BUNDLED = `{
       globals: {},
       variables: {
@@ -434,10 +434,10 @@ describe("segment-palette persist action click → the config file", () => {
       return matches[0]!.url;
     };
     const [applyUrl, resetUrl] = [urlOf("nord"), urlOf("↺")];
-    click(applyUrl);
+    await click(applyUrl);
     expect(fileSegments(durable).directory).toEqual({ palette: "nord" });
 
-    click(resetUrl);
+    await click(resetUrl);
     expect(durable.text()).toBe(original);
   });
 });

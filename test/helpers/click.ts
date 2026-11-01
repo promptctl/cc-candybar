@@ -6,6 +6,7 @@
 import { processLauncher } from "../../src/proc/launch";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
+import { JournalTurns } from "../../src/daemon/journal-turns";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
 import {
   HEALTHY_INSTALL_EDGE,
@@ -69,6 +70,12 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
+    journalTurns: new JournalTurns({
+      log: () => {},
+      monotonic: () => performance.now(),
+    }),
+    clickLanded: () => {},
+    turnWaited: () => {},
     log: () => {},
     launcher: processLauncher,
     now: () => instantOf(new Date()),
@@ -206,9 +213,9 @@ export { effectsOf, type DecodedEffect } from "../../src/click/read";
 export { boldUrls } from "./ansi";
 
 // Drive a rendered click URL through the real parse → dispatch path.
-export function clickUrl(url: string, ctx: VerbContext): void {
+export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = parseHandlerUrl(url);
   const handler = VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  handler(value, ctx);
+  await handler(value, ctx);
 }

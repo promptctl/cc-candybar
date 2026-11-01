@@ -249,10 +249,10 @@ describe("a slash click", () => {
     ]);
   });
 
-  test("types into the session's pane: read it, then stash, paste, Enter in one tmux call", () => {
+  test("types into the session's pane: read it, then stash, paste, Enter in one tmux call", async () => {
     serve(SCREENS.draft);
     const rt = runtime(HINT);
-    clickUrl(rt.urls[1]!, rt.ctx);
+    await clickUrl(rt.urls[1]!, rt.ctx);
     expect(invocations()).toEqual([
       ["-S", HINT.socket, "display", "-p", "-t", "%7", "#{pane_in_mode}", ";", "capture-pane", "-p", "-t", "%7"],
       [
@@ -267,35 +267,35 @@ describe("a slash click", () => {
     expect(rt.logged).toContain("slash: typed /model opus into %7 (session=s1)");
   });
 
-  test("a line ending in `;` is typed whole: tmux never parses it as a separator", () => {
+  test("a line ending in `;` is typed whole: tmux never parses it as a separator", async () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
-    clickUrl(rt.urls[2]!, rt.ctx);
+    await clickUrl(rt.urls[2]!, rt.ctx);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/compact keep the api;");
     expect(invocations()[1]).not.toContain("/compact keep the api;");
   });
 
-  test("a double-click types once: the second is refused in the bar, typing nothing", () => {
+  test("a double-click types once: the second is refused in the bar, typing nothing", async () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
-    clickUrl(rt.urls[0]!, rt.ctx);
-    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/typed a command moments ago/);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/typed a command moments ago/);
     expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(/\/compact was not typed/);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
   });
 
-  test("a click the pane refused types nothing, so clicking again at once goes through", () => {
+  test("a click the pane refused types nothing, so clicking again at once goes through", async () => {
     serve(SCREENS.permission);
     const rt = runtime(HINT);
-    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/not at its prompt/);
+    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/not at its prompt/);
     serve(SCREENS.idle);
-    clickUrl(rt.urls[0]!, rt.ctx);
+    await clickUrl(rt.urls[0]!, rt.ctx);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "display", "load-buffer"]);
   });
 
-  test("outside tmux: refused in the bar, and tmux is never run", () => {
+  test("outside tmux: refused in the bar, and tmux is never run", async () => {
     const rt = runtime(null);
-    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(/not running inside tmux/);
+    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/not running inside tmux/);
     expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
       /\/compact was not typed: this Claude Code is not running inside tmux/,
     );
@@ -307,14 +307,14 @@ describe("a slash click", () => {
     ["a held stash", SCREENS.stashed, false, /stashed prompt/],
     ["a held stash behind queued messages", SCREENS.queuedStashed, false, /stashed prompt/],
     ["copy mode", SCREENS.idle, true, /copy mode/],
-  ])("%s: read, refused, nothing typed", (_, screen, inMode, reason) => {
+  ])("%s: read, refused, nothing typed", async (_, screen, inMode, reason) => {
     serve(screen, inMode);
     const rt = runtime(HINT);
-    expect(() => clickUrl(rt.urls[0]!, rt.ctx)).toThrow(reason);
+    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(reason);
     expect(invocations().map((argv) => argv[2])).toEqual(["display"]);
   });
 
-  test("a line no action declares is refused before tmux is asked", () => {
+  test("a line no action declares is refused before tmux is asked", async () => {
     const rt = runtime(HINT);
     const forged = effectsUrl([{ verb: VERB_SLASH, args: ["s1", "/exit"] }]);
     // The declared lines in full, each once: the bundled command tray and
@@ -329,7 +329,7 @@ describe("a slash click", () => {
       "/model opus",
       "/compact keep the api;",
     ];
-    expect(() => clickUrl(forged, rt.ctx)).toThrow(
+    await expect(clickUrl(forged, rt.ctx)).rejects.toThrow(
       `"/exit" is not a command this config declares (it declares: ${declared.join(", ")})`,
     );
     expect(invocations()).toEqual([]);
@@ -381,17 +381,17 @@ const typedLines = (effects: { verb: string; args: string[] }[]) =>
   effects.filter((e) => e.verb === VERB_SLASH).map((e) => e.args[1]);
 
 describe("the command tray: /compact, /model, /clear from the bar", () => {
-  test.each(["/compact", "/model"])("%s is one click: typed into the session's pane", (line) => {
+  test.each(["/compact", "/model"])("%s is one click: typed into the session's pane", async (line) => {
     serve(SCREENS.idle);
     const rt = tray(HINT);
     const button = rt.links().find((l) => typedLines(l.effects).includes(line))!;
     expect(button.effects).toEqual([{ verb: VERB_SLASH, args: ["s1", line] }]);
-    clickUrl(button.url, rt.ctx);
+    await clickUrl(button.url, rt.ctx);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer"]);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(line);
   });
 
-  test("/clear takes a second click: the first arms it and types nothing", () => {
+  test("/clear takes a second click: the first arms it and types nothing", async () => {
     serve(SCREENS.idle);
     const rt = tray(HINT);
     // The bar tray's own /clear links: its arm key, or the line itself.
@@ -405,7 +405,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     expect(arm!.effects).toEqual([
       { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "armed"] },
     ]);
-    clickUrl(arm!.url, rt.ctx);
+    await clickUrl(arm!.url, rt.ctx);
     expect(invocations()).toEqual([]);
 
     // Armed: a confirm that disarms and types /clear, and a ✕ that only disarms.
@@ -417,7 +417,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     expect(cancel!.effects).toEqual([
       { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "disarmed"] },
     ]);
-    clickUrl(confirm!.url, rt.ctx);
+    await clickUrl(confirm!.url, rt.ctx);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
     expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
@@ -432,14 +432,14 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
 
   // A tray drawn inside tmux whose link is clicked once the session's client
   // reports no pane: the verb is the gate, whatever a render once drew.
-  test("a confirm clicked after the session left tmux says so in the bar and disarms, typing nothing", () => {
+  test("a confirm clicked after the session left tmux says so in the bar and disarms, typing nothing", async () => {
     const rt = tray(null, HINT);
     const armed = () => rt.links().find((l) => typedLines(l.effects).includes("/clear"));
-    clickUrl(
+    await clickUrl(
       rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clear.armed"))!.url,
       rt.ctx,
     );
-    expect(() => clickUrl(armed()!.url, rt.ctx)).toThrow(/not running inside tmux/);
+    await expect(clickUrl(armed()!.url, rt.ctx)).rejects.toThrow(/not running inside tmux/);
     expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
       /\/clear was not typed: this Claude Code is not running inside tmux/,
     );

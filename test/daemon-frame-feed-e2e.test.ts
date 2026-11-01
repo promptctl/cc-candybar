@@ -526,8 +526,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'the picked mark' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, args("still"));
-    const pick = (file: string): Promise<void> =>
-      click(
+    const pick = async (file: string): Promise<void> =>
+      await click(
         sockPath,
         `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(file)}`,
       );
@@ -651,8 +651,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     logLines(env).filter(
       (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
     );
-  const setState = (sid: string, key: string, value: string): Promise<void> =>
-    click(
+  const setState = async (sid: string, key: string, value: string): Promise<void> =>
+    await click(
       sockPath,
       effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
     );

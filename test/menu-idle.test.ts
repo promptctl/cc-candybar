@@ -86,8 +86,9 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     failures = [];
     idle = new MenuIdle({
       now: () => at(now),
-      close: (sid, { idleS, timeoutS }) =>
-        closes.push({ sid, idleS, timeoutS }),
+      close: async (sid, { idleS, timeoutS }) => {
+        closes.push({ sid, idleS, timeoutS });
+      },
       failed: (sid, e) => failures.push(`${sid}: ${String(e)}`),
     });
   });
@@ -203,16 +204,17 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     expect(closes).toHaveLength(1);
   });
 
-  test("a close that throws is reported, and retried a timeout after the next render that draws the menu", () => {
+  test("a close that rejects is reported, and retried a timeout after the next render that draws the menu", async () => {
     const failing = new MenuIdle({
       now: () => at(now),
-      close: () => {
+      close: async () => {
         throw new Error("no config");
       },
       failed: (sid, e) => failures.push(`${sid}: ${(e as Error).message}`),
     });
     failing.observe("s", at(now), true, 30);
     advance(30);
+    await jest.advanceTimersByTimeAsync(0);
     expect(failures).toEqual(["s: no config"]);
     expect(failing.getStats().armed).toBe(0);
     advance(5);
@@ -220,6 +222,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     advance(29.9);
     expect(failures).toHaveLength(1);
     advance(0.1);
+    await jest.advanceTimersByTimeAsync(0);
     expect(failures).toHaveLength(2);
     failing.dispose();
   });
@@ -284,14 +287,14 @@ function buildRuntime(src: string) {
     configFor: () => config,
     log: (_level, line) => logged.push(line),
   };
-  const clickWriting = (key: string, value: string): void => {
+  const clickWriting = async (key: string, value: string): Promise<void> => {
     const url = linkUrls(draw(instantOf(new Date())).text).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = parseHandlerUrl(url);
     expect(clickSessionOf(verb, v)).toEqual({ ok: true, id: SID });
-    VERBS.get(verb)!(v, ctx);
+    await VERBS.get(verb)!(v, ctx);
   };
   const held = (key: string): string =>
     sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
@@ -299,31 +302,31 @@ function buildRuntime(src: string) {
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
-const IDLE = { idleS: 30, timeoutS: 30 };
+const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
 
-  test("edit mode exits with the door, and its savepoint goes with it", () => {
+  test("edit mode exits with the door, and its savepoint goes with it", async () => {
     const rt = buildRuntime(BUNDLED);
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeDefined();
-    closeIdleMenus(SID, IDLE, rt.ctx);
+    await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeUndefined();
   });
 
-  test("a ✚ library open in edit mode with the door closed closes; edit mode, which drew no menu, stays", () => {
+  test("a ✚ library open in edit mode with the door closed closes; edit mode, which drew no menu, stays", async () => {
     const rt = buildRuntime(`{
       segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
       root: { h: ['directory', 'arrange'] },
     }`);
     const library = "menus.edit_default_insertSeg_0.edit_default_insert_0";
-    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    rt.clickWriting(library, "edit.default.insert.0");
+    await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await rt.clickWriting(library, "edit.default.insert.0");
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(rt.draw(instantOf(new Date())).menuRows).toBeGreaterThan(0);
-    closeIdleMenus(SID, IDLE, rt.ctx);
+    await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(library)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     expect(rt.draw(instantOf(new Date())).menuRows).toBe(0);
@@ -332,30 +335,30 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     );
   });
 
-  test("a toggle that hangs no menu is a view preference, and is left as it is", () => {
+  test("a toggle that hangs no menu is a view preference, and is left as it is", async () => {
     const rt = buildRuntime(BUNDLED);
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    rt.clickWriting(EDIT_LIVE_KEY, "open");
-    closeIdleMenus(SID, IDLE, rt.ctx);
+    await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await rt.clickWriting(EDIT_LIVE_KEY, "open");
+    await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_LIVE_KEY)).toBe("open");
   });
 
-  test("a group open by default is closed, and stays closed", () => {
+  test("a group open by default is closed, and stays closed", async () => {
     const rt = buildRuntime(`{ root: { v: [
       { kind: 'group', name: 'more', label: 'more', open: true, children: ['model'] },
       'directory',
     ] } }`);
     expect(rt.held("groups.more")).toBe("more");
-    closeIdleMenus(SID, IDLE, rt.ctx);
+    await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held("groups.more")).toBe(DISCLOSURE_CLOSED);
     expect(rt.draw(instantOf(new Date())).menuRows).toBe(0);
   });
 
-  test("with nothing open it writes nothing, and says so", () => {
+  test("with nothing open it writes nothing, and says so", async () => {
     const rt = buildRuntime(BUNDLED);
-    closeIdleMenus(SID, IDLE, rt.ctx);
+    await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(rt.logged).toContain(
       `menu-idle: closed=- idle=30.0s timeout=30s (session=${SID})`,
@@ -372,9 +375,9 @@ describe("the flash on the bar", () => {
 
   const rows = (text: string): string[] => text.split("\n");
 
-  test("menu rows light while lit; bar rows never do", () => {
+  test("menu rows light while lit; bar rows never do", async () => {
     const rt = buildRuntime(BUNDLED);
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     const calm = rt.draw(LIT);
     const lit = rt.draw(LIT, SINCE);
     expect(calm.menuRows).toBeGreaterThan(0);
@@ -393,9 +396,9 @@ describe("the flash on the bar", () => {
     expect(grounds(menu(calm.text)[0]!).size).toBeGreaterThan(1);
   });
 
-  test("dark between flashes, and before the flash begins, the bar is as it was", () => {
+  test("dark between flashes, and before the flash begins, the bar is as it was", async () => {
     const rt = buildRuntime(BUNDLED);
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     expect(rt.draw(DARK, SINCE).text).toBe(rt.draw(DARK).text);
     const waiting = rt.draw(BEFORE, SINCE);
     expect(waiting.text).toBe(rt.draw(BEFORE).text);
@@ -409,12 +412,12 @@ describe("the flash on the bar", () => {
 
   // The flash counts down to the moment the daemon's timer closes the menus,
   // so its holds are on the host clock however fast the session animates.
-  test("the flash begins and turns at the same host instant at every animation speed", () => {
+  test("the flash begins and turns at the same host instant at every animation speed", async () => {
     for (const speed of ANIMATION_SPEED_NAMES) {
       const rt = buildRuntime(
         `{ globals: { animationSpeed: "${speed}" }, root: { h: ['directory', 'model'] } }`,
       );
-      rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+      await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
       expect([speed, rt.draw(BEFORE, SINCE).nextChange]).toEqual([
         speed,
         1112.5,
@@ -423,9 +426,9 @@ describe("the flash on the bar", () => {
     }
   });
 
-  test("a menu the frame first draws, its idle period not begun, can move but says no change", () => {
+  test("a menu the frame first draws, its idle period not begun, can move but says no change", async () => {
     const rt = buildRuntime(BUNDLED);
-    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     const opened = rt.draw(BEFORE);
     expect(opened.nextChange).toBe(Infinity);
     expect(opened.motion).toBe("can-move");

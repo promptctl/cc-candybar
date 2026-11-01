@@ -358,7 +358,7 @@ test("a compile keeps nothing of a render once it returns", async () => {
 // redraws the map from the heap, so a change that grows any fails here rather
 // than quietly over-filling the budget. The bundled default, as `test/setup.ts`
 // leaves the XDG config empty.
-test("an entry, a compile and a view hold no more than the cache charges for them", () => {
+test("an entry, a compile and a view hold no more than the cache charges for them", async () => {
   const gc = exposeGc();
   const heapUsed = (): number => {
     gc();
@@ -423,7 +423,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // disposed (src/dsl/parts.ts), so it is charged for the most the bundled
   // default draws: a session that opened the door, the theme picker, every
   // list behind the ⚙ and the preset list, and every tab.
-  const walked = (i: number): SessionView => {
+  const walked = async (i: number): Promise<SessionView> => {
     const sid = `w${i}`;
     using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, viewFacts(dir + "/c0", sid));
     recordRender(sessionState, sid);
@@ -434,14 +434,14 @@ test("an entry, a compile and a view hold no more than the cache charges for the
       if (hit === undefined) throw new Error(`no link "${text}" in:\n${stripAnsi(last)}`);
       const { verb, value } = parseHandlerUrl(hit.url);
       const effects = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
       last = drawnBytes(held.view);
     }
     return held.view;
   };
-  views.push(walked(0));
+  views.push(await walked(0));
   const beforeWalked = heapUsed();
-  for (let i = 1; i <= N; i++) views.push(walked(i));
+  for (let i = 1; i <= N; i++) views.push(await walked(i));
   const perWalked = (heapUsed() - beforeWalked) / N;
   expect(perWalked).toBeLessThan(VIEW_BYTES);
 });

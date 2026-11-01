@@ -70,28 +70,28 @@ function buildRuntime() {
   return { config, sessionState, render };
 }
 
-function clickEndcaps(
+async function clickEndcaps(
   { config, sessionState }: ReturnType<typeof buildRuntime>,
   style: string,
-): void {
+): Promise<void> {
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]);
   recordRender(sessionState, SID);
-  clickUrl(url, testVerbContext(sessionState, undefined, config));
+  await clickUrl(url, testVerbContext(sessionState, undefined, config));
 }
 
 describe("DSL style picker — live reshape", () => {
-  test("clicking a style changes the bytes the joiner emits between cells", () => {
+  test("clicking a style changes the bytes the joiner emits between cells", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
 
     const powerline = render(); // default: SessionState unset -> "powerline" floor
     expect(powerline.length).toBeGreaterThan(0);
 
-    clickEndcaps(rt, "capsule");
+    await clickEndcaps(rt, "capsule");
     const capsule = render();
 
-    clickEndcaps(rt, "plain");
+    await clickEndcaps(rt, "plain");
     const plain = render();
 
     // [LAW:verifiable-goals] The reshape IS the contract: each strip style yields
@@ -102,12 +102,12 @@ describe("DSL style picker — live reshape", () => {
     expect(plain).not.toBe(capsule);
   });
 
-  test("every ENDCAPS_SHAPES member resolves to a renderable, distinct bar", () => {
+  test("every ENDCAPS_SHAPES member resolves to a renderable, distinct bar", async () => {
     const rt = buildRuntime();
     const { sessionState, render } = rt;
     const seen = new Map<string, string>();
     for (const style of ENDCAPS_SHAPES) {
-      clickEndcaps(rt, style);
+      await clickEndcaps(rt, style);
       const out = render();
       expect(out.length).toBeGreaterThan(0);
       seen.set(style, out);

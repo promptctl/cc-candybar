@@ -50,7 +50,7 @@ export class ReloadSignal {
   // mutation leaves the same state, so a reload that began after any of them
   // observed it. The condition is the reload's own promise, so the wait ends
   // on the event, not on a poll tick.
-  async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
+  async after(entry: ReloadedEntry, mutate: () => void | Promise<void>): Promise<void> {
     const reloaded = this.next(entry).then(() => true);
     await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
   }
@@ -111,7 +111,7 @@ const MAX_ROUNDS = 48;
 // that outlasts every round goes unread and the wait fails by name; `after`'s
 // never settles when no reload came.
 export async function untilHeard(
-  mutate: () => void,
+  mutate: () => void | Promise<void>,
   heard: Condition,
   what: What,
 ): Promise<void> {
@@ -127,7 +127,7 @@ export async function untilHeard(
     return asked;
   };
   for (let round = 1; round <= MAX_ROUNDS; round++) {
-    mutate();
+    await mutate();
     if (await holdsWithin(answer, RETRY_MS)) return;
   }
   throw new Error(

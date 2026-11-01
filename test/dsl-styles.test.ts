@@ -406,12 +406,12 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     return { config, sessionState, render, dispose };
   }
 
-  const clickStyle = (
+  const clickStyle = async (
     config: DslConfig,
     sessionState: SessionState,
     look: string,
-  ): void => {
-    clickUrl(
+  ): Promise<void> => {
+    await clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", look] }]),
       testVerbContext(sessionState, undefined, config),
     );
@@ -429,28 +429,28 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     return m![1]!;
   };
 
-  test("clicking a style recolors an ordinary segment; clicking none restores", () => {
+  test("clicking a style recolors an ordinary segment; clicking none restores", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "◆ here");
-      clickStyle(config, sessionState, "inverted");
+      await clickStyle(config, sessionState, "inverted");
       const adapted = bgOf(render(), "◆ here");
       // The inverted style flips lightness — the surface color must move.
       expect(adapted).not.toBe(before);
       // "none" is the identity style, not a special case: byte-exact restore
       // (rich-js isIdentityKey fast-paths the identity transposition).
-      clickStyle(config, sessionState, "none");
+      await clickStyle(config, sessionState, "none");
       expect(bgOf(render(), "◆ here")).toBe(before);
     } finally {
       dispose();
     }
   });
 
-  test("an explicit per-segment palette: pin IGNORES the style", () => {
+  test("an explicit per-segment palette: pin IGNORES the style", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
       const before = bgOf(render(), "▣ pinned");
-      clickStyle(config, sessionState, "inverted");
+      await clickStyle(config, sessionState, "inverted");
       // The pinned segment's colors are frozen by author intent — the style
       // adapts everything else (the plain segment moved; asserted above).
       expect(bgOf(render(), "▣ pinned")).toBe(before);

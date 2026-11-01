@@ -56,8 +56,8 @@ function runtime(src: string) {
   return {
     sessionState,
     render: () => renderDsl(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS),
-    click: (url: string) =>
-      clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
+    click: async (url: string) =>
+      await clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
   };
 }
 
@@ -67,7 +67,7 @@ const FOCUS_AND_CLOSE = `
   focusAndClose: { do: ['toggleFocus', 'closePanel'] },`;
 
 describe("do: several declared actions, one click", () => {
-  test("the head is the face; every member's write lands, through the derived gate", () => {
+  test("the head is the face; every member's write lands, through the derived gate", async () => {
     const rt = runtime(
       config(FOCUS_AND_CLOSE, '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}'),
     );
@@ -81,7 +81,7 @@ describe("do: several declared actions, one click", () => {
       { verb: "set-state", args: ["s1", "focus", "on"] },
       { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
-    rt.click(url!);
+    await rt.click(url!);
     expect(rt.sessionState.get("s1", "focus")).toBe("on");
     expect(rt.sessionState.get("s1", "panel")).toBe("closed");
     // The head's current state drives the next display and the next write.
@@ -89,7 +89,7 @@ describe("do: several declared actions, one click", () => {
     expect(stripAnsi(next)).toContain("◉ unfocus");
   });
 
-  test("a {{ menu }} over a do headed by an option action: each pick also fires the rest", () => {
+  test("a {{ menu }} over a do headed by an option action: each pick also fires the rest", async () => {
     const rt = runtime(
       config(
         `pickTheme: { set: 'theme', from: 'themes' },
@@ -102,7 +102,7 @@ describe("do: several declared actions, one click", () => {
     const trigger = linkUrls(rt.render()).find((u) =>
       String(effectsOf(u)[0]?.args[1]).startsWith("menus."),
     );
-    rt.click(trigger!);
+    await rt.click(trigger!);
     const dracula = linkUrls(rt.render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "dracula"),
     );
@@ -110,7 +110,7 @@ describe("do: several declared actions, one click", () => {
       { verb: "set-state", args: ["s1", "theme", "dracula"] },
       { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
-    rt.click(dracula!);
+    await rt.click(dracula!);
     expect(rt.sessionState.get("s1", "theme")).toBe("dracula");
     expect(rt.sessionState.get("s1", "panel")).toBe("closed");
   });

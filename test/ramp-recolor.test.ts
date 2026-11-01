@@ -96,8 +96,8 @@ function buildRuntime() {
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
   };
-  const click = (key: "theme" | "style", value: string): void =>
-    clickUrl(
+  const click = async (key: "theme" | "style", value: string): Promise<void> =>
+    await clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
       testVerbContext(sessionState, undefined, config),
     );
@@ -118,7 +118,7 @@ describe("ramp over palette-name stops follows the live theme", () => {
     [95, "error"],
   ])(
     "at %i the ramp paints `%s` — equal to the named cell under the base theme, a theme click, and a look click",
-    (pct, stop) => {
+    async (pct, stop) => {
       const { render, click } = buildRuntime();
       const agree = (): string => {
         const line = render({ pct, stop });
@@ -128,9 +128,9 @@ describe("ramp over palette-name stops follows the live theme", () => {
       };
 
       const base = agree();
-      click("theme", PICKED_THEME);
+      await click("theme", PICKED_THEME);
       const themed = agree();
-      click("style", PICKED_STYLE);
+      await click("style", PICKED_STYLE);
       const looked = agree();
 
       // Three states, three colours: the ramp did not freeze at first render.
