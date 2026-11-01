@@ -644,7 +644,7 @@ async function handleClick(
   facts: RequestFacts,
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
-  const { clock, menuIdle, verbCtx } = parts;
+  const { menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
@@ -655,20 +655,27 @@ async function handleClick(
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   // The click's session, as it crossed the one session-id checkpoint: one
-  // that passed is recorded and restarts its idle clock, one that failed is
-  // never recorded, and a click naming none records `sid=-`.
+  // that passed is recorded and is pending on its idle clock until it settles,
+  // one that failed is never recorded, and a click naming none records `sid=-`.
   const session = clickSessionOf(verb, value);
+  const pending = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    menuIdle.clicked(session.id, instantOf(clock.date()));
+  else if (pending !== null) {
+    noteFacts(facts, { sid: pending });
+    menuIdle.clickArrived(pending);
   }
-  await handler(value, {
-    ...verbCtx,
-    arrival,
-    turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-    clientGone,
-  });
+  try {
+    await handler(value, {
+      ...verbCtx,
+      arrival,
+      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+      clientGone,
+    });
+  } finally {
+    if (pending !== null) menuIdle.clickSettled(pending);
+  }
   return { kind: "ok" };
 }
 

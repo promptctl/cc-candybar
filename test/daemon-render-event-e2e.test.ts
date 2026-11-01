@@ -388,6 +388,8 @@ describe("every render request writes one render event, whatever its outcome", (
       "queued",
       "verb",
       "sid",
+      "placeWait",
+      "gather",
       "turnWait",
       "timedOut",
       "clientLeft",
@@ -420,6 +422,8 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(unparsed.fields.map(([key]) => key)).toEqual([
       "queued",
       "verb",
+      "placeWait",
+      "gather",
       "turnWait",
       "timedOut",
       "clientLeft",

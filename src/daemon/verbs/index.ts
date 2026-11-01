@@ -127,9 +127,10 @@ import type { Runs, RunRequest } from "../runs";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
+import type { SlashLine } from "../../claude-input/slash-line";
 import type { RenderSightings } from "../render-sightings";
 import type { ServingDaemon } from "../limits";
-import { parseClientHints } from "../protocol";
+import { parseClientHints, type ClientHints } from "../protocol";
 import {
   GLYPH_MARKS,
   checkByName,
@@ -166,6 +167,7 @@ import {
   clickArrived,
   installFacts,
   gatherFacts,
+  oneAskPerClick,
   sessionWidth,
   readStores,
   type DoctorEdge,
@@ -217,9 +219,9 @@ export interface DaemonContext {
   readonly navigation: NavigationHistory;
   // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
   // (src/daemon/journal-turns.ts).
-  readonly journalTurns: Pick<JournalTurns, "take">;
+  readonly journalTurns: Pick<JournalTurns, "take" | "click" | "gathering">;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
-  // turn: what an idle close queued behind it re-reads (src/daemon/menu-idle.ts).
+  // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
   readonly clickLanded: (sessionId: string) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
@@ -273,19 +275,39 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
-  // [LAW:nothing-unseen] How long THIS click waited for its turn, for its event.
+  // [LAW:nothing-unseen] How long THIS click waited for its place in its
+  // session, gathered, and waited for its turn, for its event.
+  readonly placeWaited: (ms: number) => void;
+  readonly gatherTook: (ms: number) => void;
   readonly turnWaited: (ms: number) => void;
   // Whether the client that sent THIS click has left.
   readonly clientGone: () => boolean;
 }
 
+// What only the turn may wait on: a handler reaches a launch through `launch`,
+// `typing` or `gather`, each bound to the turn, so it cannot await one the
+// daemon's close would not stop it after.
+type TurnBound = "launcher" | "doctor" | "claudeInput";
+
+// What a helper reads, from either side of the turn.
+type Unbound = Omit<VerbContext, TurnBound>;
+
 // A context with the journals the verb table opens around a write.
-export type Journaled<C extends DaemonContext> = C & {
+export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
-  // [LAW:single-enforcer] Every await of a handler goes through this: the
+  // [LAW:single-enforcer] Every await of a handler is one of these three: the
   // click's turn answers whether it may go on (JournalTurn.landed).
-  readonly landed: JournalTurn["landed"];
+  readonly launch: (
+    opts: Omit<LaunchOpts, "timeoutMs">,
+    what: string,
+  ) => Promise<void>;
+  readonly typing: (
+    hint: ClientHints["tmux"],
+    line: SlashLine,
+  ) => ReturnType<typeof typeSlash>;
+  // Read-only work in the turn, over what the click has written so far.
+  readonly gather: <T>(work: (ctx: C) => Promise<T>) => Promise<T>;
 };
 
 // What a handler runs with: the daemon's context, with `sessionState` the
@@ -303,7 +325,26 @@ export type ClickContext = Journaled<VerbContext>;
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: ClickContext) => Promise<void>;
 
-import type { JournalTurn, JournalTurns, TurnAsker } from "../journal-turns";
+// What a click's effect does in the turn, once anything it gathered is in hand.
+type ClickStep = (ctx: ClickContext) => Promise<void>;
+
+// [LAW:types-are-the-program] An effect of the click table. `prepare` is its
+// read-only part, handed the unjournaled context, and what it answers is the
+// rest. A gathering effect's launches only inform, so they need no turn when
+// the effect opens its click (`headGather`). `slash` is no
+// gathering effect though its first await is a pane read: that read is the
+// guard for its typing, and a guard split from its act guards nothing.
+interface Verb {
+  readonly gathers: boolean;
+  readonly prepare: (value: string, ctx: VerbContext) => Promise<ClickStep>;
+}
+
+const inTurn = (handler: VerbHandler): Verb => ({
+  gathers: false,
+  prepare: async (value) => (ctx) => handler(value, ctx),
+});
+
+import type { JournalTurn, JournalTurns } from "../journal-turns";
 import { BadVerbArgs, DaemonClosing, decodeWire } from "../verb-error";
 import {
   parseSessionId,
@@ -374,17 +415,13 @@ export async function clickLaunch(
 // One clipboard primitive, no decode — both the `copy` verb (decodes a wire
 // segment) and the diagnostic verbs (already hold a plain message) funnel here.
 function pbcopy(text: string, ctx: ClickContext): Promise<void> {
-  return ctx.landed(
-    clickLaunch(
-      ctx.launcher,
-      {
-        bin: "/usr/bin/pbcopy",
-        stdinInput: text,
-        category: "click.pbcopy",
-      },
-      "pbcopy",
-      ctx.log,
-    ),
+  return ctx.launch(
+    {
+      bin: "/usr/bin/pbcopy",
+      stdinInput: text,
+      category: "click.pbcopy",
+    },
+    "pbcopy",
   );
 }
 
@@ -419,17 +456,13 @@ const copyDiagnostic: VerbHandler = async (value, ctx) => {
 };
 
 const openVscode: VerbHandler = (value, ctx) =>
-  ctx.landed(
-    clickLaunch(
-      ctx.launcher,
-      {
-        bin: "/usr/bin/open",
-        args: ["-a", "Visual Studio Code", oneArg(value)],
-        category: "click.open",
-      },
-      'open -a "Visual Studio Code"',
-      ctx.log,
-    ),
+  ctx.launch(
+    {
+      bin: "/usr/bin/open",
+      args: ["-a", "Visual Studio Code", oneArg(value)],
+      category: "click.open",
+    },
+    'open -a "Visual Studio Code"',
   );
 
 // [LAW:one-source-of-truth] SessionState is the canonical store for
@@ -624,7 +657,7 @@ const stepState: VerbHandler = async (rawValue, ctx) => {
 // than written for the render's `ramp` to fail on. A write that holds no
 // placement's setting asks nothing of the session's config.
 function refuseDisorderedPicks(
-  ctx: VerbContext,
+  ctx: Unbound,
   sid: string,
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
@@ -761,7 +794,7 @@ export function parseRenderOrigin(raw: string): RenderOrigin {
 // [LAW:no-silent-failure] A session that has never rendered has no origin
 // and therefore no config — a loud BadVerbArgs, not the daemon's own XDG
 // guess.
-function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
+function sessionOrigin(ctx: Unbound, sid: string): RenderOrigin {
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) {
     throw new BadVerbArgs(
@@ -773,14 +806,20 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
 
 // The origin the session's last request recorded, as it named it; null for a
 // session that has never rendered.
-function requestedOrigin(ctx: DaemonContext, sid: string): RenderOrigin | null {
+function requestedOrigin(
+  ctx: Omit<DaemonContext, TurnBound>,
+  sid: string,
+): RenderOrigin | null {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
 // The origin the session's last request recorded, under its load-config
 // pick; null for a session that has never rendered.
-function recordedOrigin(ctx: DaemonContext, sid: string): RenderOrigin | null {
+function recordedOrigin(
+  ctx: Omit<DaemonContext, TurnBound>,
+  sid: string,
+): RenderOrigin | null {
   const requested = requestedOrigin(ctx, sid);
   return requested === null
     ? null
@@ -791,7 +830,7 @@ function recordedOrigin(ctx: DaemonContext, sid: string): RenderOrigin | null {
 // session renders from reloads it before the click answers, as save does; one
 // that wrote no such file rebuilds nothing (a reload restarts every source).
 // Another session's file reaches its render through the fs watcher.
-function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
+function reloadIfWritten(ctx: Unbound, sid: string, step: Step): void {
   // A session with no recorded render has no cache entry to draw stale.
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
@@ -804,7 +843,7 @@ function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
 // read, and what gates them: a session's gate is its own config's, never a
 // merge of every config the daemon holds.
-function sessionConfig(ctx: VerbContext, sid: string): DslConfig {
+function sessionConfig(ctx: Unbound, sid: string): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 
@@ -828,7 +867,10 @@ function laneMeter(ctx: DaemonContext, sid: string): LaneMeter | null {
 
 // What the session's config nests; a session that has never rendered has no
 // config, so nothing nested.
-function nestOf(ctx: DaemonContext, sid: string): DisclosureNest {
+function nestOf(
+  ctx: Omit<DaemonContext, TurnBound>,
+  sid: string,
+): DisclosureNest {
   const origin = recordedOrigin(ctx, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
@@ -1265,6 +1307,7 @@ const undo: VerbHandler = async (value, ctx) => {
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
   const step = ctx.history.undo(sid);
+  ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
@@ -1292,6 +1335,8 @@ const rewind: VerbHandler = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
+  // Said first: a stale target throws after the rest were put back.
+  ctx.journal.wrote();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
   ctx.log(
@@ -1306,6 +1351,7 @@ const redo: VerbHandler = async (value, ctx) => {
   const sid = requireSessionId(sessionId);
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
+  ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
@@ -1332,7 +1378,7 @@ export const SESSION_CLIENT_HINTS_KEY = "client-hints";
 // [LAW:no-silent-failure] A session that has never rendered has no hints —
 // a loud BadVerbArgs, never a click that acts on a guessed "not in tmux".
 function sessionHints(
-  ctx: VerbContext,
+  ctx: Unbound,
   sid: string,
 ): ReturnType<typeof parseClientHints> {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
@@ -1355,7 +1401,7 @@ function sessionHints(
 
 // [LAW:single-enforcer] One write of the whole report, through setBatch — the
 // row cap flips, the reason and fixable land, in one reactive transaction.
-function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
+function writeReport(ctx: Unbound, sid: string, facts: DoctorFacts): void {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.log(
@@ -1364,14 +1410,26 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   );
 }
 
-// The facts a doctor click reasons over: the session's, and the click itself
-// as the link that came back through the URL handler. A probe the rate limit
-// refused refuses the click (DoctorBusy), so no report is written over facts
-// the doctor did not see.
-async function clickFacts(
-  ctx: ClickContext,
+// [LAW:no-ambient-temporal-coupling] One gather: a snapshot taken for one
+// config, since config chooses what is probed (the glyphs, the data needs).
+interface ClickGather {
+  readonly facts: Awaited<ReturnType<typeof gatherFacts>>;
+  readonly install: DoctorFacts["install"];
+  // The gather that holds for the config as it stands: this one, or a new one
+  // over it, so a report never judges one config on probes for another.
+  readonly current: (ctx: VerbContext) => Promise<ClickGather>;
+}
+
+// `doctor` answers each question once for the click (`oneAskPerClick`), so a
+// gather repeated for a new config asks again only what that config changed. A
+// probe the rate limit refused refuses the click (DoctorBusy), so no report is
+// written over facts the doctor did not see.
+async function clickGather(
+  ctx: VerbContext,
   sid: string,
-): Promise<DoctorFacts> {
+  doctor: DoctorEdge,
+  load: ReturnType<DoctorEdge["loadConfig"]>,
+): Promise<ClickGather> {
   // The session's own renders, read once: whatever its Claude Code sends, it
   // sends to this session.
   const scope = {
@@ -1380,38 +1438,80 @@ async function clickFacts(
     via: ctx.arrival.via,
   } as const;
   const said = ctx.clients.ofSession(sid, ctx.now());
-  let gathered: Awaited<ReturnType<typeof gatherFacts>>;
+  let facts: ClickGather["facts"];
   try {
-    gathered = await ctx.landed(
-      gatherFacts(
-        ctx.doctor,
-        sessionHints(ctx, sid),
-        sessionOrigin(ctx, sid),
-        (key) => ctx.sessionState.get(sid, key),
-        { kind: "ok", value: ctx.serving() },
-        { kind: "ok", value: said.map((s) => s.rateLimits) },
-        { kind: "ok", value: said.map((s) => s.transcript) },
-        scope,
-        { kind: "ok", value: barsOf(scope, said) },
-        sessionWidth(sid, said),
-        readStores(ctx.doctorStores),
-      ),
+    facts = await gatherFacts(
+      { ...doctor, loadConfig: () => load },
+      sessionHints(ctx, sid),
+      sessionOrigin(ctx, sid),
+      (key) => ctx.sessionState.get(sid, key),
+      { kind: "ok", value: ctx.serving() },
+      { kind: "ok", value: said.map((s) => s.rateLimits) },
+      { kind: "ok", value: said.map((s) => s.transcript) },
+      scope,
+      { kind: "ok", value: barsOf(scope, said) },
+      sessionWidth(sid, said),
+      readStores(ctx.doctorStores),
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  return {
-    ...gathered,
-    urlHandler: clickArrived(ctx.arrival),
+  const gathered: ClickGather = {
+    facts,
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
     install: installFacts(
-      ctx.doctor.install,
+      doctor.install,
       ctx.bundle,
       said.map((s) => s.client),
     ),
-    clicked: clickedFrom(ctx, gathered),
+    current: async (now) => {
+      const stands = doctor.loadConfig(sessionOrigin(now, sid));
+      // A reload that failed keeps the config it had, so its error is the news.
+      const same =
+        stands.config === load.config &&
+        stands.error === load.error &&
+        stands.warning === load.warning;
+      return same ? gathered : clickGather(now, sid, doctor, stands);
+    },
+  };
+  return gathered;
+}
+
+// A doctor effect's gather, and the facts its turn reasons over.
+const gatherClick = (ctx: VerbContext, sid: string): Promise<ClickGather> => {
+  const doctor = oneAskPerClick(ctx.doctor);
+  return clickGather(
+    ctx,
+    sid,
+    doctor,
+    doctor.loadConfig(sessionOrigin(ctx, sid)),
+  );
+};
+
+// The gather as it stands in the turn, with the click itself as the link that
+// came back through the URL handler. [LAW:no-ambient-temporal-coupling] The
+// stores are read here, not in the gather: this click's turn is what files
+// into them, so what it read before its turn another click may have moved.
+async function clickFacts(
+  ctx: ClickContext,
+  sid: string,
+  gathered: ClickGather,
+): Promise<DoctorFacts> {
+  const { facts, install } = await ctx.gather(gathered.current);
+  const stores = readStores(ctx.doctorStores);
+  const read = {
+    ...facts,
+    marks: stores.marks,
+    clicked: stores.clicked,
+    daemon: { ...facts.daemon, read: stores.postMortemsRead },
+  };
+  return {
+    ...read,
+    urlHandler: clickArrived(ctx.arrival),
+    install,
+    clicked: clickedFrom(ctx, read),
   };
 }
 
@@ -1426,8 +1526,8 @@ async function clickFacts(
 // so a write that fails is logged — and the event's `clicked=no` shows
 // nothing was filed — while the run reports over the list as it was read.
 function clickedFrom(
-  ctx: VerbContext,
-  { terminal, clicked }: Awaited<ReturnType<typeof gatherFacts>>,
+  ctx: Unbound,
+  { terminal, clicked }: ClickGather["facts"],
 ): DoctorFacts["clicked"] {
   const sighting =
     terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
@@ -1445,14 +1545,23 @@ function clickedFrom(
   }
 }
 
-const doctorRun: VerbHandler = async (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
-  writeReport(ctx, sid, await clickFacts(ctx, sid));
+const doctorRun: Verb = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const sid = requireSessionId(oneArg(value));
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
+  },
 };
 
 // A probe link `cc-candybar doctor` opened, delivered by the URL handler: its
 // arrival is the whole effect, read back by the CLI from the daemon's stats.
-const doctorProbe: VerbHandler = async (value, ctx) => {
+// [LAW:single-enforcer] It writes no journal, so it takes no turn: nothing
+// queued can make it wait, and no client's leaving can refuse a link that came.
+const doctorProbe = async (
+  value: string,
+  ctx: Pick<VerbContext, "arrival" | "probes" | "log">,
+): Promise<void> => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
     throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
@@ -1473,78 +1582,91 @@ const doctorProbe: VerbHandler = async (value, ctx) => {
 // carries — never a fix cached from the render that drew the `[fix]`, because
 // the world may have moved (the var got set, the tmux server went away). Then
 // re-run over the post-fix facts, so the row flips to the truthful reason.
-const doctorFix: VerbHandler = async (value, ctx) => {
-  const [sessionId = "", checkName = ""] = decodeWire(() =>
-    decodeSegments(value),
-  );
-  const sid = requireSessionId(sessionId);
-  const check = checkByName(checkName);
-  if (check === undefined) {
-    throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
-  }
-  const facts = await clickFacts(ctx, sid);
-  const verdict = check.probe(facts);
-  if (verdict.ok || verdict.fix === undefined) {
-    throw new BadVerbArgs(
-      `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
+const doctorFix: Verb = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const [sessionId = "", checkName = ""] = decodeWire(() =>
+      decodeSegments(value),
     );
-  }
-  const after = applyFix(ctx.doctorStores, verdict.fix, facts);
-  if (after.kind === "failed") {
-    throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
-  }
-  ctx.log(
-    "info",
-    `doctor-fix: ${check.name} → ${describeFix(verdict.fix)} (session=${sid})`,
-  );
-  writeReport(ctx, sid, after.value);
+    const sid = requireSessionId(sessionId);
+    const check = checkByName(checkName);
+    if (check === undefined) {
+      throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
+    }
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => {
+      const facts = await clickFacts(c, sid, gathered);
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.fix === undefined) {
+        throw new BadVerbArgs(
+          `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
+        );
+      }
+      const after = applyFix(c.doctorStores, verdict.fix, facts);
+      if (after.kind === "failed") {
+        throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
+      }
+      c.log(
+        "info",
+        `doctor-fix: ${check.name} → ${describeFix(verdict.fix)} (session=${sid})`,
+      );
+      writeReport(c, sid, after.value);
+    };
+  },
 };
 
 // Record what the user saw of the glyphs THIS check's fresh verdict shows,
 // under the sighting they are — never a sighting cached from the render that
 // drew the ✓ and ✗, since the session's terminal or joiner may have moved —
 // then re-run over those same facts with the mark folded in.
-// [LAW:single-enforcer] One gathering per click, as doctorFix: a second would
-// spawn the rate-limited tmux and font probes again inside their window, and
-// the refused spawn would read as a different terminal than the one marked.
-const doctorMark: VerbHandler = async (value, ctx) => {
-  const [sessionId = "", checkName = "", mark = ""] = decodeWire(() =>
-    decodeSegments(value),
-  );
-  const sid = requireSessionId(sessionId);
-  const check = checkByName(checkName);
-  if (check === undefined) {
-    throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
-  }
-  if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
-    throw new BadVerbArgs(
-      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
+// [LAW:single-enforcer] One gathering per click, as doctorFix: a second asks
+// only what a new config changed (`oneAskPerClick`), since a refused spawn
+// would read as a different terminal than the one marked.
+const doctorMark: Verb = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const [sessionId = "", checkName = "", mark = ""] = decodeWire(() =>
+      decodeSegments(value),
     );
-  }
-  const facts = await clickFacts(ctx, sid);
-  const verdict = check.probe(facts);
-  if (verdict.ok || verdict.sighting === undefined) {
-    throw new BadVerbArgs(
-      `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
-    );
-  }
-  const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
-  // [LAW:single-enforcer] The store refuses to file over a book that does not
-  // read; that refusal is the click's.
-  const marks = ctx.doctorStores.marks.update((book) =>
-    withMark(book, ...made),
-  );
-  if (marks.kind === "failed") {
-    throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
-  }
-  ctx.log(
-    "info",
-    `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
-  );
-  writeReport(ctx, sid, {
-    ...facts,
-    marks,
-  });
+    const sid = requireSessionId(sessionId);
+    const check = checkByName(checkName);
+    if (check === undefined) {
+      throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
+    }
+    if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
+      throw new BadVerbArgs(
+        `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
+      );
+    }
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => {
+      const facts = await clickFacts(c, sid, gathered);
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.sighting === undefined) {
+        throw new BadVerbArgs(
+          `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
+        );
+      }
+      const made = [
+        check.name,
+        verdict.sighting.id,
+        mark as GlyphMark,
+      ] as const;
+      // [LAW:single-enforcer] The store refuses to file over a book that does
+      // not read; that refusal is the click's.
+      const marks = c.doctorStores.marks.update((book) =>
+        withMark(book, ...made),
+      );
+      if (marks.kind === "failed") {
+        throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
+      }
+      c.log(
+        "info",
+        `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
+      );
+      writeReport(c, sid, { ...facts, marks });
+    };
+  },
 };
 
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────
@@ -1565,9 +1687,7 @@ const slash: VerbHandler = async (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`,
     );
   }
-  const result = await ctx.landed(
-    typeSlash(ctx.claudeInput, sessionHints(ctx, sid).tmux, action.slash),
-  );
+  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action.slash);
   if (result.kind === "refused") {
     ctx.log(
       "warn",
@@ -1591,7 +1711,7 @@ const slash: VerbHandler = async (value, ctx) => {
 // link, so either check failing refuses the click before anything runs.
 function runOf(
   [sessionId = "", action = "", evaluated = "", mac = ""]: readonly string[],
-  ctx: VerbContext,
+  ctx: Unbound,
 ): RunRequest {
   const sid = requireSessionId(sessionId);
   const origin = sessionOrigin(ctx, sid);
@@ -1687,6 +1807,7 @@ const repoConfig: VerbHandler = async (value, ctx) => {
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
+  ctx.journal.wrote();
   const { superseded, absent, unchecked } = filed.value;
   ctx.log(
     "info",
@@ -1747,34 +1868,34 @@ const loadConfig: VerbHandler = async (value, ctx) => {
   }
 };
 
-const LEAF_VERBS = new Map<string, VerbHandler>([
-  [VERB_COPY, copy],
-  [VERB_LOAD_CONFIG, loadConfig],
-  [VERB_OPEN_VSCODE, openVscode],
-  [VERB_SET_STATE, setState],
-  [VERB_STEP_STATE, stepState],
-  [VERB_SET_CONFIG, setConfig],
-  [VERB_STEP_CONFIG, stepConfig],
-  [VERB_RESET_CONFIG, resetConfig],
-  [VERB_SAVE, save],
-  [VERB_SAVE_PRESET, savePreset],
-  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
-  [VERB_DELETE_PRESET, deletePreset],
-  [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
-  [VERB_UNDO, undo],
-  [VERB_REDO, redo],
-  [VERB_BACK, back],
-  [VERB_REWIND, rewind],
-  [VERB_TOOLBAR_TOGGLE, toolbarToggle],
-  [VERB_APPLY_UPDATE, applyUpdate],
+const LEAF_VERBS = new Map<string, Verb>([
+  [VERB_COPY, inTurn(copy)],
+  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
+  [VERB_OPEN_VSCODE, inTurn(openVscode)],
+  [VERB_SET_STATE, inTurn(setState)],
+  [VERB_STEP_STATE, inTurn(stepState)],
+  [VERB_SET_CONFIG, inTurn(setConfig)],
+  [VERB_STEP_CONFIG, inTurn(stepConfig)],
+  [VERB_RESET_CONFIG, inTurn(resetConfig)],
+  [VERB_SAVE, inTurn(save)],
+  [VERB_SAVE_PRESET, inTurn(savePreset)],
+  [VERB_SAVE_THEME_DEFAULT, inTurn(saveThemeDefault)],
+  [VERB_DELETE_PRESET, inTurn(deletePreset)],
+  [VERB_APPLY_LAYOUT_OP, inTurn(applyLayoutOp)],
+  [VERB_UNDO, inTurn(undo)],
+  [VERB_REDO, inTurn(redo)],
+  [VERB_BACK, inTurn(back)],
+  [VERB_REWIND, inTurn(rewind)],
+  [VERB_TOOLBAR_TOGGLE, inTurn(toolbarToggle)],
+  [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, doctorProbe],
-  [VERB_SLASH, slash],
-  [VERB_RUN, run],
-  [VERB_REPO_CONFIG, repoConfig],
-  [VERB_COPY_DIAGNOSTIC, copyDiagnostic],
+  [VERB_DOCTOR_PROBE, inTurn(doctorProbe)],
+  [VERB_SLASH, inTurn(slash)],
+  [VERB_RUN, inTurn(run)],
+  [VERB_REPO_CONFIG, inTurn(repoConfig)],
+  [VERB_COPY_DIAGNOSTIC, inTurn(copyDiagnostic)],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1887,21 +2008,66 @@ function sessionOfEffects(
   return sid === "" ? null : parseSessionId(sid);
 }
 
-const dispatch: VerbHandler = async (rawValue, ctx) => {
+// [LAW:no-silent-failure] A gather that failed before the turn fails where its
+// effect stands in the fold, so what follows it still runs and the error still
+// reaches the bar through the journal.
+const hoisted = (
+  verb: Verb,
+  value: string,
+  ctx: VerbContext,
+): Promise<ClickStep> =>
+  ctx.journalTurns
+    .gathering(() => verb.prepare(value, ctx))
+    .catch(
+      (e: unknown): ClickStep =>
+        () =>
+          Promise.reject(e),
+    );
+
+// An effect's turn: its gather's rest, or, gathering in the turn, the whole of
+// it, which then reads what the click wrote before it.
+async function perform(
+  verb: Verb,
+  value: string,
+  ctx: ClickContext,
+  gathered: ClickStep | undefined,
+): Promise<void> {
+  const step =
+    gathered ?? (await ctx.gather((full) => verb.prepare(value, full)));
+  await step(ctx);
+}
+
+// [LAW:no-ambient-temporal-coupling] Only the gather that opens a click goes
+// ahead of its turn. Every other may have to read a write before it, a gather's
+// own step included, so it stays in the fold.
+async function headGather(
+  rawValue: string,
+  ctx: VerbContext,
+): Promise<ClickStep | undefined> {
+  const [head] = batchAdjacentWrites(parseEffects(rawValue));
+  const leaf = head === undefined ? undefined : LEAF_VERBS.get(head.verb);
+  return leaf?.gathers ? hoisted(leaf, head!.value, ctx) : undefined;
+}
+
+async function foldEffects(
+  rawValue: string,
+  ctx: ClickContext,
+  gathered: ClickStep | undefined,
+): Promise<void> {
   const errors: string[] = [];
   let operational = false;
   const effects = parseEffects(rawValue);
   // The click's session, for error display, so a failing step surfaces in the
   // bar like any other.
   const session = sessionOfEffects(effects);
-  for (const { verb, value } of batchAdjacentWrites(effects)) {
-    const handler = LEAF_VERBS.get(verb);
-    if (!handler) {
+  for (const [i, { verb, value }] of batchAdjacentWrites(effects).entries()) {
+    const leaf = LEAF_VERBS.get(verb);
+    if (!leaf) {
       errors.push(`unknown effect verb "${verb}"`);
       continue;
     }
     try {
-      await handler(value, ctx);
+      await perform(leaf, value, ctx, i === 0 ? gathered : undefined);
     } catch (e) {
       // [LAW:single-enforcer] The turn is over: no later effect runs, and the
       // journal holdClickError writes through is finished. What failed before
@@ -1927,7 +2093,7 @@ const dispatch: VerbHandler = async (rawValue, ctx) => {
     const message = `dispatch: ${errors.join("; ")}`;
     throw operational ? new Error(message) : new BadVerbArgs(message);
   }
-};
+}
 
 function throwAll(failures: readonly unknown[]): void {
   if (failures.length === 1) throw failures[0];
@@ -1948,93 +2114,138 @@ function throwAll(failures: readonly unknown[]): void {
 // reports both.
 //
 // [LAW:single-enforcer] It is also where every click of a session passes, so
-// it measures that session's lane switches (`sessionOf` names it): before the
+// it measures that session's lane switches (`sid` names it): before the
 // handler, and after the commit — after any reload the handler made, since a
 // reload is synchronous. What a lane runs follows the difference, which no
 // render, frame or other session's write can make. After the commit it also
 // brings the session's view to the config its origin now resolves to.
 //
-// [LAW:single-enforcer] And it is the one place a journal's turn is taken
+// [LAW:single-enforcer] It runs in the journal's turn `click` took
 // (src/daemon/journal-turns.ts), begin through view-follow, so an awaited
 // handler keeps its step whole. A turn the daemon's close cut off was committed
 // there, and the daemon is gone from under what follows the commit.
-function journaled<C extends DaemonContext>(
-  verb: string,
-  handler: (value: string, ctx: Journaled<C>) => Promise<void>,
-  sessionOf: (value: string) => string | null,
-  asker: (ctx: C) => TurnAsker,
-): (value: string, ctx: C) => Promise<void> {
-  const inTurn = async (
-    value: string,
-    ctx: C,
-    turn: JournalTurn,
-  ): Promise<void> => {
-    const sid = sessionOf(value);
-    const lanes = sid === null ? null : laneMeter(ctx, sid);
-    const journal = ctx.history.begin();
-    const navigation = ctx.navigation.begin(journal.sessionState);
-    // Each commit runs whatever the other did: both record what landed.
-    const commit = turn.holds(() => {
-      const failed: unknown[] = [];
-      for (const step of [navigation, journal]) {
-        try {
-          step.commit();
-        } catch (e) {
-          failed.push(e);
-        }
-      }
-      throwAll(failed);
-    });
-    const failures: unknown[] = [];
-    // Both views close what a write closes, the navigating one above its
-    // recording, so ◁ back restores a closed menu with what was open in it.
-    const closing = (store: SessionStateRW): SessionStateRW =>
-      closingView(
-        store,
-        (sid) => nestOf(ctx, sid),
-        (line) => ctx.log("info", line),
-      );
-    try {
-      await handler(value, {
-        ...ctx,
-        sessionState: closing(journal.sessionState),
-        journal,
-        navigating: closing(navigation.sessionState),
-        landed: turn.landed,
-      });
-    } catch (e) {
-      failures.push(e);
-    }
-    let live = true;
-    try {
-      live = commit();
-    } catch (e) {
-      failures.push(e);
-    }
-    if (live && lanes !== null) {
+async function journaled<C extends DaemonContext>(
+  sid: string | null,
+  ctx: C,
+  turn: JournalTurn,
+  handler: (ctx: Journaled<C>) => Promise<void>,
+): Promise<void> {
+  const lanes = sid === null ? null : laneMeter(ctx, sid);
+  const journal = ctx.history.begin();
+  const navigation = ctx.navigation.begin(journal.sessionState);
+  // Each commit runs whatever the other did: both record what landed.
+  const commit = turn.holds(() => {
+    const failed: unknown[] = [];
+    for (const step of [navigation, journal]) {
       try {
-        ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
+        step.commit();
       } catch (e) {
-        failures.push(e);
+        failed.push(e);
       }
     }
-    // [LAW:single-enforcer] Every click passes here, so here is where a
-    // click that moved the session's origin — a load-config pick, or a
-    // history step restoring or clearing one — moves its view: a frame opens
-    // none (src/daemon/cache/render.ts `holdView`).
-    // A session that has never rendered has no origin, and no view.
-    if (live && sid !== null) {
-      try {
-        const origin = recordedOrigin(ctx, sid);
-        if (origin !== null) ctx.views.follow(sid, origin);
-      } catch (e) {
-        failures.push(e);
-      }
-    }
-    throwAll(failures);
+    throwAll(failed);
+  });
+  const failures: unknown[] = [];
+  // Both views close what a write closes, the navigating one above its
+  // recording, so ◁ back restores a closed menu with what was open in it.
+  const closing = (store: SessionStateRW): SessionStateRW =>
+    closingView(
+      store,
+      (sid) => nestOf(ctx, sid),
+      (line) => ctx.log("info", line),
+    );
+  // The whole context, launches included, is the gather's alone to reach.
+  const journaling = {
+    ...ctx,
+    sessionState: closing(journal.sessionState),
+    journal,
+    navigating: closing(navigation.sessionState),
   };
-  return (value, ctx) =>
-    ctx.journalTurns.take(verb, asker(ctx), (turn) => inTurn(value, ctx, turn));
+  const launches: Pick<Journaled<DaemonContext>, "launch" | "typing"> = {
+    launch: (opts, what) =>
+      turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
+    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
+  };
+  try {
+    await handler({
+      ...journaling,
+      ...launches,
+      gather: <T>(work: (c: C) => Promise<T>) => turn.landed(work(journaling)),
+    } as unknown as Journaled<C>);
+  } catch (e) {
+    failures.push(e);
+  }
+  let live = true;
+  try {
+    live = commit();
+  } catch (e) {
+    failures.push(e);
+  }
+  if (live && lanes !== null) {
+    try {
+      // [LAW:no-ambient-temporal-coupling] Only a click that wrote can have
+      // moved its lanes: for one that wrote nothing, what moved while it
+      // parked is a watcher reload, and no move of its own.
+      const after = lanes.read();
+      ctx.lanes.clicked(
+        lanes.sessionId,
+        journal.written() ? lanes.before : after,
+        after,
+      );
+    } catch (e) {
+      failures.push(e);
+    }
+  }
+  // [LAW:single-enforcer] Every click passes here, so here is where a
+  // click that moved the session's origin — a load-config pick, or a
+  // history step restoring or clearing one — moves its view: a frame opens
+  // none (src/daemon/cache/render.ts `holdView`).
+  // A session that has never rendered has no origin, and no view.
+  if (live && sid !== null) {
+    try {
+      const origin = recordedOrigin(ctx, sid);
+      if (origin !== null) ctx.views.follow(sid, origin);
+    } catch (e) {
+      failures.push(e);
+    }
+  }
+  throwAll(failures);
+}
+
+// [LAW:single-enforcer] A click: its place in its session's order, the gather
+// ahead of its turn, then a journal around the rest (src/daemon/journal-turns.ts).
+function click(
+  verb: string,
+  gather: (value: string, ctx: VerbContext) => Promise<ClickStep | undefined>,
+  handler: (
+    value: string,
+    ctx: ClickContext,
+    gathered: ClickStep | undefined,
+  ) => Promise<void>,
+): (value: string, ctx: VerbContext) => Promise<void> {
+  return async (value, ctx) => {
+    const session = clickSessionOf(verb, value);
+    const sid = session?.ok ? session.id : null;
+    return ctx.journalTurns.click(
+      verb,
+      sid,
+      {
+        placed: ctx.placeWaited,
+        waited: ctx.turnWaited,
+        gone: ctx.clientGone,
+        gathered: ctx.gatherTook,
+      },
+      () => gather(value, ctx),
+      (gathered, turn) =>
+        journaled(sid, ctx, turn, async (c) => {
+          try {
+            await handler(value, c, gathered);
+          } finally {
+            if (sid !== null) ctx.clickLanded(sid);
+          }
+        }),
+    );
+  };
 }
 
 // [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
@@ -2043,30 +2254,24 @@ function journaled<C extends DaemonContext>(
 export const VERBS: ReadonlyMap<
   string,
   (value: string, ctx: VerbContext) => Promise<void>
-> = new Map(
-  [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(([verb, handler]) => {
-    const sessionOf = (value: string): string | null => {
-      const session = clickSessionOf(verb, value);
-      return session?.ok ? session.id : null;
-    };
-    return [
-      verb,
-      journaled<VerbContext>(
+> = new Map([
+  ...[...LEAF_VERBS].map(
+    ([verb, leaf]) =>
+      [
         verb,
-        async (value, ctx) => {
-          try {
-            await handler(value, ctx);
-          } finally {
-            const sid = sessionOf(value);
-            if (sid !== null) ctx.clickLanded(sid);
-          }
-        },
-        sessionOf,
-        (ctx) => ({ waited: ctx.turnWaited, gone: ctx.clientGone }),
-      ),
-    ] as const;
-  }),
-);
+        click(
+          verb,
+          async (value, ctx) =>
+            leaf.gathers ? hoisted(leaf, value, ctx) : undefined,
+          (value, ctx, gathered) => perform(leaf, value, ctx, gathered),
+        ),
+      ] as const,
+  ),
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)] as const,
+  // After the leaves, so it replaces the click they built: a probe writes no
+  // journal, so nothing may refuse it for a turn.
+  [VERB_DOCTOR_PROBE, doctorProbe] as const,
+]);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
@@ -2094,32 +2299,32 @@ export function closeIdleMenus(
   idle: IdleClose,
   ctx: DaemonContext,
 ): Promise<void> {
-  return journaled<DaemonContext>(
+  return ctx.journalTurns.take(
     "menu-idle",
-    async (_value, c) => {
-      if (!idle.stillIdle()) {
-        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-        return;
-      }
-      idle.closed();
-      const roots = openRoots(nestOf(c, sid), (key) =>
-        c.navigating.get(sid, key),
-      );
-      c.navigating.setBatch(
-        sid,
-        roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-      );
-      c.log(
-        "info",
-        `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
-          `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
-      );
-    },
-    () => sid,
-    (c) => ({
+    {
       waited: (ms) =>
-        c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
+        ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
       gone: () => false,
-    }),
-  )("", ctx);
+    },
+    (turn) =>
+      journaled(sid, ctx, turn, async (c) => {
+        if (!idle.stillIdle()) {
+          c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
+          return;
+        }
+        idle.closed();
+        const roots = openRoots(nestOf(c, sid), (key) =>
+          c.navigating.get(sid, key),
+        );
+        c.navigating.setBatch(
+          sid,
+          roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+        );
+        c.log(
+          "info",
+          `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
+            `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
+        );
+      }),
+  );
 }

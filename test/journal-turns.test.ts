@@ -92,6 +92,12 @@ function setup() {
   return { sessionState, ctx, turns, logged, click, followed };
 }
 
+// A click reaches its turn some microtasks after it is sent, under real timers
+// and fake ones alike.
+async function drain(): Promise<void> {
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+}
+
 const undoDepth = (ctx: VerbContext): number =>
   ctx.history.depth(SID).undo;
 
@@ -101,6 +107,7 @@ describe("journals take turns", () => {
     const held = gate();
     const first = click("nord", "plain", held.wait);
     const second = click("dracula", "powerline", Promise.resolve());
+    await drain();
     expect(sessionState.get(SID, "theme")).toBe("nord");
     held.open();
     await Promise.all([first, second]);
@@ -116,9 +123,10 @@ describe("journals take turns", () => {
     const { sessionState, ctx, click } = setup();
     const held = gate();
     const slow = click("nord", "plain", held.wait);
+    await drain();
     let closed = false;
     const closing = closeIdleMenus(SID, IDLE, ctx).then(() => (closed = true));
-    await Promise.resolve();
+    await drain();
     expect(closed).toBe(false);
     held.open();
     await Promise.all([slow, closing]);
@@ -155,28 +163,27 @@ describe("the idle close decides in its turn", () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  test("a close queued behind a click leaves what that click opened", async () => {
-    const { ctx, logged, click } = setup();
+  test("a close queued behind another session's click keeps what a click arriving behind it opens", async () => {
+    const { ctx, logged } = setup();
     const m = idleOver(ctx);
-    const landing: VerbContext = {
-      ...ctx,
-      clickLanded: (sid) => m.idle.clicked(sid, m.at()),
-    };
     m.idle.observe(SID, m.at(), true, 30);
     const held = gate();
-    // The click opening the menu holds the turn past the deadline.
-    const slow = click("nord", "plain", held.wait).then(() =>
-      landing.clickLanded(SID),
-    );
-    const finished = VERBS.get(VERB_SET_STATE)!(
-      encodeSegments([SID, "theme", "dracula"]),
-      landing,
-    );
+    // Another session holds the turn past this session's deadline.
+    const other = VERBS.get(VERB_COPY)!("x", {
+      ...ctx,
+      launcher: {
+        ...ctx.launcher,
+        launch: () => held.wait.then(() => LAUNCHED),
+      } as Launcher,
+    });
+    await drain();
     m.advance(30);
     expect(m.fired).toHaveLength(1);
+    m.idle.clickArrived(SID);
     held.open();
     await jest.advanceTimersByTimeAsync(0);
-    await Promise.all([slow, finished, ...m.fired]);
+    await Promise.all([other, ...m.fired]);
+    m.idle.clickSettled(SID);
     expect(logged).toContain(`menu-idle: no longer idle, kept (session=${SID})`);
     expect(logged.filter((l) => l.startsWith("menu-idle: closed="))).toEqual([]);
     m.idle.dispose();
@@ -186,14 +193,21 @@ describe("the idle close decides in its turn", () => {
     const { ctx, logged } = setup();
     const m = idleOver(ctx);
     const held = gate();
-    const slow = parkedClick(ctx, "nord", "plain", held.wait);
     m.idle.observe(SID, m.at(), true, 30);
+    const other = VERBS.get(VERB_COPY)!("x", {
+      ...ctx,
+      launcher: {
+        ...ctx.launcher,
+        launch: () => held.wait.then(() => LAUNCHED),
+      } as Launcher,
+    });
+    await drain();
     m.advance(30);
     for (let i = 0; i < 256; i++) m.idle.clicked(`other${i}`, m.at());
     m.idle.clicked(SID, m.at());
     held.open();
     await jest.advanceTimersByTimeAsync(0);
-    await Promise.all([slow, ...m.fired]);
+    await Promise.all([other, ...m.fired]);
     expect(logged).toContain(`menu-idle: no longer idle, kept (session=${SID})`);
     m.idle.dispose();
   });
@@ -250,6 +264,7 @@ describe("close", () => {
     const { sessionState, ctx, turns, logged, click, followed } = setup();
     const held = gate();
     const cut = click("nord", "plain", held.wait);
+    await drain();
     turns.close();
     expect(logged).toContain("journal: dispatch cut off by close, committing what landed");
     expect(undoDepth(ctx)).toBe(1);
@@ -276,6 +291,7 @@ describe("close", () => {
     const held = gate();
     const cut = click("nord", "plain", held.wait);
     const queued = click("dracula", "powerline", Promise.resolve());
+    await drain();
     turns.close();
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
@@ -290,7 +306,7 @@ describe("the click path", () => {
     const events: string[] = [];
     const given = {
       clock: { monotonic: () => performance.now(), date: () => new Date() },
-      menuIdle: { clicked: () => {} },
+      menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
       payloadProviders: {},
       log: (_level: string, line: string) => events.push(line),
       tmuxStatusLines: {
@@ -371,7 +387,7 @@ describe("a cut click goes no further", () => {
     const { sessionState, ctx, turns, click } = setup();
     const held = gate();
     const cut = click("nord", "plain", held.wait);
-    await Promise.resolve();
+    await drain();
     turns.close();
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
@@ -388,7 +404,7 @@ describe("a cut click goes no further", () => {
         throw new Error("aborted");
       }),
     );
-    await Promise.resolve();
+    await drain();
     turns.close();
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
@@ -400,13 +416,13 @@ test("stats name the holder and what waits", async () => {
   const { ctx, turns, click } = setup();
   const held = gate();
   const slow = click("nord", "plain", held.wait);
-  const queued = click("dracula", "powerline", Promise.resolve());
-  await Promise.resolve();
-  await Promise.resolve();
+  await drain();
+  const queued = closeIdleMenus(SID, IDLE, ctx);
+  await drain();
   expect(turns.getStats()).toMatchObject({ holder: "dispatch", queued: 1 });
   held.open();
   await Promise.all([slow, queued]);
-  expect(turns.getStats()).toEqual({ holder: null, heldMs: 0, queued: 0 });
+  expect(turns.getStats()).toEqual({ holder: null, heldMs: 0, queued: 0, gathers: 0 });
 });
 
 describe("a doctor click", () => {
