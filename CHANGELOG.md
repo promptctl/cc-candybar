@@ -1,3 +1,9 @@
+## [1.173.1](https://github.com/promptctl/cc-candybar/compare/v1.173.0...v1.173.1) (2026-11-01)
+
+### Bug Fixes
+
+* **test:** a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj) ([#531](https://github.com/promptctl/cc-candybar/issues/531)) ([7b77d5f](https://github.com/promptctl/cc-candybar/commit/7b77d5fab04cc3822fa430e086169ef7f984b873))
+
 ## [1.173.0](https://github.com/promptctl/cc-candybar/compare/v1.172.0...v1.173.0) (2026-11-01)
 
 ### Features
