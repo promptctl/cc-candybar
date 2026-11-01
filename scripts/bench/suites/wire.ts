@@ -12,7 +12,7 @@
 import fs from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
-import { drawnLinks } from "../../../src/click/read.js";
+import { linksOf } from "../../../src/click/read.js";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
@@ -449,7 +449,9 @@ const settingClick: Benchmark = {
       let shown = drawn(await world.tick(session, DEFAULT_COLUMNS, n++), "menu").output;
       for (let i = 0; i < plan.samples; i++) {
         // The stepper the open menu draws: its next preset is a link to click.
-        const step = drawnLinks(shown).find((l) => l.text === "▶");
+        const step = linksOf(await world.frame(session, DEFAULT_COLUMNS, n++)).find(
+          (l) => l.text === "▶",
+        );
         if (step === undefined) {
           throw new Error("the open menu drew no ▶ preset stepper to click");
         }

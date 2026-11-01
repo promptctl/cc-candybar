@@ -1,12 +1,10 @@
-// Reading a rendered bar back as clicks: every link it drew, the effects a
-// click on each fires, and which of those act on the machine rather than the
-// daemon. The drive-bar harness, the tests, and the page that runs the daemon
-// in the browser (site/) read links through here, the one same way.
+// Reading a drawn Frame as clicks: every link it drew, the effects a click on
+// each fires, and which of those act on the machine rather than the daemon. The
+// drive-bar harness, the benchmark, and the page that runs the daemon in the
+// browser (site/) read links through here, the one same way.
 
-import { osc8Sequences, type Osc8Sequence } from "@promptctl/rich-js";
-
-import { INVISIBLE } from "../render/ansi";
 import { parseHandlerUrl } from "../install/index";
+import type { Frame } from "../render/frame";
 import {
   decodeSegments,
   parseEffects,
@@ -21,85 +19,32 @@ import {
 } from "./wire";
 import { SEGMENTED_VERBS } from "../daemon/verbs";
 
-export const stripAnsi = (s: string): string => s.replace(INVISIBLE, "");
-
-export interface Link {
-  readonly url: string;
-  /** The raw bytes the link wraps, SGR included. */
-  readonly text: string;
-}
-
-/**
- * Each link in order: its URI and the bytes between its open and its close.
- * A link the writer closes and reopens to change colour — a theme name's
- * swatch, a cell of several runs — is one link: runs of one URI with nothing
- * visible between them are one click target on the screen, so they are read
- * as one.
- *
- * [LAW:one-source-of-truth] Read through rich-js's `osc8Sequences`, over the
- * OSC 8 grammar the bytes are written with, so a change to how a link is
- * written is a change in one place.
- */
-export function links(rendered: string): Link[] {
-  // Where each link's bytes start and where its close ends, to join a run of
-  // one URI to the one before it.
-  const out: Array<Link & { readonly from: number; readonly end: number }> = [];
-  let open: Osc8Sequence | undefined;
-  for (const seq of osc8Sequences(rendered)) {
-    if (seq.uri !== "") {
-      // Rendered bytes close every link before the next opens; an open over
-      // an open is the unclosed-link bleed, never a link to record.
-      if (open !== undefined)
-        throw new Error(
-          `OSC 8 open at ${seq.index} while ${open.uri} is still open`,
-        );
-      open = seq;
-      continue;
-    }
-    if (open === undefined)
-      throw new Error(`OSC 8 close at ${seq.index} with no open link`);
-    const from = open.index + open.length;
-    const last = out.at(-1);
-    if (
-      last !== undefined &&
-      last.url === open.uri &&
-      stripAnsi(rendered.slice(last.end, open.index)) === ""
-    ) {
-      out[out.length - 1] = {
-        url: last.url,
-        text: rendered.slice(last.from, seq.index),
-        from: last.from,
-        end: seq.index + seq.length,
-      };
-    } else {
-      out.push({
-        url: open.uri,
-        text: rendered.slice(from, seq.index),
-        from,
-        end: seq.index + seq.length,
-      });
-    }
-    open = undefined;
-  }
-  if (open !== undefined)
-    throw new Error(
-      `OSC 8 open at ${open.index} (${open.uri}) is never closed`,
-    );
-  return out.map(({ url, text }) => ({ url, text }));
-}
-
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
   readonly text: string;
   readonly url: string;
 }
 
-/** Every link `rendered` draws, by visible text. */
-export function drawnLinks(rendered: string): DrawnLink[] {
-  return links(rendered).map((l) => ({
-    text: stripAnsi(l.text).trim(),
-    url: l.url,
-  }));
+/**
+ * Every link a frame draws, by visible text, row by row. Runs of one URI with
+ * nothing visible between them are one click target on the screen, whatever
+ * look each drew in: a theme name's swatch, a cell of several runs.
+ *
+ * [LAW:dataflow-not-control-flow] A row is cut into stretches of one URI, the
+ * stretches with none among them, and those fall away at the end.
+ */
+export function linksOf({ rows }: Pick<Frame, "rows">): DrawnLink[] {
+  return rows.flatMap(({ runs }) => {
+    const stretches: Array<{ url: string | undefined; text: string }> = [];
+    for (const { link, text } of runs.filter((run) => run.text !== "")) {
+      const last = stretches.at(-1);
+      if (last !== undefined && last.url === link) last.text += text;
+      else stretches.push({ url: link, text });
+    }
+    return stretches.flatMap(({ url, text }) =>
+      url === undefined ? [] : [{ url, text: text.trim() }],
+    );
+  });
 }
 
 // A link outside the cc-candybar scheme (a repo page, a PR) is the

@@ -270,10 +270,11 @@ const CHECKS = [
     ts: clientHintKeys,
     rust: rustHintKeys,
   },
-  // Every wire key of the render request, hints included. A key the native
-  // client stops sending degrades the same silent way: a `deadline` spelled
-  // differently reads as a client too old to state one, and every answer
-  // waits by the guessed budget instead of its client's.
+  // Every wire key the shipped clients send on a render request, hints
+  // included; a key only a script sends sits on ReaderRenderRequest. A key the
+  // native client stops sending degrades the same silent way: a `deadline`
+  // spelled differently reads as a client too old to state one, and every
+  // answer waits by the guessed budget instead of its client's.
   {
     label: "render request wire keys",
     ts: memberSet(

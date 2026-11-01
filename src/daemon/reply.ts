@@ -349,11 +349,11 @@ export async function replyTo(
             }),
           facts,
         ).then(
-          ({ answer, motion, clickShown, delivered }) => {
+          ({ resp, motion, clickShown, delivered }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,
-              resp: { ok: true, output: answer } as const,
+              resp,
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
               // (src/daemon/click-error.ts).

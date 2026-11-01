@@ -4,8 +4,13 @@ import { parseArgs } from "node:util";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import { requestedConfigTarget, type RequestedOrigin } from "../config-hint";
-import { parseClientHints } from "./protocol";
-import type { ClientHints, RefusedArg, RenderRequest } from "./protocol";
+import { parseClientHints, RENDER_ENCODINGS } from "./protocol";
+import type {
+  ClientHints,
+  ReaderRenderRequest,
+  RefusedArg,
+  RenderEncoding,
+} from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import type { RuntimeStats } from "./stats";
 import type { DaemonLogger } from "../utils/logger";
@@ -78,6 +83,22 @@ function parseRenderArgs(
   };
 }
 
+// [LAW:parse-dont-validate] The request's `encoding`: absent is `ansi`, what a
+// client sends by saying nothing, and anything else is refused, never read as
+// `ansi`: a reader would parse bytes it did not ask for.
+function parseRenderEncoding(
+  raw: unknown,
+): { ok: true; encoding: RenderEncoding } | { ok: false; problem: string } {
+  if (raw === undefined) return { ok: true, encoding: "ansi" };
+  const encoding = RENDER_ENCODINGS.find((name) => name === raw);
+  return encoding !== undefined
+    ? { ok: true, encoding }
+    : {
+        ok: false,
+        problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`,
+      };
+}
+
 // A render request that crossed the checkpoint: its hookData carries every
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
@@ -85,10 +106,15 @@ function parseRenderArgs(
 // `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, `rateLimits` is
 // what its hookData says of the rate-limit windows, and `deadline` is when its
 // client hangs up. Raw `req.*` hint fields and `req.args` are not read past
-// the checkpoint. Only checkRenderRequest makes one.
+// the checkpoint. `encoding` is how its answer is spelled. Only
+// checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
-export type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
+export type CheckedRenderRequest = Omit<
+  ReaderRenderRequest,
+  "deadline" | "encoding"
+> & {
   readonly deadline: ClientDeadline;
+  readonly encoding: RenderEncoding;
   readonly sessionId: SessionId;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
@@ -100,7 +126,7 @@ export type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
 // [LAW:parse-dont-validate] The checkpoint a render request crosses once: a
 // checked request, or the problems that refuse it.
 export function checkRenderRequest(
-  req: RenderRequest,
+  req: ReaderRenderRequest,
   stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
   log: DaemonLogger,
 ): { ok: true; req: CheckedRenderRequest } | { ok: false; problems: string[] } {
@@ -153,12 +179,14 @@ export function checkRenderRequest(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
     );
   }
+  const encoding = parseRenderEncoding(req.encoding);
+  if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
     (req as { deadline?: unknown }).deadline,
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId.ok)
+  if (wireProblems.length > 0 || !sessionId.ok || !encoding.ok)
     return { ok: false, problems: wireProblems };
   // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
   // request carries the field, and a line each rotated the log in minutes.
@@ -182,6 +210,7 @@ export function checkRenderRequest(
     req: {
       ...req,
       deadline,
+      encoding: encoding.encoding,
       sessionId: sessionId.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),

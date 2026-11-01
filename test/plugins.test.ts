@@ -29,6 +29,7 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
+import { textOf } from "../src/render/frame";
 import { startBar, type Bar } from "./helpers/drive-bar";
 import { startBarDaemon } from "./helpers/in-worker-daemon";
 import { viewFacts } from "./helpers/view-facts";
@@ -1243,7 +1244,7 @@ describe("a plugin segment's state variable", () => {
     const started = bar;
     let closed = "";
     await until(
-      async () => (closed = stripAnsi(await started.render())).includes("n-1"),
+      async () => (closed = textOf(await started.render())).includes("n-1"),
       () => `the bar showing n-1; last:\n${closed}`,
     );
     expect(closed).toContain("n-1 ▸");
@@ -1251,8 +1252,8 @@ describe("a plugin segment's state variable", () => {
     const opened = await bar.click("▸");
     expect(opened.refused).toBeNull();
     // The detail is a second row of the segment's own, under its cell.
-    expect(stripAnsi(opened.rendered)).toMatch(/n-1 ▾[^\n]*\n[^\n]*the long form/);
-    expect(stripAnsi((await bar.click("▾")).rendered)).not.toContain("the long form");
+    expect(textOf(opened.rendered)).toMatch(/n-1 ▾[^\n]*\n[^\n]*the long form/);
+    expect(textOf((await bar.click("▾")).rendered)).not.toContain("the long form");
   });
 
   // The bare `key` the plugin writes on both sides meets under `plugins.x.`,
@@ -1289,10 +1290,10 @@ describe("a plugin segment's state variable", () => {
       { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
       startBarDaemon,
     );
-    expect(stripAnsi(await bar.render())).toContain("mine=user");
+    expect(textOf(await bar.render())).toContain("mine=user");
     const opened = await bar.click("▸");
     expect(opened.refused).toBeNull();
-    const text = stripAnsi(opened.rendered);
+    const text = textOf(opened.rendered);
     expect(text).toContain("▾ detail");
     expect(text).toContain("mine=user");
   });
@@ -1323,10 +1324,10 @@ describe("a plugin segment's state variable", () => {
       { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
       startBarDaemon,
     );
-    expect(stripAnsi(await bar.render())).toContain("n=3");
+    expect(textOf(await bar.render())).toContain("n=3");
     const stepped = await bar.click("+");
     expect(stepped.refused).toBeNull();
-    expect(stripAnsi(stepped.rendered)).toContain("n=4");
+    expect(textOf(stepped.rendered)).toContain("n=4");
   });
 });
 

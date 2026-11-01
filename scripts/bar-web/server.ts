@@ -20,9 +20,10 @@ import http from "node:http";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 
+import { composeBar, type Frame } from "../../src/render/frame";
 import {
   describeLink,
-  drawnLinks,
+  linksOf,
   NotDrawnError,
   startBar,
   type Bar,
@@ -50,9 +51,9 @@ const ASSETS: Readonly<Record<string, { file: string; type: string }>> = {
   "/transport.js": { file: "transport.js", type: "text/javascript; charset=utf-8" },
 };
 
-const view = (ansi: string, refused: string | null): View => ({
-  ansi,
-  links: drawnLinks(ansi).map((l) => ({ ...l, does: describeLink(l) })),
+const view = (frame: Frame, refused: string | null): View => ({
+  ansi: composeBar(frame),
+  links: linksOf(frame).map((l) => ({ ...l, does: describeLink(l) })),
   refused,
 });
 

@@ -18,6 +18,7 @@ import {
   type ClientHints,
   type Response,
 } from "../../src/daemon/protocol";
+import { parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
@@ -96,14 +97,13 @@ export function hookData(sessionId: string, cwd: string): ClaudeHookData {
 }
 
 // One render request, retried on TIMEOUT and on an answer that drew a
-// source pending, within the budgets above, its output returned. The one
-// spelling of the transient contract: `render` below and
-// test/helpers/drive-bar.ts both send through it.
-export async function renderRequest(
+// source pending, within the budgets above. The one spelling of the transient
+// contract: `renderRequest` and `frameRequest` below both send through it.
+async function renderAnswer(
   target: DaemonTarget,
   request: Record<string, unknown>,
-  replyBudgetMs = REPLY_BUDGET_MS,
-): Promise<string> {
+  replyBudgetMs: number,
+): Promise<Extract<Response, { ok: true }>> {
   const { log, now } = endpointOf(target);
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
@@ -128,20 +128,15 @@ export async function renderRequest(
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
       throw new Error(`render failed: ${resp.error} (${resp.code})`);
     }
-    if (!("output" in resp)) {
-      throw new Error(
-        `render response carried no output: ${JSON.stringify(resp)}`,
-      );
-    }
     let event = "";
     await until(
       () => (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
-    if (/ pending=-(?: |$)/.test(event)) return resp.output;
+    if (/ pending=-(?: |$)/.test(event)) return resp;
     // A source a run superseded is drawn pending by design: no request waits
     // on it (the run may outlast the deadline), so this answer is the one.
-    if (drewOnlySuperseded(event)) return resp.output;
+    if (drewOnlySuperseded(event)) return resp;
     // [LAW:no-silent-failure] Only a wait its deadline ended may draw
     // pending: one that answered yet drew a value not answered means the wait
     // left out something the request started (rule 1), and asking again would
@@ -155,6 +150,40 @@ export async function renderRequest(
         `render still drew pending after ${attempt} asks: ${event}`,
       );
   }
+}
+
+// The bytes of a render, as Claude Code's client reads them.
+export async function renderRequest(
+  target: DaemonTarget,
+  request: Record<string, unknown>,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<string> {
+  const resp = await renderAnswer(target, request, replyBudgetMs);
+  if (!("output" in resp)) {
+    throw new Error(
+      `render response carried no output: ${JSON.stringify(resp)}`,
+    );
+  }
+  return resp.output;
+}
+
+// The Frame of a render, as a reader of one render's answer asks for it.
+export async function frameRequest(
+  target: DaemonTarget,
+  request: Record<string, unknown>,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<Frame> {
+  const resp = await renderAnswer(
+    target,
+    { ...request, encoding: "frame" },
+    replyBudgetMs,
+  );
+  if (!("frame" in resp)) {
+    throw new Error(
+      `render response carried no frame: ${JSON.stringify(resp)}`,
+    );
+  }
+  return parseFrame(resp.frame);
 }
 
 // Whether every value a render event drew pending is a plugin source a run

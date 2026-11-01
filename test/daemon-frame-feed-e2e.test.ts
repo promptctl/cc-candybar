@@ -41,6 +41,7 @@ import {
 import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
+  frameRequest,
   sendClick,
   render,
   renderBody,
@@ -50,6 +51,7 @@ import {
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
+import { composeBar } from "../src/render/frame";
 import { pageOf, viewerLink } from "./helpers/diagnostics-viewer";
 import { untilHeard } from "./helpers/reload-signal";
 import { writeAtomic } from "../src/utils/atomic-write";
@@ -690,6 +692,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
       `🧪 ${HANDOFF_BUTTON}`,
     ]);
+    // A reader asking for the Frame is answered the line the statusline shows.
+    const handoffFrame = await frameRequest(
+      sockPath,
+      renderBody(sid, projectDir, {}, args("handoff")),
+    );
+    expect(composeBar(handoffFrame)).toBe(handedOff);
+    expect(handoffFrame).toMatchObject({ nextChange: Infinity, pending: [] });
     // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
     // as one more event than a count read before the render: a retry of the
     // first render can land its event after that count is taken.

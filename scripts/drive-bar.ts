@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 
 import {
   describeLink,
-  drawnLinks,
+  linksOf,
   printable,
   startBar,
 } from "../test/helpers/drive-bar";
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
       console.log(`--- ${step}${refused}\n${printable(out)}`);
     }
     if (values.links) {
-      for (const link of drawnLinks(out)) {
+      for (const link of linksOf(out)) {
         console.log(`  ${JSON.stringify(link.text)} → ${describeLink(link)}`);
       }
     }

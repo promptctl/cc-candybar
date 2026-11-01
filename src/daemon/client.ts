@@ -18,7 +18,7 @@ import { PACKAGE_VERSION } from "../version";
 
 const CLICK_BUDGET_MS = 200;
 
-const RENDER_BUDGETS: RoundTripBudgets = {
+export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: TOTAL_BUDGET_MS,
 };

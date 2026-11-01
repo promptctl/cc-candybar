@@ -12,12 +12,12 @@ import path from "node:path";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { effectsOf, isBarLink } from "../src/click/read";
 import {
-  drawnLinks,
+  linksOf,
   startBar,
   type Bar,
   type DrawnLink,
 } from "./helpers/drive-bar";
-import { stripAnsi } from "./helpers/ansi";
+import { textOf, type Frame } from "../src/render/frame";
 import { startBarDaemon } from "./helpers/in-worker-daemon";
 
 jest.setTimeout(60_000);
@@ -29,8 +29,8 @@ const CLICKS = 150;
 const doesOf = (url: string): string =>
   new URLSearchParams(url.split("/dispatch/")[1] ?? "").get("does") ?? "";
 const withoutDoes = (url: string): string => url.replace(/does=[^&]*&/, "");
-const barLinks = (rendered: string): DrawnLink[] =>
-  drawnLinks(rendered).filter((l) => isBarLink(l.url));
+const barLinks = (rendered: Frame): DrawnLink[] =>
+  linksOf(rendered).filter((l) => isBarLink(l.url));
 
 // What a walk clicks ahead of any other new link: what only a click brings into
 // view, and these are the frames where different clicks differ least. A confirm
@@ -44,8 +44,8 @@ const DRAWN_ONLY_AFTER = [
 ];
 
 // Every `2/6` a frame draws: where each paged list stands.
-const positionsIn = (rendered: string): string[] =>
-  stripAnsi(rendered).match(/\d+\/\d+/g) ?? [];
+const positionsIn = (rendered: Frame): string[] =>
+  textOf(rendered).match(/\d+\/\d+/g) ?? [];
 
 // The positions in `after` that `before` does not hold, counted one for one, so
 // a list that moved stands out from the siblings at the same position.
