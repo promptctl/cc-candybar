@@ -35720,7 +35720,18 @@ function signalGroup(pid2, sig) {
   try {
     process_default.kill(-pid2, sig);
   } catch (err) {
-    if (err.code !== "ESRCH") throw err;
+    const code = err.code;
+    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
+      throw err;
+    }
+  }
+}
+function leaderRefuses(pid2) {
+  try {
+    process_default.kill(pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "EPERM";
   }
 }
 async function launchWaited(state, opts) {
@@ -35776,22 +35787,19 @@ async function launchWaited(state, opts) {
       deliver();
     };
     const settle3 = (r) => finish(() => resolve(r));
-    const escalate = (pid2) => {
+    const signal = (pid2, sig) => {
       try {
-        signalGroup(pid2, "SIGKILL");
+        signalGroup(pid2, sig);
       } catch (err) {
-        setImmediate(() => {
-          if (child.exitCode !== null || child.signalCode !== null) return;
-          state.unreaped.set(child, opts.category);
-          settle3({
-            ok: false,
-            reason: "signal-refused",
-            stdout: stdout2,
-            stderr: stderr2,
-            exitCode: null,
-            signal: null,
-            error: err instanceof Error ? err.message : String(err)
-          });
+        state.unreaped.set(child, opts.category);
+        settle3({
+          ok: false,
+          reason: "signal-refused",
+          stdout: stdout2,
+          stderr: stderr2,
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err)
         });
       }
     };
@@ -35802,7 +35810,7 @@ async function launchWaited(state, opts) {
       const pid2 = child.pid;
       if (pid2 !== void 0) {
         killTimer = setTimeout(() => {
-          escalate(pid2);
+          signal(pid2, "SIGKILL");
           void exited.then(
             () => setImmediate(() => {
               child.stdout?.destroy();
@@ -35810,10 +35818,7 @@ async function launchWaited(state, opts) {
             })
           );
         }, TIMEOUT_KILL_GRACE_MS);
-        try {
-          signalGroup(pid2, "SIGTERM");
-        } catch {
-        }
+        signal(pid2, "SIGTERM");
       }
     };
     child.stdout?.on("data", (chunk3) => {
@@ -35833,7 +35838,7 @@ async function launchWaited(state, opts) {
         error: spawnErrorText(err, opts.cwd)
       });
     });
-    child.on("close", (code, signal) => {
+    child.on("close", (code, signal2) => {
       state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
@@ -35842,7 +35847,7 @@ async function launchWaited(state, opts) {
           stdout: stdout2,
           stderr: stderr2,
           exitCode: code,
-          signal
+          signal: signal2
         });
         return;
       }
@@ -35850,14 +35855,14 @@ async function launchWaited(state, opts) {
         settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
         return;
       }
-      const reason = signal ? "signal" : "non-zero";
+      const reason = signal2 ? "signal" : "non-zero";
       settle3({
         ok: false,
         reason,
         stdout: stdout2,
         stderr: stderr2,
         exitCode: code,
-        signal
+        signal: signal2
       });
     });
     if (opts.timeoutMs && opts.timeoutMs > 0) {
