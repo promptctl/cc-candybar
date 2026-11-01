@@ -4,15 +4,22 @@
     {
       "version": "pr-533",
       "ref": "refs/pull/533/merge",
-      "sha": "605492d304d2f276256bcd9f5936bb2dbc4ad7fd",
-      "timestamp": "2026-11-01T03:03:30.418Z",
+      "sha": "92fab17a446ce6ae524d6ee2082fdd8e2c4e0445",
+      "timestamp": "2026-11-01T03:04:12.683Z",
       "commits": [
         {
-          "sha": "605492d304d2f276256bcd9f5936bb2dbc4ad7fd",
+          "sha": "92fab17a446ce6ae524d6ee2082fdd8e2c4e0445",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:02:45Z",
-          "message": "Merge c5af182c1a81ed478db38f0f7a422128e328198d into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+          "timestamp": "2026-10-31T21:03:26-06:00",
+          "message": "Merge dec75ba46557461a2ef32219d683f6f66b631e34 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+        },
+        {
+          "sha": "dec75ba46557461a2ef32219d683f6f66b631e34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:03:18-06:00",
+          "message": "test(daemon): the answered-request case holds its client open, so it can fail (brandon-unfiled-3248.a5k3)\n"
         },
         {
           "sha": "c5af182c1a81ed478db38f0f7a422128e328198d",
