@@ -6,6 +6,12 @@
 // turn is taken only around a journal (`journaled`, src/daemon/verbs/index.ts),
 // which never nests, so a turn never waits on itself.
 //
+// A click's read-only launches come before its turn (`click`), so a slow doctor
+// gather holds up no other session. What keeps one session's clicks in arrival
+// order is then the queue a click joins on arrival and keeps its place in
+// through gather and turn. A click holds that place while it asks for the
+// turn, and no turn ever asks for a place, so the two cannot deadlock.
+//
 // `close` ends the turns for good: what is queued is refused as its turn
 // arrives, and what is in flight is committed there and then, so writes already
 // landed stay undoable as one step when the daemon's launches abort under them,
@@ -48,10 +54,16 @@ export interface TurnAsker {
   readonly gone: () => boolean;
 }
 
+// The same, for a click that may gather first: `gathered` hears how long it took.
+export interface ClickAsker extends TurnAsker {
+  readonly gathered: (ms: number) => void;
+}
+
 const DAEMON_WIDE = "journals";
 
 export class JournalTurns {
   private readonly queue = new KeyedSerialQueue<typeof DAEMON_WIDE>();
+  private readonly sessions = new KeyedSerialQueue<string>();
   private open = true;
   private inFlight: InFlight | null = null;
   private holder: { readonly verb: string; readonly since: number } | null =
@@ -96,6 +108,34 @@ export class JournalTurns {
         this.holder = null;
       }
     });
+  }
+
+  // A click from arrival to landing: in `session`'s order (a click naming none
+  // goes straight on), `gather` outside any turn, `body` in one.
+  // [LAW:single-enforcer] `gone` is read for a click's waits and never for its
+  // own gather: a client that left at the head of its queue, or after the
+  // gather while the turn was awaited, refuses the click; one that left during
+  // the gather does not, since a gather outlasts a client's budget through no
+  // fault of a re-click. With no gather `left` is false, as it was just read.
+  click<G, T>(
+    verb: string,
+    session: string | null,
+    { waited, gone, gathered }: ClickAsker,
+    gather: () => Promise<G>,
+    body: (gathering: G, turn: JournalTurn) => Promise<T>,
+  ): Promise<T> {
+    const inPlace = async (): Promise<T> => {
+      this.refuseClosed(verb);
+      if (gone()) throw new ClickAbandoned(verb);
+      const started = this.deps.monotonic();
+      const gathering = await gather();
+      gathered(Math.round(this.deps.monotonic() - started));
+      const left = gone();
+      return this.take(verb, { waited, gone: () => !left && gone() }, (turn) =>
+        body(gathering, turn),
+      );
+    };
+    return session === null ? inPlace() : this.sessions.run(session, inPlace);
   }
 
   getStats(): JournalTurnStats {

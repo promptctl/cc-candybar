@@ -211,6 +211,30 @@ export const readStores = (stores: DoctorStores): StoresRead => ({
   postMortemsRead: stores.postMortemsRead.read(),
 });
 
+// [LAW:no-ambient-temporal-coupling] An edge that answers each rate-limited
+// question once: a click that gathers again for a new config is one click, and
+// its second gather would otherwise fall inside the limiter's window for
+// questions that config does not change. What it does change (a font asked
+// about other glyphs) is a new question, and the limiter's to refuse.
+export function oneAskPerClick(edge: DoctorEdge): DoctorEdge {
+  const asked = new Map<string, Promise<unknown>>();
+  const once = <T>(question: unknown, ask: () => Promise<T>): Promise<T> => {
+    const key = JSON.stringify(question);
+    const answer = asked.get(key) ?? ask();
+    asked.set(key, answer);
+    return answer as Promise<T>;
+  };
+  return {
+    ...edge,
+    probeTmux: (hint) => once(["tmux", hint], () => edge.probeTmux(hint)),
+    remoteLogin: (pid) => once(["remote", pid], () => edge.remoteLogin(pid)),
+    fontInUse: (terminal, env, glyphs) =>
+      once(["font", terminal, env, glyphs], () =>
+        edge.fontInUse(terminal, env, glyphs),
+      ),
+  };
+}
+
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
@@ -902,8 +926,8 @@ export async function gatherFacts(
       ...privateGlyphsIn(JSON.stringify(load.config)),
     ]),
   ].join("");
-  // Independent stages, together: a click holds the journal's turn through
-  // them, so they add the slowest stage's bound to the hold, not their sum.
+  // Independent stages, together, so they cost a click the slowest stage's
+  // bound, not their sum.
   const [nerdFont, processes, data] = await Promise.all([
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.

@@ -241,6 +241,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`menuIdle`);
   lines.push(`  sessions      ${s.menuIdle.sessions}`);
   lines.push(`  armed         ${s.menuIdle.armed}`);
+  lines.push(`  pending       ${s.menuIdle.pending}`);
   lines.push(``);
   lines.push(`journalTurns`);
   lines.push(`  holder        ${s.journalTurns.holder ?? "-"}`);

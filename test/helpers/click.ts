@@ -76,6 +76,7 @@ export function testVerbContext(
       monotonic: () => performance.now(),
     }),
     clickLanded: () => {},
+    gatherTook: () => {},
     turnWaited: () => {},
     log: () => {},
     launcher: processLauncher,

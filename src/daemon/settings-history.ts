@@ -144,6 +144,10 @@ export interface Journal {
     after: string,
   ): void;
   commit(): void;
+  // A write this journal holds no step for (a history step, the repo book).
+  wrote(): void;
+  // Whether the click wrote at all, a value it found included, across commits.
+  written(): boolean;
 }
 
 // A pending change, keyed by what it touched so a click that writes one target
@@ -193,7 +197,9 @@ export class SettingsHistory {
 
   begin(): Journal {
     const pending: Pending = new Map();
+    let written = false;
     const note = (sessionId: string, change: Change): void => {
+      written = true;
       const changes = pending.get(sessionId) ?? new Map<string, Change>();
       const earlier = changes.get(identity(change));
       changes.set(
@@ -210,8 +216,11 @@ export class SettingsHistory {
     const toggles = new Map<string, EditToggle>();
     const sessionState = recordingView(
       this.sessionState,
-      (key) => isSettingKey(key) || key === EDIT_MODE_KEY,
+      // Every key, since a write of any can move a lane: only settings are steps.
+      () => true,
       (sessionId, key, before, after) => {
+        written = true;
+        if (!isSettingKey(key) && key !== EDIT_MODE_KEY) return;
         if (key === EDIT_MODE_KEY) {
           const earlier = toggles.get(sessionId);
           toggles.set(sessionId, {
@@ -227,6 +236,10 @@ export class SettingsHistory {
       sessionState,
       file: (sessionId, file, before, after) =>
         note(sessionId, { kind: "file", file, before, after }),
+      wrote: () => {
+        written = true;
+      },
+      written: () => written,
       commit: () => {
         // Handed off before it is saved, so a save that fails is reported by
         // this commit alone and never recorded again by a later one.
