@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-530",
+      "ref": "refs/pull/530/merge",
+      "sha": "d3bd98b2a1d96ab745c0619b54d968b771bfa534",
+      "timestamp": "2026-11-01T00:57:16.858Z",
+      "commits": [
+        {
+          "sha": "d3bd98b2a1d96ab745c0619b54d968b771bfa534",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:56:35-06:00",
+          "message": "Merge 71915a891dc26e2c789c41d9acd3eb10e300390f into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+        },
+        {
+          "sha": "71915a891dc26e2c789c41d9acd3eb10e300390f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:56:25-06:00",
+          "message": "test(daemon-value): the first read waits for the launches to end, and exempts only the lifeline (candybar-testing-0x6u.945)\n"
+        },
+        {
+          "sha": "63ae89e6662f33fbf01895fe2e0796cc96ffad53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:48:35-06:00",
+          "message": "style(test): format daemon-value test (candybar-testing-0x6u.945)\n"
+        },
+        {
+          "sha": "7a59ead583ed04ad13db6329cf2a2aed06888b4b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:47:46-06:00",
+          "message": "test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-531",
       "ref": "refs/pull/531/merge",
       "sha": "d9a8be63acb1a584d9672212d4e865434330c787",
@@ -20,35 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T18:54:50-06:00",
           "message": "fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-530",
-      "ref": "refs/pull/530/merge",
-      "sha": "4522ebdc104b85ece030a0ca02003fdfd07a6179",
-      "timestamp": "2026-11-01T00:50:00.641Z",
-      "commits": [
-        {
-          "sha": "4522ebdc104b85ece030a0ca02003fdfd07a6179",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:48:46Z",
-          "message": "Merge 63ae89e6662f33fbf01895fe2e0796cc96ffad53 into 516c3eb319a548c706d04da1795e462774d057a7\n"
-        },
-        {
-          "sha": "63ae89e6662f33fbf01895fe2e0796cc96ffad53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:48:35-06:00",
-          "message": "style(test): format daemon-value test (candybar-testing-0x6u.945)\n"
-        },
-        {
-          "sha": "7a59ead583ed04ad13db6329cf2a2aed06888b4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:47:46-06:00",
-          "message": "test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945)\n"
         }
       ]
     },
