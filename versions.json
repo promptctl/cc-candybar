@@ -4,46 +4,46 @@
     {
       "version": "pr-531",
       "ref": "refs/pull/531/merge",
-      "sha": "d2dbee52745d7c10f71dd55199bcebf0ecd0dbc6",
-      "timestamp": "2026-11-01T01:36:48.588Z",
+      "sha": "3ea306816954f22157ec53135af8b60ff259e636",
+      "timestamp": "2026-11-01T01:37:43.159Z",
       "commits": [
         {
-          "sha": "d2dbee52745d7c10f71dd55199bcebf0ecd0dbc6",
+          "sha": "3ea306816954f22157ec53135af8b60ff259e636",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T19:36:03-06:00",
-          "message": "Merge 73209f817b31601c0ff4450907ac85ada3173642 into 4ef651bb79339262fca87ead8094547cec58ea68\n"
+          "timestamp": "2026-11-01T01:37:01Z",
+          "message": "Merge 04e635df98046bc1a7df956a66c2df7d12799a3f into 4ef651bb79339262fca87ead8094547cec58ea68\n"
         },
         {
-          "sha": "73209f817b31601c0ff4450907ac85ada3173642",
+          "sha": "04e635df98046bc1a7df956a66c2df7d12799a3f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:35:53-06:00",
           "message": "fix(test): the doctor's stats reads go past the guard, and a fake launch asserts only what it can fail (brandon-unfiled-3248.2ywj)\n\nThe doctor e2e's in-worker stats reads move to statsOf, which removes their\ncasts and the connection's 200 ms guard.\n\n`failed: 0` and the empty click error go back to the real-launch test: a\nheld launch only resolves ok, so neither could fail there.\n\nThe refresh event's expected file is spelled by valueOf, as the daemon logs\nit, so a temp path with a space still matches.\n"
         },
         {
-          "sha": "12e09f84aa5fe4545397a8e99ad064a37b40f9c8",
+          "sha": "961786c43d7d09bc854116f2f375c943d5980279",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:26:35-06:00",
           "message": "fix(test): a held run is observed across real turns, and a supersede is read by its file (brandon-unfiled-3248.2ywj)\n\nThe held test looked at the bar in the click's own tick, so a source resumed\nearly passed. It now holds through real turns with the program's write on\ndisk.\n\nThe e2e counted supersede refreshes across all of plugin storage, so a\nsupersede of another session's key passed. It now reads the refresh event of\nthis session's file, which removes the ledger helper.\n\nEvery in-worker stats read goes through statsOf, past the connection's 200 ms\nguard, so these files no longer fail on a slow stats reply.\n"
         },
         {
-          "sha": "150559f367bf055280749b16cad0e1394e076b82",
+          "sha": "f2763b5bbf479bb15cf5945c478e9db560ddf646",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:14:07-06:00",
           "message": "fix(test): a fake launch holds the run, and the daemon test keeps only the wiring (brandon-unfiled-3248.2ywj)\n\n\"While the program runs\" was proved on a daemon with a real shell, a file\npoll, a render poll and log events, so it measured the machine. `Runs` already\ntakes `launch` as a port, so run-action now holds the run in a fake: no\nprocess, no sleep, no wall-clock bound. The rule that no request waits on a\nsuperseded lane stays where it was pinned, in render-payload-outcomes, over a\nlane that never lands.\n\nThe daemon test is a wiring check: a click runs the real program through the\nstorage owner's supersede, and its write draws. `renderAnswer` and the gate are\ngone with the hold they served.\n"
         },
         {
-          "sha": "8427f196cc0c7019ec3b16a00b65481fd73e909b",
+          "sha": "760adb03927fb79386e2717b8259c8d511dc24a5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T19:03:55-06:00",
           "message": "fix(test): the held program waits at the shared gate, and the proof reads its own render's event (brandon-unfiled-3248.2ywj)\n\nThe fixture carried a private copy of `shellGate`'s hold. The proof scanned\nthe log for any attempt, a timed-out one included, and a failed wait named\nonly the bar. `renderAnswer` hands back the event of the answer it returned,\nso the bytes and the proof are one render, and a failed wait names how that\nrender ended.\n\nThe hold is bounded by the run's own timeout; the comment says so.\n"
         },
         {
-          "sha": "f3f6b2feb165373a4bb0423e6113dd1935796ca9",
+          "sha": "a4a342de58298e100779566177efe38091166d65",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T18:54:50-06:00",
