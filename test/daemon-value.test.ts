@@ -15,7 +15,6 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import type { RenderOrigin } from "../src/config-hint";
@@ -43,10 +42,11 @@ const WATCHED = new Set([
   "PROCESSWRAP",
   "PIPEWRAP",
 ]);
-const live = new Map<number, string>();
+const CHILD = new Set(["PROCESSWRAP", "PIPEWRAP"]);
+const live = new Map<number, Error>();
 const resources = createHook({
   init: (id, type) => {
-    if (WATCHED.has(type)) live.set(id, type);
+    if (WATCHED.has(type)) live.set(id, new Error(type));
   },
   destroy: (id) => {
     live.delete(id);
@@ -354,20 +354,40 @@ describe("the daemon is a value", () => {
 
     await until(() => !pidAlive(claudePid), "the claude stub ended", 2_000);
     await midWait;
+    const leftover = () =>
+      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
+    const origins = (held: Error[]) => held.map(({ stack }) => stack);
+    const isLifeline = ({ stack }: Error) => stack?.includes("spawnLifeline");
+    // Read in a turn of its own, so what ended has landed its destroy.
+    const turn = () => new Promise((resolve) => setImmediate(resolve));
 
-    // Past the session file's debounce, and past the kill grace of anything
-    // the close terminated. Read in a turn of its own, so this wait's own
-    // timers have landed their destroys.
-    await sleep(700);
-    await new Promise((resolve) => setImmediate(resolve));
-    const leftover = [...live]
-      .filter(([id]) => !settled.includes(id))
-      .map(([, type]) => type);
-    expect(leftover).toEqual([]);
+    // A launch's handles close after its result lands, so its end is read off
+    // the ledger itself.
+    const launches = () =>
+      leftover().filter((held) => CHILD.has(held.message) && !isLifeline(held));
+    await until(
+      () => launches().length === 0,
+      () => `the launches ended: ${origins(launches()).join("\n")}`,
+    );
+    // Only what is live at this read shows: a timer that already fired is gone.
+    await turn();
+    expect(origins(leftover().filter((held) => !isLifeline(held)))).toEqual([]);
+    // The lifeline is the one thing the close leaves to end on its own: it
+    // reaps the process group, then exits.
+    await until(
+      () => !leftover().some(isLifeline),
+      () =>
+        `the lifeline ended: ${origins(leftover().filter(isLifeline)).join("\n")}`,
+    );
+    await turn();
+    expect(origins(leftover())).toEqual([]);
     expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
     // Late work that would start a child finds its launcher closed.
     expect(
-      await daemon.launcher.launch({ bin: "/bin/echo", category: "user-shell" }),
+      await daemon.launcher.launch({
+        bin: "/bin/echo",
+        category: "user-shell",
+      }),
     ).toMatchObject({ ok: false, reason: "aborted" });
   });
 });
