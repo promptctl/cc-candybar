@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-529",
+      "ref": "refs/pull/529/merge",
+      "sha": "f6d97dca35549fcad2eba6b2f3c4dfe205253188",
+      "timestamp": "2026-11-01T00:34:33.440Z",
+      "commits": [
+        {
+          "sha": "f6d97dca35549fcad2eba6b2f3c4dfe205253188",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T00:33:45Z",
+          "message": "Merge 422901f8594be8f5141564d1695330cd178ab7ea into 8169390eb96da95acccf40e944cb0c61f88a1f39\n"
+        },
+        {
+          "sha": "422901f8594be8f5141564d1695330cd178ab7ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:26:12-06:00",
+          "message": "test(reload-signal): the carried probe's tests derive from the round, and the unread answer is a named exception (candybar-testing-0x6u.6el)\n"
+        },
+        {
+          "sha": "bd4be7f77ed974a2b68f83dbd4250508952cea48",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:21:14-06:00",
+          "message": "fix(test): the carried probe keeps the wait's synchronous path and states what it leaves unread (candybar-testing-0x6u.6el)\n"
+        },
+        {
+          "sha": "9d013dce9941363b6b2d6d39e6b46a625a62d812",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:17:43-06:00",
+          "message": "fix(test): one probe runs across a wait's rounds, so its late answer lands in the wait (candybar-testing-0x6u.6el)\n"
+        },
+        {
+          "sha": "b89ba2c6514fba118ea329e06e6932648e3b8d2b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:12:37-06:00",
+          "message": "fix(test): a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "8169390eb96da95acccf40e944cb0c61f88a1f39",
@@ -20,49 +63,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-01T00:21:21Z",
           "message": "chore(release): set `package.json` to 1.172.0 [skip ci]\n\n## [1.172.0](https://github.com/promptctl/cc-candybar/compare/v1.171.0...v1.172.0) (2026-11-01)\n\n### Features\n\n* **settings:** a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt) ([#527](https://github.com/promptctl/cc-candybar/issues/527)) ([3439d4a](https://github.com/promptctl/cc-candybar/commit/3439d4a05a61f8cd02c3099414d573b8e8e1cffc))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-529",
-      "ref": "refs/pull/529/merge",
-      "sha": "9639ec3b10dc5df575bc3463dee5edea622354e5",
-      "timestamp": "2026-11-01T00:27:16.205Z",
-      "commits": [
-        {
-          "sha": "9639ec3b10dc5df575bc3463dee5edea622354e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:26:22Z",
-          "message": "Merge b56a8ceca4c00fb9f153fe70c18940b7c6ff1179 into f5a917eecd0f8034a952dd73b375161230378ad2\n"
-        },
-        {
-          "sha": "b56a8ceca4c00fb9f153fe70c18940b7c6ff1179",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:26:12-06:00",
-          "message": "test(reload-signal): the carried probe's tests derive from the round, and the unread answer is a named exception (candybar-testing-0x6u.6el)\n"
-        },
-        {
-          "sha": "fad31f1ac326cdfd0ba82e199f6ed19f3cbffc39",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:21:14-06:00",
-          "message": "fix(test): the carried probe keeps the wait's synchronous path and states what it leaves unread (candybar-testing-0x6u.6el)\n"
-        },
-        {
-          "sha": "90164ad34dc17bc1559283924bd5c55f738a77ee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:17:43-06:00",
-          "message": "fix(test): one probe runs across a wait's rounds, so its late answer lands in the wait (candybar-testing-0x6u.6el)\n"
-        },
-        {
-          "sha": "46b0f7793f53880e02492dd1b09ae493b110e87a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:12:37-06:00",
-          "message": "fix(test): a wait hands a late probe's throw to the test that made it (candybar-testing-0x6u.6el)\n"
         }
       ]
     },
