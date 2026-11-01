@@ -210,14 +210,14 @@ function buildEditRuntime(src: string, sessionId = "s1") {
     // insertion mints its id against — the daemon's own lookup.
     configFor: () => config,
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   return { config, store, render, click, ctx, history, sessionState };
@@ -459,7 +459,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   // A fill cell's pad is part of its content, so the `🔧` rides AFTER the pad,
   // against the cell's far edge — never stranded mid-cell with the pad beyond it
   // — and the `-` leads the content, outside its sizing.
-  test("a fill segment's `-` leads and its `🔧` sits after the leftover width it absorbed", () => {
+  test("a fill segment's `-` leads and its `🔧` sits after the leftover width it absorbed", async () => {
     const src = BASE.replace(
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
@@ -469,8 +469,8 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
       )!;
-    click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
-    click(open(EDIT_LIVE_KEY, "open"));
+    await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    await click(open(EDIT_LIVE_KEY, "open"));
     const row = stripAnsi(render(60))
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
@@ -479,15 +479,15 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     );
   });
 
-  test("a segment that fails to render keeps its `-` beside its ⚠", () => {
+  test("a segment that fails to render keeps its `-` beside its ⚠", async () => {
     const src = BASE.replace("template: 'g',", `template: '{{ fail "boom" }}',`);
     const { render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
       )!;
-    click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
-    click(open(EDIT_LIVE_KEY, "open"));
+    await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    await click(open(EDIT_LIVE_KEY, "open"));
     const out = render();
     expect(stripAnsi(out)).toMatch(
       new RegExp(`${REMOVE_GLYPH}⚠ git: [^\n]*${CONFIGURE_GLYPH}`),
@@ -498,7 +498,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   // The red `✖` is floored against the ground it is DRAWN on. A segment
   // with something open under it wears its band's state colour, not its
   // closed background, so the floor is measured against that.
-  test("an open segment's `✖` stays legible on the state colour it wears", () => {
+  test("an open segment's `✖` stays legible on the state colour it wears", async () => {
     const src = BASE.replace(
       "segments: {",
       `actions: { pick: { set: 'pick', from: ['a', 'b'] } },
@@ -515,9 +515,9 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       ownUrls(render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
       )!;
-    click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
-    click(open(EDIT_LIVE_KEY, "open"));
-    click(open(menuStateKey("picky", "pick", undefined), menuMember("pick")));
+    await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    await click(open(EDIT_LIVE_KEY, "open"));
+    await click(open(menuStateKey("picky", "pick", undefined), menuMember("pick")));
     const { fg, bg } = colorsAt(withoutLinks(render()), `${REMOVE_GLYPH}m`);
     expect(
       contrastRatio(parseRgbHex(fg), parseRgbHex(bg)),
@@ -526,14 +526,14 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
 
   // An insertion point is drawn on no fill: its `✚` is green text on the
   // terminal's own ground, where `✖` sits inside its placement's cell.
-  test("`✚` is drawn on no fill, `✖` on its segment's own cell", () => {
+  test("`✚` is drawn on no fill, `✖` on its segment's own cell", async () => {
     const { render, click } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
-    click(toggle);
+    await click(toggle);
     const out = withoutLinks(render());
     const add = paintAt(out, ADD_GLYPH);
     expect(add.fg).toBeDefined();
@@ -541,14 +541,14 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(paintAt(out, REMOVE_GLYPH).bg).toBeDefined();
   });
 
-  test("edit mode leads with ✓ done, top left, and it leaves edit mode", () => {
+  test("edit mode leads with ✓ done, top left, and it leaves edit mode", async () => {
     const { render, click } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
-    click(toggle);
+    await click(toggle);
     const [first] = stripAnsi(render()).split("\n");
     expect(first).toContain("✓ done");
     expect(first).not.toMatch(/directory|git|trigger/);
@@ -558,7 +558,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       ),
     );
     expect(done).toBeDefined();
-    click(done!);
+    await click(done!);
     expect(stripAnsi(render())).not.toContain("✓ done");
   });
 
@@ -601,7 +601,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         .map((e) => String(e.args[2])),
     );
 
-  test("a segment its own `when` or its container's hides still shows its name and its `-`", () => {
+  test("a segment its own `when` or its container's hides still shows its name and its `-`", async () => {
     const { render, click } = buildEditRuntime(HIDDEN);
     const closed = stripAnsi(render());
     expect(closed).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
@@ -613,7 +613,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
-    click(toggle);
+    await click(toggle);
     const names = render();
     expect(stripAnsi(names)).toMatch(/directory.*idle.*git/);
     expect(stripAnsi(names)).toContain("alone");
@@ -635,7 +635,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
       ),
     )!;
-    click(live);
+    await click(live);
     const shown = render();
     expect(stripAnsi(shown)).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     expect(stripAnsi(shown)).toMatch(/d.*g/);
@@ -647,7 +647,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
   // The settings menu's synthesis, not withTrailingCell, lifts a gated root
   // under an ungated wrapper row (the door's), so the tail lands outside the
   // gate; edit mode needs `session.id`, which always brings the menu.
-  test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", () => {
+  test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", async () => {
     const { render, click, ctx } = buildEditRuntime(
       BASE.replace(
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
@@ -661,11 +661,11 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
           (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === to,
         ),
       );
-    click(liveToggle(render(), "open")!);
+    await click(liveToggle(render(), "open")!);
     const live = render();
     expect(stripAnsi(live)).not.toMatch(/directory|\bd\b/);
     // The way back survives the root hiding.
-    click(liveToggle(live, "closed")!);
+    await click(liveToggle(live, "closed")!);
     expect(stripAnsi(render())).toMatch(/directory.*git/);
   });
 
@@ -690,7 +690,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 // ─── end-to-end: toggle, remove, insert-via-menu, undo twice ──────────────
 
 describe("edit mode click flow: toggle → remove → insert (menu) → undo × 2", () => {
-  test("toggling edit mode on makes the `-` chrome render; off hides it again", () => {
+  test("toggling edit mode on makes the `-` chrome render; off hides it again", async () => {
     const { render, click } = buildEditRuntime(BASE);
     const before = stripAnsi(render());
     expect(before).not.toContain(REMOVE_GLYPH);
@@ -701,7 +701,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       ),
     )!;
     expect(toggleUrl).toBeDefined();
-    click(toggleUrl);
+    await click(toggleUrl);
 
     const opened = stripAnsi(render());
     expect(opened).toContain(REMOVE_GLYPH);
@@ -714,18 +714,18 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
         (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
       ),
     )!;
-    click(liveUrl);
+    await click(liveUrl);
 
     const closeUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
       ),
     )!;
-    click(closeUrl);
+    await click(closeUrl);
     expect(stripAnsi(render())).not.toContain("-");
   });
 
-  test("remove → insert (picked via menu) → undo × 2 returns the file to its original bytes", () => {
+  test("remove → insert (picked via menu) → undo × 2 returns the file to its original bytes", async () => {
     const { render, click, ctx } = buildEditRuntime(BASE);
     const original = durable.text()!;
 
@@ -735,7 +735,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
-    click(openUrl);
+    await click(openUrl);
 
     // Remove "directory" via its `-`.
     const removeUrl = ownUrls(render()).find((u) =>
@@ -746,7 +746,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       ),
     )!;
     expect(removeUrl).toBeDefined();
-    click(removeUrl);
+    await click(removeUrl);
     // The file's own root is the edited tree, in the authoring grammar.
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
     expect(durable.history().past).toHaveLength(1);
@@ -762,7 +762,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
         (e) => e.verb === "set-state" && String(e.args[1]).startsWith("menus."),
       ),
     )) {
-      click(menuOpenUrl);
+      await click(menuOpenUrl);
     }
 
     const pickUrl = ownUrls(render()).find((u) =>
@@ -773,7 +773,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       ),
     )!;
     expect(pickUrl).toBeDefined();
-    click(pickUrl);
+    await click(pickUrl);
     // The insert composed onto the tree the remove left behind.
     const afterInsert = JSON.stringify(durable.parsed().root);
     expect(afterInsert).toContain('"gitPr"');
@@ -788,9 +788,9 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // position, so BASE deliberately declares neither; drive the verb
     // directly, exactly as dsl-undo-redo.test.ts does.
     const undo = VERBS.get("undo")!;
-    undo(encodeURIComponent("s1"), ctx);
+    await undo(encodeURIComponent("s1"), ctx);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
-    undo(encodeURIComponent("s1"), ctx);
+    await undo(encodeURIComponent("s1"), ctx);
     // Byte-identical: the file IS the layout, so "back to the original
     // layout" and "back to the original bytes" are one fact.
     expect(durable.text()).toBe(original);
@@ -800,7 +800,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 // ─── chrome respects globals like any other segment ───────────────────────
 
 describe("a segment row's chrome rides its row", () => {
-  test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", () => {
+  test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", async () => {
     const { render, click } = buildEditRuntime(BASE);
     const closed = stripAnsi(render()).split("\n");
     const toggleUrl = ownUrls(render()).find((u) =>
@@ -808,7 +808,7 @@ describe("a segment row's chrome rides its row", () => {
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
-    click(toggleUrl);
+    await click(toggleUrl);
     const opened = stripAnsi(render()).split("\n");
     expect(opened.some((line) => line.includes(REMOVE_GLYPH))).toBe(true);
     // One more line than the closed bar: edit mode's own top row, with
@@ -859,19 +859,19 @@ describe("edit mode's save and cancel", () => {
     rt: ReturnType<typeof buildEditRuntime>,
     pick: (e: ReturnType<typeof effectsOf>[number]) => boolean,
   ): string => ownUrls(rt.render()).find((u) => effectsOf(u).some(pick))!;
-  const open = (rt: ReturnType<typeof buildEditRuntime>): void =>
-    rt.click(
+  const open = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
+    await rt.click(
       find(
         rt,
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     );
-  const removeGit = (rt: ReturnType<typeof buildEditRuntime>): void =>
-    rt.click(ownUrls(rt.render()).find((u) => u.includes("remove%253Agit"))!);
-  const cancel = (rt: ReturnType<typeof buildEditRuntime>): void =>
-    rt.click(find(rt, (e) => e.verb === "rewind"));
-  const done = (rt: ReturnType<typeof buildEditRuntime>): void =>
-    rt.click(
+  const removeGit = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
+    await rt.click(ownUrls(rt.render()).find((u) => u.includes("remove%253Agit"))!);
+  const cancel = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
+    await rt.click(find(rt, (e) => e.verb === "rewind"));
+  const done = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
+    await rt.click(
       ownUrls(rt.render()).find((u) => {
         const effects = effectsOf(u);
         return (
@@ -885,13 +885,13 @@ describe("edit mode's save and cancel", () => {
   const topRow = (rt: ReturnType<typeof buildEditRuntime>): string =>
     stripAnsi(rt.render()).split("\n")[0]!;
 
-  test("the row reads ✓ done with nothing changed, and ✓ save ↩ cancel after a change", () => {
+  test("the row reads ✓ done with nothing changed, and ✓ save ↩ cancel after a change", async () => {
     const rt = buildEditRuntime(BASE);
-    open(rt);
+    await open(rt);
     expect(topRow(rt)).toContain("✓ done");
     expect(topRow(rt)).not.toContain("cancel");
     expect(topRow(rt)).toContain("☐ live");
-    removeGit(rt);
+    await removeGit(rt);
     expect(topRow(rt)).toContain("✓ save");
     expect(topRow(rt)).toContain("↩ cancel");
     // The live toggle left the bar's last row for the edit row, so the `(?)`
@@ -901,13 +901,13 @@ describe("edit mode's save and cancel", () => {
     expect(rows.at(-1)).not.toContain("live");
   });
 
-  test("cancel restores the file byte for byte, leaves edit mode, and leaves nothing to redo", () => {
+  test("cancel restores the file byte for byte, leaves edit mode, and leaves nothing to redo", async () => {
     const rt = buildEditRuntime(BASE);
     const original = durable.text();
-    open(rt);
-    removeGit(rt);
+    await open(rt);
+    await removeGit(rt);
     expect(durable.text()).not.toBe(original);
-    cancel(rt);
+    await cancel(rt);
     expect(durable.text()).toBe(original);
     expect(rt.sessionState.get("s1", EDIT_MODE_KEY)).not.toBe(
       EDIT_MODE_ARRANGE,
@@ -920,13 +920,13 @@ describe("edit mode's save and cancel", () => {
     expect(stripAnsi(rt.render())).not.toContain("✓ done");
   });
 
-  test("save keeps the change; the next time edit mode opens it counts from there", () => {
+  test("save keeps the change; the next time edit mode opens it counts from there", async () => {
     const rt = buildEditRuntime(BASE);
     const original = durable.text();
-    open(rt);
-    removeGit(rt);
+    await open(rt);
+    await removeGit(rt);
     const edited = durable.text();
-    done(rt);
+    await done(rt);
     expect(durable.text()).toBe(edited);
     expect(edited).not.toBe(original);
     expect(rt.history.depth("s1")).toEqual({
@@ -934,27 +934,27 @@ describe("edit mode's save and cancel", () => {
       redo: 0,
       sinceEdit: 0,
     });
-    open(rt);
+    await open(rt);
     expect(topRow(rt)).toContain("✓ done");
   });
 
-  test("cancel takes back only what edit mode did, and undoing afterwards does not resurrect it", () => {
+  test("cancel takes back only what edit mode did, and undoing afterwards does not resurrect it", async () => {
     const rt = buildEditRuntime(BASE);
     const original = durable.text();
     // A step from before edit mode opened.
     const earlier = rt.history.begin();
     earlier.sessionState.set("s1", "theme", "nord");
     earlier.commit();
-    open(rt);
-    removeGit(rt);
-    cancel(rt);
+    await open(rt);
+    await removeGit(rt);
+    await cancel(rt);
     expect(rt.history.depth("s1")).toEqual({
       undo: 1,
       redo: 0,
       sinceEdit: 0,
     });
     expect(rt.sessionState.get("s1", "theme")).toBe("nord");
-    VERBS.get("undo")!("s1", rt.ctx);
+    await VERBS.get("undo")!("s1", rt.ctx);
     expect(rt.sessionState.get("s1", "theme")).toBeNull();
     expect(durable.text()).toBe(original);
     expect(rt.history.depth("s1")).toEqual({
@@ -964,13 +964,13 @@ describe("edit mode's save and cancel", () => {
     });
   });
 
-  test("rewind says what it put back, and a session with no savepoint is refused loudly", () => {
+  test("rewind says what it put back, and a session with no savepoint is refused loudly", async () => {
     const rt = buildEditRuntime(BASE);
-    expect(() => VERBS.get("rewind")!("s1", rt.ctx)).toThrow(/no savepoint/);
-    open(rt);
-    removeGit(rt);
+    await expect(VERBS.get("rewind")!("s1", rt.ctx)).rejects.toThrow(/no savepoint/);
+    await open(rt);
+    await removeGit(rt);
     const logs: string[] = [];
-    VERBS.get("rewind")!("s1", {
+    await VERBS.get("rewind")!("s1", {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });

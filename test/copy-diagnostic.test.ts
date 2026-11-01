@@ -38,12 +38,12 @@ beforeEach(() => {
   launched.length = 0;
 });
 
-test("the first line's click copies the full prompt, though its link carries only a key", () => {
+test("the first line's click copies the full prompt, though its link carries only a key", async () => {
   const { list, copies } = drawn();
   const link = list[0]!.lines[0]![0].link!;
   expect(link.length).toBeLessThan(200);
   expect(link).not.toContain("placement");
-  clickUrl(link, {
+  await clickUrl(link, {
     ...testVerbContext(new SessionState()),
     launcher: recording,
     diagnosticCopy: (sid, by, key) =>
@@ -54,16 +54,15 @@ test("the first line's click copies the full prompt, though its link carries onl
   expect(launched[0]!.stdinInput).toBe(PROMPT);
 });
 
-test("a key the session's last draw no longer lists is refused, and nothing is copied", () => {
+test("a key the session's last draw no longer lists is refused, and nothing is copied", async () => {
   const { list } = drawn();
   const link = list[0]!.lines[0]![0].link!;
-  expect(() =>
-    clickUrl(link, {
+  await expect(clickUrl(link, {
       ...testVerbContext(new SessionState()),
     launcher: recording,
       diagnosticCopy: () => undefined,
     }),
-  ).toThrow(/no longer listed/);
+  ).rejects.toThrow(/no longer listed/);
   expect(launched).toHaveLength(0);
 });
 

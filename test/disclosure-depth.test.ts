@@ -217,14 +217,14 @@ function build(src: string, withDefault = false) {
     resolvedStyle(cellsOf(name)[0]!.style).bgcolor?.value?.hex ?? "(no bg)";
   const fgOf = (name: string): string =>
     resolvedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // The link spans of a segment's cells, by URL.
@@ -238,20 +238,20 @@ function build(src: string, withDefault = false) {
     );
   // Click the affordance in `name` that writes `value` to `key` — a
   // disclosure toggle's set-state — loud when it is not on the bar.
-  const clickWriting = (name: string, key: string, value: string): void => {
+  const clickWriting = async (name: string, key: string, value: string): Promise<void> => {
     const url = urlsIn(name).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (url === undefined) {
       throw new Error(`"${name}" renders nothing writing ${key}=${value}`);
     }
-    click(url);
+    await click(url);
   };
   // Open the `{{ menu }}` in `name`: its opener is the one set-state whose
   // 4th arg is the page key of its 2nd (the coupled batch `renderMenu`
   // emits) and whose member is not the closed sentinel — the same shape
   // test/default-menu-bytes.test.ts identifies openers by.
-  const openMenuIn = (name: string): void => {
+  const openMenuIn = async (name: string): Promise<void> => {
     const url = urlsIn(name).find((u) =>
       effectsOf(u).some(
         (e) =>
@@ -261,7 +261,7 @@ function build(src: string, withDefault = false) {
       ),
     );
     if (url === undefined) throw new Error(`"${name}" hosts no menu opener`);
-    click(url);
+    await click(url);
   };
   const expectedTint = (name: string): string =>
     decorationFor(palette, regionOf(root, palette, name), ColorDepth.TRUECOLOR).tint.hex;
@@ -323,11 +323,11 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       `{ v: [ { h: ['m'] } ] }`,
       `{ v: [ { h: ['m'], when: '{{ .show }}' } ], when: '{{ .show }}' }`,
     ],
-  ])("%s adds no depth: the open menu renders byte-identical to the ungated tree", (_label, plain, gated) => {
-    const outputs = [plain, gated].map((row2) => {
+  ])("%s adds no depth: the open menu renders byte-identical to the ungated tree", async (_label, plain, gated) => {
+    const outputs = await Promise.all([plain, gated].map(async (row2) => {
       const rt = build(MENU_SRC(row2));
       rt.render();
-      rt.openMenuIn("m");
+      await rt.openMenuIn("m");
       const out = rt.render();
       // The menu's band is depth 0 — the trigger sits on the bar, whatever
       // `when`s enclose it — and the trigger wears that band's state.
@@ -336,7 +336,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       expect(resolvedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
       rt.dispose();
       return out;
-    });
+    }));
     expect(outputs[1]).toBe(outputs[0]);
   });
 });
@@ -359,7 +359,7 @@ const GROUP_SRC = `{
 }`;
 
 describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
-  test("closed it wears its address's tint; open it wears the state of the band its body is, and the body cells are that band's items", () => {
+  test("closed it wears its address's tint; open it wears the state of the band its body is, and the body cells are that band's items", async () => {
     const rt = build(GROUP_SRC);
     const { palette } = rt;
     rt.render();
@@ -368,7 +368,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     expect(rt.bgOf(toggle)).toBe(tint);
     expect(() => rt.bgOf("b")).toThrow(/did not render/);
 
-    rt.clickWriting(toggle, toggle, "outer");
+    await rt.clickWriting(toggle, toggle, "outer");
     rt.render();
     expect(rt.bgOf(toggle)).toBe(bandFor(palette, rt.opensOf(toggle), ColorDepth.TRUECOLOR).state.hex);
     // The body: three cells of a horizontal band, placed by their own step.
@@ -381,16 +381,16 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
 
     // Closing again returns the toggle to its tint — the state is a VALUE the
     // walk selects by the body's openness, not a transform left behind.
-    rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
+    await rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
     rt.render();
     expect(rt.bgOf(toggle)).toBe(tint);
   });
 
-  test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", () => {
+  test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", async () => {
     const rt = build(GROUP_SRC);
     const { palette } = rt;
     rt.render();
-    rt.clickWriting("groups.outer", "groups.outer", "outer");
+    await rt.clickWriting("groups.outer", "groups.outer", "outer");
     rt.render();
     const authored = palette.get("error")!;
     expect(rt.bgOf("e")).toBe(authored.hex);
@@ -401,15 +401,15 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.dispose();
   });
 
-  test("a group nested in a group's body opens the next depth", () => {
+  test("a group nested in a group's body opens the next depth", async () => {
     const rt = build(GROUP_SRC);
     const { palette } = rt;
     rt.render();
-    rt.clickWriting("groups.outer", "groups.outer", "outer");
+    await rt.clickWriting("groups.outer", "groups.outer", "outer");
     rt.render();
     // Closed inner toggle: a depth-0 item, like its siblings.
     expect(rt.bgOf("groups.inner")).toBe(rt.expectedTint("groups.inner"));
-    rt.clickWriting("groups.inner", "groups.inner", "inner");
+    await rt.clickWriting("groups.inner", "groups.inner", "inner");
     rt.render();
     const nested: Disclosure = { ...rt.opensOf("groups.outer"), depth: 1 };
     const band1 = bandFor(palette, nested, ColorDepth.TRUECOLOR);

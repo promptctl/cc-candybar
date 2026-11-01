@@ -71,6 +71,7 @@ import {
 } from "../attach-launcher.js";
 import type { LauncherNode } from "../attach-preload.js";
 import { BadVerbArgs } from "./verb-error.js";
+import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
 // marketplace.json`) names it.
@@ -644,8 +645,8 @@ type Owed = Map<Lane, boolean>;
 export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
   private readonly owed = new Map<string, Owed>();
-  // Each session's setups still to run, while one runs.
-  private readonly queued = new Map<string, Array<() => Promise<void>>>();
+  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
+  private readonly setups = new KeyedSerialQueue<string>();
 
   constructor(
     private readonly deps: {
@@ -746,28 +747,12 @@ export class LaneSetups {
     on: boolean,
     by: SetupCause,
   ): void {
-    this.deps.defer(() =>
-      this.enqueue(session.sessionId, () => this.sync(session, lane, on, by)),
+    this.deps.defer(
+      () =>
+        void this.setups.run(session.sessionId, () =>
+          this.sync(session, lane, on, by),
+        ),
     );
-  }
-
-  // [LAW:no-ambient-temporal-coupling] Runs `setup` now when none of the
-  // session's runs, else after the ones queued before it.
-  private enqueue(sessionId: string, setup: () => Promise<void>): void {
-    const queue = this.queued.get(sessionId);
-    if (queue !== undefined) {
-      queue.push(setup);
-      return;
-    }
-    const waiting: Array<() => Promise<void>> = [];
-    this.queued.set(sessionId, waiting);
-    const run = (next: () => Promise<void>): void =>
-      void next().then(() => {
-        const after = waiting.shift();
-        if (after === undefined) this.queued.delete(sessionId);
-        else run(after);
-      });
-    run(setup);
   }
 
   // Resolves once the setup has finished, however it ended.

@@ -131,14 +131,14 @@ function rig(
     );
     return last;
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
   };
   // Click the link whose visible text is `text`, in the bar as last rendered.
-  const clickText = (text: string): void => {
+  const clickText = async (text: string): Promise<void> => {
     const hit = links(last).find((l) => stripAnsi(l.text) === text);
     if (hit === undefined) {
       throw new Error(
@@ -147,17 +147,17 @@ function rig(
           .join(" ")}`,
       );
     }
-    click(hit.url);
+    await click(hit.url);
     render();
   };
   // Click the link whose writes include [key, value] — how a test names one
   // control among several that share a glyph (every closed toggle is ▸).
-  const clickWriting = (key: string, value: string): void => {
+  const clickWriting = async (key: string, value: string): Promise<void> => {
     const hit = links(last).find((l) =>
       effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (hit === undefined) throw new Error(`no link writes ${key}=${value}`);
-    click(hit.url);
+    await click(hit.url);
     render();
   };
   // The link whose visible text is `text` among those writing `key`.
@@ -173,8 +173,8 @@ function rig(
     clickText,
     clickWriting,
     linkOn,
-    click: (url: string) => {
-      click(url);
+    click: async (url: string) => {
+      await click(url);
       render();
     },
     sink,
@@ -220,19 +220,19 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("a rotation lands the ring on the option it wrote, both ways round", () => {
+  test("a rotation lands the ring on the option it wrote, both ways round", async () => {
     const rt = rig(CAROUSEL_ONLY);
     rt.render();
     const centre = () => rt.sessionState.get(SID, "pick");
     const seen: string[] = [];
     for (let i = 0; i < 6; i++) {
-      rt.clickText(CAROUSEL_NEXT);
+      await rt.clickText(CAROUSEL_NEXT);
       seen.push(centre()!);
     }
     expect(seen).toEqual(["b", "c", "d", "e", "a", "b"]);
     seen.length = 0;
     for (let i = 0; i < 3; i++) {
-      rt.clickText(CAROUSEL_PREV);
+      await rt.clickText(CAROUSEL_PREV);
       seen.push(centre()!);
     }
     expect(seen).toEqual(["a", "e", "d"]);
@@ -254,11 +254,11 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("a click on the label fires the open action and steps nothing", () => {
+  test("a click on the label fires the open action and steps nothing", async () => {
     const rt = rig(CAROUSEL_ONLY);
     rt.sessionState.set(SID, "pick", "c");
     rt.render();
-    rt.clickText("the pick");
+    await rt.clickText("the pick");
     expect(rt.sessionState.get(SID, "listing")).toBe("yes");
     expect(rt.sessionState.get(SID, "pick")).toBe("c");
     rt.dispose();
@@ -286,11 +286,11 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("a value outside the domain counts as the first option", () => {
+  test("a value outside the domain counts as the first option", async () => {
     const rt = rig(CAROUSEL_ONLY);
     rt.sessionState.set(SID, "pick", "x");
     rt.render();
-    rt.clickText(CAROUSEL_NEXT);
+    await rt.clickText(CAROUSEL_NEXT);
     expect(rt.sessionState.get(SID, "pick")).toBe("b");
     rt.dispose();
   });
@@ -355,15 +355,15 @@ const PRESET_CONTROL = `${CAROUSEL_PREV} ▦ preset ${CAROUSEL_NEXT}`;
 // label). Where a control is comes from the menu's map, as the menu lays it.
 const PICKERS = sharedMenuStateKey("candybar.pickers");
 const GEAR_PICKERS = sharedMenuStateKey("candybar.gearPickers");
-function openPicker(rt: ReturnType<typeof rig>, control: SettingName): void {
+async function openPicker(rt: ReturnType<typeof rig>, control: SettingName): Promise<void> {
   const place = PLACE[control];
   const behindGear = place === "gear";
   rt.render();
-  rt.clickText("🍫");
+  await rt.clickText("🍫");
   const tab = TABS.find((t) => within(place, t.member));
-  if (tab !== undefined) rt.clickText(tab.label);
-  if (behindGear) rt.clickWriting(PICKERS, "gear");
-  rt.clickWriting(
+  if (tab !== undefined) await rt.clickText(tab.label);
+  if (behindGear) await rt.clickWriting(PICKERS, "gear");
+  await rt.clickWriting(
     behindGear ? GEAR_PICKERS : PICKERS,
     `candybar.apply.${control}`,
   );
@@ -395,11 +395,11 @@ describe("the settings menu's look controls are pickers whose label opens a list
       }))
       .filter((c) => c.writes !== undefined);
 
-  test("closed, the theme picker is its label and the swatch of the theme in force, beside the gear", () => {
+  test("closed, the theme picker is its label and the swatch of the theme in force, beside the gear", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     rt.render();
-    rt.clickText("🍫");
-    rt.clickText("🎨 look");
+    await rt.clickText("🍫");
+    await rt.clickText("🎨 look");
     const rendered = rt.render();
     expect(stripAnsi(rendered)).toContain("🎨 theme ▀▀▀");
     // The label and the swatch are one button (`[Theme [=]]`): both open it.
@@ -413,9 +413,9 @@ describe("the settings menu's look controls are pickers whose label opens a list
       links(drawn).find(
         (l) => stripAnsi(l.text) === "▀▀▀" && effectsOf(l.url).some((e) => e.args[1] === PICKERS),
       )!;
-    rt.click(swatchButton(rendered).url);
+    await rt.click(swatchButton(rendered).url);
     expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
-    rt.click(swatchButton(rt.render()).url);
+    await rt.click(swatchButton(rt.render()).url);
     expect(rt.sink.has("candybar.list.theme.0")).toBe(false);
     const reopened = rt.render();
     // No ring: the theme is chosen by looking at it, not stepped by name.
@@ -425,16 +425,16 @@ describe("the settings menu's look controls are pickers whose label opens a list
     expect(writesOf(gear.url)).toEqual([[PICKERS, "gear"]]);
     // The style, variation and shade controls are behind it, not in the tab.
     expect(rt.sink.has("candybar.style")).toBe(false);
-    rt.clickWriting(PICKERS, "gear");
+    await rt.clickWriting(PICKERS, "gear");
     for (const control of ["style", "variation", "shade"]) {
       expect([control, rt.sink.has(`candybar.${control}`)]).toEqual([control, true]);
     }
     rt.dispose();
   });
 
-  test("open, it names the theme in force beside its swatch, over the swatch row and a two-row demo", () => {
+  test("open, it names the theme in force beside its swatch, over the swatch row and a two-row demo", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     const rendered = rt.render();
     const text = stripAnsi(rendered);
     expect(text).toContain("nord ▀▀▀");
@@ -475,11 +475,11 @@ describe("the settings menu's look controls are pickers whose label opens a list
         [0, 1, 2].map((padding) => [control, style, padding] as const),
       ),
     ),
-  )("every row of the open %s list fits its terminal (%s, padding %i)", (control, style, padding) => {
+  )("every row of the open %s list fits its terminal (%s, padding %i)", async (control, style, padding) => {
     // One compile per case, opened once; the sweep is renders, which cost
     // nothing beside the compile they would otherwise each repeat.
     const rt = rig(`{ globals: { palette: 'nord' } }`, 200, padding, style);
-    openPicker(rt, control);
+    await openPicker(rt, control);
     for (let width = 40; width <= 160; width += 3) {
       const lines = stripAnsi(rt.render(width)).split("\n");
       // The body drops below the row the control sits in, which may itself
@@ -505,9 +505,9 @@ describe("the settings menu's look controls are pickers whose label opens a list
     rt.dispose();
   });
 
-  test("▶ applies the next theme and the whole bar recolours, turning the row to it; ◀ takes it back", () => {
+  test("▶ applies the next theme and the whole bar recolours, turning the row to it; ◀ takes it back", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     const next = THEMES[(THEMES.indexOf("nord") + 1) % THEMES.length]!;
     const before = rt.sink.get("directory")![0]!.style;
     const step = rt.linkOn("theme", CAROUSEL_NEXT);
@@ -516,30 +516,30 @@ describe("the settings menu's look controls are pickers whose label opens a list
     // The page it lands on, as itself: a page number, never a sentinel.
     expect(turn![0]).toBe(menuPageKey(PICKERS));
     expect(turn![1]).toMatch(/^\d+$/);
-    rt.click(step.url);
+    await rt.click(step.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(next);
     expect(stripAnsi(rt.render())).toContain(`${next} ▀▀▀`);
     expect(swatchLinks(rt.render()).find((c) => c.writes === next)?.text).toBe("[▀▀▀]");
     expect(rt.sink.get("directory")![0]!.style).not.toEqual(before);
-    rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
+    await rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
     expect(rt.sessionState.get(SID, "theme")).toBe("nord");
     rt.dispose();
   });
 
-  test("◀ from the first theme wraps to the last, and the row turns to the page holding it", () => {
+  test("◀ from the first theme wraps to the last, and the row turns to the page holding it", async () => {
     const first = THEMES[0]!;
     const last = THEMES[THEMES.length - 1]!;
     // Narrow enough that the swatches page, so the last is on another page.
     const rt = rig(`{ globals: { palette: '${first}' } }`, 80);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     expect(swatchLinks(rt.render()).some((c) => c.writes === last)).toBe(false);
-    rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
+    await rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
     expect(rt.sessionState.get(SID, "theme")).toBe(last);
     expect(swatchLinks(rt.render()).find((c) => c.writes === last)?.text).toBe("[▀▀▀]");
     rt.dispose();
   });
 
-  test("a step keeps open a row whose own when reads its cursor below zero as closed", () => {
+  test("a step keeps open a row whose own when reads its cursor below zero as closed", async () => {
     // The standalone-picker idiom: the row shows at page ≥ 0. A step writes
     // the page it lands on, so ◀ ? ▶ never close the row they sit in.
     const rt = rig(`{
@@ -556,28 +556,28 @@ describe("the settings menu's look controls are pickers whose label opens a list
     }`);
     rt.render();
     for (const glyph of [CAROUSEL_NEXT, SWATCHES_RANDOM, CAROUSEL_PREV]) {
-      rt.click(rt.linkOn("theme", glyph).url);
+      await rt.click(rt.linkOn("theme", glyph).url);
       expect([glyph, rt.sink.has("row")]).toEqual([glyph, true]);
     }
     rt.dispose();
   });
 
-  test("? applies a theme other than the one in force", () => {
+  test("? applies a theme other than the one in force", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     const random = rt.linkOn("theme", SWATCHES_RANDOM);
     const [key, value] = writesOf(random.url)[0]!;
     expect(key).toBe("theme");
     expect(THEMES).toContain(value);
     expect(value).not.toBe("nord");
-    rt.click(random.url);
+    await rt.click(random.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(value);
     rt.dispose();
   });
 
-  test("a swatch applies its theme and the row stays where it is", () => {
+  test("a swatch applies its theme and the row stays where it is", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     const row = swatchLinks(rt.render());
     const other = links(rt.render()).find(
       (l) =>
@@ -587,19 +587,19 @@ describe("the settings menu's look controls are pickers whose label opens a list
     )!;
     expect(writesOf(other.url)).toHaveLength(1);
     const picked = writesOf(other.url)[0]![1]!;
-    rt.click(other.url);
+    await rt.click(other.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(picked);
     expect(swatchLinks(rt.render()).map((c) => c.writes)).toEqual(row.map((c) => c.writes));
     rt.dispose();
   });
 
-  test("opening the theme's swatches closes the gear, and the gear's lists open inside it", () => {
+  test("opening the theme's swatches closes the gear, and the gear's lists open inside it", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "style");
+    await openPicker(rt, "style");
     // The style list is open, and so is the gear holding it.
     expect(rt.sink.has("candybar.list.style.0")).toBe(true);
     expect(rt.sink.has("candybar.style")).toBe(true);
-    rt.clickWriting(PICKERS, "candybar.apply.theme");
+    await rt.clickWriting(PICKERS, "candybar.apply.theme");
     expect(rt.sink.has("candybar.style")).toBe(false);
     expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
     rt.dispose();
@@ -629,9 +629,9 @@ describe("randomOther", () => {
 // brandon-theme-picker-bgw.7g6: which role each row wears is a setting in the
 // ⚙ config row, chosen like every display setting beside it.
 describe("the variation control", () => {
-  test("▶ applies the next variation in this session and the bar's closed cells recolour", () => {
+  test("▶ applies the next variation in this session and the bar's closed cells recolour", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "variation");
+    await openPicker(rt, "variation");
     expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🎼 variation ${CAROUSEL_NEXT}`);
     // Row 1 (directory) and row 2 (model) under the default.
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
@@ -639,7 +639,7 @@ describe("the variation control", () => {
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
       ["set-state", "variation", "duo"],
     ]);
-    rt.click(rt.linkOn("variation", CAROUSEL_NEXT).url);
+    await rt.click(rt.linkOn("variation", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "variation")).toBe("duo");
     const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
@@ -651,16 +651,16 @@ describe("the variation control", () => {
 // candybar-theme-colours-6fq5.e5n: which of its role's shades each cell wears
 // is a setting behind the theme's ⚙, beside the variation.
 describe("the shade control", () => {
-  test("▶ turns the dial one position in this session and the bar's closed cells recolour", () => {
+  test("▶ turns the dial one position in this session and the bar's closed cells recolour", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
-    openPicker(rt, "shade");
+    await openPicker(rt, "shade");
     expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🔆 shade ${CAROUSEL_NEXT}`);
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
       ["set-state", "shade", "brighter"],
     ]);
-    rt.click(rt.linkOn("shade", CAROUSEL_NEXT).url);
+    await rt.click(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "shade")).toBe("brighter");
     const after = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     expect(after[0]).not.toEqual(before[0]);
@@ -671,11 +671,11 @@ describe("the shade control", () => {
 
 // brandon-menu-ia-q30.5y4: "make users set them in the config file."
 describe("colour depth is set in the config file, not the menu", () => {
-  test("no link on the bar or in the ⚙ config tab writes its key", () => {
+  test("no link on the bar or in the ⚙ config tab writes its key", async () => {
     const rt = rig(`{}`);
     rt.render();
-    rt.clickText("🍫");
-    rt.clickText("⚙ config");
+    await rt.clickText("🍫");
+    await rt.clickText("⚙ config");
     const rendered = rt.render();
     expect(stripAnsi(rendered)).not.toMatch(/🔣|🌈/u);
     const writers = links(rendered).filter((l) =>
@@ -763,7 +763,7 @@ describe("the preset control's list carries the layout beneath it", () => {
 
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     "%s: the preview draws the segments the closed bar draws, row for row, in the colours they wear",
-    (preset) => {
+    async (preset) => {
       const rt = rig(`{}`);
       rt.sessionState.set(SID, "preset", preset);
       const closed = rt.render();
@@ -782,7 +782,7 @@ describe("the preset control's list carries the layout beneath it", () => {
         col = barLines[line]!.indexOf(text, col) + text.length;
         barRows[line]!.push(blockLabel(name));
       }
-      openPicker(rt, "preset");
+      await openPicker(rt, "preset");
       const labels = previewLabels(rt.render());
       expect(labels).toEqual(barRows);
       // Each block wears what its segment wears on the closed bar; every
@@ -803,9 +803,9 @@ describe("the preset control's list carries the layout beneath it", () => {
     },
   );
 
-  test("edit mode's +/- and reset banner are not part of the arrangement the preview draws", () => {
+  test("edit mode's +/- and reset banner are not part of the arrangement the preview draws", async () => {
     const rt = rig(`{}`);
-    openPicker(rt, "preset");
+    await openPicker(rt, "preset");
     const outside = previewLabels(rt.render());
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     rt.sessionState.set(SID, EDIT_LIVE_KEY, "open");
@@ -816,9 +816,9 @@ describe("the preset control's list carries the layout beneath it", () => {
     rt.dispose();
   });
 
-  test("in edit mode's names view the preview draws every placed segment, shown or not", () => {
+  test("in edit mode's names view the preview draws every placed segment, shown or not", async () => {
     const rt = rig(`{}`);
-    openPicker(rt, "preset");
+    await openPicker(rt, "preset");
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Every segment the default preset places, in order: the labels stand in
     // for them whether or not this payload renders them (it renders no host,
@@ -831,9 +831,9 @@ describe("the preset control's list carries the layout beneath it", () => {
     rt.dispose();
   });
 
-  test("in the names view a placement with its own id stands for its segment", () => {
+  test("in the names view a placement with its own id stands for its segment", async () => {
     const rt = rig(`{ root: { rows: { status: { h: ['model', { seg: 'model', id: 'model-2' }] } } } }`);
-    openPicker(rt, "preset");
+    await openPicker(rt, "preset");
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const rendered = rt.render();
     expect(stripAnsi(rendered)).not.toContain("⚠");
@@ -841,14 +841,14 @@ describe("the preset control's list carries the layout beneath it", () => {
     rt.dispose();
   });
 
-  test("▶ rotates through every preset and wraps, the preview following the preset it applied", () => {
+  test("▶ rotates through every preset and wraps, the preview following the preset it applied", async () => {
     const rt = rig(`{}`);
-    openPicker(rt, "preset");
+    await openPicker(rt, "preset");
     const seen: string[] = [];
     const rowCounts: number[] = [];
     const names = presetNames(DEFAULT_DSL_CONFIG.presets);
     for (let i = 0; i < names.length; i++) {
-      rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
+      await rt.click(rt.linkOn("preset", CAROUSEL_NEXT).url);
       seen.push(rt.sessionState.get(SID, "preset")!);
       rowCounts.push(previewLabels(rt.render()).length);
     }
@@ -935,9 +935,9 @@ describe("the preview is the bar's own colours", () => {
     ["dracula", "256"],
   ] as const)(
     "%s at %s: the preview shows every colour a closed cell can wear, and its open swatch is the open door's",
-    (theme, depth) => {
+    async (theme, depth) => {
       const rt = rig(`{ globals: { palette: '${theme}', colorCompatibility: '${depth}' } }`);
-      openPicker(rt, "theme");
+      await openPicker(rt, "theme");
       const palette = transposePalette(getThemePalette(theme)!, IDENTITY);
       // Row 0 is the swatch row; the demo is row 1.
       const preview = rt.sink.get("candybar.list.theme.1")!;
@@ -959,9 +959,9 @@ describe("the preview is the bar's own colours", () => {
   // [LAW:verifiable-goals] candybar-joiners-e5r4.cfm: the preview deals every
   // tone of each hue's window, so where a depth widens a window back to the
   // dial's count the preview shows that count.
-  test("dracula at 256: the accent's window, two of whose tones the depth draws alike, widens back to three, and the preview shows all three", () => {
+  test("dracula at 256: the accent's window, two of whose tones the depth draws alike, widens back to three, and the preview shows all three", async () => {
     const rt = rig(`{ globals: { palette: 'dracula', colorCompatibility: '256' } }`);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     const palette = transposePalette(getThemePalette("dracula")!, IDENTITY);
     const window = windowAt(palette, "accent", DEFAULT_DECOR.shade, ColorDepth.EIGHT_BIT);
     const named: readonly string[] = DEFAULT_DECOR.shade.tones;
@@ -971,21 +971,21 @@ describe("the preview is the bar's own colours", () => {
     rt.dispose();
   });
 
-  test("under alt the open swatch is still the door's colour, though the door's row turns between two roles", () => {
+  test("under alt the open swatch is still the door's colour, though the door's row turns between two roles", async () => {
     // textual-dark's navy secondary and orange accent: the pure accent stands
     // off a row of secondary alone, and no colour stands off the door's row,
     // which turns to the accent after three cells — so a preview standing on
     // anything but the door's own row shows an open colour the bar never draws.
     const rt = rig(`{ globals: { palette: 'textual-dark', variation: 'alt' } }`);
-    openPicker(rt, "theme");
+    await openPicker(rt, "theme");
     expect(bgUnder(rt.sink.get("candybar.list.theme.1")!, "▾ open")).toBe(bgHex(rt.sink.get("candybar.menu")![0]!.style));
     rt.dispose();
   });
 
-  test("under a style the preview is the styled palette the bar wears — the style list previews it", () => {
+  test("under a style the preview is the styled palette the bar wears — the style list previews it", async () => {
     const rt = rig(`{ globals: { palette: 'gruvbox' } }`);
-    openPicker(rt, "style");
-    rt.click(rt.linkOn("style", CAROUSEL_NEXT).url);
+    await openPicker(rt, "style");
+    await rt.click(rt.linkOn("style", CAROUSEL_NEXT).url);
     const look = rt.sessionState.get(SID, "style")!;
     expect(look).not.toBe("none");
     // [LAW:behavior-not-structure] rich-js `transposePalette` directly, never
@@ -1003,9 +1003,9 @@ describe("the preview is the bar's own colours", () => {
     rt.dispose();
   });
 
-  test("the endcaps list has no preview row: an endcaps shape is not a palette", () => {
+  test("the endcaps list has no preview row: an endcaps shape is not a palette", async () => {
     const rt = rig(`{}`);
-    openPicker(rt, "endcaps");
+    await openPicker(rt, "endcaps");
     expect(rt.sink.has("candybar.list.endcaps.0")).toBe(true);
     expect(rt.sink.has("candybar.list.endcaps.1")).toBe(false);
     rt.dispose();

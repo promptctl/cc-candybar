@@ -404,7 +404,7 @@ export async function replyTo(
     // stopped before it.
     const t0 = clock.monotonic();
     const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = clickOutcome(parts, req, facts);
+    const outcome = await clickOutcome(parts, req, facts);
     // Whether the client was already told TIMEOUT while the click waited or
     // ran: its effect still lands, and the client reported a failure.
     noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
@@ -572,11 +572,11 @@ function serializeSegmentCells(
 // click writes its event: a refusal of its arguments is a bad request, and
 // anything else thrown is the daemon's failure — a program the click ran, or
 // a bug — recorded with the stack that says which.
-function clickOutcome(
+async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
   facts: RequestFacts,
-): RequestOutcome {
+): Promise<RequestOutcome> {
   const { verb, value } = req as { verb: unknown; value: unknown };
   if (typeof verb !== "string" || typeof value !== "string") {
     return {
@@ -587,7 +587,7 @@ function clickOutcome(
     };
   }
   try {
-    return handleClick(
+    return await handleClick(
       parts,
       verb,
       value,
@@ -617,13 +617,13 @@ const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
   "tmux-status": "linkVerb",
 };
 
-function handleClick(
+async function handleClick(
   parts: DaemonParts,
   verb: string,
   value: string,
   arrival: ClickArrival,
   facts: RequestFacts,
-): RequestOutcome {
+): Promise<RequestOutcome> {
   const { clock, menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
@@ -643,7 +643,11 @@ function handleClick(
     noteFacts(facts, { sid: session.id });
     menuIdle.clicked(session.id, instantOf(clock.date()));
   }
-  handler(value, { ...verbCtx, arrival });
+  await handler(value, {
+    ...verbCtx,
+    arrival,
+    turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+  });
   return { kind: "ok" };
 }
 
@@ -668,11 +672,11 @@ function clickReply(outcome: RequestOutcome): Response {
 // with, run as a click on it in the bar would run — a `cc-candybar://` link
 // through its own verb, any other through the platform's opener. Its verb
 // is told the click came through tmux, not the URL handler.
-function statusLineClick(
+async function statusLineClick(
   parts: DaemonParts,
   value: string,
   facts: RequestFacts,
-): RequestOutcome {
+): Promise<RequestOutcome> {
   const { tmuxStatusLines } = parts;
   const refused = (problem: string): RequestOutcome => ({
     kind: "bad-request",

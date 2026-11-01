@@ -121,7 +121,7 @@ describe("click protocol", () => {
     }
   });
 
-  test("malformed wire encoding is a BadVerbArgs (→ BAD_REQUEST), not an operational failure", () => {
+  test("malformed wire encoding is a BadVerbArgs (→ BAD_REQUEST), not an operational failure", async () => {
     // [LAW:behavior-not-structure] A bad percent-escape on the wire is an
     // argument-shape failure; the dispatcher routes BadVerbArgs to BAD_REQUEST
     // and any other Error to RENDER_FAILED. A lone `%` makes decodeURIComponent
@@ -131,7 +131,7 @@ describe("click protocol", () => {
     const ctx: VerbContext = testVerbContext(new SessionState());
     for (const verb of ["copy", "set-state"]) {
       const handler = VERBS.get(verb)!;
-      expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
+      await expect(handler("%", ctx)).rejects.toThrow(BadVerbArgs);
     }
   });
 });
@@ -139,7 +139,7 @@ describe("click protocol", () => {
 describe("apply-update verb", () => {
   // [LAW:effects-at-boundaries] The wire carries only the session id; the
   // handler's whole job is reaching the daemon's update watch through ctx.
-  test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", () => {
+  test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", async () => {
     let calls = 0;
     const ctx: VerbContext = {
       ...testVerbContext(new SessionState()),
@@ -148,10 +148,10 @@ describe("apply-update verb", () => {
       },
     };
     const handler = VERBS.get(VERB_APPLY_UPDATE)!;
-    handler(encodeURIComponent("sess-1"), ctx);
+    await handler(encodeURIComponent("sess-1"), ctx);
     expect(calls).toBe(1);
-    expect(() => handler("", ctx)).toThrow(BadVerbArgs);
-    expect(() => handler(encodeURIComponent("../etc"), ctx)).toThrow(BadVerbArgs);
+    await expect(handler("", ctx)).rejects.toThrow(BadVerbArgs);
+    await expect(handler(encodeURIComponent("../etc"), ctx)).rejects.toThrow(BadVerbArgs);
     expect(calls).toBe(1);
   });
 });
@@ -229,107 +229,104 @@ describe("step-state handler", () => {
     recordRender(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
     const step = VERBS.get(VERB_STEP_STATE)!;
-    const click = (by: number): void =>
-      step(encodeSegments(["s1", KEY, String(by)]), ctx);
+    const click = async (by: number): Promise<void> =>
+      await step(encodeSegments(["s1", KEY, String(by)]), ctx);
     return { sessionState, ctx, click };
   }
   const setup = () => session(stepper("14"));
 
-  test("an unset key steps from its config's default, not min", () => {
+  test("an unset key steps from its config's default, not min", async () => {
     const { sessionState, click } = setup();
     expect(sessionState.get("s1", KEY)).toBeNull();
-    click(2);
+    await click(2);
     expect(sessionState.get("s1", KEY)).toBe("16"); // 14 + 2, NOT 0 + 2
   });
 
-  test("N identical clicks accumulate N steps (idempotency gone)", () => {
+  test("N identical clicks accumulate N steps (idempotency gone)", async () => {
     const { sessionState, click } = setup();
-    click(2);
-    click(2);
-    click(2);
+    await click(2);
+    await click(2);
+    await click(2);
     expect(sessionState.get("s1", KEY)).toBe("20"); // 14 → 16 → 18 → 20
   });
 
-  test("stepping past a bound WRAPS to the other end", () => {
+  test("stepping past a bound WRAPS to the other end", async () => {
     const { sessionState, click } = setup();
     sessionState.set("s1", KEY, "60"); // max
-    click(2);
+    await click(2);
     expect(sessionState.get("s1", KEY)).toBe("0"); // wrapped, not clamped to 60
   });
 
-  test("a negative delta steps down", () => {
+  test("a negative delta steps down", async () => {
     const { sessionState, click } = setup();
     sessionState.set("s1", KEY, "10");
-    click(-2);
+    await click(-2);
     expect(sessionState.get("s1", KEY)).toBe("8");
   });
 
-  test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", () => {
+  test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
     const { ctx } = setup();
     const step = VERBS.get(VERB_STEP_STATE)!;
-    expect(() =>
-      step(encodeSegments(["s1", KEY, "x"]), ctx),
-    ).toThrow(BadVerbArgs);
+    await expect(step(encodeSegments(["s1", KEY, "x"]), ctx),
+    ).rejects.toThrow(BadVerbArgs);
   });
 
   // Two configs declaring the same stepper differently are two gates: each
   // session steps from, and wraps at, what ITS config declares
   // (brandon-state-gates-lbs — the bounds were once every loaded config's,
   // merged to the widest).
-  test("an unset key steps from the default of the config ITS session renders with", () => {
-    const stepIn = (dflt: string): string | null => {
+  test("an unset key steps from the default of the config ITS session renders with", async () => {
+    const stepIn = async (dflt: string): Promise<string | null> => {
       const { sessionState, click } = session(stepper(dflt));
-      click(2);
+      await click(2);
       return sessionState.get("s1", KEY);
     };
-    expect(stepIn("14")).toBe("16");
-    expect(stepIn("30")).toBe("32");
+    expect(await stepIn("14")).toBe("16");
+    expect(await stepIn("30")).toBe("32");
   });
 
-  test("a step wraps at the bounds of the config ITS session renders with", () => {
+  test("a step wraps at the bounds of the config ITS session renders with", async () => {
     const narrow = session(stepper("2", 0, 2));
     const wide = session(stepper("2", 0, 8));
     for (const s of [narrow, wide]) s.sessionState.set("s1", KEY, "2");
-    wide.click(2);
-    narrow.click(2);
+    await wide.click(2);
+    await narrow.click(2);
     // From its own max, the narrow session wraps to its min; the wide one,
     // whose config declares room above 2, steps on.
     expect(narrow.sessionState.get("s1", KEY)).toBe("0");
     expect(wide.sessionState.get("s1", KEY)).toBe("4");
   });
 
-  test("one key a word list in one config and a range in another gates each session by its own", () => {
+  test("one key a word list in one config and a range in another gates each session by its own", async () => {
     const words = session({
       ...EMPTY_DEFAULT,
       actions: { pick: { set: KEY, from: ["warm", "cool"] } },
     });
     const range = session(stepper("14"));
     const set = VERBS.get("set-state")!;
-    set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
+    await set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
     expect(words.sessionState.get("s1", KEY)).toBe("cool");
-    range.click(2);
+    await range.click(2);
     expect(range.sessionState.get("s1", KEY)).toBe("16");
     // Each refuses what only the other's config declares.
-    expect(() => words.click(2)).toThrow(/not a bounded \(range\) state key/);
-    expect(() =>
-      set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
-    ).toThrow(/must be an integer, got "cool"/);
+    await expect(words.click(2)).rejects.toThrow(/not a bounded \(range\) state key/);
+    await expect(set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
+    ).rejects.toThrow(/must be an integer, got "cool"/);
   });
 
-  test("an unset key whose config shows a non-integer is refused, not stepped from min", () => {
+  test("an unset key whose config shows a non-integer is refused, not stepped from min", async () => {
     const { sessionState, click } = session(stepper("wide"));
-    expect(() => click(2)).toThrow(
+    await expect(click(2)).rejects.toThrow(
       /"step-test-hue" shows "wide" before any click/,
     );
     expect(sessionState.get("s1", KEY)).toBeNull();
   });
 
-  test("a key the session's config declares no range for is rejected, not silently stepped", () => {
+  test("a key the session's config declares no range for is rejected, not silently stepped", async () => {
     const step = VERBS.get(VERB_STEP_STATE)!;
     const { ctx } = setup();
-    expect(() =>
-      step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
-    ).toThrow(BadVerbArgs);
+    await expect(step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
+    ).rejects.toThrow(BadVerbArgs);
   });
 
   test("step-state is a registered leaf verb", () => {

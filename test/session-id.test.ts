@@ -56,19 +56,19 @@ describe("a click's session id", () => {
   const toggle = VERBS.get("toolbar-toggle")!;
   const stepState = VERBS.get("step-state")!;
 
-  test.each(REFUSED)("refuses %s", (_, raw, problem) => {
+  test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    expect(() => toggle(encodeURIComponent(raw), ctx)).toThrow(BadVerbArgs);
-    expect(() => toggle(encodeURIComponent(raw), ctx)).toThrow(problem);
-    expect(() => stepState(encodeSegments([raw, "k", "1"]), ctx)).toThrow(
+    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(BadVerbArgs);
+    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(problem);
+    await expect(stepState(encodeSegments([raw, "k", "1"]), ctx)).rejects.toThrow(
       problem,
     );
   });
 
-  test("passes a UUID", () => {
+  test("passes a UUID", async () => {
     const state = new SessionState();
     const uuid = randomUUID();
-    toggle(encodeURIComponent(uuid), testVerbContext(state));
+    await toggle(encodeURIComponent(uuid), testVerbContext(state));
     expect(state.get(uuid, "toolbar-expanded")).toBe("1");
   });
 });

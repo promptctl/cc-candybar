@@ -192,7 +192,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
   });
 
-  test("the picker names the current member between its arrows, lists every member, and its gate admits exactly them", () => {
+  test("the picker names the current member between its arrows, lists every member, and its gate admits exactly them", async () => {
     if (control.kind !== "picker") throw new Error("not a picker");
     // The list is a row of the body the control opens; here it is laid as the
     // next row, open, so both render.
@@ -248,7 +248,7 @@ describe("a global the menu has never seen gets its control from the generator",
       effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
     );
     recordRender(sessionState, "s1");
-    clickUrl(high!, testVerbContext(sessionState, undefined, config));
+    await clickUrl(high!, testVerbContext(sessionState, undefined, config));
     expect(sessionState.get("s1", "zoom")).toBe("high");
   });
 });

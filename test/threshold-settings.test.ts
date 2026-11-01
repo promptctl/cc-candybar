@@ -93,9 +93,9 @@ function buildRuntime(src: string, utilization: number) {
   };
   // Through the verb the URL names — `dispatch` included, which is what
   // turns a refused effect into the bar's transient `click.error`.
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
-    VERBS.get(verb)!(value, ctx);
+    await VERBS.get(verb)!(value, ctx);
   };
   // The one stepper link that steps `setting` of `id` by `by`.
   const stepper = (id: string, setting: string, by: number): string => {
@@ -119,37 +119,37 @@ const bgSgr = (role: string): string => {
 };
 
 describe("block's thresholds are settings configure mode steps", () => {
-  test("lowering the warning threshold from the bar recolours the cell on the next render", () => {
+  test("lowering the warning threshold from the bar recolours the cell on the next render", async () => {
     const rt = buildRuntime(BLOCK_ONLY, 45);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
     expect(rt.render()).not.toContain(bgSgr("warning"));
     // The stepper strides by the declared step, 5: one click lands on 45.
-    rt.click(rt.stepper("block", "warnAt", -5));
+    await rt.click(rt.stepper("block", "warnAt", -5));
     expect(rt.pick("block", "warnAt")).toBe("45");
     expect(rt.render()).toContain(bgSgr("warning"));
   });
 
-  test("a step that would drop errorAt below warnAt is refused, naming both", () => {
+  test("a step that would drop errorAt below warnAt is refused, naming both", async () => {
     const rt = buildRuntime(BLOCK_ONLY, 10);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 80 → 50 in six clicks: equal thresholds are a hard edge, and allowed.
-    for (let i = 0; i < 6; i++) rt.click(rt.stepper("block", "errorAt", -5));
+    for (let i = 0; i < 6; i++) await rt.click(rt.stepper("block", "errorAt", -5));
     expect(rt.pick("block", "errorAt")).toBe("50");
     const down = rt.stepper("block", "errorAt", -5);
     const reason =
       /refused — placement "block": "errorAt" \(45\) is below "warnAt" \(50\) — error at % must be at least warning at %/;
-    expect(() => rt.click(down)).toThrow(reason);
+    await expect(rt.click(down)).rejects.toThrow(reason);
     expect(rt.pick("block", "errorAt")).toBe("50");
     // The reason is what the next render's strip shows.
     expect(lastClickError(rt.sessionState, SID)?.text ?? null).toMatch(reason);
     // The other way round is the same relation: warnAt may not climb past it.
     const up = rt.stepper("block", "warnAt", 5);
-    expect(() => rt.click(up)).toThrow(/"errorAt" \(50\) is below "warnAt" \(55\)/);
+    await expect(rt.click(up)).rejects.toThrow(/"errorAt" \(50\) is below "warnAt" \(55\)/);
     expect(rt.pick("block", "warnAt")).toBeNull();
   });
 
-  test("a set-state batch holding a descending pair is refused whole", () => {
+  test("a set-state batch holding a descending pair is refused whole", async () => {
     const rt = buildRuntime(BLOCK_ONLY, 10);
     const warn = placementDraftKey("default", "block", "warnAt");
     const error = placementDraftKey("default", "block", "errorAt");
@@ -158,31 +158,30 @@ describe("block's thresholds are settings configure mode steps", () => {
       ...testVerbContext(rt.sessionState, durable.historyFor(rt.sessionState)),
       configFor: () => load(BLOCK_ONLY),
     };
-    expect(() =>
-      setState(`${SID}/${warn}/70/${error}/60`, ctx),
-    ).toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);
+    await expect(setState(`${SID}/${warn}/70/${error}/60`, ctx),
+    ).rejects.toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);
     expect(rt.pick("block", "warnAt")).toBeNull();
     // Raising both together is one write that stands.
-    setState(`${SID}/${warn}/85/${error}/90`, ctx);
+    await setState(`${SID}/${warn}/85/${error}/90`, ctx);
     expect(rt.pick("block", "warnAt")).toBe("85");
     expect(rt.pick("block", "errorAt")).toBe("90");
   });
 });
 
 describe("a stride wider than 1 reaches both ends", () => {
-  test("a step past a bound stops on it; only a step from the bound wraps", () => {
+  test("a step past a bound stops on it; only a step from the bound wraps", async () => {
     const rt = buildRuntime(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
     configurePlacement(rt.sessionState, SID, "default", "session");
     const budget = placementDraftKey("default", "session", "budget");
     rt.sessionState.set(SID, budget, "9998");
-    rt.click(rt.stepper("session", "budget", 5));
+    await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("10000");
-    rt.click(rt.stepper("session", "budget", 5));
+    await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("0");
     rt.sessionState.set(SID, budget, "3");
-    rt.click(rt.stepper("session", "budget", -5));
+    await rt.click(rt.stepper("session", "budget", -5));
     expect(rt.pick("session", "budget")).toBe("0");
-    rt.click(rt.stepper("session", "budget", -5));
+    await rt.click(rt.stepper("session", "budget", -5));
     expect(rt.pick("session", "budget")).toBe("10000");
   });
 });

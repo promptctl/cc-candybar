@@ -136,25 +136,25 @@ function build(src: string, withDefault: boolean) {
   };
   // Drive a click through the daemon's own handlers — the gate the row ✕
   // passes is the cycle action's, derived like every other set.
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   // Click the first link on any rendered line that writes `key` = `value`.
-  const clickWriting = (lines: string[], key: string, value: string): void => {
+  const clickWriting = async (lines: string[], key: string, value: string): Promise<void> => {
     const link = lines
       .flatMap(links)
       .find((l) =>
         effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
       );
     if (link === undefined) throw new Error(`nothing writes ${key}=${value}`);
-    click(link.url);
+    await click(link.url);
   };
   return {
     render,
@@ -186,14 +186,14 @@ const GROUPS = `{
 }`;
 
 describe("brandon-disclosure-43z — a group body", () => {
-  test("every row of a vertical body leads with a ✕ writing the group's (shared) key closed, and the click closes it", () => {
+  test("every row of a vertical body leads with a ✕ writing the group's (shared) key closed, and the click closes it", async () => {
     const rt = build(GROUPS, false);
     let lines = rt.render();
     // Closed: the two toggles on their own rows, no body, no ✕ anywhere.
     expect(lines).toHaveLength(3);
     expect(lines.flatMap(links).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
-    rt.clickWriting(lines, "acc", "one");
+    await rt.clickWriting(lines, "acc", "one");
     lines = rt.render();
     // Bar row, toggle `one`, its three body rows, toggle `two`.
     expect(lines).toHaveLength(6);
@@ -205,7 +205,7 @@ describe("brandon-disclosure-43z — a group body", () => {
       expect(links(row).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     }
 
-    rt.click(links(lines[2]!)[0]!.url);
+    await rt.click(links(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
     rt.dispose();
@@ -236,13 +236,13 @@ const closeLinks = (line: string): Link[] =>
   links(line).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE);
 
 describe("brandon-disclosure-43z — lines dropped below a body's horizontal row", () => {
-  test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", () => {
+  test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", async () => {
     const rt = build(DROPS, false);
     const key = `${GROUP_NS}wide`;
     let lines = rt.render();
     expect(lines).toHaveLength(3);
 
-    rt.clickWriting(lines, key, "wide");
+    await rt.clickWriting(lines, key, "wide");
     lines = rt.render();
     // Bar row, toggle `wide`, then the body: `M1 C` with M2 and M3 dropped
     // below it, `B A` with D dropped below it; then toggle `bare`.
@@ -266,11 +266,11 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     rt.dispose();
   });
 
-  test("a body whose every child is hidden lays no row and no ✕, on the bar or in the sink", () => {
+  test("a body whose every child is hidden lays no row and no ✕, on the bar or in the sink", async () => {
     const rt = build(DROPS, false);
     const key = `${GROUP_NS}bare`;
     let lines = rt.render();
-    rt.clickWriting(lines, key, "bare");
+    await rt.clickWriting(lines, key, "bare");
     lines = rt.render();
     // Bar row, toggle `wide`, toggle `bare` — open, with nothing under it.
     expect(lines).toHaveLength(3);

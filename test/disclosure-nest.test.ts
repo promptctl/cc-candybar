@@ -74,20 +74,20 @@ function buildRuntime(src: string) {
     log: (_level, line) => logged.push(line),
   };
   // One click is one verb call, as the daemon runs it.
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
-    VERBS.get(verb)!(value, ctx);
+    await VERBS.get(verb)!(value, ctx);
   };
   // Click the affordance whose URL writes `value` to a key `key` names
   // (exactly, or as a prefix ending in `*`), wherever it landed.
-  const clickWriting = (key: string, value: string): void => {
+  const clickWriting = async (key: string, value: string): Promise<void> => {
     const matches = (k: string): boolean =>
       key.endsWith("*") ? k.startsWith(key.slice(0, -1)) : k === key;
     const url = linkUrls(render()).find((u) =>
       effectsOf(u).some((e) => matches(e.args[1] ?? "") && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
-    click(url);
+    await click(url);
   };
   // What the session reads: a cleared key holds its state variable's default.
   const held = (key: string): string =>
@@ -96,38 +96,38 @@ function buildRuntime(src: string) {
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
-const openDoor = (rt: ReturnType<typeof buildRuntime>): void =>
-  rt.clickWriting(SETTINGS_ANCHOR, "open");
+const openDoor = async (rt: ReturnType<typeof buildRuntime>): Promise<void> =>
+  await rt.clickWriting(SETTINGS_ANCHOR, "open");
 
 describe("case 1: a tab's lists and submenus close with the tab", () => {
   test.each([
-    ["its trigger", (rt: ReturnType<typeof buildRuntime>) => rt.clickWriting(TAB, DISCLOSURE_CLOSED)],
-    ["opening another tab", (rt: ReturnType<typeof buildRuntime>) => rt.clickWriting(TAB, "config")],
-  ])("the effect list, closing 🎨 look by %s", (_how, close) => {
+    ["its trigger", async (rt: ReturnType<typeof buildRuntime>) => await rt.clickWriting(TAB, DISCLOSURE_CLOSED)],
+    ["opening another tab", async (rt: ReturnType<typeof buildRuntime>) => await rt.clickWriting(TAB, "config")],
+  ])("the effect list, closing 🎨 look by %s", async (_how, close) => {
     const rt = buildRuntime(BUNDLED);
-    openDoor(rt);
-    rt.clickWriting(TAB, "look");
-    rt.clickWriting(PICKERS, "candybar.apply.effect");
-    close(rt);
-    rt.clickWriting(TAB, "look");
+    await openDoor(rt);
+    await rt.clickWriting(TAB, "look");
+    await rt.clickWriting(PICKERS, "candybar.apply.effect");
+    await close(rt);
+    await rt.clickWriting(TAB, "look");
     expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("🧪 toggles, closing ⚙ config by opening ⚡ session", () => {
+  test("🧪 toggles, closing ⚙ config by opening ⚡ session", async () => {
     const rt = buildRuntime(BUNDLED);
-    openDoor(rt);
-    rt.clickWriting(TAB, "config");
-    rt.clickWriting(PICKERS, "toggles");
-    rt.clickWriting(TAB, "session");
+    await openDoor(rt);
+    await rt.clickWriting(TAB, "config");
+    await rt.clickWriting(PICKERS, "toggles");
+    await rt.clickWriting(TAB, "session");
     expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("a list on the door's own line stays open when a tab closes: one key, held outside the tab", () => {
+  test("a list on the door's own line stays open when a tab closes: one key, held outside the tab", async () => {
     const rt = buildRuntime(BUNDLED);
-    openDoor(rt);
-    rt.clickWriting(TAB, "look");
-    rt.clickWriting(PICKERS, "candybar.apply.theme");
-    rt.clickWriting(TAB, "config");
+    await openDoor(rt);
+    await rt.clickWriting(TAB, "look");
+    await rt.clickWriting(PICKERS, "candybar.apply.theme");
+    await rt.clickWriting(TAB, "config");
     expect(rt.held(PICKERS)).toBe("candybar.apply.theme");
   });
 });
@@ -136,58 +136,58 @@ describe("case 2: the gear's lists close with the gear", () => {
   test.each([
     ["its trigger", DISCLOSURE_CLOSED],
     ["opening 🎨 theme's list", "candybar.apply.theme"],
-  ])("closing ⚙ by %s closes the style list", (_how, closeWith) => {
+  ])("closing ⚙ by %s closes the style list", async (_how, closeWith) => {
     const rt = buildRuntime(BUNDLED);
-    openDoor(rt);
-    rt.clickWriting(PICKERS, "gear");
-    rt.clickWriting(GEAR_PICKERS, "candybar.apply.style");
-    rt.clickWriting(PICKERS, closeWith);
+    await openDoor(rt);
+    await rt.clickWriting(PICKERS, "gear");
+    await rt.clickWriting(GEAR_PICKERS, "candybar.apply.style");
+    await rt.clickWriting(PICKERS, closeWith);
     expect(rt.held(GEAR_PICKERS)).toBe(DISCLOSURE_CLOSED);
   });
 });
 
-test("case 3: a lane's (?) closes with 🧪 toggles", () => {
+test("case 3: a lane's (?) closes with 🧪 toggles", async () => {
   const rt = buildRuntime(BUNDLED);
-  openDoor(rt);
-  rt.clickWriting(TAB, "config");
-  rt.clickWriting(PICKERS, "toggles");
-  rt.clickWriting("candybar.help.experimentalBand", "open");
-  rt.clickWriting(PICKERS, DISCLOSURE_CLOSED);
-  rt.clickWriting(PICKERS, "toggles");
+  await openDoor(rt);
+  await rt.clickWriting(TAB, "config");
+  await rt.clickWriting(PICKERS, "toggles");
+  await rt.clickWriting("candybar.help.experimentalBand", "open");
+  await rt.clickWriting(PICKERS, DISCLOSURE_CLOSED);
+  await rt.clickWriting(PICKERS, "toggles");
   expect(rt.held("candybar.help.experimentalBand")).toBe(DISCLOSURE_CLOSED);
 });
 
 describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
-  const arrange = (rt: ReturnType<typeof buildRuntime>): void => {
-    openDoor(rt);
-    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  const arrange = async (rt: ReturnType<typeof buildRuntime>): Promise<void> => {
+    await openDoor(rt);
+    await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
   };
 
-  test("case 4: a ✚'s segment library", () => {
+  test("case 4: a ✚'s segment library", async () => {
     const rt = buildRuntime(BUNDLED);
-    arrange(rt);
-    rt.clickWriting("menus.edit_default_insertSeg_0.*", "edit.default.insert.0");
+    await arrange(rt);
+    await rt.clickWriting("menus.edit_default_insertSeg_0.*", "edit.default.insert.0");
     const key = "menus.edit_default_insertSeg_0.edit_default_insert_0";
     expect(rt.held(key)).toBe("edit.default.insert.0");
-    rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
-    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(rt.held(key)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("case 5: edit mode's (?)", () => {
+  test("case 5: edit mode's (?)", async () => {
     const rt = buildRuntime(BUNDLED);
-    arrange(rt);
-    rt.clickWriting("edit.help", "open");
-    rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
-    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await arrange(rt);
+    await rt.clickWriting("edit.help", "open");
+    await rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(rt.held("edit.help")).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("case 6: closing the door leaves edit mode, and what edit mode opened", () => {
+  test("case 6: closing the door leaves edit mode, and what edit mode opened", async () => {
     const rt = buildRuntime(BUNDLED);
-    arrange(rt);
-    rt.clickWriting("edit.help", "open");
-    rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+    await arrange(rt);
+    await rt.clickWriting("edit.help", "open");
+    await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held("edit.help")).toBe(DISCLOSURE_CLOSED);
     expect(stripAnsi(rt.render())).not.toContain("✓ done");
@@ -195,26 +195,26 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
 });
 
 
-test("◁ back over a closed door restores the menu with what was open in it", () => {
+test("◁ back over a closed door restores the menu with what was open in it", async () => {
   const rt = buildRuntime(BUNDLED);
-  openDoor(rt);
-  rt.clickWriting(TAB, "look");
-  rt.clickWriting(PICKERS, "candybar.apply.effect");
-  rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+  await openDoor(rt);
+  await rt.clickWriting(TAB, "look");
+  await rt.clickWriting(PICKERS, "candybar.apply.effect");
+  await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
   expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
-  VERBS.get("back")!(SID, rt.ctx);
+  await VERBS.get("back")!(SID, rt.ctx);
   expect(rt.held(SETTINGS_ANCHOR)).toBe("open");
   expect(rt.held(TAB)).toBe("look");
   expect(rt.held(PICKERS)).toBe("candybar.apply.effect");
 });
 
-test("the close is logged with what it folded", () => {
+test("the close is logged with what it folded", async () => {
   const rt = buildRuntime(BUNDLED);
-  openDoor(rt);
-  rt.clickWriting(TAB, "look");
-  rt.clickWriting(PICKERS, "candybar.apply.effect");
+  await openDoor(rt);
+  await rt.clickWriting(TAB, "look");
+  await rt.clickWriting(PICKERS, "candybar.apply.effect");
   rt.logged.length = 0;
-  rt.clickWriting(TAB, "config");
+  await rt.clickWriting(TAB, "config");
   expect(rt.logged).toContain(
     `close-nested: folded=${PICKERS} (session=${SID})`,
   );
@@ -240,33 +240,33 @@ const GROUPS = `{
 const MENU_KEY = "menus.picky.applyTheme";
 
 describe("cases 7–9: a config's nested groups and menus", () => {
-  test("case 7: a nested group closes with its parent", () => {
+  test("case 7: a nested group closes with its parent", async () => {
     const rt = buildRuntime(GROUPS);
-    rt.clickWriting("acc", "outer");
-    rt.clickWriting("groups.inner", "inner");
-    rt.clickWriting("acc", DISCLOSURE_CLOSED);
-    rt.clickWriting("acc", "outer");
+    await rt.clickWriting("acc", "outer");
+    await rt.clickWriting("groups.inner", "inner");
+    await rt.clickWriting("acc", DISCLOSURE_CLOSED);
+    await rt.clickWriting("acc", "outer");
     expect(rt.held("groups.inner")).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("case 8: and when the parent closes because an accordion sibling opened", () => {
+  test("case 8: and when the parent closes because an accordion sibling opened", async () => {
     const rt = buildRuntime(GROUPS);
-    rt.clickWriting("acc", "outer");
-    rt.clickWriting("groups.inner", "inner");
-    rt.clickWriting("acc", "other");
+    await rt.clickWriting("acc", "outer");
+    await rt.clickWriting("groups.inner", "inner");
+    await rt.clickWriting("acc", "other");
     expect(rt.held("groups.inner")).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("case 9: a {{ menu }} inside a group closes with the group", () => {
+  test("case 9: a {{ menu }} inside a group closes with the group", async () => {
     const rt = buildRuntime(GROUPS);
-    rt.clickWriting("acc", "outer");
-    rt.clickWriting(MENU_KEY, "applyTheme");
-    rt.clickWriting("acc", DISCLOSURE_CLOSED);
-    rt.clickWriting("acc", "outer");
+    await rt.clickWriting("acc", "outer");
+    await rt.clickWriting(MENU_KEY, "applyTheme");
+    await rt.clickWriting("acc", DISCLOSURE_CLOSED);
+    await rt.clickWriting("acc", "outer");
     expect(rt.held(MENU_KEY)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("a group two levels down closes too, under one that starts open", () => {
+  test("a group two levels down closes too, under one that starts open", async () => {
     const rt = buildRuntime(`{ root: { v: [
       { kind: 'group', name: 'outer', label: 'outer', children: [
         { kind: 'group', name: 'middle', label: 'middle', open: true, children: [
@@ -274,10 +274,10 @@ describe("cases 7–9: a config's nested groups and menus", () => {
         ] },
       ] },
     ] } }`);
-    rt.clickWriting("groups.outer", "outer");
-    rt.clickWriting("groups.inner", "inner");
-    rt.clickWriting("groups.outer", DISCLOSURE_CLOSED);
-    rt.clickWriting("groups.outer", "outer");
+    await rt.clickWriting("groups.outer", "outer");
+    await rt.clickWriting("groups.inner", "inner");
+    await rt.clickWriting("groups.outer", DISCLOSURE_CLOSED);
+    await rt.clickWriting("groups.outer", "outer");
     expect(rt.held("groups.inner")).toBe(DISCLOSURE_CLOSED);
     expect(rt.held("groups.middle")).toBe("middle");
   });

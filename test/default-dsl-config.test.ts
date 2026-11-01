@@ -525,7 +525,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // then re-renders with theme.effective/style.effective recomputed exactly as
   // draw-bar.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
-  test("clicking a theme/style option changes theme.effective/style.effective on the next render", () => {
+  test("clicking a theme/style option changes theme.effective/style.effective on the next render", async () => {
     const SID = "theming-8uj-1";
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
@@ -576,7 +576,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // opened (brandon-theme-swatch-8v9r) — open both with the same clicks
       // a "🍫" then "🎨 theme" tap would dispatch, so the controls this test
       // exercises render.
-      clickUrl(
+      await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           {
@@ -604,7 +604,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const before = render();
       expect(names(before, `${targetTheme} ▀▀▀`)).toBe(false);
 
-      clickUrl(
+      await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] },
         ]),
@@ -623,7 +623,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             "— need at least one other declared look to exercise a look-switching click",
         );
       }
-      clickUrl(
+      await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
           { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
@@ -1258,7 +1258,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     // The arrow is one clickable region, and a click on it flips the form
     // through the same gate and verb table the daemon dispatches through.
-    test("clicking the arrow expands, and clicking it again collapses", () => {
+    test("clicking the arrow expands, and clicking it again collapses", async () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const state = new SessionState();
       recordRender(state, GIT_PAYLOAD.session_id);
@@ -1277,7 +1277,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         state,
       );
       expect(strip(collapsed)).toMatch(/▸$/);
-      clickUrl(arrow(collapsed), ctx);
+      await clickUrl(arrow(collapsed), ctx);
       expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe("expanded");
 
       const expanded = renderSegment(
@@ -1288,7 +1288,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         state,
       );
       expect(strip(expanded)).toMatch(/^\(git\) .* ◂$/);
-      clickUrl(arrow(expanded), ctx);
+      await clickUrl(arrow(expanded), ctx);
       expect(
         strip(
           renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, state),

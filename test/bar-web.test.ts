@@ -20,7 +20,7 @@ const ASSETS = path.join(process.cwd(), "scripts/bar-web");
 
 describe("bar-web", () => {
   let web: BarWeb | undefined;
-  afterEach(async () => web?.close());
+  afterEach(async () => await web?.close());
 
   const serve = (): Promise<BarWeb> =>
     serveBar(

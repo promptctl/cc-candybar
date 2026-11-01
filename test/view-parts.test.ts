@@ -304,7 +304,7 @@ describe("a kept view draws what a fresh one draws", () => {
     DEFAULT_DSL_CONFIG,
   );
 
-  test("through the bundled bar's clicks and picks", () => {
+  test("through the bundled bar's clicks and picks", async () => {
     const sessionState = new SessionState();
     const kept = viewOf(config, sessionState);
     recordRender(sessionState, SID);
@@ -347,7 +347,7 @@ describe("a kept view draws what a fresh one draws", () => {
       last = drawn.text;
       return drawn.evaluated;
     };
-    const clickText = (text: string): void => {
+    const clickText = async (text: string): Promise<void> => {
       const hit = links(last).find((l) => stripAnsi(l.text) === text);
       if (hit === undefined) {
         throw new Error(
@@ -359,14 +359,14 @@ describe("a kept view draws what a fresh one draws", () => {
       const { verb, value } = parseHandlerUrl(hit.url);
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
     };
 
     const cold = step();
     expect(step()).toBeLessThan(cold);
-    clickText("🍫");
+    await clickText("🍫");
     step();
-    clickText("🎨 look");
+    await clickText("🎨 look");
     step();
     sessionState.set(SID, "theme", listResolvablePaletteNames()[3]!);
     step();
@@ -378,7 +378,7 @@ describe("a kept view draws what a fresh one draws", () => {
     step();
     model = "Sonnet 4.7";
     step();
-    clickText("✖");
+    await clickText("✖");
     step();
     sessionState.set(SID, "preset", "compact");
     step();

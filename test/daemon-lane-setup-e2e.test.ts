@@ -95,8 +95,8 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     render(daemon, sid, dir, inTmux(sid), args());
   // A lane's switch, moved: on is the value that turns it on, off the
   // setting's floor (`false` for a 🧪 toggle, `claude` for the renderer).
-  const switchLanes = (sid: string, on: boolean, ...lanes: Lane[]) =>
-    click(
+  const switchLanes = async (sid: string, on: boolean, ...lanes: Lane[]) =>
+    await click(
       daemon,
       effectsUrl(
         lanes.map((lane) => {

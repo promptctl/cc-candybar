@@ -119,7 +119,7 @@ esac
       .catch(() => null);
     await until(() => asked().includes("log"), "the pass's commit read");
 
-    first.daemon.close();
+    await first.daemon.close();
     const second = start();
 
     // What says the launch was tried: a count of the calls `git` saw reads the
@@ -130,14 +130,14 @@ esac
     expect(second.daemon.stats.subprocessTotal).toBe(0);
     expect(second.daemon.stats.subprocessRefused.size).toBe(0);
 
-    second.daemon.close();
+    await second.daemon.close();
     expect(refused()).toBe(1);
     expect(asked()).toEqual(["status", "log"]);
     for (const daemon of up.splice(0).reverse()) await daemon.stop();
     await answer;
   });
 
-  test("a launch its rate limit refused runs at once on the next daemon", () => {
+  test("a launch its rate limit refused runs at once on the next daemon", async () => {
     const open = { bin: "/bin/echo", category: "click.open" } as const;
     const first = start();
     expect(first.daemon.launcher.launchSync(open)).toMatchObject({ ok: true });
@@ -145,7 +145,7 @@ esac
       reason: "rate-limited",
     });
 
-    first.daemon.close();
+    await first.daemon.close();
     const second = start();
 
     expect(second.daemon.launcher.launchSync(open)).toMatchObject({ ok: true });
@@ -162,7 +162,7 @@ esac
       )
       .catch(() => null);
 
-    first.daemon.close();
+    await first.daemon.close();
     const second = start();
     await answer;
 
@@ -190,7 +190,7 @@ esac
       },
     });
 
-    first.daemon.close();
+    await first.daemon.close();
     start();
     storageLog("warn", "a write that outlived its daemon");
 

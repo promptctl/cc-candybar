@@ -293,10 +293,10 @@ const STAGE_NAMES = [
   "layout tab",
   "config tab",
 ] as const;
-function forEachStage(
+async function forEachStage(
   theme: string,
   measure: (stage: string, render: (colorCompatibility: ColorCompatibility) => Chars) => void,
-): void {
+): Promise<void> {
   const OPTS = {
     endcaps: "powerline" as const,
     wrap: true,
@@ -355,7 +355,7 @@ function forEachStage(
       renderDsl(config, compiled, store, registry, PAYLOAD, at, { ...OPTS, colorCompatibility });
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
-      if (url !== null) clickUrl(url, ctx);
+      if (url !== null) await clickUrl(url, ctx);
       measure(stage, (colorCompatibility) => drawnChars(render(colorCompatibility)));
     }
   } finally {
@@ -382,11 +382,11 @@ test("every bundled theme's text reads at 256 colours as it does in truecolor", 
 // Every text colour chosen in an open state — a trigger's state cell, a band
 // plane, a band item, an applied option — is floored at the drawn depth, so
 // each stage is measured as the closed bar is.
-test("every open settings band and picker reads at 256 colours as it does in truecolor", () => {
+test("every open settings band and picker reads at 256 colours as it does in truecolor", async () => {
   const failures: string[] = [];
   let measured = 0;
   for (const theme of listThemePalettes()) {
-    forEachStage(theme, (stage, render) => {
+    await forEachStage(theme, (stage, render) => {
       measured += compare(`${theme} [${stage}]`, render("truecolor"), render("256"), failures);
     });
   }
@@ -404,7 +404,7 @@ test("at ansi no divider is drawn, every arrow's ink is its cell's slot or rich-
       const ansi = await bars.render(theme, "ansi");
       measured += sameIndex(theme, ansi, failures);
       seams += seamInks(theme, await bars.render(theme, "truecolor"), ansi, "ansi", failures);
-      forEachStage(theme, (stage, render) => {
+      await forEachStage(theme, (stage, render) => {
         const staged = render("ansi");
         measured += sameIndex(`${theme} [${stage}]`, staged, failures);
         seams += seamInks(`${theme} [${stage}]`, render("truecolor"), staged, "ansi", failures);

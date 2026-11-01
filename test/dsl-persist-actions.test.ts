@@ -426,14 +426,14 @@ function buildPersistRuntime(
     durable.historyFor(sessionState),
     config,
   );
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
       const handler = VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      handler(e.value, ctx);
+      await handler(e.value, ctx);
     }
   };
   return { config, store, render, click, sessionState };
@@ -461,7 +461,7 @@ describe("persist action click → the config file", () => {
     root: 'bar',
   }`;
 
-  test("clicking a persist-option action writes globals.palette into the config file", () => {
+  test("clicking a persist-option action writes globals.palette into the config file", async () => {
     const { render, click } = buildPersistRuntime(SRC);
     const original = durable.text()!;
     const out = render();
@@ -469,7 +469,7 @@ describe("persist action click → the config file", () => {
     // The first link is applyTheme bound to "nord" (the display text).
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
-    click(urls[0]!);
+    await click(urls[0]!);
     expect(globalsInFile()).toEqual({ palette: "nord" });
     // One span changed; the rest of the file is the author's, byte for byte.
     const written = durable.text()!;
@@ -480,14 +480,14 @@ describe("persist action click → the config file", () => {
     ]);
   });
 
-  test("clicking reset deletes the persisted key from the file", () => {
+  test("clicking reset deletes the persisted key from the file", async () => {
     const { render, click } = buildPersistRuntime(SRC);
     const urls = ownUrls(render());
-    click(urls[0]!);
+    await click(urls[0]!);
     expect(globalsInFile()).toEqual({ palette: "nord" });
     const resetUrl = urls[1]!;
     expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
-    click(resetUrl);
+    await click(resetUrl);
     expect(globalsInFile()).toEqual({});
     expect(durable.text()).toContain(GLOBALS_COMMENT);
   });
@@ -510,23 +510,23 @@ describe("persist action click → the config file", () => {
     presets: { compact: {} },
   }`;
 
-  test("clicking a persist-option action over preset writes globals.preset into the config file", () => {
+  test("clicking a persist-option action over preset writes globals.preset into the config file", async () => {
     const { render, click } = buildPersistRuntime(SRC_PRESET);
     const urls = ownUrls(render());
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
-    click(urls[0]!);
+    await click(urls[0]!);
     expect(globalsInFile()).toEqual({ preset: "compact" });
   });
 
-  test("clicking reset deletes the persisted preset from the file", () => {
+  test("clicking reset deletes the persisted preset from the file", async () => {
     const { render, click } = buildPersistRuntime(SRC_PRESET);
     const urls = ownUrls(render());
-    click(urls[0]!);
+    await click(urls[0]!);
     expect(globalsInFile()).toEqual({ preset: "compact" });
     const resetUrl = urls[1]!;
     expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
-    click(resetUrl);
+    await click(resetUrl);
     expect(globalsInFile()).toEqual({});
   });
 
@@ -541,7 +541,7 @@ describe("persist action click → the config file", () => {
   // SessionState write and its option a config-file write, so this test's
   // clicks cross BOTH of the config's gates — the combination any config
   // mixing session and persist actions derives.
-  test("a persist-option action bound via {{ menu }} opens and its option click writes set-config, not set-state", () => {
+  test("a persist-option action bound via {{ menu }} opens and its option click writes set-config, not set-state", async () => {
     const src = `{
       globals: {},
       variables: {
@@ -581,14 +581,14 @@ describe("persist action click → the config file", () => {
       durable.historyFor(sessionState),
       config,
     );
-    const click = (url: string): void => {
+    const click = async (url: string): Promise<void> => {
       const { verb, value } = parseHandlerUrl(url);
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
       for (const e of effects) {
         const handler = VERBS.get(e.verb);
         if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-        handler(e.value, ctx);
+        await handler(e.value, ctx);
       }
     };
     try {
@@ -596,7 +596,7 @@ describe("persist action click → the config file", () => {
       const toggleUrl = ownUrls(render()).find(
         (u) => effectsOf(u)[0]!.verb === "set-state",
       )!;
-      click(toggleUrl);
+      await click(toggleUrl);
 
       // Opened: this must not throw (the bug threw here) and must list
       // "256" as a set-config-backed option, never set-state.
@@ -615,7 +615,7 @@ describe("persist action click → the config file", () => {
         ),
       ).toBe(false);
 
-      click(depthUrl!);
+      await click(depthUrl!);
       expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
     } finally {
       registry.dispose();
@@ -641,28 +641,28 @@ describe("persist action click → the config file", () => {
     root: 'bar',
   }`;
 
-  test("clicking a persist-literal (to) action writes the fixed value durably", () => {
+  test("clicking a persist-literal (to) action writes the fixed value durably", async () => {
     const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[0]!)[0]!;
     expect(effect.verb).toBe("set-config");
-    click(urls[0]!);
+    await click(urls[0]!);
     expect(globalsInFile()).toEqual({ style: "vivid" });
   });
 
-  test("clicking a persist-cycle action writes the successor member durably", () => {
+  test("clicking a persist-cycle action writes the successor member durably", async () => {
     const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[1]!)[0]!;
     expect(effect.verb).toBe("set-config");
-    click(urls[1]!);
+    await click(urls[1]!);
     // Unset counts as the first member ("truecolor"); the click writes the
     // successor ("256") — same "unknown current counts as first" rule the
     // renderer's cycleIndex uses.
     expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
   });
 
-  test("clicking a persist-bounded action steps and persists via stepConfig", () => {
+  test("clicking a persist-bounded action steps and persists via stepConfig", async () => {
     const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
@@ -672,8 +672,8 @@ describe("persist action click → the config file", () => {
     // so that is the field's floor (GLOBAL_FIELDS.padding.floor = 1), not `min`.
     // candybar-settings-ui-aok.3: stepping from `min` is what made the first ◀
     // on a bar reading `padding 1` wrap to 16.
-    click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
-    click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
+    await click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
+    await click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
     expect(globalsInFile()).toEqual({ padding: 3 });
   });
 
@@ -699,21 +699,21 @@ describe("persist action click → the config file", () => {
       preset,
     );
 
-  test("a persist stepper under a preset that pins its field steps and writes that preset's globals", () => {
+  test("a persist stepper under a preset that pins its field steps and writes that preset's globals", async () => {
     const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET);
     sessionState.set("s1", "preset", "roomy");
     const urls = ownUrls(render());
-    click(urls[0]!); // seeds from roomy's 4, not the shadowed top-level 2
+    await click(urls[0]!); // seeds from roomy's 4, not the shadowed top-level 2
     expect(barUnder("roomy").padding).toBe(5);
     expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
   });
 
-  test("a persist cycle under a preset that pins its field writes that preset's globals", () => {
+  test("a persist cycle under a preset that pins its field writes that preset's globals", async () => {
     const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET);
     sessionState.set("s1", "preset", "roomy");
-    click(ownUrls(render())[1]!);
+    await click(ownUrls(render())[1]!);
     expect(barUnder("roomy").autoWrap).toBe(false);
     expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
   });
@@ -721,7 +721,7 @@ describe("persist action click → the config file", () => {
   // The ticket's repro: the pinning preset lives in the default the file
   // merges over (bundled `compact` pins padding 0), and the file names no
   // preset at all.
-  test("a persist stepper under a default-declared preset the file never names writes that preset's globals", () => {
+  test("a persist stepper under a default-declared preset the file never names writes that preset's globals", async () => {
     const withCompact: DslConfig = {
       ...EMPTY_DEFAULT,
       presets: { compact: { globals: { padding: 0 } } },
@@ -732,17 +732,17 @@ describe("persist action click → the config file", () => {
       withCompact,
     );
     sessionState.set("s1", "preset", "compact");
-    click(ownUrls(render())[2]!);
+    await click(ownUrls(render())[2]!);
     expect(barUnder("compact", withCompact).padding).toBe(1);
     expect(globalsInFile()).toEqual({});
   });
 
-  test("a persist stepper under a preset silent on its field still writes top-level globals", () => {
+  test("a persist stepper under a preset silent on its field still writes top-level globals", async () => {
     const { render, click, sessionState } = buildPersistRuntime(
       SRC_UNDER_PRESET.replace("padding: 4, ", ""),
     );
     sessionState.set("s1", "preset", "roomy");
-    click(ownUrls(render())[0]!);
+    await click(ownUrls(render())[0]!);
     expect(globalsInFile()).toEqual({ padding: 3, autoWrap: true });
   });
 
@@ -780,7 +780,7 @@ describe("persist action click → the config file", () => {
   // over it round-trips through coercePersistValue's boolean branch (not
   // just its own unit test above) and lands as a real JSON5 boolean in the
   // file, not the string "false".
-  test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", () => {
+  test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", async () => {
     const { render, click } = buildPersistRuntime(`{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
@@ -789,11 +789,11 @@ describe("persist action click → the config file", () => {
       root: 'bar',
     }`);
     const urls = ownUrls(render());
-    click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
+    await click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
     expect(globalsInFile()).toEqual({ autoWrap: false });
   });
 
-  test("an unknown config key is rejected loudly, not silently written", () => {
+  test("an unknown config key is rejected loudly, not silently written", async () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -813,12 +813,11 @@ describe("persist action click → the config file", () => {
       config,
     );
     const setConfig = VERBS.get("set-config")!;
-    expect(() =>
-      setConfig(
+    await expect(setConfig(
         `${encodeURIComponent("s1")}/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
         ctx,
       ),
-    ).toThrow(/unknown config key "not-a-real-key"/);
+    ).rejects.toThrow(/unknown config key "not-a-real-key"/);
   });
 });
 
@@ -851,7 +850,7 @@ describe("a durable click lands in the file the next reload reads", () => {
   // session (load-config pick > `--config` > `configEnv` hint). It is the sole
   // candidate: the click lands there — creating the file when it is `missing`
   // — and never falls through to the project file or the XDG tail.
-  test("an origin with an explicit path writes that path, even before it exists", () => {
+  test("an origin with an explicit path writes that path, even before it exists", async () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -869,7 +868,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.historyFor(sessionState),
       config,
     );
-    VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
+    await VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
     expect(
       (
         JSON5.parse(readFileSync(named, "utf8")) as {
@@ -887,7 +886,7 @@ describe("a durable click lands in the file the next reload reads", () => {
   // (durableConfig) — the user's file, whatever project layer has appeared
   // over it since: a project file is somebody's repository, never where a
   // click lands (brandon-plugins-ktag.8th).
-  test("no file yet creates the user's file; a project file appearing afterwards does not take the next click", () => {
+  test("no file yet creates the user's file; a project file appearing afterwards does not take the next click", async () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -903,16 +902,16 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.historyFor(sessionState),
       config,
     );
-    const click = (palette: string): void =>
-      VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
+    const click = async (palette: string): Promise<void> =>
+      await VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
     expect(durable.text()).toBeNull();
-    click("nord");
+    await click("nord");
     expect(durable.parsed()).toEqual({ globals: { palette: "nord" } });
 
     // A project layer appears between renders.
     const project = `{ globals: { menuGlyph: "P" } }`;
     writeFileSync(durable.projectPath, project);
-    click("dracula");
+    await click("dracula");
     expect(durable.parsed()).toEqual({ globals: { palette: "dracula" } });
     expect(readFileSync(durable.projectPath, "utf8")).toBe(project);
   });
@@ -958,13 +957,13 @@ describe("RenderCache: the config file is the durable store", () => {
         entry.state.config,
       );
       let clicked = false;
-      await reloads.after(entry, () => {
+      await reloads.after(entry, async () => {
         if (clicked) {
           writeFileSync(durable.configPath, durable.text()!);
           return;
         }
         clicked = true;
-        VERBS.get("set-config")!(
+        await VERBS.get("set-config")!(
           ["s1", "palette", "nord"].map(encodeURIComponent).join("/"),
           ctx,
         );

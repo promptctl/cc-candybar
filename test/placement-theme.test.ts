@@ -119,11 +119,11 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
     },
   };
-  const click = (url: string): void => {
+  const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
   };
   return { config, compiled, store, registry, sessionState, render, bgOf, click, ctx };
 }
@@ -233,7 +233,7 @@ describe("load errors", () => {
 });
 
 describe("configure mode picks a placement's theme", () => {
-  test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", () => {
+  test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", async () => {
     durable.write(TWO);
     const rt = buildRuntime(TWO);
     configurePlacement(rt.sessionState, SID, "default", "tag");
@@ -247,7 +247,7 @@ describe("configure mode picks a placement's theme", () => {
       ),
     );
     expect(open).toBeDefined();
-    rt.click(open!);
+    await rt.click(open!);
     const out = rt.render(BAR_A);
     // Every swatch of the row applies the theme it stands for, gated by the
     // theme domain.
@@ -283,7 +283,7 @@ describe("configure mode picks a placement's theme", () => {
     ).toEqual([]);
 
     const pinnedBefore = rt.bgOf("pinned");
-    rt.click(writing(first!)[0]!);
+    await rt.click(writing(first!)[0]!);
     rt.sessionState.set(SID, EDIT_MODE_KEY, "closed");
     rt.render(BAR_A);
     const following = buildRuntime(
@@ -294,7 +294,7 @@ describe("configure mode picks a placement's theme", () => {
     expect(rt.bgOf("pinned")).toBe(pinnedBefore);
 
     const logged: string[] = [];
-    VERBS.get(VERB_SAVE)!(SID, {
+    await VERBS.get(VERB_SAVE)!(SID, {
       ...rt.ctx,
       log: (_level, message) => logged.push(message),
     });

@@ -388,6 +388,7 @@ describe("every render request writes one render event, whatever its outcome", (
       "queued",
       "verb",
       "sid",
+      "turnWait",
       "timedOut",
       "took",
       "outcome",
@@ -417,6 +418,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(unparsed.fields.map(([key]) => key)).toEqual([
       "queued",
       "verb",
+      "turnWait",
       "timedOut",
       "took",
       "outcome",
@@ -782,8 +784,8 @@ describe("the tmux stub's wait is its gate's", () => {
     try {
       // A spawn that fails rejects here, by name, and the gate closes
       // whichever way this ends.
-      await Promise.all([once(child, "spawn"), stub.asked(1)]).finally(() =>
-        stub.close(),
+      await Promise.all([once(child, "spawn"), stub.asked(1)]).finally(async () =>
+        await stub.close(),
       );
       // Bounded, so a stub that ignores its gate fails this test by name and
       // the cleanup below still runs.

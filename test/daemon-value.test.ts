@@ -97,8 +97,8 @@ describe("the daemon is a value", () => {
     return daemon;
   };
 
-  const close = (daemon: Daemon): void => {
-    daemon.close();
+  const close = async (daemon: Daemon): Promise<void> => {
+    await daemon.close();
     open = null;
   };
 
@@ -160,8 +160,8 @@ describe("the daemon is a value", () => {
     config = path.join(projectDir, "bar.json5");
   });
 
-  afterEach(() => {
-    if (open !== null) close(open);
+  afterEach(async () => {
+    if (open !== null) await close(open);
     // A live scope would refuse the next test's daemon; this file runs one at a
     // time, so what is left here is the case's own.
     rmSync(sessionStatePath(), { force: true });
@@ -188,7 +188,7 @@ describe("the daemon is a value", () => {
     writeConfig(PADDED);
     const daemon = construct();
     await answer(daemon, renderRequest("value-refused"));
-    close(daemon);
+    await close(daemon);
     const closed = "the daemon closed";
 
     await expect(
@@ -216,7 +216,7 @@ describe("the daemon is a value", () => {
     expect(() => daemon.reloadConfig({} as RenderOrigin)).toThrow(closed);
   });
 
-  test("a second daemon while one is live is refused before it builds anything", () => {
+  test("a second daemon while one is live is refused before it builds anything", async () => {
     writeConfig(PADDED);
     const daemon = construct();
     const load = jest.fn(() => ({}));
@@ -224,7 +224,7 @@ describe("the daemon is a value", () => {
       construct({ session: { load, save: () => {}, flush: () => {} } }),
     ).toThrow("a daemon is already live");
     expect(load).not.toHaveBeenCalled();
-    close(daemon);
+    await close(daemon);
   });
 
   test("a build that throws stands in the way of no next build", async () => {
@@ -244,7 +244,7 @@ describe("the daemon is a value", () => {
 
     const daemon = construct();
     await answer(daemon, renderRequest("value-rebuilt"));
-    close(daemon);
+    await close(daemon);
   });
 
   test("a render and a click go through the socket's own request handling", async () => {
@@ -266,7 +266,7 @@ describe("the daemon is a value", () => {
     const before = await answer(first, renderRequest("value-restart"));
     const [url] = linkUrls(before);
     await clickLink(first, url!);
-    close(first);
+    await close(first);
 
     const second = construct();
     const after = await answer(second, renderRequest("value-restart"));
@@ -276,7 +276,7 @@ describe("the daemon is a value", () => {
   test("the bundle it is given is the build its stats name", async () => {
     const daemon = construct({ digest: "the-given-digest" });
     expect((await statsOf(daemon)).sourceDigest).toBe("the-given-digest");
-    close(daemon);
+    await close(daemon);
   });
 
   test("the clock it is given is the instant the bar is drawn at", async () => {
@@ -358,7 +358,7 @@ describe("the daemon is a value", () => {
     );
 
     const sessionFile = sessionStatePath();
-    const closing = daemon.close();
+    const closing = await daemon.close();
     open = null;
     afterClose = { armed: [], fired: [] };
     const closedWith = readFileSync(sessionFile, "utf8");

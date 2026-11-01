@@ -508,7 +508,7 @@ describe("a click on a run link", () => {
     // Another session that has rendered: what its link must prove is the
     // signature.
     r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, target: { source: "search" } }));
-    expect(() => clickUrl(relink(tampered), ctx)).toThrow(BadVerbArgs);
+    await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(BadVerbArgs);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     expect(r.lines).toContainEqual(
       expect.stringMatching(
@@ -523,7 +523,7 @@ describe("a click on a run link", () => {
   test("a link naming a session that has never rendered is refused, and nothing runs", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
-    expect(() => clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view))).toThrow(
+    await expect(clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view))).rejects.toThrow(
       "session s3 has not rendered yet — no config to act on",
     );
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
@@ -539,10 +539,10 @@ describe("a click on a run link", () => {
       actions: { ...drawnUnder.actions, [link.name]: { ...decl, run: ["./other.sh", ...decl.run.slice(1)] } },
     } as typeof drawnUnder;
     const ctx = clickContext(r, view, { configFor: () => edited });
-    expect(() => clickUrl(link.url, ctx)).toThrow(/its action has been edited since it was drawn/);
+    await expect(clickUrl(link.url, ctx)).rejects.toThrow(/its action has been edited since it was drawn/);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     // The same link under the declaration it was drawn from runs.
-    clickUrl(link.url, clickContext(r, view));
+    await clickUrl(link.url, clickContext(r, view));
     expect(r.runs.stats()).toMatchObject({ started: 1 });
   });
 
@@ -550,7 +550,7 @@ describe("a click on a run link", () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
     const ctx = clickContext(r, view, { links: linkSigner(Buffer.alloc(32, 9)) });
-    expect(() => clickUrl(link.url, ctx)).toThrow(/signature does not match/);
+    await expect(clickUrl(link.url, ctx)).rejects.toThrow(/signature does not match/);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
   });
 
@@ -563,7 +563,7 @@ describe("a click on a run link", () => {
         name: action,
         mac: TEST_SIGNER.sign({ sessionId: SID, action, declaration: "[]", evaluated: link.evaluated }),
       };
-      expect(() => clickUrl(relink(forged), clickContext(r, view))).toThrow(
+      await expect(clickUrl(relink(forged), clickContext(r, view))).rejects.toThrow(
         `"${action}" is not a run action this session's config declares`,
       );
     }
@@ -578,7 +578,7 @@ describe("a click on a run link", () => {
     await writeUntilRead(view, STATUS, SID, { home: "/h/old" });
     expect(draw(view).text).toContain("home=/h/old");
 
-    clickUrl(link.url, clickContext(r, view));
+    await clickUrl(link.url, clickContext(r, view));
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 1 });
     // `superseded` is the state no request waits on
     // (test/render-payload-outcomes.test.ts).
@@ -602,7 +602,7 @@ describe("a click on a run link", () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
 
-    clickUrl(link.url, clickContext(r, view));
+    await clickUrl(link.url, clickContext(r, view));
     await until(() => draw(view).text.includes("home=/h/new"), "the program's write", 10_000);
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
     expect(lastClickError(r.sessionState, SID)).toBeNull();

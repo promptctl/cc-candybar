@@ -112,12 +112,12 @@ function buildRuntime(source: string) {
   return { config, sessionState, render, effectiveNow };
 }
 
-function setState(
+async function setState(
   sessionState: SessionState,
   key: string,
   value: string,
-): void {
-  clickUrl(
+): Promise<void> {
+  await clickUrl(
     effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]),
     testVerbContext(sessionState, undefined, renderedConfig.get(sessionState)),
   );
@@ -128,20 +128,20 @@ function setState(
 // runtimes gates each one's clicks by its own config.
 const renderedConfig = new WeakMap<SessionState, ValidatedConfig>();
 
-const enterEditMode = (s: SessionState) =>
-  setState(s, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-const leaveEditMode = (s: SessionState) => setState(s, EDIT_MODE_KEY, "closed");
+const enterEditMode = async (s: SessionState) =>
+  await setState(s, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+const leaveEditMode = async (s: SessionState) => await setState(s, EDIT_MODE_KEY, "closed");
 
 describe("edit mode's look — a staged globals fragment", () => {
-  test("entering restyles the bar and leaving restores the previous bytes exactly", () => {
+  test("entering restyles the bar and leaving restores the previous bytes exactly", async () => {
     const { sessionState, render } = buildRuntime(
       src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
 
     const before = render();
-    enterEditMode(sessionState);
+    await enterEditMode(sessionState);
     const editing = render();
-    leaveEditMode(sessionState);
+    await leaveEditMode(sessionState);
     const after = render();
 
     expect(editing).not.toBe(before);
@@ -152,28 +152,28 @@ describe("edit mode's look — a staged globals fragment", () => {
     expect(after).toBe(before);
   });
 
-  test("the staged fragment outranks a session pick, which governs again on exit", () => {
+  test("the staged fragment outranks a session pick, which governs again on exit", async () => {
     const { sessionState, render, effectiveNow } = buildRuntime(
       src(`editGlobals: { endcaps: 'plain', default_separator: ' | ' },`),
     );
 
-    setState(sessionState, "endcaps", "capsule");
+    await setState(sessionState, "endcaps", "capsule");
     const capsule = render();
     expect(effectiveNow().endcaps).toBe("capsule");
 
-    enterEditMode(sessionState);
+    await enterEditMode(sessionState);
     // The rightmost rung wins: a session pick made BEFORE entering edit mode
     // cannot survive into a mode whose whole job is to stop segments reading as
     // one continuous strip.
     expect(effectiveNow().endcaps).toBe("plain");
     expect(render()).not.toBe(capsule);
 
-    leaveEditMode(sessionState);
+    await leaveEditMode(sessionState);
     expect(effectiveNow().endcaps).toBe("capsule");
     expect(render()).toBe(capsule);
   });
 
-  test("the look is authored: two configs differing only in editGlobals render differently", () => {
+  test("the look is authored: two configs differing only in editGlobals render differently", async () => {
     // [LAW:verifiable-goals] The ticket's actual bar — "a config can change the
     // edit-mode look; a test demonstrates it with config data only and no
     // engine edit". Both runtimes below run the SAME engine.
@@ -184,15 +184,15 @@ describe("edit mode's look — a staged globals fragment", () => {
       src(`editGlobals: { endcaps: 'plain', default_separator: ' ~~ ' },`),
     );
 
-    enterEditMode(bundled.sessionState);
-    enterEditMode(retuned.sessionState);
+    await enterEditMode(bundled.sessionState);
+    await enterEditMode(retuned.sessionState);
 
     expect(bundled.render()).toContain(" | ");
     expect(retuned.render()).toContain(" ~~ ");
     expect(retuned.render()).not.toBe(bundled.render());
   });
 
-  test("a config declaring no editGlobals gets no restyling from edit mode", () => {
+  test("a config declaring no editGlobals gets no restyling from edit mode", async () => {
     // The empty fragment is the identity one — the mode is carried entirely by
     // what the fragment CONTAINS, so staging nothing resolves to exactly the
     // pre-edit values [LAW:dataflow-not-control-flow]. Asserted on the resolved
@@ -201,32 +201,32 @@ describe("edit mode's look — a staged globals fragment", () => {
     // and conflating the two would make this test fail for the wrong reason.
     const { sessionState, effectiveNow } = buildRuntime(src());
     const before = effectiveNow();
-    enterEditMode(sessionState);
+    await enterEditMode(sessionState);
     expect(effectiveNow()).toEqual(before);
   });
 
-  test("every staged field outranks its session pick, not just style", () => {
+  test("every staged field outranks its session pick, not just style", async () => {
     const { sessionState, effectiveNow } = buildRuntime(
       src(`editGlobals: { padding: 3, autoWrap: false },`),
     );
-    setState(sessionState, "padding", "1");
-    setState(sessionState, "autoWrap", "true");
+    await setState(sessionState, "padding", "1");
+    await setState(sessionState, "autoWrap", "true");
     expect(effectiveNow().padding).toBe(1);
     expect(effectiveNow().autoWrap).toBe(true);
 
-    enterEditMode(sessionState);
+    await enterEditMode(sessionState);
     expect(effectiveNow().padding).toBe(3);
     expect(effectiveNow().autoWrap).toBe(false);
   });
 
-  test("an unstaged field still resolves through its own session pick while editing", () => {
+  test("an unstaged field still resolves through its own session pick while editing", async () => {
     // The fragment is a DELTA, not a replacement: staging `style` says nothing
     // about `padding`, exactly as a preset's globals delta does.
     const { sessionState, effectiveNow } = buildRuntime(
       src(`editGlobals: { endcaps: 'plain' },`),
     );
-    setState(sessionState, "padding", "4");
-    enterEditMode(sessionState);
+    await setState(sessionState, "padding", "4");
+    await enterEditMode(sessionState);
     expect(effectiveNow().endcaps).toBe("plain");
     expect(effectiveNow().padding).toBe(4);
   });

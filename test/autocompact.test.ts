@@ -156,9 +156,9 @@ describe("the autocompact segment", () => {
     expect(rt.lines).toEqual([]);
   });
 
-  test("a click types its line into the session", () => {
+  test("a click types its line into the session", async () => {
     const rt = runtime(ok(400_000));
-    clickUrl(rt.urls[1]!, rt.ctx);
+    await clickUrl(rt.urls[1]!, rt.ctx);
     expect(rt.typed).toEqual(["/autocompact 500000"]);
   });
 

@@ -158,7 +158,7 @@ describe("parseHandlerUrl — verb split, value raw", () => {
 });
 
 describe("dispatch verb — run all, aggregate, no nesting", () => {
-  test("every effect runs; a later failure does not undo an earlier success", () => {
+  test("every effect runs; a later failure does not undo an earlier success", async () => {
     const sessionState = new SessionState();
     // First effect writes a valid key; second steps an unknown key (rejected).
     // Two DIFFERENT verbs, so they are two steps, not one batch (next test).
@@ -167,12 +167,12 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
       { verb: VERB_STEP_STATE, args: [SID, "no-such-key", "1"] },
     ]);
     // The aggregated failure surfaces, naming the bad effect...
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow(/no-such-key/);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(/no-such-key/);
     // ...but the valid write before it still landed (no rollback).
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
   });
 
-  test("adjacent session writes are one batch: all land, or none do", () => {
+  test("adjacent session writes are one batch: all land, or none do", async () => {
     const sessionState = new SessionState();
     // A `do` action's members, or a picker option plus its close writes, are
     // separate set-state effects in the URL — the codec carries them as given.
@@ -183,7 +183,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const url = effectsUrl(effects);
     expect(effectsOf(url)).toEqual(effects);
     // Dispatch validates the run whole, so the valid write does not land alone.
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow(/no-such-key/);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(/no-such-key/);
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
@@ -216,30 +216,30 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     ).toEqual([set, { verb: VERB_RESET_CONFIG, value: "a/palette/style" }, reset("b", "endcaps")]);
   });
 
-  test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", () => {
+  test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", async () => {
     // A leaf's input rejection (set-state unknown key) is BadVerbArgs; the
     // aggregate must stay BadVerbArgs so the dispatcher maps it to BAD_REQUEST,
     // not RENDER_FAILED. (An operational leaf failure flips it to a plain Error.)
     const sessionState = new SessionState();
     const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] }]);
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow(BadVerbArgs);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(BadVerbArgs);
   });
 
-  test("a clean compound click applies both set effects", () => {
+  test("a clean compound click applies both set effects", async () => {
     const sessionState = new SessionState();
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "endcaps", "capsule"] },
     ]);
-    clickUrl(url, ctx(sessionState));
+    await clickUrl(url, ctx(sessionState));
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
     expect(sessionState.get(SID, "endcaps")).toBe("capsule");
   });
 
-  test("a nested dispatch effect is reported, never executed", () => {
+  test("a nested dispatch effect is reported, never executed", async () => {
     const sessionState = new SessionState();
     const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow(
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(
       /unknown effect verb "dispatch"/,
     );
   });
@@ -250,7 +250,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(VERBS.has(VERB_DISPATCH)).toBe(true);
   });
 
-  test("per-effect errors are written to click.error in session state for bar display", () => {
+  test("per-effect errors are written to click.error in session state for bar display", async () => {
     const sessionState = new SessionState();
     // Two effects: first valid, second bad. Dispatch throws but also writes
     // per-effect errors to session state so the next render shows them.
@@ -258,7 +258,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ]);
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow();
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow();
     const clickError = lastClickError(sessionState, SID)?.text ?? null;
     expect(clickError).not.toBeNull();
     expect(clickError).toMatch(/no-such-key/);
@@ -266,23 +266,23 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(clickError).toMatch(/set-state:/);
   });
 
-  test("a session-bearing step's malformed argument is that step's error: the click still finds its session and runs the rest", () => {
+  test("a session-bearing step's malformed argument is that step's error: the click still finds its session and runs the rest", async () => {
     const sessionState = new SessionState();
     // A load-config path carrying a bad percent escape (`%ZZ`).
     const url = effectsUrl([
       { verb: VERB_LOAD_CONFIG, args: [SID, "BAD"] },
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
     ]).replace("BAD", encodeURIComponent("%ZZ"));
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow(BadVerbArgs);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(BadVerbArgs);
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
     expect(lastClickError(sessionState, SID)?.text).toMatch(/load-config:/);
   });
 
-  test("click.error is not written when no session-bearing effect exists", () => {
+  test("click.error is not written when no session-bearing effect exists", async () => {
     const sessionState = new SessionState();
     // copy-only dispatch with an unknown verb — no session ID available.
     const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
-    expect(() => clickUrl(url, ctx(sessionState))).toThrow();
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow();
     expect(lastClickError(sessionState, SID)?.text ?? null).toBeNull();
   });
 });

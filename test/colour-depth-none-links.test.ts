@@ -34,7 +34,7 @@ import { instantOf } from "../src/utils/instant";
 
 const SGR = /\x1b\[[0-9;]*m/g;
 
-test("colour depth none keeps every link the bar draws in colour", () => {
+test("colour depth none keeps every link the bar draws in colour", async () => {
   const config = parseAndValidate(
     "<test>",
     "{ globals: { colorCompatibility: 'none' } }",
@@ -100,20 +100,20 @@ test("colour depth none keeps every link the bar draws in colour", () => {
             member(e.args[2] ?? ""),
         ),
       );
-    const click = (
+    const click = async (
       rendered: string,
       key: string,
       member: (v: string) => boolean,
-    ): void => {
+    ): Promise<void> => {
       const [url] = writers(rendered, key, member);
       if (url === undefined)
         throw new Error(`nothing on the bar writes ${key}`);
-      clickUrl(url, ctx);
+      await clickUrl(url, ctx);
     };
     // Open the 🍫 door, then ⚙ config — the clicks a user makes.
     const opened = (v: string) => v !== DISCLOSURE_CLOSED;
-    click(render(), SETTINGS_ANCHOR, opened);
-    click(render(), "candybar.tab", (v) => v === "config");
+    await click(render(), SETTINGS_ANCHOR, opened);
+    await click(render(), "candybar.tab", (v) => v === "config");
 
     expect(effectiveDepth()).toBe("none");
     const none = render();
