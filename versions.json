@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-545",
-      "ref": "refs/pull/545/merge",
-      "sha": "cef3562e2d1a06205685ef6a12a170e163ff1be7",
-      "timestamp": "2026-11-01T08:37:41.619Z",
-      "commits": [
-        {
-          "sha": "cef3562e2d1a06205685ef6a12a170e163ff1be7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:37:00-07:00",
-          "message": "Merge 5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
-        },
-        {
-          "sha": "5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:36:53-07:00",
-          "message": "feat(daemon): click-rooted launches go async, and a click cut by close goes no further (candybar-launch-q7o7.gp7)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-544",
       "ref": "refs/pull/544/merge",
-      "sha": "56b203ee982c67d05faf981d53aa25af4be8b25d",
-      "timestamp": "2026-11-01T08:30:36.337Z",
+      "sha": "2facaa4920cceede34cad55cf719eafd8a58f20f",
+      "timestamp": "2026-11-01T08:38:05.021Z",
       "commits": [
         {
-          "sha": "56b203ee982c67d05faf981d53aa25af4be8b25d",
+          "sha": "2facaa4920cceede34cad55cf719eafd8a58f20f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T08:29:38Z",
-          "message": "Merge d0016c66047ee23381ff8ef4615db14fddcad9ec into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
+          "timestamp": "2026-11-01T08:37:06Z",
+          "message": "Merge c63420662dab68cbfd6b4906e9d549318061c180 into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
+        },
+        {
+          "sha": "c63420662dab68cbfd6b4906e9d549318061c180",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:36:41-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into worktree-statusline-landscape\n"
         },
         {
           "sha": "d0016c66047ee23381ff8ef4615db14fddcad9ec",
@@ -210,6 +195,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-25T22:31:20-06:00",
           "message": "Survey: the 1,000 most-committed Claude Code statuslines — clones, new ideas, why so many\n\nRanks the styling survey's 9,558 projects by commits, reads the top 1,000\nfrom source with haiku agents, fingerprints their code for copies, and\nanswers whether they are clones, what is new in them, and why there are\nso many. README.md has the answers; projects.md and projects.tsv hold one\nentry per project; tools/ holds the scripts and agent briefs.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-545",
+      "ref": "refs/pull/545/merge",
+      "sha": "cef3562e2d1a06205685ef6a12a170e163ff1be7",
+      "timestamp": "2026-11-01T08:37:41.619Z",
+      "commits": [
+        {
+          "sha": "cef3562e2d1a06205685ef6a12a170e163ff1be7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:37:00-07:00",
+          "message": "Merge 5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
+        },
+        {
+          "sha": "5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:36:53-07:00",
+          "message": "feat(daemon): click-rooted launches go async, and a click cut by close goes no further (candybar-launch-q7o7.gp7)\n"
         }
       ]
     },
