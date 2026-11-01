@@ -1,3 +1,4 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] candybar-settings-ui-aok.2's headline acceptance,
 // measured the only way it means anything: the daemon's own request handling,
 // a REAL user config file, two REAL sessions on one daemon. The suite in
@@ -11,6 +12,7 @@
 // bar at once. The session half's whole claim is that it does not, so a test
 // that renders one session could pass with the old behaviour.
 
+import { textOf } from "../src/render/frame";
 import {
   mkdtempSync,
   mkdirSync,
@@ -21,7 +23,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { click, render, stripAnsi, urlWriting } from "./helpers/daemon-e2e";
+import { click, render, urlWriting } from "./helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
@@ -71,14 +73,14 @@ const USER_CONFIG = {
 // `2 x padding` inside each cell, so this grows with padding no matter how the
 // wrap splits the row — unlike the widest row, which SHRINKS as more padding
 // forces the same cells across more lines.
-function barInk(rendered: string): number {
+function barInk(rendered: Frame): number {
   return rows(rendered).reduce((n, l) => n + l.length, 0);
 }
 
 // Rendered rows. The daemon terminates its output with a newline, so the naive
 // split always carries a trailing empty element that is not a row.
-function rows(rendered: string): string[] {
-  return stripAnsi(rendered)
+function rows(rendered: Frame): string[] {
+  return textOf(rendered)
     .split("\n")
     .filter((l) => l.trim() !== "");
 }
@@ -117,7 +119,7 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
       expect(barInk(clickerAfter)).toBeGreaterThan(barInk(clickerBefore));
       // ...and the session that did not click is byte-identical. This is the
       // assertion the persist-only behaviour could never satisfy.
-      expect(stripAnsi(bystanderAfter)).toBe(stripAnsi(bystanderBefore));
+      expect(textOf(bystanderAfter)).toBe(textOf(bystanderBefore));
 
       // autoWrap, same story on a THIRD session — so wrapping is the only
       // thing that differs between it and the bystander, with padding held at
@@ -130,8 +132,8 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
       await click(daemon, urlWriting(wrapperBefore, "autoWrap", "false"));
 
       expect(rows(await render(daemon, WRAPPER, projectDir))).toHaveLength(1);
-      expect(stripAnsi(await render(daemon, BYSTANDER, projectDir))).toBe(
-        stripAnsi(bystanderBefore),
+      expect(textOf(await render(daemon, BYSTANDER, projectDir))).toBe(
+        textOf(bystanderBefore),
       );
 
       // A cold restart, through the close a real one takes. SessionState is
@@ -139,16 +141,16 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
       // so a click is not lost when the RSS backstop recycles the daemon
       // mid-session — the session halves come back exactly as
       // theme/endcaps/style do, and the bystander is still untouched.
-      const clickerWide = stripAnsi(await render(daemon, CLICKER, projectDir));
+      const clickerWide = textOf(await render(daemon, CLICKER, projectDir));
       await daemon.stop();
       daemon = startDaemon(env);
 
-      expect(stripAnsi(await render(daemon, CLICKER, projectDir))).toBe(
+      expect(textOf(await render(daemon, CLICKER, projectDir))).toBe(
         clickerWide,
       );
       expect(rows(await render(daemon, WRAPPER, projectDir))).toHaveLength(1);
-      expect(stripAnsi(await render(daemon, BYSTANDER, projectDir))).toBe(
-        stripAnsi(bystanderBefore),
+      expect(textOf(await render(daemon, BYSTANDER, projectDir))).toBe(
+        textOf(bystanderBefore),
       );
 
       // And the user's config file was never written to — the session half is

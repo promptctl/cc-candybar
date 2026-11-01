@@ -7,11 +7,12 @@
 // long as the daemon, so before this, every reload or eviction left the whole
 // disposed store reachable from that atom — 2,500 observers against 12 live
 // entries in the breach snapshot of 2026-10-19 — until the RSS backstop fired.
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -64,7 +65,7 @@ function renderedEntry(
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   if (drawn) {
-    renderDsl(
+    drawPayload(
       config,
       compiled,
       store,
@@ -72,7 +73,7 @@ function renderedEntry(
       PAYLOAD,
       instantOf(new Date()),
       OPTS,
-    );
+    ).frame;
   }
   return registry;
 }

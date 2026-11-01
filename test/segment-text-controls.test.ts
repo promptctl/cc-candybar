@@ -6,16 +6,18 @@
 // a string becomes drawn characters, and this pins that every segment's text
 // takes that path on the production render.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
-import { stripAnsi } from "./helpers/ansi";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
@@ -35,12 +37,12 @@ const CONFIG = parseAndValidate(
   DEFAULT_DSL_CONFIG,
 );
 
-function render(s: string): string {
+function render(s: string): Frame {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    return renderDsl(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS);
+    return drawPayload(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS).frame;
   } finally {
     registry.dispose();
   }
@@ -54,11 +56,11 @@ const RLM = String.fromCodePoint(0x200f);
 describe("a segment's text reaches the terminal without the controls it could issue", () => {
   test("a bidi override, an isolate and a C1 CSI in data are not drawn", () => {
     const out = render(`a${RLO}b${LRI}c${CSI}2Jd`);
-    for (const control of [RLO, LRI, CSI]) expect(out).not.toContain(control);
-    expect(stripAnsi(out)).toContain("[abc2Jd]");
+    for (const control of [RLO, LRI, CSI]) expect(textOf(out)).not.toContain(control);
+    expect(textOf(out)).toContain("[abc2Jd]");
   });
 
   test("a bidi mark, which holds no direction state, is drawn", () => {
-    expect(render(`a${RLM}b`)).toContain(`a${RLM}b`);
+    expect(textOf(render(`a${RLM}b`))).toContain(`a${RLM}b`);
   });
 });

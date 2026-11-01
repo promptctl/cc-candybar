@@ -9,11 +9,14 @@
 // (5) `cc-candybar check` catches a preset staging a segment nobody declared.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
-// loader, registerDslConfig + renderDsl for rendering, the real dispatch for
+// loader, registerDslConfig + drawDsl for rendering, the real dispatch for
 // the click (gated by the config the session renders), the real
 // checkConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
+import { textOf } from "../src/render/frame";
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -23,7 +26,7 @@ import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -272,7 +275,7 @@ describe("preset compile diagnostics name the authored path", () => {
 
 // Mirrors the daemon's per-render resolution verbatim (draw-bar.ts): the preset
 // resolves FIRST, its fragment's globals feed everything else, and its compiled
-// root is the tree renderDsl walks.
+// root is the tree drawDsl walks.
 describe("preset selection — the arrangement the bar renders", () => {
   const SRC = `{
     globals: { palette: '${THEME}', padding: 1 },
@@ -305,9 +308,9 @@ describe("preset selection — the arrangement the bar renders", () => {
     // The daemon's exact order: resolve the preset, take ITS globals, render.
     const resolve = () =>
       resolveEffectiveGlobals(config, (key) => sessionState.get(SID, key), () => false);
-    const render = (): string => {
+    const render = (): Frame => {
       const effective = resolve();
-      return renderDsl(
+      return drawPayload(
         config,
         compiled,
         store,
@@ -317,7 +320,7 @@ describe("preset selection — the arrangement the bar renders", () => {
         { ...OPTS, padding: effective.padding },
         undefined,
         effective,
-      );
+      ).frame;
     };
     const dispose = (): void => {
       registry.dispose();
@@ -340,8 +343,8 @@ describe("preset selection — the arrangement the bar renders", () => {
     try {
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
       const out = rt.render();
-      expect(out).toContain("ALPHA");
-      expect(out).not.toContain("BETA");
+      expect(textOf(out)).toContain("ALPHA");
+      expect(textOf(out)).not.toContain("BETA");
     } finally {
       rt.dispose();
     }
@@ -353,8 +356,8 @@ describe("preset selection — the arrangement the bar renders", () => {
       await clickPreset(rt,"both");
       expect(rt.resolve().preset).toBe("both");
       const out = rt.render();
-      expect(out).toContain("ALPHA");
-      expect(out).toContain("BETA");
+      expect(textOf(out)).toContain("ALPHA");
+      expect(textOf(out)).toContain("BETA");
     } finally {
       rt.dispose();
     }
@@ -364,7 +367,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const rt = buildRuntime(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
       expect(rt.resolve().preset).toBe("both");
-      expect(rt.render()).toContain("BETA");
+      expect(textOf(rt.render())).toContain("BETA");
     } finally {
       rt.dispose();
     }
@@ -375,7 +378,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     try {
       await clickPreset(rt,PRESET_FLOOR);
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
-      expect(rt.render()).not.toContain("BETA");
+      expect(textOf(rt.render())).not.toContain("BETA");
     } finally {
       rt.dispose();
     }
@@ -392,8 +395,8 @@ describe("preset selection — the arrangement the bar renders", () => {
       // `roomy` declares no root, so the config's own layout still renders —
       // the fragment is a DELTA, not a replacement.
       const out = rt.render();
-      expect(out).toContain("ALPHA");
-      expect(out).not.toContain("BETA");
+      expect(textOf(out)).toContain("ALPHA");
+      expect(textOf(out)).not.toContain("BETA");
       // And a field the fragment does not name is untouched.
       expect(presetGlobals(rt.config, "roomy").palette).toBe(THEME);
     } finally {
@@ -416,8 +419,8 @@ describe("preset selection — the arrangement the bar renders", () => {
       // preset.effective — is the floor, not the stale pick, so a menu label
       // reading it cannot name an arrangement the bar is not in.
       expect(() => rt.render()).not.toThrow();
-      expect(rt.render()).toContain("ALPHA");
-      expect(rt.render()).not.toContain("BETA");
+      expect(textOf(rt.render())).toContain("ALPHA");
+      expect(textOf(rt.render())).not.toContain("BETA");
     } finally {
       rt.dispose();
     }
@@ -441,7 +444,7 @@ describe("preset selection — the arrangement the bar renders", () => {
       // And the same names reach the render, from the same map.
       const rendered = rt.render();
       for (const name of [PRESET_FLOOR, "both", "roomy"]) {
-        expect(rendered).toContain(name);
+        expect(textOf(rendered)).toContain(name);
       }
     } finally {
       rt.dispose();

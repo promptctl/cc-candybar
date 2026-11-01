@@ -72,7 +72,7 @@ import {
 // unrenderable direction.
 // [LAW:one-source-of-truth] The runtime list and the type derive from one
 // declaration; the loader validates a container's `direction` against this set,
-// and renderDsl's projection switch is exhaustive over it (adding an arm here
+// and drawDsl's projection switch is exhaustive over it (adding an arm here
 // forces a matching render arm).
 export const DIRECTIONS = ["vertical", "horizontal"] as const;
 export type Direction = (typeof DIRECTIONS)[number];

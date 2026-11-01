@@ -17,6 +17,9 @@ import path from "node:path";
 
 import JSON5 from "json5";
 import { effectsOf } from "./helpers/click";
+import { linkUrls } from "./helpers/frame";
+import { plainOf, type Frame, type Run } from "../src/render/frame";
+import { sameDraw } from "./helpers/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { startDaemon } from "./helpers/in-worker-daemon";
 import {
@@ -29,7 +32,6 @@ import {
 // callback), so the wait for a click's effect is the shared render-until,
 // which carries the reason.
 import { click, render, renderUntil } from "./helpers/daemon-e2e";
-import { linkUrls, withoutLinks } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
 
@@ -79,10 +81,10 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       // so it is found by content rather than by index. Its links are dropped:
       // a control's link names the session it was rendered for, and the fresh
       // session below is a different one — the colours are what must match.
-      const statusRow = (out: string): string | undefined => {
-        const row = out.split("\n").find((line) => line.includes("Opus 4.7"));
-        return row === undefined ? undefined : withoutLinks(row);
-      };
+      const statusRow = (out: Frame): Omit<Run, "link">[] | undefined =>
+        out.rows
+          .find(({ runs }) => plainOf(runs).includes("Opus 4.7"))
+          ?.runs.map(({ link: _, ...look }) => look);
       const statusRowBefore = statusRow(before);
       expect(statusRowBefore).toBeDefined();
 
@@ -153,14 +155,14 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
         daemon,
         SID,
         projectDir,
-        (b) => b !== opened,
+        (b) => !sameDraw(b, opened),
         "a change from the opened render",
         10_000,
       );
-      expect(afterClick).not.toBe(opened);
-      // The status row — nothing to do with `directory` — is byte-identical:
-      // the override changed exactly one segment's palette, nothing else.
-      expect(statusRow(afterClick)).toBe(statusRowBefore);
+      expect(afterClick.rows).not.toEqual(opened.rows);
+      // The status row — nothing to do with `directory` — is the same run for
+      // run: the override changed exactly one segment's palette, nothing else.
+      expect(statusRow(afterClick)).toEqual(statusRowBefore);
 
       // [LAW:one-source-of-truth] The config FILE is the durable store
       // (candybar-config-dqe). `segments` merge by name then by field, so
@@ -192,7 +194,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       // construction — the status row is the untouched control).
       const FRESH_SID = "seg-e2e-session-2-fresh";
       const freshOut = await render(daemon, FRESH_SID, projectDir);
-      expect(statusRow(freshOut)).toBe(statusRowBefore);
+      expect(statusRow(freshOut)).toEqual(statusRowBefore);
 
       // The file is STILL exactly what the click wrote — a restart reads it,
       // never rewrites it.

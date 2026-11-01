@@ -463,7 +463,7 @@ export async function replyTo(
     // projectDir, cwd) through the wire.
     const dbgView = renderCache.latestView();
     // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
-    // cache stores StripCell arrays (cheap, written by renderDsl).
+    // cache stores StripCell arrays (cheap, written by drawDsl).
     // The debug projection needs strings, so serialize only for the
     // `segments` projection (`vars` and `config` don't need it) and only
     // when this request actually fires. Normal renders pay no per-segment

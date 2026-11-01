@@ -1,8 +1,11 @@
+import type { Frame } from "../src/render/frame";
 // What a lane runs follows the session's own clicks, measured at the click,
 // and the tmux status line follows a request's arrival and a click's commit:
 // no draw — a request's or a frame's — starts either (src/daemon/lane-setup.ts,
 // src/daemon/tmux-status.ts).
 
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import {
   chmodSync,
   mkdirSync,
@@ -23,16 +26,10 @@ import {
   VERB_TMUX_STATUS_CLICK,
 } from "../src/click/wire";
 import { rangeOf } from "../src/tmux-status/frames";
-import { linkUrls } from "./helpers/ansi";
 import { LANES, type Lane } from "../src/config/lanes";
 import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import type { ClientHints } from "../src/daemon/protocol";
-import {
-  click,
-  render,
-  sendClick,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { click, render, sendClick } from "./helpers/daemon-e2e";
 import { answeredRender, logLines, renderLines } from "./helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
@@ -91,7 +88,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   const inTmux = (sid: string): ClientHints => ({
     tmux: { socket: `/tmp/lane-e2e-${sid}`, pane: "%7", truecolor: null },
   });
-  const renderIn = (sid: string, dir = projectDir): Promise<string> =>
+  const renderIn = (sid: string, dir = projectDir): Promise<Frame> =>
     render(daemon, sid, dir, inTmux(sid), args());
   // A lane's switch, moved: on is the value that turns it on, off the
   // setting's floor (`false` for a 🧪 toggle, `claude` for the renderer).
@@ -273,8 +270,8 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       "--config",
       file,
     ]);
-    expect(stripAnsi(drawn)).toContain("a lane mark");
-    expect(stripAnsi(drawn)).not.toContain("⟲ claude");
+    expect(textOf(drawn)).toContain("a lane mark");
+    expect(textOf(drawn)).not.toContain("⟲ claude");
     await renderLines(env, sid, 1);
     expect(statusLines(sid, "holding")).toEqual([]);
     expect(readFileSync(file, "utf8")).toBe(source);
@@ -390,7 +387,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
                 ]),
               ),
             )
-          ).every((drawn) => drawn.includes("a reloaded mark")),
+          ).every((drawn) => textOf(drawn).includes("a reloaded mark")),
         "each entry's draw of the rewritten config",
       );
       for (const d of dirs) {

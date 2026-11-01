@@ -1,4 +1,4 @@
-// [LAW:single-enforcer] registerDslConfig + renderDsl are THE two spine
+// [LAW:single-enforcer] registerDslConfig + drawDsl are THE two spine
 // functions the daemon calls verbatim. No parallel registration path, no
 // alternate render path. bzh.2 reuses these; it does not reimplement them.
 //
@@ -32,10 +32,7 @@ import {
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
-import {
-  resolveEffectiveGlobals,
-  type EffectiveGlobals,
-} from "../config/effective-globals.js";
+import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
@@ -51,7 +48,7 @@ import {
   stripSeamCols,
 } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
-import { ansiOf, type Frame } from "../render/frame.js";
+import type { Frame } from "../render/frame.js";
 import {
   SessionEffects,
   type MenuFlash,
@@ -160,7 +157,7 @@ import {
 
 // [LAW:one-source-of-truth] The full compiled artifact registerDslConfig
 // produces: every segment's compiled templates AND the compiled layout tree
-// (nodes with parsed `when`). renderDsl needs both; bundling them keeps the
+// (nodes with parsed `when`). drawDsl needs both; bundling them keeps the
 // daemon cache holding one value, not two that could fall out of sync. The
 // compiled node + segment shapes live in node-registry (the render layer that
 // owns node behavior); this driver only assembles + walks them.
@@ -210,7 +207,7 @@ export interface CompiledConfig {
   // every segment-scoped template function reads — the menu's identity, the
   // `color` func's palette, the `bgOf` func's background. Surfaced here so the
   // walk can publish into it. One instance per compiled config; mutated
-  // synchronously within a single renderDsl walk (renders are sequential +
+  // synchronously within a single drawDsl walk (renders are sequential +
   // synchronous, so no cross-render leak) — the spatial cousin of the hue
   // cursor, one owner. [LAW:no-ambient-temporal-coupling]
   readonly activeSegment: ActiveSegmentRef;
@@ -407,10 +404,10 @@ function compileHelpers(
  * Walks config.variables (global vars) and each segment's vars sub-block
  * (namespaced as segName.varName) and calls the matching SourceRegistry
  * declare* method for each VariableDecl. Also pre-parses every segment's
- * when/template/bg/fg strings once — renderDsl only evaluates.
+ * when/template/bg/fg strings once — drawDsl only evaluates.
  *
  * Call once per config (at startup or hot-reload). The daemon calls this;
- * the render loop calls renderDsl with the returned CompiledConfig.
+ * the render loop calls drawDsl with the returned CompiledConfig.
  *
  * HOT-RELOAD: pass a fresh VariableStore + SourceRegistry on each call.
  * defineBox/defineComputed throws if a variable name is already declared in
@@ -750,7 +747,7 @@ export function compileDslConfig(
   );
 
   // Pre-parse all segment templates once.
-  // renderDsl calls evaluate() only — parse() never runs in the hot render
+  // drawDsl calls evaluate() only — parse() never runs in the hot render
   // path.
   // [LAW:no-defensive-null-guards] Object.create(null) — segment names come from
   // user config; a null-prototype object prevents __proto__/constructor/prototype
@@ -781,7 +778,7 @@ export function compileDslConfig(
   }
 
   // [LAW:one-source-of-truth] Compile the layout tree once here, alongside the
-  // segment templates — renderDsl never parses. This driver owns the cross-cutting
+  // segment templates — drawDsl never parses. This driver owns the cross-cutting
   // `when` parse (one site, walk-uniform) and threads the recursion + per-config
   // resolution (palette names, state-key→var) into each node type's compile as
   // capabilities; the kind-specific assembly lives in node-registry.
@@ -870,7 +867,7 @@ export function compileDslConfig(
   // naming the path it was written at, not a per-render throw. Membership is
   // decided by SHAPE (`isExpression`), the same way a template is told from a
   // literal everywhere else here, so an entry exists iff the resolution can hand
-  // renderDsl an `expression` arm carrying that source — one predicate, every
+  // the view an `expression` arm carrying that source — one predicate, every
   // reader. [LAW:dataflow-not-control-flow] One fold over every fragment × every
   // slot: adding a slot or a preset never adds a branch here.
   // Keyed by slot, then source: one text written in both slots is two rules, and
@@ -1070,22 +1067,22 @@ function segmentsUnder(node: CompiledNode): CompiledSegmentNode[] {
   ];
 }
 
-// ─── renderDsl ───────────────────────────────────────────────────────────────
+// ─── drawDsl ───────────────────────────────────────────────────────────────
 
 /**
- * Render the DSL config to a (possibly multi-line) ANSI string.
+ * Draw the bound view to a Frame, the rows a terminal's bytes and every lane
+ * derive from.
  *
  * Pipeline:
- *   1. Push payload (+ injected `term.cols`) into input boxes — once per render.
- *   2. Build the scope proxy — once per render.
- *   3. Walk the compiled layout tree (renderNode) in pre-order, producing a list
+ *   1. Build the scope proxy — once per render.
+ *   2. Walk the compiled layout tree (renderNode) in pre-order, producing a list
  *      of LINES OF CELLS (not yet serialized). A `container` composes its
  *      children's blocks by its `direction` (vertical stacks, horizontal zips
  *      cells per row); a `segment` leaf evaluates into cell lines. A node whose
  *      `when` (or an ancestor's) is false contributes no line; its ADDRESS — the
  *      position its colours derive from — is unchanged by being hidden, so
  *      visible siblings keep their colours.
- *   4. Serialize each composed line through the ONE strip joiner and join "\n".
+ *   3. Draw each composed line through the ONE strip joiner into Rows.
  *
  * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
  * path. ONE walk renders every layout, flat or nested. The test and the daemon
@@ -1193,7 +1190,7 @@ export type RenderWarning =
 // [LAW:one-source-of-truth] Each field IS the field `resolveEffectiveGlobals`
 // resolves (see EffectiveGlobals for how): a Pick, not a restatement, so the
 // selection cannot hold a field the resolution does not, and every one is
-// required — a caller hands over the whole resolution or none of it.
+// required — a caller hands over the whole resolution.
 export type DrawSelection = Pick<
   EffectiveGlobals,
   | "preset"
@@ -1243,54 +1240,6 @@ export function bindPayload(
   };
   bindView(compiled, store, registry, fixedSource(drawn, selection));
   return drawn;
-}
-
-// One frame of a fixed payload: bound (`bindPayload`) and drawn in one call.
-// What the demo and a test draw by: the seam a session's view reads, given a
-// constant.
-export function drawPayload(
-  config: ValidatedConfig,
-  compiled: CompiledConfig,
-  store: VariableStore,
-  registry: SourceRegistry,
-  payload: unknown,
-  at: Instant,
-  opts: BuildLineOptions,
-  observers?: RenderObservers,
-  // [LAW:one-source-of-truth] An omitting caller renders as a session that has
-  // never clicked: the daemon's own resolution with no picks, so a config
-  // declaring globals.preset or globals.style draws the preset, theme and look
-  // the bar does. Whether the file authors the preset's root is no part of it.
-  selection: RenderSelection = resolveEffectiveGlobals(
-    config,
-    () => null,
-    () => false,
-  ),
-): DrawnFrame {
-  const drawn = bindPayload(
-    compiled,
-    store,
-    registry,
-    payload,
-    opts,
-    selection,
-  );
-  return drawDsl(
-    config,
-    compiled,
-    store,
-    registry,
-    drawn,
-    at,
-    opts,
-    observers,
-    selection,
-  );
-}
-
-// The bytes of `drawPayload`'s frame.
-export function renderDsl(...args: Parameters<typeof drawPayload>): string {
-  return ansiOf(drawPayload(...args).frame);
 }
 
 export function drawDsl(

@@ -6,14 +6,13 @@
 // At 256 colours and ansi each is that colour rounded once, by the writer.
 // candybar-joiners-e5r4.i30: the open door's ✖, text on the segment that
 // opened the menu, is a red its palette names for its error role.
-// Driven through the real loader, `resolveEffectiveGlobals` and `renderDsl`,
+// Driven through the real loader, `resolveEffectiveGlobals` and `drawDsl`,
 // under every bundled theme.
 
 import {
   ColorDepth,
   ColorSpec,
   type ColorRgba,
-  decodeAnsi,
   drawnColour,
   getThemePalette,
   listThemePalettes,
@@ -21,8 +20,9 @@ import {
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
+import type { Frame } from "../src/render/frame";
+import { runUnder } from "./helpers/frame";
 import { SETTINGS_NS } from "../src/config/reserved-names";
-import { resolvedStyle } from "../src/render/rich-theme";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
@@ -61,26 +61,24 @@ const VIEWS: readonly View[] = [
 ];
 
 /**
- * Every visible character of a rendered frame with the background it is drawn
- * on, read through rich-js's `decodeAnsi`, the writer's inverse. The one
+ * Every drawn character of a frame, spaces included since a plane and a cell's
+ * padding are grounds too, with the background it is drawn on. The one
  * exemption is a swatch, which shows another palette's colours on purpose. An
  * authored `bg` is meaning, not policy; it needs no exemption only because
  * every one the bundled bar draws is a palette role (`warning`, `error`), and
  * an authored colour that is not belongs on this list.
  */
-function grounds(rendered: string): { readonly ch: string; readonly at: string; readonly bg: ColorSpec }[] {
-  return rendered.split("\n").flatMap((line, row) => {
-    const text = decodeAnsi(line);
-    return text.spans.flatMap(({ start, end, style }) => {
-      const bg = resolvedStyle(style).bgcolor;
-      if (bg === undefined) return [];
-      // Columns counted in the string's own units, as `start` is, so two
-      // depths that split one run into different spans place it alike.
-      let column = start;
-      return [...text.plain.slice(start, end)].flatMap((ch) => {
+function grounds({ rows }: Frame): { readonly ch: string; readonly at: string; readonly bg: ColorSpec }[] {
+  return rows.flatMap(({ runs }, row) => {
+    // Columns counted along the row, so two depths that split one row into
+    // different runs place it alike.
+    let column = 0;
+    return runs.flatMap(({ text, bg }) => {
+      const ground = bg === undefined ? undefined : ColorSpec.parse(bg);
+      return [...text].flatMap((ch) => {
         const at = `row ${row} col ${column}`;
         column += ch.length;
-        return ch === SWATCH_GLYPH ? [] : [{ ch, at, bg }];
+        return ground === undefined || ch === SWATCH_GLYPH ? [] : [{ ch, at, bg: ground }];
       });
     });
   });
@@ -100,13 +98,13 @@ describe("every background the bar draws is a colour its palette names", () => {
         );
         bar.pick("theme", theme);
         VIEWS[0]!.show(bar);
-        const barRows = bar.render(AT).text.split("\n").length;
+        const barRows = bar.render(AT).frame.rows.length;
         for (const view of VIEWS) {
           view.show(bar);
-          const { text } = bar.render(AT);
+          const { frame } = bar.render(AT);
           // Non-vacuous: an open view draws its menu above the bar.
-          expect([theme, view.name, text.split("\n").length > barRows]).toEqual([theme, view.name, view.open]);
-          for (const { ch, at, bg } of grounds(text)) {
+          expect([theme, view.name, frame.rows.length > barRows]).toEqual([theme, view.name, view.open]);
+          for (const { ch, at, bg } of grounds(frame)) {
             measured++;
             const hex = bg.value?.hex;
             if (hex === undefined || !named.has(hex)) wrong.push(`${theme} ${view.name} ${at} '${ch}': ${hex ?? bg.name}`);
@@ -134,7 +132,7 @@ describe("the open door's ✖ is a red its palette names for its error role", ()
         for (const shade of SHADE_NAMES) {
           bar.pick("shade", shade);
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-          const { ink } = doorClose(bar.render(AT).text);
+          const { ink } = doorClose(bar.render(AT).frame);
           measured++;
           if (!reds.has(ink.hex)) wrong.push(`${theme} at ${shade}: ✖ ${ink.hex}`);
         }
@@ -176,7 +174,7 @@ describe("a lower depth draws each of those colours rounded once", () => {
             const drawn = [truecolor, lower].map((bar) => {
               bar.pick("theme", theme);
               view.show(bar);
-              return grounds(bar.render(AT).text);
+              return grounds(bar.render(AT).frame);
             });
             const [full, rounded] = drawn as [ReturnType<typeof grounds>, ReturnType<typeof grounds>];
             const where = `${JSON.stringify(look)} ${theme} ${view.name}`;
@@ -222,12 +220,8 @@ describe("the settings door and its frame-rate cell take two places of the first
   const THEME = "textual-dark";
   const palette = getThemePalette(THEME)!;
   // The background under the first character of `text` on the bar's first line.
-  const groundUnder = (rendered: string, text: string): string | undefined => {
-    const line = decodeAnsi(rendered.split("\n")[0]!);
-    const at = line.plain.indexOf(text);
-    const span = line.spans.find(({ start, end }) => start <= at && at < end);
-    return span === undefined ? undefined : resolvedStyle(span.style).bgcolor?.value?.hex;
-  };
+  const groundUnder = ({ rows }: Frame, text: string): string | undefined =>
+    runUnder({ rows: rows.slice(0, 1) }, text)?.bg;
 
   test("under every dial position, they wear two", () => {
     const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
@@ -240,9 +234,9 @@ describe("the settings door and its frame-rate cell take two places of the first
           expect([shade, hue, new Set(named).size]).toEqual([shade, hue, named.length]);
         }
         bar.pick("shade", shade);
-        const { text } = bar.render(AT);
-        const door = groundUnder(text, DOOR_GLYPH);
-        const rate = groundUnder(text, POLLED);
+        const { frame } = bar.render(AT);
+        const door = groundUnder(frame, DOOR_GLYPH);
+        const rate = groundUnder(frame, POLLED);
         expect([shade, door === undefined, rate === undefined]).toEqual([shade, false, false]);
         expect([shade, door]).not.toEqual([shade, rate]);
       }

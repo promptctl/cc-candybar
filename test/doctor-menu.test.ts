@@ -1,10 +1,14 @@
 // [LAW:verifiable-goals] brandon-doctor-b6a: the `🍫 › 🧰 tools › 🩺 doctor`
 // route, driven through the real loader, the real spine (registerDslConfig +
-// renderDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
+// drawDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
 // probe answers `RGB`, and a settings.json in a temp Claude Code directory the
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way draw-bar.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RenderSightings } from "../src/daemon/render-sightings";
@@ -26,7 +30,7 @@ import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -52,7 +56,6 @@ import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -147,11 +150,11 @@ function buildRuntime(
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const render = (): string =>
-    stripAnsi(
-      renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS),
+    textOf(
+      drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame,
     );
-  const renderRaw = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
+  const renderRaw = (): Frame =>
+    drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;
   recordRender(sessionState, "s1");
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;

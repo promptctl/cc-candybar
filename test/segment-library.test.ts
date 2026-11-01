@@ -5,12 +5,16 @@
 // copied list, so a segment added anywhere either lands in the library or fails
 // a test loudly.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -33,7 +37,6 @@ import {
 import { cellWidth } from "../src/render/picker";
 import { effectsOf } from "./helpers/click";
 import { VERB_SET_STATE } from "../src/click/wire";
-import { links as rawLinks, stripAnsi, type Link } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -59,9 +62,6 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
-const links = (rendered: string): Link[] =>
-  rawLinks(rendered).map((l) => ({ url: l.url, text: stripAnsi(l.text) }));
-
 // An edit-mode bar over `userSegments` (extra declarations merged over the
 // bundled default), at `width` columns. `open` opens the first `+`.
 function rig(width: number, userSegments = "") {
@@ -76,19 +76,19 @@ function rig(width: number, userSegments = "") {
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");
-  const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
+  const render = (): Frame =>
+    drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor",
       wrap: true,
       padding: 1,
       width,
-    });
+    }).frame;
   // The `+` opener is the one coupled write whose 4th argument is the page
   // key of its 2nd; opening applies exactly those writes.
   let pageKey = "";
-  const open = (): string => {
-    const opener = links(render())
+  const open = (): Frame => {
+    const opener = linksOf(render())
       .flatMap((l) => effectsOf(l.url))
       .find(
         (e) =>
@@ -103,15 +103,15 @@ function rig(width: number, userSegments = "") {
     pageKey = opener.args[3]!;
     return render();
   };
-  const page = (to: number): string => {
+  const page = (to: number): Frame => {
     sessionState.set(SID, pageKey, String(to));
     return render();
   };
   return { config, render, open, page, dispose: () => registry.dispose() };
 }
 
-const lines = (out: string): string[] =>
-  stripAnsi(out)
+const lines = (out: Frame): string[] =>
+  textOf(out)
     .split("\n")
     // The strip's powerline caps are private-use glyphs, not text.
     .map((l) => l.replace(/[\uE000-\uF8FF]/gu, "").trim());
@@ -222,7 +222,7 @@ describe("the add menu is a segment library", () => {
       expect(nav).toContain(`${GROUP_LABELS[group]} ${i + 1}/${pages.length}`);
       expect(nav.includes("←")).toBe(i > 0);
       expect(nav.includes("→")).toBe(i < pages.length - 1);
-      for (const line of stripAnsi(out).split("\n")) {
+      for (const line of textOf(out).split("\n")) {
         expect(cellWidth(line)).toBeLessThanOrEqual(80);
       }
       // Only this group's segments are on the page.
@@ -238,7 +238,7 @@ describe("the add menu is a segment library", () => {
   test("a library row is the segment's whole click target: it inserts that segment", () => {
     const r = rig(80);
     const out = r.open();
-    const row = links(out).find((l) => l.text.startsWith("directory "))!;
+    const row = linksOf(out).find((l) => l.text.startsWith("directory "))!;
     const [layoutOp] = effectsOf(row.url);
     expect(layoutOp!.verb).toBe("apply-layout-op");
     expect(layoutOp!.args[2]).toMatch(/^insert:directory:/);

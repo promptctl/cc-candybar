@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] Action-surface acceptance, driven through the real spine
-// (registerDslConfig + renderDsl), the real loader (parseAndValidate), and the
+// (registerDslConfig + drawDsl), the real loader (parseAndValidate), and the
 // real set-state gate (stateGate of the config the session renders, built from
 // deriveActionValidators) — never a parallel rig:
 //
@@ -20,13 +20,17 @@
 //      source; integer bounds; non-zero `by`), resolves `{{ action }}` refs, and
 //      requires session.id for any set action.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls, boldUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
@@ -36,7 +40,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
-import { recordRender, testVerbContext, effectsOf, boldUrls } from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
   parseEffects,
@@ -46,7 +50,6 @@ import {
 } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { CHECKS } from "../src/doctor/checks";
 
@@ -63,7 +66,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function ownUrls(rendered: string): string[] {
+function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The ambient chrome every bar carries (the global settings menu and the
   // edit-mode toggle it reaches) emits its own clickable regions; this file's
@@ -89,8 +92,8 @@ function buildRuntime(src: string, sessionId = "s1") {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (width = Number.POSITIVE_INFINITY): string =>
-    renderDsl(
+  const render = (width = Number.POSITIVE_INFINITY): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -98,7 +101,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
       opts(width),
-    );
+    ).frame;
   const sideEffects: SideEffect[] = [];
   recordRender(sessionState, sessionId);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
@@ -137,7 +140,7 @@ describe("2de.12 — literal set action", () => {
   test("renders one clickable region whose click sets the literal value", async () => {
     const { render, click, sessionState } = buildRuntime(SRC);
     const out = render();
-    expect(stripAnsi(out)).toContain("vanilla 🍫");
+    expect(textOf(out)).toContain("vanilla 🍫");
     const urls = ownUrls(out);
     expect(urls).toHaveLength(1);
     expect(effectsOf(urls[0]!)).toEqual([
@@ -146,7 +149,7 @@ describe("2de.12 — literal set action", () => {
     await click(urls[0]!);
     expect(sessionState.get("s1", "flavor")).toBe("chocolate");
     // The next render reflects the mutated state (the cross-process loop in one process).
-    expect(stripAnsi(render())).toContain("chocolate 🍫");
+    expect(textOf(render())).toContain("chocolate 🍫");
   });
 
   test("derives an allow-list gate of {to} for the custom key", () => {
@@ -264,7 +267,7 @@ describe("2de.12 — option set action", () => {
     }`;
     const { render, click, sessionState } = buildRuntime(src);
     const out = render();
-    expect(stripAnsi(out)).toContain("🎨 fancy");
+    expect(textOf(out)).toContain("🎨 fancy");
     const url = ownUrls(out)[0]!;
     expect(effectsOf(url)).toEqual([
       { verb: "set-state", args: ["s1", "sel", target] },
@@ -434,7 +437,7 @@ describe("2de.12 — bounded set action", () => {
   test("◀/▶ emit a RELATIVE step-state nudge (key + signed by), no absolute target; display is plain text", () => {
     const { render } = buildRuntime(SRC);
     const out = render();
-    expect(stripAnsi(out)).toContain("◀ 14 ▶");
+    expect(textOf(out)).toContain("◀ 14 ▶");
     const urls = ownUrls(out);
     // The link carries the irreducible intent — the signed delta — NOT a value
     // computed from the rendered `current` (the idempotent-absolute bug).
@@ -451,7 +454,7 @@ describe("2de.12 — bounded set action", () => {
     const at14 = ownUrls(render());
     sessionState.set("s1", "level", "58");
     const at58 = ownUrls(render());
-    expect(stripAnsi(render())).toContain("◀ 58 ▶");
+    expect(textOf(render())).toContain("◀ 58 ▶");
     expect(at58).toEqual(at14); // identical link strings despite 14 → 58
   });
 
@@ -490,7 +493,7 @@ describe("2de.12 — bounded set action", () => {
   test("a click steps and the next render shows the new value", async () => {
     const { render, click } = buildRuntime(SRC);
     await click(ownUrls(render())[1]!); // ▶: 14 → 16
-    expect(stripAnsi(render())).toContain("◀ 16 ▶");
+    expect(textOf(render())).toContain("◀ 16 ▶");
   });
 });
 
@@ -520,7 +523,7 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
     root: { v: ['ok', 'bad'] },
   }`;
 
-  const urlWriting = (out: string, value: string): string => {
+  const urlWriting = (out: Frame, value: string): string => {
     const url = ownUrls(out).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === "theme-page" && e.args[2] === value,
@@ -860,7 +863,7 @@ describe("2de.4 — cycle set action", () => {
   test("renders the current member's display; the click writes the successor", async () => {
     const { render, click, sessionState } = buildRuntime(SRC);
     const out = render();
-    expect(stripAnsi(out)).toContain("▸ details");
+    expect(textOf(out)).toContain("▸ details");
     const urls = ownUrls(out);
     expect(urls).toHaveLength(1);
     expect(effectsOf(urls[0]!)).toEqual([
@@ -870,7 +873,7 @@ describe("2de.4 — cycle set action", () => {
     expect(sessionState.get("s1", "details-open")).toBe("1");
     // Next render flips display AND write target (the toggle round trip).
     const out2 = render();
-    expect(stripAnsi(out2)).toContain("▾ details");
+    expect(textOf(out2)).toContain("▾ details");
     expect(effectsOf(ownUrls(out2)[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "0"] },
     ]);
@@ -881,7 +884,7 @@ describe("2de.4 — cycle set action", () => {
     // Bypass the gate to simulate a foreign/legacy stored value.
     sessionState.set("s1", "details-open", "garbage");
     const out = render();
-    expect(stripAnsi(out)).toContain("▸ details");
+    expect(textOf(out)).toContain("▸ details");
     expect(effectsOf(ownUrls(out)[0]!)).toEqual([
       { verb: "set-state", args: ["s1", "details-open", "1"] },
     ]);
@@ -891,10 +894,10 @@ describe("2de.4 — cycle set action", () => {
     const src = SRC.replace('"▸ details" "▾ details"', '"⊕"');
     const { render, click, sessionState } = buildRuntime(src);
     const out = render();
-    expect(stripAnsi(out)).toContain("⊕");
+    expect(textOf(out)).toContain("⊕");
     await click(ownUrls(out)[0]!);
     expect(sessionState.get("s1", "details-open")).toBe("1");
-    expect(stripAnsi(render())).toContain("⊕");
+    expect(textOf(render())).toContain("⊕");
   });
 
   test("a display arity that is neither 1 nor the member count surfaces as a visible error cell", () => {
@@ -911,7 +914,7 @@ describe("2de.4 — cycle set action", () => {
     const { render } = buildRuntime(src);
     // [LAW:no-silent-failure] Arity errors surface as a visible ⚠ error cell
     // rather than crashing the bar — partial rendering keeps other segments alive.
-    const out = stripAnsi(render());
+    const out = textOf(render());
     expect(out).toMatch(/⚠.*bar.*cycles 3 members/);
   });
 
@@ -930,7 +933,7 @@ describe("2de.4 — cycle set action", () => {
       root: { h: ['bar', 'ok'] },
     }`;
     const { render } = buildRuntime(src);
-    const errorRow = stripAnsi(render())
+    const errorRow = textOf(render())
       .split("\n")
       .find((line) => line.includes("unregisteredFn"));
     expect(errorRow).toContain("NEIGHBOUR");
@@ -947,7 +950,7 @@ describe("2de.4 — cycle set action", () => {
       root: { h: ['bar', 'ok'] },
     }`;
     const { render } = buildRuntime(src);
-    const errorRow = stripAnsi(render())
+    const errorRow = textOf(render())
       .split("\n")
       .find((line) => line.includes("FIRST"));
     expect(errorRow).toContain("SECOND");
@@ -982,7 +985,7 @@ describe("2de.4 — cycle set action", () => {
       ["●", "off"],
     ] as const) {
       const out = render();
-      expect(stripAnsi(out)).toContain(display);
+      expect(textOf(out)).toContain(display);
       await click(ownUrls(out)[0]!);
       expect(sessionState.get("s1", "mode")).toBe(written);
     }
@@ -1021,12 +1024,12 @@ describe("2de.4 — cycle set action", () => {
     // A renders open; B renders closed (current "a" is outside B's domain) and
     // B's click writes "b" — expand B, auto-closing A.
     const out = render();
-    expect(stripAnsi(out)).toContain("▾A");
-    expect(stripAnsi(out)).toContain("▸B");
+    expect(textOf(out)).toContain("▾A");
+    expect(textOf(out)).toContain("▸B");
     await click(ownUrls(out)[1]!);
     expect(sessionState.get("s1", "menu")).toBe("b");
-    expect(stripAnsi(render())).toContain("▸A");
-    expect(stripAnsi(render())).toContain("▾B");
+    expect(textOf(render())).toContain("▸A");
+    expect(textOf(render())).toContain("▾B");
   });
 });
 

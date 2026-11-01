@@ -6,6 +6,7 @@
 // override arrives the only way a client can send one: as the `configEnv` hint,
 // the `--config` flag, or a load-config click.
 
+import { textOf } from "../src/render/frame";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,14 +17,7 @@ import {
   VERB_SET_CONFIG,
 } from "../src/click/wire";
 import { renderLines } from "./helpers/daemon-log";
-import {
-  click,
-  configFlag,
-  hookData,
-  render as renderBar,
-  renderRequest,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { click, configFlag, hookData, render as renderBar, renderRequest } from "./helpers/daemon-e2e";
 import type { DaemonTarget } from "./helpers/daemon-wire";
 import { readDiagnostics } from "./helpers/diagnostics-viewer";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
@@ -45,7 +39,7 @@ async function render(
 ): Promise<string> {
   const bar = await renderBar(target, sessionId, cwd, hints, args);
   const pages = await readDiagnostics(target, sessionId, cwd, bar, hints, args);
-  return [bar, ...pages.map((p) => p.text)].join("\n");
+  return [textOf(bar), ...pages.map((p) => p.text)].join("\n");
 }
 
 describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running daemon", () => {
@@ -94,25 +88,17 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   //   • an override naming a file that does not exist — the bar says so, and
   //     names the path, instead of the silent default the ticket measured.
   test("a rejected override and an absent override are each visibly distinct from no override", async () => {
-    const plain = stripAnsi(
-      await render(daemon, "cfg-env-plain", projectDir),
-    );
-    const viaRejected = stripAnsi(
-      await render(daemon, "cfg-env-rejected", projectDir, {
-        configEnv: rejected,
-      }),
-    );
-    const viaAbsent = stripAnsi(
-      await render(daemon, "cfg-env-absent", projectDir, {
-        configEnv: absent,
-      }),
-    );
+    const plain = await render(daemon, "cfg-env-plain", projectDir);
+    const viaRejected = await render(daemon, "cfg-env-rejected", projectDir, {
+      configEnv: rejected,
+    });
+    const viaAbsent = await render(daemon, "cfg-env-absent", projectDir, {
+      configEnv: absent,
+    });
 
-    const viaValid = stripAnsi(
-      await render(daemon, "cfg-env-valid", projectDir, {
-        configEnv: override,
-      }),
-    );
+    const viaValid = await render(daemon, "cfg-env-valid", projectDir, {
+      configEnv: override,
+    });
 
     expect(plain).not.toContain("Invalid config");
     expect(plain).not.toContain("Config file not found");
@@ -170,15 +156,23 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     const sid = "cfg-env-precedence";
     const hints = { configEnv: absent };
 
-    const flagOverHint = stripAnsi(
-      await render(daemon, sid, projectDir, hints, configFlag(rejected)),
+    const flagOverHint = await render(
+      daemon,
+      sid,
+      projectDir,
+      hints,
+      configFlag(rejected),
     );
     expect(flagOverHint).toContain("⚠ Invalid config in");
     expect(flagOverHint).toContain(rejected);
     expect(flagOverHint).not.toContain("Config file not found");
 
-    const emptyFlag = stripAnsi(
-      await render(daemon, sid, projectDir, hints, configFlag("")),
+    const emptyFlag = await render(
+      daemon,
+      sid,
+      projectDir,
+      hints,
+      configFlag(""),
     );
     expect(emptyFlag).toContain("⚠ Config file not found:");
     expect(emptyFlag).toContain(absent);
@@ -188,8 +182,12 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       daemon,
       `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(override)}`,
     );
-    const pickOverBoth = stripAnsi(
-      await render(daemon, sid, projectDir, hints, configFlag(rejected)),
+    const pickOverBoth = await render(
+      daemon,
+      sid,
+      projectDir,
+      hints,
+      configFlag(rejected),
     );
     expect(pickOverBoth).toContain("OVERRIDE-WINS");
     expect(pickOverBoth).not.toContain("Invalid config");
@@ -202,43 +200,38 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   // and on the render event, like an unknown flag or a stray word, and the
   // bar renders with no --config.
   test("a bare --config is refused on the bar and the render event, not silently dropped", async () => {
-    const bare = stripAnsi(
-      await render(daemon, "cfg-flag-bare", projectDir, {}, [
-        "cc-candybar",
-        "--config",
-      ]),
-    );
+    const bare = await render(daemon, "cfg-flag-bare", projectDir, {}, [
+      "cc-candybar",
+      "--config",
+    ]);
     expect(bare).toContain(
       "--config names no file — the bar renders with no --config",
     );
 
-    const lastBare = stripAnsi(
-      await render(daemon, "cfg-flag-last-bare", projectDir, {}, [
-        ...configFlag(override),
-        "--config",
-      ]),
-    );
+    const lastBare = await render(daemon, "cfg-flag-last-bare", projectDir, {}, [
+      ...configFlag(override),
+      "--config",
+    ]);
     expect(lastBare).toContain(
       "--config names no file — the bar renders with no --config",
     );
     expect(lastBare).not.toContain("OVERRIDE-WINS");
 
-    const unknown = stripAnsi(
-      await render(daemon, "cfg-flag-unknown", projectDir, {}, [
-        ...configFlag(override),
-        "--bogus",
-        "--bogus",
-      ]),
-    );
+    const unknown = await render(daemon, "cfg-flag-unknown", projectDir, {}, [
+      ...configFlag(override),
+      "--bogus",
+      "--bogus",
+    ]);
     expect(unknown).toContain("Unknown flags: --bogus");
     expect(unknown).not.toContain("names no file");
     expect(unknown).toContain("OVERRIDE-WINS");
 
-    const positional = stripAnsi(
-      await render(daemon, "cfg-flag-positional", projectDir, {}, [
-        ...configFlag(override),
-        "stray.json5",
-      ]),
+    const positional = await render(
+      daemon,
+      "cfg-flag-positional",
+      projectDir,
+      {},
+      [...configFlag(override), "stray.json5"],
     );
     expect(positional).toContain("Unexpected arguments: stray.json5");
     expect(positional).toContain("OVERRIDE-WINS");
@@ -270,14 +263,12 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   // relative path is resolved against the cwd the client reported, never the
   // daemon's own.
   test("a relative --config resolves against the client's cwd", async () => {
-    const bar = stripAnsi(
-      await render(
-        daemon,
-        "cfg-flag-relative",
-        projectDir,
-        {},
-        configFlag(path.basename(override)),
-      ),
+    const bar = await render(
+      daemon,
+      "cfg-flag-relative",
+      projectDir,
+      {},
+      configFlag(path.basename(override)),
     );
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Config file not found");
@@ -287,11 +278,9 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   // raw. The checkpoint refuses it — the daemon would read it against its own
   // cwd — and the bar says so rather than rendering another config unexplained.
   test("a relative configEnv hint is refused on the bar, not resolved against the daemon's cwd", async () => {
-    const bar = stripAnsi(
-      await render(daemon, "cfg-env-stale-client", projectDir, {
-        configEnv: path.basename(override),
-      }),
-    );
+    const bar = await render(daemon, "cfg-env-stale-client", projectDir, {
+      configEnv: path.basename(override),
+    });
     expect(bar).toContain('Client hints refused: configEnv="override.json5"');
     expect(bar).not.toContain("OVERRIDE-WINS");
     // The render event names what was refused; a render that refused nothing

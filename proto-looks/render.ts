@@ -10,6 +10,7 @@ import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES, type ShadeName } from "../src/themes/decor";
+import type { Frame } from "../src/render/frame";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { instantOf } from "../src/utils/instant";
 import { sessionBar, type Payload, type SessionRender } from "../test/helpers/session-bar";
@@ -42,7 +43,7 @@ const SHOWN: Record<State, (base: Payload) => Payload> = {
 };
 
 interface Rendered {
-  readonly text: string;
+  readonly rows: Frame["rows"];
 }
 interface Views {
   readonly closed: Rendered;
@@ -53,9 +54,9 @@ const bar = sessionBar(`{}`, 170);
 const at = instantOf(new Date("2026-10-23T12:00:00Z"));
 
 // No warning is a fact about the look; any warning is a fault in the harness.
-const judged = ({ text, warnings }: SessionRender): Rendered => {
+const judged = ({ frame, warnings }: SessionRender): Rendered => {
   if (warnings.length > 0) throw new Error(`render warned: ${warnings.map((w) => w.message).join("; ")}`);
-  return { text };
+  return { rows: frame.rows };
 };
 
 // The menu the open view shows: the door open on ⚡ session, the theme's ⚙

@@ -12,16 +12,18 @@
 //
 // [LAW:single-enforcer] Drives the real seams: resolveEffectiveGlobals (the one
 // resolution the daemon and `cc-candybar check` both call), the real click wire
-// for the session writes, and registerDslConfig + renderDsl for the bytes. No
+// for the session writes, and registerDslConfig + drawDsl for the bytes. No
 // parallel rig and no hand-built joiner — a test that restated the chain would
 // pass while the daemon diverged, which is the whole failure this ticket closes.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf, type Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -84,9 +86,9 @@ function buildRuntime(source: string) {
       () => false,
     );
 
-  const render = (): string => {
+  const render = (): Frame => {
     const effective = effectiveNow();
-    return renderDsl(
+    return drawPayload(
       config,
       compiled,
       store,
@@ -106,7 +108,7 @@ function buildRuntime(source: string) {
       // from — so the bar cannot be painted from one resolution and labelled
       // from another.
       effective,
-    );
+    ).frame;
   };
 
   return { config, sessionState, render, effectiveNow };
@@ -144,12 +146,12 @@ describe("edit mode's look — a staged globals fragment", () => {
     await leaveEditMode(sessionState);
     const after = render();
 
-    expect(editing).not.toBe(before);
-    expect(editing).toContain(" | ");
+    expect(editing.rows).not.toEqual(before.rows);
+    expect(textOf(editing)).toContain(" | ");
     // [LAW:dataflow-not-control-flow] Restoration is by construction, not by a
     // save/restore path: nothing wrote the previous style anywhere, it was only
-    // out-ranked. Byte equality is the proof that nothing was persisted.
-    expect(after).toBe(before);
+    // out-ranked. Equal rows are the proof that nothing was persisted.
+    expect(after.rows).toEqual(before.rows);
   });
 
   test("the staged fragment outranks a session pick, which governs again on exit", async () => {
@@ -166,11 +168,11 @@ describe("edit mode's look — a staged globals fragment", () => {
     // cannot survive into a mode whose whole job is to stop segments reading as
     // one continuous strip.
     expect(effectiveNow().endcaps).toBe("plain");
-    expect(render()).not.toBe(capsule);
+    expect(render().rows).not.toEqual(capsule.rows);
 
     await leaveEditMode(sessionState);
     expect(effectiveNow().endcaps).toBe("capsule");
-    expect(render()).toBe(capsule);
+    expect(render().rows).toEqual(capsule.rows);
   });
 
   test("the look is authored: two configs differing only in editGlobals render differently", async () => {
@@ -187,9 +189,9 @@ describe("edit mode's look — a staged globals fragment", () => {
     await enterEditMode(bundled.sessionState);
     await enterEditMode(retuned.sessionState);
 
-    expect(bundled.render()).toContain(" | ");
-    expect(retuned.render()).toContain(" ~~ ");
-    expect(retuned.render()).not.toBe(bundled.render());
+    expect(textOf(bundled.render())).toContain(" | ");
+    expect(textOf(retuned.render())).toContain(" ~~ ");
+    expect(retuned.render().rows).not.toEqual(bundled.render().rows);
   });
 
   test("a config declaring no editGlobals gets no restyling from edit mode", async () => {

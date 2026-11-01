@@ -13,7 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { stripAnsi } from "./helpers/ansi";
+import { textOf, type Frame } from "../src/render/frame";
 
 jest.setTimeout(60_000);
 
@@ -50,28 +50,31 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     // The page's first render compiles the config in its arrival turn, which
     // can spend its whole deadline, so what has not answered draws pending;
     // the page's next redraw waits for it, as Claude Code's next tick does.
-    const cold = await transport.render(size);
-    const first = await transport.render(size);
-    const door = first.links.find((l) => l.text === "🍫");
-    const opened = await transport.click(door.url, size);
-    const copy = opened.links.find((l) => l.does.startsWith("copy "));
+    const cold = await transport.frame(size);
+    const first = await transport.frame(size);
+    const door = (await transport.render(size)).links.find((l) => l.text === "🍫");
+    const clicked = await transport.click(door.url, size);
+    const opened = await transport.frame(size);
+    const copy = clicked.links.find((l) => l.does.startsWith("copy "));
     const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
-    const working = await transport.render(size);
-    const tools = await transport.click(working.links.find((l) => l.text.includes("tools")).url, size);
-    const doctor = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);
-    console.log(JSON.stringify({ renders: { cold: cold.ansi, first: first.ansi, opened: opened.ansi, working: working.ansi, doctor: doctor.ansi }, refused: opened.refused, copied: copied.refused, doctorRefused: doctor.refused }));
+    const working = await transport.frame(size);
+    const painted = await transport.render(size);
+    const tools = await transport.click(painted.links.find((l) => l.text.includes("tools")).url, size);
+    const doctored = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);
+    const doctor = await transport.frame(size);
+    console.log(JSON.stringify({ frames: { cold, first, opened, working, doctor }, refused: clicked.refused, copied: copied.refused, doctorRefused: doctored.refused }));
     process.exit(0);
   `;
   const printed = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
   fs.rmSync(out, { recursive: true, force: true });
-  const { renders, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
-    renders: Record<"cold" | "first" | "opened" | "working" | "doctor", string>;
+  const { frames, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
+    frames: Record<"cold" | "first" | "opened" | "working" | "doctor", Pick<Frame, "rows">>;
     refused: string | null;
     copied: string | null;
     doctorRefused: string | null;
   };
-  const r = { ...said, cold: stripAnsi(renders.cold), first: stripAnsi(renders.first), opened: stripAnsi(renders.opened), working: stripAnsi(renders.working), doctor: stripAnsi(renders.doctor) };
+  const r = { ...said, cold: textOf(frames.cold), first: textOf(frames.first), opened: textOf(frames.opened), working: textOf(frames.working), doctor: textOf(frames.doctor) };
   expect(r.cold).toContain("~/c/tidepool");
   expect(r.first).toContain("~/c/tidepool");
   expect(r.first).toContain("fix-cache-timer");

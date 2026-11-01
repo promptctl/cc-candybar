@@ -10,6 +10,7 @@
 // constructed URL — so a test keeps passing when the bar is restyled and fails
 // when the click stops doing what it claimed.
 
+import { linkUrls } from "./frame";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 
@@ -18,7 +19,7 @@ import {
   type ClientHints,
   type Response,
 } from "../../src/daemon/protocol";
-import { parseFrame, type Frame } from "../../src/render/frame";
+import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
@@ -29,14 +30,12 @@ import {
   type DaemonTarget,
 } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
-import { linkUrls, stripAnsi } from "./ansi";
 import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
 import { valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
-export { linkUrls, stripAnsi } from "./ansi";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
@@ -225,15 +224,15 @@ export function renderBody(
   };
 }
 
-// One status-line render, as Claude Code would ask for it.
+// One status-line render's Frame, as a reader of its answer asks for it.
 export function render(
   target: DaemonTarget,
   sessionId: string,
   cwd: string,
   hints: ClientHints = {},
   args: string[] = [],
-): Promise<string> {
-  return renderRequest(target, renderBody(sessionId, cwd, hints, args));
+): Promise<Frame> {
+  return frameRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
 // A click, decoded the same way `cc-candybar url-handle` decodes it, then sent
@@ -301,20 +300,20 @@ export async function renderUntil(
   target: DaemonTarget,
   sessionId: string,
   projectDir: string,
-  accepts: (rendered: string) => boolean,
+  accepts: (rendered: Frame) => boolean,
   what: string,
   timeoutMs = 5_000,
-): Promise<string> {
-  let last = "";
+): Promise<Frame> {
+  let last: Frame | undefined;
   await until(
     async () => accepts((last = await render(target, sessionId, projectDir))),
     () =>
-      last
-        ? `a render of ${what}; last render was:\n${last}`
-        : `a render of ${what}; no render answered within the budget`,
+      last === undefined
+        ? `a render of ${what}; no render answered within the budget`
+        : `a render of ${what}; last render was:\n${textOf(last)}`,
     timeoutMs,
   );
-  return last;
+  return last!;
 }
 
 // [LAW:no-ambient-temporal-coupling] The real client answers within its own
@@ -341,7 +340,7 @@ export function runRealClient(
         timeout: 10_000,
       },
     );
-    if (run.status !== 0 || stripAnsi(run.stdout).trim() !== "") break;
+    if (run.status !== 0 || run.stdout.trim() !== "") break;
     // [LAW:no-silent-failure] A retry that absorbs a blank is named, so a
     // client that needs several runs every time (a real latency regression)
     // shows in the log instead of passing unseen.
@@ -371,9 +370,9 @@ export function findUrl(
 }
 
 // The affordance that writes `value` to `key`, as the user's own click would
-// find it: by what it does, from the rendered bytes — never constructed.
+// find it: by what it does, from the drawn frame — never constructed.
 export function urlWriting(
-  rendered: string,
+  rendered: Frame,
   key: string,
   value: string,
 ): string {

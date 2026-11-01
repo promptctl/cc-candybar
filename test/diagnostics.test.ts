@@ -6,6 +6,8 @@
 // exactly the viewed message. Width is asserted with rich-js cellLength — the
 // one display-width measure the renderer wraps by.
 
+import { linksOf } from "../src/click/read";
+import { linkUrls } from "./helpers/frame";
 import {
   RichText,
   Segment,
@@ -42,6 +44,8 @@ import {
   ansiOf,
   diagnosticFrame,
   encodeAnsi,
+  plainOf,
+  type Frame,
   type Row,
 } from "../src/render/frame";
 import {
@@ -50,7 +54,6 @@ import {
 } from "../src/themes/policy";
 import { DIAGNOSTICS_VIEWING } from "../src/config/door";
 import { effectsOf } from "./helpers/click";
-import { links, linkUrls, stripAnsi } from "./helpers/ansi";
 
 const SID = "sid-1";
 // Messages each about their own text, unless a test says otherwise.
@@ -91,10 +94,12 @@ const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
     rows.map((row) => row.runs),
     depth,
   );
-const viewer = (...args: Parameters<typeof viewerRows>): string =>
-  encoded(viewerRows(...args), args[4].colorCompatibility);
+const viewer = (...args: Parameters<typeof viewerRows>): Pick<Frame, "rows"> => ({
+  rows: viewerRows(...args),
+});
 
-const rowsOf = (out: string): string[] => out.split("\n").map(stripAnsi);
+const rowsOf = ({ rows }: Pick<Frame, "rows">): string[] =>
+  rows.map(({ runs }) => plainOf(runs));
 const cellWidth = (row: string): number => new RichText(row).cellLength;
 
 describe("the diagnostic list", () => {
@@ -227,7 +232,7 @@ describe("the viewer", () => {
     const keys = list.map((_, i) => viewerKey(list, i, 0));
     expect(new Set(keys).size).toBe(4);
     expect(keys.map((k) => viewedIndex(k, list)!.index)).toEqual([1, 2, 3, 4]);
-    const said = links(viewer(list, at(2), SID, "request", geometry(80))).map(
+    const said = linksOf(viewer(list, at(2), SID, "request", geometry(80))).map(
       (l) => /does=([^&]*)/.exec(l.url)![1],
     );
     expect(said).toEqual([
@@ -237,8 +242,8 @@ describe("the viewer", () => {
       "copy+diagnostic+2",
       "copy+diagnostic+2",
     ]);
-    const next = links(viewer(list, at(2), SID, "request", geometry(80)))
-      .filter((l) => stripAnsi(l.text).trim() === "›")
+    const next = linksOf(viewer(list, at(2), SID, "request", geometry(80)))
+      .filter((l) => l.text === "›")
       .flatMap((l) => effectsOf(l.url));
     expect(next).toEqual([
       { verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, keys[2]] },
@@ -255,8 +260,8 @@ describe("the viewer", () => {
     const last = rowsOf(viewer(list, { index: 1, page: 7 }, SID, "request", short));
     expect(last.at(-1)).toBe("  issue 29 ");
     const onward = (pos: { index: number; page: number }) =>
-      links(viewer(list, pos, SID, "request", short))
-        .filter((l) => stripAnsi(l.text).trim() === "›")
+      linksOf(viewer(list, pos, SID, "request", short))
+        .filter((l) => l.text === "›")
         .flatMap((l) => effectsOf(l.url))
         .map((e) => viewedIndex(e.args[2] as string, list));
     expect(onward(at(1))).toEqual([{ index: 1, page: 1 }]);
@@ -283,8 +288,8 @@ describe("the viewer", () => {
     const rows = rowsOf(viewer(list, last, SID, "request", tiny));
     expect(rows).toHaveLength(2);
     expect(rows[1]).toMatch(/… 11 more rows: ⧉ copy has them all/);
-    const onward = links(viewer(list, last, SID, "request", tiny))
-      .filter((l) => stripAnsi(l.text).trim() === "›")
+    const onward = linksOf(viewer(list, last, SID, "request", tiny))
+      .filter((l) => l.text === "›")
       .flatMap((l) => effectsOf(l.url))
       .map((e) => viewedIndex(e.args[2] as string, list));
     expect(onward).toEqual([at(2)]);
@@ -303,11 +308,11 @@ describe("the viewer", () => {
     expect(header(1)).toBe("✕   [1/3] › ⧉ copy ");
     expect(header(2)).toBe("✕ ‹ [2/3] › ⧉ copy ");
     expect(header(3)).toBe("✕ ‹ [3/3]   ⧉ copy ");
-    const writes = links(viewer(list, at(2), SID, "request", geometry(80)))
+    const writes = linksOf(viewer(list, at(2), SID, "request", geometry(80)))
       .filter((l) =>
         effectsOf(l.url).every((e) => e.verb !== "copy-diagnostic"),
       )
-      .map((l) => [stripAnsi(l.text).trim(), effectsOf(l.url)]);
+      .map((l) => [l.text, effectsOf(l.url)]);
     const [a, , c] = list.map((_, i) => viewerKey(list, i, 0));
     expect(writes).toEqual([
       ["✕", [{ verb: "set-state", args: [SID, DIAGNOSTICS_VIEWING, "0"] }]],
@@ -348,10 +353,10 @@ describe("the viewer", () => {
     expect(copies.length).toBeGreaterThan(1);
     for (const c of copies) expect(c).toEqual(own);
     // Only the first line's words click; the issue lines below carry none.
-    const bodyLinks = links(out.split("\n").slice(1).join("\n"));
+    const bodyLinks = linksOf({ rows: out.rows.slice(1) });
     const firstLine = ERROR.split("\n")[0]!;
     for (const l of bodyLinks) {
-      expect(firstLine).toContain(stripAnsi(l.text).trim().split(" ")[0]);
+      expect(firstLine).toContain(l.text.split(" ")[0]);
       expect(effectsOf(l.url)).toEqual([own]);
     }
     // The key is the one the viewer opens the message at.
@@ -383,8 +388,8 @@ describe("the viewer", () => {
 
   test("a message's control characters are neutralized before they reach the terminal", () => {
     const list = collectDiagnostics(["x\x1b[31mred\x9bCSI"], [], []);
-    const body = viewer(list, at(1), SID, "request", geometry(80)).split("\n")[1]!;
-    expect(stripAnsi(body)).not.toMatch(/[\x1b\x9b]/);
+    const body = rowsOf(viewer(list, at(1), SID, "request", geometry(80)))[1]!;
+    expect(body).not.toMatch(/[\x1b\x9b]/);
   });
 });
 

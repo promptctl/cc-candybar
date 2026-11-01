@@ -28,6 +28,10 @@
 //      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls, runUnder, truecolorOf } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
@@ -35,7 +39,7 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -59,51 +63,23 @@ import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-gly
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { linkUrls, stripAnsi, withoutLinks } from "./helpers/ansi";
-import { contrastRatio, parseRgbHex } from "@promptctl/rich-js";
+import { contrastRatio } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
 
-// The truecolor fg and bg in force where `text` first appears in `rendered`
-// (links removed): every SGR before it, folded in order.
-// The colours in force at `text`'s first column; either is undefined when none
-// is (a cell drawn with no fill has no bg).
+// The colours drawn at `text`'s first character, as hex; either is undefined
+// when none is (a cell drawn with no fill has no bg).
 function paintAt(
-  rendered: string,
+  rendered: Frame,
   text: string,
 ): { fg: string | undefined; bg: string | undefined } {
-  const at = stripAnsi(rendered).indexOf(text);
-  expect(at).toBeGreaterThanOrEqual(0);
-  let fg: string | undefined;
-  let bg: string | undefined;
-  let visible = 0;
-  for (const m of rendered.matchAll(/\x1b\[([\d;]*)m|[^\x1b]/gu)) {
-    if (m[1] === undefined) {
-      if (visible >= at) break;
-      visible += m[0].length;
-      continue;
-    }
-    const params = m[1].split(";").map(Number);
-    for (let i = 0; i < params.length; i++) {
-      if (params[i] === 0) [fg, bg] = [undefined, undefined];
-      if (params[i] === 39) fg = undefined;
-      if (params[i] === 49) bg = undefined;
-      if ((params[i] === 38 || params[i] === 48) && params[i + 1] === 2) {
-        const hex = params
-          .slice(i + 2, i + 5)
-          .map((n) => n.toString(16).padStart(2, "0"))
-          .join("");
-        if (params[i] === 38) fg = hex;
-        else bg = hex;
-        i += 4;
-      }
-    }
-  }
-  return { fg, bg };
+  const run = runUnder(rendered, text);
+  expect(run).toBeDefined();
+  return { fg: run!.fg, bg: run!.bg };
 }
 
-function colorsAt(rendered: string, text: string): { fg: string; bg: string } {
+function colorsAt(rendered: Frame, text: string): { fg: string; bg: string } {
   const { fg, bg } = paintAt(rendered, text);
   expect(fg).toBeDefined();
   expect(bg).toBeDefined();
@@ -122,7 +98,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function ownUrls(rendered: string): string[] {
+function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -190,8 +166,8 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   // The daemon publishes the session's history depth into every render's
   // payload (`history.sinceEdit` is what edit mode's save cell counts).
   const history = durable.historyFor(sessionState);
-  const render = (width?: number): string =>
-    renderDsl(
+  const render = (width?: number): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -203,7 +179,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
       },
       instantOf(new Date()),
       opts(width),
-    );
+    ).frame;
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, history),
     // The config this bar rendered with, which gates every click and which an
@@ -471,7 +447,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       )!;
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
-    const row = stripAnsi(render(60))
+    const row = textOf(render(60))
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
     expect(row).toMatch(
@@ -489,7 +465,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
     const out = render();
-    expect(stripAnsi(out)).toMatch(
+    expect(textOf(out)).toMatch(
       new RegExp(`${REMOVE_GLYPH}⚠ git: [^\n]*${CONFIGURE_GLYPH}`),
     );
     expect(ownUrls(out).some((u) => u.includes("remove%253Agit"))).toBe(true);
@@ -518,10 +494,8 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
     await click(open(menuStateKey("picky", "pick", undefined), menuMember("pick")));
-    const { fg, bg } = colorsAt(withoutLinks(render()), `${REMOVE_GLYPH}m`);
-    expect(
-      contrastRatio(parseRgbHex(fg), parseRgbHex(bg)),
-    ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+    const { fg, bg } = colorsAt(render(), `${REMOVE_GLYPH}m`);
+    expect(contrastRatio(truecolorOf(fg), truecolorOf(bg))).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 
   // An insertion point is drawn on no fill: its `✚` is green text on the
@@ -534,7 +508,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       ),
     )!;
     await click(toggle);
-    const out = withoutLinks(render());
+    const out = render();
     const add = paintAt(out, ADD_GLYPH);
     expect(add.fg).toBeDefined();
     expect(add.bg).toBeUndefined();
@@ -549,7 +523,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       ),
     )!;
     await click(toggle);
-    const [first] = stripAnsi(render()).split("\n");
+    const [first] = textOf(render()).split("\n");
     expect(first).toContain("✓ done");
     expect(first).not.toMatch(/directory|git|trigger/);
     const done = ownUrls(render()).find((u) =>
@@ -559,18 +533,18 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     );
     expect(done).toBeDefined();
     await click(done!);
-    expect(stripAnsi(render())).not.toContain("✓ done");
+    expect(textOf(render())).not.toContain("✓ done");
   });
 
   test("chrome segments are gated behind edit.mode — absent from render when closed", () => {
     const { render } = buildEditRuntime(BASE);
-    const out = stripAnsi(render());
+    const out = textOf(render());
     expect(out).not.toContain(REMOVE_GLYPH); // no `-` rendered while closed
   });
 
-  test("no render-walk branch: renderDsl's own source never mentions edit mode", () => {
+  test("no render-walk branch: drawDsl's own source never mentions edit mode", () => {
     // [LAW:dataflow-not-control-flow] The chrome is spliced tree nodes with
-    // an ordinary `when`; renderDsl (the ONE render path, called verbatim by
+    // an ordinary `when`; drawDsl (the ONE render path, called verbatim by
     // the daemon and the demo alike) needed zero edits for this feature, and
     // this asserts that structurally rather than by promise.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -594,7 +568,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
     "root: { v: [ { h: ['directory', 'idle', 'git'] }, 'alone', { h: ['boxed'], when: '{{ false }}' }, 'trigger' ] },",
   );
-  const removesOf = (rendered: string): string[] =>
+  const removesOf = (rendered: Frame): string[] =>
     ownUrls(rendered).flatMap((u) =>
       effectsOf(u)
         .filter((e) => e.verb === "apply-layout-op")
@@ -603,7 +577,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 
   test("a segment its own `when` or its container's hides still shows its name and its `-`", async () => {
     const { render, click } = buildEditRuntime(HIDDEN);
-    const closed = stripAnsi(render());
+    const closed = textOf(render());
     expect(closed).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     // A hidden segment that is a whole row leaves no blank line behind.
     expect(closed.split("\n").some((line) => line.trim() === "")).toBe(false);
@@ -615,10 +589,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     )!;
     await click(toggle);
     const names = render();
-    expect(stripAnsi(names)).toMatch(/directory.*idle.*git/);
-    expect(stripAnsi(names)).toContain("alone");
-    expect(stripAnsi(names)).toContain("boxed");
-    expect(stripAnsi(names)).not.toMatch(/IDLE|ALONE|BOXED|\bd\b|\bg\b/);
+    expect(textOf(names)).toMatch(/directory.*idle.*git/);
+    expect(textOf(names)).toContain("alone");
+    expect(textOf(names)).toContain("boxed");
+    expect(textOf(names)).not.toMatch(/IDLE|ALONE|BOXED|\bd\b|\bg\b/);
     expect(removesOf(names)).toEqual(
       expect.arrayContaining(
         ["idle", "alone", "boxed", "directory"].map((target) =>
@@ -637,8 +611,8 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     )!;
     await click(live);
     const shown = render();
-    expect(stripAnsi(shown)).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
-    expect(stripAnsi(shown)).toMatch(/d.*g/);
+    expect(textOf(shown)).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
+    expect(textOf(shown)).toMatch(/d.*g/);
     expect(removesOf(shown)).not.toContain(
       encodeLayoutOp({ op: "remove", target: "idle" }),
     );
@@ -655,7 +629,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
       ),
     );
     ctx.sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const liveToggle = (rendered: string, to: string): string | undefined =>
+    const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
           (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === to,
@@ -663,10 +637,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
       );
     await click(liveToggle(render(), "open")!);
     const live = render();
-    expect(stripAnsi(live)).not.toMatch(/directory|\bd\b/);
+    expect(textOf(live)).not.toMatch(/directory|\bd\b/);
     // The way back survives the root hiding.
     await click(liveToggle(live, "closed")!);
-    expect(stripAnsi(render())).toMatch(/directory.*git/);
+    expect(textOf(render())).toMatch(/directory.*git/);
   });
 
   test("only a name label stands for a segment in the arrangement, whatever the presets are called", () => {
@@ -692,7 +666,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 describe("edit mode click flow: toggle → remove → insert (menu) → undo × 2", () => {
   test("toggling edit mode on makes the `-` chrome render; off hides it again", async () => {
     const { render, click } = buildEditRuntime(BASE);
-    const before = stripAnsi(render());
+    const before = textOf(render());
     expect(before).not.toContain(REMOVE_GLYPH);
 
     const toggleUrl = ownUrls(render()).find((u) =>
@@ -703,7 +677,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     expect(toggleUrl).toBeDefined();
     await click(toggleUrl);
 
-    const opened = stripAnsi(render());
+    const opened = textOf(render());
     expect(opened).toContain(REMOVE_GLYPH);
     // Edit mode shows each content cell as its segment's name, so the
     // trigger reads "trigger" until `☐ live` puts the live output back.
@@ -722,7 +696,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       ),
     )!;
     await click(closeUrl);
-    expect(stripAnsi(render())).not.toContain("-");
+    expect(textOf(render())).not.toContain("-");
   });
 
   test("remove → insert (picked via menu) → undo × 2 returns the file to its original bytes", async () => {
@@ -802,14 +776,14 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 describe("a segment row's chrome rides its row", () => {
   test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", async () => {
     const { render, click } = buildEditRuntime(BASE);
-    const closed = stripAnsi(render()).split("\n");
+    const closed = textOf(render()).split("\n");
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     )!;
     await click(toggleUrl);
-    const opened = stripAnsi(render()).split("\n");
+    const opened = textOf(render()).split("\n");
     expect(opened.some((line) => line.includes(REMOVE_GLYPH))).toBe(true);
     // One more line than the closed bar: edit mode's own top row, with
     // `✎ done`. The chrome itself adds none.
@@ -826,8 +800,8 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const renderWith = (padding: number): string =>
-      renderDsl(
+    const renderWith = (padding: number): Frame =>
+      drawPayload(
         config,
         compiled,
         store,
@@ -835,9 +809,9 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
         { session_id: "s1", project_dir: "/tmp/proj" },
         instantOf(new Date()),
         { ...opts(), padding },
-      );
-    const padded0 = stripAnsi(renderWith(0));
-    const padded2 = stripAnsi(renderWith(2));
+      ).frame;
+    const padded0 = textOf(renderWith(0));
+    const padded2 = textOf(renderWith(2));
     // Same content, more surrounding whitespace at padding=2 — the chrome
     // segment's `-`/`+` cells widen by the same 2×padding every other
     // segment's cells do, since applySegmentLayout pads BEFORE sizing with
@@ -883,7 +857,7 @@ describe("edit mode's save and cancel", () => {
       })!,
     );
   const topRow = (rt: ReturnType<typeof buildEditRuntime>): string =>
-    stripAnsi(rt.render()).split("\n")[0]!;
+    textOf(rt.render()).split("\n")[0]!;
 
   test("the row reads ✓ done with nothing changed, and ✓ save ↩ cancel after a change", async () => {
     const rt = buildEditRuntime(BASE);
@@ -896,7 +870,7 @@ describe("edit mode's save and cancel", () => {
     expect(topRow(rt)).toContain("↩ cancel");
     // The live toggle left the bar's last row for the edit row, so the `(?)`
     // is alone after the content.
-    const rows = stripAnsi(rt.render()).split("\n");
+    const rows = textOf(rt.render()).split("\n");
     expect(rows.at(-1)).toContain("(?)");
     expect(rows.at(-1)).not.toContain("live");
   });
@@ -917,7 +891,7 @@ describe("edit mode's save and cancel", () => {
       redo: 0,
       sinceEdit: 0,
     });
-    expect(stripAnsi(rt.render())).not.toContain("✓ done");
+    expect(textOf(rt.render())).not.toContain("✓ done");
   });
 
   test("save keeps the change; the next time edit mode opens it counts from there", async () => {

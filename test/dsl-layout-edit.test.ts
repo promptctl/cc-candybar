@@ -1,3 +1,4 @@
+import { textOf } from "../src/render/frame";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
 // the real spine (mirroring dsl-persist-actions.test.ts's model one arm
 // over), re-aimed at the config FILE as the one durable store
@@ -42,6 +43,9 @@
 //      authored root from the file, so the next reload falls back to the
 //      bundled tree — never a silent drift between screen and disk.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
@@ -52,7 +56,7 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
@@ -104,7 +108,6 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { viewFacts } from "./helpers/view-facts";
-import { INVISIBLE, linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
@@ -120,7 +123,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function ownUrls(rendered: string): string[] {
+function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -549,8 +552,8 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
-  const render = (): string =>
-    renderDsl(
+  const render = (): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -558,7 +561,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
       opts(),
-    );
+    ).frame;
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
     // The daemon's own lookup and reload: a click is gated by the config as
@@ -834,7 +837,7 @@ describe("apply-layout-op click → the config file", () => {
 // text `↺ reset layout` now, but the preset name still reaches the chrome's
 // action names and root key, so this keeps proving such a preset compiles and
 // renders its banner through real parseAndValidate + registerDslConfig +
-// renderDsl.
+// drawDsl.
 describe('the reset-layout banner survives quote/backslash preset names', () => {
 
   test('a preset named with a " and a \\ compiles and still renders the banner', () => {
@@ -869,7 +872,7 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
       compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     }).not.toThrow();
     const basePalette = getThemePalette("textual-dark"!);
-    const rendered = renderDsl(
+    const rendered = drawPayload(
       config,
       compiled!,
       store,
@@ -883,8 +886,8 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
       opts(),
       undefined,
       selectionFor(config, {}, picked({ preset: presetName })),
-    );
-    expect(rendered.replace(INVISIBLE, "")).toContain("↺ reset layout");
+    ).frame;
+    expect(textOf(rendered)).toContain("↺ reset layout");
     registry.dispose();
   });
 });
@@ -922,7 +925,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
       const basePalette = getThemePalette("textual-dark"!);
-      return renderDsl(
+      return textOf(drawPayload(
         config,
         compiled,
         store,
@@ -936,7 +939,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
         opts(),
         undefined,
         selectionFor(config, {}, picked({ preset: "gated" })),
-      ).replace(INVISIBLE, "");
+      ).frame);
     } finally {
       registry.dispose();
     }

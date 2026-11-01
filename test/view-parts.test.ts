@@ -4,6 +4,8 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -13,20 +15,14 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
-import {
-  drawPayload,
-  registerDslConfig,
-  type DrawnFrame,
-  type RenderWarning,
-} from "../src/dsl/render";
+import { registerDslConfig, type DrawnFrame, type RenderWarning } from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { links, stripAnsi } from "./helpers/ansi";
-import { ansiOf } from "../src/render/frame";
+import { textOf, type Frame } from "../src/render/frame";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -92,7 +88,7 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     // frame is drawn for (`drawing.fps`, a draw projection), and the door's
     // own cell, whose indicator reads the draw's diagnostics; nothing else.
     expect(second.evaluated).toBe(3);
-    expect(stripAnsi(ansiOf(second.frame))).toContain(String(Math.floor(B)));
+    expect(textOf(second.frame)).toContain(String(Math.floor(B)));
     expect(view.errors).toEqual([]);
   });
 
@@ -103,16 +99,16 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     // `stamp`'s body, the door's two cells, and `shown`'s body: `shown`'s
     // colours read no `x`.
     expect(changed.evaluated).toBe(4);
-    expect(stripAnsi(ansiOf(changed.frame))).toContain("x=2");
+    expect(textOf(changed.frame)).toContain("x=2");
   });
 
   test("a wider strip, every part that fits a row to it", () => {
     const view = viewOf(CONFIG);
     view.draw({ x: "1" }, A);
     const wider = view.draw({ x: "1" }, A, { ...OPTS, width: 300 });
-    expect(stripAnsi(ansiOf(wider.frame))).toBe(
-      stripAnsi(
-        ansiOf(viewOf(CONFIG).draw({ x: "1" }, A, { ...OPTS, width: 300 }).frame),
+    expect(textOf(wider.frame)).toBe(
+      textOf(
+        viewOf(CONFIG).draw({ x: "1" }, A, { ...OPTS, width: 300 }).frame,
       ),
     );
   });
@@ -131,8 +127,8 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     const urls = [A, B].map(
       (at) =>
-        links(ansiOf(view.draw({}, at).frame)).find(
-          (l) => stripAnsi(l.text) === "copy",
+        linksOf(view.draw({}, at).frame).find(
+          (l) => l.text === "copy",
         )!.url,
     );
     expect(urls[0]).toContain(String(Math.floor(A)));
@@ -154,8 +150,8 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     const urls = [A, B].map(
       (at) =>
-        links(ansiOf(view.draw({}, at).frame)).find(
-          (l) => stripAnsi(l.text) === "copy",
+        linksOf(view.draw({}, at).frame).find(
+          (l) => l.text === "copy",
         )!.url,
     );
     expect(urls[0]).toContain(String(Math.floor(A)));
@@ -298,7 +294,7 @@ describe("a kept part keeps nothing of where it was first asked", () => {
 });
 
 // A view kept across a session's clicks, theme and look picks, a narrower
-// terminal and new data draws, at every step, the bytes a view made fresh for
+// terminal and new data draws, at every step, the rows a view made fresh for
 // that step draws: nothing a part reads escapes what it tracks.
 describe("a kept view draws what a fresh one draws", () => {
   const SID = "parts";
@@ -316,7 +312,7 @@ describe("a kept view draws what a fresh one draws", () => {
     const ctx = testVerbContext(sessionState, undefined, config);
     let width = 200;
     let model = "Opus 4.7";
-    let last = "";
+    let last: Frame;
     const selection = () =>
       resolveEffectiveGlobals(
         config,
@@ -345,20 +341,19 @@ describe("a kept view draws what a fresh one draws", () => {
       const opts = { ...OPTS, padding: 0, width };
       const drawn = kept.draw(payload(), at, opts, selection());
       const fresh = viewOf(config, sessionState);
-      const anew = ansiOf(fresh.draw(payload(), at, opts, selection()).frame);
+      const anew = fresh.draw(payload(), at, opts, selection()).frame;
       fresh.registry.dispose();
-      const text = ansiOf(drawn.frame);
-      expect(stripAnsi(text)).toBe(stripAnsi(anew));
-      expect(text).toBe(anew);
-      last = text;
+      expect(textOf(drawn.frame)).toBe(textOf(anew));
+      expect(drawn.frame.rows).toEqual(anew.rows);
+      last = drawn.frame;
       return drawn.evaluated;
     };
     const clickText = async (text: string): Promise<void> => {
-      const hit = links(last).find((l) => stripAnsi(l.text) === text);
+      const hit = linksOf(last).find((l) => l.text === text);
       if (hit === undefined) {
         throw new Error(
-          `no link "${text}" in:\n${stripAnsi(last)}\nlinks: ${links(last)
-            .map((l) => JSON.stringify(stripAnsi(l.text)))
+          `no link "${text}" in:\n${textOf(last)}\nlinks: ${linksOf(last)
+            .map((l) => JSON.stringify(l.text))
             .join(" ")}`,
         );
       }

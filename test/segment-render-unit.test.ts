@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] 2de.10 acceptance, driven through the REAL spine
-// (registerDslConfig + renderDsl) and the REAL loader (parseAndValidate) — the
+// (registerDslConfig + drawDsl) and the REAL loader (parseAndValidate) — the
 // same path the daemon renders through, never a parallel rig.
 //
 // The unit of rendering is the SEGMENT: one strip item. The
@@ -12,15 +12,18 @@
 //   2. Two adjacent segments are always joined by a filled arrow, whatever
 //      their grounds: no thin divider is drawn in its place.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { POWERLINE } from "./helpers/powerline";
 import { instantOf } from "../src/utils/instant";
@@ -41,22 +44,22 @@ const OPTS = {
 };
 
 
-function chevronCount(rendered: string): number {
-  return rendered.split(CHEVRON).length - 1;
+function chevronCount(rendered: Pick<Frame, "rows">): number {
+  return textOf(rendered).split(CHEVRON).length - 1;
 }
 
-function render(src: string, hookData: Record<string, unknown>): string {
+function render(src: string, hookData: Record<string, unknown>): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  return renderDsl(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
+  return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS).frame;
 }
 
 describe("segment is the rendering unit (2de.10)", () => {
   test("a unit with internal clickable regions renders as ONE strip item — no internal chevron", () => {
-    // A segment whose template emits three OSC-8 links. The segment collapses to
+    // A segment whose template draws three links. The segment collapses to
     // one strip item, so the only chevrons in its line are its lead and its
     // tail — never one between X/Y/Z — while all three link spans survive
     // inside it.
@@ -73,13 +76,13 @@ describe("segment is the rendering unit (2de.10)", () => {
       },
       root: { v: ['${SETTINGS_ANCHOR}', 'actions'] },
     }`;
-    const line = render(src, {}).split("\n")[1]!;
+    const line = { rows: render(src, {}).rows.slice(1, 2) };
 
     // One unit ⇒ one item ⇒ only the lead and tail chevrons, none between the
     // regions.
     expect(chevronCount(line)).toBe(2);
-    // All three clickable regions survive as their own OSC-8 spans inside the
-    // single item.
+    // All three clickable regions survive as their own links inside the single
+    // item.
     expect(linkUrls(line)).toHaveLength(3);
   });
 
@@ -90,7 +93,7 @@ describe("segment is the rendering unit (2de.10)", () => {
     // unit must instead contribute no item at all — the bar renders exactly as
     // it does without the segment (the settings door, present in every bar, is
     // all either renders).
-    const bar = (root: string): string =>
+    const bar = (root: string): Frame =>
       render(
         `{
           globals: { palette: 'textual-dark' },
@@ -100,8 +103,8 @@ describe("segment is the rendering unit (2de.10)", () => {
         {},
       );
 
-    expect(bar(`{ h: ['${SETTINGS_ANCHOR}', 'empty'] }`)).toBe(
-      bar(`{ h: ['${SETTINGS_ANCHOR}'] }`),
+    expect(bar(`{ h: ['${SETTINGS_ANCHOR}', 'empty'] }`).rows).toEqual(
+      bar(`{ h: ['${SETTINGS_ANCHOR}'] }`).rows,
     );
   });
 
@@ -124,8 +127,8 @@ describe("segment is the rendering unit (2de.10)", () => {
 
     // The cells are the door, its frame rate, a and b: the lead, three joins
     // and the tail are all arrows.
-    expect(out.split(DIVIDER).length - 1).toBe(0);
+    expect(textOf(out).split(DIVIDER).length - 1).toBe(0);
     expect(chevronCount(out)).toBe(5);
-    expect(stripAnsi(out)).toMatch(new RegExp(`AAA\\s*${CHEVRON}\\s*BBB`));
+    expect(textOf(out)).toMatch(new RegExp(`AAA\\s*${CHEVRON}\\s*BBB`));
   });
 });

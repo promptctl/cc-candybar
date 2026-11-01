@@ -8,35 +8,23 @@ const idx = (rgb) => {
   if (!colourIdx.has(rgb)) { colourIdx.set(rgb, colours.length); colours.push(rgb); }
   return colourIdx.get(rgb);
 };
-const hex = (r, g, b) => "#" + [r, g, b].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
-// One row of SGR-styled text → runs [text, fg, bg, flags]; flags: 1 bold, 2 dim, 4 italic, 8 underline, 16 reverse.
-function runsOf(row) {
-  const text = row.replace(/\x1b\]8;[^\x1b]*\x1b\\/g, "");
-  const runs = [];
-  let fg = null, bg = null, flags = 0, at = 0;
-  const re = /\x1b\[([0-9;]*)m/g;
-  const push = (t) => { if (t) runs.push([t, idx(fg), idx(bg), flags]); };
-  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
-    push(text.slice(at, m.index));
-    at = re.lastIndex;
-    const c = m[1] === "" ? [0] : m[1].split(";").map(Number);
-    for (let i = 0; i < c.length; i++) {
-      const n = c[i];
-      if (n === 0) { fg = null; bg = null; flags = 0; }
-      else if (n === 1) flags |= 1; else if (n === 2) flags |= 2; else if (n === 3) flags |= 4;
-      else if (n === 4) flags |= 8; else if (n === 7) flags |= 16;
-      else if (n === 22) flags &= ~3; else if (n === 23) flags &= ~4; else if (n === 24) flags &= ~8; else if (n === 27) flags &= ~16;
-      else if (n === 39) fg = null; else if (n === 49) bg = null;
-      else if ((n === 38 || n === 48) && c[i + 1] === 2 && c.length >= i + 5) { const v = hex(c[i + 2], c[i + 3], c[i + 4]); if (n === 38) fg = v; else bg = v; i += 4; }
-      // [LAW:no-silent-failure] an SGR code this page cannot draw would show a wrong colour as the look.
-      else throw new Error(`unhandled SGR ${n} in ${JSON.stringify(m[0])}`);
-    }
-  }
-  push(text.slice(at));
-  if (/\x1b/.test(runs.map((r) => r[0]).join(""))) throw new Error("escape left in text");
-  return runs;
-}
-const picture = ({ text }) => ({ rows: text.split("\n").map(runsOf) });
+// flags: 1 bold, 2 dim, 4 italic, 8 underline, 16 reverse.
+const FLAGS = { bold: 1, dim: 2, italic: 4, underline: 8, reverse: 16 };
+// [LAW:no-silent-failure] a colour or attribute this page cannot draw would show a wrong look.
+const colourOf = (colour) => {
+  if (colour === undefined || colour === "default") return idx(null);
+  if (!/^#[0-9a-f]{6}$/.test(colour)) throw new Error(`unhandled colour ${colour}`);
+  return idx(colour);
+};
+const flagsOf = (attrs = []) =>
+  attrs.reduce((flags, name) => {
+    if (FLAGS[name] === undefined) throw new Error(`unhandled attribute ${name}`);
+    return flags | FLAGS[name];
+  }, 0);
+// One row of a Frame → runs [text, fg, bg, flags].
+const runsOf = ({ runs }) =>
+  runs.filter(({ text }) => text !== "").map(({ text, fg, bg, attrs }) => [text, colourOf(fg), colourOf(bg), flagsOf(attrs)]);
+const picture = ({ rows }) => ({ rows: rows.map(runsOf) });
 const drawn = JSON.parse(fs.readFileSync(`${OUT}/renders.json`, "utf8"));
 const taken = new Set();
 const take = (from, key) => {

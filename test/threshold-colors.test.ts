@@ -1,3 +1,4 @@
+import { textOf } from "../src/render/frame";
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
 // names — not opaque bytes. block/weekly heat as utilization passes the
 // placement's `warnAt` and `errorAt` settings; burnrate heats as the projected
@@ -13,10 +14,13 @@
 //
 // Written against the `if ge … else …` helper cascades BEFORE they became one
 // `ramp` call each (brandon-custom-segments-g5z.2): the ramp is proven
-// byte-equivalent by this file passing unchanged on both sides of that
+// equivalent by this file passing unchanged on both sides of that
 // change. [LAW:behavior-not-structure] — the contract is the colour at each
 // value, whichever spelling computes it.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { runUnder } from "./helpers/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
@@ -30,7 +34,7 @@ import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -190,7 +194,7 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 };
 
-// The theme is named rather than handed over as a Palette: renderDsl resolves it
+// The theme is named rather than handed over as a Palette: drawDsl resolves it
 // from the SELECTION now (brandon-themes-dzl), so a name is the whole input and
 // the palette the expectations read is built from that same name.
 function renderOne(
@@ -199,7 +203,7 @@ function renderOne(
   themeName: string,
   onSegmentError?: (segName: string, message: string) => void,
   undecorated = false,
-): string {
+): Frame {
   const narrowed = narrowToSegment(
     parseAndValidate("<default>", SERIALIZED),
     c.segment,
@@ -218,7 +222,7 @@ function renderOne(
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-    return renderDsl(
+    return drawPayload(
       one,
       compiled,
       store,
@@ -228,35 +232,21 @@ function renderOne(
       OPTS,
       { onSegmentError },
       selectionFor(one, {}, picked({ theme: themeName })),
-    );
+    ).frame;
   } finally {
     registry.dispose();
   }
 }
 
-// The fg/bg pair of the SGR run that paints the cell's glyph — the one
-// `38;2;r;g;b;48;2;r;g;b` sequence immediately before the glyph's text.
+// The fg/bg pair of the run that paints the cell's glyph.
 function cellColors(
-  rendered: string,
+  frame: Frame,
   glyph: string,
 ): { fg: string; bg: string } {
-  const m = rendered.match(new RegExp(`\\x1b\\[([\\d;]+)m[^\\x1b]*${glyph}`));
-  expect(m).not.toBeNull();
-  const params = m![1]!.split(";").map(Number);
-  const out: { fg?: string; bg?: string } = {};
-  for (let i = 0; i < params.length; i++) {
-    if ((params[i] === 38 || params[i] === 48) && params[i + 1] === 2) {
-      const hex = params
-        .slice(i + 2, i + 5)
-        .map((n) => n.toString(16).padStart(2, "0"))
-        .join("");
-      out[params[i] === 38 ? "fg" : "bg"] = `#${hex}`;
-      i += 4;
-    }
-  }
-  expect(out.fg).toBeDefined();
-  expect(out.bg).toBeDefined();
-  return { fg: out.fg!, bg: out.bg! };
+  const run = runUnder(frame, glyph);
+  expect(run?.fg).toBeDefined();
+  expect(run?.bg).toBeDefined();
+  return { fg: run!.fg!, bg: run!.bg! };
 }
 
 // A calm row wears the cell's own decoration: what the same cell renders with
@@ -332,7 +322,7 @@ describe("a threshold below its neighbour is a loud render error", () => {
         "textual-dark",
         (name, message) => errors.push(`${name}: ${message}`),
       );
-      expect(rendered).toContain("⚠");
+      expect(textOf(rendered)).toContain("⚠");
       expect(errors).toHaveLength(1);
       expect(errors[0]).toMatch(
         new RegExp(`^${segment}: .*ascending position order; ${pair}`),

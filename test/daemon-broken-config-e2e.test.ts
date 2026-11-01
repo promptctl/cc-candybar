@@ -5,18 +5,14 @@
 // config that places a segment nothing declares draws everything else it
 // placed, and the one bad placement is its error.
 
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { RichText } from "@promptctl/rich-js";
-import {
-  click,
-  linkUrls,
-  render,
-  stripAnsi,
-  urlWriting,
-} from "./helpers/daemon-e2e";
+import { click, render, urlWriting } from "./helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -69,7 +65,7 @@ describe("a config that cannot be drawn as written", () => {
     const sid = "broken-parse";
     const a = args("unparsable", `{ root: { h: ["directory"] `);
     const bar = await render(daemon, sid, projectDir, {}, a);
-    const text = stripAnsi(bar);
+    const text = textOf(bar);
     // The bundled default with its door, the indicator beside it, no strip.
     expect(text).toContain(DOOR_GLYPH);
     expect(indicatorOf(bar)).toBe("⚠ 1");
@@ -80,7 +76,7 @@ describe("a config that cannot be drawn as written", () => {
     expect(pages.map((p) => p.position)).toEqual(["1/1"]);
     expect(pages[0]!.text).toContain("unparsable.json5");
     // The viewer takes the body's place: the bar's door is not drawn under it.
-    expect(stripAnsi(pages[0]!.rendered)).not.toContain(DOOR_GLYPH);
+    expect(textOf(pages[0]!.rendered)).not.toContain(DOOR_GLYPH);
     // ✕ brought the bar back.
     expect(indicatorOf(await render(daemon, sid, projectDir, {}, a))).toBe(
       "⚠ 1",
@@ -112,11 +108,11 @@ describe("a config that cannot be drawn as written", () => {
     shown = await draw(flagged);
     expect(pageOf(shown).text).toContain("--no-such-flag");
     shown = await draw(a);
-    expect(stripAnsi(shown)).toContain("MINE");
+    expect(textOf(shown)).toContain("MINE");
     expect(indicatorOf(shown)).toBe("⚠ 1");
     // Another error arriving later does not open the viewer on it.
     shown = await draw([...a, "--another-flag"]);
-    expect(stripAnsi(shown)).toContain("MINE");
+    expect(textOf(shown)).toContain("MINE");
     expect(indicatorOf(shown)).toBe("⚠ 2");
   });
 
@@ -140,8 +136,8 @@ describe("a config that cannot be drawn as written", () => {
     expect(indicatorOf(bar)).toBe("⚠ 1");
     await click(daemon, urlWriting(bar, SETTINGS_ANCHOR, "open"));
     const opened = await render(daemon, sid, projectDir, {}, a);
-    expect(stripAnsi(opened)).toContain(DOOR_CLOSE_GLYPH);
-    expect(stripAnsi(opened)).toContain("▦"); // preset switching is reachable
+    expect(textOf(opened)).toContain(DOOR_CLOSE_GLYPH);
+    expect(textOf(opened)).toContain("▦"); // preset switching is reachable
     expect(indicatorOf(opened)).toBe("⚠ 1"); // still loud
     const [page] = await readDiagnostics(
       daemon,
@@ -161,7 +157,7 @@ describe("a config that cannot be drawn as written", () => {
       `{ segments: { mine: { template: "MINE" }, also: { template: "ALSO" } }, root: { h: ["mine", "nosuchseg", "also"] } }`,
     );
     const bar = await render(daemon, sid, projectDir, {}, a);
-    const text = stripAnsi(bar);
+    const text = textOf(bar);
     expect(text).toContain("MINE");
     expect(text).toContain("ALSO");
     expect(indicatorOf(bar)).toBe("⚠ 1");
@@ -206,7 +202,7 @@ describe("a config that cannot be drawn as written", () => {
     expect(pages.map((p) => p.text).join("\n")).not.toContain("repo.lit");
     expect(pages[1]!.text).toContain('duplicate key "padding"');
     for (const page of pages)
-      for (const row of stripAnsi(page.rendered).trimEnd().split("\n"))
+      for (const row of textOf(page.rendered).trimEnd().split("\n"))
         expect(new RichText(row).cellLength).toBeLessThanOrEqual(40);
 
     // ‹ steps back from the second message to the first.
@@ -233,7 +229,7 @@ describe("a config that cannot be drawn as written", () => {
       });
     for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
     for (const u of copyUrls) expect(u.length).toBeLessThan(200);
-    expect(shown).not.toContain("Fix my cc-candybar");
+    expect(textOf(shown)).not.toContain("Fix my cc-candybar");
     // A key no draw lists (the message fixed since) is refused loudly.
     await expect(
       click(daemon, copyUrls[0]!.replace(String(copies[0]!.args[2]), "1")),

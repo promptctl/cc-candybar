@@ -1,3 +1,4 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] A cloned repository's cc-candybar config runs only
 // once the user approves it, by one click in the bar, and the answer holds:
 // across a daemon restart and across edits of the file, as Claude Code's
@@ -5,19 +6,14 @@
 // exploited: the daemon's own request handling, a project config whose
 // `shell` variable leaves a marker on disk when it runs.
 
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  findUrl,
-  linkUrls,
-  render,
-  renderUntil,
-  sendClick,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { findUrl, render, renderUntil, sendClick } from "./helpers/daemon-e2e";
 import type { DaemonTarget } from "./helpers/daemon-wire";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
@@ -77,18 +73,18 @@ async function questionOf(
   target: DaemonTarget,
   sessionId: string,
   cwd: string,
-  bar: string,
+  bar: Frame,
 ): Promise<ViewerPage | undefined> {
   const pages = await readDiagnostics(target, sessionId, cwd, bar);
   return pages.find((p) => p.text.includes("a cc-candybar config for"));
 }
 
 // The rendered link that answers `answer` for a repository.
-function answerUrl(rendered: string, answer: string): string {
+function answerUrl(rendered: Frame, answer: string): string {
   const url = findUrl(linkUrls(rendered), (effects) =>
     effects.some((e) => e.verb === VERB_REPO_CONFIG && e.args[2] === answer),
   );
-  if (url === undefined) throw new Error(`no ${answer} link in:\n${rendered}`);
+  if (url === undefined) throw new Error(`no ${answer} link in:\n${textOf(rendered)}`);
   return url;
 }
 
@@ -124,13 +120,13 @@ describe("a repository's config waits for the user's one answer", () => {
   const start = (): void => {
     daemon = startDaemon(isolated.env);
   };
-  const draw = (sid: string): Promise<string> =>
+  const draw = (sid: string): Promise<Frame> =>
     render(daemon, sid, project);
 
   test("unanswered: nothing runs, the user's config draws, and the bar asks", async () => {
     start();
     const bar = await draw("repo-ask");
-    const text = stripAnsi(bar);
+    const text = textOf(bar);
     expect(text).toContain("USERSEG");
     expect(text).not.toContain("REPOSEG");
     // The question is a message the indicator offers, its answers in it.
@@ -177,7 +173,7 @@ describe("a repository's config waits for the user's one answer", () => {
       daemon,
       "repo-yes",
       project,
-      (r) => stripAnsi(r).includes("REPOSEGran"),
+      (r) => textOf(r).includes("REPOSEGran"),
       "the approved repository's config",
     );
     expect(
@@ -189,7 +185,7 @@ describe("a repository's config waits for the user's one answer", () => {
     await daemon.stop();
     start();
     const restartedBar = await draw("repo-yes-2");
-    expect(stripAnsi(restartedBar)).toContain("REPOSEG");
+    expect(textOf(restartedBar)).toContain("REPOSEG");
     expect(
       await questionOf(daemon, "repo-yes-2", project, restartedBar),
     ).toBeUndefined();
@@ -200,7 +196,7 @@ describe("a repository's config waits for the user's one answer", () => {
       daemon,
       "repo-yes-2",
       project,
-      (r) => stripAnsi(r).includes("EDITED"),
+      (r) => textOf(r).includes("EDITED"),
       "the edited config",
     );
     expect(
@@ -231,13 +227,13 @@ describe("a repository's config waits for the user's one answer", () => {
       (r) => indicatorOf(r) === null,
       "the bar without the question",
     );
-    expect(stripAnsi(declined)).toContain("USERSEG");
-    expect(stripAnsi(declined)).not.toContain("REPOSEG");
+    expect(textOf(declined)).toContain("USERSEG");
+    expect(textOf(declined)).not.toContain("REPOSEG");
 
     await daemon.stop();
     start();
     const restartedBar = await draw("repo-no-2");
-    expect(stripAnsi(restartedBar)).toContain("USERSEG");
+    expect(textOf(restartedBar)).toContain("USERSEG");
     expect(indicatorOf(restartedBar)).toBeNull();
     expect(fs.existsSync(marker)).toBe(false);
   });
@@ -292,7 +288,7 @@ describe("a repository's config waits for the user's one answer", () => {
         daemon,
         "repo-wt",
         wt,
-        (r) => stripAnsi(r).includes("WTSEGran"),
+        (r) => textOf(r).includes("WTSEGran"),
         "the worktree's config, approved through its repository",
       );
       // [LAW:nothing-unseen] The answer says which entries it superseded.
@@ -311,7 +307,7 @@ describe("a repository's config waits for the user's one answer", () => {
       });
       // The main worktree is approved by the same answer.
       const main = await draw("repo-main");
-      expect(stripAnsi(main)).toContain("REPOSEG");
+      expect(textOf(main)).toContain("REPOSEG");
       expect(indicatorOf(main)).toBeNull();
     } finally {
       fs.rmSync(wt, { recursive: true, force: true });

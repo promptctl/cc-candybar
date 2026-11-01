@@ -28,18 +28,11 @@ import {
   type Response,
 } from "../src/daemon/protocol";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
+import { textOf, type Frame } from "../src/render/frame";
 import { sweepJestTmp } from "./global-teardown";
-import {
-  click,
-  linkUrls,
-  render,
-  renderBody,
-  renderRequest,
-  renderUntil,
-  sendClick,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { click, frameRequest, render, renderBody, renderRequest, renderUntil, sendClick } from "./helpers/daemon-e2e";
 import { renderLines } from "./helpers/daemon-log";
+import { linkUrls } from "./helpers/frame";
 import {
   heldClock,
   startDaemon,
@@ -67,7 +60,7 @@ describe("a daemon in this worker", () => {
   let userConfig: string;
   let daemon: InWorkerDaemon | null = null;
 
-  const width = (bar: string): number => stripAnsi(bar).trimEnd().length;
+  const width = (bar: Frame): number => textOf(bar).trimEnd().length;
 
   beforeEach(() => {
     const prepared = prepareIsolatedDaemonEnv("ccb-in-worker");
@@ -90,7 +83,7 @@ describe("a daemon in this worker", () => {
     const sid = "in-worker-draw";
     daemon = startDaemon(env);
     const before = await render(daemon, sid, projectDir);
-    expect(stripAnsi(before)).toContain("[wide]");
+    expect(textOf(before)).toContain("[wide]");
 
     await click(daemon, linkUrls(before)[0]!);
 
@@ -159,7 +152,7 @@ describe("a daemon in this worker", () => {
     daemon = startDaemon(env);
     const { send, log, now } = daemon;
     let asked = 0;
-    const out = await renderRequest(
+    const out = await frameRequest(
       {
         log,
         now,
@@ -170,7 +163,7 @@ describe("a daemon in this worker", () => {
       },
       renderBody("in-worker-timeout", projectDir),
     );
-    expect(stripAnsi(out)).toContain("[wide]");
+    expect(textOf(out)).toContain("[wide]");
     expect(asked).toBeGreaterThan(1);
   });
 

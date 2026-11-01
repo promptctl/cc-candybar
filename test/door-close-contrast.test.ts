@@ -3,7 +3,7 @@
 // always a red the theme names for its error role; it reads because it is one
 // of those that clears TEXT_MIN_CONTRAST on its ground, and where none does,
 // the one standing farthest off, on the grounds listed below. Driven through
-// the real loader, `resolveEffectiveGlobals` and `renderDsl`, under every
+// the real loader, `resolveEffectiveGlobals` and `drawDsl`, under every
 // bundled theme, dial position and variation, at truecolor, 256 and ansi, each
 // pair measured as the terminal draws it.
 
@@ -226,7 +226,7 @@ function doorsUnder(bar: SessionBar, theme: string, looks: ReadonlyArray<readonl
     bar.pick("variation", variation);
     bar.pick("shade", shade);
     bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    return { variation, shade, ...doorClose(bar.render(AT).text) };
+    return { variation, shade, ...doorClose(bar.render(AT).frame) };
   });
 }
 

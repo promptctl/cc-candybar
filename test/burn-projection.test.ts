@@ -8,6 +8,9 @@
 // session too young to project yields ABSENCE (a missing field → the -1 default
 // → "—"), never a fabricated number.
 
+import { textOf } from "../src/render/frame";
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -27,7 +30,7 @@ import {
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -198,7 +201,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 function renderBurnrate(
   payload: Record<string, unknown>,
   atMs: number = NOW_MS,
-): string {
+): Frame {
   const raw = parseDslConfig(
     "<test>",
     `{ root: { h: ["burnrate"] } }`,
@@ -218,7 +221,7 @@ function renderBurnrate(
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    return renderDsl(
+    return drawPayload(
       cfg,
       compiled,
       store,
@@ -232,7 +235,7 @@ function renderBurnrate(
         padding: 0,
         width: Number.POSITIVE_INFINITY,
       },
-    );
+    ).frame;
   } finally {
     registry.dispose();
   }
@@ -254,10 +257,10 @@ describe("burnrate segment render", () => {
       block: { nativeUtilization: 20, resetsAt: NOW_SEC + 4 * 3600 },
       weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400 },
     });
-    expect(line).toContain("$12.00/hr");
-    expect(line).toContain("4h to 5h");
-    expect(line).toContain("to wk");
-    expect(line).not.toContain("—");
+    expect(textOf(line)).toContain("$12.00/hr");
+    expect(textOf(line)).toContain("4h to 5h");
+    expect(textOf(line)).toContain("to wk");
+    expect(textOf(line)).not.toContain("—");
   });
 
   test("absent projections render '—' (the -1 default), never a fake number", () => {
@@ -268,9 +271,9 @@ describe("burnrate segment render", () => {
       block: { nativeUtilization: 2, resetsAt: NOW_SEC + (5 * 3600 - 120) },
       weekly: { percentage: 1, resetsAt: NOW_SEC + (7 * 86400 - 120) },
     });
-    expect(line).toContain("—/hr");
-    expect(line).toContain("—");
-    expect(line).not.toMatch(/\$\d/); // no dollar figure
+    expect(textOf(line)).toContain("—/hr");
+    expect(textOf(line)).toContain("—");
+    expect(textOf(line)).not.toMatch(/\$\d/); // no dollar figure
   });
 
   test("the ETA is the instant's the frame is drawn at, from one payload", () => {
@@ -281,8 +284,8 @@ describe("burnrate segment render", () => {
       block: { nativeUtilization: 20, resetsAt: NOW_SEC + 4 * 3600 },
       weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400 },
     };
-    expect(renderBurnrate(payload)).toContain("4h to 5h");
-    expect(renderBurnrate(payload, NOW_MS + 3600 * 1000)).toContain("8h to 5h");
+    expect(textOf(renderBurnrate(payload))).toContain("4h to 5h");
+    expect(textOf(renderBurnrate(payload, NOW_MS + 3600 * 1000))).toContain("8h to 5h");
   });
 
   test("hidden when no rate-limit window is active", () => {
@@ -290,7 +293,7 @@ describe("burnrate segment render", () => {
     // The bar is never empty — every rendered bar carries the global settings
     // menu (candybar-settings-ui-aok.1) — so hidden is asserted as "none of
     // this segment's own content", not as an empty line.
-    expect(line).not.toContain("/hr");
-    expect(line).not.toMatch(/\$\d/);
+    expect(textOf(line)).not.toContain("/hr");
+    expect(textOf(line)).not.toMatch(/\$\d/);
   });
 });

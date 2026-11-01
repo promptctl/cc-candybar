@@ -74,7 +74,7 @@ function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
 //
-// The exact wiring renderDsl uses: ONE ActiveSegmentRef, an engine whose
+// The exact wiring drawDsl uses: ONE ActiveSegmentRef, an engine whose
 // segment-scoped funcs (`color`, `bgOf`) read through it, and
 // resolveSegmentColors publishing into it. The templates are parsed once and
 // the palette arrives per call — which is the whole point of the seam.
@@ -593,7 +593,7 @@ function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
 
 describe("per-segment hue via palette transposition", () => {
   const base = makeTestPalette();
-  // A hue-only ThemeKey — the shape renderDsl composes for a segment when no
+  // A hue-only ThemeKey — the shape drawDsl composes for a segment when no
   // style is active (the other three axes identity).
   const hueKey = (hueShift: number): ThemeKey => ({
     hueShift,

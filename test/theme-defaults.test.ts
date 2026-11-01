@@ -14,8 +14,9 @@
 //   5. a theme chosen by a rule contributes no default.
 //
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
-// validate, resolveEffectiveGlobals, registerDslConfig + renderDsl.
+// validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
@@ -33,7 +34,7 @@ import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -269,7 +270,7 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
   try {
     const effective = resolveEffectiveGlobals(config, () => null, () => false);
     const at = instantOf(new Date());
-    renderDsl(
+    drawPayload(
       config,
       compiled,
       store,
@@ -279,9 +280,9 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       renderOptionsOf(effective, OPTS_WIDTH),
       { perSegmentSink: sink },
       effective,
-    );
+    ).frame;
     const daemon = bg();
-    renderDsl(
+    drawPayload(
       config,
       compiled,
       store,
@@ -290,7 +291,7 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       at,
       renderOptionsOf(effective, OPTS_WIDTH),
       { perSegmentSink: sink },
-    );
+    ).frame;
     return { daemon, compileOnly: bg() };
   } finally {
     registry.dispose();

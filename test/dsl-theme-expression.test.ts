@@ -1,8 +1,9 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
 // accepts a TEMPLATE, evaluated per render, so the bar's theme can follow data;
 // (2) precedence comes out IDENTICAL to the style's — staged over session over the
 // expression — and an explicit session pick of the FLOOR name still holds; (3)
-// renderDsl is the one producer of `theme.effective`, so a label cannot disagree
+// drawDsl is the one producer of `theme.effective`, so a label cannot disagree
 // with the palette the bar wears; (4) an expression result naming no installed
 // theme renders the floor AND SAYS SO, rather than throwing the bar away or
 // repainting it in silence; (5) a malformed template is a LOAD error, and the
@@ -10,7 +11,7 @@
 // `palette:` pin still refuses one.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
-// loader, registerDslConfig + renderDsl for rendering, and the same
+// loader, registerDslConfig + drawDsl for rendering, and the same
 // resolveThemeSelection the daemon calls. No parallel rig.
 //
 // [LAW:behavior-not-structure] Every colour assertion compares against the SAME
@@ -22,20 +23,16 @@
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
-import { stripAnsi } from "./helpers/ansi";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import {
-  registerDslConfig,
-  renderDsl,
-  type CompiledConfig,
-  type RenderWarning,
-} from "../src/dsl/render";
+import { registerDslConfig, type CompiledConfig, type RenderWarning } from "../src/dsl/render";
 import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
@@ -89,7 +86,7 @@ const src = (palette: string, extra = ""): string => `{
 
 // One render: the bytes, plus each segment's own first-cell background.
 interface Painted {
-  readonly text: string;
+  readonly frame: Frame;
   readonly bg: (segName: string) => string;
 }
 
@@ -110,7 +107,7 @@ function buildRuntime(source = src(RULE)): Runtime {
   const warnings: RenderWarning[] = [];
   const sink = new Map<string, readonly RichText[]>();
   const render = (pct: number): Painted => {
-    const text = renderDsl(
+    const frame = drawPayload(
       config,
       compiled,
       store,
@@ -121,8 +118,8 @@ function buildRuntime(source = src(RULE)): Runtime {
       { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
       // Resolved as src/daemon/draw-bar.ts resolves it, over the session's picks.
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-    );
-    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: renderDsl clears
+    ).frame;
+    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: drawDsl clears
     // it at the top of the next call, so a colour read deferred past that call
     // would measure a render this Painted never described.
     const bgs = new Map(
@@ -132,7 +129,7 @@ function buildRuntime(source = src(RULE)): Runtime {
       ]),
     );
     return {
-      text,
+      frame,
       bg: (segName) => {
         const hex = bgs.get(segName);
         if (hex === undefined)
@@ -180,8 +177,8 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   test("theme.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
     const { render, dispose } = buildRuntime();
     try {
-      expect(stripAnsi(render(90).text)).toContain("T=dracula");
-      expect(stripAnsi(render(10).text)).toContain("T=nord");
+      expect(textOf(render(90).frame)).toContain("T=dracula");
+      expect(textOf(render(10).frame)).toContain("T=nord");
     } finally {
       dispose();
     }
@@ -193,7 +190,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       sessionState.set(SID, "theme", "tokyo-night");
       // pct 90 would have chosen dracula; the session pick holds at every value.
       expect(render(90).bg("plain")).toBe(byName("tokyo-night"));
-      expect(stripAnsi(render(90).text)).toContain("T=tokyo-night");
+      expect(textOf(render(90).frame)).toContain("T=tokyo-night");
     } finally {
       dispose();
     }
@@ -208,7 +205,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     try {
       sessionState.set(SID, "theme", THEME_FLOOR);
       expect(render(90).bg("plain")).toBe(byName(THEME_FLOOR));
-      expect(stripAnsi(render(90).text)).toContain(`T=${THEME_FLOOR}`);
+      expect(textOf(render(90).frame)).toContain(`T=${THEME_FLOOR}`);
     } finally {
       dispose();
     }
@@ -272,7 +269,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       // in the floor theme, and reports once, naming the slot and the bad name.
       const bad = rt.render(90);
       expect(bad.bg("plain")).toBe(byName(THEME_FLOOR));
-      expect(stripAnsi(bad.text)).toContain(`T=${THEME_FLOOR}`);
+      expect(textOf(bad.frame)).toContain(`T=${THEME_FLOOR}`);
       expect(rt.warnings.map((w) => [w.kind, w.kind === "rule" && w.slot])).toEqual([["rule", "palette"]]);
       expect(rt.warnings[0]!.message).toContain("globals.palette");
       expect(rt.warnings[0]!.message).toContain("gruvbux-dark");
@@ -328,7 +325,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("an omitted theme selection renders what the CONFIG declares, not the floor", () => {
-    // renderDsl takes no base-palette argument any more, so the default must be
+    // drawDsl takes no base-palette argument any more, so the default must be
     // the config's own declared theme — substituting the floor would silently
     // repaint every compile-only render (the demo, `cc-candybar check`, tests).
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
@@ -342,7 +339,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
       const sink = new Map<string, readonly RichText[]>();
-      const out = renderDsl(
+      const out = drawPayload(
         config,
         compiled,
         store,
@@ -351,16 +348,16 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         instantOf(new Date()),
         OPTS,
         { perSegmentSink: sink },
-      );
+      ).frame;
       const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("nord"));
-      expect(stripAnsi(out)).toContain("T=nord");
+      expect(textOf(out)).toContain("T=nord");
     } finally {
       registry.dispose();
     }
   });
 
-  test("an omitted selection evaluates a RULE too, rather than falling to the floor", () => {
+  test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore();
     const registry = new SourceRegistry(
@@ -372,7 +369,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
       const sink = new Map<string, readonly RichText[]>();
-      const out = renderDsl(
+      const out = drawPayload(
         config,
         compiled,
         store,
@@ -381,7 +378,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         instantOf(new Date()),
         OPTS,
         { perSegmentSink: sink },
-      );
+      ).frame;
       const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("dracula"));
     } finally {
@@ -576,8 +573,8 @@ describe("a rule inside a preset's globals", () => {
         () => false,
       );
       const sink = new Map<string, readonly RichText[]>();
-      const render = (pct: number): { text: string; bg: string } => {
-        const text = renderDsl(
+      const render = (pct: number): { frame: Frame; bg: string } => {
+        const frame = drawPayload(
           config,
           compiled,
           store,
@@ -587,12 +584,12 @@ describe("a rule inside a preset's globals", () => {
           OPTS,
           { perSegmentSink: sink },
           effective,
-        );
+        ).frame;
         const cells = sink.get("plain")!;
-        return { text, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
+        return { frame, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
       };
       const hot = render(90);
-      expect(stripAnsi(hot.text)).toContain("T=dracula L=hot");
+      expect(textOf(hot.frame)).toContain("T=dracula L=hot");
       expect(hot.bg).toBe(
         transposePalette(getThemePalette("dracula"), {
           hueShift: 180,
@@ -601,7 +598,7 @@ describe("a rule inside a preset's globals", () => {
           lightnessShift: 0,
         }).get("surface")!.hex,
       );
-      expect(stripAnsi(render(10).text)).toContain("T=nord L=none");
+      expect(textOf(render(10).frame)).toContain("T=nord L=none");
       expect(render(10).bg).toBe(byName("nord"));
     });
   });
@@ -620,7 +617,7 @@ describe("a rule inside a preset's globals", () => {
   test("a caller picking only a preset renders the ACTIVE preset's rule, not the config's top-level palette", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-      const text = renderDsl(
+      const frame = drawPayload(
         config,
         compiled,
         store,
@@ -630,8 +627,8 @@ describe("a rule inside a preset's globals", () => {
         OPTS,
         {},
         selectionFor(config, {}, picked({ preset: "ruled" })),
-      );
-      expect(stripAnsi(text)).toContain("T=dracula");
+      ).frame;
+      expect(textOf(frame)).toContain("T=dracula");
     });
   });
 
@@ -641,7 +638,7 @@ describe("a rule inside a preset's globals", () => {
       (config, registry, store) => {
         const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
         const said: RenderWarning[] = [];
-        renderDsl(
+        drawPayload(
           config,
           compiled,
           store,
@@ -651,7 +648,7 @@ describe("a rule inside a preset's globals", () => {
           OPTS,
           { onRenderWarning: (w) => said.push(w) },
           selectionFor(config, {}, picked({ preset: "ruled" })),
-        );
+        ).frame;
         expect(said).toEqual([
           { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
         ]);
@@ -664,7 +661,7 @@ describe("a rule inside a preset's globals", () => {
     withRegistry(presetSrc(shared, shared), (config, registry, store) => {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
       const said: RenderWarning[] = [];
-      renderDsl(
+      drawPayload(
         config,
         compiled,
         store,
@@ -674,7 +671,7 @@ describe("a rule inside a preset's globals", () => {
         OPTS,
         { onRenderWarning: (w) => said.push(w) },
         selectionFor(config, {}, picked({ preset: "ruled" })),
-      );
+      ).frame;
       expect(said).toEqual([
         { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
       ]);

@@ -594,11 +594,11 @@ export function drawRender(
     ),
     feeds: feedsFact(projected.feeds),
   });
-  // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
+  // [LAW:no-silent-failure] What drawDsl had to settle for itself and could
   // not honour (`RenderWarning`): this frame's own, recorded for its renderer
   // after the walk, so the bar still renders and the indicator counts them.
   const drawnWarnings: RenderWarning[] = [];
-  // [LAW:one-source-of-truth] The options renderDsl draws with are the SAME
+  // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME
   // `effective` struct the payload was just built from, projected by the one
   // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
   // computation to drift from it.

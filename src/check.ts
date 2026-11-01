@@ -18,11 +18,13 @@
 // through the exact functions the daemon runs (RenderCache.reloadInto →
 // buildState, then the per-request render in draw-bar.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateRenderable → registerDslConfig →
-// deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path — check additionally waits,
-// before each pass, for the shell/file runs that pass's payload started, under
-// one bounded settle window for the whole verdict; the daemon's first cold
-// render does not (its next render shows what check showed).
+// deriveActionValidators → drawDsl. "check passes" and "the daemon renders"
+// cannot diverge, because they are one code path as far as the Frame, and
+// encoding a Frame refuses nothing: it is the print's, so a verdict with no
+// `--render` encodes nothing. Check additionally waits, before each pass, for
+// the shell/file runs that pass's payload started, under one bounded settle
+// window for the whole verdict; the daemon's first cold render does not (its
+// next render shows what check showed).
 
 import { linkSignerFromKeyFile } from "./daemon/link-key.js";
 import { repoConfigs } from "./daemon/repo-configs.js";
@@ -59,7 +61,7 @@ import {
   type CompiledConfig,
   type RenderWarning,
 } from "./dsl/render.js";
-import { ansiOf } from "./render/frame.js";
+import { ansiOf, type Frame } from "./render/frame.js";
 import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
@@ -184,7 +186,7 @@ function bindPass(
 // fails that suite loudly rather than drifting silently.
 //
 // [LAW:types-are-the-program] Typed as the payload a view draws from, less
-// `term`, which the draw writes from its width (drawPayload): a field the
+// `term`, which the draw writes from its width (bindPayload): a field the
 // daemon's payload requires — every declared source's reading among them — is
 // a compile error here until the fixture carries it.
 export type CheckPayload = Omit<ViewPayload, "term">;
@@ -324,7 +326,7 @@ export type CheckOutcome =
       readonly kind: "clean";
       readonly layers: readonly ConfigLayer[];
       readonly warnings: readonly string[];
-      readonly rendered: string;
+      readonly rendered: Frame;
     }
   | {
       readonly kind: "fatal";
@@ -610,7 +612,7 @@ export async function renderEffective(
   width: number,
   at: Instant,
 ): Promise<{
-  rendered: string;
+  rendered: Frame;
   failures: Map<string, string>;
   advisories: Set<string>;
 }> {
@@ -674,7 +676,7 @@ export async function renderEffective(
     },
     effective,
   );
-  return { rendered: ansiOf(frame), failures, advisories };
+  return { rendered: frame, failures, advisories };
 }
 
 // The verdict: the prepared config rendered under every preset, every render
@@ -685,7 +687,7 @@ async function loadRegisterRender(
   cwd: string,
   warnings: string[],
   settleMs: number,
-): Promise<string> {
+): Promise<Frame> {
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render; one settle window for every wait.
   const at = instantOf(new Date());
@@ -740,7 +742,7 @@ async function loadRegisterRender(
         () => customized,
       );
       let pass: {
-        rendered?: string;
+        rendered?: Frame;
         failures: Map<string, string>;
         advisories: ReadonlySet<string>;
       };
@@ -851,7 +853,7 @@ function warningLines(warnings: readonly string[]): string {
 
 // `--render` (brandon-check-m2a): the bar beneath the verdict line, for an
 // author who cannot look at a live one. [LAW:one-source-of-truth] It is
-// `o.rendered` — the very string the verdict's fresh-session pass reached —
+// `o.rendered` — the very frame the verdict's fresh-session pass reached —
 // so the bar an author reads and the bar `check` blessed cannot differ; re-rendering here
 // (at a terminal width, say) would be two clocks, and the audience this exists
 // for reads a pipe, which has no width at all. The flag adds a VALUE to one
@@ -869,7 +871,8 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
           : "";
       return {
         stdout:
-          `✓ ${where}: config OK${count}\n` + (render ? `${o.rendered}\n` : ""),
+          `✓ ${where}: config OK${count}\n` +
+          (render ? `${ansiOf(o.rendered)}\n` : ""),
         stderr: warningLines(o.warnings),
         code: EXIT_CLEAN,
       };

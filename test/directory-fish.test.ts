@@ -3,22 +3,24 @@
 // rule the ticket asked us to define: the directory template COLLAPSES first
 // (~-relative → project-relative → absolute), then ABBREVIATES the survivor
 // (every segment but the leaf → its leading char). Rendered through the real
-// spine (registerDslConfig + renderDsl), the same two functions the daemon and
+// spine (registerDslConfig + drawDsl), the same two functions the daemon and
 // demo call — not a synthetic in-process transform.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
-import { INVISIBLE, links, stripAnsi } from "./helpers/ansi";
-import { effectsOf } from "../src/click/read";
+import { linksOf, effectsOf } from "../src/click/read";
 import { VERB_COPY } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 
@@ -28,8 +30,8 @@ import { instantOf } from "../src/utils/instant";
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 // Narrow the root to just the directory segment so the rendered line is exactly
-// that segment's text. One plain cell + padding 0 draws no chrome, so
-// after removing ANSI/OSC-8 escapes what remains IS the directory string.
+// that segment's text. One plain cell + padding 0 draws no chrome, so the
+// frame's text IS the directory string.
 const dirOnlyRoot = {
   rows: {
     main: {
@@ -55,10 +57,10 @@ const dropEditNs = dropEditChrome;
 type DirPaths = { home: string; project_dir: string; current_dir: string };
 
 function renderDir(paths: DirPaths): string {
-  return renderDirRaw(paths).replace(INVISIBLE, "").trim();
+  return textOf(renderDirRaw(paths)).trim();
 }
 
-function renderDirRaw(paths: DirPaths): string {
+function renderDirRaw(paths: DirPaths): Frame {
   const base = parseAndValidate("<default>", SERIALIZED);
   const parsed = {
     ...base,
@@ -88,13 +90,13 @@ function renderDirRaw(paths: DirPaths): string {
         added_dirs: [],
       },
     };
-    return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
+    return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
       endcaps: "plain",
       colorCompatibility: "none",
       wrap: true,
       padding: 0,
       width: Number.POSITIVE_INFINITY,
-    });
+    }).frame;
   } finally {
     registry.dispose();
   }
@@ -176,8 +178,8 @@ describe("clicking the directory copies the full path", () => {
       project_dir: "/Users/bmf/code/cc-candybar",
       current_dir,
     });
-    const cellLinks = links(rendered);
-    expect(cellLinks.map((l) => stripAnsi(l.text).trim())).toEqual(["~/c/c/s/d/leaf"]);
+    const cellLinks = linksOf(rendered);
+    expect(cellLinks.map((l) => l.text)).toEqual(["~/c/c/s/d/leaf"]);
     expect(effectsOf(cellLinks[0]!.url)).toEqual([
       { verb: VERB_COPY, args: [current_dir] },
     ]);
@@ -210,7 +212,7 @@ describe("configurability seam: user template override restores full path", () =
         cwd: "/Users/bmf/code/cc-candybar",
       });
       const basePalette = getThemePalette("textual-dark"!);
-      const line = renderDsl(
+      const line = textOf(drawPayload(
         overridden,
         compiled,
         store,
@@ -235,9 +237,7 @@ describe("configurability seam: user template override restores full path", () =
           padding: 0,
           width: Number.POSITIVE_INFINITY,
         },
-      )
-        .replace(INVISIBLE, "")
-        .trim();
+      ).frame).trim();
       expect(line).toBe("/Users/bmf/code/cc-candybar");
     } finally {
       registry.dispose();

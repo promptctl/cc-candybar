@@ -1,10 +1,12 @@
 // [LAW:verifiable-goals] brandon-context-ceiling-xta.7xt: a `slash` action
 // types its declared command into the clicked session's Claude Code pane.
 // Driven through the real loader, the real spine (registerDslConfig +
-// renderDsl), the real verb table AND the production tmux edge, with a stub
+// drawDsl), the real verb table AND the production tmux edge, with a stub
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
+import { drawPayload } from "./helpers/draw-payload";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -13,7 +15,7 @@ import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -27,7 +29,6 @@ import {
 import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
-import { linkUrls } from "./helpers/ansi";
 import { createLauncher } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
@@ -226,7 +227,7 @@ function runtime(tmux: TmuxHint | null) {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  const raw = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS);
+  const raw = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS).frame;
   const logged: string[] = [];
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
@@ -371,7 +372,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   };
   // The tray's links by what they do, in render order.
   const links = () =>
-    linkUrls(renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS)).map(
+    linkUrls(drawPayload(config, compiled, store, registry, payload, instantOf(new Date()), OPTS).frame).map(
       (u) => ({ url: u, effects: effectsOf(u) }),
     );
   return { config, links, ctx, sessionState };

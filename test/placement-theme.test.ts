@@ -11,6 +11,11 @@
 //     colour of the palette picking them would put on the placement, all on
 //     one ground, and save writes the pick into the placement.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -19,7 +24,7 @@ import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { bindRender } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
@@ -42,7 +47,6 @@ import {
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { links, linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -85,9 +89,9 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   let sink = new Map<string, readonly RichText[]>();
-  const render = (barTheme = BAR_A): string => {
+  const render = (barTheme = BAR_A): Frame => {
     sink = new Map();
-    return renderDsl(
+    return drawPayload(
       config,
       compiled,
       store,
@@ -103,7 +107,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       },
       { perSegmentSink: sink },
       selectionFor(config, { theme: decided(barTheme) }),
-    );
+    ).frame;
   };
   // The background a placement's cell wears, read by its id.
   const bgOf = (id: string): string => {
@@ -150,7 +154,7 @@ describe("the theme domain", () => {
 describe("a placement's theme recolours that placement alone", () => {
   test("a pinned placement holds when the bar's theme moves; its sibling follows", () => {
     const rt = buildRuntime(TWO);
-    const underA = stripAnsi(rt.render(BAR_A));
+    const underA = textOf(rt.render(BAR_A));
     const [followA, pinnedA] = [rt.bgOf("tag"), rt.bgOf("pinned")];
     rt.render(BAR_B);
     const [followB, pinnedB] = [rt.bgOf("tag"), rt.bgOf("pinned")];
@@ -269,16 +273,23 @@ describe("configure mode picks a placement's theme", () => {
       hex(paletteForThemeName(second!), "background"),
     );
     const swatchOf = (value: string) =>
-      links(out).find(
+      linksOf(out).find(
         (l) =>
-          /▀▀▀/u.test(stripAnsi(l.text)) &&
+          /▀▀▀/u.test(l.text) &&
           effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
       )!;
-    expect(stripAnsi(swatchOf(first!).text).trim()).toBe("▀▀▀");
-    expect(swatchOf(first!).text).not.toBe(swatchOf(second!).text);
+    const lookOf = (value: string) => {
+      const { url } = swatchOf(value);
+      const { fg, bg } = out.rows
+        .flatMap(({ runs }) => runs)
+        .find((run) => run.link === url && run.text.includes("▀"))!;
+      return { fg, bg };
+    };
+    expect(swatchOf(first!).text).toBe("▀▀▀");
+    expect(lookOf(first!)).not.toEqual(lookOf(second!));
     expect(
-      links(out).filter((l) =>
-        listResolvablePaletteNames().includes(stripAnsi(l.text).trim()),
+      linksOf(out).filter((l) =>
+        listResolvablePaletteNames().includes(l.text),
       ),
     ).toEqual([]);
 

@@ -8,6 +8,7 @@
 //   - with no `fg:` the cell carries no text colour either: the terminal's own
 //     text on its own ground, the one pair known to read there.
 
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
@@ -15,7 +16,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolvedStyle } from "../src/render/rich-theme.js";
@@ -47,7 +48,7 @@ function render() {
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
-  const out = renderDsl(
+  const out = drawPayload(
     config,
     compiled,
     store,
@@ -62,7 +63,7 @@ function render() {
       width: Number.POSITIVE_INFINITY,
     },
     { perSegmentSink: sink },
-  );
+  ).frame;
   const style = (name: string) => resolvedStyle(sink.get(name)![0]!.style);
   return { out, style, dispose: () => registry.dispose() };
 }

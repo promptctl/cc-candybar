@@ -7,11 +7,9 @@
 
 import http from "node:http";
 import path from "node:path";
-import { cellLen } from "@promptctl/rich-js";
 
 import { serveBar, type BarWeb, type View } from "../scripts/bar-web/server";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../src/config/disclosure";
-import { stripAnsi } from "./helpers/ansi";
 import { startBarDaemon } from "./helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
@@ -48,9 +46,12 @@ describe("bar-web", () => {
 
   test("a click on a drawn link is the daemon's click, and the answer is the next render", async () => {
     web = await serve();
+    // The size a request states reaches the draw: the narrow view wraps onto more rows.
+    const rowsOf = ({ ansi }: View): number => ansi.split("\n").length;
+    const narrow = await post("/render", { width: 30, rows: 40 });
     const closed = await post("/render", { width: 80, rows: 40 });
     expect(closed.status).toBe(200);
-    expect(stripAnsi(closed.json.ansi).split("\n").every((l) => cellLen(l) <= 80)).toBe(true);
+    expect(rowsOf(narrow.json)).toBeGreaterThan(rowsOf(closed.json));
     const door = closed.json.links.find((l) => l.text === DOOR_GLYPH)!;
     expect(door.does).toMatch(/^set-state <session> candybar\.menu open/);
 

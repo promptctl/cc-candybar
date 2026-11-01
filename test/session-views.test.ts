@@ -1,3 +1,5 @@
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -15,10 +17,8 @@ import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
-import { renderDsl } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
-import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { createLauncher, type Launcher } from "../src/proc/launch";
@@ -120,8 +120,8 @@ const drawn = (
   sid: string = view.sessionId,
   at = new Date(),
 ): string =>
-  stripAnsi(
-    renderDsl(
+  textOf(
+    drawPayload(
       view.state.config,
       view.state.compiled,
       view.store,
@@ -129,7 +129,7 @@ const drawn = (
       { session_id: sid, workspace: { project_dir: dir } },
       instantOf(at),
       { endcaps: "plain", colorCompatibility: "none", wrap: true, padding: 1, width: 300 },
-    ),
+    ).frame,
   );
 
 // One render of session `sid` from `cwd`, as the daemon draws one: through the

@@ -5,6 +5,8 @@
 // daemon's own is exercised — a project config found first, a user config
 // unread behind it, and a declaration the project config never uses.
 
+import { textOf, type Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import {
   cpSync,
@@ -17,15 +19,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import {
-  click,
-  linkUrls,
-  render,
-  renderBody,
-  renderRequest,
-  stripAnsi,
-  urlWriting,
-} from "./helpers/daemon-e2e";
+import { click, frameRequest, render, renderBody, renderRequest, urlWriting } from "./helpers/daemon-e2e";
 import { bundleAt, startDaemon, statsOf } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -64,8 +58,8 @@ import { answerRepo } from "./helpers/repo-approval";
 jest.setTimeout(30_000);
 
 // The report row wraps at the client's width; its text is what is asserted.
-const flat = (rendered: string): string =>
-  stripAnsi(rendered).replace(/\s+/g, " ");
+const flat = (rendered: Frame): string =>
+  textOf(rendered).replace(/\s+/g, " ");
 
 test("the doctor's config row reports the session's own config load", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
@@ -132,7 +126,7 @@ test("the doctor's config row says what named the session's file", async () => {
   writeFileSync(named, "{}");
   writeFileSync(picked, "{}");
   // Wrapping may fall inside a path, so spaces are no part of what is read.
-  const squeezed = (s: string): string => stripAnsi(s).replace(/\s+/g, "");
+  const squeezed = (s: string): string => s.replace(/\s+/g, "");
 
   const daemon = startDaemon(env);
   try {
@@ -148,7 +142,7 @@ test("the doctor's config row says what named the session's file", async () => {
         effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
       );
       await click(daemon, run!);
-      return squeezed(await draw());
+      return squeezed(textOf(await draw()));
     };
     const flag = ["cc-candybar", "--config", named];
 
@@ -435,7 +429,7 @@ test("the session data row reads the transcript the session's render named", asy
   const SID = "doctor-e2e-transcript";
   const renderT = () => {
     const body = renderBody(SID, projectDir);
-    return renderRequest(daemon, {
+    return frameRequest(daemon, {
       ...body,
       hookData: { ...(body.hookData as object), transcript_path: transcript },
     });

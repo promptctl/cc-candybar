@@ -1,11 +1,13 @@
+import type { Frame } from "../../src/render/frame";
 // What the update notice's cases share, in a worker or on a real process: a
 // checkout laid down in scratch, and the bar's messages read in its viewer.
 
+import { linkUrls } from "./frame";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { findUrl, linkUrls, render } from "./daemon-e2e";
+import { findUrl, render } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
 import { readDiagnostics, type ViewerPage } from "./diagnostics-viewer";
 import { until } from "./until";
@@ -94,7 +96,7 @@ export function scratchLayout(source: Source): Scratch {
   };
 }
 
-export const affordance = (raw: string, verb: string, key?: string): string => {
+export const affordance = (raw: Frame, verb: string, key?: string): string => {
   const url = findUrl(linkUrls(raw), (effects) =>
     effects.some(
       (e) => e.verb === verb && (key === undefined || e.args[1] === key),

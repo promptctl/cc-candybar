@@ -20,6 +20,7 @@ import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
 import { homeLayer, loadConfigChain } from "../../../src/config/dsl-loader.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
+import { ansiOf } from "../../../src/render/frame.js";
 import { instantOf } from "../../../src/utils/instant.js";
 import { REPO } from "../environment.js";
 import { removeTree, scratchDir } from "../fixtures.js";
@@ -27,7 +28,7 @@ import { repeat } from "../measure.js";
 import { measured, type Benchmark } from "../types.js";
 
 const ABOUT =
-  "renderDsl over the check fixture's payload: a stage of a tick (no render cache, session state or hints), not its cost";
+  "drawDsl over the check fixture's payload: a stage of a tick (no render cache, session state or hints), not its cost";
 
 // The terminal widths Claude Code runs in, narrowest split pane to widest.
 const WIDTHS = [40, 80, 120, 200, 300] as const;
@@ -76,12 +77,13 @@ function drawnClean(
   drew: Awaited<ReturnType<typeof renderEffective>>,
   what: string,
 ): number {
-  if (drew.failures.size > 0 || drew.rendered.length === 0) {
+  const bytes = ansiOf(drew.rendered).length;
+  if (drew.failures.size > 0 || bytes === 0) {
     throw new Error(
-      `${what} drew a broken bar (${drew.rendered.length} bytes): ${[...drew.failures].map(([k, v]) => `${k}: ${v}`).join("; ") || "nothing"}`,
+      `${what} drew a broken bar (${bytes} bytes): ${[...drew.failures].map(([k, v]) => `${k}: ${v}`).join("; ") || "nothing"}`,
     );
   }
-  return drew.rendered.length;
+  return bytes;
 }
 
 interface Draw {

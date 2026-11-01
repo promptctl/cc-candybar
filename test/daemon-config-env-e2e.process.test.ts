@@ -2,14 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  configFlag,
-  hookData,
-  killAndWait,
-  render,
-  runRealClient,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { configFlag, hookData, killAndWait, render, runRealClient } from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -69,7 +62,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
     // tick would, but a warm entry keeps that the exception. The cache key is
     // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
     // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
-    // one this warmed.
+    // one this warmed. Each literal below is one run of the bar it printed.
     await render(sockPath, sid, projectDir, { configEnv: override });
     const client = runRealClient([], {
       cwd: projectDir,
@@ -77,7 +70,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
       input: JSON.stringify(hookData(sid, projectDir)),
     });
     expect(client.status).toBe(0);
-    const bar = stripAnsi(client.stdout);
+    const bar = client.stdout;
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Invalid config");
     expect(bar).not.toContain("Config file not found");
@@ -97,7 +90,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
       input: JSON.stringify(hookData(sid, projectDir)),
     });
     expect(client.status).toBe(0);
-    const bar = stripAnsi(client.stdout);
+    const bar = client.stdout;
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Unexpected arguments");
   });

@@ -1,16 +1,19 @@
 // Reproduces every width in SETTINGS-MENU-MAP.md.
 //   pnpm exec tsx design-docs/settings-menu-map-render.mts
-// Part 1 renders TODAY's menu through renderDsl (the check payload, one session
+// Part 1 renders TODAY's menu through drawDsl (the check payload, one session
 // state per open disclosure) at 80 and 200 columns in the default and compact
 // presets. Part 2 measures the PROPOSED rows with the model part 1 validates:
 // each cell is its text + 2 padding + 1 seam, plus one cap per row, at padding 1.
+import { drawPayload } from "../test/helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { cellLen } from "@promptctl/rich-js";
 import { loadConfig, validateConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { checkPayload } from "../src/check";
 import {
   renderOptionsOf,
@@ -21,7 +24,6 @@ import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { stripAnsi } from "../test/helpers/ansi";
 import { perSetting } from "../src/config/setting-projections";
 
 const SID = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
@@ -57,7 +59,7 @@ const STATES: Record<string, Record<string, string>> = {
 type Drift = "all marked" | "fresh";
 function renderToday(
   preset: string, width: number, state: Record<string, string>, drift: Drift = "all marked",
-): string {
+): Frame {
   const cfg = validateConfig(loadConfig(null, DEFAULT_DSL_CONFIG), "<default>");
   const session = new SessionState();
   session.set(SID, "preset", preset);
@@ -72,11 +74,11 @@ function renderToday(
     session_id: SID,
     term: { cols: width },
   };
-  return renderDsl(
+  return drawPayload(
     cfg, compiled, store, registry, payload, renderOptionsOf(eff, width),
     { onSegmentError: (s, m) => console.log(`ERROR ${s}: ${m}`) },
     renderSelectionOf(eff),
-  );
+  ).frame;
 }
 
 const rendered = new Map<string, string[]>();
@@ -85,12 +87,12 @@ for (const preset of ["default", "compact"]) {
   for (const width of [80, 200]) {
     for (const [name, state] of Object.entries(STATES)) {
       console.log(`--- ${preset} ${name} @${width}`);
-      const lines = stripAnsi(renderToday(preset, width, state)).split("\n");
+      const lines = textOf(renderToday(preset, width, state)).split("\n");
       for (const line of lines) console.log(`[${cellLen(line)}] ${line}`);
       rendered.set(`${preset} ${name} @${width}`, lines);
     }
     console.log(`--- ${preset} fresh door @${width}`);
-    const lines = stripAnsi(renderToday(preset, width, door, "fresh")).split("\n");
+    const lines = textOf(renderToday(preset, width, door, "fresh")).split("\n");
     for (const line of lines) console.log(`[${cellLen(line)}] ${line}`);
     rendered.set(`${preset} fresh door @${width}`, lines);
   }

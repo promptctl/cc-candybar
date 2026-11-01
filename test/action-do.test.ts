@@ -1,14 +1,17 @@
 // [LAW:verifiable-goals] brandon-settings-menu-92b: a `do` action fires several
 // declared actions from one click. Driven through the real loader, the real
-// spine (registerDslConfig + renderDsl), and the real set-state gate derived
+// spine (registerDslConfig + drawDsl), and the real set-state gate derived
 // from the config, so "the gate admits it" is measured, not assumed.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -19,7 +22,6 @@ import {
   recordRender,
   testVerbContext,
 } from "./helpers/click";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -55,7 +57,7 @@ function runtime(src: string) {
   recordRender(sessionState, "s1");
   return {
     sessionState,
-    render: () => renderDsl(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS),
+    render: () => drawPayload(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame,
     click: async (url: string) =>
       await clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
   };
@@ -73,7 +75,7 @@ describe("do: several declared actions, one click", () => {
     );
     const out = rt.render();
     // The head is a two-member cycle, so the `do` shows its per-member display.
-    expect(stripAnsi(out)).toContain("◎ focus");
+    expect(textOf(out)).toContain("◎ focus");
     const [url] = linkUrls(out).filter((u) => u.includes("focus"));
     // Members' effects, head first; the daemon joins the adjacent session
     // writes into one batch (test/click-wire.test.ts pins that).
@@ -86,7 +88,7 @@ describe("do: several declared actions, one click", () => {
     expect(rt.sessionState.get("s1", "panel")).toBe("closed");
     // The head's current state drives the next display and the next write.
     const next = rt.render();
-    expect(stripAnsi(next)).toContain("◉ unfocus");
+    expect(textOf(next)).toContain("◉ unfocus");
   });
 
   test("a {{ menu }} over a do headed by an option action: each pick also fires the rest", async () => {

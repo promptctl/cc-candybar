@@ -10,18 +10,18 @@
 // reach is asserted too: a config that stops drawing a blank row, a wrapped
 // row, a ColorBlend, a moving effect or a fade fails here, not silently.
 
+import { drawPayload } from "./helpers/draw-payload";
 import { ColorDepth, Style, type ColorSpec } from "@promptctl/rich-js";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { stripAnsi } from "./helpers/ansi";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, drawPayload } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { LANE_FRAMES } from "../src/daemon/lane-frames";
-import { ansiOf, renderFailedFrame, type Frame } from "../src/render/frame";
+import { textOf, ansiOf, renderFailedFrame, type Frame } from "../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
@@ -175,8 +175,8 @@ describe("the reach of the config these bytes are drawn from", () => {
   test.each(DEPTHS)(
     "at %s it draws a blank row and a row FlexStrip wrapped",
     (depth) => {
-      for (const { ansi } of reachFrames(depth)) {
-        const lines = stripAnsi(ansi).split("\n");
+      for (const { drawn } of reachFrames(depth)) {
+        const lines = textOf(drawn).split("\n");
         const top = lines.findIndex((line) => line.includes("TOP"));
         // The row of no cells is one empty line, between its neighbours.
         expect(lines[top + 1]).toBe("");

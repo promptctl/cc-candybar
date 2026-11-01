@@ -1,23 +1,26 @@
 // [LAW:verifiable-goals] Style-picker done-gate: clicking a style option
 // RESHAPES the whole bar live (the powerline cap/separator family changes). The
 // reshape lives in the daemon's PER-RENDER strip-style resolution
-// (resolveEffectiveGlobals -> renderOpts.endcaps), OUTSIDE renderDsl — the exact twin
+// (resolveEffectiveGlobals -> renderOpts.endcaps), OUTSIDE drawDsl — the exact twin
 // of how a theme click recolors via basePalette (see dsl-theme-picker-recolor).
 // This test replicates that resolution exactly as src/daemon/draw-bar.ts does, so
-// it proves the end-to-end loop: a set-state `style` click changes the bytes the
-// joiner emits between cells.
+// it proves the end-to-end loop: a set-state `style` click changes what the
+// joiner draws between cells.
 //
-// [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
+// [LAW:single-enforcer] Drives the real spine — registerDslConfig + drawDsl
 // for rendering, the real click wire for the set-state, and the same
 // resolveEffectiveGlobals the daemon calls. No parallel rig, no hand-built
 // joiner.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { recordRender, testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -60,12 +63,12 @@ function buildRuntime() {
   // daemon does — the session's clicked style over the config default over the
   // "powerline" floor. Freezing it would silently pass while the real daemon
   // reshapes. (draw-bar.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
-  const render = (): string =>
-    renderDsl(config, compiled, store, registry, { session_id: SID }, instantOf(new Date()), {
+  const render = (): Frame =>
+    drawPayload(config, compiled, store, registry, { session_id: SID }, instantOf(new Date()), {
       endcaps: globalsFor(config, (key) => sessionState.get(SID, key)).endcaps,
       colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
-    });
+    }).frame;
 
   return { config, sessionState, render };
 }
@@ -86,7 +89,7 @@ describe("DSL style picker — live reshape", () => {
     const { sessionState, render } = rt;
 
     const powerline = render(); // default: SessionState unset -> "powerline" floor
-    expect(powerline.length).toBeGreaterThan(0);
+    expect(textOf(powerline).length).toBeGreaterThan(0);
 
     await clickEndcaps(rt, "capsule");
     const capsule = render();
@@ -97,9 +100,9 @@ describe("DSL style picker — live reshape", () => {
     // [LAW:verifiable-goals] The reshape IS the contract: each strip style yields
     // a distinct inter-cell rendering, so all three footprints are pairwise
     // different. If the session style were ignored, all three would be identical.
-    expect(capsule).not.toBe(powerline);
-    expect(plain).not.toBe(powerline);
-    expect(plain).not.toBe(capsule);
+    expect(capsule.rows).not.toEqual(powerline.rows);
+    expect(plain.rows).not.toEqual(powerline.rows);
+    expect(plain.rows).not.toEqual(capsule.rows);
   });
 
   test("every ENDCAPS_SHAPES member resolves to a renderable, distinct bar", async () => {
@@ -109,8 +112,8 @@ describe("DSL style picker — live reshape", () => {
     for (const style of ENDCAPS_SHAPES) {
       await clickEndcaps(rt, style);
       const out = render();
-      expect(out.length).toBeGreaterThan(0);
-      seen.set(style, out);
+      expect(textOf(out).length).toBeGreaterThan(0);
+      seen.set(style, JSON.stringify(out.rows));
     }
     // The render for each style is unique — the domain offered by the picker
     // maps one-to-one onto a distinct rendered shape (no dead options).

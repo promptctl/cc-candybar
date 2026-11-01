@@ -11,6 +11,9 @@
 // between-turns / a too-stale baseline yields ABSENCE (missing field → -1
 // default → "—"), never a stale or divide-by-zero number.
 
+import { textOf } from "../src/render/frame";
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -36,7 +39,7 @@ import {
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -448,7 +451,7 @@ describe("payloadOf — speed lane", () => {
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-function renderSpeed(payload: Record<string, unknown>): string {
+function renderSpeed(payload: Record<string, unknown>): Frame {
   const raw = parseDslConfig("<test>", `{ root: { h: ["speed"] } }`, ALLOWED);
   const cfg = validateConfig(
     { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: "{}" },
@@ -464,7 +467,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    return renderDsl(
+    return drawPayload(
       cfg,
       compiled,
       store,
@@ -478,7 +481,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
         padding: 0,
         width: Number.POSITIVE_INFINITY,
       },
-    );
+    ).frame;
   } finally {
     registry.dispose();
   }
@@ -499,16 +502,16 @@ describe("speed segment render", () => {
       session: { tokens: 1500 },
       speed: { output: 1500, total: 1500 }, // input absent ⇒ -1 ⇒ "—"
     });
-    expect(line).toContain("1.5K/s"); // formatTokenCount K-scaling
-    expect(line).toContain("out");
-    expect(line).toContain("in —");
-    expect(line).toContain("tot");
+    expect(textOf(line)).toContain("1.5K/s"); // formatTokenCount K-scaling
+    expect(textOf(line)).toContain("out");
+    expect(textOf(line)).toContain("in —");
+    expect(textOf(line)).toContain("tot");
   });
 
   test("all lanes absent render '—' (the -1 default), never a fake number", () => {
     const line = renderSpeed({ ...SEG_BASE, session: { tokens: 1500 } });
-    expect(line).toContain("—");
-    expect(line).not.toMatch(/\d\/s/); // no tok/s figure anywhere
+    expect(textOf(line)).toContain("—");
+    expect(textOf(line)).not.toMatch(/\d\/s/); // no tok/s figure anywhere
   });
 
   test("hidden when the session has done no work (tokens 0)", () => {
@@ -516,7 +519,7 @@ describe("speed segment render", () => {
     // The bar is never empty — every rendered bar carries the global settings
     // menu (candybar-settings-ui-aok.1) — so hidden is asserted as "none of
     // this segment's own content", not as an empty line.
-    expect(line).not.toContain("/s");
-    expect(line).not.toContain("tot");
+    expect(textOf(line)).not.toContain("/s");
+    expect(textOf(line)).not.toContain("tot");
   });
 });

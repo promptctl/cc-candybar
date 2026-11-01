@@ -3,6 +3,8 @@
 // template's `frames` — runs that many times faster than at 1x, a change of
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
@@ -11,7 +13,7 @@ import { selectionFor } from "./helpers/selection";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionEffects, type RowItem } from "../src/render/effect";
 import { FrameMemory } from "../src/render/frame-memory";
@@ -24,7 +26,6 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { stripAnsi } from "./helpers/ansi";
 
 // A whole multiple of the ten-second cycles below, so `frames` reads its
 // first frame at at(0).
@@ -198,8 +199,8 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     try {
       return seconds
         .map((s) =>
-          stripAnsi(
-            renderDsl(
+          textOf(
+            drawPayload(
               CONFIG,
               compiled,
               store,
@@ -215,7 +216,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
               },
               undefined,
               selectionFor(CONFIG, { animationSpeed: speed, effects }),
-            ),
+            ).frame,
           ),
         )
         .at(-1)!;

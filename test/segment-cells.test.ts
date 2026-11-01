@@ -2,28 +2,25 @@
 // style.link presence) and style outcomes, never AST shapes or internal
 // state of the conversion walk.
 
+import { plainOf, type Run } from "../src/render/frame";
 import { TEST_ENGINE } from "./helpers/test-engine";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToCells } from "../src/template-engine/cells";
-import { renderStripCells } from "../src/render/strip";
+import { drawStripCells } from "../src/render/strip";
 import { RichText, Style } from "@promptctl/rich-js";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { stripAnsi } from "./helpers/ansi";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
 
-// Render cells to a truecolor ANSI string so tests assert observable output
-// (SGR escapes), not internal style placement. [LAW:behavior-not-structure]
-function renderCells(cells: readonly RichText[]): string {
-  return renderStripCells(cells, {
+// Draw cells at truecolor so tests assert observable output (the runs drawn),
+// not internal style placement. [LAW:behavior-not-structure]
+function renderCells(cells: readonly RichText[]): readonly Run[] {
+  return drawStripCells(cells, {
     endcaps: "plain",
     colorCompatibility: "truecolor", wrap: true, padding: 0,
     width: Number.POSITIVE_INFINITY,
-  });
+  }).lines.flat();
 }
-
-// CSI prefix of an ANSI SGR sequence (ESC + "[").
-const SGR = "\x1b[";
 
 
 // Helper: evaluate a template and convert to StripCells.
@@ -216,12 +213,12 @@ describe("fragmentsToCells — direct fragment input", () => {
     expect(cells).toHaveLength(1);
     expect(cells[0]!.plain).toBe("status: err");
 
-    // Behavioral proof: the red fg actually survives to ANSI output. A flatten
-    // to an unstyled plain cell would emit no SGR escape and fail this.
+    // Behavioral proof: the red fg actually survives to the drawn runs. A
+    // flatten to an unstyled plain cell would draw no colour and fail this.
     const rendered = renderCells(cells);
-    expect(rendered).toContain(SGR);
-    // Visible text (escapes removed) is intact and unduplicated.
-    expect(stripAnsi(rendered)).toBe("status: err");
+    expect(rendered.find(({ text }) => text === "err")?.fg).toBe("color(1)");
+    // Visible text is intact and unduplicated.
+    expect(plainOf(rendered)).toBe("status: err");
   });
 
   test("adjacent fragments sharing a background coalesce into one cell", () => {
@@ -335,21 +332,14 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
     // Cell-level bg survived.
     expect(resolvedStyle(cells[0]!.style).bgcolor?.name).toBe("blue");
 
-    // The per-fragment fg must reach the ANSI output as distinct SGR groups —
-    // not collapsed into one fg. The serializer wraps each SGR-codes group
-    // separately, so the rendered string must contain at least 3 distinct
-    // SGR open sequences (one for the baseline-fg run, one for green, one for
-    // red — plus possibly more for transitions back to baseline).
-    const rendered = renderStripCells(cells, {
-      endcaps: "plain",
-      colorCompatibility: "truecolor", wrap: true, padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    });
-    expect(stripAnsi(rendered)).toBe(" prefix SU suffix ");
-    // At least three SGR opens (green segment + red segment + a baseline) means
-    // the parts survived as distinct foregrounds.
-    const sgrOpens = rendered.match(/\x1b\[[0-9;]+m/g) ?? [];
-    expect(sgrOpens.length).toBeGreaterThanOrEqual(3);
+    // The per-fragment fg must reach the drawn runs as distinct looks — not
+    // collapsed into one fg (one for the baseline-fg run, one for green, one
+    // for red).
+    const rendered = renderCells(cells);
+    expect(plainOf(rendered)).toBe(" prefix SU suffix ");
+    // Three foregrounds (green segment + red segment + a baseline) means the
+    // parts survived as distinct foregrounds.
+    expect(new Set(rendered.map(({ fg }) => fg)).size).toBeGreaterThanOrEqual(3);
   });
 });
 

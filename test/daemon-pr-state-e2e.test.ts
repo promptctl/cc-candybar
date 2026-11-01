@@ -11,7 +11,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { hookData, renderRequest, stripAnsi } from "./helpers/daemon-e2e";
+import { textOf } from "../src/render/frame";
+import { frameRequest, hookData } from "./helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { renderLines } from "./helpers/daemon-log";
@@ -94,8 +95,8 @@ describe("a daemon render carries the branch's PR in every state", () => {
   ])("branch %s → %j, pr=%s", async (branch, cell, fact) => {
     const sessionId = `pr-e2e-${branch}`;
     const repo = checkout(branch);
-    const out = stripAnsi(
-      await renderRequest(daemon, {
+    const out = textOf(
+      await frameRequest(daemon, {
         hookData: hookData(sessionId, repo),
         args: ["cc-candybar", "--config", config],
         cwd: repo,

@@ -15,7 +15,7 @@ import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/protocol";
 import { REGISTRY_URL } from "../src/install/currency";
 import { parseHandlerUrl } from "../src/install/index";
-import { composeBar, parseFrame } from "../src/render/frame";
+import { composeBar, parseFrame, type Frame } from "../src/render/frame";
 import { PACKAGE_VERSION } from "../src/version";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
@@ -172,7 +172,8 @@ async function daemon(request: ReaderRenderRequest | ClickRequest): Promise<Extr
   return resp;
 }
 
-async function render(size: Size) {
+// The Frame the daemon draws at `size`.
+async function frame(size: Size): Promise<Frame> {
   const resp = await daemon({
     v: PROTOCOL_VERSION,
     kind: "render",
@@ -186,8 +187,12 @@ async function render(size: Size) {
     claudeConfigDir: CLAUDE_DIR,
   });
   if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
-  const frame = parseFrame(resp.frame);
-  return { ansi: composeBar(frame), links: linksOf(frame).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
+  return parseFrame(resp.frame);
+}
+
+async function render(size: Size) {
+  const drawn = await frame(size);
+  return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
 }
 
 // The page's clipboard. The write starts before anything is awaited: a browser
@@ -277,6 +282,7 @@ export const transport = {
     'This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>\'s own daemon, compiled for the browser and running in this page against a simulated machine. ' +
     "The bar replays a few turns of a Claude Code session. Every click is real: open the 🍫 menu, switch themes, arrange segments.",
   landscape: __LANDSCAPE__,
+  frame,
   render,
   click,
   // A new session over the bundled config: what the visitor's clicks wrote is

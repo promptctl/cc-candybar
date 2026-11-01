@@ -10,6 +10,9 @@
 //   - A file that puts them out of order, or still declares a retired
 //     threshold variable, fails to load and says what to write instead.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
+import { backgroundsOf, linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
@@ -18,7 +21,7 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { testVerbContext, effectsOf } from "./helpers/click";
@@ -31,7 +34,6 @@ import {
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/click-error";
 
@@ -65,8 +67,8 @@ function buildRuntime(src: string, utilization: number) {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  const render = (): string =>
-    renderDsl(
+  const render = (): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -86,7 +88,7 @@ function buildRuntime(src: string, utilization: number) {
       },
       undefined,
       selectionFor(config, {}, picked({ theme: THEME })),
-    );
+    ).frame;
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),
     configFor: () => config,
@@ -111,23 +113,19 @@ function buildRuntime(src: string, utilization: number) {
   return { sessionState, render, click, stepper, pick };
 }
 
-// The `48;2;r;g;b` background SGR a palette role is drawn with.
-const bgSgr = (role: string): string => {
-  const hex = getThemePalette(THEME)!.get(role)!.hex.slice(1);
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return `48;2;${r};${g};${b}`;
-};
+// The background a palette role is drawn with.
+const roleBg = (role: string): string => getThemePalette(THEME)!.get(role)!.hex;
 
 describe("block's thresholds are settings configure mode steps", () => {
   test("lowering the warning threshold from the bar recolours the cell on the next render", async () => {
     const rt = buildRuntime(BLOCK_ONLY, 45);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
-    expect(rt.render()).not.toContain(bgSgr("warning"));
+    expect(backgroundsOf(rt.render())).not.toContain(roleBg("warning"));
     // The stepper strides by the declared step, 5: one click lands on 45.
     await rt.click(rt.stepper("block", "warnAt", -5));
     expect(rt.pick("block", "warnAt")).toBe("45");
-    expect(rt.render()).toContain(bgSgr("warning"));
+    expect(backgroundsOf(rt.render())).toContain(roleBg("warning"));
   });
 
   test("a step that would drop errorAt below warnAt is refused, naming both", async () => {

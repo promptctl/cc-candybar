@@ -2,7 +2,7 @@
 // bundled frame, under every bundled theme at truecolor, 256 colours and ansi,
 // the closed bar and the settings menu open on each tab, no seam joins two
 // grounds drawn as one colour: Brandon's rule, "don't put the same color on two
-// adjascent segments", read off the bytes a terminal is sent. Alike means one
+// adjascent segments", read off the colours the frame draws. Alike means one
 // colour after the writer rounds it, compared for identity, as the policy
 // decides it: where a theme names two neighbouring shades so near that the
 // joiner lifts the arrow between them, they are still two colours, and the
@@ -175,7 +175,7 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
       bar.pick("theme", theme);
       for (const [frame, show] of FRAMES) {
         show(bar);
-        const { text, segments } = bar.render(AT);
+        const { frame: drawn, segments } = bar.render(AT);
         // An authored cell as the frame draws it: its visible text.
         const authored = new Set(
           Object.keys(AUTHORED).flatMap((name) => {
@@ -200,7 +200,7 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
           const bgs = worn.get(known(text, ground));
           return bgs !== undefined && [...bgs].every((bg) => shades.has(bg));
         };
-        const chars = drawnChars(text);
+        const chars = drawnChars(drawn);
         for (const { left, right, at } of seams(chars)) {
           // A tail enters the terminal's own ground: no neighbour.
           if (right === undefined) continue;

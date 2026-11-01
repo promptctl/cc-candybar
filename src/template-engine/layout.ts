@@ -259,8 +259,7 @@ export function applySegmentLayout(
   if (cells.length === 0) return [];
 
   // [LAW:one-source-of-truth] The DSL path's ONE intra-cell padding
-  // application — the same rich-js pad primitive toCell (render/strip.ts)
-  // uses on the legacy shape, threading the same resolved globals.padding.
+  // application, threading the resolved globals.padding.
   // pad() shifts spans, so OSC-8 link regions survive; the spaces inherit
   // the cell's wrapping style, so the segment bg is continuous.
   const cell = collapseToCell(cells, baseStyle).pad(padding);

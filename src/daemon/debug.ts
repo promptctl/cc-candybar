@@ -48,7 +48,7 @@ export interface DaemonDslState {
   readonly compiled: CompiledConfig;
   // [LAW:dataflow-not-control-flow] Per-segment last-render strings live in
   // the same state bundle the renderer mutates. Today (legacy renderer) it
-  // is empty; bzh.2 populates it from inside renderDsl.
+  // is empty; bzh.2 populates it from inside drawDsl.
   readonly lastRenderBySegment: ReadonlyMap<string, string>;
 }
 

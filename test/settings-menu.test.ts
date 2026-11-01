@@ -1,6 +1,6 @@
 // [LAW:verifiable-goals] candybar-settings-ui-aok.1 acceptance — the global
 // settings menu, driven through the real loader (parse → merge → validate), the
-// real spine (registerDslConfig + renderDsl), and the real set-state gate.
+// real spine (registerDslConfig + drawDsl), and the real set-state gate.
 //
 // The measuring stick the ticket names: a USER config whose `root` is a whole
 // tree of one row of two segments — a tree replaces the bundled rows, so the
@@ -19,6 +19,10 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolvedStyle } from "../src/render/rich-theme.js";
@@ -27,7 +31,7 @@ import { POWERLINE } from "./helpers/powerline";
 import type { RichText } from "@promptctl/rich-js";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -64,7 +68,6 @@ import {
 } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
@@ -116,11 +119,11 @@ function buildRuntime(
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
-  const render = (): string => {
+  const render = (): Frame => {
     sink.clear();
-    return renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS, {
+    return drawPayload(config, compiled, store, registry, payload, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
-    });
+    }).frame;
   };
   // The session has rendered, as it always has before a click: edit mode's
   // `✓` runs the settings menu's `save`, which acts on the config the
@@ -149,7 +152,7 @@ function buildRuntime(
     }
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = async (out: string, key: string, value: string): Promise<void> => {
+  const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -187,18 +190,18 @@ describe("the global settings menu is reachable from a user config", () => {
     const { render } = buildRuntime(userConfig(TWO_SEGMENT_ROW));
     // The user declared two segments; the bar shows three cells, and the first
     // is the door their `root` could not close.
-    expect(stripAnsi(render())).toContain(DOOR_GLYPH);
+    expect(textOf(render())).toContain(DOOR_GLYPH);
   });
 
   test("the toggle opens a body carrying preset switching and the tabs", async () => {
     const { render, clickWriting } = buildRuntime(
       userConfig(TWO_SEGMENT_ROW),
     );
-    const closed = stripAnsi(render());
+    const closed = textOf(render());
     expect(closed).not.toContain("⚡ session");
 
     await clickWriting(render(), SETTINGS_ANCHOR, "open");
-    const opened = stripAnsi(render());
+    const opened = textOf(render());
     // One symbol per state: the open door is the ✖, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
     expect(opened).not.toContain(DOOR_GLYPH);
@@ -267,8 +270,8 @@ describe("placement is a position, not a mode", () => {
       userConfig(`{ v: [${TWO_SEGMENT_ROW}, '${SETTINGS_ANCHOR}'] }`),
     );
 
-    const defaultedLines = stripAnsi(defaulted.render()).split("\n");
-    const placedLines = stripAnsi(placed.render()).split("\n");
+    const defaultedLines = textOf(defaulted.render()).split("\n");
+    const placedLines = textOf(placed.render()).split("\n");
 
     // Defaulted: the menu joins the bar's first row. Placed: it is the row the
     // author put it on. Same cell, different position — one splice, two values.
@@ -280,7 +283,7 @@ describe("placement is a position, not a mode", () => {
 
   test("a bare-segment root grows the menu beside it", () => {
     const { render } = buildRuntime(userConfig(`'directory'`));
-    expect(stripAnsi(render())).toContain(DOOR_GLYPH);
+    expect(textOf(render())).toContain(DOOR_GLYPH);
   });
 
   test("the anchor appears exactly once in every resolved preset root", () => {
@@ -532,7 +535,7 @@ describe("the default placement never inherits an author's gate", () => {
     const { render } = buildRuntime(
       `{ globals: {}, root: { v: [{ h: ['directory','model'], when: '{{ eq "a" "a" }}' }] } }`,
     );
-    const bar = stripAnsi(render());
+    const bar = textOf(render());
     expect(bar.split("\n")).toHaveLength(1);
     expect(bar).toContain(DOOR_GLYPH);
     expect(bar).toContain("Opus");
@@ -543,7 +546,7 @@ describe("the default placement never inherits an author's gate", () => {
     const { render } = buildRuntime(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
     );
-    const bar = stripAnsi(render());
+    const bar = textOf(render());
     expect(bar).toContain(DOOR_GLYPH);
     expect(bar).not.toContain("Opus");
   });
@@ -605,7 +608,7 @@ describe("the menu in a config that declares no variables", () => {
   test("loads, renders the door, and opens every disclosure without a ⚠", async () => {
     const { config, render, click } = buildRuntime(BARE, EMPTY_DEFAULT);
     const keys = disclosureKeys(config);
-    const first = stripAnsi(render());
+    const first = textOf(render());
     expect(first).toContain(DOOR_GLYPH);
     expect(first).not.toContain("⚠");
     // Click every affordance that opens a disclosure, until a render offers no
@@ -624,7 +627,7 @@ describe("the menu in a config that declares no variables", () => {
         if (opens.length === 0 || opened.has(id)) continue;
         opened.add(id);
         await click(url);
-        const out = stripAnsi(render());
+        const out = textOf(render());
         expect(out).not.toContain("⚠");
         frontier = true;
         break;
@@ -863,7 +866,7 @@ describe("globals.menuGlyph", () => {
     const { render } = buildRuntime(
       `{ globals: { menuGlyph: "🍬" }, root: ${TWO_SEGMENT_ROW} }`,
     );
-    const out = stripAnsi(render());
+    const out = textOf(render());
     expect(out).toContain("🍬");
     expect(out).not.toContain(DOOR_GLYPH);
   });
@@ -872,7 +875,7 @@ describe("globals.menuGlyph", () => {
     const { render } = buildRuntime(
       `{ globals: { menuGlyph: "🍬 .x}}" }, root: ${TWO_SEGMENT_ROW} }`,
     );
-    expect(stripAnsi(render())).toContain("🍬 .x}}");
+    expect(textOf(render())).toContain("🍬 .x}}");
   });
 
   test.each([

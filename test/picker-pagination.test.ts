@@ -8,8 +8,12 @@
 //
 // [LAW:behavior-not-structure] These assert the rendered geometry (width ≤ limit;
 // the nav glyphs visible), never the internal pagination shape — driven through
-// the real spine (registerDslConfig + renderDsl) and the real strip serializer.
+// the real spine (registerDslConfig + drawDsl) and the real strip serializer.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf } from "../src/render/frame";
+import { sameDraw } from "./helpers/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, RichText } from "@promptctl/rich-js";
@@ -17,12 +21,11 @@ import { Style } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { renderStripCells, stripChromeCols } from "../src/render/strip";
+import { registerDslConfig } from "../src/dsl/render";
+import { drawStripCells, stripChromeCols } from "../src/render/strip";
 import type { Endcaps } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { stripAnsi } from "./helpers/ansi";
 import { swatch } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 import { menuPageKey } from "../src/config/menu-keys";
@@ -87,9 +90,9 @@ function buildRuntime(
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
-  const renderPage = (width: number, page: number, wrap = true): string => {
+  const renderPage = (width: number, page: number, wrap = true): Frame => {
     sessionState.set("s1", "theme-page", String(page));
-    return renderDsl(
+    return drawPayload(
       config,
       compiled,
       store,
@@ -103,7 +106,7 @@ function buildRuntime(
         width,
         padding,
       },
-    );
+    ).frame;
   };
   return { renderPage };
 }
@@ -121,14 +124,14 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
         overflow: "ignore",
         style: new Style({ bgcolor: "#445566", color: "#ffffff" }),
       });
-      const out = stripAnsi(
-        renderStripCells([cell], {
+      const out = plainOf(
+        drawStripCells([cell], {
           endcaps: style,
           colorCompatibility: "truecolor",
           wrap: true,
           padding: 0,
           width: 60,
-        }),
+        }).lines.flat(),
       );
       expect(cw(out) - cw(content)).toBe(stripChromeCols({ endcaps: style }));
     },
@@ -147,7 +150,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
         // (the cursor clamps past the end). Cap the walk well above any real count.
         const seen: string[] = [];
         for (let p = 0; p < 40; p++) {
-          const line = stripAnsi(renderPage(width, p)).split("\n")[0] ?? "";
+          const line = textOf(renderPage(width, p)).split("\n")[0] ?? "";
           // Past the last page the cursor clamps, re-rendering the last page; stop.
           if (seen.length > 0 && line === seen[seen.length - 1]) break;
           seen.push(line);
@@ -173,7 +176,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     const shown = new Set<string>();
     let prev = "";
     for (let p = 0; p < 40; p++) {
-      const line = stripAnsi(renderPage(width, p)).split("\n")[0] ?? "";
+      const line = textOf(renderPage(width, p)).split("\n")[0] ?? "";
       if (p > 0 && line === prev) break;
       prev = line;
       // Whole-cell membership: theme names are space-delimited tokens, so a name
@@ -188,7 +191,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
 
   // brandon-display-dam.1: globals.autoWrap=false must disable ONLY the
   // FlexStrip row-wrap. The picker paginates from the same finite width
-  // (term.cols), so every page renders byte-identically with wrap off —
+  // (term.cols), so every page draws the same rows with wrap off —
   // proof that no-wrap is not implemented as width=Infinity, which would
   // collapse pagination to one infinite page.
   test.each(SHAPES)("pagination is unaffected by wrap:false (%s)", (style) => {
@@ -197,9 +200,9 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
       for (let p = 0; p < 40; p++) {
         const wrapped = renderPage(width, p, true);
         const unwrapped = renderPage(width, p, false);
-        expect(unwrapped).toBe(wrapped);
+        expect(unwrapped.rows).toEqual(wrapped.rows);
         // Stop after the cursor clamps to the last page.
-        if (p > 0 && wrapped === renderPage(width, p - 1, true)) break;
+        if (p > 0 && sameDraw(wrapped, renderPage(width, p - 1, true))) break;
       }
     }
   });
@@ -214,7 +217,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
       const seen: string[] = [];
       for (let p = 0; p < 40; p++) {
-        const line = stripAnsi(renderPage(width, p)).split("\n")[0] ?? "";
+        const line = textOf(renderPage(width, p)).split("\n")[0] ?? "";
         if (seen.length > 0 && line === seen[seen.length - 1]) break;
         seen.push(line);
       }
@@ -237,7 +240,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
 // the two: the drop path AND a finite width AND every style.
 //
 // [LAW:behavior-not-structure] Driven through the real spine (registerDslConfig +
-// renderDsl + the real menu synthesis) and the real strip serializer; asserts the
+// drawDsl + the real menu synthesis) and the real strip serializer; asserts the
 // rendered geometry (every line ≤ width; the → the abg bug ate is present on each
 // non-last dropped page), never the internal pagination shape.
 describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols", () => {
@@ -297,14 +300,14 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       width: number,
       themePage: number,
       openStyle = false,
-    ): string => {
+    ): Frame => {
       sessionState.set("s1", THEME_OPEN, "applyTheme");
       sessionState.set("s1", THEME_PAGE, String(themePage));
       if (openStyle) {
         sessionState.set("s1", ENDCAPS_OPEN, "applyEndcaps");
         sessionState.set("s1", STYLE_PAGE, "0");
       }
-      return renderDsl(
+      return drawPayload(
         config,
         compiled,
         store,
@@ -318,7 +321,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
           width,
           padding,
         },
-      );
+      ).frame;
     };
     return { render };
   }
@@ -334,7 +337,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       for (let width = FLOOR; width <= 80; width++) {
         const bodies: string[] = [];
         for (let p = 0; p < 40; p++) {
-          const lines = stripAnsi(render(width, p)).split("\n");
+          const lines = textOf(render(width, p)).split("\n");
           // Every emitted line — inline trigger row 0 AND the dropped body — must
           // fit the width budget; the reserve is what makes the padded, capped
           // dropped band fit even when packed to the full page.
@@ -372,7 +375,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       const { render } = buildMenuRuntime(style);
       for (let width = FLOOR; width <= 80; width++) {
         for (let p = 0; p < 12; p++) {
-          const lines = stripAnsi(render(width, p, true)).split("\n");
+          const lines = textOf(render(width, p, true)).split("\n");
           // row 0 (inline triggers) + one dropped body per open menu = ≥ 3 lines.
           expect(lines.length).toBeGreaterThanOrEqual(3);
           for (const line of lines) expect(cw(line)).toBeLessThanOrEqual(width);
@@ -391,7 +394,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
     const { render } = buildMenuRuntime(style, PAD);
     for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
       for (let p = 0; p < 40; p++) {
-        const lines = stripAnsi(render(width, p)).split("\n");
+        const lines = textOf(render(width, p)).split("\n");
         for (const line of lines) expect(cw(line)).toBeLessThanOrEqual(width);
         const body = lines.find((l) => l.includes("✕")) ?? "";
         if (p > 0 && body === "") break;

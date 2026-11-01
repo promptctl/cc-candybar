@@ -1,3 +1,4 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] Every shipped example config under examples/ must
 // survive the full production pipeline: parse → merge-on-default → validate →
 // register → render. A template parse error in an inline override, a dangling
@@ -17,6 +18,8 @@
 // discovers files by globbing the directory, so a new example is covered the
 // moment it lands (no per-file edit).
 
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +28,6 @@ import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -36,7 +38,7 @@ const exampleFiles = fs
 
 // Run one example through the shipped check pipeline; the rendered line for
 // content assertions.
-async function renderExample(file: string): Promise<string> {
+async function renderExample(file: string): Promise<Frame> {
   return expectClean(file, await checkConfig(path.join(examplesDir, file)))
     .rendered;
 }
@@ -66,7 +68,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   // dotted path, and its `default` (`? · 0 deps`) is what a scan that never
   // landed would render.
   test("demo-variables renders the json document's scanned fields, never its default", async () => {
-    const out = stripAnsi(await renderExample("demo-variables.json5"));
+    const out = textOf(await renderExample("demo-variables.json5"));
     expect(out).toContain("📦 cc-candybar · 3 deps");
   });
 
@@ -138,7 +140,7 @@ describe("a `{ rows }` root merges by name over the bundled default", () => {
       "rows-merge",
       `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
     );
-    const [identity, status, ...rest] = stripAnsi(outcome.rendered).split("\n");
+    const [identity, status, ...rest] = textOf(outcome.rendered).split("\n");
     expect(rest).toEqual([]);
     // The bundled identity row, untouched: the fish-abbreviated directory
     // the check payload's cwd renders to.

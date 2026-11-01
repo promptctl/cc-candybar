@@ -3,13 +3,17 @@
 // cmt-b97df8ef), each clicking the links the bar renders through the verbs the
 // daemon runs, then reopening the parent to find the child closed.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -21,7 +25,6 @@ import {
   encodeRenderOrigin,
   type VerbContext,
 } from "../src/daemon/verbs";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -56,11 +59,11 @@ function buildRuntime(src: string) {
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (): string => {
+  const render = (): Frame => {
     sink.clear();
-    return renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
+    return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
-    });
+    }).frame;
   };
   sessionState.set(
     SID,
@@ -190,7 +193,7 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
     await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held("edit.help")).toBe(DISCLOSURE_CLOSED);
-    expect(stripAnsi(rt.render())).not.toContain("✓ done");
+    expect(textOf(rt.render())).not.toContain("✓ done");
   });
 });
 

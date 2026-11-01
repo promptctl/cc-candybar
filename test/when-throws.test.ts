@@ -5,19 +5,16 @@
 // draws the ⚠ cell its segment's own failing `when` draws.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate, then
-// registerDslConfig + renderDsl.
+// registerDslConfig + drawDsl.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { stripAnsi } from "./helpers/ansi";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import {
-  registerDslConfig,
-  renderDsl,
-  type RenderWarning,
-} from "../src/dsl/render";
+import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
@@ -60,8 +57,8 @@ function runtime(source: string) {
   const warnings: RenderWarning[] = [];
   const segmentErrors: Array<readonly [string, string]> = [];
   const render = (pct = 0): string =>
-    stripAnsi(
-      renderDsl(
+    textOf(
+      drawPayload(
         config,
         compiled,
         store,
@@ -73,7 +70,7 @@ function runtime(source: string) {
           onRenderWarning: (w) => warnings.push(w),
           onSegmentError: (id, message) => segmentErrors.push([id, message]),
         },
-      ),
+      ).frame,
     );
   return {
     render,

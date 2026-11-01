@@ -4,12 +4,14 @@
 // durable one included; a durable click writes the harness's copy of the
 // config, never the file it was started from; a click that would act on the
 // developer's machine is not sent; a click on text the bar did not draw fails, naming what
-// it did draw. These cases are about the bar, and draw on a daemon in this worker;
+// it did draw; a render fits the size it was asked for. These cases are about the bar, and draw on a daemon in this worker;
 // what `pnpm bar` itself runs is in test/drive-bar.process.test.ts.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { cellLen } from "@promptctl/rich-js";
 
 import { describeLink, linksOf, startBar, type Bar } from "./helpers/drive-bar";
 import { DOOR_GLYPH } from "../src/config/disclosure";
@@ -18,12 +20,17 @@ import { startBarDaemon } from "./helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
 
-const userConfig = (): string => {
+const userConfig = (config = "{ root: { h: ['directory', 'model'] } }\n"): string => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-drive-test-"));
   const file = path.join(dir, "config.json5");
-  fs.writeFileSync(file, "{ root: { h: ['directory', 'model'] } }\n");
+  fs.writeFileSync(file, config);
   return file;
 };
+
+// Five cells a row can break between, wider together than 80 columns.
+const WIDE_BAR = `{ segments: { ${["a", "b", "c", "d", "e"]
+  .map((name) => `${name}: { template: '${name.repeat(24)}' }`)
+  .join(", ")} }, root: { h: ['a', 'b', 'c', 'd', 'e'] } }`;
 
 describe("drive-bar", () => {
   let bar: Bar | undefined;
@@ -67,6 +74,18 @@ describe("drive-bar", () => {
     expect(textOf(rendered)).toContain("✖ directory");
   });
 
+
+  test("a render fits the size it was asked for", async () => {
+    bar = await startBar(
+      { width: 200, rows: 40, config: userConfig(WIDE_BAR), cwd: process.cwd(), ssh: false },
+      startBarDaemon,
+    );
+    const wide = textOf(await bar.render()).split("\n");
+    expect(wide.filter((line) => cellLen(line) > 80)).not.toEqual([]);
+    bar.resize({ width: 80, rows: 40 });
+    const narrow = textOf(await bar.render()).split("\n");
+    expect(narrow.filter((line) => cellLen(line) > 80)).toEqual([]);
+  });
 
   test("a click on text the bar did not draw names what it drew", async () => {
     bar = await startBar(

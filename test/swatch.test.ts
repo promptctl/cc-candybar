@@ -9,20 +9,22 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, type RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DECOR_HUES } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { swatch, SWATCH_GLYPH } from "../src/render/swatch";
-import { links, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
@@ -58,7 +60,7 @@ function rig(template: string) {
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
-  const rendered = renderDsl(
+  const rendered = drawPayload(
     config,
     compiled,
     store,
@@ -67,7 +69,7 @@ function rig(template: string) {
     instantOf(new Date()),
     OPTS,
     { perSegmentSink: sink },
-  );
+  ).frame;
   registry.dispose();
   return { rendered, cells: sink.get("s") ?? [] };
 }
@@ -112,13 +114,13 @@ describe("{{ swatch }}", () => {
   });
 
   test("over a domain that names no palette it is refused, naming why", () => {
-    expect(stripAnsi(rig('{{ swatch "applyWord" }}').rendered)).toMatch(
+    expect(textOf(rig('{{ swatch "applyWord" }}').rendered)).toMatch(
       /swatch references action "applyWord", whose options are not colour-valued/,
     );
   });
 
   test("an option outside the domain is refused, naming it, before any palette is asked for it", () => {
-    expect(stripAnsi(rig('{{ swatch "applyTheme" "no-such-theme" }}').rendered)).toMatch(
+    expect(textOf(rig('{{ swatch "applyTheme" "no-such-theme" }}').rendered)).toMatch(
       /swatch "applyTheme": "no-such-theme" is not one of its options/,
     );
   });
@@ -126,7 +128,7 @@ describe("{{ swatch }}", () => {
 
 describe('{{ themePreview "applyAction" }}', () => {
   test("is two rows drawn in the palette of the option the key holds", () => {
-    const text = stripAnsi(rig('{{ themePreview "applyTheme" }}').rendered);
+    const text = textOf(rig('{{ themePreview "applyTheme" }}').rendered);
     const lines = text.split("\n");
     const bar = lines.findIndex((l) => l.includes("~/code"));
     expect(bar).toBeGreaterThanOrEqual(0);
@@ -139,10 +141,10 @@ describe("links()", () => {
     // A theme option in a bare picker is its name and its swatch: several
     // runs of colour, every one carrying the option's click.
     const { rendered } = rig('{{ picker "applyTheme" "page" false false }}');
-    const nord = links(rendered).filter((l) =>
-      stripAnsi(l.text).startsWith("nord "),
+    const nord = linksOf(rendered).filter((l) =>
+      l.text.startsWith("nord "),
     );
-    expect(nord.map((l) => stripAnsi(l.text))).toEqual(["nord ▀▀▀"]);
+    expect(nord.map((l) => l.text)).toEqual(["nord ▀▀▀"]);
     expect(nord[0]!.url).toContain("theme%2Fnord");
   });
 });

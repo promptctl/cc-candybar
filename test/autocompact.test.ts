@@ -1,12 +1,15 @@
 // [LAW:verifiable-goals] brandon-context-ceiling-xta.e3p: the `autocompact`
 // segment and its controls, driven through the real loader, the real spine
-// (registerDslConfig + renderDsl) and the real slash verb, with a fake Claude
+// (registerDslConfig + drawDsl) and the real slash verb, with a fake Claude
 // input edge standing in for the tmux pane. Each render's payload comes from
 // the daemon's own projection (projectAutoCompact) of a settings read, so the
 // cell is tested against what the daemon sends. Typing into a real pane is
 // test/claude-input.test.ts's; the lane itself is
 // test/render-payload-outcomes.test.ts's.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -15,7 +18,7 @@ import path from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -35,7 +38,6 @@ import {
 } from "../src/segments/autocompact";
 import { projectAutoCompact } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -77,7 +79,7 @@ function runtime(
     context: { totalTokens: 1, contextLeft: 99 },
     ...(autocompact !== undefined && { autocompact }),
   };
-  const raw = renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
+  const raw = drawPayload(config, compiled, store, registry, payload, instantOf(new Date()), OPTS).frame;
   const typed: string[] = [];
   const claudeInput: ClaudeInputEdge = {
     read: async () => ({ inMode: false, screen: ["─".repeat(30), "❯ ", "─".repeat(30)] }),
@@ -92,7 +94,7 @@ function runtime(
   );
   // What each control types, in the order the cell draws them.
   const lines = urls.map((u) => effectsOf(u)[0]!.args[1]);
-  return { text: stripAnsi(raw), urls, lines, ctx, typed };
+  return { text: textOf(raw), urls, lines, ctx, typed };
 }
 
 describe("the autocompact segment", () => {

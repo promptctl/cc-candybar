@@ -1,24 +1,21 @@
 // [LAW:verifiable-goals] brandon-unfiled-3248.2gq: a globals rule — `style`,
 // `palette` or `effect` — whose template throws when it is evaluated renders
 // that slot's floor and reports a `rule` warning naming where it was written,
-// rather than throwing out of renderDsl and taking the whole bar away. A
+// rather than throwing out of drawDsl and taking the whole bar away. A
 // failing segment costs one ⚠ cell; a failing rule costs its slot.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate, then
-// registerDslConfig + renderDsl, the style resolved as src/daemon/draw-bar.ts
+// registerDslConfig + drawDsl, the style resolved as src/daemon/draw-bar.ts
 // resolves it and the theme and effect from the config's own globals.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { stripAnsi } from "./helpers/ansi";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import {
-  registerDslConfig,
-  renderDsl,
-  type RenderWarning,
-} from "../src/dsl/render";
+import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { EFFECT_FLOOR, STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
@@ -59,8 +56,8 @@ function runtime(source: string) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): string =>
-    stripAnsi(
-      renderDsl(
+    textOf(
+      drawPayload(
         config,
         compiled,
         store,
@@ -69,7 +66,7 @@ function runtime(source: string) {
         instantOf(new Date()),
         OPTS,
         { onRenderWarning: (w) => warnings.push(w) },
-      ),
+      ).frame,
     );
   return { render, warnings, dispose: () => registry.dispose() };
 }

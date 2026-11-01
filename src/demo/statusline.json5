@@ -5,7 +5,7 @@
 //             No rebuild — the config IS the program.
 //
 // This file is rendered by the SAME two functions the daemon calls
-// (registerDslConfig + renderDsl in src/dsl/render.ts). There is no
+// (registerDslConfig + drawDsl in src/dsl/render.ts). There is no
 // demo-only render path — what you see here is what production produces.
 {
   globals: {

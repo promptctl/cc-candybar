@@ -1,6 +1,6 @@
 // [LAW:behavior-not-structure] `width: "fill"` (brandon-layout-0c2): a segment takes
-// what is left of its row. The claim is about SERIALIZED COLUMNS — what the terminal
-// receives — not about which function computed the share, so every assertion here
+// what is left of its row. The claim is about DRAWN COLUMNS — what the terminal
+// shows — not about which function computed the share, so every assertion here
 // measures the rendered line.
 //
 // The first test is where the ticket's risk lives. The leftover depends on what the
@@ -18,12 +18,14 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, cellLen, RichText } from "@promptctl/rich-js";
 
 import { resolveFill } from "../src/render/fill";
-import { renderStripCells } from "../src/render/strip";
+import { drawStripCells } from "../src/render/strip";
 import type { CellSizing, LaidCell } from "../src/template-engine/layout";
 import type { BuildLineOptions } from "../src/render/strip";
 import {
@@ -33,12 +35,9 @@ import {
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { INVISIBLE, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
-
-const cols = (line: string): number => cellLen(line.replace(INVISIBLE, ""));
 
 const SIZING: CellSizing = {
   justify: "left",
@@ -72,10 +71,10 @@ function serialize(
   cells: readonly LaidCell[],
   options: BuildLineOptions,
 ): string[] {
-  return renderStripCells(
+  return drawStripCells(
     resolveFill(cells, options).map((item) => item.owner),
     options,
-  ).split("\n");
+  ).lines.map(plainOf);
 }
 
 describe("a fill segment absorbs the row's leftover width", () => {
@@ -92,7 +91,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
           style,
           width,
           lines: lines.length,
-          cols: cols(lines[0]!),
+          cols: cellLen(lines[0]!),
         }).toEqual({ style, width, lines: 1, cols: width });
       }
     },
@@ -115,7 +114,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
     for (const width of [31, 32, 33]) {
       const cells = [fixed("a"), fill("x"), fixed("b"), fill("y")];
       const lines = serialize(cells, opts({ width }));
-      expect(cols(lines[0]!)).toBe(width);
+      expect(cellLen(lines[0]!)).toBe(width);
       const [, first, , second] = cells;
       // Split evenly to within the one-column remainder.
       expect(
@@ -135,7 +134,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
     const natural = cell.text.cellLength;
     const withFill = serialize([fixed(long), cell], opts({ width: 20 }));
     expect(cell.text.cellLength).toBe(natural);
-    for (const line of withFill) expect(cols(line)).toBeLessThanOrEqual(20);
+    for (const line of withFill) expect(cellLen(line)).toBeLessThanOrEqual(20);
   });
 
   // The case that actually discriminates, found by a mutation that did NOT bite:
@@ -152,9 +151,9 @@ describe("a fill segment absorbs the row's leftover width", () => {
       opts({ width: 20 }),
     );
     expect(lines.length).toBeGreaterThan(1);
-    expect(cols(lines[0]!)).toBeLessThan(20);
+    expect(cellLen(lines[0]!)).toBeLessThan(20);
     expect(cell.text.cellLength).toBe(natural);
-    for (const line of lines) expect(cols(line)).toBeLessThanOrEqual(20);
+    for (const line of lines) expect(cellLen(line)).toBeLessThanOrEqual(20);
   });
 
   // An unbounded row has no "rest of it", and `globals.autoWrap: false` renders at
@@ -185,7 +184,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
 // brandon-render-channels-b1x.2fs — the demand is a field of the laid cell, so it
 // reaches the row through every way the walk rebuilds a line: zipped into a
 // horizontal container's row, and copied into a new line behind the ✕ an open
-// disclosure body's rows are led with. Measured on the bytes `renderDsl` emits,
+// disclosure body's rows are led with. Measured on the frame `drawDsl` draws,
 // the one render path, rather than on the cells it composes.
 describe("a fill segment fills wherever the walk places it", () => {
   const WIDTH = 60;
@@ -212,7 +211,7 @@ describe("a fill segment fills wherever the walk places it", () => {
     );
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     const errors: string[] = [];
-    const out = renderDsl(
+    const out = drawPayload(
       config,
       compiled,
       store,
@@ -221,15 +220,15 @@ describe("a fill segment fills wherever the walk places it", () => {
       instantOf(new Date()),
       opts({ width: WIDTH, padding: 1 }),
       { onSegmentError: (n, m) => errors.push(`${n}: ${m}`) },
-    );
+    ).frame;
     registry.dispose();
     expect(errors).toEqual([]);
-    return out.split("\n");
+    return textOf(out).split("\n");
   };
   const filled = (lines: string[]) =>
     lines
-      .filter((l) => stripAnsi(l).includes("fill"))
-      .map((l) => ({ line: stripAnsi(l), cols: cols(l) }));
+      .filter((l) => l.includes("fill"))
+      .map((l) => ({ line: l, cols: cellLen(l) }));
 
   test("in a horizontal row", () => {
     const rows = filled(render(`{ h: ['a', 'wide', 'b'] }`));

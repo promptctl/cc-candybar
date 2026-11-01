@@ -39,22 +39,13 @@ import {
   type Response,
 } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
-import {
-  click,
-  frameRequest,
-  sendClick,
-  render,
-  renderBody,
-  renderRequest,
-  stripAnsi,
-  urlWriting,
-} from "./helpers/daemon-e2e";
+import { click, frameRequest, sendClick, render, renderBody, renderRequest, urlWriting } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
-import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { linksOf } from "../src/click/read";
-import { composeBar, textOf } from "../src/render/frame";
+import { composeBar, textOf, type Frame } from "../src/render/frame";
 import { pageOf, viewerLink } from "./helpers/diagnostics-viewer";
+import { barOf } from "./helpers/drawn-frame";
 import { untilHeard } from "./helpers/reload-signal";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { until, type Condition } from "./helpers/until";
@@ -80,8 +71,8 @@ jest.setTimeout(30_000);
 // `moving` wears sparkle, the bundled loop whose bytes change most often from
 // one thirtieth of a second to the next (the others were tuned to move about
 // one just-noticeable step a second). `toggle` is a still bar a click changes.
-// Every config but `off` switches on the statusline lane these subscribers
-// name, whose frames are the render's own bytes, and the band lane.
+// These subscribers take the band lane, whose frames are rows of runs, and a
+// test of the statusline lane, whose frames are the render's own bytes, names it.
 const CONFIGS = {
   moving: `{ globals: { effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
   // A glyph that turns every thirtieth of a second, as a lane toggle's spinner
@@ -90,7 +81,7 @@ const CONFIGS = {
   still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
   // A glyph that turns once a second, the bar's only motion, as the effort
   // gauge at max does.
-  beat: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
+  beat: `{ globals: { experimentalBand: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   // The band lane alone, which draws the bar elsewhere: its own file, since
   // the statusline's reset button rewrites the file it names.
@@ -105,15 +96,15 @@ const CONFIGS = {
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
   // Still, and its palette rule names no theme for two seconds of every four:
   // a render warning that comes and goes while nothing else moves.
-  clock: `{ globals: { experimentalStatusline: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
-  toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  clock: `{ globals: { experimentalBand: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
+  toggle: `{ globals: { experimentalBand: true, experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 // A pushed frame, and when it arrived: ms since framesOf first subscribed.
-type Frame = { readonly at: number; readonly resp: Response };
+type Pushed = { readonly at: number; readonly resp: Response };
 
 describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
@@ -128,8 +119,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     path.join(projectDir, `${name}.json5`),
   ];
 
-  // Every frame pushed for `sessionId` while `during` runs, with when each
-  // arrived. `during` is handed the frames
+  // Every frame `lane` is pushed for `sessionId` while `during` runs, with when
+  // each arrived. `during` is handed the frames
   // received so far, so it can wait for ones the daemon has sent before the
   // stream closes (closing drops whatever is still in flight); `elapsed`, the
   // clock those arrivals are read on; `waitFor`, the wait for them; and
@@ -143,13 +134,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   async function framesOf(
     sessionId: string,
     during: (feed: {
-      received: ReadonlyArray<Frame>;
+      received: ReadonlyArray<Pushed>;
       elapsed: () => number;
       waitFor: typeof until;
       untilHeard: typeof untilHeard;
     }) => Promise<void>,
-  ): Promise<Frame[]> {
-    const frames: Frame[] = [];
+    lane: "band" | "statusline" = "band",
+  ): Promise<Pushed[]> {
+    const frames: Pushed[] = [];
     const opened = Date.now();
     const elapsed = (): number => Date.now() - opened;
     let ended: Error | null = null;
@@ -157,7 +149,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       openFrameStream(
         sockPath,
         sessionId,
-        "statusline",
+        lane,
         (resp) => frames.push({ at: elapsed(), resp }),
         (end) => {
           if (end.kind === "refused" && end.resp.code === "TIMEOUT")
@@ -202,15 +194,20 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       ? resp.band.map((row) => row.map((run) => run.text).join("")).join("\n")
       : resp;
 
-  const outputs = (frames: ReadonlyArray<Frame>): string[] =>
+  // What band-lane frames drew, as Frames, read as a render's answer is.
+  const bars = (frames: ReadonlyArray<Pushed>): Frame[] =>
     frames.map(({ resp }) => {
-      if (!resp.ok || !("output" in resp))
-        throw new Error(`not a frame: ${JSON.stringify(resp)}`);
-      return resp.output;
+      if (!resp.ok || !("band" in resp))
+        throw new Error(`not a band frame: ${JSON.stringify(resp)}`);
+      return barOf(
+        ...resp.band.map((row) =>
+          row.map(({ text, href }) => ({ text, link: href })),
+        ),
+      );
     });
 
-  const shows = (frames: ReadonlyArray<Frame>, text: string): boolean =>
-    outputs(frames).some((o) => stripAnsi(o).includes(text));
+  const shows = (frames: ReadonlyArray<Pushed>, text: string): boolean =>
+    bars(frames).some((o) => textOf(o).includes(text));
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
@@ -260,16 +257,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         );
       },
     );
-    const pushed = outputs(frames);
-    for (const output of pushed) {
-      expect(stripAnsi(output)).toContain("a moving mark");
+    const pushed = bars(frames);
+    for (const bar of pushed) {
+      expect(textOf(bar)).toContain("a moving mark");
       // candybar-animation-wbxz.829, .014: a frame the feed drew shows its
       // ceiling.
-      expect(stripAnsi(output)).toMatch(/ ≤\d+ fps /u);
+      expect(textOf(bar)).toMatch(/ ≤\d+ fps /u);
     }
     // An unchanged frame is never sent twice.
-    for (let i = 1; i < pushed.length; i++)
-      expect(pushed[i]).not.toBe(pushed[i - 1]);
+    for (let i = 1; i < frames.length; i++)
+      expect(frames[i]!.resp).not.toEqual(frames[i - 1]!.resp);
     // The daemon draws at 30 a second while the bar moves; half that leaves
     // room for a slow CI box, and is far past Claude Code's one a second.
     expect(after.drawn - before.drawn).toBeGreaterThanOrEqual(30);
@@ -283,11 +280,15 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // every render of its session, so its toggle can show them.
   test("a render while a lane streams names that lane's subscribers and frame rate", async () => {
     await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
-    await framesOf("feed-rate", async ({ received, waitFor }) => {
-      await waitFor(() => received.length >= 5, "the stream is moving");
-      await sleep(1000);
-      await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
-    });
+    await framesOf(
+      "feed-rate",
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length >= 5, "the stream is moving");
+        await sleep(1000);
+        await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
+      },
+      "statusline",
+    );
     const events = await renderLines(env, "feed-rate", 2);
     expect(events[0]).toContain(" feeds=- ");
     const fps = /feeds=statusline:1sub\/(\d+)fps\/shown /u.exec(events.at(-1)!);
@@ -306,7 +307,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       args("still"),
     );
     // The request's own answer is Claude Code's to poll: it shows no pace.
-    expect(stripAnsi(answered)).toMatch(
+    expect(textOf(answered)).toMatch(
       new RegExp(`${POLLED}.*a still mark`, "su"),
     );
     let drawn = 0;
@@ -320,13 +321,41 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       },
     );
     // Its ceiling is part of the frame and does not change it.
-    expect(outputs(frames).map(stripAnsi)).toEqual([
+    expect(bars(frames).map(textOf)).toEqual([
       expect.stringMatching(/ ≤30 fps .*a still mark/su),
     ]);
     // brandon-unfiled-3248.8ro6 §4e: and it is drawn once a second. A draw
     // that wrote something its view reads would wake the next frame, and the
     // still bar would be redrawn at the moving rate, its bytes never pushed.
     expect(drawn).toBeLessThanOrEqual(3);
+  });
+
+  // Lane B draws Claude Code's own statusline, so its frames are the bytes a
+  // render answers, and they differ from them by the pace alone.
+  test("a statusline subscriber's frame is the render's own bytes, with the feed's ceiling for its pace", async () => {
+    const sid = "feed-statusline-bytes";
+    const answered = await render(sockPath, sid, projectDir, {}, args("still"));
+    const frames = await framesOf(
+      sid,
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length > 0, "the first frame");
+      },
+      "statusline",
+    );
+    const paced = barOf(
+      ...answered.rows.map(({ runs }) =>
+        runs.flatMap((run) =>
+          run.text === ` ${POLLED}`
+            ? [
+                { ...run, text: "≤30" },
+                { ...run, text: " fps" },
+              ]
+            : [run],
+        ),
+      ),
+    );
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.resp).toMatchObject({ output: composeBar(paced) });
   });
 
   // candybar-animation-wbxz.014: a bar is drawn when it next changes, so one
@@ -357,8 +386,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(drawn).toBeGreaterThanOrEqual(2);
     expect(drawn).toBeLessThanOrEqual(4);
     expect(pushed).toBe(drawn);
-    const glyphs = outputs(frames).map(
-      (o) => /(tick|tock)/u.exec(stripAnsi(o))![1],
+    const glyphs = bars(frames).map(
+      (o) => /(tick|tock)/u.exec(textOf(o))![1],
     );
     for (let i = 1; i < glyphs.length; i++)
       expect(glyphs[i]).not.toBe(glyphs[i - 1]);
@@ -371,7 +400,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     let drawn = 0;
     await framesOf(sid, async ({ received, waitFor }) => {
       await waitFor(
-        () => outputs(received).some((o) => /\[1\/1\]/u.test(stripAnsi(o))),
+        () => bars(received).some((o) => /\[1\/1\]/u.test(textOf(o))),
         "a frame showing the viewer",
       );
       const before = await feedStats();
@@ -404,13 +433,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         await sleep(100);
         await click(
           sockPath,
-          urlWriting(outputs(received)[1]!, "face", "shut"),
+          urlWriting(bars(received)[1]!, "face", "shut"),
         );
         secondAt = elapsed();
         await waitFor(() => received.length > 2, "the bar clicked again");
       },
     );
-    expect(outputs(frames).map(stripAnsi)).toEqual([
+    expect(bars(frames).map(textOf)).toEqual([
       expect.stringContaining("door shut"),
       expect.stringContaining("door open"),
       expect.stringContaining("door shut"),
@@ -448,7 +477,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const config = path.join(projectDir, "source-wake.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalStatusline: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",
@@ -477,7 +506,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         );
       },
     );
-    expect(outputs(frames).map(stripAnsi)).toEqual([
+    expect(bars(frames).map(textOf)).toEqual([
       expect.stringContaining("status green"),
       expect.stringContaining("status amber"),
       expect.stringContaining("status red"),
@@ -493,7 +522,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-reload-wake";
     const config = path.join(projectDir, "reload-wake.json5");
     const configOf = (mark: string): string =>
-      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
+      `{ globals: { experimentalBand: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
     writeFileSync(config, configOf("before the save"));
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",
@@ -513,7 +542,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         );
       },
     );
-    expect(outputs(frames).map(stripAnsi)).toEqual([
+    expect(bars(frames).map(textOf)).toEqual([
       expect.stringContaining("before the save"),
       expect.stringContaining("after the save"),
     ]);
@@ -529,7 +558,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const picked = path.join(projectDir, "picked.json5");
     writeFileSync(
       picked,
-      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'the picked mark' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalBand: true }, segments: { mark: { template: 'the picked mark' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, args("still"));
     const pick = async (file: string): Promise<void> =>
@@ -543,11 +572,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await waitFor(() => shows(received, "the picked mark"), "the picked bar");
       await pick("");
       await waitFor(
-        () => stripAnsi(outputs(received).at(-1)!).includes("a still mark"),
+        () => textOf(bars(received).at(-1)!).includes("a still mark"),
         "the bar the request named, once the pick is cleared",
       );
     });
-    const shown = outputs(frames).map(stripAnsi);
+    const shown = bars(frames).map(textOf);
     expect(shown[0]).toContain("a still mark");
     expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
     // [LAW:no-ambient-temporal-coupling] The log is written off the loop, so
@@ -579,7 +608,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         await waitFor(() => received.length > 0, "the first render's frame");
       },
     );
-    expect(outputs(frames).map(stripAnsi)).toEqual([
+    expect(bars(frames).map(textOf)).toEqual([
       expect.stringContaining("a still mark"),
     ]);
     expect(frames[0]!.at).toBeGreaterThanOrEqual(200);
@@ -698,7 +727,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // The switch alone draws nothing: with no band following the session, the
     // statusline keeps the bar.
     expect(
-      stripAnsi(await render(sockPath, sid, projectDir, {}, args("handoff"))),
+      textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
     ).toContain("a handed-off mark");
     await until(() => events().length > 0, "the first render's event");
     // A request answered TIMEOUT under load is asked again, and each is an
@@ -717,15 +746,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       {},
       args("handoff"),
     );
-    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
+    expect(textOf(handedOff).trim().split("\n")).toEqual([
       `🧪 ${HANDOFF_BUTTON}`,
     ]);
     // A reader asking for the Frame is answered the line the statusline shows.
-    const handoffFrame = await frameRequest(
-      sockPath,
-      renderBody(sid, projectDir, {}, args("handoff")),
-    );
-    expect(composeBar(handoffFrame)).toBe(handedOff);
+    const body = renderBody(sid, projectDir, {}, args("handoff"));
+    const handoffFrame = await frameRequest(sockPath, body);
+    expect(composeBar(handoffFrame)).toBe(await renderRequest(sockPath, body));
     expect(handoffFrame).toMatchObject({ nextChange: Infinity, pending: [] });
     // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
     // as one more event than a count read before the render: a retry of the
@@ -736,14 +763,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       (found) => / handoff=band /.test(found.at(-1) ?? ""),
       "the handoff render's event",
     );
-    const button = links(handedOff).find((l) => l.text.includes("⟲"));
+    const button = linksOf(handedOff).find((l) => l.text.includes("⟲"));
     await click(sockPath, button!.url);
     // The reset took the lane's setting out of the file it was in.
     expect(
       readFileSync(path.join(projectDir, "handoff.json5"), "utf8"),
     ).not.toContain("experimentalBand");
     expect(
-      stripAnsi(await render(sockPath, sid, projectDir, {}, args("handoff"))),
+      textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
     ).toContain("a handed-off mark");
     // And the band's stream is refused now its lane is off.
     expect(await band.ended).toMatchObject({ kind: "refused" });
@@ -818,10 +845,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       {},
       args("warned"),
     );
-    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
+    expect(textOf(handedOff).trim().split("\n")).toEqual([
       `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
     ]);
-    expect(stripAnsi(handedOff)).not.toContain('duplicate key "effect"');
+    expect(textOf(handedOff)).not.toContain('duplicate key "effect"');
     const last = String(barText(band.live().at(-1)!));
     expect(last).toContain("a warned mark");
     expect(last.match(/⚠/g)).toHaveLength(1);
@@ -835,7 +862,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(viewer.text).toContain('duplicate key "effect"');
     await click(sockPath, viewerLink(viewer.rendered, "✕")!.url);
     expect(
-      stripAnsi(await render(sockPath, sid, projectDir, {}, args("warned"))),
+      textOf(await render(sockPath, sid, projectDir, {}, args("warned"))),
     ).toContain(HANDOFF_BUTTON);
   });
 
@@ -1008,7 +1035,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // request met from its first frame. A frame that starts counting it later
     // is the lane's next spaced frame, a still second after the one before,
     // never a wake that could feed itself.
-    const shown = outputs(frames).map((o) => stripAnsi(o).includes("⚠ 1"));
+    const shown = bars(frames).map((o) => textOf(o).includes("⚠ 1"));
     for (const [i, onset] of frames.entries()) {
       if (i === 0 || !shown[i] || shown[i - 1]) continue;
       expect(onset.at - frames[i - 1]!.at).toBeGreaterThan(500);
@@ -1036,14 +1063,33 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       after = await revision();
     });
     expect((await feedStats()).drawn - drawnBefore).toBeGreaterThan(0);
-    const shown = outputs(frames).map(stripAnsi);
+    const shown = bars(frames).map(textOf);
     expect(shown.length).toBeGreaterThan(0);
     // Every frame counts the warned config's load warning.
     expect(shown.every((text) => text.includes("⚠ 1"))).toBe(true);
     expect(after).toBe(before);
   });
 
-  test("a failed click's error shows on the pushed frames and Claude Code's bar for the hold, and leaves by time alone", async () => {
+  test("a failed click's error shows on Claude Code's bar", async () => {
+    const sid = "feed-click-error-bar";
+    await render(sockPath, sid, projectDir, {}, args("toggle"));
+    const bad = effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]);
+    // The statusline lane draws the bar where Claude Code does, so with it
+    // followed a render answers the bar, where a lane that draws it elsewhere
+    // would answer the handoff row.
+    await framesOf(
+      sid,
+      async ({ received, waitFor }) => {
+        await waitFor(() => received.length > 0, "the bar before the click");
+        expect((await sendClick(sockPath, bad)).ok).toBe(false);
+        const bar = await render(sockPath, sid, projectDir, {}, args("toggle"));
+        expect(textOf(bar)).toContain("⚠ 1");
+      },
+      "statusline",
+    );
+  });
+
+  test("a failed click's error shows on the pushed frames for the hold, and leaves by time alone", async () => {
     await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
     const bad = effectsUrl([
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
@@ -1052,13 +1098,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const shows = (text: string): boolean => text.includes("⚠ 1");
     // The bar, the bar with the error for the hold, the bar: where the error
     // first shows, and the first frame after it that no longer does.
-    const hold = (frames: ReadonlyArray<Frame>) => {
-      const shown = outputs(frames).map(stripAnsi);
+    const hold = (frames: ReadonlyArray<Pushed>) => {
+      const shown = bars(frames).map(textOf);
       const errorAt = shown.findIndex(shows);
       const clearAt = shown.findIndex((text, i) => i > errorAt && !shows(text));
       return { shown, errorAt, clearAt };
     };
-    let inside = "";
     let clickedAt = 0;
     const frames = await framesOf(
       "feed-click-error",
@@ -1066,13 +1111,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         await waitFor(() => received.length > 0, "the bar before the click");
         clickedAt = elapsed();
         expect((await sendClick(sockPath, bad)).ok).toBe(false);
-        inside = await render(
-          sockPath,
-          "feed-click-error",
-          projectDir,
-          {},
-          args("toggle"),
-        );
         await waitFor(
           () => hold(received).errorAt > 0,
           "a frame showing the error",
@@ -1089,7 +1127,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         );
       },
     );
-    expect(shows(stripAnsi(inside))).toBe(true);
     const { shown, errorAt, clearAt } = hold(frames);
     expect(shows(shown[0]!)).toBe(false);
     expect(errorAt).toBeGreaterThan(0);

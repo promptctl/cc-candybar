@@ -14,6 +14,10 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -26,7 +30,7 @@ import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
 import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { drawnDepth, listResolvablePaletteNames } from "../src/themes/policy";
 import type {
   ColorCompatibility,
@@ -37,7 +41,6 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { links, stripAnsi } from "./helpers/ansi";
 import { CAROUSEL_NEXT, CAROUSEL_PREV } from "../src/render/carousel";
 import { decorEntryColour, windowAt } from "../src/themes/decor";
 import { DEFAULT_DECOR } from "./helpers/decor";
@@ -72,7 +75,7 @@ function opts(
 }
 
 // One rig over the real cascade: parse on the bundled default (where the
-// settings menu is synthesized), render through renderDsl with the session's
+// settings menu is synthesized), render through drawDsl with the session's
 // theme and style resolved the way the daemon resolves them, and click through
 // the real verb handlers, gated by that config.
 function rig(
@@ -94,17 +97,17 @@ function rig(
   recordRender(sessionState, SID);
   const ctx = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
-  let last = "";
+  let last: Frame;
   // The terminal's width is a fact of the render, not of the compile: one
   // compiled config draws at every width a sweep asks for.
-  const render = (cols = width): string => {
+  const render = (cols = width): Frame => {
     const effective = resolveEffectiveGlobals(
       config,
       (key) => sessionState.get(SID, key),
       () => false,
     );
     const depth = effective.colorCompatibility;
-    last = renderDsl(
+    last = drawPayload(
       config,
       compiled,
       store,
@@ -128,7 +131,7 @@ function rig(
       opts(cols, padding, style, depth),
       { perSegmentSink: sink },
       effective,
-    );
+    ).frame;
     return last;
   };
   const click = async (url: string): Promise<void> => {
@@ -139,11 +142,11 @@ function rig(
   };
   // Click the link whose visible text is `text`, in the bar as last rendered.
   const clickText = async (text: string): Promise<void> => {
-    const hit = links(last).find((l) => stripAnsi(l.text) === text);
+    const hit = linksOf(last).find((l) => l.text === text);
     if (hit === undefined) {
       throw new Error(
-        `no link "${text}" in:\n${stripAnsi(last)}\nlinks: ${links(last)
-          .map((l) => JSON.stringify(stripAnsi(l.text)))
+        `no link "${text}" in:\n${textOf(last)}\nlinks: ${linksOf(last)
+          .map((l) => JSON.stringify(l.text))
           .join(" ")}`,
       );
     }
@@ -153,7 +156,7 @@ function rig(
   // Click the link whose writes include [key, value] — how a test names one
   // control among several that share a glyph (every closed toggle is ▸).
   const clickWriting = async (key: string, value: string): Promise<void> => {
-    const hit = links(last).find((l) =>
+    const hit = linksOf(last).find((l) =>
       effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (hit === undefined) throw new Error(`no link writes ${key}=${value}`);
@@ -162,9 +165,9 @@ function rig(
   };
   // The link whose visible text is `text` among those writing `key`.
   const linkOn = (key: string, text: string) =>
-    links(last).find(
+    linksOf(last).find(
       (l) =>
-        stripAnsi(l.text) === text &&
+        l.text === text &&
         effectsOf(l.url).some((e) => e.args[1] === key),
     )!;
   return {
@@ -198,10 +201,10 @@ const CAROUSEL_ONLY = `{
 }`;
 
 describe("the carousel rotates by applying", () => {
-  const arrows = (rendered: string) => {
-    const all = links(rendered);
+  const arrows = (rendered: Frame) => {
+    const all = linksOf(rendered);
     const at = (glyph: string) =>
-      writesOf(all.find((l) => stripAnsi(l.text) === glyph)!.url);
+      writesOf(all.find((l) => l.text === glyph)!.url);
     return { prev: at(CAROUSEL_PREV), next: at(CAROUSEL_NEXT) };
   };
 
@@ -244,11 +247,11 @@ describe("the carousel rotates by applying", () => {
     for (const held of ["a", "c", "x"]) {
       rt.sessionState.set(SID, "pick", held);
       const rendered = rt.render();
-      expect([held, stripAnsi(rendered)]).toEqual([
+      expect([held, textOf(rendered)]).toEqual([
         held,
         expect.stringContaining(`${CAROUSEL_PREV} the pick ${CAROUSEL_NEXT}`),
       ]);
-      expect(links(rendered).filter((l) => writesOf(l.url).some(([k]) => k === "pick")).map((l) => stripAnsi(l.text)))
+      expect(linksOf(rendered).filter((l) => writesOf(l.url).some(([k]) => k === "pick")).map((l) => l.text))
         .toEqual([CAROUSEL_PREV, CAROUSEL_NEXT]);
     }
     rt.dispose();
@@ -279,7 +282,7 @@ describe("the carousel rotates by applying", () => {
           .map((span) => resolvedStyle(span.style)),
       );
     };
-    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} look ▀▀▀ ${CAROUSEL_NEXT}`);
+    expect(textOf(rt.render())).toContain(`${CAROUSEL_PREV} look ▀▀▀ ${CAROUSEL_NEXT}`);
     const nord = swatch();
     rt.sessionState.set(SID, "th", "dracula");
     expect(swatch()).not.toEqual(nord);
@@ -301,7 +304,7 @@ describe("the carousel rotates by applying", () => {
       segments: { ring: { template: '{{ carousel "choose" "list" "l" }}' } },
       root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
     }`);
-    expect(stripAnsi(rt.render())).toContain(
+    expect(textOf(rt.render())).toContain(
       `declare { kind: "state", key: "unread" }`,
     );
     rt.dispose();
@@ -338,7 +341,7 @@ describe("the carousel rotates by applying", () => {
       segments: { ring: { template: '{{ carousel "choose" "list" "l" }}' } },
       root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } },
     }`);
-    expect(stripAnsi(rt.render())).toContain(
+    expect(textOf(rt.render())).toContain(
       `carousel references action "choose"`,
     );
     rt.dispose();
@@ -385,12 +388,14 @@ function bodyRows(rt: ReturnType<typeof rig>, control: string): RichText[][] {
 describe("the settings menu's look controls are pickers whose label opens a list", () => {
   const THEMES = listResolvablePaletteNames();
   // The links of the swatch row: every link writing the theme whose text is
-  // a swatch, with the theme it writes.
-  const swatchLinks = (rendered: string) =>
-    links(rendered)
-      .filter((l) => /▀▀▀/u.test(stripAnsi(l.text)))
+  // a swatch, with the theme it writes. Its text is read off its runs, padding
+  // included, since an unmarked swatch's spaces stand where the marked one's
+  // brackets do.
+  const swatchLinks = (rendered: Frame) =>
+    linksOf(rendered)
+      .filter((l) => /▀▀▀/u.test(l.text))
       .map((l) => ({
-        text: stripAnsi(l.text),
+        text: plainOf(rendered.rows.flatMap(({ runs }) => runs).filter((run) => run.link === l.url)),
         writes: effectsOf(l.url).find((e) => e.args[1] === "theme")?.args[2],
       }))
       .filter((c) => c.writes !== undefined);
@@ -401,17 +406,17 @@ describe("the settings menu's look controls are pickers whose label opens a list
     await rt.clickText("🍫");
     await rt.clickText("🎨 look");
     const rendered = rt.render();
-    expect(stripAnsi(rendered)).toContain("🎨 theme ▀▀▀");
+    expect(textOf(rendered)).toContain("🎨 theme ▀▀▀");
     // The label and the swatch are one button (`[Theme [=]]`): both open it.
-    const opens = links(rendered).filter((l) =>
-      ["🎨 theme", "▀▀▀"].includes(stripAnsi(l.text)),
+    const opens = linksOf(rendered).filter((l) =>
+      ["🎨 theme", "▀▀▀"].includes(l.text),
     );
-    expect(opens.map((l) => stripAnsi(l.text))).toEqual(["🎨 theme", "▀▀▀"]);
+    expect(opens.map((l) => l.text)).toEqual(["🎨 theme", "▀▀▀"]);
     expect(writesOf(opens[1]!.url)).toEqual(writesOf(opens[0]!.url));
     // The swatch's own link, as the bar last drew it: open, it closes again.
-    const swatchButton = (drawn: string) =>
-      links(drawn).find(
-        (l) => stripAnsi(l.text) === "▀▀▀" && effectsOf(l.url).some((e) => e.args[1] === PICKERS),
+    const swatchButton = (drawn: Frame) =>
+      linksOf(drawn).find(
+        (l) => l.text === "▀▀▀" && effectsOf(l.url).some((e) => e.args[1] === PICKERS),
       )!;
     await rt.click(swatchButton(rendered).url);
     expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
@@ -419,9 +424,9 @@ describe("the settings menu's look controls are pickers whose label opens a list
     expect(rt.sink.has("candybar.list.theme.0")).toBe(false);
     const reopened = rt.render();
     // No ring: the theme is chosen by looking at it, not stepped by name.
-    expect(stripAnsi(reopened)).not.toMatch(new RegExp(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
+    expect(textOf(reopened)).not.toMatch(new RegExp(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
     // The gear opens the theme's configuration on the same accordion.
-    const gear = links(rendered).find((l) => stripAnsi(l.text) === "⚙")!;
+    const gear = linksOf(rendered).find((l) => l.text === "⚙")!;
     expect(writesOf(gear.url)).toEqual([[PICKERS, "gear"]]);
     // The style, variation and shade controls are behind it, not in the tab.
     expect(rt.sink.has("candybar.style")).toBe(false);
@@ -436,7 +441,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "theme");
     const rendered = rt.render();
-    const text = stripAnsi(rendered);
+    const text = textOf(rendered);
     expect(text).toContain("nord ▀▀▀");
     expect(text).toContain(`${CAROUSEL_PREV} ${SWATCHES_RANDOM} ${CAROUSEL_NEXT}`);
     // The row opens on the page holding the theme in force, a run of the
@@ -451,9 +456,9 @@ describe("the settings menu's look controls are pickers whose label opens a list
     // "The name loses its styling and the swatch carries the colour": no
     // theme NAME is a link that picks a theme.
     expect(
-      links(rendered).filter(
+      linksOf(rendered).filter(
         (l) =>
-          THEMES.includes(stripAnsi(l.text)) &&
+          THEMES.includes(l.text) &&
           effectsOf(l.url).some((e) => e.args[1] === "theme"),
       ),
     ).toEqual([]);
@@ -481,7 +486,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     const rt = rig(`{ globals: { palette: 'nord' } }`, 200, padding, style);
     await openPicker(rt, control);
     for (let width = 40; width <= 160; width += 3) {
-      const lines = stripAnsi(rt.render(width)).split("\n");
+      const lines = textOf(rt.render(width)).split("\n");
       // The body drops below the row the control sits in, which may itself
       // wrap: it starts at the first line after the control holding the
       // body's first row.
@@ -518,7 +523,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     expect(turn![1]).toMatch(/^\d+$/);
     await rt.click(step.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(next);
-    expect(stripAnsi(rt.render())).toContain(`${next} ▀▀▀`);
+    expect(textOf(rt.render())).toContain(`${next} ▀▀▀`);
     expect(swatchLinks(rt.render()).find((c) => c.writes === next)?.text).toBe("[▀▀▀]");
     expect(rt.sink.get("directory")![0]!.style).not.toEqual(before);
     await rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
@@ -579,10 +584,10 @@ describe("the settings menu's look controls are pickers whose label opens a list
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "theme");
     const row = swatchLinks(rt.render());
-    const other = links(rt.render()).find(
+    const other = linksOf(rt.render()).find(
       (l) =>
-        /▀▀▀/u.test(stripAnsi(l.text)) &&
-        stripAnsi(l.text) !== "[▀▀▀]" &&
+        /▀▀▀/u.test(l.text) &&
+        l.text !== "[▀▀▀]" &&
         effectsOf(l.url).some((e) => e.args[1] === "theme"),
     )!;
     expect(writesOf(other.url)).toHaveLength(1);
@@ -632,7 +637,7 @@ describe("the variation control", () => {
   test("▶ applies the next variation in this session and the bar's closed cells recolour", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "variation");
-    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🎼 variation ${CAROUSEL_NEXT}`);
+    expect(textOf(rt.render())).toContain(`${CAROUSEL_PREV} 🎼 variation ${CAROUSEL_NEXT}`);
     // Row 1 (directory) and row 2 (model) under the default.
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("variation", CAROUSEL_NEXT).url);
@@ -654,7 +659,7 @@ describe("the shade control", () => {
   test("▶ turns the dial one position in this session and the bar's closed cells recolour", async () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "shade");
-    expect(stripAnsi(rt.render())).toContain(`${CAROUSEL_PREV} 🔆 shade ${CAROUSEL_NEXT}`);
+    expect(textOf(rt.render())).toContain(`${CAROUSEL_PREV} 🔆 shade ${CAROUSEL_NEXT}`);
     const before = ["directory", "model"].map((n) => rt.sink.get(n)![0]!.style);
     const trial = effectsOf(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
@@ -677,8 +682,8 @@ describe("colour depth is set in the config file, not the menu", () => {
     await rt.clickText("🍫");
     await rt.clickText("⚙ config");
     const rendered = rt.render();
-    expect(stripAnsi(rendered)).not.toMatch(/🔣|🌈/u);
-    const writers = links(rendered).filter((l) =>
+    expect(textOf(rendered)).not.toMatch(/🔣|🌈/u);
+    const writers = linksOf(rendered).filter((l) =>
       effectsOf(l.url).some((e) =>
         e.args[1] === "colorCompatibility",
       ),
@@ -691,8 +696,8 @@ describe("colour depth is set in the config file, not the menu", () => {
 // The preview's rows, as the labels each draws: the lines after the list of
 // presets (the body's first row, under the control's ◀ label ▶), up to the
 // preset actions or the menu's tab strip below the body.
-function previewLabels(rendered: string): string[][] {
-  const lines = stripAnsi(rendered).split("\n");
+function previewLabels(rendered: Frame): string[][] {
+  const lines = textOf(rendered).split("\n");
   const ring = lines.findIndex((l) => l.includes(PRESET_CONTROL));
   const rows: string[][] = [];
   for (const line of lines.slice(ring + 2)) {
@@ -772,7 +777,7 @@ describe("the preset control's list carries the layout beneath it", () => {
       const tints = Object.fromEntries(drawn.map((n) => [blockLabel(n), closedStyle(n)]));
       // Which line of the closed bar each drawn segment sits on: segments are
       // drawn in order, so each is found at or after the one before it.
-      const barLines = stripAnsi(closed).split("\n");
+      const barLines = textOf(closed).split("\n");
       const barRows: string[][] = barLines.map(() => []);
       let line = 0;
       let col = 0;
@@ -836,7 +841,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     await openPicker(rt, "preset");
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const rendered = rt.render();
-    expect(stripAnsi(rendered)).not.toContain("⚠");
+    expect(textOf(rendered)).not.toContain("⚠");
     expect(previewLabels(rendered)[1]).toEqual(["model", "model"]);
     rt.dispose();
   });

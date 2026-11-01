@@ -3,6 +3,7 @@
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -11,9 +12,7 @@ import path from "node:path";
 import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
 import { homeLayer } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
-import { stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
-import { renderDsl } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
@@ -81,7 +80,7 @@ function config(definition = DEFINITION): string {
 
 function clean(o: CheckOutcome): { rendered: string; warnings: readonly string[] } {
   if (o.kind !== "clean") throw new Error(`expected clean, got ${JSON.stringify(o)}`);
-  return { rendered: stripAnsi(o.rendered), warnings: o.warnings };
+  return { rendered: textOf(o.rendered), warnings: o.warnings };
 }
 
 function fatal(o: CheckOutcome): string {
@@ -679,8 +678,8 @@ describe("an installed plugin", () => {
           const s = held.state;
           expect(s).toBe(states[i]);
           expect(await s.registry.settled(5000)).toEqual([]);
-          return stripAnsi(
-            renderDsl(
+          return textOf(
+            drawPayload(
               s.config,
               s.compiled,
               held.view.store,
@@ -688,7 +687,7 @@ describe("an installed plugin", () => {
               { session_id: `s${i}`, project_dir: main },
               instantOf(new Date()),
               { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
-            ),
+            ).frame,
           );
         }),
       );

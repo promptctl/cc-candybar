@@ -7,19 +7,13 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import {
-  compileDslConfig,
-  compileInputOf,
-  declareDslVariables,
-  drawPayload,
-  EVERY_SCOPE,
-  type RenderWarning,
-} from "../src/dsl/render";
+import { compileDslConfig, compileInputOf, declareDslVariables, EVERY_SCOPE, type RenderWarning } from "../src/dsl/render";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
@@ -30,8 +24,7 @@ import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "./helpers/selection";
-import { stripAnsi } from "./helpers/ansi";
-import { ansiOf, type Frame } from "../src/render/frame";
+import { textOf, ansiOf, type Frame } from "../src/render/frame";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -97,7 +90,7 @@ function renderer(cfg: ValidatedConfig) {
       );
       return {
         frame,
-        text: stripAnsi(ansiOf(frame)).split("\n").at(-1)!,
+        text: textOf(frame).split("\n").at(-1)!,
         errors,
         warnings,
       };
@@ -175,11 +168,11 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       on.session.set("s", "edit.mode", "arrange");
       on.session.set("s", "edit.live", "open");
       on.answer({ label: "a wide value", show: true });
-      const drew = stripAnsi(ansiOf(on.draw().frame)).split("\n");
+      const drew = textOf(on.draw().frame).split("\n");
       expect(drew.join("\n")).toContain("a wide value");
       on.unanswer();
       const { frame, errors } = on.draw();
-      const rows = stripAnsi(ansiOf(frame)).split("\n");
+      const rows = textOf(frame).split("\n");
       expect(rows.join("\n")).toContain(LOADING_GLYPH);
       expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
       expect(errors).toEqual([]);
@@ -199,10 +192,10 @@ describe("a placement whose value is not answered yet draws where it stood", () 
     );
     try {
       on.answer({ top: "a top row", bottom: "and a longer bottom row" });
-      const drew = stripAnsi(ansiOf(on.draw().frame)).split("\n");
+      const drew = textOf(on.draw().frame).split("\n");
       expect(drew).toHaveLength(2);
       on.unanswer();
-      const rows = stripAnsi(ansiOf(on.draw().frame)).split("\n");
+      const rows = textOf(on.draw().frame).split("\n");
       expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
       // The settings door leads the first row.
       expect(rows[0]!.trimEnd().endsWith(`|  ${LOADING_GLYPH}`)).toBe(true);
@@ -422,11 +415,11 @@ describe("what hangs open under a placement not answered yet stays open", () => 
     );
     try {
       on.answer({ show: true });
-      const drew = stripAnsi(ansiOf(on.draw().frame)).split("\n");
+      const drew = textOf(on.draw().frame).split("\n");
       expect(drew.join("\n")).toContain("an inner value");
       on.unanswer();
       const { frame, errors, warnings } = on.draw();
-      const rows = stripAnsi(ansiOf(frame)).split("\n");
+      const rows = textOf(frame).split("\n");
       // The body's row is still there, the width it drew, its placement
       // waiting on the gate over it.
       expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
@@ -436,7 +429,7 @@ describe("what hangs open under a placement not answered yet stays open", () => 
       expect(errors).toEqual([]);
       expect(warnings).toEqual([]);
       on.answer({ show: true });
-      expect(stripAnsi(ansiOf(on.draw().frame)).split("\n")).toEqual(drew);
+      expect(textOf(on.draw().frame).split("\n")).toEqual(drew);
     } finally {
       on.dispose();
     }
@@ -454,11 +447,11 @@ describe("what hangs open under a placement not answered yet stays open", () => 
     );
     try {
       on.answer({ colour: "error" });
-      const drew = stripAnsi(ansiOf(on.draw().frame)).split("\n");
+      const drew = textOf(on.draw().frame).split("\n");
       expect(drew.join("\n")).toContain("a group label");
       on.unanswer();
       const { frame, errors } = on.draw();
-      const rows = stripAnsi(ansiOf(frame)).split("\n");
+      const rows = textOf(frame).split("\n");
       // The toggle waits where it stood; the body it hangs open is answered,
       // and drawn as it was.
       expect(rows.join("\n")).not.toContain("a group label");

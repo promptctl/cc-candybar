@@ -2,13 +2,14 @@
 // off the cells it drew, so a template's `frames` moves the bar exactly as an
 // effect does, and a bar with neither is still.
 
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, drawPayload } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import type { DrawnMotion } from "../src/render/drawn-motion";
 import type { Frame } from "../src/render/frame";
 import type { ColorCompatibility } from "../src/themes/policy";

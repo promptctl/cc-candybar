@@ -86,13 +86,6 @@ function draw(
   };
 }
 
-export interface RenderedSegmentLike {
-  type: string;
-  text: string;
-  bgHex?: string;
-  fgHex?: string;
-}
-
 // [LAW:one-source-of-truth] `Endcaps`/`ColorCompatibility` and their value lists live
 // in themes/policy.ts (the render-identifier policy module, importable by the
 // option-source machinery without a render→template-engine cycle). Re-exported
@@ -248,24 +241,10 @@ export function stripPrivateGlyphs(options: StripShape): string {
   return privateGlyphsIn(plainOf(lines.flat()));
 }
 
-function toCell(seg: RenderedSegmentLike, padding: number): RichText {
-  // [LAW:one-source-of-truth] Intra-cell padding derives from the one resolved
-  // globals.padding value on BuildLineOptions — the joiners sit between cells;
-  // padding sits inside, inheriting the cell's wrapping style (bg fill).
-  const style = new Style({
-    bgcolor: seg.bgHex || undefined,
-    color: seg.fgHex || undefined,
-  });
-  return new RichText(seg.text, { style, end: "", overflow: "ignore" }).pad(
-    padding,
-  );
-}
-
 /**
  * [LAW:single-enforcer] The one place RichText cells become lines of runs.
- * Every render path (DSL RichText[] via the template-engine pipeline,
- * buildLineStrip's input-shape adapter, debug per-segment serialization)
- * flows through here. The wrap dispatch lives here too:
+ * Every render path (DSL RichText[] via the template-engine pipeline, debug
+ * per-segment serialization) flows through here. The wrap dispatch lives here too:
  * wrap enabled at a finite width → FlexStrip (rich-js owns the wrap
  * algebra); otherwise → Strip, one unbounded line.
  *
@@ -316,20 +295,5 @@ export function renderStripCells(
   return encodeAnsi(
     drawStripCells(cells, options).lines,
     options.colorCompatibility,
-  );
-}
-
-/**
- * Input-shape adapter for callers that hold RenderedSegmentLike[] rather
- * than pre-constructed RichText cells. Wrap behavior is identical to
- * renderStripCells — the cell construction is the only difference.
- */
-export function buildLineStrip(
-  segments: readonly RenderedSegmentLike[],
-  options: BuildLineOptions,
-): string {
-  return renderStripCells(
-    segments.map((seg) => toCell(seg, options.padding)),
-    options,
   );
 }

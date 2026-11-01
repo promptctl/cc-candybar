@@ -18,7 +18,6 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { stripAnsi } from "./helpers/ansi";
 import {
   CONNECT_TIMEOUT_MS,
   encodeFrame,
@@ -29,7 +28,9 @@ import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
 } from "../src/daemon/request-deadline";
+import { textOf, type WireFrame } from "../src/render/frame";
 import {
+  frameRequest,
   hookData,
   render,
   renderBody,
@@ -131,7 +132,7 @@ describe("every render request writes one render event, whatever its outcome", (
     // A gate that fails costs what it gates, not the bar
     // (brandon-unfiled-3248.ryf): the reply is a bar, and its event says why
     // (the indicator offers it from the next frame: daemon-render-warnings).
-    const gated = stripAnsi(
+    const gated = textOf(
       await render(
         daemon,
         "ev-gate",
@@ -248,10 +249,11 @@ describe("every render request writes one render event, whatever its outcome", (
     const asked = await sendDaemonRequest(daemon, {
       v: PROTOCOL_VERSION,
       kind: "render",
+      encoding: "frame",
       ...renderBody("ev-pending", projectDir, hints, configFlag("waiting")),
     });
     expect(asked).toMatchObject({ ok: true });
-    const waiting = stripAnsi((asked as { output: string }).output);
+    const waiting = textOf((asked as { frame: WireFrame }).frame);
     expect(waiting).toContain("…");
     expect(waiting).not.toContain("⚠");
     expect(field(await attempts("ev-pending", "ok", "info"), "pending")).toBe(
@@ -546,7 +548,7 @@ describe("every render request writes one render event, whatever its outcome", (
         "--config",
         config,
       ]);
-      return renderRequest(daemon, {
+      return frameRequest(daemon, {
         ...body,
         hookData: {
           ...(body.hookData as object),
@@ -567,11 +569,11 @@ describe("every render request writes one render event, whatever its outcome", (
       () => existsSync(runs) && readFileSync(runs, "utf8") === "1\n",
       "the first run landing",
     );
-    expect(stripAnsi(await ask("model-b"))).toContain("run2");
+    expect(textOf(await ask("model-b"))).toContain("run2");
     // Its deadline is the request's own, never one of the session's facts: a
     // request that differs from the last only by it moves no session state.
     const before = await revision();
-    expect(stripAnsi(await ask("model-b"))).toContain("run2");
+    expect(textOf(await ask("model-b"))).toContain("run2");
     expect(await revision()).toBe(before);
     for (const event of (await eventsOf("ev-keyed", 3)).slice(1))
       expect(field(event, "ended")).toBe("answered");
@@ -651,11 +653,12 @@ describe("a request's deadline", () => {
       const stated = await answeredAfter(1, waitMs, {
         v: PROTOCOL_VERSION,
         kind: "render",
+        encoding: "frame",
         ...tmuxBody("ev-late", "%1"),
         deadline: daemon.now() + TOTAL_BUDGET_MS,
       });
       expect(stated).toMatchObject({ ok: true });
-      expect(stripAnsi((stated as { output: string }).output)).toContain("…");
+      expect(textOf((stated as { frame: WireFrame }).frame)).toContain("…");
       // Answered, it holds nothing, though its source reads on: `using`
       // released the hold on exit.
       await expect(stats()).resolves.toMatchObject({
@@ -676,8 +679,8 @@ describe("a request's deadline", () => {
         (lines) => lines.some((l) => / tmux refresh .* outcome=ok /u.test(l)),
         "tmux's read landing",
       );
-      const drawn = stripAnsi(
-        await renderRequest(daemon, tmuxBody("ev-late", "%1")),
+      const drawn = textOf(
+        await frameRequest(daemon, tmuxBody("ev-late", "%1")),
       );
       expect(drawn).toContain("held");
       expect(field((await landedEvents(env, "ev-late", 2))[1]!, "ended")).toBe("answered");

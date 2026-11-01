@@ -1,3 +1,4 @@
+import type { Frame } from "../src/render/frame";
 // brandon-theme-picker-bgw.fe0 — text keeps its contrast at 256 colours.
 // brandon-theme-picker-bgw.ddk — so does every seam, and at ansi nothing is
 // drawn on its own ground's index.
@@ -6,7 +7,7 @@
 // are chosen on truecolor values; the terminal draws what the 256 downgrade
 // hands it. So every bundled theme's bar is rendered twice through `check`'s
 // own pipeline — once truecolor, once at 256 — and each text character is
-// measured on the colours the terminal will actually draw: 38;5;n decoded
+// measured on the colours the terminal will actually draw: a palette index read
 // through the fixed xterm cube and grey ramp. A character may not land on
 // ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists), must keep
 // the highest floor it cleared in truecolor, and an arrow must stay the
@@ -17,6 +18,8 @@
 // drawn, and otherwise lifted off the cell it enters: in truecolor to the very
 // colour rich-js's joiner lifts it to, with rich-js itself as the oracle.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import {
@@ -30,8 +33,9 @@ import {
   Style,
   render as richRender,
   resolveDestination,
-  segmentsToString,
 } from "@promptctl/rich-js";
+import { runLines } from "../src/render/frame";
+import { barOf } from "./helpers/drawn-frame";
 import { POWERLINE } from "./helpers/powerline";
 import { ARROWS, DIVIDER, drawnChars, hex, isRgb, same, seams, type Char, type Drawn, type Rgb } from "./helpers/seams";
 import { NO_REPO, prepareConfig, renderEffective } from "../src/check";
@@ -49,7 +53,7 @@ import { VERB_SET_STATE } from "../src/click/wire";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
   clickUrl,
@@ -57,7 +61,6 @@ import {
   recordRender,
   testVerbContext,
 } from "./helpers/click";
-import { linkUrls } from "./helpers/ansi";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 
@@ -88,8 +91,8 @@ const standsOff = (ink: Drawn | undefined, ground: Drawn | undefined): boolean =
 
 // [LAW:verifiable-goals] The ink rich-js's own joiner draws an arrow in, at
 // `depth`, between a cell on `left` and one on `right`, both as truecolor drew
-// them: the oracle an arrow on the bar is held to, read back through the same
-// decoding as the bar, so the function under test is not its own oracle.
+// them: the oracle an arrow on the bar is held to, read through the same reader
+// as the bar, so the function under test is not its own oracle.
 const inks = new Map<string, Drawn | undefined>();
 function joinerInk(left: Rgb, right: Rgb, depth: ColorCompatibility): Drawn | undefined {
   const key = JSON.stringify([left, right, depth]);
@@ -97,16 +100,18 @@ function joinerInk(left: Rgb, right: Rgb, depth: ColorCompatibility): Drawn | un
   const cell = (c: Rgb) => new RichText("x", { end: "", style: new Style({ bgcolor: hex(c) }) });
   const destination = resolveDestination(depth);
   const drawn = drawnChars(
-    segmentsToString(
-      [
-        ...richRender(new Strip([cell(left), cell(right)], RICH_JOINERS.powerline), {
-          maxWidth: 80,
-          isTerminal: false,
-          asciiOnly: false,
-          colorSystem: destination.colorSystem,
-        }),
-      ],
-      destination,
+    barOf(
+      ...runLines(
+        [
+          ...richRender(new Strip([cell(left), cell(right)], RICH_JOINERS.powerline), {
+            maxWidth: 80,
+            isTerminal: false,
+            asciiOnly: false,
+            colorSystem: destination.colorSystem,
+          }),
+        ],
+        destination.colorSystem,
+      ),
     ),
   );
   // The seam is the arrow between the two cells' text.
@@ -148,7 +153,7 @@ function seamInks(label: string, truecolor: Chars, drawn: Chars, depth: ColorCom
     // The oracle is fed the colours a cell wears before the writer rounds
     // them, which only the truecolor frame names: a lower depth can deal a
     // cell another shade of its role than truecolor does (src/themes/decor.ts
-    // `windowAt`, `pressedAt`), and its bytes show only the rounding, which
+    // `windowAt`, `pressedAt`), and its frame shows only the rounding, which
     // two shades can share while rich-js lifts from the unrounded colour.
     // Asking the policy which shade it dealt would make the function under
     // test its own oracle, so there the lift is held to what the joiner
@@ -314,7 +319,7 @@ async function forEachStage(
   };
   // Open the disclosure `key` names: the click on the bar that writes it a
   // member other than closed — loud when the bar renders none.
-  const opener = (rendered: string, key: string, member: (v: string) => boolean): string => {
+  const opener = (rendered: Frame, key: string, member: (v: string) => boolean): string => {
     const url = linkUrls(rendered).find((u) =>
       effectsOf(u).some(
         (e) =>
@@ -327,7 +332,7 @@ async function forEachStage(
     if (url === undefined) throw new Error(`nothing on the bar opens ${key}`);
     return url;
   };
-  const STAGES: Record<(typeof STAGE_NAMES)[number], (rendered: string) => string | null> = {
+  const STAGES: Record<(typeof STAGE_NAMES)[number], (rendered: Frame) => string | null> = {
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
     "preset picker": (r) => opener(r, "menus.candybar_pickers", (v) => v.endsWith("preset")),
@@ -352,7 +357,7 @@ async function forEachStage(
     // One instant for every render, as `closedBars` draws.
     const at = instantOf(new Date());
     const render = (colorCompatibility: ColorCompatibility) =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, at, { ...OPTS, colorCompatibility });
+      drawPayload(config, compiled, store, registry, PAYLOAD, at, { ...OPTS, colorCompatibility }).frame;
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
       if (url !== null) await clickUrl(url, ctx);

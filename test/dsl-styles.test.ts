@@ -8,19 +8,21 @@
 // (a name a prior config's vocabulary admitted) collapses to "none".
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
-// loader, registerDslConfig + renderDsl for rendering, the real dispatch for
+// loader, registerDslConfig + drawDsl for rendering, the real dispatch for
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
-import { stripAnsi } from "./helpers/ansi";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -46,6 +48,17 @@ const OPTS = {
   wrap: true,
   padding: 0,
   width: Number.POSITIVE_INFINITY,
+};
+
+// The truecolor background of the row containing a marker. Row-scoped: each
+// root row holds exactly one segment here, so the row's first background IS that
+// segment's (a whole-frame scan would find the first row's for every marker).
+const bgOf = ({ rows }: Frame, marker: string): string => {
+  const row = rows.find(({ runs }) => plainOf(runs).includes(marker));
+  expect(row).toBeDefined();
+  const hex = row!.runs.find(({ bg }) => bg?.startsWith("#"))?.bg;
+  expect(hex).toBeDefined();
+  return hex!;
 };
 
 // ─── Loader validation ────────────────────────────────────────────────────────
@@ -333,7 +346,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
       cwd: process.cwd(),
     });
     try {
-      const rendered = renderDsl(
+      const rendered = drawPayload(
         config,
         compiled,
         store,
@@ -341,11 +354,11 @@ describe('from: "styles" — rendered options and the derived gate share the con
         { session_id: SID },
         instantOf(new Date()),
         OPTS,
-      );
+      ).frame;
       // Each style name appears as a clickable region writing itself to `style` —
       // the same names the gate above allows, from the same config map.
       for (const name of ["none", "vapor", "washed"]) {
-        expect(rendered).toContain(name);
+        expect(textOf(rendered)).toContain(name);
       }
     } finally {
       registry.dispose();
@@ -357,7 +370,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
 
 // Mirrors the daemon's per-render resolution verbatim (draw-bar.ts): basePalette
 // from resolveThemeSelection, the style ThemeKey from effectiveStyleName →
-// styleKeyByName, threaded into renderDsl. The click drives the REAL wire.
+// styleKeyByName, threaded into drawDsl. The click drives the REAL wire.
 describe("style click — live whole-bar recolor over the active theme", () => {
   const SRC = `{
     globals: { palette: '${THEME}' },
@@ -387,8 +400,8 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     // A click is gated by the config its session renders: record the render
     // the click below resolves that config from.
     recordRender(sessionState, SID);
-    const render = (): string => {
-      return renderDsl(
+    const render = (): Frame => {
+      return drawPayload(
         config,
         compiled,
         store,
@@ -398,7 +411,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
         OPTS,
         undefined,
         selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-      );
+      ).frame;
     };
     const dispose = (): void => {
       registry.dispose();
@@ -417,18 +430,6 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     );
   };
 
-  // The bg SGR of the row containing the named glyph run. Row-scoped: each
-  // root row holds exactly one segment here, so the row's first bg SGR IS that
-  // segment's background (a whole-render scan would match the first row's bg
-  // for every marker).
-  const bgOf = (rendered: string, marker: string): string => {
-    const line = rendered.split("\n").find((l) => l.includes(marker));
-    expect(line).toBeDefined();
-    const m = line!.match(/48;2;(\d+;\d+;\d+)/);
-    expect(m).not.toBeNull();
-    return m![1]!;
-  };
-
   test("clicking a style recolors an ordinary segment; clicking none restores", async () => {
     const { config, sessionState, render, dispose } = buildRuntime();
     try {
@@ -437,7 +438,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
       const adapted = bgOf(render(), "◆ here");
       // The inverted style flips lightness — the surface color must move.
       expect(adapted).not.toBe(before);
-      // "none" is the identity style, not a special case: byte-exact restore
+      // "none" is the identity style, not a special case: an exact restore
       // (rich-js isIdentityKey fast-paths the identity transposition).
       await clickStyle(config, sessionState, "none");
       expect(bgOf(render(), "◆ here")).toBe(before);
@@ -479,12 +480,12 @@ describe("style click — live whole-bar recolor over the active theme", () => {
 // [LAW:behavior-not-structure] The claim is that the WHOLE BAR is transposed by
 // what an expression in `globals.style` evaluates to, per render, and that the
 // precedence the three name rungs already had is unchanged — a session pick
-// still outranks it. Every assertion measures a serialized background SGR (the
-// colour the terminal receives) or the load-time refusal, never which function
+// still outranks it. Every assertion measures a drawn background (the colour
+// the terminal receives) or the load-time refusal, never which function
 // computed the choice.
 //
 // The rig mirrors the daemon verbatim: `resolveStyleSelection` over the three
-// rungs, threaded into renderDsl as `RenderSelection.style`, exactly as
+// rungs, threaded into drawDsl as `RenderSelection.style`, exactly as
 // payloadOf → draw-bar.ts does.
 describe("globals.style as an expression — a style chosen by data", () => {
   // The expression reads a payload field, which is the point: `.context.pct` is
@@ -525,8 +526,8 @@ describe("globals.style as an expression — a style chosen by data", () => {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
     });
-    const render = (pct: number, staged?: string): string =>
-      renderDsl(
+    const render = (pct: number, staged?: string): Frame =>
+      drawPayload(
         config,
         compiled,
         store,
@@ -548,19 +549,10 @@ describe("globals.style as an expression — a style chosen by data", () => {
           },
           (key) => sessionState.get(SID, key),
         ),
-      );
+      ).frame;
     return { sessionState, render, dispose: () => registry.dispose() };
   }
 
-  // The bg SGR of the row carrying a marker — the same row-scoped measure the
-  // click tests above use.
-  const bgOf = (rendered: string, marker: string): string => {
-    const line = rendered.split("\n").find((l) => l.includes(marker));
-    expect(line).toBeDefined();
-    const m = line!.match(/48;2;(\d+;\d+;\d+)/);
-    expect(m).not.toBeNull();
-    return m![1]!;
-  };
   // What the same bar looks like under a style chosen by NAME — the reference
   // every expression result is checked against, so "it changed colour" is never
   // mistaken for "it changed to the right colour".
@@ -593,9 +585,9 @@ describe("globals.style as an expression — a style chosen by data", () => {
   test("style.effective reports what the expression chose, so the label cannot disagree with the bar", () => {
     const { render, dispose } = buildRuntime();
     try {
-      expect(stripAnsi(render(90))).toContain("L=inverted");
-      expect(stripAnsi(render(50))).toContain("L=washed");
-      expect(stripAnsi(render(10))).toContain("L=none");
+      expect(textOf(render(90))).toContain("L=inverted");
+      expect(textOf(render(50))).toContain("L=washed");
+      expect(textOf(render(10))).toContain("L=none");
     } finally {
       dispose();
     }
@@ -610,7 +602,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     try {
       sessionState.set(SID, "style", "washed");
       expect(bgOf(render(90), "◆ here")).toBe(byName("washed"));
-      expect(stripAnsi(render(90))).toContain("L=washed");
+      expect(textOf(render(90))).toContain("L=washed");
       // The case a floor-equality test would get wrong: picking "none" is a
       // DECISION, not the absence of one, so a hot payload must not recolour.
       sessionState.set(SID, "style", "none");
@@ -639,7 +631,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     try {
       const out = render(90);
       expect(bgOf(out, "◆ here")).toBe(byName("none"));
-      expect(stripAnsi(out)).toContain("L=none");
+      expect(textOf(out)).toContain("L=none");
     } finally {
       dispose();
     }

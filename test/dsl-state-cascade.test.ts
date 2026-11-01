@@ -1,13 +1,15 @@
 // [LAW:verifiable-goals] vhi.1 acceptance: a click verb mutates SessionState;
 // the next DSL render reflects the change without re-reading disk. This test
 // drives the cascade end-to-end through the bzh.7 spine — registerDslConfig
-// + renderDsl — so the verification matches the live render path the
+// + drawDsl — so the verification matches the live render path the
 // daemon uses, not a parallel test rig.
 //
 // [LAW:single-enforcer] The verb dispatch goes through the registry in
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { feedInputs } from "./helpers/inputs";
@@ -17,11 +19,10 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { testVerbContext, recordRender } from "./helpers/click";
-import { stripAnsi } from "./helpers/ansi";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { instantOf } from "../src/utils/instant";
 
@@ -65,7 +66,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
-      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));
+      textOf(drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame);
     // A click is gated by the config its session renders: every test below
     // hands this config to its verb context, and this is the render it reads.
     recordRender(sessionState, SESSION_ID);
@@ -86,7 +87,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
   test("set-state theme write changes the rendered COLORS on next render (k5a.4)", async () => {
     // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
-    // bar. The renderDsl-level tests above prove the TEXT cascade; this proves
+    // bar. The drawDsl-level tests above prove the TEXT cascade; this proves
     // the COLOR cascade by resolving basePalette per render from the session
     // theme exactly as the daemon does (resolveThemeSelection over
     // SessionState, whose decided arm carries the palette) — no frozen entry
@@ -117,7 +118,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // renders below would BOTH be the floor theme and the test would assert
     // that two identical strings differ — vacuous rather than merely weaker.
     const render = () =>
-      renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS, undefined, selectionFor(config, {}, (key) => sessionState.get(SESSION_ID, key)));
+      drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS, undefined, selectionFor(config, {}, (key) => sessionState.get(SESSION_ID, key))).frame;
 
     const before = render(); // effective theme = textual-dark (globals default)
     recordRender(sessionState, SESSION_ID);
@@ -125,9 +126,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
     const after = render(); // effective theme = nord
 
-    // Same text, different ANSI color codes — the palette switched live.
-    expect(stripAnsi(after)).toBe(stripAnsi(before));
-    expect(after).not.toBe(before);
+    // Same text, different colours — the palette switched live.
+    expect(textOf(after)).toBe(textOf(before));
+    expect(after.rows).not.toEqual(before.rows);
   });
 
   test("set-state click verb propagates to the next render", async () => {
@@ -149,7 +150,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   test("cascade triggers a reactive observer, not just a fresh render-time read", async () => {
     // [LAW:behavior-not-structure] The "set-state click verb propagates"
     // test above asserts the rendered string carries the new value — true
-    // whenever renderDsl sees the new value at next read, which can
+    // whenever drawDsl sees the new value at next read, which can
     // happen via two different mechanisms:
     //   (a) atom.reportChanged() invalidated the computed; the next read
     //       re-derives through the dep graph (the intended contract); or
@@ -542,14 +543,14 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-    const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
+    const out = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor",
       wrap: true,
       padding: 0,
       width: Number.POSITIVE_INFINITY,
-    });
-    expect(stripAnsi(out)).toContain("calm");
+    }).frame;
+    expect(textOf(out)).toContain("calm");
   });
 
   test("toolbar-toggle click verb cascades through state binding", async () => {
@@ -576,7 +577,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
-      stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));
+      textOf(drawPayload(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS).frame);
     recordRender(sessionState, SESSION_ID);
     const ctx =testVerbContext(sessionState, undefined, config);
 

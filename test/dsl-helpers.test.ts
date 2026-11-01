@@ -6,10 +6,12 @@
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
 // key is a no-op (an inherited define emits nothing).
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
-import { stripAnsi } from "./helpers/ansi";
 
 import { validateConfig } from "./helpers/parse-and-validate";
 import {
@@ -19,7 +21,7 @@ import {
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 
 // [LAW:single-enforcer] One strip-opts shape across the file; Infinity width keeps
@@ -58,9 +60,9 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   return { config, compiled, store, registry };
 }
 
-function render(source: string, payload: unknown, dflt?: DslConfig): string {
+function render(source: string, payload: unknown, dflt?: DslConfig): Frame {
   const { config, compiled, store, registry } = build(source, dflt);
-  return renderDsl(
+  return drawPayload(
     config,
     compiled,
     store,
@@ -68,7 +70,7 @@ function render(source: string, payload: unknown, dflt?: DslConfig): string {
     payload,
     instantOf(new Date()),
     OPTS,
-  );
+  ).frame;
 }
 
 describe("bdi.2 — config-level shared helper templates", () => {
@@ -79,7 +81,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       segments: { cost: { template: '{{ template "money" .x }}' } },
       root: "cost",
     }`;
-    expect(stripAnsi(render(source, { x: 1.5 }))).toContain("$1.50");
+    expect(textOf(render(source, { x: 1.5 }))).toContain("$1.50");
   });
 
   test("a parameterized helper is defined ONCE, called from many segments", () => {
@@ -96,7 +98,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       },
       root: { h: ["s1", "s2"] },
     }`;
-    const out = stripAnsi(render(source, { a: 2, b: 10.005 }));
+    const out = textOf(render(source, { a: 2, b: 10.005 }));
     expect(out).toContain("$2.00");
     expect(out).toContain("$10.01"); // %.2f rounds half-up at the boundary
   });
@@ -111,7 +113,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       segments: { c: { template: '{{ template "labeled" .x }}' } },
       root: "c",
     }`;
-    expect(stripAnsi(render(source, { x: 3 }))).toContain("cost=$3.00");
+    expect(textOf(render(source, { x: 3 }))).toContain("cost=$3.00");
   });
 
   test("a helper may call one declared AFTER it: resolution is by name at render, not by declaration order", () => {
@@ -128,7 +130,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       segments: { c: { template: '{{ template "labeled" .x }}' } },
       root: "c",
     }`;
-    expect(stripAnsi(render(source, { x: 3 }))).toContain("cost=$3.00");
+    expect(textOf(render(source, { x: 3 }))).toContain("cost=$3.00");
   });
 
   test("by-name override (merge cascade): user helper wins, renders the override", () => {
@@ -143,7 +145,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       segments: { cost: { template: '{{ template "money" .x }}' } },
       root: "cost",
     }`;
-    const out = stripAnsi(render(source, { x: 7 }, dflt));
+    const out = textOf(render(source, { x: 7 }, dflt));
     expect(out).toContain("€7");
     expect(out).not.toContain("$7");
   });
@@ -181,7 +183,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
     }`;
     const { config } = build(source);
     expect(config.helpers).toEqual({});
-    expect(stripAnsi(render(source, { x: 42 }))).toContain("x=42");
+    expect(textOf(render(source, { x: 42 }))).toContain("x=42");
   });
 
   test("an UNUSED helper is output-neutral (byte-identical to no helpers)", () => {
@@ -198,7 +200,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       segments: { plain: { template: 'x={{ .x }}' } },
       root: "plain",
     }`;
-    expect(render(withHelper, { x: 9 })).toBe(render(without, { x: 9 }));
+    expect(render(withHelper, { x: 9 }).rows).toEqual(render(without, { x: 9 }).rows);
   });
 });
 
@@ -317,7 +319,7 @@ describe("84s — action refs through helpers", () => {
       segments: { s: { template: '{{ template "btn" . }}' } },
       root: "s",
     }`;
-    expect(stripAnsi(render(source, { session_id: "abc" }))).toContain("GO");
+    expect(textOf(render(source, { session_id: "abc" }))).toContain("GO");
   });
 
   test("a {{ menu }} in a helper stays a load error", () => {

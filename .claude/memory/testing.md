@@ -1,6 +1,6 @@
 # Testing
 
-- Read rendered bytes through the test helpers' ANSI reader, not a regex of your own. Every link carries an id= derived from its URL, so a regex that spells out ESC]8;; matches nothing.
+- Read a draw from the frame it returned, never from its bytes: only a test whose subject is an encoder reads bytes. Two draws are two objects and each frame carries its own wall-clock moment, so compare their rows. A comparison by identity passes whatever was drawn, and a whole-frame equality can fail on the clock. A frame in a template string compiles and prints nothing useful, so a failure message hands over its text.
 - Jest runs ESM through ts-jest. If an ESM dependency ships untranspiled, add it to the transform allow-list under both node_modules/<pkg> and pnpm's .pnpm shadow path.
 - The transform transpiles only, so a type error in a test passes jest and fails the typecheck. Types have one checker, tsc, which the Test job runs before the suite; checking them in the transform costs seconds per file on CI's cold cache.
 - Tests time out at 30 s. Fake time and the filesystem rather than waiting on real ones.
