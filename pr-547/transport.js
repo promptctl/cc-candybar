@@ -22548,6 +22548,102 @@ init_globals();
 // src/click/wire.ts
 init_globals();
 init_url();
+
+// src/config/disclosure.ts
+init_globals();
+var DISCLOSURE_CLOSED = "closed";
+var DISCLOSURE_OPEN = "open";
+var DISCLOSURE_GLYPH_CLOSED = "\u25B8";
+var DISCLOSURE_GLYPH_OPEN = "\u25BE";
+var DISCLOSURE_GLYPH_CLOSE = "\u2715";
+var DISCLOSURE_CLOSE_ROLE = "warning";
+var DOOR_CLOSE_ROLE = "error";
+var DOOR_GLYPH = "\u{1F36B}";
+var DOOR_CLOSE_GLYPH = "\u2716";
+function cycleDisplayIssue(subject, count, members) {
+  if (count === 0) return `${subject} needs a display (the clickable text)`;
+  if (count !== 1 && count !== members) {
+    return `${subject} cycles ${members} members; bind one display per member (${members}) or one static display, got ${count}`;
+  }
+  return void 0;
+}
+function pickCycleDisplay(subject, displays, members, index) {
+  const issue3 = cycleDisplayIssue(subject, displays.length, members);
+  if (issue3 !== void 0) throw new Error(issue3);
+  return displays.length === 1 ? displays[0] : displays[index];
+}
+function escapeTemplateLiteral(s) {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+function disclosureNode(name, ref, body, placement, when2) {
+  return {
+    kind: "segment",
+    name,
+    opens: { ref, body, placement },
+    ...when2 !== void 0 && { when: when2 }
+  };
+}
+function disclosureGate(first2, ...rest2) {
+  const terms = [first2, ...rest2].map(disclosureTerm).join(" ");
+  return `{{ and ${terms} }}`;
+}
+function disclosureTerm(ref) {
+  return `(eq .${ref.variable} "${escapeTemplateLiteral(ref.member)}")`;
+}
+function disclosureTrigger(action2, closed, open2) {
+  return `{{ ${disclosureTriggerCall(action2, templateLiteral(closed), templateLiteral(open2))} }}`;
+}
+function disclosureTriggerCall(action2, closed, open2) {
+  return `action "${action2}" ${closed} ${open2}`;
+}
+function templateLiteral(text4) {
+  return `"${escapeTemplateLiteral(text4)}"`;
+}
+function disclosureStateVar(key, def) {
+  return { kind: "state", key, default: def };
+}
+function disclosureCycleAction(key, member) {
+  return { set: key, cycle: [DISCLOSURE_CLOSED, member] };
+}
+function disclosureOfAction(decl) {
+  if (!("set" in decl && "cycle" in decl)) return void 0;
+  const [first2, member, ...more] = decl.cycle;
+  return first2 === DISCLOSURE_CLOSED && member !== void 0 && more.length === 0 ? { key: decl.set, member } : void 0;
+}
+
+// src/config/door.ts
+init_globals();
+
+// src/config/reserved-names.ts
+init_globals();
+var GROUP_NS = "groups.";
+var MENU_NS = "menus.";
+var MENU_PAGE_NS = "menupages.";
+var EDIT_NS = "edit.";
+var SETTINGS_NS = "candybar.";
+var RESERVED_NAMESPACES = [
+  GROUP_NS,
+  MENU_NS,
+  MENU_PAGE_NS,
+  EDIT_NS,
+  SETTINGS_NS
+];
+function isReservedName(name) {
+  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+}
+
+// src/config/door.ts
+var SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
+var SETTINGS_OPEN = DISCLOSURE_OPEN;
+var SETTINGS_REF = {
+  variable: SETTINGS_ANCHOR,
+  key: SETTINGS_ANCHOR,
+  member: SETTINGS_OPEN
+};
+var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
+var DIAGNOSTICS_CLOSED = "0";
+
+// src/click/wire.ts
 var URL_SCHEME = "cc-candybar";
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
@@ -22578,6 +22674,66 @@ var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
+function sayWrite(key, value) {
+  if (key === DIAGNOSTICS_VIEWING)
+    return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
+  const set2 = `set ${key} to ${value}`;
+  if (!isReservedName(key)) return set2;
+  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
+  if (key.startsWith(MENU_PAGE_NS))
+    return `turn ${menu} to page ${Number(value) + 1}`;
+  if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
+  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
+  return key.startsWith(MENU_NS) ? `open ${value}` : set2;
+}
+var COPIED_LENGTH = 60;
+var ELISION = "...";
+function saidCopy(text4) {
+  const chars = [...text4];
+  const kept = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
+  return chars.length <= COPIED_LENGTH ? text4 : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
+}
+var SAYS = {
+  [VERB_SET_STATE]: ([, ...pairs2]) => pairs2.flatMap(
+    (key, i) => i % 2 === 0 ? [sayWrite(key, pairs2[i + 1])] : []
+  ),
+  [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
+  [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
+  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
+  [VERB_LOAD_CONFIG]: ([, path40]) => [`load config ${path40}`],
+  [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
+  [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
+  [VERB_SAVE]: () => ["save settings"],
+  [VERB_SAVE_PRESET]: () => ["save as a new preset"],
+  [VERB_SAVE_THEME_DEFAULT]: () => ["save this look for the theme"],
+  [VERB_DELETE_PRESET]: ([, name]) => [`delete preset ${name}`],
+  [VERB_RESET_CONFIG]: ([, ...keys2]) => keys2.map((key) => `reset ${key}`),
+  [VERB_APPLY_LAYOUT_OP]: ([, key, op]) => [`edit ${op} in ${key}`],
+  [VERB_UNDO]: () => ["undo"],
+  [VERB_REDO]: () => ["redo"],
+  [VERB_BACK]: () => ["go back"],
+  [VERB_REWIND]: () => ["cancel edits"],
+  [VERB_APPLY_UPDATE]: () => ["update cc-candybar"],
+  [VERB_DOCTOR_RUN]: () => ["run doctor"],
+  [VERB_DOCTOR_FIX]: ([, check]) => [`fix ${check}`],
+  [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
+  [VERB_SLASH]: ([, line]) => [`type ${line}`],
+  [VERB_RUN]: ([, action2]) => [`run ${action2}`],
+  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`mark config in ${dir} ${answer2}`],
+  [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"]
+};
+var spell = (text4) => encodeURIComponent(text4).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
+function clickDoes(effects) {
+  const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
+  const [face = "nothing", ...rest2] = [
+    ...effects.filter((e) => !writesSession(e)),
+    ...effects.filter(writesSession)
+  ].flatMap((e) => SAYS[e.verb](e.args));
+  return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
+}
 function encodeSegments(parts) {
   return parts.map(encodeURIComponent).join("/");
 }
@@ -22587,10 +22743,11 @@ function decodeSegments(value) {
 function decodeFirstSegment(value) {
   return decodeURIComponent(value.split("/", 1)[0]);
 }
-function effectsUrl(effects) {
-  const qs = effects.map(
+function effectsUrl(effects, says = clickDoes(effects)) {
+  const params = effects.map(
     (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`
-  ).join("&");
+  );
+  const qs = [`does=${spell(says)}`, ...params].join("&");
   return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
 }
 function parseEffects(rawValue) {
@@ -36724,67 +36881,6 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
 
 // src/daemon/acquire.ts
 init_process();
-
-// src/config/disclosure.ts
-init_globals();
-var DISCLOSURE_CLOSED = "closed";
-var DISCLOSURE_GLYPH_CLOSED = "\u25B8";
-var DISCLOSURE_GLYPH_OPEN = "\u25BE";
-var DISCLOSURE_GLYPH_CLOSE = "\u2715";
-var DISCLOSURE_CLOSE_ROLE = "warning";
-var DOOR_CLOSE_ROLE = "error";
-var DOOR_GLYPH = "\u{1F36B}";
-var DOOR_CLOSE_GLYPH = "\u2716";
-function cycleDisplayIssue(subject, count, members) {
-  if (count === 0) return `${subject} needs a display (the clickable text)`;
-  if (count !== 1 && count !== members) {
-    return `${subject} cycles ${members} members; bind one display per member (${members}) or one static display, got ${count}`;
-  }
-  return void 0;
-}
-function pickCycleDisplay(subject, displays, members, index) {
-  const issue3 = cycleDisplayIssue(subject, displays.length, members);
-  if (issue3 !== void 0) throw new Error(issue3);
-  return displays.length === 1 ? displays[0] : displays[index];
-}
-function escapeTemplateLiteral(s) {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-function disclosureNode(name, ref, body, placement, when2) {
-  return {
-    kind: "segment",
-    name,
-    opens: { ref, body, placement },
-    ...when2 !== void 0 && { when: when2 }
-  };
-}
-function disclosureGate(first2, ...rest2) {
-  const terms = [first2, ...rest2].map(disclosureTerm).join(" ");
-  return `{{ and ${terms} }}`;
-}
-function disclosureTerm(ref) {
-  return `(eq .${ref.variable} "${escapeTemplateLiteral(ref.member)}")`;
-}
-function disclosureTrigger(action2, closed, open2) {
-  return `{{ ${disclosureTriggerCall(action2, templateLiteral(closed), templateLiteral(open2))} }}`;
-}
-function disclosureTriggerCall(action2, closed, open2) {
-  return `action "${action2}" ${closed} ${open2}`;
-}
-function templateLiteral(text4) {
-  return `"${escapeTemplateLiteral(text4)}"`;
-}
-function disclosureStateVar(key, def) {
-  return { kind: "state", key, default: def };
-}
-function disclosureCycleAction(key, member) {
-  return { set: key, cycle: [DISCLOSURE_CLOSED, member] };
-}
-function disclosureOfAction(decl) {
-  if (!("set" in decl && "cycle" in decl)) return void 0;
-  const [first2, member, ...more] = decl.cycle;
-  return first2 === DISCLOSURE_CLOSED && member !== void 0 && more.length === 0 ? { key: decl.set, member } : void 0;
-}
 
 // src/claude-settings.ts
 init_globals();
@@ -52707,73 +52803,6 @@ function ident(name) {
   return name.replace(/[^A-Za-z0-9]+/g, "_");
 }
 
-// src/config/loader/reserved-namespace.ts
-init_globals();
-var GROUP_NS = "groups.";
-var MENU_NS = "menus.";
-var MENU_PAGE_NS = "menupages.";
-var EDIT_NS = "edit.";
-var SETTINGS_NS = "candybar.";
-var RESERVED_NAMESPACES = [
-  GROUP_NS,
-  MENU_NS,
-  MENU_PAGE_NS,
-  EDIT_NS,
-  SETTINGS_NS
-];
-function isReservedName(name) {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
-}
-function reservedNamespaceOf(name) {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
-function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
-  for (const section of ["variables", "actions", "segments"]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(ns)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-      }
-    }
-  }
-}
-function pluginScopeCollisions(ctx, out, inherited) {
-  for (const section of [
-    "variables",
-    "actions",
-    "helpers",
-    "segments"
-  ]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      const scope = scopeOf(name);
-      if (scope === void 0) continue;
-      if (section !== "variables" && name === scope) continue;
-      if (section === "segments" && inherited.has(name)) continue;
-      ctx.issues.push({
-        path: `${section}.${name}`,
-        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
-        line: findKeyLine(ctx.source, [section, name])
-      });
-    }
-  }
-  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
-    for (const v of Object.keys(decl.vars ?? {})) {
-      const name = `${segment}.${v}`;
-      const scope = scopeOf(name);
-      if (scope === void 0 || inherited.has(segment)) continue;
-      ctx.issues.push({
-        path: `segments.${segment}.vars.${v}`,
-        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      });
-    }
-  }
-}
-
 // src/config/menu-keys.ts
 var PAGE_HOLDING_CURRENT = "-1";
 function menuMember(applyName) {
@@ -53264,16 +53293,57 @@ init_globals();
 init_globals();
 var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
 
-// src/config/door.ts
+// src/config/loader/reserved-namespace.ts
 init_globals();
-var SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
-var SETTINGS_OPEN = "open";
-var SETTINGS_REF = {
-  variable: SETTINGS_ANCHOR,
-  key: SETTINGS_ANCHOR,
-  member: SETTINGS_OPEN
-};
-var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
+function reservedNamespaceOf(name) {
+  const collapsed = ident(name);
+  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
+}
+function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
+  for (const section of ["variables", "actions", "segments"]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(ns)) {
+        ctx.issues.push({
+          path: `${section}.${name}`,
+          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+      }
+    }
+  }
+}
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
+      ctx.issues.push({
+        path: `segments.${segment}.vars.${v}`,
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
+      });
+    }
+  }
+}
 
 // src/config/loader/edit-mode.ts
 var EDIT_MODE_KEY = "edit.mode";
@@ -53353,14 +53423,17 @@ function editModeArtifacts() {
 // src/config/help.ts
 init_globals();
 var HELP_GLYPH_CLOSED = "(?)";
-var HELP_OPEN = "open";
 function declareHelp(name, lines2, within4, out) {
-  const self2 = { variable: name, key: name, member: HELP_OPEN };
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
   out.variables[name] = {
     ...disclosureStateVar(name, DISCLOSURE_CLOSED),
     ...within4.length > 0 && { within: within4 }
   };
-  out.actions[name] = disclosureCycleAction(name, HELP_OPEN);
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
   out.segments[name] = {
     template: disclosureTrigger(
       name,
@@ -56048,7 +56121,7 @@ var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
 var EDIT_LIVE_REF = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
-  member: "open"
+  member: DISCLOSURE_OPEN
 };
 function configuringVar(presetIdent) {
   return `${EDIT_NS}configuring.p${presetIdent}`;
@@ -65426,7 +65499,7 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
         [
           diagnosticSpan(
             m.lines[0][0].text,
-            copyLink(sessionId2, by, keys2[i])
+            copyLink(sessionId2, by, keys2[i], i + 1)
           )
         ],
         ...m.lines.slice(1)
@@ -65441,10 +65514,11 @@ function plainMessage({ about, text: message, copy: copy3 }, severity) {
 function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
 }
-function copyLink(sessionId2, by, key) {
-  return effectsUrl([
-    { verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }
-  ]);
+function copyLink(sessionId2, by, key, position) {
+  return effectsUrl(
+    [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }],
+    `copy diagnostic ${position}`
+  );
 }
 function worstLevel(list2) {
   return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
@@ -65483,10 +65557,9 @@ function diagnosticsProjection(list2) {
     label: level === null ? "" : `\u26A0 ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
-    open: list2.length === 0 ? VIEWER_CLOSED : viewerKey(list2, 0, 0)
+    open: list2.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list2, 0, 0)
   };
 }
-var VIEWER_CLOSED = "0";
 function viewedIndex(raw, list2) {
   const key = Number(raw) - 1;
   const at = stopsOf(list2).indexOf(Math.floor(key / PAGES));
@@ -65505,9 +65578,15 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg
   });
-  const go = (key) => viewerLink(sessionId2, key);
   const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
-  const step4 = (glyph, to) => to === null ? button(" ", null) : button(glyph, go(viewerKey(list2, to.index - 1, to.page)));
+  const step4 = (glyph, to) => to === null ? button(" ", null) : button(
+    glyph,
+    viewerLink(
+      sessionId2,
+      viewerKey(list2, to.index - 1, to.page),
+      `show diagnostic ${to.index} of ${list2.length} page ${to.page + 1}`
+    )
+  );
   const headerOf = (pages, page2) => {
     const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
     const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
@@ -65515,13 +65594,13 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
     return renderStripCells(
       [
-        button("\u2715", go(VIEWER_CLOSED)),
+        button("\u2715", viewerLink(sessionId2, DIAGNOSTICS_CLOSED)),
         ...steps2 ? [step4("\u2039", back2)] : [],
         button(position, null),
         ...steps2 ? [step4("\u203A", on2)] : [],
         button(
           "\u29C9 copy",
-          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0))
+          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0), index)
         )
       ],
       opts
@@ -65562,10 +65641,11 @@ function handoffRows(handoff, list2, sessionId2, geometry) {
   ];
   return channelRows(handoff, viewerOptions(geometry), indicator).join("\n");
 }
-function viewerLink(sessionId2, key) {
-  return effectsUrl([
-    { verb: VERB_SET_STATE, args: [sessionId2, DIAGNOSTICS_VIEWING, key] }
-  ]);
+function viewerLink(sessionId2, key, says) {
+  return effectsUrl(
+    [{ verb: VERB_SET_STATE, args: [sessionId2, DIAGNOSTICS_VIEWING, key] }],
+    says
+  );
 }
 function viewerOptions(geometry) {
   return {
@@ -69586,7 +69666,7 @@ var RuntimeStats = class _RuntimeStats {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -83897,6 +83977,7 @@ var JournalTurns = class {
   inFlight = null;
   holder = null;
   queued = 0;
+  gathersInFlight = 0;
   // Runs `body` in its turn, unless the daemon closed or the asker left while
   // it waited: a click whose client took a TIMEOUT never lands, so clicking
   // again cannot revert a toggle.
@@ -83949,17 +84030,25 @@ var JournalTurns = class {
     };
     return session === null ? inPlace() : this.sessions.run(session, inPlace);
   }
-  // A click's gather, one at a time daemon-wide and in no turn: its probes share
-  // a rate window across sessions, so two at once would refuse the second.
-  gathering(gather) {
-    return this.gathers.run(GATHERS, gather);
+  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
+  // kept them: its probes share rate windows across sessions, so a slow gather
+  // refuses none behind it. Two within a window still meet the limiter's
+  // refusal, the doctor's 'click again'.
+  async gathering(gather) {
+    this.gathersInFlight++;
+    try {
+      return await this.gathers.run(GATHERS, gather);
+    } finally {
+      this.gathersInFlight--;
+    }
   }
   getStats() {
     const { holder, queued } = this;
     return {
       holder: holder?.verb ?? null,
       heldMs: holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
-      queued
+      queued,
+      gathers: this.gathersInFlight
     };
   }
   close() {
