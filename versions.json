@@ -4,15 +4,22 @@
     {
       "version": "pr-544",
       "ref": "refs/pull/544/merge",
-      "sha": "2facaa4920cceede34cad55cf719eafd8a58f20f",
-      "timestamp": "2026-11-01T08:38:05.021Z",
+      "sha": "4c02c9bcb5002174905b917ba035bd9c61d9cd5f",
+      "timestamp": "2026-11-01T08:44:53.871Z",
       "commits": [
         {
-          "sha": "2facaa4920cceede34cad55cf719eafd8a58f20f",
+          "sha": "4c02c9bcb5002174905b917ba035bd9c61d9cd5f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T08:37:06Z",
-          "message": "Merge c63420662dab68cbfd6b4906e9d549318061c180 into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
+          "timestamp": "2026-11-01T08:44:00Z",
+          "message": "Merge 51090ccd608d60d89ff09d70ec7694341decd606 into 9609332f9a9c2241f95596ea95225dae70482e95\n"
+        },
+        {
+          "sha": "51090ccd608d60d89ff09d70ec7694341decd606",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:43:49-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into worktree-statusline-landscape\n"
         },
         {
           "sha": "c63420662dab68cbfd6b4906e9d549318061c180",
