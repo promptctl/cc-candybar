@@ -35279,7 +35279,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.176.0";
+var PACKAGE_VERSION = "1.177.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35743,7 +35743,7 @@ var RATE_LIMITS = {
   // for any human click cadence.
   "click.pbcopy": 1e3,
   "click.open": 1e3,
-  // A click's probe, which holds the journal's turn for up to its 2 s timeout.
+  // A click's probe, run ahead of its turn for up to its 2 s timeout.
   "doctor.tmux": 1e3,
   "doctor.font": 1e3,
   "doctor.process": 1e3,
@@ -65028,7 +65028,9 @@ var SettingsHistory = class {
   }
   begin() {
     const pending2 = /* @__PURE__ */ new Map();
+    let written2 = false;
     const note = (sessionId2, change) => {
+      written2 = true;
       const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
       const earlier = changes.get(identity2(change));
       changes.set(
@@ -65040,8 +65042,11 @@ var SettingsHistory = class {
     const toggles = /* @__PURE__ */ new Map();
     const sessionState = recordingView(
       this.sessionState,
-      (key) => isSettingKey(key) || key === EDIT_MODE_KEY,
+      // Every key, since a write of any can move a lane: only settings are steps.
+      () => true,
       (sessionId2, key, before, after) => {
+        written2 = true;
+        if (!isSettingKey(key) && key !== EDIT_MODE_KEY) return;
         if (key === EDIT_MODE_KEY) {
           const earlier = toggles.get(sessionId2);
           toggles.set(sessionId2, {
@@ -65056,6 +65061,10 @@ var SettingsHistory = class {
     return {
       sessionState,
       file: (sessionId2, file, before, after) => note(sessionId2, { kind: "file", file, before, after }),
+      wrote: () => {
+        written2 = true;
+      },
+      written: () => written2,
       commit: () => {
         const committing = new Map(pending2);
         const toggled = new Map(toggles);
@@ -69002,6 +69011,24 @@ var readStores = (stores) => ({
   clicked: stores.clicked.read(),
   postMortemsRead: stores.postMortemsRead.read()
 });
+function oneAskPerClick(edge) {
+  const asked2 = /* @__PURE__ */ new Map();
+  const once2 = (question, ask) => {
+    const key = JSON.stringify(question);
+    const answer2 = asked2.get(key) ?? ask();
+    asked2.set(key, answer2);
+    return answer2;
+  };
+  return {
+    ...edge,
+    probeTmux: (hint) => once2(["tmux", hint], () => edge.probeTmux(hint)),
+    remoteLogin: (pid2) => once2(["remote", pid2], () => edge.remoteLogin(pid2)),
+    fontInUse: (terminal, env2, glyphs) => once2(
+      ["font", terminal, env2, glyphs],
+      () => edge.fontInUse(terminal, env2, glyphs)
+    )
+  };
+}
 var TMUX_CLIENT_FORMAT = "#{client_termfeatures}	#{client_termtype}	#{client_termname}	#{client_pid}	#{client_utf8}";
 function parseTmuxClient(stdout2) {
   const line = stdout2.replace(/\n$/, "");
@@ -69638,8 +69665,8 @@ var RuntimeStats = class _RuntimeStats {
         budgetBytes: 0
       },
       effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0 },
+      menuIdle: { sessions: 0, armed: 0, pending: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -69884,6 +69911,10 @@ function parseSessionId(raw) {
 }
 
 // src/daemon/verbs/index.ts
+var inTurn = (handler) => ({
+  gathers: false,
+  prepare: async (value) => (ctx) => handler(value, ctx)
+});
 function requireSessionId(value) {
   const parsed2 = parseSessionId(value);
   if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
@@ -69910,17 +69941,13 @@ async function clickLaunch(launcher, opts, what, log) {
   );
 }
 function pbcopy(text4, ctx) {
-  return ctx.landed(
-    clickLaunch(
-      ctx.launcher,
-      {
-        bin: "/usr/bin/pbcopy",
-        stdinInput: text4,
-        category: "click.pbcopy"
-      },
-      "pbcopy",
-      ctx.log
-    )
+  return ctx.launch(
+    {
+      bin: "/usr/bin/pbcopy",
+      stdinInput: text4,
+      category: "click.pbcopy"
+    },
+    "pbcopy"
   );
 }
 var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -69945,17 +69972,13 @@ var copyDiagnostic = async (value, ctx) => {
     );
   await pbcopy(text4, ctx);
 };
-var openVscode = (value, ctx) => ctx.landed(
-  clickLaunch(
-    ctx.launcher,
-    {
-      bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", oneArg(value)],
-      category: "click.open"
-    },
-    'open -a "Visual Studio Code"',
-    ctx.log
-  )
+var openVscode = (value, ctx) => ctx.launch(
+  {
+    bin: "/usr/bin/open",
+    args: ["-a", "Visual Studio Code", oneArg(value)],
+    category: "click.open"
+  },
+  'open -a "Visual Studio Code"'
 );
 var toolbarToggle = async (value, ctx) => {
   const sessionId2 = requireSessionId(oneArg(value));
@@ -70446,6 +70469,7 @@ var undo = async (value, ctx) => {
   const sid = requireSessionId(sessionId2);
   ctx.journal.commit();
   const step4 = ctx.history.undo(sid);
+  ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
@@ -70462,6 +70486,7 @@ var back = async (value, ctx) => {
 var rewind = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
+  ctx.journal.wrote();
   const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
   ctx.log(
@@ -70474,6 +70499,7 @@ var redo = async (value, ctx) => {
   const sid = requireSessionId(sessionId2);
   ctx.journal.commit();
   const step4 = ctx.history.redo(sid);
+  ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
@@ -70508,45 +70534,72 @@ function writeReport(ctx, sid, facts) {
     `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
 }
-async function clickFacts(ctx, sid) {
+async function clickGather(ctx, sid, doctor, load) {
   const scope = {
     kind: "clicked",
     sessionId: sid,
     via: ctx.arrival.via
   };
   const said = ctx.clients.ofSession(sid, ctx.now());
-  let gathered;
+  let facts;
   try {
-    gathered = await ctx.landed(
-      gatherFacts(
-        ctx.doctor,
-        sessionHints(ctx, sid),
-        sessionOrigin(ctx, sid),
-        (key) => ctx.sessionState.get(sid, key),
-        { kind: "ok", value: ctx.serving() },
-        { kind: "ok", value: said.map((s) => s.rateLimits) },
-        { kind: "ok", value: said.map((s) => s.transcript) },
-        scope,
-        { kind: "ok", value: barsOf(scope, said) },
-        sessionWidth(sid, said),
-        readStores(ctx.doctorStores)
-      )
+    facts = await gatherFacts(
+      { ...doctor, loadConfig: () => load },
+      sessionHints(ctx, sid),
+      sessionOrigin(ctx, sid),
+      (key) => ctx.sessionState.get(sid, key),
+      { kind: "ok", value: ctx.serving() },
+      { kind: "ok", value: said.map((s) => s.rateLimits) },
+      { kind: "ok", value: said.map((s) => s.transcript) },
+      scope,
+      { kind: "ok", value: barsOf(scope, said) },
+      sessionWidth(sid, said),
+      readStores(ctx.doctorStores)
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  return {
-    ...gathered,
-    urlHandler: clickArrived(ctx.arrival),
+  const gathered = {
+    facts,
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
     install: installFacts(
-      ctx.doctor.install,
+      doctor.install,
       ctx.bundle,
       said.map((s) => s.client)
     ),
-    clicked: clickedFrom(ctx, gathered)
+    current: async (now2) => {
+      const stands = doctor.loadConfig(sessionOrigin(now2, sid));
+      const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
+      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
+    }
+  };
+  return gathered;
+}
+var gatherClick = (ctx, sid) => {
+  const doctor = oneAskPerClick(ctx.doctor);
+  return clickGather(
+    ctx,
+    sid,
+    doctor,
+    doctor.loadConfig(sessionOrigin(ctx, sid))
+  );
+};
+async function clickFacts(ctx, sid, gathered) {
+  const { facts, install: install2 } = await ctx.gather(gathered.current);
+  const stores = readStores(ctx.doctorStores);
+  const read2 = {
+    ...facts,
+    marks: stores.marks,
+    clicked: stores.clicked,
+    daemon: { ...facts.daemon, read: stores.postMortemsRead }
+  };
+  return {
+    ...read2,
+    urlHandler: clickArrived(ctx.arrival),
+    install: install2,
+    clicked: clickedFrom(ctx, read2)
   };
 }
 function clickedFrom(ctx, { terminal, clicked }) {
@@ -70564,9 +70617,13 @@ function clickedFrom(ctx, { terminal, clicked }) {
     return clicked;
   }
 }
-var doctorRun = async (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
-  writeReport(ctx, sid, await clickFacts(ctx, sid));
+var doctorRun = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const sid = requireSessionId(oneArg(value));
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
+  }
 };
 var doctorProbe = async (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
@@ -70582,68 +70639,81 @@ var doctorProbe = async (value, ctx) => {
     `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`
   );
 };
-var doctorFix = async (value, ctx) => {
-  const [sessionId2 = "", checkName = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
-  const check = checkByName(checkName);
-  if (check === void 0) {
-    throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
-  }
-  const facts = await clickFacts(ctx, sid);
-  const verdict = check.probe(facts);
-  if (verdict.ok || verdict.fix === void 0) {
-    throw new BadVerbArgs(
-      `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
+var doctorFix = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const [sessionId2 = "", checkName = ""] = decodeWire(
+      () => decodeSegments(value)
     );
+    const sid = requireSessionId(sessionId2);
+    const check = checkByName(checkName);
+    if (check === void 0) {
+      throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
+    }
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => {
+      const facts = await clickFacts(c, sid, gathered);
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.fix === void 0) {
+        throw new BadVerbArgs(
+          `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
+        );
+      }
+      const after = applyFix(c.doctorStores, verdict.fix, facts);
+      if (after.kind === "failed") {
+        throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
+      }
+      c.log(
+        "info",
+        `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
+      );
+      writeReport(c, sid, after.value);
+    };
   }
-  const after = applyFix(ctx.doctorStores, verdict.fix, facts);
-  if (after.kind === "failed") {
-    throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
-  }
-  ctx.log(
-    "info",
-    `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
-  );
-  writeReport(ctx, sid, after.value);
 };
-var doctorMark = async (value, ctx) => {
-  const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
-  const check = checkByName(checkName);
-  if (check === void 0) {
-    throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
-  }
-  if (!GLYPH_MARKS.includes(mark)) {
-    throw new BadVerbArgs(
-      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+var doctorMark = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
+      () => decodeSegments(value)
     );
+    const sid = requireSessionId(sessionId2);
+    const check = checkByName(checkName);
+    if (check === void 0) {
+      throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
+    }
+    if (!GLYPH_MARKS.includes(mark)) {
+      throw new BadVerbArgs(
+        `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+      );
+    }
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => {
+      const facts = await clickFacts(c, sid, gathered);
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.sighting === void 0) {
+        throw new BadVerbArgs(
+          `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
+        );
+      }
+      const made = [
+        check.name,
+        verdict.sighting.id,
+        mark
+      ];
+      const marks = c.doctorStores.marks.update(
+        (book) => withMark(book, ...made)
+      );
+      if (marks.kind === "failed") {
+        throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
+      }
+      c.log(
+        "info",
+        `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
+      );
+      writeReport(c, sid, { ...facts, marks });
+    };
   }
-  const facts = await clickFacts(ctx, sid);
-  const verdict = check.probe(facts);
-  if (verdict.ok || verdict.sighting === void 0) {
-    throw new BadVerbArgs(
-      `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
-    );
-  }
-  const made = [check.name, verdict.sighting.id, mark];
-  const marks = ctx.doctorStores.marks.update(
-    (book) => withMark(book, ...made)
-  );
-  if (marks.kind === "failed") {
-    throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
-  }
-  ctx.log(
-    "info",
-    `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
-  );
-  writeReport(ctx, sid, {
-    ...facts,
-    marks
-  });
 };
 var slash = async (value, ctx) => {
   const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
@@ -70657,9 +70727,7 @@ var slash = async (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
-  const result = await ctx.landed(
-    typeSlash(ctx.claudeInput, sessionHints(ctx, sid).tmux, action2.slash)
-  );
+  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
   if (result.kind === "refused") {
     ctx.log(
       "warn",
@@ -70749,6 +70817,7 @@ var repoConfig = async (value, ctx) => {
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered2}: ${filed.reason}`);
   }
+  ctx.journal.wrote();
   const { superseded, absent, unchecked } = filed.value;
   ctx.log(
     "info",
@@ -70787,33 +70856,33 @@ var loadConfig2 = async (value, ctx) => {
   }
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
-  [VERB_COPY, copy],
-  [VERB_LOAD_CONFIG, loadConfig2],
-  [VERB_OPEN_VSCODE, openVscode],
-  [VERB_SET_STATE, setState],
-  [VERB_STEP_STATE, stepState],
-  [VERB_SET_CONFIG, setConfig],
-  [VERB_STEP_CONFIG, stepConfig],
-  [VERB_RESET_CONFIG, resetConfig],
-  [VERB_SAVE, save],
-  [VERB_SAVE_PRESET, savePreset],
-  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
-  [VERB_DELETE_PRESET, deletePreset2],
-  [VERB_APPLY_LAYOUT_OP, applyLayoutOp2],
-  [VERB_UNDO, undo],
-  [VERB_REDO, redo],
-  [VERB_BACK, back],
-  [VERB_REWIND, rewind],
-  [VERB_TOOLBAR_TOGGLE, toolbarToggle],
-  [VERB_APPLY_UPDATE, applyUpdate],
+  [VERB_COPY, inTurn(copy)],
+  [VERB_LOAD_CONFIG, inTurn(loadConfig2)],
+  [VERB_OPEN_VSCODE, inTurn(openVscode)],
+  [VERB_SET_STATE, inTurn(setState)],
+  [VERB_STEP_STATE, inTurn(stepState)],
+  [VERB_SET_CONFIG, inTurn(setConfig)],
+  [VERB_STEP_CONFIG, inTurn(stepConfig)],
+  [VERB_RESET_CONFIG, inTurn(resetConfig)],
+  [VERB_SAVE, inTurn(save)],
+  [VERB_SAVE_PRESET, inTurn(savePreset)],
+  [VERB_SAVE_THEME_DEFAULT, inTurn(saveThemeDefault)],
+  [VERB_DELETE_PRESET, inTurn(deletePreset2)],
+  [VERB_APPLY_LAYOUT_OP, inTurn(applyLayoutOp2)],
+  [VERB_UNDO, inTurn(undo)],
+  [VERB_REDO, inTurn(redo)],
+  [VERB_BACK, inTurn(back)],
+  [VERB_REWIND, inTurn(rewind)],
+  [VERB_TOOLBAR_TOGGLE, inTurn(toolbarToggle)],
+  [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, doctorProbe],
-  [VERB_SLASH, slash],
-  [VERB_RUN, run2],
-  [VERB_REPO_CONFIG, repoConfig],
-  [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
+  [VERB_DOCTOR_PROBE, inTurn(doctorProbe)],
+  [VERB_SLASH, inTurn(slash)],
+  [VERB_RUN, inTurn(run2)],
+  [VERB_REPO_CONFIG, inTurn(repoConfig)],
+  [VERB_COPY_DIAGNOSTIC, inTurn(copyDiagnostic)]
 ]);
 var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_SET_STATE,
@@ -70871,19 +70940,31 @@ function sessionOfEffects(effects) {
   const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
   return sid === "" ? null : parseSessionId(sid);
 }
-var dispatch = async (rawValue, ctx) => {
+var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
+  (e) => () => Promise.reject(e)
+);
+async function perform(verb, value, ctx, gathered) {
+  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
+  await step4(ctx);
+}
+async function headGather(rawValue, ctx) {
+  const [head] = batchAdjacentWrites(parseEffects(rawValue));
+  const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
+  return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
+}
+async function foldEffects(rawValue, ctx, gathered) {
   const errors2 = [];
   let operational = false;
   const effects = parseEffects(rawValue);
   const session = sessionOfEffects(effects);
-  for (const { verb, value } of batchAdjacentWrites(effects)) {
-    const handler = LEAF_VERBS.get(verb);
-    if (!handler) {
+  for (const [i, { verb, value }] of batchAdjacentWrites(effects).entries()) {
+    const leaf = LEAF_VERBS.get(verb);
+    if (!leaf) {
       errors2.push(`unknown effect verb "${verb}"`);
       continue;
     }
     try {
-      await handler(value, ctx);
+      await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
     } catch (e) {
       if (e instanceof DaemonClosing) {
         if (errors2.length > 0)
@@ -70906,7 +70987,7 @@ var dispatch = async (rawValue, ctx) => {
     const message = `dispatch: ${errors2.join("; ")}`;
     throw operational ? new Error(message) : new BadVerbArgs(message);
   }
-};
+}
 function throwAll(failures) {
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1) {
@@ -70915,96 +70996,125 @@ function throwAll(failures) {
     );
   }
 }
-function journaled(verb, handler, sessionOf, asker) {
-  const inTurn = async (value, ctx, turn) => {
-    const sid = sessionOf(value);
-    const lanes = sid === null ? null : laneMeter(ctx, sid);
-    const journal = ctx.history.begin();
-    const navigation = ctx.navigation.begin(journal.sessionState);
-    const commit3 = turn.holds(() => {
-      const failed2 = [];
-      for (const step4 of [navigation, journal]) {
-        try {
-          step4.commit();
-        } catch (e) {
-          failed2.push(e);
-        }
-      }
-      throwAll(failed2);
-    });
-    const failures = [];
-    const closing = (store) => closingView(
-      store,
-      (sid2) => nestOf(ctx, sid2),
-      (line) => ctx.log("info", line)
-    );
-    try {
-      await handler(value, {
-        ...ctx,
-        sessionState: closing(journal.sessionState),
-        journal,
-        navigating: closing(navigation.sessionState),
-        landed: turn.landed
-      });
-    } catch (e) {
-      failures.push(e);
-    }
-    let live = true;
-    try {
-      live = commit3();
-    } catch (e) {
-      failures.push(e);
-    }
-    if (live && lanes !== null) {
+async function journaled(sid, ctx, turn, handler) {
+  const lanes = sid === null ? null : laneMeter(ctx, sid);
+  const journal = ctx.history.begin();
+  const navigation = ctx.navigation.begin(journal.sessionState);
+  const commit3 = turn.holds(() => {
+    const failed2 = [];
+    for (const step4 of [navigation, journal]) {
       try {
-        ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
+        step4.commit();
       } catch (e) {
-        failures.push(e);
+        failed2.push(e);
       }
     }
-    if (live && sid !== null) {
-      try {
-        const origin = recordedOrigin(ctx, sid);
-        if (origin !== null) ctx.views.follow(sid, origin);
-      } catch (e) {
-        failures.push(e);
-      }
-    }
-    throwAll(failures);
+    throwAll(failed2);
+  });
+  const failures = [];
+  const closing = (store) => closingView(
+    store,
+    (sid2) => nestOf(ctx, sid2),
+    (line) => ctx.log("info", line)
+  );
+  const journaling = {
+    ...ctx,
+    sessionState: closing(journal.sessionState),
+    journal,
+    navigating: closing(navigation.sessionState)
   };
-  return (value, ctx) => ctx.journalTurns.take(verb, asker(ctx), (turn) => inTurn(value, ctx, turn));
+  const launches = {
+    launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
+    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line))
+  };
+  try {
+    await handler({
+      ...journaling,
+      ...launches,
+      gather: (work) => turn.landed(work(journaling))
+    });
+  } catch (e) {
+    failures.push(e);
+  }
+  let live = true;
+  try {
+    live = commit3();
+  } catch (e) {
+    failures.push(e);
+  }
+  if (live && lanes !== null) {
+    try {
+      const after = lanes.read();
+      ctx.lanes.clicked(
+        lanes.sessionId,
+        journal.written() ? lanes.before : after,
+        after
+      );
+    } catch (e) {
+      failures.push(e);
+    }
+  }
+  if (live && sid !== null) {
+    try {
+      const origin = recordedOrigin(ctx, sid);
+      if (origin !== null) ctx.views.follow(sid, origin);
+    } catch (e) {
+      failures.push(e);
+    }
+  }
+  throwAll(failures);
 }
-var VERBS = new Map(
-  [...LEAF_VERBS, [VERB_DISPATCH, dispatch]].map(([verb, handler]) => {
-    const sessionOf = (value) => {
-      const session = clickSessionOf(verb, value);
-      return session?.ok ? session.id : null;
-    };
-    return [
+function click(verb, gather, handler) {
+  return async (value, ctx) => {
+    const session = clickSessionOf(verb, value);
+    const sid = session?.ok ? session.id : null;
+    return ctx.journalTurns.click(
       verb,
-      journaled(
+      sid,
+      {
+        placed: ctx.placeWaited,
+        waited: ctx.turnWaited,
+        gone: ctx.clientGone,
+        gathered: ctx.gatherTook
+      },
+      () => gather(value, ctx),
+      (gathered, turn) => journaled(sid, ctx, turn, async (c) => {
+        try {
+          await handler(value, c, gathered);
+        } finally {
+          if (sid !== null) ctx.clickLanded(sid);
+        }
+      })
+    );
+  };
+}
+var VERBS = new Map([
+  ...[...LEAF_VERBS].map(
+    ([verb, leaf]) => [
+      verb,
+      click(
         verb,
-        async (value, ctx) => {
-          try {
-            await handler(value, ctx);
-          } finally {
-            const sid = sessionOf(value);
-            if (sid !== null) ctx.clickLanded(sid);
-          }
-        },
-        sessionOf,
-        (ctx) => ({ waited: ctx.turnWaited, gone: ctx.clientGone })
+        async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
+        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
       )
-    ];
-  })
-);
+    ]
+  ),
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
+  // After the leaves, so it replaces the click they built: a probe writes no
+  // journal, so nothing may refuse it for a turn.
+  [VERB_DOCTOR_PROBE, doctorProbe]
+]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
 function closeIdleMenus(sid, idle, ctx) {
-  return journaled(
+  return ctx.journalTurns.take(
     "menu-idle",
-    async (_value, c) => {
+    {
+      waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
+      gone: () => false
+    },
+    (turn) => journaled(sid, ctx, turn, async (c) => {
       if (!idle.stillIdle()) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
@@ -71022,13 +71132,8 @@ function closeIdleMenus(sid, idle, ctx) {
         "info",
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
       );
-    },
-    () => sid,
-    (c) => ({
-      waited: (ms) => c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
-      gone: () => false
     })
-  )("", ctx);
+  );
 }
 
 // src/click/read.ts
@@ -77245,7 +77350,7 @@ var VERB_FACT = {
   "tmux-status": "linkVerb"
 };
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  const { clock, menuIdle, verbCtx } = parts;
+  const { menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
@@ -77256,17 +77361,24 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
+  const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    menuIdle.clicked(session.id, instantOf(clock.date()));
+  else if (pending2 !== null) {
+    noteFacts(facts, { sid: pending2 });
+    menuIdle.clickArrived(pending2);
   }
-  await handler(value, {
-    ...verbCtx,
-    arrival,
-    turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-    clientGone
-  });
+  try {
+    await handler(value, {
+      ...verbCtx,
+      arrival,
+      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
+      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
+      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+      clientGone
+    });
+  } finally {
+    if (pending2 !== null) menuIdle.clickSettled(pending2);
+  }
   return { kind: "ok" };
 }
 function clickReply(outcome) {
@@ -77292,11 +77404,11 @@ async function statusLineClick(parts, value, facts, clientGone) {
     kind: "bad-request",
     problems: [problem]
   });
-  const click2 = tmuxStatusLines.linkAt(value);
-  if (click2.kind === "refused") return refused(click2.reason);
-  noteFacts(facts, { link: click2.url });
-  if (click2.url.startsWith("cc-candybar://")) {
-    const parsed2 = decodeWire(() => parseHandlerUrl(click2.url));
+  const click3 = tmuxStatusLines.linkAt(value);
+  if (click3.kind === "refused") return refused(click3.reason);
+  noteFacts(facts, { link: click3.url });
+  if (click3.url.startsWith("cc-candybar://")) {
+    const parsed2 = decodeWire(() => parseHandlerUrl(click3.url));
     if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
       return refused("a status-line link names another status-line click");
     return handleClick(
@@ -77312,10 +77424,10 @@ async function statusLineClick(parts, value, facts, clientGone) {
     parts.launcher,
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [click2.url],
+      args: [click3.url],
       category: "click.open"
     },
-    `opening ${click2.url}`,
+    `opening ${click3.url}`,
     parts.log
   );
   return { kind: "ok" };
@@ -83852,16 +83964,20 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 // src/daemon/journal-turns.ts
 init_globals();
 var DAEMON_WIDE = "journals";
+var GATHERS = "gathers";
 var JournalTurns = class {
   constructor(deps) {
     this.deps = deps;
   }
   deps;
   queue = new KeyedSerialQueue();
+  sessions = new KeyedSerialQueue();
+  gathers = new KeyedSerialQueue();
   open = true;
   inFlight = null;
   holder = null;
   queued = 0;
+  gathersInFlight = 0;
   // Runs `body` in its turn, unless the daemon closed or the asker left while
   // it waited: a click whose client took a TIMEOUT never lands, so clicking
   // again cannot revert a toggle.
@@ -83889,12 +84005,50 @@ var JournalTurns = class {
       }
     });
   }
+  // A click from arrival to landing: in `session`'s order (a click naming none
+  // goes straight on), `gather` outside any turn, `body` in one.
+  // [LAW:single-enforcer] `gone` is read for a click's waits and never for its
+  // own gather: a client that left at the head of its queue, or after the
+  // gather while the turn was awaited, refuses the click; one that left during
+  // the gather does not, since a gather outlasts a client's budget through no
+  // fault of a re-click. With no gather `left` is false, as it was just read.
+  click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
+    const arrived3 = this.deps.monotonic();
+    const inPlace = async () => {
+      placed2(Math.round(this.deps.monotonic() - arrived3));
+      this.refuseClosed(verb);
+      if (gone()) throw new ClickAbandoned(verb);
+      const started2 = this.deps.monotonic();
+      const gathering = await gather();
+      gathered(Math.round(this.deps.monotonic() - started2));
+      const left = gone();
+      return this.take(
+        verb,
+        { waited, gone: () => !left && gone() },
+        (turn) => body(gathering, turn)
+      );
+    };
+    return session === null ? inPlace() : this.sessions.run(session, inPlace);
+  }
+  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
+  // kept them: its probes share rate windows across sessions, so a slow gather
+  // refuses none behind it. Two within a window still meet the limiter's
+  // refusal, the doctor's 'click again'.
+  async gathering(gather) {
+    this.gathersInFlight++;
+    try {
+      return await this.gathers.run(GATHERS, gather);
+    } finally {
+      this.gathersInFlight--;
+    }
+  }
   getStats() {
     const { holder, queued } = this;
     return {
       holder: holder?.verb ?? null,
       heldMs: holder === null ? 0 : Math.round(this.deps.monotonic() - holder.since),
-      queued
+      queued,
+      gathers: this.gathersInFlight
     };
   }
   close() {
@@ -83926,20 +84080,36 @@ var MenuIdle = class {
   }
   deps;
   sessions = /* @__PURE__ */ new Map();
+  // Clicks in flight per session, entries deleted at zero. Apart from the
+  // records, which eviction drops under a click that is still in flight.
+  pending = /* @__PURE__ */ new Map();
   disposed = false;
   // A click in the session starts a new idle period.
   clicked(sessionId2, at) {
     const idle = this.record(sessionId2, at);
     idle.since = at;
-    idle.clicks++;
     this.settle(sessionId2);
+  }
+  // A click of the session arrived: no deadline until it settles.
+  clickArrived(sessionId2) {
+    this.pending.set(sessionId2, (this.pending.get(sessionId2) ?? 0) + 1);
+    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
+  }
+  // A click of the session landed or was refused, after any landing stamp. A
+  // record evicted meanwhile has no timer left to follow it.
+  clickSettled(sessionId2) {
+    const left = this.pending.get(sessionId2) - 1;
+    if (left === 0) this.pending.delete(sessionId2);
+    else this.pending.set(sessionId2, left);
+    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
   }
   // When the idle period of the menus the session's last frame drew began —
   // its last click, or the first frame that drew them, whichever is later —
   // or nothing, while it drew none: a menu that appears now has only begun.
+  // Nothing too while a click is in flight: no close is due to count down to.
   since(sessionId2, at) {
     const idle = this.record(sessionId2, at);
-    return idle.shown ? idle.since : void 0;
+    return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
   }
   // What the session's newest frame drew: whether a menu row, and the
   // timeout its settings resolve to. Frames are taken by their instant, not
@@ -83956,11 +84126,14 @@ var MenuIdle = class {
     idle.timeoutS = timeoutS;
     this.settle(sessionId2);
   }
-  // The sessions whose clocks are kept, and those whose close timer is armed.
+  // The sessions whose clocks are kept, those whose close timer is armed, and
+  // the clicks in flight.
   getStats() {
     let armed = 0;
     for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
-    return { sessions: this.sessions.size, armed };
+    let pending2 = 0;
+    for (const count of this.pending.values()) pending2 += count;
+    return { sessions: this.sessions.size, armed, pending: pending2 };
   }
   dispose() {
     this.disposed = true;
@@ -83970,7 +84143,6 @@ var MenuIdle = class {
   record(sessionId2, at) {
     const idle = this.sessions.get(sessionId2) ?? {
       since: at,
-      clicks: 0,
       timeoutS: 0,
       shown: false,
       drawnAt: at,
@@ -83989,7 +84161,7 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
+    const due = idle.shown && !idle.closing && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -84011,20 +84183,20 @@ var MenuIdle = class {
   // after this one: never at once, and never for a session that stopped
   // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
   // among the journals, so whether the session is still idle is read in that
-  // turn: a click since this firing, or one landing ahead of it, keeps what
-  // it opened. The record follows that decision (`closed`), and until the
-  // close settles no frame arms another. A close that failed waits a timeout
-  // too, so it is retried at that pace and not at every frame.
+  // turn: a click since this firing keeps what it opened. The record follows
+  // that decision (`closed`), and until the close settles no frame arms
+  // another. A close that failed waits a timeout too, so it is retried at that
+  // pace and not at every frame.
   fire(sessionId2) {
     const idle = this.sessions.get(sessionId2);
     idle.timer = null;
     const now2 = this.deps.now();
-    const lastClick = idle.clicks;
     const closing = {
       idleS: now2 - idle.since,
       timeoutS: idle.timeoutS,
-      // An evicted record stops counting, so its session is no longer known idle.
-      stillIdle: () => this.sessions.get(sessionId2) === idle && idle.clicks === lastClick,
+      // A click arrived after this firing is queued behind the close, and an
+      // evicted record stops counting, so its session is no longer known idle.
+      stillIdle: () => this.sessions.get(sessionId2) === idle && !this.pending.has(sessionId2),
       closed: () => {
         idle.since = now2;
         idle.shown = false;
@@ -84410,8 +84582,8 @@ function createDaemon(inputs) {
     clock,
     exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn, and
-    // close ends those (src/daemon/journal-turns.ts); a subscribe its request
+    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
+    // and close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
@@ -84929,7 +85101,7 @@ function copy2(text4) {
     (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text4}`
   );
 }
-async function click(url, size) {
+async function click2(url, size) {
   const effects = effectsOf(url);
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
@@ -84980,7 +85152,7 @@ var transport = {
   about: `This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>'s own daemon, compiled for the browser and running in this page against a simulated machine. The bar replays a few turns of a Claude Code session. Every click is real: open the \u{1F36B} menu, switch themes, arrange segments.`,
   landscape: "landscape/",
   render: render2,
-  click,
+  click: click2,
   // A new session over the bundled config: what the visitor's clicks wrote is
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {
