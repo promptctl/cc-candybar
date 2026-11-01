@@ -10,15 +10,35 @@ import {
   parseEffects,
   encodeSegments,
   decodeSegments,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_APPLY_UPDATE,
+  VERB_BACK,
   VERB_COPY,
+  VERB_COPY_DIAGNOSTIC,
+  VERB_DELETE_PRESET,
   VERB_DISPATCH,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
   VERB_LOAD_CONFIG,
+  VERB_OPEN_VSCODE,
+  VERB_REDO,
+  VERB_REPO_CONFIG,
   VERB_RESET_CONFIG,
+  VERB_REWIND,
+  VERB_RUN,
+  VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
+  VERB_SET_CONFIG,
   VERB_SET_STATE,
+  VERB_SLASH,
+  VERB_STEP_CONFIG,
   VERB_STEP_STATE,
+  VERB_TOOLBAR_TOGGLE,
+  VERB_UNDO,
   batchAdjacentWrites,
+  type Effect,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
@@ -45,7 +65,9 @@ describe("click wire — encode/decode round-trip", () => {
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
     ]);
-    expect(url.startsWith("cc-candybar://dispatch/e=")).toBe(true);
+    expect(url.startsWith("cc-candybar://dispatch/does=set+theme+to+nord&e=")).toBe(
+      true,
+    );
     expect(effectsOf(url)).toEqual([
       { verb: "set-state", args: [SID, "theme", "nord"] },
     ]);
@@ -84,12 +106,212 @@ describe("click wire — encode/decode round-trip", () => {
   });
 });
 
+// [LAW:verifiable-goals] What a hover reads for each verb, pinned word for word.
+// test/click-does.test.ts holds these to the bar's real clicks.
+describe("a link says in words what its click does", () => {
+  const spelled = (effects: readonly Effect[]): string =>
+    /^cc-candybar:\/\/dispatch\/does=([^&]*)/.exec(effectsUrl(effects))![1]!;
+  const does = (effects: readonly Effect[]): string =>
+    new URLSearchParams(`does=${spelled(effects)}`).get("does")!;
+  const MAC = "ab".repeat(32);
+
+  test.each<[Effect, string]>([
+    [
+      { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
+      "set theme to nord",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "closed"] },
+      "close candybar.tab",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "menus.pickers", "apply.theme"] },
+      "open apply.theme",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "menus.pickers", "closed"] },
+      "close pickers",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "menupages.menus.pickers", "2"] },
+      "turn pickers to page 3",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "candybar.diagnostics", "2583095"] },
+      "open diagnostics",
+    ],
+    [
+      { verb: VERB_STEP_STATE, args: [SID, "padding", "1"] },
+      "step padding up by 1",
+    ],
+    [
+      { verb: VERB_STEP_STATE, args: [SID, "padding", "-1"] },
+      "step padding down by 1",
+    ],
+    [
+      { verb: VERB_SET_CONFIG, args: [SID, "wrap", "true"] },
+      "save wrap as true",
+    ],
+    [
+      { verb: VERB_STEP_CONFIG, args: [SID, "padding", "-1"] },
+      "save step padding down by 1",
+    ],
+    [{ verb: VERB_RESET_CONFIG, args: [SID, "palette"] }, "reset palette"],
+    [
+      {
+        verb: VERB_APPLY_LAYOUT_OP,
+        args: [SID, "presets.a.root", "remove:model"],
+      },
+      "edit remove:model in presets.a.root",
+    ],
+    [{ verb: VERB_COPY, args: ["/tmp/proj"] }, "copy /tmp/proj"],
+    [
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "42"] },
+      "copy diagnostic",
+    ],
+    [
+      { verb: VERB_OPEN_VSCODE, args: ["/tmp/a.ts"] },
+      "open /tmp/a.ts in vs code",
+    ],
+    [{ verb: VERB_TOOLBAR_TOGGLE, args: [SID] }, "toggle the toolbar"],
+    [
+      { verb: VERB_LOAD_CONFIG, args: [SID, "/tmp/c.json5"] },
+      "load config /tmp/c.json5",
+    ],
+    [{ verb: VERB_SAVE, args: [SID] }, "save settings"],
+    [{ verb: VERB_SAVE_PRESET, args: [SID] }, "save as a new preset"],
+    [
+      { verb: VERB_SAVE_THEME_DEFAULT, args: [SID] },
+      "save this look for the theme",
+    ],
+    [
+      { verb: VERB_DELETE_PRESET, args: [SID, "custom-1"] },
+      "delete preset custom-1",
+    ],
+    [{ verb: VERB_UNDO, args: [SID] }, "undo"],
+    [{ verb: VERB_REDO, args: [SID] }, "redo"],
+    [{ verb: VERB_BACK, args: [SID] }, "go back"],
+    [{ verb: VERB_REWIND, args: [SID] }, "cancel edits"],
+    [{ verb: VERB_APPLY_UPDATE, args: [SID] }, "update cc-candybar"],
+    [{ verb: VERB_DOCTOR_RUN, args: [SID] }, "run doctor"],
+    [{ verb: VERB_DOCTOR_FIX, args: [SID, "hooks"] }, "fix hooks"],
+    [
+      { verb: VERB_DOCTOR_MARK, args: [SID, "glyphs", "yes"] },
+      "mark glyphs yes",
+    ],
+    [{ verb: VERB_SLASH, args: [SID, "/clear"] }, "type /clear"],
+    [{ verb: VERB_RUN, args: [SID, "deploy", "{}", MAC] }, "run deploy"],
+    [
+      { verb: VERB_REPO_CONFIG, args: [SID, "/tmp/repo", "approved", MAC] },
+      "approved config in /tmp/repo",
+    ],
+  ])("%j says %s", (effect, text) => {
+    expect(does([effect])).toBe(text);
+  });
+
+  test("a click that does several things says the first and counts the rest", () => {
+    expect(
+      does([
+        { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
+        { verb: VERB_SET_STATE, args: [SID, "a", "1", "b", "2"] },
+      ]),
+    ).toBe("set candybar.tab to look and 2 more");
+  });
+
+  test("what a click fires speaks over the session writes around it", () => {
+    expect(
+      does([
+        {
+          verb: VERB_SET_STATE,
+          args: [SID, "commands.clear.armed", "disarmed"],
+        },
+        { verb: VERB_SLASH, args: [SID, "/clear"] },
+      ]),
+    ).toBe("type /clear and 1 more");
+  });
+
+  test("a hover reads words joined the way a form joins them", () => {
+    expect(
+      spelled([{ verb: VERB_SET_STATE, args: [SID, "preset", "compact"] }]),
+    ).toBe("set+preset+to+compact");
+  });
+
+  test.each(["▲", "a b", "a-b", "a+b", "a&b=c#d", "100%"])(
+    "the value %s keeps every character",
+    (value) => {
+      const text = does([{ verb: VERB_SET_STATE, args: [SID, "k", value] }]);
+      expect(text).toBe(`set k to ${value}`);
+    },
+  );
+
+  test("a link is printable ASCII whatever a value holds", () => {
+    expect(
+      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "k", "▲ 🍫"] }]),
+    ).toMatch(/^[\x21-\x7e]+$/);
+  });
+
+  test("a long copied text keeps both ends, whole characters at each", () => {
+    const text = does([
+      { verb: VERB_COPY, args: [`${"🍫".repeat(80)}/config.json5`] },
+    ]);
+    expect(text).toMatch(/^copy 🍫+\.\.\.🍫+\/config\.json5$/u);
+    expect([...text].length).toBeLessThanOrEqual("copy ".length + 60);
+  });
+
+  test("only copied text is cut", () => {
+    const value = "a".repeat(200);
+    expect(does([{ verb: VERB_SET_STATE, args: [SID, "k", value] }])).toBe(
+      `set k to ${value}`,
+    );
+  });
+
+  test("a draw that holds a fact the effects do not can say it instead", () => {
+    const effects: Effect[] = [
+      { verb: VERB_SET_STATE, args: [SID, "k", "2583095899324419"] },
+    ];
+    const url = effectsUrl(effects, "show diagnostic 2 of 15 page 3");
+    expect(url).toContain("does=show+diagnostic+2+of+15+page+3&e=");
+    expect(effectsOf(url)).toEqual(effectsOf(effectsUrl(effects)));
+  });
+
+  test("the words are not part of the click", () => {
+    const url = effectsUrl([
+      { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
+    ]);
+    expect(effectsOf(url.replace(/does=[^&]*/, "does=anything"))).toEqual(
+      effectsOf(url),
+    );
+  });
+});
+
+// [LAW:one-source-of-truth] The wire is a published contract: a link already in
+// a terminal's scrollback was drawn before `does` existed, and the emitter can no
+// longer spell one, so this shape is written out by hand.
+describe("a dispatch link drawn before `does` existed", () => {
+  const url =
+    "cc-candybar://dispatch/e=set-state%2Fs1%2Ftheme%2Fnord&e=set-state%2Fs1%2Fendcaps%2Fplain";
+
+  test("parses to its effects", () => {
+    expect(effectsOf(url)).toEqual([
+      { verb: "set-state", args: [SID, "theme", "nord"] },
+      { verb: "set-state", args: [SID, "endcaps", "plain"] },
+    ]);
+  });
+
+  test("still runs", async () => {
+    const sessionState = new SessionState();
+    await clickUrl(url, ctx(sessionState));
+    expect(sessionState.get(SID, "theme")).toBe("nord");
+    expect(sessionState.get(SID, "endcaps")).toBe("plain");
+  });
+});
+
 describe("parseHandlerUrl — verb split, value raw", () => {
   test("dispatch URL → verb=dispatch, value is the raw query string", () => {
     const url = effectsUrl([{ verb: VERB_COPY, args: ["hi"] }]);
     const { verb, value } = parseHandlerUrl(url);
     expect(verb).toBe(VERB_DISPATCH);
-    expect(value.startsWith("e=")).toBe(true);
+    expect(parseEffects(value)).toEqual([{ verb: "copy", value: "hi" }]);
   });
 
   test("old direct set-state link still parses (back-compat scrollback)", () => {
@@ -176,7 +398,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const sessionState = new SessionState();
     // A `do` action's members, or a picker option plus its close writes, are
     // separate set-state effects in the URL — the codec carries them as given.
-    const effects = [
+    const effects: Effect[] = [
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ];
@@ -238,7 +460,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
 
   test("a nested dispatch effect is reported, never executed", async () => {
     const sessionState = new SessionState();
-    const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
+    const url = "cc-candybar://dispatch/e=dispatch%2Fwhatever";
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(
       /unknown effect verb "dispatch"/,
     );
@@ -281,7 +503,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
   test("click.error is not written when no session-bearing effect exists", async () => {
     const sessionState = new SessionState();
     // copy-only dispatch with an unknown verb — no session ID available.
-    const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
+    const url = "cc-candybar://dispatch/e=dispatch%2Fwhatever";
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow();
     expect(lastClickError(sessionState, SID)?.text ?? null).toBeNull();
   });

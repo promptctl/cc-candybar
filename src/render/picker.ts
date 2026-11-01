@@ -25,7 +25,7 @@
 
 import { RichText, Style, type ColorRgba } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
+import { effectsUrl, VERB_SET_STATE, type Effect } from "../click/wire.js";
 import {
   presentedAction,
   linkFragment,
@@ -413,7 +413,7 @@ export function renderPicker(
   // CloseWrites); ✕ performs exactly them, and a closeOnPick option click folds
   // the same pairs into its apply write — one atomic set-state either way, so
   // "what closing means" cannot diverge between the two affordances.
-  const closeWrite =
+  const closeWrite: readonly Effect[] =
     close.kind === "led"
       ? []
       : [

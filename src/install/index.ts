@@ -393,7 +393,7 @@ interface ParsedUrl {
 // without using `new URL`, which lowercases hosts (would mangle case-sensitive
 // session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
 // (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
-// value. The dispatch effect list rides as `dispatch/e=…&e=…`, so its query-
+// value. The dispatch effect list rides as `dispatch/does=…&e=…`, so its query-
 // style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
 // in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
 //
