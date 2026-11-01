@@ -75,7 +75,7 @@ function renderPair(
       compiled,
       store,
       registry,
-      { session_id: SESSION, cwd: "/tmp", git: GIT },
+      { session_id: SESSION, cwd: "/tmp", workspace: { current_dir: "/tmp" }, git: GIT },
       instantOf(new Date(AT_SEC * 1000)),
       {
         endcaps: "powerline",
@@ -97,12 +97,12 @@ function renderPair(
 describe("gitaculous settings", () => {
   test("every default reproduces the segment without settings", () => {
     expect(renderPair({}, "collapsed")).toEqual({
-      full: "⎇ feature +2/-1 SU? ▸",
-      lean: "⎇ feature +2/-1 SU? ▸",
+      full: "/tmp ⎇ feature +2/-1 SU? ▸",
+      lean: "/tmp ⎇ feature +2/-1 SU? ▸",
     });
     const { full, lean } = renderPair({}, "expanded");
     expect(full).toBe(
-      "(git) repo [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◷ 5m ◂",
+      "(git) /tmp [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◷ 5m ◂",
     );
     expect(lean).toBe(full);
   });
@@ -115,8 +115,7 @@ describe("gitaculous settings", () => {
     ["flags", "collapsed", " SU?"],
     ["flags", "expanded", " SU?"],
     ["operation", "expanded", " [rebase]"],
-    ["repo", "expanded", " repo"],
-    ["upstream", "expanded", " [origin/feature +2/-1]"],
+        ["upstream", "expanded", " [origin/feature +2/-1]"],
     ["sha", "expanded", " abc1234"],
     ["stash", "expanded", " (1 stashed)"],
     ["age", "expanded", " ◷ 5m"],

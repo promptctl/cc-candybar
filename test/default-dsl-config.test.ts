@@ -1209,24 +1209,24 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const NO_UPSTREAM = { branch: "spike", repoName: "repo", sha: "abc1234" };
     test.each([
-      ["collapsed", REBASING, "⎇ feature +2/-1 SU? ▸"],
+      ["collapsed", REBASING, "/tmp ⎇ feature +2/-1 SU? ▸"],
       [
         "expanded",
         REBASING,
-        "(git) repo [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◂",
+        "(git) /tmp [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◂",
       ],
-      ["collapsed", CLEAN, "⎇ main ▸"],
-      ["expanded", CLEAN, "(git) repo abc1234 ⎇ main [origin/main] ◂"],
-      ["collapsed", NO_UPSTREAM, "⎇ spike ▸"],
-      ["expanded", NO_UPSTREAM, "(git) repo abc1234 ⎇ spike ◂"],
-      ["collapsed", GIT_PAYLOAD.git, "⎇ main +1/-1 SU?!1 ▸"],
+      ["collapsed", CLEAN, "/tmp ⎇ main ▸"],
+      ["expanded", CLEAN, "(git) /tmp abc1234 ⎇ main [origin/main] ◂"],
+      ["collapsed", NO_UPSTREAM, "/tmp ⎇ spike ▸"],
+      ["expanded", NO_UPSTREAM, "(git) /tmp abc1234 ⎇ spike ◂"],
+      ["collapsed", GIT_PAYLOAD.git, "/tmp ⎇ main +1/-1 SU?!1 ▸"],
       [
         "expanded",
         GIT_PAYLOAD.git,
-        "(git) repo abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed) ◂",
+        "(git) /tmp abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed) ◂",
       ],
-      ["collapsed", { branch: "" }, ""],
-      ["expanded", { branch: "" }, ""],
+      ["collapsed", { branch: "" }, "/tmp"],
+      ["expanded", { branch: "" }, "/tmp"],
     ] as const)("%s: %j reads %j", (detail, git, text) => {
       const visible = renderSegment(
         "gitaculous",
@@ -1242,7 +1242,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // variable's default, which a user redeclares to start expanded.
     test("a session starts in the form git.detail defaults to", () => {
       const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
-      expect(strip(renderSegment("gitaculous"))).toBe("⎇ main +1/-1 SU?!1 ▸");
+      expect(strip(renderSegment("gitaculous"))).toBe("/tmp ⎇ main +1/-1 SU?!1 ▸");
       expect(
         strip(
           renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {
@@ -1265,8 +1265,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const ctx = testVerbContext(state, undefined, parsed);
       const arrow = (line: string) => {
         const urls = linkUrls(line);
-        expect(urls).toHaveLength(1);
-        return urls[0]!;
+        expect(urls).toHaveLength(2);
+        return urls[1]!;
       };
       const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
       const collapsed = renderSegment(
@@ -1971,7 +1971,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const lines = visibleLines(
       renderPreset("git", 200, payloadWithPrAndHistory).rendered,
     );
-    expect(lines.find((l) => l.includes("⇆ #181"))).toContain("⎇ main");
+    expect(lines.find((l) => l.includes("⇆ #181"))).toContain("~/c/c/src ⎇ main");
     // What sets it apart from verbose, which also stages gitPr: the status
     // row drops the rate-limit windows the default shows.
     expect(visible(renderPreset("default", 200).rendered)).toContain("◑ ");

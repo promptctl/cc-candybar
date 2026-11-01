@@ -1490,6 +1490,13 @@ function projectPayload(
     ...(workspace !== undefined && { workspace }),
     ...(home !== undefined && { home }),
     ...(git !== undefined && { git }),
+    ...(hookData.location !== undefined && {
+      location: {
+        ...hookData.location,
+        main: posixify(hookData.location.main) ?? "",
+        gitPending: isPending(git),
+      },
+    }),
     ...(tmuxPane !== null && {
       tmux: {
         pane: tmuxPane.pane,
