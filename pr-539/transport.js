@@ -50293,7 +50293,7 @@ var PathWatches = class {
   // since a directory may have appeared unheard, which says its fault, and
   // every subscriber re-reads as if its own watch had reported. Both together,
   // so no variable drops a stall's fault without reading again, and in one
-  // action, so one change of delivery is one publish.
+  // action, so one change of delivery is one publish of this registry's.
   noticed(notice) {
     switch (notice.kind) {
       case "period":
