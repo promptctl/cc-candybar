@@ -794,3 +794,34 @@ describe("a launcher's scope", () => {
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });
+
+describe("launch input a child does not read", () => {
+  const unread = "x".repeat(10 * 1024 * 1024);
+
+  it("leaves a child's success standing", async () => {
+    const launcher = createLauncher({});
+    const r = await launcher.launch({
+      category: "user-shell",
+      bin: "sh",
+      args: ["-c", "exit 0"],
+      stdinInput: unread,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("reports the failed write beside a child's failure", async () => {
+    const launcher = createLauncher({});
+    const r = await launcher.launch({
+      category: "user-shell",
+      bin: "sh",
+      args: ["-c", "exit 1"],
+      stdinInput: unread,
+    });
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "non-zero",
+      exitCode: 1,
+      error: expect.stringMatching(/^stdin: /),
+    });
+  });
+});

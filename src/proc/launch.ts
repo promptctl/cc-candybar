@@ -606,6 +606,9 @@ async function launchWaited(
     // SIGINT propagated through the tty, SIGPIPE on a closed pipe, etc. would
     // all be misreported as "timeout" or "aborted".
     let terminated: Terminated | null = null;
+    // A child may stop reading and still succeed (`head -1`), so its exit stays
+    // the verdict; a failed write only explains a launch that failed anyway.
+    const failure: { error?: string } = {};
 
     const onAbort = () => terminate("aborted");
     const unlisten = () => {
@@ -747,6 +750,7 @@ async function launchWaited(
           stderr,
           exitCode: code,
           signal,
+          ...failure,
         });
         return;
       }
@@ -762,6 +766,7 @@ async function launchWaited(
         stderr,
         exitCode: code,
         signal,
+        ...failure,
       });
     };
 
@@ -773,11 +778,10 @@ async function launchWaited(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
 
-    if (opts.stdinInput !== undefined && child.stdin) {
-      child.stdin.end(opts.stdinInput);
-    } else if (child.stdin) {
-      child.stdin.end();
-    }
+    child.stdin?.on("error", (err) => {
+      failure.error = `stdin: ${err.message}`;
+    });
+    child.stdin?.end(opts.stdinInput);
   });
 }
 
