@@ -22552,6 +22552,7 @@ init_url();
 // src/config/disclosure.ts
 init_globals();
 var DISCLOSURE_CLOSED = "closed";
+var DISCLOSURE_OPEN = "open";
 var DISCLOSURE_GLYPH_CLOSED = "\u25B8";
 var DISCLOSURE_GLYPH_OPEN = "\u25BE";
 var DISCLOSURE_GLYPH_CLOSE = "\u2715";
@@ -23332,7 +23333,7 @@ function pluginScopeCollisions(ctx, out, inherited) {
 
 // src/config/door.ts
 var SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
-var SETTINGS_OPEN = "open";
+var SETTINGS_OPEN = DISCLOSURE_OPEN;
 var SETTINGS_REF = {
   variable: SETTINGS_ANCHOR,
   key: SETTINGS_ANCHOR,
@@ -23372,12 +23373,14 @@ var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_TMUX_STATUS_CLICK = "tmux-status-click";
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
   if (key === DIAGNOSTICS_VIEWING) return "open diagnostics";
-  const menu = key.replace(MENU_PAGE_NS, "").replace(MENU_NS, "");
+  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
   if (key.startsWith(MENU_PAGE_NS))
     return `turn ${menu} to page ${Number(value) + 1}`;
   if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
+  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
   return key.startsWith(MENU_NS) ? `open ${value}` : `set ${key} to ${value}`;
 }
 var COPIED_LENGTH = 60;
@@ -23414,14 +23417,15 @@ var SAYS = {
   [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
   [VERB_SLASH]: ([, line]) => [`type ${line}`],
   [VERB_RUN]: ([, action2]) => [`run ${action2}`],
-  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`${answer2} config in ${dir}`],
+  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`mark config in ${dir} ${answer2}`],
   [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"]
 };
 var spell = (text4) => encodeURIComponent(text4).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
 function clickDoes(effects) {
+  const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
   const [face = "nothing", ...rest2] = [
-    ...effects.filter((e) => e.verb !== VERB_SET_STATE),
-    ...effects.filter((e) => e.verb === VERB_SET_STATE)
+    ...effects.filter((e) => !writesSession(e)),
+    ...effects.filter(writesSession)
   ].flatMap((e) => SAYS[e.verb](e.args));
   return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
 }
@@ -53410,7 +53414,7 @@ function editModeArtifacts() {
 // src/config/help.ts
 init_globals();
 var HELP_GLYPH_CLOSED = "(?)";
-var HELP_OPEN = "open";
+var HELP_OPEN = DISCLOSURE_OPEN;
 function declareHelp(name, lines2, within4, out) {
   const self2 = { variable: name, key: name, member: HELP_OPEN };
   out.variables[name] = {
@@ -56105,7 +56109,7 @@ var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
 var EDIT_LIVE_REF = {
   variable: EDIT_LIVE_KEY,
   key: EDIT_LIVE_KEY,
-  member: "open"
+  member: DISCLOSURE_OPEN
 };
 function configuringVar(presetIdent) {
   return `${EDIT_NS}configuring.p${presetIdent}`;
@@ -65611,7 +65615,7 @@ function handoffRows(handoff, list2, sessionId2, geometry) {
     cell(
       label2,
       new Style({ bgcolor: bg, color: fg }).withLink(
-        viewerLink(sessionId2, open2)
+        viewerLink(sessionId2, open2, "open diagnostics")
       )
     )
   ];
