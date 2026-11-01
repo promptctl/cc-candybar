@@ -390,6 +390,7 @@ describe("every render request writes one render event, whatever its outcome", (
       "sid",
       "turnWait",
       "timedOut",
+      "clientLeft",
       "took",
       "outcome",
     ]);
@@ -405,6 +406,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(unknownVerb.fields.map(([key]) => key)).toEqual([
       "queued",
       "timedOut",
+      "clientLeft",
       "took",
       "outcome",
       "problems",
@@ -420,6 +422,7 @@ describe("every render request writes one render event, whatever its outcome", (
       "verb",
       "turnWait",
       "timedOut",
+      "clientLeft",
       "took",
       "outcome",
       "problems",
@@ -463,6 +466,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(fields.fields.map(([key]) => key)).toEqual([
       "queued",
       "timedOut",
+      "clientLeft",
       "took",
       "outcome",
       "problems",

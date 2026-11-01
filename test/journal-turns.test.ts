@@ -302,8 +302,9 @@ describe("the click path", () => {
       replyTo(
         given,
         { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
-        gone,
+        () => false,
         performance.now(),
+        gone,
       );
     return { send, events };
   }

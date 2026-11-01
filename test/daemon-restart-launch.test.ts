@@ -159,6 +159,7 @@ esac
         renderOf(sid) as unknown as Request,
         () => false,
         first.daemon.clock.monotonic(),
+        () => false,
       )
       .catch(() => null);
 

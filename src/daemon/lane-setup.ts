@@ -660,7 +660,8 @@ export class LaneSetups {
       readonly log: (level: "info" | "warn", msg: string) => void;
       readonly now: () => Instant;
       // [LAW:effects-at-boundaries] Runs a setup in the turn after the click
-      // or request that started it, so the click's journal has committed.
+      // or request that started it, so what that turn still does after
+      // `clicked` (the click's view follow) lands first.
       readonly defer: (run: () => void) => void;
     },
   ) {}

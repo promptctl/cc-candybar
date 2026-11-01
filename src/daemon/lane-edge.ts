@@ -1,9 +1,6 @@
 // The effects a lane's setup performs (src/daemon/lane-setup.ts): tmux calls
 // against the session's recorded server, the `claude` CLI, the process table,
-// and the PATH lookup. What a click waits on is synchronous — a tmux call
-// answers in milliseconds — and what outlasts a click's 200 ms budget (the
-// `claude` CLI, the process table, the wait for an exit) runs off the
-// daemon's loop.
+// and the PATH lookup. Every one is awaited, off the daemon's loop.
 //
 // [LAW:single-enforcer] Every spawn goes through src/proc/launch (tmux through
 // src/proc/tmux), under its own launch category.

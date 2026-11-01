@@ -133,6 +133,7 @@ export async function handleRequest(
   req: Request,
   timedOut: () => boolean,
   accepted: number,
+  clientLeft: () => boolean,
 ): Promise<HandledRequest> {
   if (
     !req ||
@@ -185,7 +186,7 @@ export async function handleRequest(
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(parts, req, timedOut, accepted));
+  return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
 
 // The reply to a request of any kind but a subscribe, past the connection's
@@ -195,6 +196,7 @@ export async function replyTo(
   req: ReplyRequest,
   timedOut: () => boolean,
   accepted: number,
+  clientLeft: () => boolean,
 ): Promise<Reply> {
   const {
     stats,
@@ -389,6 +391,7 @@ export async function replyTo(
     // there.
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N",
       queued: `${queuedMs}ms`,
     });
     const { level, line } = requestEvent(
@@ -413,10 +416,19 @@ export async function replyTo(
     // stopped before it.
     const t0 = clock.monotonic();
     const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(parts, req, facts, timedOut);
-    // Whether the client was already told TIMEOUT while the click waited or
-    // ran: its effect still lands, and the client reported a failure.
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const outcome = await clickOutcome(
+      parts,
+      req,
+      facts,
+      () => timedOut() || clientLeft(),
+    );
+    // Whether the client was told TIMEOUT, and whether it hung up, while the
+    // click ran: its effect lands though the client reported a failure. One
+    // still waiting for its turn at either moment was refused (`abandoned`).
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N",
+    });
     const { level, line } = requestEvent(
       "click",
       facts,

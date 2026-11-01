@@ -359,6 +359,7 @@ export async function clickLaunch(
     log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
+  if (result.reason === "aborted") throw new DaemonClosing(what);
   // What the launch itself said of its failure: the spawn's error, or what
   // the program wrote to stderr before it exited.
   const said = result.error ?? result.stderr.trim();

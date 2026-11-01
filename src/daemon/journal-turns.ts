@@ -10,7 +10,9 @@
 // arrives, and what is in flight is committed there and then, so writes already
 // landed stay undoable as one step when the daemon's launches abort under them,
 // and goes no further than its next `landed`. A click's launches are bounded
-// (`clickLaunch`), so a turn always comes back.
+// (`clickLaunch`), so a turn comes back unless a child outlives SIGKILL, in
+// uninterruptible sleep: its launch never settles, and `getStats` shows the
+// holder's `heldMs` growing.
 
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { ClickAbandoned, DaemonClosing } from "./verb-error.js";

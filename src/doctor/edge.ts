@@ -902,36 +902,42 @@ export async function gatherFacts(
       ...privateGlyphsIn(JSON.stringify(load.config)),
     ]),
   ].join("");
-  return {
-    tmux,
-    width,
-    terminal,
+  // Independent probes, together: a click holds the journal's turn through
+  // them, so the hold is the slowest's bound, not their sum.
+  const [nerdFont, processes, data] = await Promise.all([
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.
-    nerdFont:
-      glyphs === ""
-        ? { kind: "none" }
-        : {
-            kind: "glyphs",
-            glyphs,
-            terminal: await terminalFacts(edge, terminal, hints, glyphs),
-          },
-    marks: stores.marks,
-    clicked: stores.clicked,
-    daemon: {
-      serving,
-      processes: await edge.daemons(),
-      read: stores.postMortemsRead,
-    },
-    config: configFacts(load, origin.target),
-    sighted,
-    frames: bars.kind === "failed" ? bars : { kind: "read" },
-    data: await segmentDataFacts(
+    glyphs === ""
+      ? ({ kind: "none" } as const)
+      : terminalFacts(edge, terminal, hints, glyphs).then((read) => ({
+          kind: "glyphs" as const,
+          glyphs,
+          terminal: read,
+        })),
+    edge.daemons(),
+    segmentDataFacts(
       edge,
       dataNeeds(load.config, globals.preset),
       origin,
       rateLimits,
     ),
+  ]);
+  return {
+    tmux,
+    width,
+    terminal,
+    nerdFont,
+    marks: stores.marks,
+    clicked: stores.clicked,
+    daemon: {
+      serving,
+      processes,
+      read: stores.postMortemsRead,
+    },
+    config: configFacts(load, origin.target),
+    sighted,
+    frames: bars.kind === "failed" ? bars : { kind: "read" },
+    data,
     transcripts: transcriptReads(edge, transcripts),
     claudeSettings: settingsChains(
       {

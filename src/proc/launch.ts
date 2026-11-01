@@ -184,7 +184,7 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   // for any human click cadence.
   "click.pbcopy": 1000,
   "click.open": 1000,
-  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
+  // A click's probe, which holds the journal's turn for up to its 2 s timeout.
   "doctor.tmux": 1000,
   "doctor.font": 1000,
   "doctor.process": 1000,

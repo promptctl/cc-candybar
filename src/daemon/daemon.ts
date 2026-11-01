@@ -153,6 +153,7 @@ export interface Daemon {
     req: Request,
     timedOut: () => boolean,
     accepted: number,
+    clientLeft: () => boolean,
   ) => Promise<HandledRequest>;
   // The reply to a request of any kind but a subscribe, past the connection's
   // checkpoint: what the page in site/ calls with requests it built.
@@ -160,6 +161,7 @@ export interface Daemon {
     req: ReplyRequest,
     timedOut: () => boolean,
     accepted: number,
+    clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];
   // Re-read the config a render origin resolves to, now: what a durable click
@@ -660,13 +662,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // the way in. A click that got in holds or waits for a journal's turn, and
     // close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
-    handle: async (req, timedOut, accepted) => {
+    handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted);
+      return handleRequest(parts, req, timedOut, accepted, clientLeft);
     },
-    reply: async (req, timedOut, accepted) => {
+    reply: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted);
+      return replyTo(parts, req, timedOut, accepted, clientLeft);
     },
     subscribe: (sessionId, subscriber) => {
       closing.signal.throwIfAborted();
