@@ -4,15 +4,22 @@
     {
       "version": "pr-556",
       "ref": "refs/pull/556/merge",
-      "sha": "ec7e4ed1a48e60c464cfd9e2d69be8c1fc8aaae2",
-      "timestamp": "2026-11-01T21:16:02.897Z",
+      "sha": "80e170d6cde53600091b839b6140d7822010fc4d",
+      "timestamp": "2026-11-01T21:25:50.289Z",
       "commits": [
         {
-          "sha": "ec7e4ed1a48e60c464cfd9e2d69be8c1fc8aaae2",
+          "sha": "80e170d6cde53600091b839b6140d7822010fc4d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T14:15:19-07:00",
-          "message": "Merge 0a6899b39f30c43ec6269657cace6e69464f9c85 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+          "timestamp": "2026-11-01T21:24:52Z",
+          "message": "Merge 67b637edfc903567f6c5eb581986fceb860edc7b into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "67b637edfc903567f6c5eb581986fceb860edc7b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:24:32-07:00",
+          "message": "docs(testing): the render is cut at its wait, and an import rule holds the pieces' order (candybar-testing-ihvy.43x)\n"
         },
         {
           "sha": "0a6899b39f30c43ec6269657cace6e69464f9c85",
