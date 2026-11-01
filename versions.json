@@ -4,15 +4,22 @@
     {
       "version": "pr-552",
       "ref": "refs/pull/552/merge",
-      "sha": "63141bdaf16a9ed1e4d143ce573b0faf16bdfd41",
-      "timestamp": "2026-11-01T14:33:51.169Z",
+      "sha": "6df619c91ff0525f11d243bec80750a92203bd5f",
+      "timestamp": "2026-11-01T14:47:35.467Z",
       "commits": [
         {
-          "sha": "63141bdaf16a9ed1e4d143ce573b0faf16bdfd41",
+          "sha": "6df619c91ff0525f11d243bec80750a92203bd5f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:33:00-07:00",
-          "message": "Merge 89dfbe592a8f5d5a3900da4bed0211e00413e593 into 09301ac9bc6ac05841560bc1972b974b3305916f\n"
+          "timestamp": "2026-11-01T07:46:38-07:00",
+          "message": "Merge d54a44f77e346925b4dbe25fcd3015bdcd75ac8e into 09301ac9bc6ac05841560bc1972b974b3305916f\n"
+        },
+        {
+          "sha": "d54a44f77e346925b4dbe25fcd3015bdcd75ac8e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T07:46:10-07:00",
+          "message": "refactor(render): one drawn colour has one spelling, and a lane refuses inside its encoder (candybar-isolated-daemon-bfab.2nq)\n\nAnswers the high review of #552.\n\n- A Run spells a terminal colour `color(n)` whichever name drew it, so a\n  hex downgraded beside `red` is one look. mergedRuns then does what it\n  says at every depth: the spelled-look exception is gone, and ANSI bytes\n  and the lane snapshots do not move.\n- bandFrame and tmuxStatusFrame are total: laneEncoded lives inside each,\n  so a caller cannot reach the throw and a follower's push cannot abort.\n- The feed's answer is `resp`, because `answers.bar` read as the Frame\n  beside `feed.last.bar`.\n- Lanes map a Run's attrs directly. Run.attrs already holds what is on.\n- A Run's link is clean only because RichText admitted it, and band and\n  tmux write it past rich-js's encoder, so that is stated and tested.\n"
         },
         {
           "sha": "89dfbe592a8f5d5a3900da4bed0211e00413e593",

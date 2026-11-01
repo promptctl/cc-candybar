@@ -53993,18 +53993,19 @@ function renderFailedFrame(message) {
     DIAGNOSTIC_ERROR_COLORS
   );
 }
-function laneEncoded(encode, frame) {
+function laneEncoded(encode2, frame) {
   try {
-    return encode(frame);
+    return encode2(frame);
   } catch (error) {
     const why2 = error instanceof Error ? error.message : String(error);
-    return encode(
+    return encode2(
       diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS)
     );
   }
 }
 function drawnColor(spec) {
-  return spec.type === ColorDepth.TRUECOLOR ? spec.value.hex : spec.name;
+  if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
+  return spec.number === void 0 ? spec.name : `color(${spec.number})`;
 }
 var ATTRIBUTES = Object.keys(new Style().attributes);
 function lookOf(style, depth) {
@@ -75557,7 +75558,7 @@ function noteSent(rate, at) {
   const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
   rate.splice(0, rate.length, ...kept, at);
 }
-var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.bar : answers.statusline;
+var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 var paceOf = (period) => Math.round(1e3 / period);
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
@@ -75885,10 +75886,10 @@ var FrameFeeds = class {
     if (feed.followers.size === 0) return;
     frame.delivered();
     const answers = {
-      bar: JSON.stringify(frame.resp),
+      resp: JSON.stringify(frame.resp),
       statusline: JSON.stringify(frame.statusline)
     };
-    if (feed.last?.answers.bar === answers.bar && feed.last.answers.statusline === answers.statusline)
+    if (feed.last?.answers.resp === answers.resp && feed.last.answers.statusline === answers.statusline)
       return;
     const before = feed.last?.answers ?? null;
     feed.last = { bar: frame.bar, answers };
@@ -82167,22 +82168,19 @@ var ATTRIBUTES2 = {
   frame: null,
   encircle: null
 };
-var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES2);
 function escaped(text4) {
   return text4.replaceAll("#", "##");
 }
 function directive({ fg, bg, attrs = [] }) {
-  const attributes = ATTRIBUTE_NAMES2.filter((name) => attrs.includes(name)).map(
-    (name) => {
-      const tmux3 = ATTRIBUTES2[name];
-      if (tmux3 === null)
-        throw new Error(`frames: a tmux status line cannot draw ${name} text`);
-      return tmux3;
-    }
-  );
+  const attributes = attrs.map((name) => {
+    const tmux3 = ATTRIBUTES2[name];
+    if (tmux3 === null)
+      throw new Error(`frames: a tmux status line cannot draw ${name} text`);
+    return tmux3;
+  });
   return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
-function tmuxStatusFrame(frame) {
+function encode(frame) {
   const links3 = {};
   const drawn = (run3) => {
     const text4 = directive(run3) + escaped(run3.text);
@@ -82193,6 +82191,9 @@ function tmuxStatusFrame(frame) {
   };
   const rows = frame.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
   return { rows, links: links3 };
+}
+function tmuxStatusFrame(frame) {
+  return laneEncoded(encode, frame);
 }
 
 // src/daemon/tmux-status.ts
@@ -82455,7 +82456,7 @@ var TmuxStatusLines = class {
     entry.unsubscribe = this.deps.subscribe(sessionId2, {
       lane: "tmuxStatus",
       frame: (bar) => {
-        entry.frame = laneEncoded(tmuxStatusFrame, bar);
+        entry.frame = tmuxStatusFrame(bar);
         this.reconcile(entry.socket);
       },
       refused: (resp) => {
