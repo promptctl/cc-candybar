@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-531",
+      "ref": "refs/pull/531/merge",
+      "sha": "a145448b9314b368992acd322d332478fa0d575b",
+      "timestamp": "2026-11-01T01:04:51.558Z",
+      "commits": [
+        {
+          "sha": "a145448b9314b368992acd322d332478fa0d575b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:04:05Z",
+          "message": "Merge 8427f196cc0c7019ec3b16a00b65481fd73e909b into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+        },
+        {
+          "sha": "8427f196cc0c7019ec3b16a00b65481fd73e909b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T19:03:55-06:00",
+          "message": "fix(test): the held program waits at the shared gate, and the proof reads its own render's event (brandon-unfiled-3248.2ywj)\n\nThe fixture carried a private copy of `shellGate`'s hold. The proof scanned\nthe log for any attempt, a timed-out one included, and a failed wait named\nonly the bar. `renderAnswer` hands back the event of the answer it returned,\nso the bytes and the proof are one render, and a failed wait names how that\nrender ended.\n\nThe hold is bounded by the run's own timeout; the comment says so.\n"
+        },
+        {
+          "sha": "f3f6b2feb165373a4bb0423e6113dd1935796ca9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:54:50-06:00",
+          "message": "fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-530",
       "ref": "refs/pull/530/merge",
       "sha": "49b734cc78941e7a9dda5b564b44bce3e5f4e35e",
@@ -41,28 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T18:47:46-06:00",
           "message": "test(daemon-value): close's leftovers are read by fact, not after a fixed sleep (candybar-testing-0x6u.945)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-531",
-      "ref": "refs/pull/531/merge",
-      "sha": "d9a8be63acb1a584d9672212d4e865434330c787",
-      "timestamp": "2026-11-01T00:55:52.752Z",
-      "commits": [
-        {
-          "sha": "d9a8be63acb1a584d9672212d4e865434330c787",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:55:01-06:00",
-          "message": "Merge ffb039040d38bd8cc9761a1c9082c4bbd9df374f into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
-        },
-        {
-          "sha": "ffb039040d38bd8cc9761a1c9082c4bbd9df374f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:54:50-06:00",
-          "message": "fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n"
         }
       ]
     },
