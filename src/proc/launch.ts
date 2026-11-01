@@ -506,10 +506,12 @@ function unguard(state: LaunchState, group: number): void {
 
 // A closed owner's lifeline goes with it: the EOF a dying launcher gives it, on
 // purpose, so no fault is recorded. Nothing launches after the abort that runs
-// this, so nothing starts another.
+// this, so nothing starts another. It holds the loop from here: `settled` waits
+// on its end, and an unref'd end never comes in a process with nothing else open.
 function endLifeline(state: LaunchState): void {
   const line = state.lifeline;
   state.lifeline = null;
+  line?.process.ref();
   line?.pipe.end();
 }
 
@@ -664,8 +666,9 @@ async function launchWaited(
       });
     });
 
+    // The child's end, not `close`: a descendant can hold the pipes past it.
+    child.once("exit", () => state.unreaped.delete(child));
     child.on("close", (code, signal) => {
-      state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally

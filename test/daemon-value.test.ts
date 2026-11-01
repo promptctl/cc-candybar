@@ -233,7 +233,6 @@ describe("the daemon is a value", () => {
       flush: () => {},
     };
     const settled = [...live.keys()];
-    baseline = new Set(settled);
     expect(() => construct({ session: unreadable })).toThrow(
       "the session file cannot be read",
     );
@@ -315,6 +314,7 @@ describe("the daemon is a value", () => {
     }`);
 
     const settled = [...live.keys()];
+    baseline = new Set(settled);
     const daemon = construct();
     daemon.arm();
 
