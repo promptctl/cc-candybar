@@ -35279,7 +35279,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.177.1";
+var PACKAGE_VERSION = "1.177.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -54104,6 +54104,52 @@ var EffectSessions = class {
 
 // src/render/frame.ts
 init_globals();
+
+// src/render/diagnostic-text.ts
+init_globals();
+var ELLIPSIS = "\u2026";
+var NEUTRALIZED_RANGES = [
+  [0, 31],
+  [127, 159],
+  [8234, 8238],
+  [8294, 8303]
+];
+function isControlChar(code) {
+  return NEUTRALIZED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
+}
+function sanitizeText(text4) {
+  let sanitized = "";
+  for (const ch of text4) {
+    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
+  }
+  return sanitized.replace(/\s+/g, " ").trim();
+}
+function sanitizeAndTruncate(text4, maxLen) {
+  const sanitized = sanitizeText(text4);
+  let out = "";
+  let count = 0;
+  for (const ch of sanitized) {
+    if (count === maxLen) {
+      return out.replace(/.$/u, ELLIPSIS);
+    }
+    out += ch;
+    count++;
+  }
+  return out;
+}
+
+// src/render/frame.ts
+function diagnosticFrame(text4, colors) {
+  return {
+    depth: "truecolor",
+    rows: [
+      { kind: "diagnostic", runs: [{ text: sanitizeText(text4), ...colors }] }
+    ],
+    nextChange: Infinity,
+    motion: "still",
+    pending: []
+  };
+}
 function drawnColor(spec) {
   return spec.type === ColorDepth.TRUECOLOR ? spec.value.hex : spec.name;
 }
@@ -65465,59 +65511,25 @@ function stateFile(dir, name, empty2, parse3) {
 // src/render/diagnostics.ts
 init_globals();
 
-// src/render/diagnostic-text.ts
-init_globals();
-var ELLIPSIS = "\u2026";
-var NEUTRALIZED_RANGES = [
-  [0, 31],
-  [127, 159],
-  [8234, 8238],
-  [8294, 8303]
-];
-function isControlChar(code) {
-  return NEUTRALIZED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
-}
-function sanitizeText(text4) {
-  let sanitized = "";
-  for (const ch of text4) {
-    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
-  }
-  return sanitized.replace(/\s+/g, " ").trim();
-}
-function sanitizeAndTruncate(text4, maxLen) {
-  const sanitized = sanitizeText(text4);
-  let out = "";
-  let count = 0;
-  for (const ch of sanitized) {
-    if (count === maxLen) {
-      return out.replace(/.$/u, ELLIPSIS);
-    }
-    out += ch;
-    count++;
-  }
-  return out;
-}
-
 // src/render/diagnostic-style.ts
 init_globals();
-var DIAGNOSTIC_ERROR_FG = "\x1B[38;2;255;255;255m";
-var DIAGNOSTIC_ERROR_BG = "\x1B[48;2;200;40;40m";
-var DIAGNOSTIC_WARNING_FG = "\x1B[38;2;0;0;0m";
-var DIAGNOSTIC_WARNING_BG = "\x1B[48;2;220;160;40m";
-var ANSI_RESET = "\x1B[0m";
-function hexOfSgr(sgr) {
-  const m = /;2;(\d+);(\d+);(\d+)m$/.exec(sgr);
-  if (m === null) throw new Error(`diagnostic-style: not a 24-bit SGR: ${sgr}`);
-  return "#" + m.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, "0")).join("");
-}
 var DIAGNOSTIC_ERROR_COLORS = {
-  fg: hexOfSgr(DIAGNOSTIC_ERROR_FG),
-  bg: hexOfSgr(DIAGNOSTIC_ERROR_BG)
+  fg: "#ffffff",
+  bg: "#c82828"
 };
 var DIAGNOSTIC_WARNING_COLORS = {
-  fg: hexOfSgr(DIAGNOSTIC_WARNING_FG),
-  bg: hexOfSgr(DIAGNOSTIC_WARNING_BG)
+  fg: "#000000",
+  bg: "#dca028"
 };
+var ANSI_RESET = "\x1B[0m";
+function sgrOf(layer, hex3) {
+  const channels = [1, 3, 5].map(
+    (at) => Number.parseInt(hex3.slice(at, at + 2), 16)
+  );
+  return `\x1B[${layer};2;${channels.join(";")}m`;
+}
+var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
+var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
 
 // src/render/diagnostics.ts
 var ERROR_SEVERITY = {
@@ -65661,7 +65673,7 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
     const steps2 = list2.length > 1 || pages > 1;
     const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
-    return renderStripCells(
+    return drawnRows(
       [
         button("\u2715", viewerLink(sessionId2, DIAGNOSTICS_CLOSED)),
         ...steps2 ? [step4("\u2039", back2)] : [],
@@ -65681,21 +65693,20 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
     const pages = Math.min(PAGES, Math.ceil(body.length / perPage));
     const page2 = Math.min(at.page, pages - 1);
     const header = headerOf(pages, page2);
-    const measured3 = header.split("\n").length;
-    if (measured3 > headerRows) {
-      headerRows = measured3;
+    if (header.length > headerRows) {
+      headerRows = header.length;
       continue;
     }
     const rows = body.slice(page2 * perPage, (page2 + 1) * perPage);
     const left = body.length - (page2 + 1) * perPage;
     const shownRows = page2 === pages - 1 && left > 0 ? [
       ...rows.slice(0, -1),
-      renderStripCells(
+      ...drawnRows(
         [button(`\u2026 ${left + 1} more rows: \u29C9 copy has them all`, null)],
         { ...opts, wrap: false }
       )
     ] : rows;
-    return [header, ...shownRows].join("\n");
+    return [...header, ...shownRows];
   }
 }
 function handoffRows(handoff, list2, sessionId2, geometry) {
@@ -65708,7 +65719,7 @@ function handoffRows(handoff, list2, sessionId2, geometry) {
       )
     )
   ];
-  return channelRows(handoff, viewerOptions(geometry), indicator).join("\n");
+  return channelRows(handoff, viewerOptions(geometry), indicator);
 }
 function viewerLink(sessionId2, key, says) {
   return effectsUrl(
@@ -65727,6 +65738,10 @@ function viewerOptions(geometry) {
   };
 }
 var cell = (word, style) => new RichText(`${word} `, { style, end: "", overflow: "ignore" });
+var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) => ({
+  kind: "diagnostic",
+  runs
+}));
 var ISSUE_INDENT = " ";
 function channelRows(message, opts, trailing) {
   const base = new Style({
@@ -65741,7 +65756,7 @@ function channelRows(message, opts, trailing) {
       (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
     );
     const after = i === 0 ? trailing : [];
-    return renderStripCells([prefix, ...cells, ...after], opts).split("\n");
+    return drawnRows([prefix, ...cells, ...after], opts);
   });
 }
 
@@ -72121,12 +72136,6 @@ function applySegmentLayout(cells, options) {
 }
 
 // src/render/fill.ts
-function drawnCols(drawing2) {
-  return Math.max(
-    0,
-    ...drawing2.split("\n").map((line) => cellLen(line.replace(INVISIBLE, "")))
-  );
-}
 function resolveFill(row2, options) {
   const items = () => row2.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
   const demands = [];
@@ -72135,9 +72144,9 @@ function resolveFill(row2, options) {
   });
   if (demands.length === 0) return items();
   if (!Number.isFinite(options.width)) return items();
-  const natural = renderStripCells(row2.map(stripItem), options).split("\n");
+  const natural = drawStripCells(row2.map(stripItem), options).lines;
   if (natural.length > 1) return items();
-  const deficit = Math.max(0, options.width - drawnCols(natural[0] ?? ""));
+  const deficit = Math.max(0, options.width - cellLen(plainOf2(natural.flat())));
   const share = Math.floor(deficit / demands.length);
   const remainder = deficit - share * demands.length;
   demands.forEach(({ at, how }, i) => {
@@ -74253,7 +74262,7 @@ function drawSegment(node, ctx) {
     const bodyOpen = bodyGate.kind === "shown";
     const waits = gate2.kind === "pending" ? gate2 : bodyGate;
     const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
-    const drawn = own2.kind === "drawn" ? drawnRows(own2.segment, layoutOf) : waitingRows(
+    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
       node,
       scope,
       ctx,
@@ -74325,7 +74334,7 @@ function ownAnswer(evaluate) {
     return waitingOn(pending2.variable);
   }
 }
-function drawnRows(segment, layoutOf) {
+function drawnRows2(segment, layoutOf) {
   const { styles, fragments, lead, trail, drops, open: open2 } = segment;
   const baseStyle = open2 ? styles.trigger : styles.closed;
   const layout = layoutOf(baseStyle);
@@ -76185,7 +76194,7 @@ function renderFrame(parts, sessionId2, fps, at) {
           fps
         }
       );
-      const output = composeBar(drawn);
+      const output = composeBar(drawn.body);
       return {
         resp: { ok: true, output },
         statusline: {
@@ -76519,18 +76528,17 @@ function drawRender(parts, setup, drawing2) {
         return lanes[lane] && rows !== null ? [rows] : [];
       }) : []
     ),
-    colorCompatibility: effective.colorCompatibility
+    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
+    // the depth the frame is encoded at.
+    colorCompatibility: frame.depth
   };
   const viewing = viewedIndex(
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
-  const body = viewing === null ? {
-    text: ansiOf(frame),
-    nextChange: frame.nextChange,
-    motion: frame.motion
-  } : {
-    text: viewerRows(
+  const body = viewing === null ? frame : {
+    depth: frame.depth,
+    rows: viewerRows(
       diagnostics,
       viewing,
       sessionId2,
@@ -76538,7 +76546,8 @@ function drawRender(parts, setup, drawing2) {
       geometry
     ),
     nextChange: Infinity,
-    motion: frame.motion === "still" ? "still" : "can-move"
+    motion: frame.motion === "still" ? "still" : "can-move",
+    pending: []
   };
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -76580,7 +76589,7 @@ function drawRender(parts, setup, drawing2) {
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(evaluated2),
     // The sources it drew as not answered yet; `-` for none.
-    pending: frame.pending.join(",") || "-",
+    pending: body.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
@@ -76599,7 +76608,7 @@ function drawRender(parts, setup, drawing2) {
   });
   return {
     drawn: {
-      body: body.text,
+      body,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry
@@ -76612,8 +76621,8 @@ function drawRender(parts, setup, drawing2) {
     lanes
   };
 }
-function composeBar(drawn) {
-  return drawn.body + "\n";
+function composeBar(body) {
+  return ansiOf(body) + "\n";
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
@@ -76705,7 +76714,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       setup,
       ANSWERING
     );
-    const output = composeBar(drawn);
+    const output = composeBar(drawn.body);
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
     const statusline = statuslineOf(sessionId2, drawn, output, elsewhere);
@@ -76728,12 +76737,15 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
 }
 function statuslineOf(sessionId2, drawn, output, elsewhere) {
   const [first2, ...rest2] = elsewhere;
-  return first2 === void 0 || drawn.viewerOpen ? output : handoffRows(
-    laneHandoff(sessionId2, [first2, ...rest2]),
-    drawn.diagnostics,
-    sessionId2,
-    drawn.geometry
-  ) + "\n";
+  return first2 === void 0 || drawn.viewerOpen ? output : composeBar({
+    depth: drawn.body.depth,
+    rows: handoffRows(
+      laneHandoff(sessionId2, [first2, ...rest2]),
+      drawn.diagnostics,
+      sessionId2,
+      drawn.geometry
+    )
+  });
 }
 
 // src/daemon/reply.ts
@@ -82421,12 +82433,9 @@ function tmuxStatusResponse(resp) {
   try {
     return tmuxStatusFrame(ansi);
   } catch (error) {
-    const why2 = sanitizeText(
-      error instanceof Error ? error.message : String(error)
-    );
+    const why2 = error instanceof Error ? error.message : String(error);
     return tmuxStatusFrame(
-      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}\u26A0 cc-candybar ${why2}${ANSI_RESET}
-`
+      ansiOf(diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS))
     );
   }
 }

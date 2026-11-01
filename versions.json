@@ -2,60 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-551",
-      "ref": "refs/pull/551/merge",
-      "sha": "2b57e4b5e31b205682a5984bf7ff899d50844eba",
-      "timestamp": "2026-11-01T13:52:17.186Z",
-      "commits": [
-        {
-          "sha": "2b57e4b5e31b205682a5984bf7ff899d50844eba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T13:51:29Z",
-          "message": "Merge e4ea56c6f341e7bd3e86617ab4dece3ee31b9a55 into 7a2b230a3590504f28701f135da02ae258381d66\n"
-        },
-        {
-          "sha": "e4ea56c6f341e7bd3e86617ab4dece3ee31b9a55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:51:26-07:00",
-          "message": "Merge branch 'main' into candybar-isolated-daemon-bfab.agt"
-        },
-        {
-          "sha": "46fbecec902dc60f799f70e47b252af64d285098",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:45:05-07:00",
-          "message": "fix(render): the render event says what the body left pending (candybar-isolated-daemon-bfab.agt)\n\nThe event's motion read the body and its pending read the bar behind it, so with\nthe viewer open it named sources the frame on screen never drew. Frame.depth's\ncomment also said a depth is always the view's, which a frame with no draw behind\nit is not.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "305130dbba9a125efdc4255c260363d35b7341e2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:40:03-07:00",
-          "message": "fix(render): a composed frame states only what it drew (candybar-isolated-daemon-bfab.agt)\n\nReview of the diagnostics change found three things the Frame said falsely.\n\nThe viewer was drawn at the effective depth and encoded at the frame's, two\nsources for one fact that only agreed by luck. It now draws at the frame's depth.\n\nThe viewer's frame kept the hidden bar's pending sources, and the handoff line\nbuilt a Frame out of the bar's motion and nextChange to reach the encoder. The\nviewer now states none pending, and the encoder takes only what it reads, depth\nand rows, so the handoff line has no facts to borrow.\n\nmessageRows had no production caller, and its comment claimed the viewer paged\nit. It goes, and its test reads the row through the viewer.\n\nNo byte moves: the viewer and handoff entries of the before/after sweep compare\nidentical, 2304 of them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "595d4f4f6e8728a0b54774e49ad329018bf9ac5e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:25:05-07:00",
-          "message": "refactor(render): diagnostics draw Rows, and fill reads run widths (candybar-isolated-daemon-bfab.agt)\n\nThe viewer, the handoff line and fill drew through the strip, encoded the\nresult, then split the bytes to recover lines the draw already held. Each now\nreads drawStripCells' lines. A viewer row is a Row of kind diagnostic, paged and\nmeasured as rows, and the body drawRender returns is a Frame, the bar's or one\nholding the viewer's rows, so one encoder writes either.\n\nThe diagnostic colours are hex at the source. The SGR the client's glyph writes\nderives from them in a leaf the client loads, so it is spelled there rather than\nasked of rich-js. check-protocol reads the hex and spells the same escape, still\ncomparing bytes against the Rust literals, and a test holds the two spellings of\nthat derivation together.\n\ndiagnosticFrame is the one constructor of a frame with no draw behind it. The\nband and tmux catch arms use it in place of SGR literals; 2nq moves it to the\nfailed render and removes those arms.\n\nNo byte moves. test/frame-bytes.test.ts.snap is untouched, and viewer, message\nand handoff bytes over four depths, six widths, four row caps and four pages\ncompared identical before and after, 2784 entries. test/diagnostics.test.ts pins\nthem at every depth by comparison with what rich-js writes for the same text,\nlink and hex style.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "491054d4c9a3d06c79cf392d409455412fc491cf",
-      "timestamp": "2026-11-01T13:04:42.475Z",
+      "sha": "09301ac9bc6ac05841560bc1972b974b3305916f",
+      "timestamp": "2026-11-01T14:01:19.504Z",
       "commits": [
         {
-          "sha": "491054d4c9a3d06c79cf392d409455412fc491cf",
+          "sha": "09301ac9bc6ac05841560bc1972b974b3305916f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:03:52-07:00",
-          "message": "refactor(render): the draw's output is a Frame, and every byte derives from it (candybar-isolated-daemon-bfab.abb) (#550)\n\n* test(render): every terminal lane's bytes, pinned before the draw keeps its structure (candybar-isolated-daemon-bfab.abb)\n\nCommitted against unchanged source, so the snapshot is evidence the change\nmoves no byte: the ANSI and the band and tmux status lanes, at all four depths,\nmenus closed and open, from the bundled default and a config using the supported\nAPI's reach, plus a RENDER_FAILED response through both lanes. The reach is\nasserted, so a config that stops drawing a blank row, a wrapped row, a ColorBlend,\na moving effect or a fade fails.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* feat(render): the draw's output is a Frame, and every byte derives from it (candybar-isolated-daemon-bfab.abb)\n\ndraw() held rich-js segments and threw them away, so a bar existed only as\nbytes. It now returns lines of runs in the colours drawn at the frame's depth;\ndrawDsl stamps each line's kind into a Row and DrawnFrame holds the Frame.\nencodeAnsi is the one path from a draw to bytes. Callers holding no Frame hand\nit their depth, and strip geometry reads plainOf without encoding.\n\nNo byte moves: test/frame-bytes.test.ts.snap and the default menu snapshot are\nuntouched. Readers move off the bytes in later tickets.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* test(render): encodeAnsi writes what rich-js writes, and is the one path to bytes (candybar-isolated-daemon-bfab.abb)\n\nCompares encodeAnsi over runLines with segmentsToString at all four depths, over\na grid of named, indexed, hex, translucent and blended colours and over every\nloop effect at advancing times, and asserts its own reach. Asserts a run's colours\nwere drawn, not copied from the spec, and that src holds no second path to bytes.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(render): a strip that draws no line stays loud, and runLines takes only the depth it reads (candybar-isolated-daemon-bfab.abb)\n\nA row vanished silently when rich-js drew no line, where the earlier check threw, so the check returns over lines and carries the single-enforcer marker it lost. runLines took a whole Destination and read one field, so a caller's hyperlinks or reducedMotion were ignored here and honoured nowhere; it takes the depth. Two comments overclaimed: a truecolor run can hold a standard colour's name, and bytes outside a draw are hand-written today.\n\n* perf(render): a run's attributes read one list of names, not a new object per run (candybar-isolated-daemon-bfab.abb)\n\nstyle.attributes builds a 13-entry object on each read, only so its keys could name attributes that never change. On a 200-run row that was 0.136 ms against 0.02 ms, about a third of the encoder's added cost on an effect's hot path. The list is derived from rich-js once, so it holds no state and restates nothing.\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
+          "timestamp": "2026-11-01T07:00:23-07:00",
+          "message": "refactor(render): diagnostics draw Rows, and fill reads run widths (candybar-isolated-daemon-bfab.agt) (#551)\n\nThe viewer, the handoff line and fill drew through the strip, encoded the\nresult, then split the bytes to recover lines the draw already held. Each now\nreads drawStripCells' lines. A viewer row is a Row of kind diagnostic, paged and\nmeasured as rows, and the body drawRender returns is a Frame, the bar's or one\nholding the viewer's rows, so one encoder writes either. The viewer's frame draws\nat the frame's depth and states none of the hidden bar's sources as pending, and\nthe encoder takes only depth and rows, so the handoff line borrows no facts.\n\nThe diagnostic colours are hex at the source. The SGR the client's glyph writes\nderives from them in a leaf the client loads, so it is spelled there rather than\nasked of rich-js. check-protocol reads the hex and spells the same escape, still\ncomparing bytes against the Rust literals, and a test holds the two spellings of\nthat derivation together.\n\ndiagnosticFrame is the one constructor of a frame with no draw behind it. The\nband and tmux catch arms use it in place of SGR literals; 2nq moves it to the\nfailed render and removes those arms.\n\nNo byte moves. test/frame-bytes.test.ts.snap is untouched, and viewer and handoff\nbytes over four depths, six widths, four row caps and four pages compared\nidentical before and after, 2304 entries. test/diagnostics.test.ts pins their\nlook at every depth by comparison with what rich-js writes for the same text,\nlink and hex style.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+        },
+        {
+          "sha": "7a2b230a3590504f28701f135da02ae258381d66",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T13:12:41Z",
+          "message": "chore(release): set `package.json` to 1.177.2 [skip ci]\n\n## [1.177.2](https://github.com/promptctl/cc-candybar/compare/v1.177.1...v1.177.2) (2026-11-01)\n\n### Bug Fixes\n\n* **daemon:** background and lifecycle launches go async (candybar-launch-q7o7.jqq) ([#549](https://github.com/promptctl/cc-candybar/issues/549)) ([722b6fe](https://github.com/promptctl/cc-candybar/commit/722b6fe4c0d62887ce180576956933793a7e8d12))\n"
         }
       ]
     },
