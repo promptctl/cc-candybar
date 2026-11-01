@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e7c7caacfb9c807a1424dde9d75a66559451e5ed",
+      "timestamp": "2026-11-01T08:12:42.361Z",
+      "commits": [
+        {
+          "sha": "e7c7caacfb9c807a1424dde9d75a66559451e5ed",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:11:52-07:00",
+          "message": "feat(daemon): journals take turns so click handlers can await (candybar-launch-q7o7.rs0) (#542)\n\n* feat(daemon): journals take turns in one queue, across awaited clicks (candybar-launch-q7o7.rs0)\n\n* fix(daemon): a turn's commits both run, and an evicted idle record is not idle (candybar-launch-q7o7.rs0)\n\nStep 10 fixes. navigation.commit throwing no longer skips the journal commit. inFlight clears at commit, replacing the committed flag, so close never reports a finished click as cut off. Tests now exercise the live gate.\n\n* fix(daemon): an idle close skipped for eviction no longer blames a click (candybar-launch-q7o7.rs0)\n\n* test(daemon): the landing stamp runs on a real verb, even when it throws (candybar-launch-q7o7.rs0)"
+        },
+        {
+          "sha": "2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-01T06:41:59Z",
+          "message": "chore(release): set `package.json` to 1.174.7 [skip ci]\n\n## [1.174.7](https://github.com/promptctl/cc-candybar/compare/v1.174.6...v1.174.7) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) ([#541](https://github.com/promptctl/cc-candybar/issues/541)) ([63c79c5](https://github.com/promptctl/cc-candybar/commit/63c79c571fe30da5a6ba1df1c66e3c0610a95c03))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-543",
       "ref": "refs/pull/543/merge",
       "sha": "981836e48bea9359c13081b9050c03e776a30d0f",
@@ -20,71 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T01:06:48-07:00",
           "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-542",
-      "ref": "refs/pull/542/merge",
-      "sha": "e1d8ec047f4c24638a0793d50f4df76a94ef0c7c",
-      "timestamp": "2026-11-01T08:06:40.303Z",
-      "commits": [
-        {
-          "sha": "e1d8ec047f4c24638a0793d50f4df76a94ef0c7c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T08:05:46Z",
-          "message": "Merge dca13474f5c565b11f1fc5ea481196255782c9a9 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
-        },
-        {
-          "sha": "dca13474f5c565b11f1fc5ea481196255782c9a9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:05:39-07:00",
-          "message": "test(daemon): the landing stamp runs on a real verb, even when it throws (candybar-launch-q7o7.rs0)\n"
-        },
-        {
-          "sha": "79557950b4255425e8c2a40d1343aed978aab832",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:56:44-06:00",
-          "message": "fix(daemon): an idle close skipped for eviction no longer blames a click (candybar-launch-q7o7.rs0)\n"
-        },
-        {
-          "sha": "ee879949c296a1794e75f4f64a54212b9ae57330",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:43:15-06:00",
-          "message": "fix(daemon): a turn's commits both run, and an evicted idle record is not idle (candybar-launch-q7o7.rs0)\n\nStep 10 fixes. navigation.commit throwing no longer skips the journal commit. inFlight clears at commit, replacing the committed flag, so close never reports a finished click as cut off. Tests now exercise the live gate.\n"
-        },
-        {
-          "sha": "35d4cc45f83d7461386e291f12118c786701bd58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:20:48-06:00",
-          "message": "feat(daemon): journals take turns in one queue, across awaited clicks (candybar-launch-q7o7.rs0)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "63c79c571fe30da5a6ba1df1c66e3c0610a95c03",
-      "timestamp": "2026-11-01T06:32:30.828Z",
-      "commits": [
-        {
-          "sha": "63c79c571fe30da5a6ba1df1c66e3c0610a95c03",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:31:34-06:00",
-          "message": "fix(proc): a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) (#541)\n\n* fix(proc): a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t)\n\n* fix(proc): capture owns its lifetime and a refused child leaves unreaped on exit (candybar-testing-0x6u.v5t)\n\n* fix(proc): settled reads unreaped directly; tests pin exit removal (candybar-testing-0x6u.v5t)"
-        },
-        {
-          "sha": "86e9a73e4a4b54ee92437eaa6e42305f677421a5",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T06:10:32Z",
-          "message": "chore(release): set `package.json` to 1.174.6 [skip ci]\n\n## [1.174.6](https://github.com/promptctl/cc-candybar/compare/v1.174.5...v1.174.6) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a character split across two reads stays whole (candybar-testing-0x6u.71b) ([#540](https://github.com/promptctl/cc-candybar/issues/540)) ([62bc62d](https://github.com/promptctl/cc-candybar/commit/62bc62daea77f6e6c8b7543db42bf9736245ebaa))\n"
         }
       ]
     },

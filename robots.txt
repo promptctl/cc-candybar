@@ -1,4 +1,3 @@
 User-agent: *
 Disallow: /cc-candybar/pr-543/
-Disallow: /cc-candybar/pr-542/
 Disallow: /cc-candybar/pr-517/

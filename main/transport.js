@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.6";
+var PACKAGE_VERSION = "1.174.7";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -70686,7 +70686,7 @@ function sessionOfEffects(effects) {
   const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
   return sid === "" ? null : parseSessionId(sid);
 }
-var dispatch = (rawValue, ctx) => {
+var dispatch = async (rawValue, ctx) => {
   const errors2 = [];
   let operational = false;
   const effects = parseEffects(rawValue);
@@ -70698,7 +70698,7 @@ var dispatch = (rawValue, ctx) => {
       continue;
     }
     try {
-      handler(value, ctx);
+      await handler(value, ctx);
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) operational = true;
       errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
@@ -70717,12 +70717,31 @@ var dispatch = (rawValue, ctx) => {
     throw operational ? new Error(message) : new BadVerbArgs(message);
   }
 };
-function journaled(handler, sessionOf) {
-  return (value, ctx) => {
+function throwAll(failures) {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new Error(
+      failures.map((e) => String(e.message ?? e)).join("; ")
+    );
+  }
+}
+function journaled(verb, handler, sessionOf, turnWaited) {
+  const inTurn = async (value, ctx, turn) => {
     const sid = sessionOf(value);
     const lanes = sid === null ? null : laneMeter(ctx, sid);
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
+    const commit3 = turn.holds(() => {
+      const failed2 = [];
+      for (const step4 of [navigation, journal]) {
+        try {
+          step4.commit();
+        } catch (e) {
+          failed2.push(e);
+        }
+      }
+      throwAll(failed2);
+    });
     const failures = [];
     const closing = (store) => closingView(
       store,
@@ -70730,7 +70749,7 @@ function journaled(handler, sessionOf) {
       (line) => ctx.log("info", line)
     );
     try {
-      handler(value, {
+      await handler(value, {
         ...ctx,
         sessionState: closing(journal.sessionState),
         journal,
@@ -70739,20 +70758,20 @@ function journaled(handler, sessionOf) {
     } catch (e) {
       failures.push(e);
     }
-    navigation.commit();
+    let live = true;
     try {
-      journal.commit();
+      live = commit3();
     } catch (e) {
       failures.push(e);
     }
-    if (lanes !== null) {
+    if (live && lanes !== null) {
       try {
         ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
       } catch (e) {
         failures.push(e);
       }
     }
-    if (sid !== null) {
+    if (live && sid !== null) {
       try {
         const origin = recordedOrigin(ctx, sid);
         if (origin !== null) ctx.views.follow(sid, origin);
@@ -70760,31 +70779,49 @@ function journaled(handler, sessionOf) {
         failures.push(e);
       }
     }
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) {
-      throw new Error(
-        failures.map((e) => String(e.message ?? e)).join("; ")
-      );
-    }
+    throwAll(failures);
   };
+  return (value, ctx) => ctx.journalTurns.take(
+    verb,
+    (ms) => turnWaited(ctx, ms),
+    (turn) => inTurn(value, ctx, turn)
+  );
 }
 var VERBS = new Map(
-  [...LEAF_VERBS, [VERB_DISPATCH, dispatch]].map(
-    ([verb, handler]) => [
+  [...LEAF_VERBS, [VERB_DISPATCH, dispatch]].map(([verb, handler]) => {
+    const sessionOf = (value) => {
+      const session = clickSessionOf(verb, value);
+      return session?.ok ? session.id : null;
+    };
+    return [
       verb,
-      journaled(handler, (value) => {
-        const session = clickSessionOf(verb, value);
-        return session?.ok ? session.id : null;
-      })
-    ]
-  )
+      journaled(
+        verb,
+        async (value, ctx) => {
+          try {
+            await handler(value, ctx);
+          } finally {
+            const sid = sessionOf(value);
+            if (sid !== null) ctx.clickLanded(sid);
+          }
+        },
+        sessionOf,
+        (ctx, ms) => ctx.turnWaited(ms)
+      )
+    ];
+  })
 );
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
 function closeIdleMenus(sid, idle, ctx) {
-  journaled(
+  return journaled(
+    "menu-idle",
     (_value, c) => {
+      if (!idle.stillIdle()) {
+        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
+        return;
+      }
       const roots = openRoots(
         nestOf(c, sid),
         (key) => c.navigating.get(sid, key)
@@ -70798,7 +70835,8 @@ function closeIdleMenus(sid, idle, ctx) {
         `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
       );
     },
-    () => sid
+    () => sid,
+    (c, ms) => c.log("info", `menu-idle: waited=${ms}ms (session=${sid})`)
   )("", ctx);
 }
 
@@ -76852,7 +76890,7 @@ async function replyTo(parts, req, timedOut, accepted) {
   if (req.kind === "click") {
     const t0 = clock.monotonic();
     const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = clickOutcome(parts, req, facts);
+    const outcome = await clickOutcome(parts, req, facts);
     noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
     const { level, line } = requestEvent(
       "click",
@@ -76958,7 +76996,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
   }
   return out;
 }
-function clickOutcome(parts, req, facts) {
+async function clickOutcome(parts, req, facts) {
   const { verb, value } = req;
   if (typeof verb !== "string" || typeof value !== "string") {
     return {
@@ -76969,7 +77007,7 @@ function clickOutcome(parts, req, facts) {
     };
   }
   try {
-    return handleClick(
+    return await handleClick(
       parts,
       verb,
       value,
@@ -76984,7 +77022,7 @@ var VERB_FACT = {
   link: "verb",
   "tmux-status": "linkVerb"
 };
-function handleClick(parts, verb, value, arrival, facts) {
+async function handleClick(parts, verb, value, arrival, facts) {
   const { clock, menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
@@ -77001,7 +77039,11 @@ function handleClick(parts, verb, value, arrival, facts) {
     noteFacts(facts, { sid: session.id });
     menuIdle.clicked(session.id, instantOf(clock.date()));
   }
-  handler(value, { ...verbCtx, arrival });
+  await handler(value, {
+    ...verbCtx,
+    arrival,
+    turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` })
+  });
   return { kind: "ok" };
 }
 function clickReply(outcome) {
@@ -77019,7 +77061,7 @@ function clickReply(outcome) {
       return renderFailed(outcome.error);
   }
 }
-function statusLineClick(parts, value, facts) {
+async function statusLineClick(parts, value, facts) {
   const { tmuxStatusLines } = parts;
   const refused = (problem) => ({
     kind: "bad-request",
@@ -82761,6 +82803,37 @@ function takeWhile(xs, ok3) {
   return end === -1 ? [...xs] : xs.slice(0, end);
 }
 
+// src/utils/keyed-serial-queue.ts
+init_globals();
+var KeyedSerialQueue = class {
+  // Each key's tasks still to run, while one runs.
+  waiting = /* @__PURE__ */ new Map();
+  run(key, task) {
+    return new Promise((resolve, reject2) => {
+      const entry = async () => {
+        try {
+          resolve(await task());
+        } catch (e) {
+          reject2(e);
+        }
+      };
+      const behind = this.waiting.get(key);
+      if (behind !== void 0) {
+        behind.push(entry);
+        return;
+      }
+      const tasks = [];
+      this.waiting.set(key, tasks);
+      const drain = (next2) => void next2().then(() => {
+        const after = tasks.shift();
+        if (after === void 0) this.waiting.delete(key);
+        else drain(after);
+      });
+      drain(entry);
+    });
+  }
+};
+
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
 var BAND_CLIENT = import_node_path41.default.join("bin", "cc-candybar-native");
@@ -83047,8 +83120,8 @@ var LaneSetups = class {
   deps;
   // Each session's owed lanes, least recently owed first.
   owed = /* @__PURE__ */ new Map();
-  // Each session's setups still to run, while one runs.
-  queued = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
+  setups = new KeyedSerialQueue();
   // A click of `sessionId` moved its switches from `before` to `after`.
   // `session` is the session as its latest request reported it, or null when
   // this daemon holds none yet.
@@ -83108,25 +83181,11 @@ var LaneSetups = class {
   }
   start(session, lane, on2, by) {
     this.deps.defer(
-      () => this.enqueue(session.sessionId, () => this.sync(session, lane, on2, by))
+      () => void this.setups.run(
+        session.sessionId,
+        () => this.sync(session, lane, on2, by)
+      )
     );
-  }
-  // [LAW:no-ambient-temporal-coupling] Runs `setup` now when none of the
-  // session's runs, else after the ones queued before it.
-  enqueue(sessionId2, setup) {
-    const queue = this.queued.get(sessionId2);
-    if (queue !== void 0) {
-      queue.push(setup);
-      return;
-    }
-    const waiting2 = [];
-    this.queued.set(sessionId2, waiting2);
-    const run3 = (next2) => void next2().then(() => {
-      const after = waiting2.shift();
-      if (after === void 0) this.queued.delete(sessionId2);
-      else run3(after);
-    });
-    run3(setup);
   }
   // Resolves once the setup has finished, however it ended.
   sync(session, lane, on2, by) {
@@ -83555,6 +83614,49 @@ var RenderWarningRecords = class {
 };
 var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 
+// src/daemon/journal-turns.ts
+init_globals();
+var DAEMON_WIDE = "journals";
+var JournalTurns = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  queue = new KeyedSerialQueue();
+  open = true;
+  inFlight = null;
+  // Runs `body` in its turn; `waited` hears how many ms the turn took to come.
+  take(verb, waited, body) {
+    const asked2 = this.deps.monotonic();
+    return this.queue.run(DAEMON_WIDE, async () => {
+      if (!this.open) throw new Error(`the daemon closed: ${verb} refused`);
+      waited(Math.round(this.deps.monotonic() - asked2));
+      return body({
+        holds: (commit3) => {
+          const held = { verb, commit: commit3 };
+          this.inFlight = held;
+          return () => this.commit(held);
+        }
+      });
+    });
+  }
+  close() {
+    this.open = false;
+    if (this.inFlight === null) return;
+    this.deps.log(
+      "warn",
+      `journal: ${this.inFlight.verb} cut off by close, committing what landed`
+    );
+    this.commit(this.inFlight);
+  }
+  commit(held) {
+    if (this.inFlight !== held) return false;
+    this.inFlight = null;
+    held.commit();
+    return true;
+  }
+};
+
 // src/daemon/menu-idle.ts
 init_globals();
 var MAX_SESSIONS6 = 256;
@@ -83567,7 +83669,9 @@ var MenuIdle = class {
   disposed = false;
   // A click in the session starts a new idle period.
   clicked(sessionId2, at) {
-    this.record(sessionId2, at).since = at;
+    const idle = this.record(sessionId2, at);
+    idle.since = at;
+    idle.clicks++;
     this.settle(sessionId2);
   }
   // When the idle period of the menus the session's last frame drew began —
@@ -83606,6 +83710,7 @@ var MenuIdle = class {
   record(sessionId2, at) {
     const idle = this.sessions.get(sessionId2) ?? {
       since: at,
+      clicks: 0,
       timeoutS: 0,
       shown: false,
       drawnAt: at,
@@ -83643,22 +83748,24 @@ var MenuIdle = class {
   // every menu shut — so the timer waits for a render that draws a menu again
   // (a group open by default, a close that failed) and closes it a timeout
   // after this one: never at once, and never for a session that stopped
-  // rendering.
+  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
+  // among the journals, so whether the session is still idle is read in that
+  // turn: a click since this firing, or one landing ahead of it, keeps what
+  // it opened.
   fire(sessionId2) {
     const idle = this.sessions.get(sessionId2);
     idle.timer = null;
     const now2 = this.deps.now();
+    const lastClick = idle.clicks;
     const closing = {
       idleS: now2 - idle.since,
-      timeoutS: idle.timeoutS
+      timeoutS: idle.timeoutS,
+      // An evicted record stops counting, so its session is no longer known idle.
+      stillIdle: () => this.sessions.get(sessionId2) === idle && idle.clicks === lastClick
     };
     idle.since = now2;
     idle.shown = false;
-    try {
-      this.deps.close(sessionId2, closing);
-    } catch (e) {
-      this.deps.failed(sessionId2, e);
-    }
+    this.deps.close(sessionId2, closing).catch((e) => this.deps.failed(sessionId2, e));
   }
 };
 
@@ -83932,8 +84039,14 @@ function createDaemon(inputs) {
     onApplied: () => binaryWatch.checkNow(),
     log
   });
+  const journalTurns = new JournalTurns({
+    log,
+    monotonic: () => clock.monotonic()
+  });
   const verbCtx = {
     sessionState,
+    journalTurns,
+    clickLanded: (sessionId2) => menuIdle.clicked(sessionId2, instant()),
     log,
     launcher,
     now: instant,
@@ -84024,9 +84137,9 @@ function createDaemon(inputs) {
     clock,
     exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click runs in the turn it enters, so one that got in has
-    // landed before any close; a subscribe its request reached as the daemon
-    // closed is refused here and opens no feed.
+    // the way in. A click that got in holds or waits for a journal's turn, and
+    // close ends those (src/daemon/journal-turns.ts); a subscribe its request
+    // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted) => {
       closing.signal.throwIfAborted();
       return handleRequest(parts, req, timedOut, accepted);
@@ -84052,6 +84165,9 @@ function createDaemon(inputs) {
     },
     close() {
       const teardown = [
+        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
+        // the journal in flight commits what landed; none opens after.
+        ["journalTurns close", () => journalTurns.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
         // comes before the abort that ends the daemon's launches.
