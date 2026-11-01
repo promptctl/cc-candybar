@@ -70860,7 +70860,7 @@ function sessionOfEffects(effects) {
   const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
   return sid === "" ? null : parseSessionId(sid);
 }
-var hoisted = (verb, value, ctx) => verb.prepare(value, ctx).catch(
+var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
   (e) => () => Promise.reject(e)
 );
 async function perform(verb, value, ctx, gathered) {
@@ -70870,7 +70870,7 @@ async function perform(verb, value, ctx, gathered) {
 async function headGather(rawValue, ctx) {
   const [head] = batchAdjacentWrites(parseEffects(rawValue));
   const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
-  return leaf?.gathers ? [await hoisted(leaf, head.value, ctx)] : [];
+  return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
 }
 async function foldEffects(rawValue, ctx, gathered) {
   const errors2 = [];
@@ -70884,7 +70884,7 @@ async function foldEffects(rawValue, ctx, gathered) {
       continue;
     }
     try {
-      await perform(leaf, value, ctx, gathered[i]);
+      await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
     } catch (e) {
       if (e instanceof DaemonClosing) {
         if (errors2.length > 0)
@@ -71014,8 +71014,8 @@ var VERBS = new Map([
       verb,
       click(
         verb,
-        async (value, ctx) => leaf.gathers ? [await hoisted(leaf, value, ctx)] : [],
-        (value, ctx, [gathered]) => perform(leaf, value, ctx, gathered)
+        async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
+        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
       )
     ]
   ),
@@ -77292,7 +77292,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
       ...verbCtx,
       arrival,
       placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gatherMs: `${ms}` }),
+      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
       clientGone
     });
@@ -83884,6 +83884,7 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 // src/daemon/journal-turns.ts
 init_globals();
 var DAEMON_WIDE = "journals";
+var GATHERS = "gathers";
 var JournalTurns = class {
   constructor(deps) {
     this.deps = deps;
@@ -83891,6 +83892,7 @@ var JournalTurns = class {
   deps;
   queue = new KeyedSerialQueue();
   sessions = new KeyedSerialQueue();
+  gathers = new KeyedSerialQueue();
   open = true;
   inFlight = null;
   holder = null;
@@ -83946,6 +83948,11 @@ var JournalTurns = class {
       );
     };
     return session === null ? inPlace() : this.sessions.run(session, inPlace);
+  }
+  // A click's gather, one at a time daemon-wide and in no turn: its probes share
+  // a rate window across sessions, so two at once would refuse the second.
+  gathering(gather) {
+    return this.gathers.run(GATHERS, gather);
   }
   getStats() {
     const { holder, queued } = this;
@@ -84030,7 +84037,8 @@ var MenuIdle = class {
     idle.timeoutS = timeoutS;
     this.settle(sessionId2);
   }
-  // The sessions whose clocks are kept, and those whose close timer is armed.
+  // The sessions whose clocks are kept, those whose close timer is armed, and
+  // the clicks in flight.
   getStats() {
     let armed = 0;
     for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;

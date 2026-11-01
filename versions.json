@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-547",
+      "ref": "refs/pull/547/merge",
+      "sha": "99165b777f3038e96b621daaa3d859d424b9121b",
+      "timestamp": "2026-11-01T10:24:41.878Z",
+      "commits": [
+        {
+          "sha": "99165b777f3038e96b621daaa3d859d424b9121b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T10:23:59Z",
+          "message": "Merge 4ce3a3733e8a23f729696d39b984af622d0a68c4 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
+        },
+        {
+          "sha": "4ce3a3733e8a23f729696d39b984af622d0a68c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:23:47-07:00",
+          "message": "fix(daemon): click gathers run one at a time, in no turn (candybar-launch-q7o7.fqw)\n\nDoctor probes share a daemon-wide rate window, so a gather running beside\nanother session's was refused. The hoisted gather is one step, not a list.\n"
+        },
+        {
+          "sha": "f1ae0ef4bc6ab195daae9f81aa7c27b27d06c2c2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:13:46-07:00",
+          "message": "fix(daemon): only a click's first gather runs ahead of its turn; a failed reload re-gathers (candybar-launch-q7o7.fqw)\n\nReview findings: a gather's own step writes, so a later gather stays in the\nfold. A reload that fails keeps its config, so error and warning count as the\nconfig changing. A partial rewind counts as a write. No countdown draws while a\nclick is in flight. The session-queue wait lands on the click event (placeWait).\n"
+        },
+        {
+          "sha": "00b6b0eb765153c62a7e0d1b4d7b76f21497481d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:00:03-07:00",
+          "message": "fix(daemon): read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw)\n\nA click joins its session's queue on arrival and keeps its place through\ngather and turn; only the daemon-wide turn is taken after the gather. Leading\ngathers hoist out of the turn with their failures carried to their position\nin the fold, a gather is a snapshot of one config and re-gathers in the turn\nwhen that config changed, and doctor-probe leaves the turn. Idle clock pending\nreplaces the arrival stamp; handlers lose launcher, doctor and claudeInput.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-548",
       "ref": "refs/pull/548/merge",
       "sha": "b0a67c7f2ad8392eae57b128fd5f01767442ca2f",
@@ -56,35 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T02:48:01-07:00",
           "message": "feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2)\n\nA dispatch link leads with a `does` param, derived from the effects the\nclick fires, so a hover reads `does=set+preset+to+compact` before the\npercent-encoded payload. parseEffects reads only `e`, so drawn links and\nolder daemons are unaffected.\n\nA click's non-session effect is its face, so a confirm reads as what it\nfires rather than the disarm that precedes it. `does` is form-encoded and\nloses no character; only copied text is shortened. The diagnostics viewer\npasses its words, because the position it shows exists only at draw.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-547",
-      "ref": "refs/pull/547/merge",
-      "sha": "dd8e8bf8a6d0b89452a7326f4b7dca0b24a487c0",
-      "timestamp": "2026-11-01T10:15:07.705Z",
-      "commits": [
-        {
-          "sha": "dd8e8bf8a6d0b89452a7326f4b7dca0b24a487c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T10:13:56Z",
-          "message": "Merge f1ae0ef4bc6ab195daae9f81aa7c27b27d06c2c2 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
-        },
-        {
-          "sha": "f1ae0ef4bc6ab195daae9f81aa7c27b27d06c2c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:13:46-07:00",
-          "message": "fix(daemon): only a click's first gather runs ahead of its turn; a failed reload re-gathers (candybar-launch-q7o7.fqw)\n\nReview findings: a gather's own step writes, so a later gather stays in the\nfold. A reload that fails keeps its config, so error and warning count as the\nconfig changing. A partial rewind counts as a write. No countdown draws while a\nclick is in flight. The session-queue wait lands on the click event (placeWait).\n"
-        },
-        {
-          "sha": "00b6b0eb765153c62a7e0d1b4d7b76f21497481d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:00:03-07:00",
-          "message": "fix(daemon): read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw)\n\nA click joins its session's queue on arrival and keeps its place through\ngather and turn; only the daemon-wide turn is taken after the gather. Leading\ngathers hoist out of the turn with their failures carried to their position\nin the fold, a gather is a snapshot of one config and re-gathers in the turn\nwhen that config changed, and doctor-probe leaves the turn. Idle clock pending\nreplaces the arrival stamp; handlers lose launcher, doctor and claudeInput.\n"
         }
       ]
     },
