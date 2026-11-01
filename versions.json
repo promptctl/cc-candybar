@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-531",
+      "ref": "refs/pull/531/merge",
+      "sha": "d9a8be63acb1a584d9672212d4e865434330c787",
+      "timestamp": "2026-11-01T00:55:52.752Z",
+      "commits": [
+        {
+          "sha": "d9a8be63acb1a584d9672212d4e865434330c787",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:55:01-06:00",
+          "message": "Merge ffb039040d38bd8cc9761a1c9082c4bbd9df374f into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+        },
+        {
+          "sha": "ffb039040d38bd8cc9761a1c9082c4bbd9df374f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T18:54:50-06:00",
+          "message": "fix(test): a held program proves a request does not wait on its run (brandon-unfiled-3248.2ywj)\n\nThe test claimed no request waits on a running program, and measured it by a\n2 s sleep and daemon-wide `requests.timedOut` holding still. That counter also\nmoves for any request slow on its own, so the test measured the machine. It was\nweaker than its claim too: a render that waited on the run ends at its own wait\nbudget, before the 200 ms guard, so the old test passes with the rule broken.\n\nThe program now runs until the test releases it. A render event that ended\n`answered` over the superseded source cannot come from a wait that included the\nrun, however loaded the machine, so load can delay the proof but not fail it.\n\nThe click goes through `click`, which reads a TIMEOUT as the click landing, and\nthe counts are read past the connection, where the guard is not.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-530",
       "ref": "refs/pull/530/merge",
       "sha": "4522ebdc104b85ece030a0ca02003fdfd07a6179",
