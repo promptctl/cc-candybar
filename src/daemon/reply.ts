@@ -668,6 +668,7 @@ async function handleClick(
     await handler(value, {
       ...verbCtx,
       arrival,
+      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
       gatherTook: (ms) => noteFacts(facts, { gatherMs: `${ms}` }),
       turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
       clientGone,

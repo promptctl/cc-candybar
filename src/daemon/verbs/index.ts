@@ -221,7 +221,7 @@ export interface DaemonContext {
   // (src/daemon/journal-turns.ts).
   readonly journalTurns: Pick<JournalTurns, "take" | "click">;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
-  // turn: what an idle close queued behind it re-reads (src/daemon/menu-idle.ts).
+  // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
   readonly clickLanded: (sessionId: string) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
@@ -277,6 +277,7 @@ export interface VerbContext extends DaemonContext {
   readonly arrival: ClickArrival;
   // [LAW:nothing-unseen] How long THIS click gathered and then waited for its
   // turn, for its event.
+  readonly placeWaited: (ms: number) => void;
   readonly gatherTook: (ms: number) => void;
   readonly turnWaited: (ms: number) => void;
   // Whether the client that sent THIS click has left.
@@ -1334,8 +1335,9 @@ const rewind: VerbHandler = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
-  const restored = ctx.history.rewind(sid);
+  // Said first: a stale target throws after the rest were put back.
   ctx.journal.wrote();
+  const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
   ctx.log(
     "info",
@@ -1466,9 +1468,12 @@ async function clickGather(
     ),
     current: async (now) => {
       const stands = doctor.loadConfig(sessionOrigin(now, sid));
-      return stands.config === load.config
-        ? gathered
-        : clickGather(now, sid, doctor, stands);
+      // A reload that failed keeps the config it had, so its error is the news.
+      const same =
+        stands.config === load.config &&
+        stands.error === load.error &&
+        stands.warning === load.warning;
+      return same ? gathered : clickGather(now, sid, doctor, stands);
     },
   };
   return gathered;
@@ -2030,20 +2035,16 @@ async function perform(
   await step(ctx);
 }
 
-// [LAW:no-ambient-temporal-coupling] Only the run of gathers that opens a click
-// goes ahead of its turn. Past any other effect, position says a gather may
-// have to read that effect's write, so it stays in the fold.
-async function leadingGathers(
+// [LAW:no-ambient-temporal-coupling] Only the gather that opens a click goes
+// ahead of its turn. Every other may have to read a write before it, a gather's
+// own step included, so it stays in the fold.
+async function headGather(
   rawValue: string,
   ctx: VerbContext,
 ): Promise<readonly ClickStep[]> {
-  const gathered: ClickStep[] = [];
-  for (const { verb, value } of batchAdjacentWrites(parseEffects(rawValue))) {
-    const leaf = LEAF_VERBS.get(verb);
-    if (leaf === undefined || !leaf.gathers) break;
-    gathered.push(await hoisted(leaf, value, ctx));
-  }
-  return gathered;
+  const [head] = batchAdjacentWrites(parseEffects(rawValue));
+  const leaf = head === undefined ? undefined : LEAF_VERBS.get(head.verb);
+  return leaf?.gathers ? [await hoisted(leaf, head!.value, ctx)] : [];
 }
 
 async function foldEffects(
@@ -2111,13 +2112,13 @@ function throwAll(failures: readonly unknown[]): void {
 // reports both.
 //
 // [LAW:single-enforcer] It is also where every click of a session passes, so
-// it measures that session's lane switches (`sessionOf` names it): before the
+// it measures that session's lane switches (`sid` names it): before the
 // handler, and after the commit — after any reload the handler made, since a
 // reload is synchronous. What a lane runs follows the difference, which no
 // render, frame or other session's write can make. After the commit it also
 // brings the session's view to the config its origin now resolves to.
 //
-// [LAW:single-enforcer] And it is the one place a journal's turn is taken
+// [LAW:single-enforcer] It runs in the journal's turn `click` took
 // (src/daemon/journal-turns.ts), begin through view-follow, so an awaited
 // handler keeps its step whole. A turn the daemon's close cut off was committed
 // there, and the daemon is gone from under what follows the commit.
@@ -2227,6 +2228,7 @@ function click(
       verb,
       sid,
       {
+        placed: ctx.placeWaited,
         waited: ctx.turnWaited,
         gone: ctx.clientGone,
         gathered: ctx.gatherTook,
@@ -2263,7 +2265,9 @@ export const VERBS: ReadonlyMap<
         ),
       ] as const,
   ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, leadingGathers, foldEffects)] as const,
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)] as const,
+  // After the leaves, so it replaces the click they built: a probe writes no
+  // journal, so nothing may refuse it for a turn.
   [VERB_DOCTOR_PROBE, doctorProbe] as const,
 ]);
 

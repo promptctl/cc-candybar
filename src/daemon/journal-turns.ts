@@ -3,8 +3,8 @@
 // journal's begin and commit, so run-to-completion no longer keeps two journals
 // apart: each takes a turn here, daemon-wide and not per session, because a
 // session's history is its own but the config files it writes are shared. The
-// turn is taken only around a journal (`journaled`, src/daemon/verbs/index.ts),
-// which never nests, so a turn never waits on itself.
+// turn is taken only around a journal (`click` and `closeIdleMenus`,
+// src/daemon/verbs/index.ts), which never nests, so a turn never waits on itself.
 //
 // A click's read-only launches come before its turn (`click`), so a slow doctor
 // gather holds up no other session. What keeps one session's clicks in arrival
@@ -54,8 +54,10 @@ export interface TurnAsker {
   readonly gone: () => boolean;
 }
 
-// The same, for a click that may gather first: `gathered` hears how long it took.
+// The same, for a click that may gather first: `placed` hears how long it
+// waited behind its session's earlier clicks, `gathered` how long it took.
 export interface ClickAsker extends TurnAsker {
+  readonly placed: (ms: number) => void;
   readonly gathered: (ms: number) => void;
 }
 
@@ -120,11 +122,13 @@ export class JournalTurns {
   click<G, T>(
     verb: string,
     session: string | null,
-    { waited, gone, gathered }: ClickAsker,
+    { placed, waited, gone, gathered }: ClickAsker,
     gather: () => Promise<G>,
     body: (gathering: G, turn: JournalTurn) => Promise<T>,
   ): Promise<T> {
+    const arrived = this.deps.monotonic();
     const inPlace = async (): Promise<T> => {
+      placed(Math.round(this.deps.monotonic() - arrived));
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const started = this.deps.monotonic();

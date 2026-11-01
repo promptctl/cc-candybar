@@ -84,9 +84,10 @@ export class MenuIdle {
   // When the idle period of the menus the session's last frame drew began —
   // its last click, or the first frame that drew them, whichever is later —
   // or nothing, while it drew none: a menu that appears now has only begun.
+  // Nothing too while a click is in flight: no close is due to count down to.
   since(sessionId: string, at: Instant): Instant | undefined {
     const idle = this.record(sessionId, at);
-    return idle.shown ? idle.since : undefined;
+    return idle.shown && !this.pending.has(sessionId) ? idle.since : undefined;
   }
 
   // What the session's newest frame drew: whether a menu row, and the
@@ -180,9 +181,10 @@ export class MenuIdle {
   // after this one: never at once, and never for a session that stopped
   // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
   // among the journals, so whether the session is still idle is read in that
-  // turn: a click since this firing keeps what it opened. The record follows that decision (`closed`), and until the
-  // close settles no frame arms another. A close that failed waits a timeout
-  // too, so it is retried at that pace and not at every frame.
+  // turn: a click since this firing keeps what it opened. The record follows
+  // that decision (`closed`), and until the close settles no frame arms
+  // another. A close that failed waits a timeout too, so it is retried at that
+  // pace and not at every frame.
   private fire(sessionId: string): void {
     const idle = this.sessions.get(sessionId)!;
     idle.timer = null;

@@ -53,7 +53,8 @@ const B = "session-b";
 const LAUNCHED = { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult;
 type Load = ReturnType<DoctorEdge["loadConfig"]>;
 const LOAD = { layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT } as unknown as Load;
-const FAILED_LOAD = { ...LOAD, error: "the file changed", config: { ...EMPTY_DEFAULT } } as Load;
+// As production: a reload that fails keeps the config it had.
+const FAILED_LOAD = { ...LOAD, error: "the file changed" } as Load;
 
 function gate(): { wait: Promise<void>; open: () => void } {
   let open = (): void => {};
@@ -158,6 +159,18 @@ describe("a gather holds no turn", () => {
     expect(toggled(A)).toBe("1");
   });
 
+  test("a gather past a click's first gather runs in the turn, after the first one's write", async () => {
+    const { held, gathers, ctx } = setup();
+    const url = effectsUrl([
+      { verb: VERB_DOCTOR_RUN, args: [A] },
+      { verb: VERB_DOCTOR_RUN, args: [A] },
+    ]);
+    const twice = VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
+    held.open();
+    await twice;
+    expect(gathers).toEqual(["holder=null", `holder=${VERB_DISPATCH}`]);
+  });
+
   test("doctor-probe answers at once with the turn held", async () => {
     const { ctx, turns } = setup();
     const parked = gate();
@@ -190,7 +203,7 @@ describe("one session's order", () => {
     expect(toggled(A)).toBe("1");
   });
 
-  test("two doctor-marks land in arrival order", async () => {
+  test("two doctor-marks reach their verdicts in arrival order", async () => {
     const order: string[] = [];
     const first = gate();
     let probes = 0;
@@ -473,7 +486,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
     close: async () => {},
     failed: () => {},
   });
-  const { arrival: _a, turnWaited: _t, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
   const events: string[] = [];
   const parts = {
     clock: { monotonic: () => performance.now(), date: () => new Date() },
@@ -512,4 +525,25 @@ test("tsc refuses `ctx.launcher` in a VerbHandler", () => {
     void ctx.claudeInput;
   };
   expect(handler).toBeDefined();
+});
+
+test("a click waiting behind its session's gather reports the wait; a menu with a click in flight draws no countdown", async () => {
+  const { held, doctor, toggle, ctx } = setup();
+  const waits: number[] = [];
+  const a = doctor(A);
+  const later = toggle(A, { ...ctx, placeWaited: (ms) => waits.push(ms) });
+  await new Promise((r) => setTimeout(r, 20));
+  held.open();
+  await Promise.all([a, later]);
+  expect(waits).toHaveLength(1);
+  expect(waits[0]).toBeGreaterThan(0);
+
+  const idle = new MenuIdle({ now: () => instantOf(new Date(100000)), close: async () => {}, failed: () => {} });
+  idle.observe(A, instantOf(new Date(100000)), true, 30);
+  expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
+  idle.clickArrived(A);
+  expect(idle.since(A, instantOf(new Date(100000)))).toBeUndefined();
+  idle.clickSettled(A);
+  expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
+  idle.dispose();
 });

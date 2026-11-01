@@ -659,8 +659,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn, and
-    // close ends those (src/daemon/journal-turns.ts); a subscribe its request
+    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
+    // and close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();

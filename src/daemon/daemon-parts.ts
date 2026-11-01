@@ -59,6 +59,6 @@ export interface DaemonParts {
   readonly journalTurns: Pick<JournalTurns, "getStats">;
   readonly verbCtx: Omit<
     VerbContext,
-    "arrival" | "gatherTook" | "turnWaited" | "clientGone"
+    "arrival" | "placeWaited" | "gatherTook" | "turnWaited" | "clientGone"
   >;
 }
