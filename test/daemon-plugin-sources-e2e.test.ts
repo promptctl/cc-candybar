@@ -20,6 +20,7 @@ import {
   prepareIsolatedDaemonEnv,
 } from "./helpers/spawn-isolated-daemon";
 import { loggedWhen, renderLines } from "./helpers/daemon-log";
+import { valueOf } from "../src/utils/logfmt";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_RUN } from "../src/click/wire";
 
@@ -166,7 +167,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       env,
       (lines) =>
         lines.some((l) => l.includes(`run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `)) &&
-        lines.some((l) => l.includes(`plugin storage refresh file=${file} `) && l.includes(" stored=Y by=supersede outcome=ok ")),
+        lines.some((l) => l.includes(`plugin storage refresh file=${valueOf(file)} `) && l.includes(" stored=Y by=supersede outcome=ok ")),
       "the run's event, and the read its resume started of this session's file",
     );
   });

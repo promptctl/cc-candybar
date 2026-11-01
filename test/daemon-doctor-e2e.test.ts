@@ -26,7 +26,7 @@ import {
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
-import { bundleAt, startDaemon } from "./helpers/in-worker-daemon";
+import { bundleAt, startDaemon, statsOf } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
 } from "./helpers/spawn-isolated-daemon";
@@ -59,7 +59,6 @@ import {
 } from "../src/doctor/daemon-answer";
 import { claudeConfigDir, detectClaudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
-import type { StatsSnapshot } from "../src/daemon/stats";
 import { answerRepo } from "./helpers/repo-approval";
 
 jest.setTimeout(30_000);
@@ -205,10 +204,9 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
         clientVersion: "0.0.1",
       }),
     ).toMatchObject({ ok: true });
-    expect(await request({ kind: "stats" })).toMatchObject({
-      ok: true,
-      stats: { handlerProbes: [{ nonce, handler: "0.0.1" }] },
-    });
+    expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
+      { nonce, handler: "0.0.1" },
+    ]);
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
@@ -317,13 +315,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
   const daemon = startDaemon(env, { bundle: bundleAt(repo) });
   try {
     const verdict = async () => {
-      const resp = await sendDaemonRequest(
-        daemon,
-        { v: PROTOCOL_VERSION, kind: "stats" } as never,
-        5000,
-      );
-      const stats = (resp as { stats: StatsSnapshot }).stats;
-      const asked = parseDaemonClients(stats);
+      const asked = parseDaemonClients(await statsOf(daemon.daemon));
       const install = installOf(
         productionInstallEdge,
         { kind: "recent" },
@@ -394,14 +386,9 @@ test("the rate-limit windows each render carried are the segment-data row's fact
   const daemon = startDaemon(env);
   try {
     const seen = async () => {
-      const resp = await sendDaemonRequest(
-        daemon,
-        { v: PROTOCOL_VERSION, kind: "stats" } as never,
-        5000,
-      );
       return rateLimitsOf(
         { kind: "recent" },
-        parseRateLimitSightings((resp as { stats: StatsSnapshot }).stats),
+        parseRateLimitSightings(await statsOf(daemon.daemon)),
         ownDir,
       );
     };

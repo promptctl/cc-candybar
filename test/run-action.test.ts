@@ -585,15 +585,14 @@ describe("a click on a run link", () => {
     expect(during).toContain(LOADING_GLYPH);
     expect(during).not.toContain("home=/h/old");
 
-    // Through real turns with its write on disk, whatever the watch hears. A
-    // slow machine shortens this hold and cannot fail it.
+    // Through real turns with its write on disk, so a source resumed before the
+    // exit would draw it. A slow machine shortens this hold and cannot fail it.
     programWrites(SID, { home: "/h/new" });
     await throughout(() => draw(view).text.includes(LOADING_GLYPH), "the loading cell while the program runs", 200);
 
     program.exit();
     await until(() => draw(view).text.includes("home=/h/new"), "the program's write");
-    expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
-    expect(lastClickError(r.sessionState, SID)).toBeNull();
+    expect(r.runs.stats()).toMatchObject({ started: 1, running: 0 });
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
@@ -603,6 +602,8 @@ describe("a click on a run link", () => {
 
     clickUrl(link.url, clickContext(r, view));
     await until(() => draw(view).text.includes("home=/h/new"), "the program's write", 10_000);
+    expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
+    expect(lastClickError(r.sessionState, SID)).toBeNull();
     const read = view.lanes().sources.get(STATUS)!.current();
     if (read.kind !== "ok") throw new Error(JSON.stringify(read));
     expect(read.value).toEqual({
