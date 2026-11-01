@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-543",
+      "ref": "refs/pull/543/merge",
+      "sha": "981836e48bea9359c13081b9050c03e776a30d0f",
+      "timestamp": "2026-11-01T08:07:53.232Z",
+      "commits": [
+        {
+          "sha": "981836e48bea9359c13081b9050c03e776a30d0f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:06:56-07:00",
+          "message": "Merge ac305a8bee1db35670c918b9e25a71487a206f23 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+        },
+        {
+          "sha": "ac305a8bee1db35670c918b9e25a71487a206f23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:06:48-07:00",
+          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-542",
       "ref": "refs/pull/542/merge",
       "sha": "e1d8ec047f4c24638a0793d50f4df76a94ef0c7c",
