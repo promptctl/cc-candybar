@@ -4,15 +4,22 @@
     {
       "version": "pr-534",
       "ref": "refs/pull/534/merge",
-      "sha": "980f57c4f0d0cc1f5a88c1861946ea230943fa77",
-      "timestamp": "2026-11-01T02:52:17.395Z",
+      "sha": "6274d5910db5dfcb05fa3d475c77dd58859fda48",
+      "timestamp": "2026-11-01T02:53:11.648Z",
       "commits": [
         {
-          "sha": "980f57c4f0d0cc1f5a88c1861946ea230943fa77",
+          "sha": "6274d5910db5dfcb05fa3d475c77dd58859fda48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:50:45Z",
-          "message": "Merge c5c1210d82b42147b829986bdea718c32626c474 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+          "timestamp": "2026-10-31T20:52:21-06:00",
+          "message": "Merge 2b28a87f53bbb5da70fd74b44eb78e09d499bfc3 into 53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f\n"
+        },
+        {
+          "sha": "2b28a87f53bbb5da70fd74b44eb78e09d499bfc3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T20:52:12-06:00",
+          "message": "test(proc): the stalled-loop case keeps its child alive past the abort (candybar-testing-0x6u.0mz)\n"
         },
         {
           "sha": "c5c1210d82b42147b829986bdea718c32626c474",
