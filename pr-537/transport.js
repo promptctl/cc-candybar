@@ -35774,7 +35774,6 @@ async function launchWaited(state, opts) {
     let killTimer = null;
     let groupEndTimer = null;
     let terminated = null;
-    const failure = {};
     const onAbort = () => terminate("aborted");
     const unlisten = () => {
       opts.signal?.removeEventListener("abort", onAbort);
@@ -35876,8 +35875,7 @@ async function launchWaited(state, opts) {
           stdout: stdout2,
           stderr: stderr2,
           exitCode: code,
-          signal: signal2,
-          ...failure
+          signal: signal2
         });
         return;
       }
@@ -35892,8 +35890,7 @@ async function launchWaited(state, opts) {
         stdout: stdout2,
         stderr: stderr2,
         exitCode: code,
-        signal: signal2,
-        ...failure
+        signal: signal2
       });
     };
     child.on("close", conclude);
@@ -35902,8 +35899,7 @@ async function launchWaited(state, opts) {
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
-    child.stdin?.on("error", (err) => {
-      failure.error = `stdin: ${err.message}`;
+    child.stdin?.on("error", () => {
     });
     child.stdin?.end(opts.stdinInput);
   });
@@ -35927,8 +35923,8 @@ function launchBlocking(state, opts) {
     stats?.onEnd(opts.category, Date.now() - t0);
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
-    if (result.error) {
-      const code = result.error.code;
+    const code = result.error?.code;
+    if (result.error && code !== "EPIPE") {
       const reason2 = code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
         ok: false,
