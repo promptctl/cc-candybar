@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-545",
+      "ref": "refs/pull/545/merge",
+      "sha": "cef3562e2d1a06205685ef6a12a170e163ff1be7",
+      "timestamp": "2026-11-01T08:37:41.619Z",
+      "commits": [
+        {
+          "sha": "cef3562e2d1a06205685ef6a12a170e163ff1be7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:37:00-07:00",
+          "message": "Merge 5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad into 52c69beb5b01d9c842ae7f38fbb59f0c64086cb1\n"
+        },
+        {
+          "sha": "5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:36:53-07:00",
+          "message": "feat(daemon): click-rooted launches go async, and a click cut by close goes no further (candybar-launch-q7o7.gp7)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-544",
       "ref": "refs/pull/544/merge",
       "sha": "56b203ee982c67d05faf981d53aa25af4be8b25d",
