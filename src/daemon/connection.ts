@@ -77,6 +77,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       return;
     }
     responded = true;
+    clearBackstop();
     const settle =
       exitAfterFlush === null
         ? undefined

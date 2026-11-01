@@ -63,24 +63,29 @@ export interface HeldClock extends DaemonClock {
 export function heldClock(start: Date = new Date()): HeldClock {
   let elapsed = 0;
   const timers = new Set<{ at: number; fire: () => void }>();
+  const nextDue = (end: number) =>
+    [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
+  // Each timer fires at its own moment, and one cleared by an earlier firing
+  // does not fire at all.
+  const fireThrough = (end: number): void => {
+    for (let due = nextDue(end); due; due = nextDue(end)) {
+      elapsed = due.at;
+      timers.delete(due);
+      due.fire();
+    }
+    elapsed = end;
+  };
   return {
     date: () => new Date(start.getTime() + elapsed),
     monotonic: () => elapsed,
     after: (ms, fire) => {
       const timer = { at: elapsed + ms, fire };
       timers.add(timer);
+      // Already due, it fires on the loop's next turn, as a real timer does.
+      if (ms <= 0) setImmediate(() => fireThrough(elapsed));
       return () => timers.delete(timer);
     },
-    advance: (ms) => {
-      elapsed += ms;
-      [...timers]
-        .filter((timer) => timer.at <= elapsed)
-        .sort((a, b) => a.at - b.at)
-        .forEach((timer) => {
-          timers.delete(timer);
-          timer.fire();
-        });
-    },
+    advance: (ms) => fireThrough(elapsed + ms),
   };
 }
 

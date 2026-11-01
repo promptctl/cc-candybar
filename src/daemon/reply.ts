@@ -324,15 +324,6 @@ export async function replyTo(
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
     }
-    // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
-    // at its arrival: early enough before its client hangs up to draw
-    // (src/daemon/request-deadline.ts).
-    const waitEndsAt = (req: CheckedRenderRequest): number =>
-      t0 +
-      waitBudgetMs(req.deadline, accepted, {
-        epochMs: started.getTime(),
-        monoMs: t0,
-      });
     const rendered: {
       outcome: RequestOutcome;
       resp: Response;
@@ -343,7 +334,14 @@ export async function replyTo(
           parts,
           checked.req,
           at,
-          waitEndsAt(checked.req),
+          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+          // fixed at its arrival: early enough before its client hangs up to
+          // draw (src/daemon/request-deadline.ts).
+          t0 +
+            waitBudgetMs(checked.req.deadline, accepted, {
+              epochMs: started.getTime(),
+              monoMs: t0,
+            }),
           facts,
         ).then(
           ({ answer, motion, clickShown, delivered }) => {

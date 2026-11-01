@@ -936,9 +936,9 @@ async function drawAnswer(
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = clock.monotonic();
-  // [LAW:one-source-of-truth] The event's figure is the wait as armed, read
-  // once, so the two cannot disagree. Setup has spent part of what the
-  // request arrived with.
+  // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
+  // reading. Setup has spent part of what the request arrived with, and below
+  // zero says by how much it overran: the timer fires at once.
   const budget = waitEndsAt - waitFrom;
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
