@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.7";
+var PACKAGE_VERSION = "1.175.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35586,7 +35586,7 @@ var RATE_LIMITS = {
   // for any human click cadence.
   "click.pbcopy": 1e3,
   "click.open": 1e3,
-  // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
+  // A click's probe, which holds the journal's turn for up to its 2 s timeout.
   "doctor.tmux": 1e3,
   "doctor.font": 1e3,
   "doctor.process": 1e3,
@@ -69286,33 +69286,38 @@ async function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits
       ...privateGlyphsIn(JSON.stringify(load.config))
     ])
   ].join("");
+  const [nerdFont2, processes, data] = await Promise.all([
+    // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
+    // union: none to draw is the arm with no terminal to read.
+    glyphs === "" ? { kind: "none" } : terminalFacts(edge, terminal, hints, glyphs).then((read2) => ({
+      kind: "glyphs",
+      glyphs,
+      terminal: read2
+    })),
+    edge.daemons(),
+    segmentDataFacts(
+      edge,
+      dataNeeds(load.config, globals.preset),
+      origin,
+      rateLimits
+    )
+  ]);
   return {
     tmux: tmux3,
     width,
     terminal,
-    // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
-    // union: none to draw is the arm with no terminal to read.
-    nerdFont: glyphs === "" ? { kind: "none" } : {
-      kind: "glyphs",
-      glyphs,
-      terminal: await terminalFacts(edge, terminal, hints, glyphs)
-    },
+    nerdFont: nerdFont2,
     marks: stores.marks,
     clicked: stores.clicked,
     daemon: {
       serving,
-      processes: await edge.daemons(),
+      processes,
       read: stores.postMortemsRead
     },
     config: configFacts(load, origin.target),
     sighted,
     frames: bars.kind === "failed" ? bars : { kind: "read" },
-    data: await segmentDataFacts(
-      edge,
-      dataNeeds(load.config, globals.preset),
-      origin,
-      rateLimits
-    ),
+    data,
     transcripts: transcriptReads2(edge, transcripts),
     claudeSettings: settingsChains(
       {
@@ -69815,6 +69820,7 @@ async function clickLaunch(launcher, opts, what, log) {
     log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
+  if (result.reason === "aborted") throw new DaemonClosing(what);
   const said = result.error ?? result.stderr.trim();
   throw new Error(
     `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`
@@ -76809,7 +76815,7 @@ function subscription(req) {
     );
   return { kind: "subscribe", sessionId: sessionId2.id, lane };
 }
-async function handleRequest(parts, req, timedOut, accepted) {
+async function handleRequest(parts, req, timedOut, accepted, clientLeft) {
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse3("BAD_REQUEST", "malformed request");
   }
@@ -76843,9 +76849,9 @@ async function handleRequest(parts, req, timedOut, accepted) {
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse3("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(parts, req, timedOut, accepted));
+  return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
-async function replyTo(parts, req, timedOut, accepted) {
+async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   const {
     stats,
     clock,
@@ -76993,6 +76999,7 @@ async function replyTo(parts, req, timedOut, accepted) {
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N",
       queued: `${queuedMs}ms`
     });
     const { level, line } = requestEvent(
@@ -77011,8 +77018,16 @@ async function replyTo(parts, req, timedOut, accepted) {
   if (req.kind === "click") {
     const t0 = clock.monotonic();
     const facts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(parts, req, facts, timedOut);
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const outcome = await clickOutcome(
+      parts,
+      req,
+      facts,
+      () => timedOut() || clientLeft()
+    );
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N"
+    });
     const { level, line } = requestEvent(
       "click",
       facts,
@@ -84318,13 +84333,13 @@ function createDaemon(inputs) {
     // the way in. A click that got in holds or waits for a journal's turn, and
     // close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
-    handle: async (req, timedOut, accepted) => {
+    handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted);
+      return handleRequest(parts, req, timedOut, accepted, clientLeft);
     },
-    reply: async (req, timedOut, accepted) => {
+    reply: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted);
+      return replyTo(parts, req, timedOut, accepted, clientLeft);
     },
     subscribe: (sessionId2, subscriber) => {
       closing.signal.throwIfAborted();
@@ -84803,7 +84818,7 @@ function hookData() {
   };
 }
 async function daemon2(request2) {
-  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic());
+  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic(), () => false);
   delivered();
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";
