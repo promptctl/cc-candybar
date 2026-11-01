@@ -11,6 +11,7 @@ import {
   type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
@@ -58,6 +59,7 @@ function makeCache(
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
     { launcher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

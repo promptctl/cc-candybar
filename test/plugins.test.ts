@@ -24,6 +24,7 @@ import {
   DECLARES_NOTHING,
   SOURCES_NOTHING,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
@@ -652,6 +653,7 @@ describe("an installed plugin", () => {
     });
     const cache = new RenderCache(
       { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -1028,6 +1030,7 @@ describe("an installed plugin", () => {
     });
     const cache = new RenderCache(
       { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,

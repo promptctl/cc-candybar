@@ -877,7 +877,7 @@ describe("watchFault", () => {
 
   test("a watch that hears every place its paths can change has no fault", () => {
     const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
-    expect(watchFault("config", { derived, held: held([]) })).toBeNull();
+    expect(watchFault("config", { derived, held: held([]) }, null)).toBeNull();
   });
 
   test("names each path whose links it cannot follow, and each directory the OS is not listening to", () => {
@@ -891,9 +891,21 @@ describe("watchFault", () => {
         { kind: "refused", path: "/r", reason: "EMFILE" },
         { kind: "failed", path: "/f", reason: "gone" },
       ]),
-    });
+    }, null);
     expect(fault).toContain(`config: cannot follow a link chain — ${x}: more than 40 symbolic links`);
     expect(fault).toContain("; cannot watch /r — EMFILE; watching /f failed — gone");
+  });
+
+  test("a reason beyond the watch's own is the watch's fault too", () => {
+    const derived = watchTargetsOf({ named: [path.join(dir, "f")], whole: [] });
+    expect(watchFault("config", { derived, held: held([]) }, "the OS stopped")).toBe("config: the OS stopped");
+    expect(
+      watchFault(
+        "config",
+        { derived, held: held([{ kind: "refused", path: "/r", reason: "EMFILE" }]) },
+        "the OS stopped",
+      ),
+    ).toBe("config: cannot watch /r — EMFILE; the OS stopped");
   });
 });
 

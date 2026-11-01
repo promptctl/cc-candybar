@@ -19,6 +19,7 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { declareLanes, renderOptionsOf } from "../src/daemon/render-payload";
 import { sessionSource, type SessionSource } from "../src/daemon/session-source";
 import { SessionState } from "../src/daemon/session-state";
@@ -187,6 +188,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),

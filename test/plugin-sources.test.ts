@@ -23,6 +23,7 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import {
   declareLanes,
   projectSources,
@@ -146,6 +147,7 @@ function rig(): Rig {
       watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),

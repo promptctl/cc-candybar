@@ -68,6 +68,18 @@ export interface FileEventsStats {
 // What a consumer of the one fact reads.
 export type FileEvents = Pick<FileEventDelivery, "delivery" | "subscribe">;
 
+// What a build outside the daemon reads: nothing measured, no span open, and
+// no notice ever sent.
+export const NO_FILE_EVENTS: FileEvents = {
+  delivery: () => ({
+    kind: "unmeasured",
+    since: 0,
+    reason: "outside the daemon",
+    missedSince: null,
+  }),
+  subscribe: () => () => {},
+};
+
 // [LAW:types-are-the-program] The instrument itself: not started, probing its
 // folder through its one watch, or ended, because its watch failed or its
 // folder went. An ended instrument holds no watch, so nothing it could hear
@@ -237,14 +249,11 @@ export class FileEventDelivery {
       return;
     }
     if (now === "gone") {
-      this.end(inst.period, "the probe folder was removed; restart the daemon");
+      this.end(inst.period, "the probe folder was removed");
       return;
     }
     if (!sameIdentity(now, inst.identity)) {
-      this.end(
-        inst.period,
-        "the probe folder was replaced; restart the daemon",
-      );
+      this.end(inst.period, "the probe folder was replaced");
       return;
     }
     const d = this.current;
@@ -325,6 +334,8 @@ export class FileEventDelivery {
     this.notify({ kind: "caught-up", since: d.missedSince });
   }
 
+  // [LAW:no-silent-failure] An ended instrument holds no watch and never
+  // measures again, so whatever ended it, only a restart can.
   private end(period: NodeJS.Timeout, reason: string): void {
     const inst = this.instrument;
     if (inst.kind === "probing") inst.handle.release();
@@ -333,7 +344,7 @@ export class FileEventDelivery {
     this.move({
       kind: "unmeasured",
       since: at,
-      reason,
+      reason: `${reason}; restart the daemon`,
       missedSince: this.current.missedSince ?? at,
     });
   }
@@ -368,6 +379,16 @@ export class FileEventDelivery {
   }
 }
 
+const stopped = (since: number): string =>
+  `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
+
+// [LAW:one-source-of-truth] Why nothing that refreshes on file events can
+// refresh now, or `null` while delivery is not stalled: what each such
+// consumer shows. Unmeasured is no finding about delivery, so it is not one
+// here: those consumers read as usual, and the bar's row says it cannot check.
+export const stallReason = (d: Delivery): string | null =>
+  d.kind === "stalled" ? stopped(d.missedSince) : null;
+
 // [LAW:no-silent-failure] The bar's row for as long as the span is open,
 // whatever state delivery is in: an edit made after the span's start may never
 // have been heard, and only an event the watch reports closes it. With no span
@@ -389,9 +410,9 @@ export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
       case "delivering":
         return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
       case "stalled":
-        return `file events stopped at ${since}: the OS has delivered no file event since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
       case "unmeasured":
-        return `the daemon cannot check whether file events are arriving: ${d.reason}, since ${since}`;
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
   };
   return [{ kind: "file-events", state: d.kind, message: message() }];
