@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-552",
-      "ref": "refs/pull/552/merge",
-      "sha": "6df619c91ff0525f11d243bec80750a92203bd5f",
-      "timestamp": "2026-11-01T14:47:35.467Z",
-      "commits": [
-        {
-          "sha": "6df619c91ff0525f11d243bec80750a92203bd5f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:46:38-07:00",
-          "message": "Merge d54a44f77e346925b4dbe25fcd3015bdcd75ac8e into 09301ac9bc6ac05841560bc1972b974b3305916f\n"
-        },
-        {
-          "sha": "d54a44f77e346925b4dbe25fcd3015bdcd75ac8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:46:10-07:00",
-          "message": "refactor(render): one drawn colour has one spelling, and a lane refuses inside its encoder (candybar-isolated-daemon-bfab.2nq)\n\nAnswers the high review of #552.\n\n- A Run spells a terminal colour `color(n)` whichever name drew it, so a\n  hex downgraded beside `red` is one look. mergedRuns then does what it\n  says at every depth: the spelled-look exception is gone, and ANSI bytes\n  and the lane snapshots do not move.\n- bandFrame and tmuxStatusFrame are total: laneEncoded lives inside each,\n  so a caller cannot reach the throw and a follower's push cannot abort.\n- The feed's answer is `resp`, because `answers.bar` read as the Frame\n  beside `feed.last.bar`.\n- Lanes map a Run's attrs directly. Run.attrs already holds what is on.\n- A Run's link is clean only because RichText admitted it, and band and\n  tmux write it past rich-js's encoder, so that is stated and tested.\n"
-        },
-        {
-          "sha": "89dfbe592a8f5d5a3900da4bed0211e00413e593",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:32:41-07:00",
-          "message": "refactor(render): band and tmux encode Frames, nothing in src decodes ANSI (candybar-isolated-daemon-bfab.2nq)\n\nThe band and tmux status lanes read the drawn Frame instead of decoding the\nbytes the render wrote. Every FeedFrame has a bar: a failed render's is the\ndiagnostic Frame, in the words of the statusline's error glyph, so a lane\nholds no failure branch and planOutcome leaves every surface the daemon draws.\n\nSink carries the bar beside the lane's JSON, and feed.last holds it once per\npush for a late joiner. mergedRuns joins neighbouring runs of one look, as the\ndecoder did, so one tmux link stays one range. laneEncoded is the one refusal\npoint, replacing both catch arms. nextChange and motion leave FeedFrame and\ndrawRender's return, because the Frame states them.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "09301ac9bc6ac05841560bc1972b974b3305916f",
-      "timestamp": "2026-11-01T14:01:19.504Z",
+      "sha": "ef5e1fd23a63c3bd27493e045e98c9877f67e0fe",
+      "timestamp": "2026-11-01T15:07:27.792Z",
       "commits": [
         {
-          "sha": "09301ac9bc6ac05841560bc1972b974b3305916f",
+          "sha": "ef5e1fd23a63c3bd27493e045e98c9877f67e0fe",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T07:00:23-07:00",
-          "message": "refactor(render): diagnostics draw Rows, and fill reads run widths (candybar-isolated-daemon-bfab.agt) (#551)\n\nThe viewer, the handoff line and fill drew through the strip, encoded the\nresult, then split the bytes to recover lines the draw already held. Each now\nreads drawStripCells' lines. A viewer row is a Row of kind diagnostic, paged and\nmeasured as rows, and the body drawRender returns is a Frame, the bar's or one\nholding the viewer's rows, so one encoder writes either. The viewer's frame draws\nat the frame's depth and states none of the hidden bar's sources as pending, and\nthe encoder takes only depth and rows, so the handoff line borrows no facts.\n\nThe diagnostic colours are hex at the source. The SGR the client's glyph writes\nderives from them in a leaf the client loads, so it is spelled there rather than\nasked of rich-js. check-protocol reads the hex and spells the same escape, still\ncomparing bytes against the Rust literals, and a test holds the two spellings of\nthat derivation together.\n\ndiagnosticFrame is the one constructor of a frame with no draw behind it. The\nband and tmux catch arms use it in place of SGR literals; 2nq moves it to the\nfailed render and removes those arms.\n\nNo byte moves. test/frame-bytes.test.ts.snap is untouched, and viewer and handoff\nbytes over four depths, six widths, four row caps and four pages compared\nidentical before and after, 2304 entries. test/diagnostics.test.ts pins their\nlook at every depth by comparison with what rich-js writes for the same text,\nlink and hex style.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-        },
-        {
-          "sha": "7a2b230a3590504f28701f135da02ae258381d66",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T13:12:41Z",
-          "message": "chore(release): set `package.json` to 1.177.2 [skip ci]\n\n## [1.177.2](https://github.com/promptctl/cc-candybar/compare/v1.177.1...v1.177.2) (2026-11-01)\n\n### Bug Fixes\n\n* **daemon:** background and lifecycle launches go async (candybar-launch-q7o7.jqq) ([#549](https://github.com/promptctl/cc-candybar/issues/549)) ([722b6fe](https://github.com/promptctl/cc-candybar/commit/722b6fe4c0d62887ce180576956933793a7e8d12))\n"
+          "timestamp": "2026-11-01T08:06:37-07:00",
+          "message": "refactor(render): band and tmux encode Frames, nothing in src decodes ANSI (candybar-isolated-daemon-bfab.2nq) (#552)\n\n* refactor(render): band and tmux encode Frames, nothing in src decodes ANSI (candybar-isolated-daemon-bfab.2nq)\n\nThe band and tmux status lanes read the drawn Frame instead of decoding the\nbytes the render wrote. Every FeedFrame has a bar: a failed render's is the\ndiagnostic Frame, in the words of the statusline's error glyph, so a lane\nholds no failure branch and planOutcome leaves every surface the daemon draws.\n\nSink carries the bar beside the lane's JSON, and feed.last holds it once per\npush for a late joiner. mergedRuns joins neighbouring runs of one look, as the\ndecoder did, so one tmux link stays one range. laneEncoded is the one refusal\npoint, replacing both catch arms. nextChange and motion leave FeedFrame and\ndrawRender's return, because the Frame states them.\n\n* refactor(render): one drawn colour has one spelling, and a lane refuses inside its encoder (candybar-isolated-daemon-bfab.2nq)\n\nAnswers the high review of #552.\n\n- A Run spells a terminal colour `color(n)` whichever name drew it, so a\n  hex downgraded beside `red` is one look. mergedRuns then does what it\n  says at every depth: the spelled-look exception is gone, and ANSI bytes\n  and the lane snapshots do not move.\n- bandFrame and tmuxStatusFrame are total: laneEncoded lives inside each,\n  so a caller cannot reach the throw and a follower's push cannot abort.\n- The feed's answer is `resp`, because `answers.bar` read as the Frame\n  beside `feed.last.bar`.\n- Lanes map a Run's attrs directly. Run.attrs already holds what is on.\n- A Run's link is clean only because RichText admitted it, and band and\n  tmux write it past rich-js's encoder, so that is stated and tested."
         }
       ]
     },

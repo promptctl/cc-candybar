@@ -72,18 +72,18 @@ var __callDispose = (stack, error, hasError) => {
     return _ = Error(m), _.name = "SuppressedError", _.error = e, _.suppressed = s, _;
   };
   var fail2 = (e) => error = hasError ? new E(e, error, "An error was suppressed during disposal") : (hasError = true, e);
-  var next2 = (it) => {
+  var next = (it) => {
     while (it = stack.pop()) {
       try {
         var result = it[1] && it[1].call(it[2]);
-        if (it[0]) return Promise.resolve(result).then(next2, (e) => (fail2(e), next2()));
+        if (it[0]) return Promise.resolve(result).then(next, (e) => (fail2(e), next()));
       } catch (e) {
         fail2(e);
       }
     }
     if (hasError) throw error;
   };
-  return next2();
+  return next();
 };
 
 // node_modules/.pnpm/events@3.3.0/node_modules/events/events.js
@@ -3248,15 +3248,15 @@ function __disposeResources(env2) {
     env2.hasError = true;
   }
   var r, s = 0;
-  function next2() {
+  function next() {
     while (r = env2.stack.pop()) {
       try {
-        if (!r.async && s === 1) return s = 0, env2.stack.push(r), Promise.resolve().then(next2);
+        if (!r.async && s === 1) return s = 0, env2.stack.push(r), Promise.resolve().then(next);
         if (r.dispose) {
           var result = r.dispose.call(r.value);
-          if (r.async) return s |= 2, Promise.resolve(result).then(next2, function(e) {
+          if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) {
             fail2(e);
-            return next2();
+            return next();
           });
         } else s |= 1;
       } catch (e) {
@@ -3266,7 +3266,7 @@ function __disposeResources(env2) {
     if (s === 1) return env2.hasError ? Promise.reject(env2.error) : Promise.resolve();
     if (env2.hasError) throw env2.error;
   }
-  return next2();
+  return next();
 }
 function __rewriteRelativeImportExtension(path40, preserveJsx) {
   if (typeof path40 === "string" && /^\.\.?\//.test(path40)) {
@@ -3649,8 +3649,8 @@ var require_inspectPrimitive = __commonJS({
           last2 = i + 1;
         } else if (point >= 55296 && point <= 57343) {
           if (point <= 56319 && i + 1 < length) {
-            const next2 = str.charCodeAt(i + 1);
-            if (next2 >= 56320 && next2 <= 57343) {
+            const next = str.charCodeAt(i + 1);
+            if (next >= 56320 && next <= 57343) {
               i++;
               continue;
             }
@@ -7589,10 +7589,10 @@ var require_glob = __commonJS({
               gss++;
             if (gss > gs)
               parts.splice(gs + 1, gss - gs);
-            const next2 = parts[gs + 1];
+            const next = parts[gs + 1];
             const p2 = parts[gs + 2];
             const p22 = parts[gs + 3];
-            if (next2 !== "..")
+            if (next !== "..")
               continue;
             if (!p2 || p2 === "." || p2 === ".." || !p22 || p22 === "." || p22 === "..")
               continue;
@@ -8030,7 +8030,7 @@ var require_glob = __commonJS({
               return;
             const current = pattern2.at(index);
             const nextIndex = index + 1;
-            const next2 = pattern2.at(nextIndex);
+            const next = pattern2.at(nextIndex);
             const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
             if (current === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
@@ -8054,7 +8054,7 @@ var require_glob = __commonJS({
                 subPatterns.add(nextIndex);
               if (!this.followSymlinks && entry.isSymbolicLink())
                 nSymlinks.add(index);
-              if (next2 === ".." && entryIsDirectory) {
+              if (next === ".." && entryIsDirectory) {
                 const parent = join4(path40, "..");
                 if (nextIndex < last2) {
                   if (!this.subpatterns.has(path40) && !cache2.seen(path40, pattern2, nextIndex + 1))
@@ -10441,7 +10441,7 @@ var require_from = __commonJS({
       readable._read = function() {
         if (!reading) {
           reading = true;
-          next2();
+          next();
         }
       };
       readable._destroy = function(error, cb) {
@@ -10467,7 +10467,7 @@ var require_from = __commonJS({
           await value;
         }
       }
-      async function next2() {
+      async function next() {
         for (; ; ) {
           try {
             const { value, done: done2 } = isAsync ? await iterator.next() : iterator.next();
@@ -11215,7 +11215,7 @@ var require_readable = __commonJS({
     }
     async function* createAsyncIterator(stream, options) {
       let callback = nop;
-      function next2(resolve) {
+      function next(resolve) {
         if (this === stream) {
           callback();
           callback = nop;
@@ -11223,7 +11223,7 @@ var require_readable = __commonJS({
           callback = resolve;
         }
       }
-      stream.on("readable", next2);
+      stream.on("readable", next);
       let error;
       const cleanup = eos(
         stream,
@@ -11246,7 +11246,7 @@ var require_readable = __commonJS({
           } else if (error === null) {
             return;
           } else {
-            await new Promise2(next2);
+            await new Promise2(next);
           }
         }
       } catch (err) {
@@ -11256,7 +11256,7 @@ var require_readable = __commonJS({
         if ((error || (options === null || options === void 0 ? void 0 : options.destroyOnReturn) !== false) && (error === void 0 || stream._readableState.autoDestroy)) {
           destroyImpl.destroyer(stream, null);
         } else {
-          stream.off("readable", next2);
+          stream.off("readable", next);
           cleanup();
         }
       }
@@ -13375,7 +13375,7 @@ var require_operators = __commonJS({
         const signalOpt = {
           signal
         };
-        let next2;
+        let next;
         let resume;
         let done2 = false;
         let cnt = 0;
@@ -13414,9 +13414,9 @@ var require_operators = __commonJS({
               cnt += 1;
               PromisePrototypeThen(val, afterItemProcessed, onCatch);
               queue.push(val);
-              if (next2) {
-                next2();
-                next2 = null;
+              if (next) {
+                next();
+                next = null;
               }
               if (!done2 && (queue.length >= highWaterMark || cnt >= concurrency)) {
                 await new Promise2((resolve) => {
@@ -13431,9 +13431,9 @@ var require_operators = __commonJS({
             queue.push(val);
           } finally {
             done2 = true;
-            if (next2) {
-              next2();
-              next2 = null;
+            if (next) {
+              next();
+              next = null;
             }
           }
         }
@@ -13455,7 +13455,7 @@ var require_operators = __commonJS({
               maybeResume();
             }
             await new Promise2((resolve) => {
-              next2 = resolve;
+              next = resolve;
             });
           }
         } finally {
@@ -20512,13 +20512,13 @@ var require_primordials2 = __commonJS({
       WeakMap: WeakMap2,
       WeakSet: WeakSet2
     } = primordials;
-    var createSafeIterator = (factory, next2) => {
+    var createSafeIterator = (factory, next) => {
       class SafeIterator {
         constructor(iterable) {
           this._iterator = factory(iterable);
         }
         next() {
-          return next2(this._iterator);
+          return next(this._iterator);
         }
         [SymbolIterator]() {
           return this;
@@ -20551,14 +20551,14 @@ var require_primordials2 = __commonJS({
     var makeSafe = (unsafe, safe) => {
       if (SymbolIterator in unsafe.prototype) {
         const dummy = new unsafe();
-        let next2;
+        let next;
         ArrayPrototypeForEach(ReflectOwnKeys(unsafe.prototype), (key) => {
           if (!ReflectGetOwnPropertyDescriptor(safe.prototype, key)) {
             const desc = ReflectGetOwnPropertyDescriptor(unsafe.prototype, key);
             if (typeof desc.value === "function" && desc.value.length === 0 && SymbolIterator in (FunctionPrototypeCall(desc.value, dummy) ?? {})) {
               const createIterator = uncurryThis(desc.value);
-              next2 = next2 ?? uncurryThis(createIterator(dummy).next);
-              const SafeIterator = createSafeIterator(createIterator, next2);
+              next = next ?? uncurryThis(createIterator(dummy).next);
+              const SafeIterator = createSafeIterator(createIterator, next);
               desc.value = function() {
                 return new SafeIterator(this);
               };
@@ -20944,7 +20944,7 @@ To specify an option argument starting with a dash use ${example}.`;
       values2[longOption] = optionValue;
     }
     function argsToTokens(args, options) {
-      const tokens2 = [];
+      const tokens = [];
       let index = -1;
       let groupCount = 0;
       const remainingArgs = ArrayPrototypeSlice(args);
@@ -20956,9 +20956,9 @@ To specify an option argument starting with a dash use ${example}.`;
         else
           index++;
         if (arg === "--") {
-          ArrayPrototypePush(tokens2, { kind: "option-terminator", index });
+          ArrayPrototypePush(tokens, { kind: "option-terminator", index });
           ArrayPrototypePushApply(
-            tokens2,
+            tokens,
             ArrayPrototypeMap(remainingArgs, (arg2) => {
               return { kind: "positional", index: ++index, value: arg2 };
             })
@@ -20975,7 +20975,7 @@ To specify an option argument starting with a dash use ${example}.`;
             inlineValue = false;
           }
           ArrayPrototypePush(
-            tokens2,
+            tokens,
             {
               kind: "option",
               name: longOption,
@@ -21009,7 +21009,7 @@ To specify an option argument starting with a dash use ${example}.`;
           const longOption = findLongOptionForShort(shortOption, options);
           const value = StringPrototypeSlice(arg, 2);
           ArrayPrototypePush(
-            tokens2,
+            tokens,
             {
               kind: "option",
               name: longOption,
@@ -21030,7 +21030,7 @@ To specify an option argument starting with a dash use ${example}.`;
             inlineValue = false;
           }
           ArrayPrototypePush(
-            tokens2,
+            tokens,
             {
               kind: "option",
               name: longOption,
@@ -21048,7 +21048,7 @@ To specify an option argument starting with a dash use ${example}.`;
           const longOption = StringPrototypeSlice(arg, 2, equalIndex);
           const value = StringPrototypeSlice(arg, equalIndex + 1);
           ArrayPrototypePush(
-            tokens2,
+            tokens,
             {
               kind: "option",
               name: longOption,
@@ -21060,9 +21060,9 @@ To specify an option argument starting with a dash use ${example}.`;
           );
           continue;
         }
-        ArrayPrototypePush(tokens2, { kind: "positional", index, value: arg });
+        ArrayPrototypePush(tokens, { kind: "positional", index, value: arg });
       }
-      return tokens2;
+      return tokens;
     }
     var parseArgs2 = (config2 = kEmptyObject) => {
       const args = objectGetOwn(config2, "args") ?? getMainArgs();
@@ -21112,15 +21112,15 @@ To specify an option argument starting with a dash use ${example}.`;
           }
         }
       );
-      const tokens2 = argsToTokens(args, options);
+      const tokens = argsToTokens(args, options);
       const result = {
         values: { __proto__: null },
         positionals: []
       };
       if (returnTokens) {
-        result.tokens = tokens2;
+        result.tokens = tokens;
       }
-      ArrayPrototypeForEach(tokens2, (token) => {
+      ArrayPrototypeForEach(tokens, (token) => {
         if (token.kind === "option") {
           if (strict) {
             checkOptionUsage(parseConfig, token);
@@ -23593,14 +23593,14 @@ function cutCells(text4, positions) {
   let lead = 0;
   let at = 0;
   let col = 0;
-  let next2 = 0;
+  let next = 0;
   for (const glyph of clustersFrom(text4, asCodePoint(0))) {
-    if (next2 === positions.length)
+    if (next === positions.length)
       break;
     const end = col + cellLen(glyph);
     let from = col;
-    for (; next2 < positions.length && positions[next2] < end; next2++) {
-      const cut = positions[next2];
+    for (; next < positions.length && positions[next] < end; next++) {
+      const cut = positions[next];
       pieces.push(" ".repeat(lead) + text4.slice(start, at) + " ".repeat(cut - from));
       lead = 0;
       start = cut === col ? at : at + glyph.length;
@@ -24214,7 +24214,7 @@ var ColorSpec = class _ColorSpec {
       [new _ColorSpec(`color(${slot})`, depth === ColorDepth.WINDOWS ? depth : ColorDepth.STANDARD, slot), theme24.ansiColors.get(slot)],
       ...depth === ColorDepth.EIGHT_BIT ? [cubeCandidate(value)] : []
     ];
-    return candidates.reduce((best, next2) => rgbDistance(next2[1], value) < rgbDistance(best[1], value) ? next2 : best)[0];
+    return candidates.reduce((best, next) => rgbDistance(next[1], value) < rgbDistance(best[1], value) ? next : best)[0];
   }
   /**
    * Every colour `depth` writes by index, each with the colour a terminal
@@ -29687,9 +29687,9 @@ function transposePalette(palette, key, name) {
     return new Palette(name ?? palette.name, palette.dark, palette.mapRoles((colour) => colour));
   }
   const anchorKey = { ...key, hueShift: 0 };
-  const next2 = palette.mapRoles((colour, role) => Oklch.fromRgba(colour).applyKey(isAnchored(role) ? anchorKey : key).toRgba());
-  const newDark = Oklch.fromRgba(next2.background).l < 0.5;
-  return new Palette(name ?? palette.name, newDark, next2);
+  const next = palette.mapRoles((colour, role) => Oklch.fromRgba(colour).applyKey(isAnchored(role) ? anchorKey : key).toRgba());
+  const newDark = Oklch.fromRgba(next.background).l < 0.5;
+  return new Palette(name ?? palette.name, newDark, next);
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
@@ -30438,20 +30438,20 @@ function parseStyleColor(token, failure, words2) {
   }
 }
 function parseStyleDefinition(definition) {
-  const tokens2 = definition.split(/\s+/);
+  const tokens = definition.split(/\s+/);
   const opts = {};
   let i = 0;
-  while (i < tokens2.length) {
-    const token = tokens2[i];
+  while (i < tokens.length) {
+    const token = tokens[i];
     if (token === "not") {
       i++;
-      const next2 = tokens2[i];
-      if (!next2) {
+      const next = tokens[i];
+      if (!next) {
         throw new StyleSyntaxError(`Expected attribute after "not" in style definition`);
       }
-      const attrName = ATTRIBUTE_SHORT_ALIASES[next2] ?? next2;
+      const attrName = ATTRIBUTE_SHORT_ALIASES[next] ?? next;
       if (!ATTRIBUTE_SET.has(attrName)) {
-        throw new StyleSyntaxError(`Invalid attribute: "${next2}"${nearMiss(next2, ATTRIBUTE_NAMES)}`);
+        throw new StyleSyntaxError(`Invalid attribute: "${next}"${nearMiss(next, ATTRIBUTE_NAMES)}`);
       }
       opts[attrName] = false;
       i++;
@@ -30459,17 +30459,17 @@ function parseStyleDefinition(definition) {
     }
     if (token === "on") {
       i++;
-      const next2 = tokens2[i];
-      if (!next2) {
+      const next = tokens[i];
+      if (!next) {
         throw new StyleSyntaxError(`Expected color after "on" in style definition`);
       }
-      opts.bgcolor = parseStyleColor(next2, "Invalid background color", COLOR_NAMES);
+      opts.bgcolor = parseStyleColor(next, "Invalid background color", COLOR_NAMES);
       i++;
       continue;
     }
     if (token === "link") {
       i++;
-      const url = tokens2[i];
+      const url = tokens[i];
       if (url) {
         opts.link = url;
       }
@@ -31274,12 +31274,12 @@ var Segment = class _Segment {
       return [segments];
     const sections = [[]];
     let offset = 0;
-    let next2 = 0;
+    let next = 0;
     for (const segment of segments) {
       const end = offset + segment.cellLength;
       const inside = [];
-      for (; next2 < cuts.length && cuts[next2] < end; next2++) {
-        const cut = cuts[next2];
+      for (; next < cuts.length && cuts[next] < end; next++) {
+        const cut = cuts[next];
         if (cut <= offset)
           sections.push([]);
         else
@@ -31291,7 +31291,7 @@ var Segment = class _Segment {
         sections.push(piece.hasText ? [piece] : []);
       offset = end;
     }
-    for (; next2 < cuts.length; next2++)
+    for (; next < cuts.length; next++)
       sections.push([]);
     if (sections[sections.length - 1].length === 0)
       sections.pop();
@@ -32541,8 +32541,8 @@ var RichText = class _RichText {
     return this;
   }
   // --- Token Appending ---
-  appendTokens(tokens2) {
-    for (const [text4, style] of tokens2) {
+  appendTokens(tokens) {
+    for (const [text4, style] of tokens) {
       this.append(text4, style);
     }
     return this;
@@ -32896,8 +32896,8 @@ var Strip = class {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       yield* render(drawItem(item), row2);
-      const next2 = i + 1 < items.length ? items[i + 1] : null;
-      yield* render(drawJoin(this.joiner, item, next2, { index: i + 1 }), row2);
+      const next = i + 1 < items.length ? items[i + 1] : null;
+      yield* render(drawJoin(this.joiner, item, next, { index: i + 1 }), row2);
     }
     yield Segment.line();
   }
@@ -33126,9 +33126,9 @@ var JoinedCell = class _JoinedCell {
       return void 0;
     const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
     const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
-    const next2 = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
-    const restamp = (level) => ({ ...level, owner: level.owner === this ? next2 : level.owner, inner: level.inner && restamp(level.inner) });
-    return { colors: next2.style, style: style.withAnchor(style.anchor && restamp(style.anchor)) };
+    const next = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
+    const restamp = (level) => ({ ...level, owner: level.owner === this ? next : level.owner, inner: level.inner && restamp(level.inner) });
+    return { colors: next.style, style: style.withAnchor(style.anchor && restamp(style.anchor)) };
   }
 };
 function joinedCell(anchor) {
@@ -33281,147 +33281,6 @@ function segmentsToString(segments, destination) {
     parts.push(segmentToString(segment, destination));
   return parts.join("");
 }
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/ansi.js
-init_globals();
-var escapes = () => /\r|\x1b\[([0-9;:]*)m|\x1b\[([012]?)K|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|\x9c|$)|\x1b[ -/]*[0-~]/g;
-function* escapeTokens(bytes) {
-  let at = 0;
-  for (const match of bytes.matchAll(escapes())) {
-    if (match.index > at)
-      yield { kind: "text", text: bytes.slice(at, match.index) };
-    if (match[0] === "\r")
-      yield { kind: "return" };
-    if (match[1] !== void 0)
-      yield { kind: "sgr", params: match[1] };
-    if (match[2] !== void 0)
-      yield { kind: "erase", mode: match[2] || "0" };
-    at = match.index + match[0].length;
-  }
-  if (at < bytes.length)
-    yield { kind: "text", text: bytes.slice(at) };
-}
-function* tokens(line) {
-  let at = 0;
-  for (const sequence of osc8Sequences(line)) {
-    yield* escapeTokens(line.slice(at, sequence.index));
-    yield { kind: "link", uri: sequence.uri };
-    at = sequence.index + sequence.length;
-  }
-  yield* escapeTokens(line.slice(at));
-}
-function adding(options) {
-  const added = new Style(options);
-  return (style) => style.add(added);
-}
-function next(rest2) {
-  const step4 = rest2.next();
-  return step4.done ? void 0 : step4.value;
-}
-function extendedColor(rest2) {
-  const kind = next(rest2);
-  if (kind === 5) {
-    const n = next(rest2);
-    return n === void 0 ? void 0 : ColorSpec.fromAnsi(n);
-  }
-  if (kind === 2) {
-    const [r, g, b] = [next(rest2), next(rest2), next(rest2)];
-    return b === void 0 ? void 0 : ColorSpec.fromRgb(r, g, b);
-  }
-  return void 0;
-}
-var SGR_OPS = new Map([
-  [0, () => NULL_STYLE],
-  // [LAW:one-source-of-truth] The codes that turn an attribute on are the
-  // ones `Style.toSgrCodes` writes; only the codes that turn one off are ours.
-  ...ATTRIBUTE_NAMES.map((name) => [ATTRIBUTE_SGR[name], adding({ [name]: true })]),
-  [22, adding({ bold: false, dim: false })],
-  [23, adding({ italic: false })],
-  // ECMA-48: 24 is "neither singly nor doubly underlined", 25 "steady" at
-  // either speed. Rich's table clears only the first of each pair.
-  [24, adding({ underline: false, underline2: false })],
-  [25, adding({ blink: false, blink2: false })],
-  [27, adding({ reverse: false })],
-  [28, adding({ conceal: false })],
-  [29, adding({ strike: false })],
-  [38, (style, rest2) => style.add(new Style({ color: extendedColor(rest2) }))],
-  [39, adding({ color: ColorSpec.default() })],
-  [48, (style, rest2) => style.add(new Style({ bgcolor: extendedColor(rest2) }))],
-  [49, adding({ bgcolor: ColorSpec.default() })],
-  // Underline colour has no field on Style; its arguments are still spent, or
-  // `58;2;1;2;3` would read on as bold, dim and italic.
-  [58, (style, rest2) => (extendedColor(rest2), style)],
-  [54, adding({ frame: false, encircle: false })],
-  [55, adding({ overline: false })],
-  ...Array.from({ length: 8 }, (_, n) => [
-    [30 + n, adding({ color: ColorSpec.fromAnsi(n) })],
-    [40 + n, adding({ bgcolor: ColorSpec.fromAnsi(n) })],
-    [90 + n, adding({ color: ColorSpec.fromAnsi(n + 8) })],
-    [100 + n, adding({ bgcolor: ColorSpec.fromAnsi(n + 8) })]
-  ]).flat()
-]);
-var identity = (style) => style;
-function applySgr(style, params) {
-  const codes = params.split(";").filter((code) => /^\d*$/.test(code)).map((code) => Math.min(255, Number(code))).values();
-  let result = style;
-  for (const code of codes)
-    result = (SGR_OPS.get(code) ?? identity)(result, codes);
-  return result;
-}
-var BLANK = [" ", NULL_STYLE];
-function erase(cells, column, mode) {
-  if (mode !== "0")
-    cells.fill(BLANK, 0, Math.min(column + 1, cells.length));
-  if (mode !== "1")
-    cells.length = Math.min(column, cells.length);
-}
-var AnsiDecoder = class {
-  sgr = NULL_STYLE;
-  link = void 0;
-  /** One `RichText` per line of `ansi`; a final newline ends a line rather than starting one. */
-  decode(ansi) {
-    return (ansi.match(/[^\n]*\n|[^\n]+/g) ?? []).map((line) => this.decodeLine(line.replace(/\r?\n$/, "")));
-  }
-  /**
-   * One line of output, holding no `\n`, written the way a terminal writes
-   * it: `\r` returns to the first column, and text overwrites from there.
-   */
-  decodeLine(line) {
-    const cells = [];
-    let column = 0;
-    for (const token of tokens(line)) {
-      switch (token.kind) {
-        case "text": {
-          const style = this.sgr.withLink(this.link);
-          for (const char of token.text)
-            cells[column++] = [char, style];
-          break;
-        }
-        case "return":
-          column = 0;
-          break;
-        case "erase":
-          erase(cells, column, token.mode);
-          break;
-        case "sgr":
-          this.sgr = applySgr(this.sgr, token.params);
-          break;
-        case "link":
-          this.link = token.uri === "" ? void 0 : token.uri;
-          break;
-      }
-    }
-    const runs = [];
-    for (const [char, style] of cells) {
-      const last2 = runs.at(-1);
-      if (last2?.[1].equals(style))
-        last2[0] += char;
-      else
-        runs.push([char, style]);
-    }
-    return RichText.assemble(runs);
-  }
-};
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
 init_globals();
@@ -35377,9 +35236,9 @@ function walkLinks(at) {
   const hops = [at];
   try {
     for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next2 = linkTarget(hops[hops.length - 1]);
-      if (next2 === null) return { hops, stopped: null };
-      hops.push(next2);
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
     }
     return {
       hops,
@@ -35566,72 +35425,6 @@ function sanitizeClient(v) {
   return CLIENT_KINDS.includes(kind) && path40 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path40, source } : void 0;
 }
 
-// src/daemon/client-transport.ts
-function asString(v, fallback) {
-  return typeof v === "string" ? v : fallback;
-}
-function asProtocolVersion(v) {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
-}
-function interpretResponse(kind, resp, project) {
-  const raw = resp;
-  if (raw.ok === true) {
-    const value = project(resp);
-    if (value !== void 0) {
-      return { kind: "ok", value };
-    }
-    return {
-      kind: "permanent",
-      cause: "malformed_response",
-      message: `ok response without payload for "${kind}" request`
-    };
-  }
-  const errorMessage = asString(raw.error, "(no error message)");
-  switch (raw.code) {
-    case "VERSION_MISMATCH":
-      return {
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: PROTOCOL_VERSION,
-        // Older daemons may not echo daemonV; non-number values from a
-        // misbehaving stub also fall back to 0 (the renderer maps 0 to
-        // "unknown" in the visible glyph).
-        daemonV: asProtocolVersion(raw.daemonV)
-      };
-    case "TIMEOUT":
-      return { kind: "transient", cause: "timeout", message: errorMessage };
-    case "BAD_REQUEST":
-      return { kind: "permanent", cause: "bad_request", message: errorMessage };
-    case "RENDER_FAILED":
-      return {
-        kind: "permanent",
-        cause: "render_failed",
-        message: errorMessage
-      };
-    case "SWITCHED_OFF":
-      return {
-        kind: "permanent",
-        cause: "switched_off",
-        message: errorMessage
-      };
-    default:
-      return {
-        kind: "permanent",
-        cause: "malformed_response",
-        message: `unknown error code: ${String(raw.code)}`
-      };
-  }
-}
-
-// src/daemon/client.ts
-function projectOutput(resp) {
-  const output = resp.output;
-  return typeof output === "string" ? output : void 0;
-}
-function renderOutcomeOf(resp) {
-  return interpretResponse("render", resp, projectOutput);
-}
-
 // src/daemon/acquire.ts
 init_globals();
 var import_node_path9 = __toESM(require_path_browserify(), 1);
@@ -35812,10 +35605,10 @@ var TIMEOUT_KILL_GRACE_MS = 250;
 var GROUP_END_POLL_MIN_MS = 25;
 var GROUP_END_POLL_MAX_MS = 1e3;
 var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
-function setFault(state, next2) {
-  if (next2 === state.fault) return;
-  state.fault = next2;
-  state.scope.observeLifeline(next2);
+function setFault(state, next) {
+  if (next === state.fault) return;
+  state.fault = next;
+  state.scope.observeLifeline(next);
 }
 function lose(state, line, reason) {
   if (state.lifeline?.process !== line) return;
@@ -36714,9 +36507,9 @@ var NEAR_LIMIT = 0.75;
 function approachingLimit(bytes, limit) {
   return bytes > limit * NEAR_LIMIT;
 }
-function artifactFile(dir, kind, identity3) {
+function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path8.default.join(dir, `${prefix}${identity3}${suffix}`);
+  return import_node_path8.default.join(dir, `${prefix}${identity2}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -36753,9 +36546,9 @@ function makeLimits(deps) {
       `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
     );
     const stamp2 = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
-    const identity3 = `${stamp2}-${deps.pid}`;
+    const identity2 = `${stamp2}-${deps.pid}`;
     await attempt(deps.log, "memory report", async () => {
-      const file = artifactFile(deps.snapshotDir, "memoryReport", identity3);
+      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
       const report2 = await deps.captureMemoryReport();
       if (disarmed) return;
       deps.writeMemoryReport(file, report2);
@@ -36767,7 +36560,7 @@ function makeLimits(deps) {
     }
     await attempt(deps.log, "heap snapshot", () => {
       deps.writeLogNow();
-      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity3);
+      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
       deps.log(
         "info",
         `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
@@ -36844,12 +36637,12 @@ function postMortemsOf(files) {
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    const identity3 = base.slice(prefix.length, base.length - suffix.length);
-    byIdentity.set(identity3, { ...byIdentity.get(identity3), [kind]: file });
+    const identity2 = base.slice(prefix.length, base.length - suffix.length);
+    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
   }
   const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity3, found]) => ({
-    identity: identity3,
+  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found]) => ({
+    identity: identity2,
     artifacts: Object.fromEntries(
       kinds.flatMap((k) => found[k] === void 0 ? [] : [[k, found[k]]])
     )
@@ -37190,8 +36983,8 @@ function trailerAfter(text4, end) {
   LINE_TRAILER.lastIndex = i;
   const m = LINE_TRAILER.exec(text4);
   if (m === null) return { commaEnd, line: null };
-  const next2 = i + m[0].length;
-  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
+  const next = i + m[0].length;
+  return { commaEnd, line: { at: next - m[1].length, next } };
 }
 function removeMember(text4, span) {
   const { commaEnd, line } = trailerAfter(text4, span.end);
@@ -37567,16 +37360,16 @@ async function readWholeLines(path40, prior, until2, window2) {
     let reached = start + first2.length;
     let shortRead = first2.length < Math.min(window2.length, end - start);
     while (lastNl < 0 && reached < end && !shortRead) {
-      const next2 = await readInto(
+      const next = await readInto(
         fh,
         window2.subarray(0, end - reached),
         reached
       );
-      bytesRead += next2.length;
-      const nl = next2.indexOf(10);
+      bytesRead += next.length;
+      const nl = next.indexOf(10);
       if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next2.length < Math.min(window2.length, end - reached);
-      reached += next2.length;
+      shortRead = next.length < Math.min(window2.length, end - reached);
+      reached += next.length;
     }
     const bytes = lastNl + 1;
     const longLine = bytes > window2.length ? bytes : 0;
@@ -39212,7 +39005,7 @@ var statIdentity = (folder) => {
   }
 };
 var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity3) => identity3 === "gone" ? "gone" : `${identity3.dev}:${identity3.ino}:${identity3.birthtimeNs}`;
+var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
 var boundOf = (folder) => {
   try {
     return statIdentity(folder);
@@ -39299,11 +39092,11 @@ function watchFault(label2, watch2, beyond) {
   ];
   return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
 }
-function folded(window2, next2) {
-  if (next2.kind === "failed") return next2;
+function folded(window2, next) {
+  if (next.kind === "failed") return next;
   if (window2.kind !== "changed") return window2;
-  if (next2.kind === "unknown") return next2;
-  for (const p2 of next2.paths) window2.paths.add(p2);
+  if (next.kind === "unknown") return next;
+  for (const p2 of next.paths) window2.paths.add(p2);
   return window2;
 }
 var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path13.default.join(dir, filename)]) };
@@ -39668,10 +39461,10 @@ var FileEventDelivery = class {
     }
     const period = setInterval(() => void this.tick(), PROBE_EVERY_MS);
     period.unref();
-    let identity3;
+    let identity2;
     try {
       fs_default.mkdirSync(folder, { recursive: true });
-      identity3 = this.identityOf(folder);
+      identity2 = this.identityOf(folder);
     } catch (e) {
       this.end(
         period,
@@ -39679,14 +39472,14 @@ var FileEventDelivery = class {
       );
       return;
     }
-    if (identity3 === "gone") {
+    if (identity2 === "gone") {
       this.end(period, "the probe folder was removed as it was made");
       return;
     }
     const probing = {
       kind: "probing",
       folder,
-      identity: identity3,
+      identity: identity2,
       period,
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
@@ -39850,24 +39643,24 @@ var FileEventDelivery = class {
     });
   }
   // [LAW:nothing-unseen] One line on each change of state, none per period.
-  move(next2) {
+  move(next) {
     const was = label(this.current);
-    this.current = next2;
-    if (label(next2) === was) return;
-    switch (next2.kind) {
+    this.current = next;
+    if (label(next) === was) return;
+    switch (next.kind) {
       case "delivering":
         this.logger("info", "file events delivering");
         break;
       case "stalled":
         this.logger(
           "warn",
-          `file events stalled since=${iso(next2.missedSince)}`
+          `file events stalled since=${iso(next.missedSince)}`
         );
         break;
       case "unmeasured":
         this.logger(
           "warn",
-          `file events unmeasured since=${iso(next2.since)} reason=${JSON.stringify(next2.reason)}`
+          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
         );
         break;
     }
@@ -42125,7 +41918,7 @@ var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
         } catch (e) {
           return reject2(e);
         }
-        next2(ret);
+        next(ret);
       }
       function onRejected(err) {
         pendingPromise = void 0;
@@ -42135,11 +41928,11 @@ var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
         } catch (e) {
           return reject2(e);
         }
-        next2(ret);
+        next(ret);
       }
-      function next2(ret) {
+      function next(ret) {
         if (isFunction(ret == null ? void 0 : ret.then)) {
-          ret.then(next2, reject2);
+          ret.then(next, reject2);
           return;
         }
         if (ret.done) {
@@ -44245,9 +44038,9 @@ var DocumentCell = class {
     return this.cell.get();
   }
   set(value) {
-    const next2 = shaped(value);
-    if (sameDocument(this.cell.get(), next2)) return;
-    this.cell.set(next2);
+    const next = shaped(value);
+    if (sameDocument(this.cell.get(), next)) return;
+    this.cell.set(next);
     this.lastChangedAt = Date.now();
   }
   lastUpdatedMs() {
@@ -44951,19 +44744,19 @@ var Lexer = class {
     const startOffset = this.offset;
     if (isSign(this.src[this.offset] ?? "")) this.advanceBy(1);
     if (this.src[this.offset] === "0" && this.offset + 1 < this.src.length) {
-      const next2 = this.src[this.offset + 1];
-      if (next2 === "x" || next2 === "X") {
+      const next = this.src[this.offset + 1];
+      if (next === "x" || next === "X") {
         this.advanceBy(2);
         while (isHex(this.src[this.offset] ?? "") || this.src[this.offset] === "_") this.advanceBy(1);
         if (this.src[this.offset] === "." || this.src[this.offset] === "p" || this.src[this.offset] === "P") while (this.isHexFloatTail(this.src[this.offset] ?? "")) this.advanceBy(1);
         return this.finishNumber(startOffset, start);
       }
-      if (next2 === "o" || next2 === "O") {
+      if (next === "o" || next === "O") {
         this.advanceBy(2);
         while (isOctal(this.src[this.offset] ?? "") || this.src[this.offset] === "_") this.advanceBy(1);
         return this.finishNumber(startOffset, start);
       }
-      if (next2 === "b" || next2 === "B") {
+      if (next === "b" || next === "B") {
         this.advanceBy(2);
         while (isBinary(this.src[this.offset] ?? "") || this.src[this.offset] === "_") this.advanceBy(1);
         return this.finishNumber(startOffset, start);
@@ -45414,10 +45207,10 @@ var Parser = class {
     const cmds = [this.parseCommand()];
     while (this.peek().type === "Pipe") {
       this.next();
-      const next2 = this.peek();
-      if (!canStartPrimary(next2.type)) throw this.errAt(next2, "missing command after `|`", {
+      const next = this.peek();
+      if (!canStartPrimary(next.type)) throw this.errAt(next, "missing command after `|`", {
         expected: "command",
-        found: tokenLabel(next2)
+        found: tokenLabel(next)
       });
       cmds.push(this.parseCommand());
     }
@@ -45647,8 +45440,8 @@ function decodeStringLiteral(raw, pos, source) {
       out += c;
       continue;
     }
-    const next2 = raw[++i];
-    switch (next2) {
+    const next = raw[++i];
+    switch (next) {
       case "n":
         out += "\n";
         break;
@@ -45687,7 +45480,7 @@ function decodeStringLiteral(raw, pos, source) {
       case "5":
       case "6":
       case "7": {
-        const digits = next2 + (raw[i + 1] ?? "") + (raw[i + 2] ?? "");
+        const digits = next + (raw[i + 1] ?? "") + (raw[i + 2] ?? "");
         i += 2;
         out += String.fromCodePoint(Number.parseInt(digits, 8));
         break;
@@ -45711,9 +45504,9 @@ function decodeStringLiteral(raw, pos, source) {
         break;
       }
       default:
-        throw new ParseError(`bad escape sequence \\${next2}`, pos, {
+        throw new ParseError(`bad escape sequence \\${next}`, pos, {
           expected: "valid escape sequence",
-          found: `\\${next2}`,
+          found: `\\${next}`,
           source
         });
     }
@@ -46655,8 +46448,8 @@ var Engine = class {
     if (pipe.cmds.length === 0) throw new EvalError("empty pipeline", pipe.pos, { source: ctx.source });
     let value = this.evalCommand(pipe.cmds[0], scope, ctx, NO_PIPE);
     for (let i = 1; i < pipe.cmds.length; i++) {
-      const next2 = pipe.cmds[i];
-      value = this.evalCommand(next2, scope, ctx, {
+      const next = pipe.cmds[i];
+      value = this.evalCommand(next, scope, ctx, {
         kind: "value",
         value
       });
@@ -50852,11 +50645,11 @@ var SourceRegistry = class _SourceRegistry {
       const read2 = raw.kind === "ok" && raw.value.trim() === "" ? ABSENT2 : raw;
       const outcome = parsed(read2, jsonParser, where);
       this.noteOutcome(name, outcome);
-      const next2 = outcome.kind === "ok" || read2.kind === "ok" || varDefault === void 0 ? outcome : fallback;
+      const next = outcome.kind === "ok" || read2.kind === "ok" || varDefault === void 0 ? outcome : fallback;
       const torn2 = showingRead && read2.kind === "ok" && outcome.kind !== "ok";
       const show2 = () => {
         showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next2);
+        this.store.setDocument(name, next);
       };
       if (torn2) {
         settling = setTimeout(show2, TORN_WRITE_SETTLE_MS);
@@ -51352,11 +51145,11 @@ function elementPathLine(source, document, pathParts) {
   let indexed = false;
   for (const part of pathParts) {
     const element = node.kind === "array" && /^\d+$/.test(part);
-    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
-    if (next2 === void 0) break;
+    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    if (next === void 0) break;
     indexed ||= element;
-    node = next2;
-    reached = next2;
+    node = next;
+    reached = next;
   }
   return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
 }
@@ -52571,11 +52364,11 @@ function beside(node, anchor, cell3, relation) {
     };
   }
   for (const [i, child] of node.children.entries()) {
-    const next2 = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
-    if (next2 !== null) {
+    const next = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
+    if (next !== null) {
       return {
         ...node,
-        children: node.children.map((c, j) => j === i ? next2 : c)
+        children: node.children.map((c, j) => j === i ? next : c)
       };
     }
   }
@@ -52583,12 +52376,12 @@ function beside(node, anchor, cell3, relation) {
 }
 function besideInBody(node, anchor, cell3, relation) {
   let found = false;
-  const next2 = mapOpens(node, (body) => {
+  const next = mapOpens(node, (body) => {
     const placed2 = beside(body, anchor, cell3, relation);
     found = placed2 !== null;
     return placed2 ?? body;
   });
-  return found ? next2 : null;
+  return found ? next : null;
 }
 function restages(fragment) {
   if (!isRowsFragment(fragment)) return true;
@@ -54105,6 +53898,25 @@ var EffectSessions = class {
 // src/render/frame.ts
 init_globals();
 
+// src/render/diagnostic-style.ts
+init_globals();
+var DIAGNOSTIC_ERROR_COLORS = {
+  fg: "#ffffff",
+  bg: "#c82828"
+};
+var DIAGNOSTIC_WARNING_COLORS = {
+  fg: "#000000",
+  bg: "#dca028"
+};
+function sgrOf(layer, hex3) {
+  const channels = [1, 3, 5].map(
+    (at) => Number.parseInt(hex3.slice(at, at + 2), 16)
+  );
+  return `\x1B[${layer};2;${channels.join(";")}m`;
+}
+var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
+var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
+
 // src/render/diagnostic-text.ts
 init_globals();
 var ELLIPSIS = "\u2026";
@@ -54138,6 +53950,31 @@ function sanitizeAndTruncate(text4, maxLen) {
   return out;
 }
 
+// src/render/error-glyph.ts
+init_globals();
+var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
+var PREFIX = "\u26A0 cc-candybar: ";
+var MAX_MESSAGE_LEN = 60;
+function permanentGlyphText(outcome) {
+  return `${PREFIX}${describe2(outcome)}`;
+}
+function describe2(outcome) {
+  switch (outcome.cause) {
+    case "version_mismatch": {
+      const daemon3 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
+      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon3})`;
+    }
+    case "bad_request":
+      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "render_failed":
+      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "switched_off":
+      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "malformed_response":
+      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+  }
+}
+
 // src/render/frame.ts
 function diagnosticFrame(text4, colors) {
   return {
@@ -54150,8 +53987,25 @@ function diagnosticFrame(text4, colors) {
     pending: []
   };
 }
+function renderFailedFrame(message) {
+  return diagnosticFrame(
+    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
+    DIAGNOSTIC_ERROR_COLORS
+  );
+}
+function laneEncoded(encode2, frame) {
+  try {
+    return encode2(frame);
+  } catch (error) {
+    const why2 = error instanceof Error ? error.message : String(error);
+    return encode2(
+      diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS)
+    );
+  }
+}
 function drawnColor(spec) {
-  return spec.type === ColorDepth.TRUECOLOR ? spec.value.hex : spec.name;
+  if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
+  return spec.number === void 0 ? spec.name : `color(${spec.number})`;
 }
 var ATTRIBUTES = Object.keys(new Style().attributes);
 function lookOf(style, depth) {
@@ -54196,6 +54050,17 @@ function ansiOf(frame) {
     frame.rows.map((row2) => row2.runs),
     frame.depth
   );
+}
+var sameLook = (a, b) => a.fg === b.fg && a.bg === b.bg && a.link === b.link && a.attrs?.join() === b.attrs?.join();
+function mergedRuns({ runs }) {
+  const merged = [];
+  for (const run3 of runs) {
+    const last2 = merged.at(-1);
+    if (last2 !== void 0 && sameLook(last2, run3))
+      merged[merged.length - 1] = { ...last2, text: last2.text + run3.text };
+    else merged.push(run3);
+  }
+  return merged;
 }
 function plainOf2(runs) {
   return runs.map((run3) => run3.text).join("");
@@ -56488,13 +56353,13 @@ function insertTerm(ctx, posIdent, anchor, relation) {
   const member = menuMember(applyName);
   const stateKey = menuStateKey(chromeSegName, applyName, void 0);
   const pageKey = menuPageKey(stateKey);
-  const identity3 = menuActionName(stateKey, member);
+  const identity2 = menuActionName(stateKey, member);
   artifacts.variables[stateKey] = {
     ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
     within: [EDIT_MODE_REF]
   };
   artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-  artifacts.actions[identity3] = disclosureCycleAction(stateKey, member);
+  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
   artifacts.actions[pageKey] = { set: pageKey, int: true };
   const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
   const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
@@ -58345,18 +58210,18 @@ function synthesizePlacementMenus(config2, issues) {
         }
         ownerBySynthKey.set(stateKey, owner);
         ownerBySynthKey.set(pageKey, owner);
-        const identity3 = menuActionName(stateKey, member);
+        const identity2 = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
-        const prior = claimed.get(identity3);
+        const prior = claimed.get(identity2);
         if (prior !== void 0 && prior !== claimant) {
           issue3(
             node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity3}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
           );
           continue;
         }
-        claimed.set(identity3, claimant);
-        actions[identity3] = disclosureCycleAction(stateKey, member);
+        claimed.set(identity2, claimant);
+        actions[identity2] = disclosureCycleAction(stateKey, member);
         variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
         variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
         actions[pageKey] = { set: pageKey, int: true };
@@ -59824,8 +59689,8 @@ function floorProblems(settings) {
       ];
     }
     const chain2 = [name];
-    for (let next2 = floor2; next2 !== void 0; next2 = floorOf3(next2)) {
-      if (next2 === name) {
+    for (let next = floor2; next !== void 0; next = floorOf3(next)) {
+      if (next === name) {
         return chain2.every((member) => name <= member) ? [
           {
             setting: name,
@@ -59833,8 +59698,8 @@ function floorProblems(settings) {
           }
         ] : [];
       }
-      if (chain2.includes(next2)) return [];
-      chain2.push(next2);
+      if (chain2.includes(next)) return [];
+      chain2.push(next);
     }
     return [];
   });
@@ -60319,12 +60184,12 @@ function validateNoCycles(ctx, cfg, within4 = () => true) {
   function dfs(node) {
     color.set(node, GRAY);
     stack.push(node);
-    for (const next2 of graph.get(node) ?? []) {
-      if (!within4(next2)) continue;
-      const c = color.get(next2);
+    for (const next of graph.get(node) ?? []) {
+      if (!within4(next)) continue;
+      const c = color.get(next);
       if (c === GRAY) {
-        const cycleStart = stack.indexOf(next2);
-        const cycle = [...stack.slice(cycleStart), next2];
+        const cycleStart = stack.indexOf(next);
+        const cycle = [...stack.slice(cycleStart), next];
         const firstNode = cycle[0];
         const info = nodeInfo.get(firstNode);
         ctx.issues.push({
@@ -60337,7 +60202,7 @@ function validateNoCycles(ctx, cfg, within4 = () => true) {
         });
         return true;
       }
-      if (c === WHITE2 && dfs(next2)) return true;
+      if (c === WHITE2 && dfs(next)) return true;
     }
     color.set(node, BLACK);
     stack.pop();
@@ -65104,7 +64969,7 @@ var MAX_STEPS = 50;
 var MAX_SESSIONS2 = 32;
 var MAX_BYTES2 = 8 * 1024 * 1024;
 var EMPTY = { past: [], future: [] };
-var identity2 = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
+var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
 var SettingsHistory = class {
   constructor(sessionState, logger, storage = EPHEMERAL_HISTORY_STORAGE) {
     this.sessionState = sessionState;
@@ -65127,8 +64992,8 @@ var SettingsHistory = class {
   get state() {
     return this.held;
   }
-  set state(next2) {
-    runInAction(() => this.held.replace(next2));
+  set state(next) {
+    runInAction(() => this.held.replace(next));
   }
   depth(sessionId2) {
     const { past, future, savepoint } = this.state.get(sessionId2) ?? EMPTY;
@@ -65147,9 +65012,9 @@ var SettingsHistory = class {
     const note = (sessionId2, change) => {
       written2 = true;
       const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
-      const earlier = changes.get(identity2(change));
+      const earlier = changes.get(identity(change));
       changes.set(
-        identity2(change),
+        identity(change),
         earlier === void 0 ? change : { ...change, before: earlier.before }
       );
       pending2.set(sessionId2, changes);
@@ -65195,8 +65060,8 @@ var SettingsHistory = class {
           const current = this.history(sessionId2);
           const appended = step4.length === 0 ? current : afterAppend(current, step4);
           const toggle = toggled.get(sessionId2);
-          const next2 = toggle === void 0 ? appended : withToggle(appended, toggle);
-          if (next2 !== current) this.put(sessionId2, next2);
+          const next = toggle === void 0 ? appended : withToggle(appended, toggle);
+          if (next !== current) this.put(sessionId2, next);
         }
       }
     };
@@ -65232,8 +65097,8 @@ var SettingsHistory = class {
     const stale = savepoint.net.filter(
       (c) => this.read(sessionId2, c) !== c.after
     );
-    const gone = new Set(stale.map(identity2));
-    const putBack = savepoint.net.filter((c) => !gone.has(identity2(c)));
+    const gone = new Set(stale.map(identity));
+    const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without2(pastAt(history, savepoint), gone));
     this.apply(sessionId2, putBack, "before", "rewind", {
       past,
@@ -65242,7 +65107,7 @@ var SettingsHistory = class {
     });
     if (stale.length > 0) {
       throw new BadVerbArgs(
-        `rewind: ${stale.map(describe2).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
+        `rewind: ${stale.map(describe3).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
       );
     }
     return putBack;
@@ -65273,7 +65138,7 @@ var SettingsHistory = class {
     const from = to === "before" ? "after" : "before";
     const stale = step4.filter((c) => this.read(sessionId2, c) !== c[from]);
     if (stale.length > 0) {
-      const gone = new Set(stale.map(identity2));
+      const gone = new Set(stale.map(identity));
       const { past, future, savepoint } = this.history(sessionId2);
       this.put(sessionId2, {
         past: without2(past, gone),
@@ -65286,13 +65151,13 @@ var SettingsHistory = class {
               [...past, ...[...future].reverse()].slice(0, savepoint.at),
               gone
             ).length,
-            net: savepoint.net.filter((c) => !gone.has(identity2(c))),
+            net: savepoint.net.filter((c) => !gone.has(identity(c))),
             below: without2(savepoint.below, gone)
           }
         }
       });
       throw new BadVerbArgs(
-        `${verb}: ${stale.map(describe2).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
+        `${verb}: ${stale.map(describe3).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
       );
     }
     const written2 = [];
@@ -65331,26 +65196,26 @@ var SettingsHistory = class {
   // session that changed least recently. The new state is adopted only once
   // it is saved, so memory never holds a step the file could not.
   put(sessionId2, history) {
-    const next2 = new Map(this.state);
-    next2.delete(sessionId2);
+    const next = new Map(this.state);
+    next.delete(sessionId2);
     if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
-      next2.set(sessionId2, history);
+      next.set(sessionId2, history);
     }
-    while (next2.size > MAX_SESSIONS2 || weight(next2) > MAX_BYTES2) {
-      const [oldest, h] = next2.entries().next().value;
-      if (next2.size > 1) next2.delete(oldest);
+    while (next.size > MAX_SESSIONS2 || weight(next) > MAX_BYTES2) {
+      const [oldest, h] = next.entries().next().value;
+      if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
-        next2.set(oldest, withoutOldestStep(h));
+        next.set(oldest, withoutOldestStep(h));
       } else {
         this.logger(
           "warn",
           `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES2} bytes; cancel is no longer available`
         );
-        next2.delete(oldest);
+        next.delete(oldest);
       }
     }
-    this.storage.save(Object.fromEntries(next2));
-    this.state = next2;
+    this.storage.save(Object.fromEntries(next));
+    this.state = next;
   }
 };
 function weight(state) {
@@ -65389,11 +65254,11 @@ function savepointAfter(savepoint, dropped2, step4) {
   };
 }
 function withNet(net, step4) {
-  const byTarget = new Map(net.map((c) => [identity2(c), c]));
+  const byTarget = new Map(net.map((c) => [identity(c), c]));
   for (const c of step4) {
-    const first2 = byTarget.get(identity2(c));
+    const first2 = byTarget.get(identity(c));
     byTarget.set(
-      identity2(c),
+      identity(c),
       first2 === void 0 ? c : { ...first2, after: c.after }
     );
   }
@@ -65453,12 +65318,12 @@ function withToggle(history, toggle) {
   return history;
 }
 function without2(steps2, gone) {
-  return steps2.map((step4) => step4.filter((c) => !gone.has(identity2(c)))).filter((step4) => step4.length > 0);
+  return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
 }
 function describeStep(step4) {
-  return step4.map(describe2).join(", ");
+  return step4.map(describe3).join(", ");
 }
-function describe2(change) {
+function describe3(change) {
   return change.kind === "session" ? `session setting "${change.key}"` : change.file;
 }
 
@@ -65495,10 +65360,10 @@ function stateFile(dir, name, empty2, parse3) {
   };
   return {
     read: read2,
-    update: (next2) => {
+    update: (next) => {
       const current = read2();
       if (current.kind === "failed") return current;
-      const value = next2(current.value);
+      const value = next(current.value);
       if (value !== current.value) {
         writeAtomic(file, `${JSON.stringify(value, null, 2)}
 `);
@@ -65510,28 +65375,6 @@ function stateFile(dir, name, empty2, parse3) {
 
 // src/render/diagnostics.ts
 init_globals();
-
-// src/render/diagnostic-style.ts
-init_globals();
-var DIAGNOSTIC_ERROR_COLORS = {
-  fg: "#ffffff",
-  bg: "#c82828"
-};
-var DIAGNOSTIC_WARNING_COLORS = {
-  fg: "#000000",
-  bg: "#dca028"
-};
-var ANSI_RESET = "\x1B[0m";
-function sgrOf(layer, hex3) {
-  const channels = [1, 3, 5].map(
-    (at) => Number.parseInt(hex3.slice(at, at + 2), 16)
-  );
-  return `\x1B[${layer};2;${channels.join(";")}m`;
-}
-var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
-var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
-
-// src/render/diagnostics.ts
 var ERROR_SEVERITY = {
   level: "error",
   glyph: "\u26A0",
@@ -65780,11 +65623,11 @@ var repoConfigs = (dir = stateDir()) => {
   const filed = () => fs_default.existsSync(repoConfigsPath(dir));
   return {
     read: () => (filed() ? book : loose).read(),
-    update: (next2) => {
-      if (filed()) return book.update(next2);
+    update: (next) => {
+      if (filed()) return book.update(next);
       const kept = loose.read();
       if (kept.kind === "failed") return kept;
-      return book.update(() => next2(kept.value));
+      return book.update(() => next(kept.value));
     }
   };
 };
@@ -66648,9 +66491,9 @@ var GitService = class {
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
-    const identity3 = configIdentity(configPath);
-    if (identity3 === null) return this.readRemotes(workingDir);
-    const { key, stamp: stamp2 } = identity3;
+    const identity2 = configIdentity(configPath);
+    if (identity2 === null) return this.readRemotes(workingDir);
+    const { key, stamp: stamp2 } = identity2;
     const memo = this.remotesByConfig.get(key);
     if (memo !== void 0 && memo.stamp === stamp2) {
       this.remotesByConfig.delete(key);
@@ -67940,13 +67783,13 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (end === void 0 || window2.reset) {
       end = { size: window2.size, stamp: window2.stamp };
     }
-    const next2 = window2.start + window2.lines.length;
+    const next = window2.start + window2.lines.length;
     value = await step4(
       value,
       decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
     );
     cursor = {
-      offset: next2,
+      offset: next,
       stamp: end.stamp,
       ino: window2.ino
     };
@@ -69389,9 +69232,9 @@ function terminalIdentity(tmux3, env2) {
     }
   }
 }
-async function terminalFacts(edge, identity3, hints, glyphs) {
-  if (identity3.kind !== "seen") return identity3;
-  const { identified, tmuxClient: client } = identity3;
+async function terminalFacts(edge, identity2, hints, glyphs) {
+  if (identity2.kind !== "seen") return identity2;
+  const { identified, tmuxClient: client } = identity2;
   const env2 = hints.terminalEnv;
   if (identified.kind !== "known") return identified;
   const { name, version } = identified.terminal;
@@ -69519,13 +69362,13 @@ function applyFix(stores, fix, facts) {
     case "claude-settings": {
       const settingsPath = fix.file.path;
       const text4 = readClaudeSettingsText(settingsPath);
-      const next2 = setValue(
+      const next = setValue(
         text4,
         fix.path,
         JSON.stringify(fix.value),
         JSON_DIALECT
       );
-      writeAtomic(settingsPath, next2);
+      writeAtomic(settingsPath, next);
       const reread = (chain2) => ({
         ...chain2,
         sources: readSettings(chain2.at)
@@ -70135,8 +69978,8 @@ var stepState = async (rawValue, ctx) => {
     params,
     stateKeySeed(config2, (k) => ctx.sessionState.get(sid, k), key)
   );
-  const next2 = stepWithin(clamped, by, params.min, params.max);
-  const result = gate2.validate(key, String(next2));
+  const next = stepWithin(clamped, by, params.min, params.max);
+  const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
@@ -70324,8 +70167,8 @@ var stepConfig = async (rawValue, ctx) => {
     params,
     configKeySeed(landing.globals, key)
   );
-  const next2 = stepWithin(current, by, params.min, params.max);
-  const result = gate2.validate(key, String(next2));
+  const next = stepWithin(current, by, params.min, params.max);
+  const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
@@ -71622,7 +71465,7 @@ function stakeClaim(dir, actDir, record2) {
     fs_default.rmSync(staging, { recursive: true, force: true });
   }
 }
-async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now2, read2) {
+async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
   const actDir = import_node_path33.default.join(dir, String(act));
   const job = launcher.launchJobSync(command, filesOf(actDir));
@@ -71631,7 +71474,7 @@ async function claimAct(launcher, dir, after, identity3, command, timeoutMs, now
   try {
     const start = await read2(job.pid);
     const record2 = {
-      identity: identity3,
+      identity: identity2,
       pid: job.pid,
       startTime: start.kind === "start" ? start.token : null,
       started: now2,
@@ -71706,7 +71549,7 @@ var KeyedSerialQueue = class {
       }
       const tasks = [];
       this.waiting.set(key, tasks);
-      const drain = (next2) => void next2().then(() => {
+      const drain = (next) => void next().then(() => {
         const after = tasks.shift();
         if (after === void 0) this.waiting.delete(key);
         else drain(after);
@@ -71755,11 +71598,11 @@ function factsOf(update) {
 }
 function updateNotice(update, act, ctx) {
   if (update === null) return [];
-  const identity3 = updateIdentity(update);
-  if (!ctx.enabled || ctx.dismissed === identity3) return [];
+  const identity2 = updateIdentity(update);
+  if (!ctx.enabled || ctx.dismissed === identity2) return [];
   const facts = factsOf(update);
   const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failure = act.kind === "failed" && act.identity === identity3 ? [`${facts.act} failed: ${act.reason}`] : [];
+  const failure = act.kind === "failed" && act.identity === identity2 ? [`${facts.act} failed: ${act.reason}`] : [];
   const message = [sentence, ...failure].join("\n");
   const actSpan = act.kind === "running" ? diagnosticSpan(`[${facts.busy}]`, null) : diagnosticSpan(
     `[${facts.act}]`,
@@ -71773,7 +71616,7 @@ function updateNotice(update, act, ctx) {
       effectsUrl([
         {
           verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity3]
+          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity2]
         }
       ])
     ),
@@ -71795,7 +71638,7 @@ function updateNotice(update, act, ctx) {
   return [
     {
       severity: UPDATE_SEVERITY,
-      about: `update\0${identity3}`,
+      about: `update\0${identity2}`,
       message,
       copy: message,
       lines: [first2, ...rest2]
@@ -71899,12 +71742,12 @@ function makeUpdateWatch(opts) {
   const current = () => closed ? null : updateOf(build, release3);
   function syncGate() {
     const update = current();
-    const identity3 = update === null ? null : updateIdentity(update);
-    if ((gate2 === null ? null : gate2.identity) === identity3) return;
+    const identity2 = update === null ? null : updateIdentity(update);
+    if ((gate2 === null ? null : gate2.identity) === identity2) return;
     gate2?.dispose();
-    gate2 = identity3 === null ? null : {
-      identity: identity3,
-      dispose: registerStateValidator(UPDATE_DISMISSED_KEY, [identity3])
+    gate2 = identity2 === null ? null : {
+      identity: identity2,
+      dispose: registerStateValidator(UPDATE_DISMISSED_KEY, [identity2])
     };
   }
   function sampleBuild() {
@@ -71952,21 +71795,21 @@ function makeUpdateWatch(opts) {
       return facts;
     });
     if (closed || !read2.ok) return;
-    const next2 = judgeAct(read2.value);
-    if (seen === null && next2.kind === "running") {
-      log("info", `apply-update: act ${next2.act} is running; watching it`);
+    const next = judgeAct(read2.value);
+    if (seen === null && next.kind === "running") {
+      log("info", `apply-update: act ${next.act} is running; watching it`);
     }
-    if (seen?.kind === "running" && next2.kind !== "running") {
-      if (next2.kind === "succeeded") {
-        log("info", `apply-update: act ${next2.act} succeeded`);
+    if (seen?.kind === "running" && next.kind !== "running") {
+      if (next.kind === "succeeded") {
+        log("info", `apply-update: act ${next.act} succeeded`);
         sampleBuild();
         onApplied();
       }
-      if (next2.kind === "failed") {
-        log("error", `apply-update: act ${next2.act} failed: ${next2.reason}`);
+      if (next.kind === "failed") {
+        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
       }
     }
-    seen = next2;
+    seen = next;
   }
   let tickTimer;
   async function tick() {
@@ -72535,9 +72378,9 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
       };
     }
     case "set-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
       return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next] }],
         active: false
       };
     }
@@ -72593,9 +72436,9 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
       };
     }
     case "persist-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
       return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, next2] }],
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, next] }],
         active: false
       };
     }
@@ -73218,12 +73061,12 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
-  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
+  const next = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
   if (catalogue === void 0) {
     const indices = pageSections.flatMap((section) => section.indices);
     return [
       assemble(
-        [...nav, ...indices.map((i) => optionCell(gridFaces[i], i)), ...next2],
+        [...nav, ...indices.map((i) => optionCell(gridFaces[i], i)), ...next],
         paged
       )
     ];
@@ -73231,7 +73074,7 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
   const bold = new Style({ bold: true });
   const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
   const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
-  const lines2 = [assemble([...nav, ...where, ...next2], paged)];
+  const lines2 = [assemble([...nav, ...where, ...next], paged)];
   for (const section of pageSections) {
     if (pageSections.length > 1) {
       lines2.push(
@@ -74513,7 +74356,7 @@ function unwrap2(answer2) {
   throw answer2.error;
 }
 var always = (value) => ({ read: () => value });
-var sameLook = sameBy({
+var sameLook2 = sameBy({
   basePalette: is,
   palette: is,
   decor: sameDecor
@@ -74593,7 +74436,7 @@ var ViewParts = class {
   facts;
   look = observable.box(void 0, {
     deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
+    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook2(a, b)
   });
   layout;
   // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
@@ -74696,8 +74539,8 @@ var ViewParts = class {
       };
       let held;
       node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next2 = settle3();
-        if (held === void 0 || !sameSlot(held, next2)) held = next2;
+        const next = settle3();
+        if (held === void 0 || !sameSlot(held, next)) held = next;
         return held;
       });
       this.slots.set(slot, node);
@@ -75715,11 +75558,7 @@ function noteSent(rate, at) {
   const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
   rate.splice(0, rate.length, ...kept, at);
 }
-var sentOf = (resp) => ({
-  resp,
-  bytes: JSON.stringify(resp)
-});
-var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.bar : answers.statusline;
+var answerOf3 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 var paceOf = (period) => Math.round(1e3 / period);
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
@@ -75981,7 +75820,7 @@ var FrameFeeds = class {
   // next change is Infinity, and an unseen bar's spacing is the still period.
   schedule(feed, frame, at) {
     const { moving, still } = this.deps.periods;
-    const until2 = ((frame?.nextChange ?? Infinity) - at) * 1e3;
+    const until2 = ((frame?.bar.nextChange ?? Infinity) - at) * 1e3;
     const shownPeriod = Math.min(Math.max(until2, moving), still);
     const shown = this.shown(feed);
     if (shownPeriod < still && shown) feed.moving++;
@@ -76047,29 +75886,29 @@ var FrameFeeds = class {
     if (feed.followers.size === 0) return;
     frame.delivered();
     const answers = {
-      bar: sentOf(frame.resp),
-      statusline: sentOf(frame.statusline)
+      resp: JSON.stringify(frame.resp),
+      statusline: JSON.stringify(frame.statusline)
     };
-    if (feed.last?.answers.bar.bytes === answers.bar.bytes && feed.last.answers.statusline.bytes === answers.statusline.bytes)
+    if (feed.last?.answers.resp === answers.resp && feed.last.answers.statusline === answers.statusline)
       return;
     const before = feed.last?.answers ?? null;
-    feed.last = { answers };
+    feed.last = { bar: frame.bar, answers };
     this.pushed++;
     feed.pushed++;
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
     for (const [lane, rate] of feed.rates)
-      if (before === null || answerOf3(before, lane).bytes !== answerOf3(answers, lane).bytes)
+      if (before === null || answerOf3(before, lane) !== answerOf3(answers, lane))
         noteSent(rate, at);
     for (const sub2 of feed.followers.keys()) this.send(feed, sub2);
   }
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
   send(feed, sub2) {
     if (feed.last === null) return;
-    const { resp, bytes } = answerOf3(feed.last.answers, sub2.lane);
-    if (feed.followers.get(sub2) === bytes) return;
-    sub2.frame(resp, bytes);
-    feed.followers.set(sub2, bytes);
+    const json2 = answerOf3(feed.last.answers, sub2.lane);
+    if (feed.followers.get(sub2) === json2) return;
+    sub2.frame(feed.last.bar, json2);
+    feed.followers.set(sub2, json2);
   }
   // A subscription its lane's toggle refuses, told why.
   refuse(sessionId2, sub2) {
@@ -76186,16 +76025,13 @@ function renderFrame(parts, sessionId2, fps, at) {
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, at, facts));
       if (setup === null) return null;
-      const { drawn, nextChange, evaluated: evaluated2, delivered, lanes } = drawRender(
-        parts,
-        setup,
-        {
-          by: "feed",
-          fps
-        }
-      );
+      const { drawn, evaluated: evaluated2, delivered, lanes } = drawRender(parts, setup, {
+        by: "feed",
+        fps
+      });
       const output = composeBar(drawn.body);
       return {
+        bar: drawn.body,
         resp: { ok: true, output },
         statusline: {
           ok: true,
@@ -76206,7 +76042,6 @@ function renderFrame(parts, sessionId2, fps, at) {
             handedOffTo(lanes, frameFeeds.following(sessionId2))
           )
         },
-        nextChange,
         evaluated: evaluated2,
         delivered,
         failure: null
@@ -76226,9 +76061,9 @@ function renderFrame(parts, sessionId2, fps, at) {
     );
     const failed2 = renderFailed(error);
     return {
+      bar: renderFailedFrame(failed2.error),
       resp: failed2,
       statusline: failed2,
-      nextChange: Infinity,
       evaluated: 0,
       delivered: NOTHING_DELIVERED,
       failure: { level, line: `frame ${line}` }
@@ -76613,8 +76448,6 @@ function drawRender(parts, setup, drawing2) {
       diagnostics,
       geometry
     },
-    motion: body.motion,
-    nextChange: body.nextChange,
     evaluated: evaluated2,
     clickShown,
     delivered,
@@ -76709,7 +76542,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       ended,
       refreshed: refreshedFact(refreshed)
     });
-    const { drawn, motion, clickShown, delivered, lanes } = drawRender(
+    const { drawn, clickShown, delivered, lanes } = drawRender(
       parts,
       setup,
       ANSWERING
@@ -76725,7 +76558,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     });
     return {
       answer: toStatusline ? statusline : output,
-      motion,
+      motion: drawn.body.motion,
       clickShown,
       delivered
     };
@@ -76864,7 +76697,7 @@ function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
 
 // src/daemon/render-checkpoint.ts
 function parseRenderArgs(args, cwd2) {
-  const { tokens: tokens2 } = (0, import_parseargs.parseArgs)({
+  const { tokens } = (0, import_parseargs.parseArgs)({
     args: args.slice(1),
     // skip binary path
     options: { config: { type: "string" } },
@@ -76872,10 +76705,10 @@ function parseRenderArgs(args, cwd2) {
     tokens: true,
     allowPositionals: true
   });
-  const config2 = (tokens2 ?? []).filter(
+  const config2 = (tokens ?? []).filter(
     (t2) => t2.kind === "option" && t2.name === "config"
   ).at(-1);
-  const refused = (tokens2 ?? []).flatMap((t2) => {
+  const refused = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
         return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
@@ -77686,9 +77519,9 @@ var Period = class {
   }
   hold(held) {
     if (this.state === "disposed") return;
-    const next2 = held ? "held" : "released";
-    if (next2 === this.state) return;
-    this.state = next2;
+    const next = held ? "held" : "released";
+    if (next === this.state) return;
+    this.state = next;
     this.schedule();
   }
   dispose() {
@@ -79114,13 +78947,13 @@ function mergeFolds(files) {
     }
   }
   if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
-  const tokens2 = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
+  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
   return {
     sessionInfo: {
       cost,
       calculatedCost: cost,
       officialCost: null,
-      tokens: tokens2,
+      tokens,
       tokenBreakdown: bd
     },
     days
@@ -80368,12 +80201,12 @@ var RefreshFaults = class {
   refreshed(sessionId2, lane, reason) {
     const held = this.bySession.get(sessionId2);
     if (reason === null && held?.has(lane) !== true) return;
-    const next2 = new Map(held);
-    if (reason === null) next2.delete(lane);
-    else next2.set(lane, reason);
+    const next = new Map(held);
+    if (reason === null) next.delete(lane);
+    else next.set(lane, reason);
     runInAction(() => {
-      if (next2.size === 0) this.bySession.delete(sessionId2);
-      else this.bySession.set(sessionId2, next2);
+      if (next.size === 0) this.bySession.delete(sessionId2);
+      else this.bySession.set(sessionId2, next);
     });
   }
 };
@@ -80509,14 +80342,14 @@ var ManagedStorage = class {
       throw new Error(`plugin storage: no key was asked for ${key.folder}`);
     }
     const unusable = key.generation === folder.generation ? folder.unusable : null;
-    const identity3 = unusable === null ? this.identityOf(key.folder) : "gone";
+    const identity2 = unusable === null ? this.identityOf(key.folder) : "gone";
     if (key.generation === folder.generation) {
-      folder.identity = identity3 === "gone" ? null : identity3;
+      folder.identity = identity2 === "gone" ? null : identity2;
     }
     const watched = {
       key,
       folder,
-      identity: identity3,
+      identity: identity2,
       holders: 0,
       // [LAW:single-enforcer] The only acquirer of this registry key, so the
       // slot's one callback is this generation's own.
@@ -81303,8 +81136,8 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
   const redeclare = (facts2, preset) => {
     const now2 = declared.get();
     if (facts2 === now2.facts && preset === now2.preset) return;
-    const next2 = declaration(facts2, preset);
-    runInAction(() => declared.set(next2));
+    const next = declaration(facts2, preset);
+    runInAction(() => declared.set(next));
   };
   const stop2 = reaction(
     presetNow,
@@ -81348,7 +81181,7 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     registry,
     holds: holds2,
     source,
-    requested: (next2) => redeclare(next2, presetNow()),
+    requested: (next) => redeclare(next, presetNow()),
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
@@ -82273,57 +82106,6 @@ init_globals();
 
 // src/tmux-status/frames.ts
 init_globals();
-
-// src/render/outcome-plan.ts
-init_globals();
-
-// src/render/error-glyph.ts
-init_globals();
-var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
-var PREFIX = "\u26A0 cc-candybar: ";
-var MAX_MESSAGE_LEN = 60;
-function formatPermanentGlyph(outcome) {
-  return `${OPEN}${PREFIX}${describe3(outcome)}${ANSI_RESET}
-`;
-}
-function describe3(outcome) {
-  switch (outcome.cause) {
-    case "version_mismatch": {
-      const daemon3 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
-      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon3})`;
-    }
-    case "bad_request":
-      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "render_failed":
-      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "switched_off":
-      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "malformed_response":
-      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-  }
-}
-
-// src/render/outcome-plan.ts
-function planOutcome(outcome) {
-  switch (outcome.kind) {
-    case "ok":
-      return { output: outcome.value, kick: false, debug: null };
-    case "transient":
-      return {
-        output: "\n",
-        kick: true,
-        debug: `daemon unavailable (transient: ${outcome.cause}: ${outcome.message}) \u2014 kicking daemon`
-      };
-    case "permanent":
-      return {
-        output: formatPermanentGlyph(outcome),
-        kick: false,
-        debug: `daemon refused request (permanent: ${outcome.cause}) \u2014 not kicking`
-      };
-  }
-}
-
-// src/tmux-status/frames.ts
 var RANGE_PREFIX = "ccb";
 var RANGE_HASH_HEX = 15 - RANGE_PREFIX.length;
 function rangeOf2(url) {
@@ -82347,8 +82129,10 @@ var STANDARD_NAMES = [
   "brightcyan",
   "brightwhite"
 ];
-function tmuxColor(spec) {
-  if (spec === void 0 || spec.isDefault) return "terminal";
+function tmuxColor(drawn) {
+  if (drawn === void 0) return "terminal";
+  const spec = ColorSpec.parse(drawn);
+  if (spec.isDefault) return "terminal";
   switch (spec.type) {
     case ColorDepth.STANDARD: {
       const name = spec.number === void 0 ? void 0 : STANDARD_NAMES[spec.number];
@@ -82384,60 +82168,32 @@ var ATTRIBUTES2 = {
   frame: null,
   encircle: null
 };
-var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES2);
 function escaped(text4) {
   return text4.replaceAll("#", "##");
 }
-function directive(style) {
-  const attributes = ATTRIBUTE_NAMES2.filter((name) => style[name] === true).map(
-    (name) => {
-      const tmux3 = ATTRIBUTES2[name];
-      if (tmux3 === null)
-        throw new Error(`frames: a tmux status line cannot draw ${name} text`);
-      return tmux3;
-    }
-  );
-  return `#[${["none", `fg=${tmuxColor(style.color)}`, `bg=${tmuxColor(style.bgcolor)}`, ...attributes].join(",")}]`;
-}
-var PLAIN2 = new Style();
-function tmuxStatusFrame(ansi) {
-  const links3 = {};
-  const run3 = (text4, style) => {
-    const drawn = directive(style) + escaped(text4);
-    if (style.link === void 0) return drawn;
-    const range = rangeOf2(style.link);
-    links3[range] = style.link;
-    return `#[range=user|${range}]${drawn}#[norange]`;
-  };
-  const rows = new AnsiDecoder().decode(ansi).map((line) => {
-    const plain = line.plain;
-    const runs = [];
-    let at = 0;
-    for (const span of line.spans) {
-      if (!(span.style instanceof Style)) {
-        throw new Error(
-          `frames: the decoder gave a span a ${typeof span.style} style`
-        );
-      }
-      if (span.start > at) runs.push(run3(plain.slice(at, span.start), PLAIN2));
-      runs.push(run3(plain.slice(span.start, span.end), span.style));
-      at = span.end;
-    }
-    if (at < plain.length) runs.push(run3(plain.slice(at), PLAIN2));
-    return runs.join("");
+function directive({ fg, bg, attrs = [] }) {
+  const attributes = attrs.map((name) => {
+    const tmux3 = ATTRIBUTES2[name];
+    if (tmux3 === null)
+      throw new Error(`frames: a tmux status line cannot draw ${name} text`);
+    return tmux3;
   });
+  return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
+}
+function encode(frame) {
+  const links3 = {};
+  const drawn = (run3) => {
+    const text4 = directive(run3) + escaped(run3.text);
+    if (run3.link === void 0) return text4;
+    const range = rangeOf2(run3.link);
+    links3[range] = run3.link;
+    return `#[range=user|${range}]${text4}#[norange]`;
+  };
+  const rows = frame.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
   return { rows, links: links3 };
 }
-function tmuxStatusResponse(resp) {
-  const ansi = planOutcome(renderOutcomeOf(resp)).output;
-  try {
-    return tmuxStatusFrame(ansi);
-  } catch (error) {
-    const why2 = error instanceof Error ? error.message : String(error);
-    return tmuxStatusFrame(
-      ansiOf(diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS))
-    );
-  }
+function tmuxStatusFrame(frame) {
+  return laneEncoded(encode, frame);
 }
 
 // src/daemon/tmux-status.ts
@@ -82699,8 +82455,8 @@ var TmuxStatusLines = class {
     );
     entry.unsubscribe = this.deps.subscribe(sessionId2, {
       lane: "tmuxStatus",
-      frame: (resp) => {
-        entry.frame = tmuxStatusResponse(resp);
+      frame: (bar) => {
+        entry.frame = tmuxStatusFrame(bar);
         this.reconcile(entry.socket);
       },
       refused: (resp) => {
@@ -83243,10 +82999,10 @@ function startPlace(startDir, cwd2) {
 var within3 = (dir, top) => dir === top || dir.startsWith(top + import_node_path41.default.sep);
 function relaunchArgs(argv2) {
   const kept = [];
-  const tokens2 = argv2.slice(1);
+  const tokens = argv2.slice(1);
   let i = 0;
-  while (i < tokens2.length) {
-    const token = tokens2[i];
+  while (i < tokens.length) {
+    const token = tokens[i];
     i += 1;
     if (token === "--") break;
     if (!isFlag(token)) continue;
@@ -83259,7 +83015,7 @@ function relaunchArgs(argv2) {
         reason: `Claude Code was started with ${name}, which cc-candybar does not know how to carry to a restart`
       };
     }
-    const taken = eq2 !== -1 ? [] : rule.arity === "one" ? tokens2.slice(i, i + 1) : rule.arity === "optional" ? tokens2.slice(i, i + 1).filter((t2) => !isFlag(t2)) : rule.arity === "variadic" ? takeWhile(tokens2.slice(i), (t2) => !isFlag(t2)) : [];
+    const taken = eq2 !== -1 ? [] : rule.arity === "one" ? tokens.slice(i, i + 1) : rule.arity === "optional" ? tokens.slice(i, i + 1).filter((t2) => !isFlag(t2)) : rule.arity === "variadic" ? takeWhile(tokens.slice(i), (t2) => !isFlag(t2)) : [];
     if (rule.arity === "one" && eq2 === -1 && taken.length === 0) {
       return {
         kind: "refused",
@@ -85017,8 +84773,8 @@ function seedWorld(state) {
   });
   repo = state;
 }
-function updateRepo(next2) {
-  repo = { ...repo, ...next2 };
+function updateRepo(next) {
+  repo = { ...repo, ...next };
   import_memfs.vol.writeFileSync(`${GIT}/index`, JSON.stringify(repo));
   import_memfs.vol.writeFileSync(`${GIT}/refs/heads/${repo.branch}`, `${repo.head}
 `);
