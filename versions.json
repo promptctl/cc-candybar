@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-535",
+      "ref": "refs/pull/535/merge",
+      "sha": "fd08fae50a62862d65174b2f171b353791e26b0b",
+      "timestamp": "2026-11-01T04:17:42.768Z",
+      "commits": [
+        {
+          "sha": "fd08fae50a62862d65174b2f171b353791e26b0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:16:53-06:00",
+          "message": "Merge 9eea923bdad15d238d155477518bf252348542af into 136fdd87d04c0ab9b35e07bf9b15f497cb1e29a3\n"
+        },
+        {
+          "sha": "9eea923bdad15d238d155477518bf252348542af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:01:23-06:00",
+          "message": "fix(proc): an abort of an ended group signals nothing (candybar-testing-0x6u.425)\n"
+        },
+        {
+          "sha": "2de90a5df358d46877d86e5adc59e073a2248f62",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T22:00:09-06:00",
+          "message": "fix(proc): an abort stands, and no poll outlives a settled launch (candybar-testing-0x6u.425)\n"
+        },
+        {
+          "sha": "9d0f7c6b7cd0dd31f64a90940bc642001cc919e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:50:50-06:00",
+          "message": "fix(proc): every end of a launch leaves the holder its pipes, and a timeout reads the group first (candybar-testing-0x6u.425)\n"
+        },
+        {
+          "sha": "ff965383829413332e071cc0e3ab8a993741772f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:44:23-06:00",
+          "message": "fix(proc): a launch concludes with its group and leaves the holder its pipes (candybar-testing-0x6u.425)\n"
+        },
+        {
+          "sha": "cf2d9372627ebc8ad4b20c8afd38dc0f85b8da00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:35:11-06:00",
+          "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "136fdd87d04c0ab9b35e07bf9b15f497cb1e29a3",
@@ -20,56 +70,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-01T03:37:44Z",
           "message": "chore(release): set `package.json` to 1.174.2 [skip ci]\n\n## [1.174.2](https://github.com/promptctl/cc-candybar/compare/v1.174.1...v1.174.2) (2026-11-01)\n\n### Bug Fixes\n\n* **daemon:** a request's timers run on its clock, and the deadline case holds them (brandon-unfiled-3248.a5k3) ([#533](https://github.com/promptctl/cc-candybar/issues/533)) ([4814ee7](https://github.com/promptctl/cc-candybar/commit/4814ee778a28c55a7193789772cc2d681d409ab0))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-535",
-      "ref": "refs/pull/535/merge",
-      "sha": "3ca3c1c9b506cc781fc6a6dde2aad3e39b741b7c",
-      "timestamp": "2026-11-01T04:02:17.302Z",
-      "commits": [
-        {
-          "sha": "3ca3c1c9b506cc781fc6a6dde2aad3e39b741b7c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T04:01:34Z",
-          "message": "Merge 41175606ded0f80217f6b3ec1bb57616670e2b18 into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
-        },
-        {
-          "sha": "41175606ded0f80217f6b3ec1bb57616670e2b18",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:01:23-06:00",
-          "message": "fix(proc): an abort of an ended group signals nothing (candybar-testing-0x6u.425)\n"
-        },
-        {
-          "sha": "ce7e96b2db3dd1da7a510085d699169698dfd07c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:00:09-06:00",
-          "message": "fix(proc): an abort stands, and no poll outlives a settled launch (candybar-testing-0x6u.425)\n"
-        },
-        {
-          "sha": "2b131f24fa881ea23cbaede0b3d95c803857aa60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:50:50-06:00",
-          "message": "fix(proc): every end of a launch leaves the holder its pipes, and a timeout reads the group first (candybar-testing-0x6u.425)\n"
-        },
-        {
-          "sha": "cd1e87fb9afd928148eebeeeb573d68943a6dbf2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:44:23-06:00",
-          "message": "fix(proc): a launch concludes with its group and leaves the holder its pipes (candybar-testing-0x6u.425)\n"
-        },
-        {
-          "sha": "6d1c712e7a50ed409f91153c0b957e7b11cb6453",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:35:11-06:00",
-          "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
         }
       ]
     },
