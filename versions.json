@@ -4,15 +4,22 @@
     {
       "version": "pr-530",
       "ref": "refs/pull/530/merge",
-      "sha": "d3bd98b2a1d96ab745c0619b54d968b771bfa534",
-      "timestamp": "2026-11-01T00:57:16.858Z",
+      "sha": "49b734cc78941e7a9dda5b564b44bce3e5f4e35e",
+      "timestamp": "2026-11-01T01:04:35.850Z",
       "commits": [
         {
-          "sha": "d3bd98b2a1d96ab745c0619b54d968b771bfa534",
+          "sha": "49b734cc78941e7a9dda5b564b44bce3e5f4e35e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:56:35-06:00",
-          "message": "Merge 71915a891dc26e2c789c41d9acd3eb10e300390f into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+          "timestamp": "2026-11-01T01:03:44Z",
+          "message": "Merge 121ff7f274fa4f5640153abf950b5706a8738200 into ab1bfd6b20a5b979eb3a63271206ab9f7bc2bc20\n"
+        },
+        {
+          "sha": "121ff7f274fa4f5640153abf950b5706a8738200",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T19:03:34-06:00",
+          "message": "test(daemon-value): the launches' end is read off the ledger, not a counter (candybar-testing-0x6u.945)\n"
         },
         {
           "sha": "71915a891dc26e2c789c41d9acd3eb10e300390f",
