@@ -122,8 +122,9 @@ export function gateOf(
 /**
  * Collapse a visual line's cells into the ONE strip item the unit contributes
  * for that line. [LAW:single-enforcer] A unit (segment, or an inline leaf) is
- * one strip item — the powerline joiner caps BETWEEN units, never inside one,
- * so a unit's interior bg/fg variation is paint, not a structural seam the
+ * laid as one strip item, which its row divides only when it is wider than a
+ * line (src/render/fill.ts) — the powerline joiner caps BETWEEN units, never
+ * inside one, so a unit's interior bg/fg variation is paint, not a structural seam the
  * joiner reads. Each input cell's wrapping style becomes a span over its range
  * and its interior spans (including OSC-8 links) carry through, so every
  * clickable region survives as its own span — serialized as one OSC-8 region
@@ -164,7 +165,7 @@ export function sizeCell(cell: RichText, width: number, how: CellSizing): void {
 // row's leftover width, with the sizing intent the row needs to honour it (the row
 // finally sizes the cell and cannot ask the segment declaration again). The demand
 // is a declared field of the cell, so code that rebuilds the text of a laid cell
-// either carries the demand across or fails to typecheck. `resolveFill`
+// either carries the demand across or fails to typecheck. `fitRow`
 // (src/render/fill.ts) is where a row's laid cells become the strip items it
 // serializes.
 // [LAW:dataflow-not-control-flow] The demand is a VALUE riding the cell, not a

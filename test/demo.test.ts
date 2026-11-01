@@ -57,7 +57,7 @@ describe("pnpm demo", () => {
         },
       },
       root: "probe",
-    }`);
+    }`, { COLUMNS: "1000" });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(
       `home=${join(dir, "home")} undo=0 unsaved=0 file=${join(dir, "config.json5")}`,

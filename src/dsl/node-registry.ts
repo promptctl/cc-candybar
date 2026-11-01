@@ -998,7 +998,8 @@ function drawnRows(
   // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
   // lines BEFORE per-segment layout — width/justify/truncate then measure each
   // line cleanly. A newline-free segment is the degenerate one-line case. Each
-  // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
+  // laid line is ONE strip item, until its row divides one wider than a line:
+  // applySegmentLayout collapses a line's cells to
   // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
   // at the segment's edges, never inside it.
   // Each inline line is a ROW of the band this segment sits on.

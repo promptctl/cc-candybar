@@ -15,6 +15,8 @@
 //   6. The loader rejects a picker referencing an undeclared action.
 
 import { drawPayload } from "./helpers/draw-payload";
+import { cellLen } from "@promptctl/rich-js";
+
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
@@ -38,10 +40,10 @@ import { instantOf } from "../src/utils/instant";
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
 
-function opts(width: number) {
+function opts(width: number, wrap = true) {
   return {
     endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
+    colorCompatibility: "truecolor" as const, wrap, padding: 0,
     width,
   };
 }
@@ -81,7 +83,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (width: number): Frame =>
+  const render = (width: number, wrap = true): Frame =>
     drawPayload(
       config,
       compiled,
@@ -89,7 +91,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       registry,
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
-      opts(width),
+      opts(width, wrap),
     ).frame;
   const gate = stateGate(config);
   const click = (url: string): void => {
@@ -222,8 +224,18 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(plain).toContain("✕");
     expect(plain).not.toContain("→");
     expect(plain).not.toContain("←");
-    // Every theme is present (the long line wraps via FlexStrip, none dropped).
+    // Every theme is present: the row divides the long cell, and drops none.
     for (const t of THEMES) expect(plain).toContain(t);
+    expect(plain.split("\n").filter((line) => cellLen(line) > 30)).toEqual([]);
+  });
+
+  test("wrap (paged=false) with autoWrap off keeps the row one unbounded line", () => {
+    const { render, sessionState } = buildRuntime(pickerConfig(true, false));
+    sessionState.set("s1", "theme-page", "0");
+    const lines = textOf(render(30, false)).split("\n");
+    expect(
+      lines.filter((line) => THEMES.every((t) => line.includes(t))),
+    ).toHaveLength(1);
   });
 });
 

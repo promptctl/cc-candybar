@@ -175,6 +175,9 @@ function harness(opts: {
 // The parts each bar frame says it evaluated.
 const EVALUATED = 3;
 
+// The strip items each bar frame says divided cells added.
+const CELL_BREAKS = 2;
+
 // A frame drawing `output`, next changing at `nextChange`, whose statusline
 // shows `handoff` in its place, if any.
 function barFrame(
@@ -187,6 +190,7 @@ function barFrame(
     resp: { ok: true, output },
     statusline: { ok: true, output: handoff ?? output },
     evaluated: EVALUATED,
+    cellBreaks: CELL_BREAKS,
     delivered: () => {},
     failure: null,
   };
@@ -203,6 +207,7 @@ function failedFrame(req: string): FeedFrame {
     resp,
     statusline: resp,
     evaluated: 0,
+    cellBreaks: 0,
     delivered: () => {},
     failure: { level: "error", line: `frame ${req} threw` },
   };
@@ -613,6 +618,20 @@ describe("on a faked clock", () => {
         ` drawn=${state.renders} .* evaluated=${EVALUATED * state.renders} `,
       ),
     );
+  });
+
+  // A lane's requests draw a handoff row, so the feed is what shows how the
+  // lane's width treats its bar.
+  test("the summary counts the strip items its frames' divided cells added", async () => {
+    const { feeds, note, state, log } = harness({ motion: "moving" });
+    note("s", "bar");
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {}),
+    );
+    await pass(100);
+    close();
+    expect(log.at(-1)).toContain(` cellBreaks=${CELL_BREAKS * state.renders} `);
   });
 
   // brandon-unfiled-3248.8ro6 §4e: no cause of a wake sets the draw rate. A

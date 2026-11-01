@@ -829,7 +829,8 @@ export interface SegmentDecl {
   // width, split evenly when a row declares more than one
   // (brandon-layout-0c2). A fill segment can never widen a row past the width
   // it was given: when the other cells already fill it every share is zero and
-  // the strip's own wrap owns the overflow exactly as before.
+  // the strip's own wrap owns the overflow exactly as before. A cell of any width
+  // wider than a line wraps across lines, unless `autoWrap` is off.
   readonly width?: "auto" | number | "fill";
   readonly justify?: JustifyMode;
   readonly truncate?: TruncateMode;

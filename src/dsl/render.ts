@@ -47,7 +47,7 @@ import {
   stripChromeCols,
   stripSeamCols,
 } from "../render/strip.js";
-import { resolveFill } from "../render/fill.js";
+import { fitRow } from "../render/fill.js";
 import type { Frame } from "../render/frame.js";
 import {
   SessionEffects,
@@ -1140,6 +1140,8 @@ export interface DrawnFrame {
   // How many of the view's parts this frame evaluated (src/dsl/parts.ts):
   // between data changes, only those that read the instant.
   readonly evaluated: number;
+  // How many strip items dividing cells too wide for a line added.
+  readonly cellBreaks: number;
   // How each slot whose selection is a rule settled: `kept`, settled in the
   // turn what it reads moved (outside any draw), or `per-draw`, a rule that
   // reads the instant, evaluated by this frame. A decided slot is absent.
@@ -1516,18 +1518,19 @@ export function drawDsl(
     );
   }
   const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor)))
-    // A row's fill demands resolve here and nowhere else: this is the one place a
-    // composed row and the width it must fit are both in hand (brandon-layout-0c2).
+    // A row fits its width here and nowhere else: this is the one place a
+    // composed row and that width are both in hand (brandon-layout-0c2).
     // [LAW:one-source-of-truth] A row's motion follows the row, not its line
     // number, so a menu opening over it does not move it onto another's.
     // Its items are what the strip stamps their cells with, each beside the
     // effect its cell demands.
     .map(({ line, row }) => {
-      const items = resolveFill(line.cells, drawOpts);
+      const items = fitRow(line.cells, drawOpts);
       // At the root, a `deeper` line is one an open menu added.
       const kind: RowKind = line.band === "deeper" ? "menu" : "bar";
       return {
         kind,
+        cellBreaks: items.length - line.cells.length,
         ...drawStripCells(
           items.map((item) => item.owner),
           drawOpts,
@@ -1582,6 +1585,7 @@ export function drawDsl(
       pending: [...waited].sort(),
     },
     evaluated: parts.evaluated - evaluatedBefore,
+    cellBreaks: rendered.reduce((sum, row) => sum + row.cellBreaks, 0),
     rules,
   };
 }

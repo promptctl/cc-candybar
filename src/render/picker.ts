@@ -15,9 +15,9 @@
 //
 // [LAW:dataflow-not-control-flow] Paged vs wrap is ONE value, not a mode: the
 // `paged` flag selects the available width passed to `paginate` (term.cols vs
-// Infinity). Infinite width ⇒ one page ⇒ the long line wraps via FlexStrip; finite
-// ⇒ a sliced page with ←/→. The same fold, same emit pipeline; the width value
-// (and the matching overflow) select the shape.
+// Infinity). Infinite width ⇒ one page ⇒ one long cell, which its row divides
+// across lines (src/render/fill.ts); finite ⇒ a sliced page with ←/→. The same
+// fold, same emit pipeline; the width value selects the shape.
 //
 // [LAW:one-way-deps] Lives in render/ (depends on template-engine/ + ./action.js),
 // injected into the engine by the caller (registerDslConfig hands pickerFuncs in
@@ -95,7 +95,7 @@ export function ledRowBudget(runtime: ActionRuntime): number {
 // width, reserved width): greedy fill into pages, each reserving room for the
 // ←/→/✕ affordances. The `page` value selects the slice; an oversized lone item
 // gets its own page (it can't be split). Infinite width = one page (the wrap
-// case — everything on one line, FlexStrip breaks it). Exported for unit testing.
+// case — everything in one cell, which its row divides). Exported for unit testing.
 export function paginate(
   widths: readonly number[],
   available: number,
@@ -149,18 +149,15 @@ function gridPages(
 
 // [LAW:dataflow-not-control-flow] Join link-bearing spans with single-space
 // separators into ONE RichText (a picker is one `{{ picker }}` expression, so it
-// must emit one value; the option/affordance cells ride as spans on it). Its
-// overflow is the `paged` value: a paged page is one unbounded line (`"ignore"`:
-// no break, no cut — the page already fits); a wrap-mode run is the long line
-// FlexStrip is ALLOWED to break across lines.
-export function assemble(frags: readonly RichText[], paged: boolean): RichText {
+// must emit one value; the option/affordance cells ride as spans on it).
+export function assemble(frags: readonly RichText[]): RichText {
   const spaced: RichText[] = [];
   for (const frag of frags) {
     if (spaced.length > 0) spaced.push(new RichText(" "));
     spaced.push(frag);
   }
   const assembled = RichText.fromFragments(spaced);
-  assembled.overflow = paged ? "ignore" : undefined;
+  assembled.overflow = "ignore";
   assembled.end = "";
   return assembled;
 }
@@ -484,10 +481,11 @@ export function renderPicker(
   if (catalogue === undefined) {
     const indices = pageSections.flatMap((section) => section.indices);
     return [
-      assemble(
-        [...nav, ...indices.map((i) => optionCell(gridFaces[i]!, i)), ...next],
-        paged,
-      ),
+      assemble([
+        ...nav,
+        ...indices.map((i) => optionCell(gridFaces[i]!, i)),
+        ...next,
+      ]),
     ];
   }
 
@@ -501,12 +499,10 @@ export function renderPicker(
     pageSections.length === 1
       ? [new RichText(`${pageSections[0]!.label}${position}`, { style: bold })]
       : [];
-  const lines: RichText[] = [assemble([...nav, ...where, ...next], paged)];
+  const lines: RichText[] = [assemble([...nav, ...where, ...next])];
   for (const section of pageSections) {
     if (pageSections.length > 1) {
-      lines.push(
-        assemble([new RichText(section.label, { style: bold })], paged),
-      );
+      lines.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
       ...section.indices.map((i) => cellWidth(labelOf(apply.options[i]!))),
@@ -522,10 +518,7 @@ export function renderPicker(
       const row =
         description === undefined ? name : `${name}${gap}${description}`;
       lines.push(
-        assemble(
-          [optionCell(optionFace(i, fitCells(row, available)), i)],
-          paged,
-        ),
+        assemble([optionCell(optionFace(i, fitCells(row, available)), i)]),
       );
     }
   }

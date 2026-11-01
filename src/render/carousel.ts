@@ -82,7 +82,7 @@ export function renderCarousel(
   const { options } = apply;
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.
-  if (options.length === 0) return assemble([], true);
+  if (options.length === 0) return assemble([]);
   const indexAt = ringAround(options, readVar(store, apply.stateVar));
   const ring = (offset: number): string => options[indexAt(offset)]!;
   const step = (offset: number): string =>
@@ -97,34 +97,31 @@ export function renderCarousel(
       ).effects,
     );
 
-  return assemble(
-    [
-      linkFragment(CAROUSEL_PREV, step(-1), false),
-      linkOver(
-        // Drawn as the arrows are, in the segment's own colours (Brandon: "The
-        // name loses its styling"), beside the swatch of the value in force
-        // when the domain is colour-valued.
-        labelPaint(
-          renderLook(runtime, "{{ carousel }}"),
-          apply.paletteOf,
-          ring(0),
-          label,
-        ),
-        effectsUrl(
-          realize(
-            runtime.compiled.get(openName)!,
-            ring(0),
-            undefined,
-            store,
-            sessionId,
-            runtime.signer,
-          ).effects,
-        ),
+  return assemble([
+    linkFragment(CAROUSEL_PREV, step(-1), false),
+    linkOver(
+      // Drawn as the arrows are, in the segment's own colours (Brandon: "The
+      // name loses its styling"), beside the swatch of the value in force
+      // when the domain is colour-valued.
+      labelPaint(
+        renderLook(runtime, "{{ carousel }}"),
+        apply.paletteOf,
+        ring(0),
+        label,
       ),
-      linkFragment(CAROUSEL_NEXT, step(1), false),
-    ],
-    true,
-  );
+      effectsUrl(
+        realize(
+          runtime.compiled.get(openName)!,
+          ring(0),
+          undefined,
+          store,
+          sessionId,
+          runtime.signer,
+        ).effects,
+      ),
+    ),
+    linkFragment(CAROUSEL_NEXT, step(1), false),
+  ]);
 }
 
 export function carouselFuncs(runtime: ActionRuntime): FuncMap {

@@ -241,6 +241,24 @@ export function stripPrivateGlyphs(options: StripShape): string {
   return privateGlyphsIn(plainOf(lines.flat()));
 }
 
+// [LAW:single-enforcer] The width a line breaks at, the one reading of the
+// `wrap` policy over the `width` fact: unbounded where a row may not break.
+export function lineWidth(
+  options: Pick<BuildLineOptions, "wrap" | "width">,
+): number {
+  return options.wrap ? options.width : Infinity;
+}
+
+// [LAW:one-source-of-truth] rich-js's own word wrap of one cell, as the text of
+// its lines: a folding copy drawn through the one `draw`. rich-js keeps its line
+// breaker private, and this is what spares the project a second theory of where
+// a line may break.
+export function wrappedLines(text: RichText, width: number): readonly string[] {
+  const wrapping = text.copy();
+  wrapping.overflow = "fold";
+  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf);
+}
+
 /**
  * [LAW:single-enforcer] The one place RichText cells become lines of runs.
  * Every render path (DSL RichText[] via the template-engine pipeline, debug
@@ -262,7 +280,7 @@ export function drawStripCells(
 ): DrawnRow {
   if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const joiner = pickJoiner(options.endcaps, options.separator);
-  const flex = options.wrap && Number.isFinite(options.width);
+  const flex = Number.isFinite(lineWidth(options));
   const drawn = {
     colorSystem: options.colorCompatibility,
     ...(flex ? { width: options.width } : {}),

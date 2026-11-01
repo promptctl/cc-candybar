@@ -2,7 +2,7 @@
 // (registerDslConfig + drawDsl) and the REAL loader (parseAndValidate) — the
 // same path the daemon renders through, never a parallel rig.
 //
-// The unit of rendering is the SEGMENT: one strip item. The
+// The unit of rendering is the SEGMENT: one strip item as laid. The
 // powerline joiner caps BETWEEN units, never inside one, and two distinct
 // units are always joined by a filled arrow. Both facts are
 // observed here as powerline-glyph counts in the rendered output:

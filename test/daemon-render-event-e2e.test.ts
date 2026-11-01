@@ -268,6 +268,19 @@ describe("every render request writes one render event, whatever its outcome", (
     const [cold, kept] = keptEvents.map((e) => Number(field(e, "evaluated")));
     expect(cold).toBeGreaterThan(0);
     expect(kept).toBeLessThan(cold!);
+    // A render says how far its width divided its cells: nothing on a bar that
+    // fits, and something on one that does not.
+    expect(field(keptEvents[1]!, "cellBreaks")).toBe("0");
+    await render(
+      daemon,
+      "ev-narrow",
+      projectDir,
+      { ...hints, termCols: 8 },
+      configFlag("drawn"),
+    );
+    expect(
+      Number(field(await attempts("ev-narrow", "ok", "info"), "cellBreaks")),
+    ).toBeGreaterThan(0);
     // A warm render's wait answers inside its deadline.
     expect(field(keptEvents[1]!, "ended")).toBe("answered");
     await render(
