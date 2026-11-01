@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createLauncher, type Launcher } from "../../src/proc/launch";
+import { until } from "../helpers/until";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.
@@ -52,9 +53,27 @@ describe("a launch whose child ends with a descendant outside its group", () => 
       ),
     );
     expect(r).toMatchObject({ ok: true, stdout: "" });
-    await new Promise((end) => setTimeout(end, 600));
-    expect(existsSync(marker)).toBe(true);
-    rmSync(dir, { recursive: true });
+    try {
+      await until(() => existsSync(marker), "the holder's later write");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("reports the child's exit when its group ended before the timeout", async () => {
+    const r = await launch(
+      {
+        bin: "sh",
+        args: [
+          "-c",
+          'sleep 0.9 & python3 -c "$1"; exit 0',
+          "sh",
+          `${SET}${FORK_HOLDER}`,
+        ],
+      },
+      1450,
+    );
+    expect(r).toMatchObject({ ok: true, exitCode: 0 });
   });
 
   it("reports a non-zero exit as one", async () => {

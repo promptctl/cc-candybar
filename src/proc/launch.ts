@@ -597,7 +597,7 @@ async function launchWaited(
     let stdout = "";
     let stderr = "";
     let settled = false;
-    let closed = false;
+    let released = false;
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
     let groupEndTimer: NodeJS.Timeout | null = null;
@@ -646,24 +646,18 @@ async function launchWaited(
       }
     };
 
-    // [LAW:no-ambient-temporal-coupling] The pipes go a turn after an end is
-    // seen, once what was written before it is read: a descendant that left the
-    // group could otherwise hold them open, and keep this launch from ever
-    // resolving.
-    const release = () =>
-      setImmediate(() => {
-        child.stdout?.destroy();
-        child.stderr?.destroy();
-      });
-    // Nothing of the launch is left once its group has ended, so it concludes
-    // on the child's exit. A descendant that left the group keeps its pipes,
-    // drained, since a destroyed one would kill it with SIGPIPE at its next write.
+    // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
+    // what was written before it is read. Nothing of the launch is left, so it
+    // concludes on the child's exit. A descendant that left the group keeps its
+    // pipes, drained: a destroyed one would kill it with SIGPIPE at its next
+    // write, for as long as the launcher lives to read them.
     const concludeWithGroup = () => {
+      released = true;
+      if (groupEndTimer) clearTimeout(groupEndTimer);
       for (const pipe of [child.stdout, child.stderr]) {
         pipe?.removeAllListeners("data").resume();
         (pipe as Socket | null)?.unref();
       }
-      state.unreaped.delete(child);
       conclude(child.exitCode, child.signalCode);
     };
     // While a member of the group lives the launch waits for it, guarded, so
@@ -672,7 +666,7 @@ async function launchWaited(
     // refused signal still owns its pipes. The timer never holds the process.
     if (group !== undefined) {
       const awaitGroupEnd = (delayMs: number) => {
-        if (closed) return;
+        if (released) return;
         if (groupGone(group)) {
           setImmediate(concludeWithGroup);
           return;
@@ -688,8 +682,8 @@ async function launchWaited(
       );
     }
 
-    // [LAW:types-are-the-program] Do NOT settle here. We signal and let the
-    // `close` handler resolve once the child is actually gone, so the promise
+    // [LAW:types-are-the-program] Do NOT settle here. We signal and let
+    // `conclude` resolve once the child is actually gone, so the promise
     // never resolves while the child is still alive. SIGTERM first; SIGKILL
     // after a grace period if the child ignores it. One termination per
     // child: the other trigger is disarmed so the cause cannot be rewritten.
@@ -700,17 +694,24 @@ async function launchWaited(
     // wrong target (verified: it can terminate the caller), so escalation is
     // gated on the pid actually existing.
     const terminate = (cause: Terminated) => {
+      // A group that ended between polls has its own verdict, and its id may
+      // no longer be the launch's to signal.
+      const ended = child.exitCode !== null || child.signalCode !== null;
+      if (ended && group !== undefined && groupGone(group)) {
+        setImmediate(concludeWithGroup);
+        return;
+      }
       terminated = cause;
       if (timer) clearTimeout(timer);
       unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
-        // The release here is not behind the group's end: a group holding an
+        // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
         killTimer = setTimeout(() => {
           signal(pid, "SIGKILL");
-          void exited.then(release);
+          void exited.then(() => setImmediate(concludeWithGroup));
         }, TIMEOUT_KILL_GRACE_MS);
         signal(pid, "SIGTERM");
       }
@@ -736,6 +737,7 @@ async function launchWaited(
     });
 
     const conclude = (code: number | null, signal: NodeJS.Signals | null) => {
+      state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
@@ -767,9 +769,8 @@ async function launchWaited(
     };
 
     child.on("close", (code, signal) => {
-      closed = true;
+      released = true;
       if (groupEndTimer) clearTimeout(groupEndTimer);
-      state.unreaped.delete(child);
       conclude(code, signal);
     });
 
