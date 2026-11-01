@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-556",
+      "ref": "refs/pull/556/merge",
+      "sha": "019435c30aec22d208b1f0a7d16ebd0fb3d37f4f",
+      "timestamp": "2026-11-01T21:06:31.207Z",
+      "commits": [
+        {
+          "sha": "019435c30aec22d208b1f0a7d16ebd0fb3d37f4f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:05:32-07:00",
+          "message": "Merge 015d83257fb4fb46dfb754a5fe6ebc82a42fb301 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "015d83257fb4fb46dfb754a5fe6ebc82a42fb301",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:05:14-07:00",
+          "message": "docs(testing): five end-to-end tests, and the daemon cut into pieces to reach them (candybar-testing-ihvy.43x)\n\nThe plan now carries Brandon's ruling: five end-to-end tests with one\nassertion each, and any test that boots the daemon counts as one, in a\nworker or not. So the daemon is cut into ten pieces with fakes at their\ninputs, and the harness goes. Every finding of the plan's review is\nfolded in and every count is re-measured on main at 62b28e2b.\n\nThe review and the ruling are deleted here because the plan now holds\nboth; the commit before this one keeps them as they were.\n"
+        },
+        {
+          "sha": "610e310c486ae1163fd581feac8d9fff5d03e3ff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T14:00:22-07:00",
+          "message": "docs(testing): the plan's review and the owner's ruling on it\n\nKept as they were so the plan's rewrite can be checked against them.\n"
+        },
+        {
+          "sha": "a5cfce18ef09e1e35625665d75364472541c6e47",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:05:14-06:00",
+          "message": "docs(testing): plan the layered test suite\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "62b28e2b95ed10f4a7c35fc2dca80ca8550e41e5",
