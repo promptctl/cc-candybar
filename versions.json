@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-546",
+      "ref": "refs/pull/546/merge",
+      "sha": "219a6ec80f06e5a53061cd9d6fa7b6d3ba8f97da",
+      "timestamp": "2026-11-01T10:15:17.644Z",
+      "commits": [
+        {
+          "sha": "219a6ec80f06e5a53061cd9d6fa7b6d3ba8f97da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T10:14:19Z",
+          "message": "Merge b83d6174af887dd312c37e46cb97dd4f9c003e28 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
+        },
+        {
+          "sha": "b83d6174af887dd312c37e46cb97dd4f9c003e28",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:14:09-07:00",
+          "message": "fix(click): an authored key reads as itself, and the codec stays off the loader (brandon-menus-sjhy.5y2)\n\nReview medium on PR #546.\n\n- Only a synthesized key is a disclosure: an authored `prFilter` written\n  `closed` reads `set prFilter to closed`, not `close prFilter`.\n- The viewer's closed value moves beside its key, so a close derives\n  `close diagnostics` and ✕ needs no caption of its own.\n- The namespace constants and isReservedName move to config/reserved-names,\n  a leaf, so wire.ts no longer pulls in the loader's modules and json5.\n"
+        },
+        {
+          "sha": "c460d93793c81196f76cda96d2eab15fdb8d0491",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T03:03:11-07:00",
+          "message": "fix(click): a disclosure opens in the words it closes in (brandon-menus-sjhy.5y2)\n\nReview high on PR #546.\n\n- A disclosure's open member reads `open candybar.menu`, matching `close\n  candybar.menu`. DISCLOSURE_OPEN replaces three spellings of \"open\".\n- A namespace strips only as a prefix: `my.menus.x` no longer reads `my.x`.\n- step-state is a session write, so it no longer outranks what a click fires.\n- A repo-config answer reads `mark config in <dir> approved`, an action rather\n  than a finished state.\n- EffectVerb derives from SAYS, one list instead of two.\n- viewerLink requires its words, so a close cannot read as `open diagnostics`.\n"
+        },
+        {
+          "sha": "2ec68a934e001b94ffedbc97d14e065a9d1c3507",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T02:48:01-07:00",
+          "message": "feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2)\n\nA dispatch link leads with a `does` param, derived from the effects the\nclick fires, so a hover reads `does=set+preset+to+compact` before the\npercent-encoded payload. parseEffects reads only `e`, so drawn links and\nolder daemons are unaffected.\n\nA click's non-session effect is its face, so a confirm reads as what it\nfires rather than the disarm that precedes it. `does` is form-encoded and\nloses no character; only copied text is shortened. The diagnostics viewer\npasses its words, because the position it shows exists only at draw.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-547",
       "ref": "refs/pull/547/merge",
       "sha": "dd8e8bf8a6d0b89452a7326f4b7dca0b24a487c0",
@@ -27,35 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T03:00:03-07:00",
           "message": "fix(daemon): read-only doctor gathers run ahead of the journal turn (candybar-launch-q7o7.fqw)\n\nA click joins its session's queue on arrival and keeps its place through\ngather and turn; only the daemon-wide turn is taken after the gather. Leading\ngathers hoist out of the turn with their failures carried to their position\nin the fold, a gather is a snapshot of one config and re-gathers in the turn\nwhen that config changed, and doctor-probe leaves the turn. Idle clock pending\nreplaces the arrival stamp; handlers lose launcher, doctor and claudeInput.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-546",
-      "ref": "refs/pull/546/merge",
-      "sha": "5c36b5b509924a21bc341fb49c1c293a64643838",
-      "timestamp": "2026-11-01T10:04:04.266Z",
-      "commits": [
-        {
-          "sha": "5c36b5b509924a21bc341fb49c1c293a64643838",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T10:03:21Z",
-          "message": "Merge c460d93793c81196f76cda96d2eab15fdb8d0491 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
-        },
-        {
-          "sha": "c460d93793c81196f76cda96d2eab15fdb8d0491",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:03:11-07:00",
-          "message": "fix(click): a disclosure opens in the words it closes in (brandon-menus-sjhy.5y2)\n\nReview high on PR #546.\n\n- A disclosure's open member reads `open candybar.menu`, matching `close\n  candybar.menu`. DISCLOSURE_OPEN replaces three spellings of \"open\".\n- A namespace strips only as a prefix: `my.menus.x` no longer reads `my.x`.\n- step-state is a session write, so it no longer outranks what a click fires.\n- A repo-config answer reads `mark config in <dir> approved`, an action rather\n  than a finished state.\n- EffectVerb derives from SAYS, one list instead of two.\n- viewerLink requires its words, so a close cannot read as `open diagnostics`.\n"
-        },
-        {
-          "sha": "2ec68a934e001b94ffedbc97d14e065a9d1c3507",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T02:48:01-07:00",
-          "message": "feat(click): a button's URL says in words what clicking it does (brandon-menus-sjhy.5y2)\n\nA dispatch link leads with a `does` param, derived from the effects the\nclick fires, so a hover reads `does=set+preset+to+compact` before the\npercent-encoded payload. parseEffects reads only `e`, so drawn links and\nolder daemons are unaffected.\n\nA click's non-session effect is its face, so a confirm reads as what it\nfires rather than the disarm that precedes it. `does` is form-encoded and\nloses no character; only copied text is shortened. The diagnostics viewer\npasses its words, because the position it shows exists only at draw.\n"
         }
       ]
     },
