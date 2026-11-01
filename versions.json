@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-542",
+      "ref": "refs/pull/542/merge",
+      "sha": "d303dc524764030bd16144f0faebccb8e24d598f",
+      "timestamp": "2026-11-01T07:22:58.761Z",
+      "commits": [
+        {
+          "sha": "d303dc524764030bd16144f0faebccb8e24d598f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:22:15-06:00",
+          "message": "Merge 35d4cc45f83d7461386e291f12118c786701bd58 into 2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8\n"
+        },
+        {
+          "sha": "35d4cc45f83d7461386e291f12118c786701bd58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:20:48-06:00",
+          "message": "feat(daemon): journals take turns in one queue, across awaited clicks (candybar-launch-q7o7.rs0)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "63c79c571fe30da5a6ba1df1c66e3c0610a95c03",
