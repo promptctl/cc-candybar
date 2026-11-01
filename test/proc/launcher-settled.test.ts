@@ -77,11 +77,16 @@ describe("a launcher settles", () => {
 
   test("naming a launch the OS would not let it end, until that child exits", async () => {
     const { closing, launcher } = scope();
+    const pidFile = path.join(dir, "refused");
     const run = launcher.launch({
       bin: "/bin/sh",
-      args: ["-c", "exec sleep 2"],
+      args: [
+        "-c",
+        `echo $$ > '${pidFile}.tmp'; mv '${pidFile}.tmp' '${pidFile}'; exec sleep 30`,
+      ],
       category: "user-shell",
     });
+    await until(() => existsSync(pidFile), "the child started");
     const refuse = jest.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
     });
@@ -91,6 +96,7 @@ describe("a launcher settles", () => {
       unreaped: ["user-shell"],
     });
     refuse.mockRestore();
+    process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
     await until(
       async () => (await launcher.settled()).unreaped.length === 0,
       "the refused child exited",

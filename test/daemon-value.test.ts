@@ -378,7 +378,7 @@ describe("the daemon is a value", () => {
     // A launch's SIGKILL escalation is the one timer a close means to leave
     // armed: on a slow turn it fires before the child's end clears it.
     expect(
-      origins(fired.filter(({ stack }) => !stack?.includes("terminate"))),
+      origins(fired.filter(({ stack }) => !stack?.includes("at terminate ("))),
     ).toEqual([]);
     expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
     // Late work that would start a child finds its launcher closed.

@@ -437,6 +437,8 @@ function setFault(state: LaunchState, next: string | null): void {
 function lose(state: LaunchState, line: ChildProcess, reason: string): void {
   if (state.lifeline?.process !== line) return;
   state.lifeline = null;
+  // `settled` waits on this end too.
+  line.ref();
   setFault(state, reason);
 }
 
@@ -666,9 +668,8 @@ async function launchWaited(
       });
     });
 
-    // The child's end, not `close`: a descendant can hold the pipes past it.
-    child.once("exit", () => state.unreaped.delete(child));
     child.on("close", (code, signal) => {
+      state.unreaped.delete(child);
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
       // including the termination paths. Once `terminated` is set the cause
       // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
@@ -1077,7 +1078,11 @@ export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
     lifelineWarnings: () => lifelineWarnings(state),
     settled: async () => {
       await Promise.all(state.ending);
-      return { unreaped: [...state.unreaped.values()] };
+      // The child's own end, not `close`: a descendant can hold the pipes past it.
+      const running = [...state.unreaped].filter(
+        ([child]) => child.exitCode === null && child.signalCode === null,
+      );
+      return { unreaped: running.map(([, category]) => category) };
     },
     __lifelineForTest: () => {
       const line = state.lifeline;
