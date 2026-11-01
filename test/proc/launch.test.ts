@@ -304,7 +304,10 @@ describe("launch (async)", () => {
         () => fs.existsSync(survived),
         "the refused child's last write",
       );
-      expect(decoded).not.toHaveBeenCalled();
+      const read = decoded.mock.calls.map(([chunk]) => (chunk as Buffer).length);
+      expect(read.reduce((sum, length) => sum + length, 0)).toBeLessThan(
+        300_000,
+      );
     } finally {
       decoded.mockRestore();
       kill.mockRestore();

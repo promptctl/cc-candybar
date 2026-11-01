@@ -1182,11 +1182,7 @@ export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
     lifelineWarnings: () => lifelineWarnings(state),
     settled: async () => {
       await Promise.all(state.ending);
-      // The child's own end, not `close`: a descendant can hold the pipes past it.
-      const running = [...state.unreaped].filter(
-        ([child]) => child.exitCode === null && child.signalCode === null,
-      );
-      return { unreaped: running.map(([, category]) => category) };
+      return { unreaped: [...state.unreaped.values()] };
     },
     __lifelineForTest: () => {
       const line = state.lifeline;
