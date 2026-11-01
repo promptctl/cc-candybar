@@ -1,3 +1,9 @@
+## [1.174.3](https://github.com/promptctl/cc-candybar/compare/v1.174.2...v1.174.3) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425) ([#535](https://github.com/promptctl/cc-candybar/issues/535)) ([043f443](https://github.com/promptctl/cc-candybar/commit/043f44379d2c1a27622f7b48535a323be7a59242))
+
 ## [1.174.2](https://github.com/promptctl/cc-candybar/compare/v1.174.1...v1.174.2) (2026-11-01)
 
 ### Bug Fixes
