@@ -35767,8 +35767,12 @@ async function launchWaited(state, opts) {
     const group = child.pid;
     if (group !== void 0) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
-    let stdout2 = "";
-    let stderr2 = "";
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    const output = () => ({
+      stdout: import_buffer.Buffer.concat(stdoutChunks).toString("utf8"),
+      stderr: import_buffer.Buffer.concat(stderrChunks).toString("utf8")
+    });
     let settled3 = false;
     let timer = null;
     let killTimer = null;
@@ -35799,8 +35803,7 @@ async function launchWaited(state, opts) {
         settle3({
           ok: false,
           reason: "signal-refused",
-          stdout: stdout2,
-          stderr: stderr2,
+          ...output(),
           exitCode: null,
           signal: null,
           error: err instanceof Error ? err.message : String(err)
@@ -35849,18 +35852,13 @@ async function launchWaited(state, opts) {
         signal(pid2, "SIGTERM");
       }
     };
-    child.stdout?.setEncoding("utf8").on("data", (text4) => {
-      stdout2 += text4;
-    });
-    child.stderr?.setEncoding("utf8").on("data", (text4) => {
-      stderr2 += text4;
-    });
+    child.stdout?.on("data", (chunk3) => stdoutChunks.push(chunk3));
+    child.stderr?.on("data", (chunk3) => stderrChunks.push(chunk3));
     child.on("error", (err) => {
       settle3({
         ok: false,
         reason: "spawn-error",
-        stdout: stdout2,
-        stderr: stderr2,
+        ...output(),
         exitCode: null,
         signal: null,
         error: spawnErrorText(err, opts.cwd)
@@ -35872,23 +35870,21 @@ async function launchWaited(state, opts) {
         settle3({
           ok: false,
           reason: terminated,
-          stdout: stdout2,
-          stderr: stderr2,
+          ...output(),
           exitCode: code,
           signal: signal2
         });
         return;
       }
       if (code === 0) {
-        settle3({ ok: true, stdout: stdout2, stderr: stderr2, exitCode: code });
+        settle3({ ok: true, ...output(), exitCode: code });
         return;
       }
       const reason = signal2 ? "signal" : "non-zero";
       settle3({
         ok: false,
         reason,
-        stdout: stdout2,
-        stderr: stderr2,
+        ...output(),
         exitCode: code,
         signal: signal2
       });

@@ -4,15 +4,22 @@
     {
       "version": "pr-540",
       "ref": "refs/pull/540/merge",
-      "sha": "d77a8d221830116ef617fbdf2244be169ac92a08",
-      "timestamp": "2026-11-01T05:34:21.228Z",
+      "sha": "f94f128a6f3011a39e065ee863e63d6d6d18a680",
+      "timestamp": "2026-11-01T05:39:02.348Z",
       "commits": [
         {
-          "sha": "d77a8d221830116ef617fbdf2244be169ac92a08",
+          "sha": "f94f128a6f3011a39e065ee863e63d6d6d18a680",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:33:30-06:00",
-          "message": "Merge bec6dbca193e8f1f57547337f43637b280e00a6b into 691727676169eed0e0826fea6dee07d1d902077d\n"
+          "timestamp": "2026-11-01T05:38:11Z",
+          "message": "Merge 1f2de0042e3e649a1ae491ee693a4f4f1fc42066 into 691727676169eed0e0826fea6dee07d1d902077d\n"
+        },
+        {
+          "sha": "1f2de0042e3e649a1ae491ee693a4f4f1fc42066",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:38:00-06:00",
+          "message": "fix(proc): a launch decodes its output once, at settle (candybar-testing-0x6u.71b)\n"
         },
         {
           "sha": "bec6dbca193e8f1f57547337f43637b280e00a6b",
