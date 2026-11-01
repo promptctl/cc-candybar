@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-551",
+      "ref": "refs/pull/551/merge",
+      "sha": "f5dd3a4c647118886cd2a817edc5c75dbc2a4552",
+      "timestamp": "2026-11-01T13:26:05.960Z",
+      "commits": [
+        {
+          "sha": "f5dd3a4c647118886cd2a817edc5c75dbc2a4552",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T06:25:15-07:00",
+          "message": "Merge 595d4f4f6e8728a0b54774e49ad329018bf9ac5e into 7a2b230a3590504f28701f135da02ae258381d66\n"
+        },
+        {
+          "sha": "595d4f4f6e8728a0b54774e49ad329018bf9ac5e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T06:25:05-07:00",
+          "message": "refactor(render): diagnostics draw Rows, and fill reads run widths (candybar-isolated-daemon-bfab.agt)\n\nThe viewer, the handoff line and fill drew through the strip, encoded the\nresult, then split the bytes to recover lines the draw already held. Each now\nreads drawStripCells' lines. A viewer row is a Row of kind diagnostic, paged and\nmeasured as rows, and the body drawRender returns is a Frame, the bar's or one\nholding the viewer's rows, so one encoder writes either.\n\nThe diagnostic colours are hex at the source. The SGR the client's glyph writes\nderives from them in a leaf the client loads, so it is spelled there rather than\nasked of rich-js. check-protocol reads the hex and spells the same escape, still\ncomparing bytes against the Rust literals, and a test holds the two spellings of\nthat derivation together.\n\ndiagnosticFrame is the one constructor of a frame with no draw behind it. The\nband and tmux catch arms use it in place of SGR literals; 2nq moves it to the\nfailed render and removes those arms.\n\nNo byte moves. test/frame-bytes.test.ts.snap is untouched, and viewer, message\nand handoff bytes over four depths, six widths, four row caps and four pages\ncompared identical before and after, 2784 entries. test/diagnostics.test.ts pins\nthem at every depth by comparison with what rich-js writes for the same text,\nlink and hex style.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "491054d4c9a3d06c79cf392d409455412fc491cf",
