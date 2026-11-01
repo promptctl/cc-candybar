@@ -36076,15 +36076,18 @@ function readJobEnd(status) {
   if (text4 === "timeout") return { kind: "timeout" };
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
-function jobGroupAlive(pid2) {
+function signalJob(pid2, sig) {
   try {
-    process_default.kill(-pid2, 0);
+    process_default.kill(-pid2, sig);
     return true;
   } catch (err) {
     const code = err.code;
     if (code === "ESRCH" || code === "EPERM") return false;
     throw err;
   }
+}
+function jobGroupAlive(pid2) {
+  return signalJob(pid2, 0);
 }
 function groupGone(pid2) {
   try {
@@ -36100,7 +36103,9 @@ function endJob(pid2, status, end) {
     writeFileSync(staged, `${formatJobEnd(end)}
 `);
   } catch (err) {
-    if (err.code === "ENOENT") return false;
+    if (err.code === "ENOENT") {
+      return { stands: false, signalled: false };
+    }
     throw err;
   }
   let stands = true;
@@ -36112,9 +36117,11 @@ function endJob(pid2, status, end) {
   } finally {
     rmSync(staged, { force: true });
   }
-  signalGroup(pid2, "SIGTERM");
-  setTimeout(() => signalGroup(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return stands;
+  const signalled = signalJob(pid2, "SIGTERM");
+  if (signalled) {
+    setTimeout(() => signalJob(pid2, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
+  }
+  return { stands, signalled };
 }
 function createLauncher(owner) {
   const launcher = {
@@ -71475,8 +71482,10 @@ function makeUpdateWatch(opts) {
   }
   function endIfOverdue(facts) {
     if (!facts?.alive || Date.now() <= facts.record.deadline) return;
-    const why2 = endOverdue(actsDir2, facts) ? "timed out" : "outlived its verdict";
-    log("error", `apply-update: act ${facts.act} ${why2}; ending it`);
+    const { stands, signalled } = endOverdue(actsDir2, facts);
+    const why2 = stands ? "timed out" : "outlived its verdict";
+    const ending = signalled ? "ending it" : "its group took no signal";
+    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
   }
   function watchAct() {
     const read2 = touchActs(() => {

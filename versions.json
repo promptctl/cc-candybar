@@ -2,95 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-538",
-      "ref": "refs/pull/538/merge",
-      "sha": "1de82b881dc680ad49347b92fe8a283d92db68d8",
-      "timestamp": "2026-11-01T05:24:44.722Z",
-      "commits": [
-        {
-          "sha": "1de82b881dc680ad49347b92fe8a283d92db68d8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:24:04-06:00",
-          "message": "Merge 4999cece1db8bb85c682728a2ca327b6e7aa38dd into 1435f5c909561280b02fc77cc21e462541e582fb\n"
-        },
-        {
-          "sha": "4999cece1db8bb85c682728a2ca327b6e7aa38dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:24:02-06:00",
-          "message": "Merge branch 'main' into candybar-testing-0x6u.zrb"
-        },
-        {
-          "sha": "b6df4371bc3ef8dd128d5660a18b6c9c39b55a7a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:15:44-06:00",
-          "message": "Merge branch 'main' into candybar-testing-0x6u.zrb"
-        },
-        {
-          "sha": "59eb35417a229fd80ea5441b65a78bcc27d6a7ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:09:25-06:00",
-          "message": "docs(proc): jobGroupAlive states the limit of its read (candybar-testing-0x6u.zrb)\n"
-        },
-        {
-          "sha": "379dcc2f368194b29ec77c8cab057e129d8491d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:05:40-06:00",
-          "message": "test(update-act): a SIGKILL refused in the grace timer does not throw (candybar-testing-0x6u.zrb)\n"
-        },
-        {
-          "sha": "f65c6827e29f526c3528f7973fcef095d5500069",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:03:20-06:00",
-          "message": "test(update-act): keep the diff to this change (candybar-testing-0x6u.zrb)\n"
-        },
-        {
-          "sha": "a58214805ca7d22d51fa89db115e26de30af70a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:02:52-06:00",
-          "message": "test(update-act): restore formatting of unrelated lines (candybar-testing-0x6u.zrb)\n"
-        },
-        {
-          "sha": "be889c46b26d33db9fb83a6d141aab49f891a680",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:02:28-06:00",
-          "message": "fix(proc): a refused job signal is reported to the caller, and only a delivered SIGTERM arms the SIGKILL (candybar-testing-0x6u.zrb)\n"
-        },
-        {
-          "sha": "6c2f37de53fe0694042cd37555fcf4c50423d780",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T22:56:55-06:00",
-          "message": "fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1435f5c909561280b02fc77cc21e462541e582fb",
-      "timestamp": "2026-11-01T05:21:29.634Z",
+      "sha": "691727676169eed0e0826fea6dee07d1d902077d",
+      "timestamp": "2026-11-01T05:31:27.616Z",
       "commits": [
         {
-          "sha": "1435f5c909561280b02fc77cc21e462541e582fb",
+          "sha": "691727676169eed0e0826fea6dee07d1d902077d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T23:20:37-06:00",
-          "message": "fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8) (#539)\n\n* fix(var-sources): a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8)\n\nWhile the OS isn't delivering file events, a watch_file variable showed its\nold value as current. It now carries the stall as its standing fault, read\nfrom the delivery owner, and drops the fault only by re-reading.\n\n`SourceRegistry` takes `FileEvents`, the type ManagedStorage already reads,\nin place of the one-caller `CatchUps` adapter. `RenderDeps.fileEvents` is\nrequired, so a daemon that doesn't wire it doesn't compile. `stallReason`\nholds the rule and the wording for every consumer, and `end()` says\n\"restart the daemon\" once for all of its reasons.\n\n* fix(var-sources): a stall is one publish, and PathWatches owns what it hears (brandon-unfiled-3248.fme8)\n\nAnswers the first review of #539.\n\n- One change of delivery is one action, so a stall that faults every\n  `watch_file` variable publishes once, not once per variable.\n- `PathWatches` subscribes to the delivery owner and releases it itself, as\n  ManagedStorage does, so the registry no longer forwards notices.\n- `watchFault`'s `beyond` is required, so a consumer leaving out the stall says\n  so at its call site.\n- The unmeasured row leads with `since`, so a reason ending in \"restart the\n  daemon\" ends the sentence.\n- The claim is that a variable reads again when it drops the fault: the read\n  it starts is in flight like any refresh's.\n- Every terminal reason is tested, and a failed probe write says no restart.\n- The `[LAW:single-enforcer]` marker returns at the wire in daemon.ts.\n\n* docs(var-sources): the stall fault's claims match what it does (brandon-unfiled-3248.fme8)\n\nAnswers the second review of #539.\n\n- A batch is one publish of a registry, not of the daemon: each registry\n  hears the notice on its own.\n- data-sources.md no longer says a stale value never reads as current.\n- segment-authoring.md lists the stall among what a `watch_file` reports.\n- The demo reads `NO_FILE_EVENTS` in place of a never-started owner, so one\n  stand-in says \"nothing measured\"."
-        },
-        {
-          "sha": "47f89057d4df0fa92b35e70ce11e0149b138bb7d",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T05:06:20Z",
-          "message": "chore(release): set `package.json` to 1.174.4 [skip ci]\n\n## [1.174.4](https://github.com/promptctl/cc-candybar/compare/v1.174.3...v1.174.4) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** input a child leaves unread no longer ends the daemon (candybar-testing-0x6u.47e) ([#537](https://github.com/promptctl/cc-candybar/issues/537)) ([e98fef8](https://github.com/promptctl/cc-candybar/commit/e98fef8ecc1558cc8cdf59993c8534b6d584d2fd))\n"
+          "timestamp": "2026-10-31T23:30:26-06:00",
+          "message": "fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb) (#538)\n\n* fix(proc): a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb)\n\n* fix(proc): a refused job signal is reported to the caller, and only a delivered SIGTERM arms the SIGKILL (candybar-testing-0x6u.zrb)\n\n* test(update-act): restore formatting of unrelated lines (candybar-testing-0x6u.zrb)\n\n* test(update-act): keep the diff to this change (candybar-testing-0x6u.zrb)\n\n* test(update-act): a SIGKILL refused in the grace timer does not throw (candybar-testing-0x6u.zrb)\n\n* docs(proc): jobGroupAlive states the limit of its read (candybar-testing-0x6u.zrb)"
         }
       ]
     },
