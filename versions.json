@@ -4,15 +4,22 @@
     {
       "version": "pr-550",
       "ref": "refs/pull/550/merge",
-      "sha": "4083f946c227a370ae973a63a7af23055eb2dc8d",
-      "timestamp": "2026-11-01T12:42:40.498Z",
+      "sha": "03b672b5f44dd383923cb7c249ad4d7690449b1f",
+      "timestamp": "2026-11-01T12:58:46.758Z",
       "commits": [
         {
-          "sha": "4083f946c227a370ae973a63a7af23055eb2dc8d",
+          "sha": "03b672b5f44dd383923cb7c249ad4d7690449b1f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T12:41:48Z",
-          "message": "Merge 8300b4423ab6f964d1c15f102b930a4cee2da9b8 into 722b6fe4c0d62887ce180576956933793a7e8d12\n"
+          "timestamp": "2026-11-01T12:57:59Z",
+          "message": "Merge 5ae34693eb8a6e0e0f4b9ff1dfb50daa0feb32ad into 722b6fe4c0d62887ce180576956933793a7e8d12\n"
+        },
+        {
+          "sha": "5ae34693eb8a6e0e0f4b9ff1dfb50daa0feb32ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T05:57:47-07:00",
+          "message": "perf(render): a run's attributes read one list of names, not a new object per run (candybar-isolated-daemon-bfab.abb)\n\nstyle.attributes builds a 13-entry object on each read, only so its keys could name attributes that never change. On a 200-run row that was 0.136 ms against 0.02 ms, about a third of the encoder's added cost on an effect's hot path. The list is derived from rich-js once, so it holds no state and restates nothing.\n"
         },
         {
           "sha": "8300b4423ab6f964d1c15f102b930a4cee2da9b8",

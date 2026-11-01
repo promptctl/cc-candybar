@@ -54107,11 +54107,10 @@ init_globals();
 function drawnColor(spec) {
   return spec.type === ColorDepth.TRUECOLOR ? spec.value.hex : spec.name;
 }
+var ATTRIBUTES = Object.keys(new Style().attributes);
 function lookOf(style, depth) {
   const { color, bgcolor } = style.drawnColors(depth);
-  const attrs = Object.keys(style.attributes).filter(
-    (name) => style[name] === true
-  );
+  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
   return {
     ...color !== void 0 && { fg: drawnColor(color) },
     ...bgcolor !== void 0 && { bg: drawnColor(bgcolor) },
@@ -82358,7 +82357,7 @@ function tmuxColor(spec) {
   }
   throw new Error(`frames: no tmux colour for ${spec.name}`);
 }
-var ATTRIBUTES = {
+var ATTRIBUTES2 = {
   bold: "bold",
   dim: "dim",
   italic: "italics",
@@ -82373,14 +82372,14 @@ var ATTRIBUTES = {
   frame: null,
   encircle: null
 };
-var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES);
+var ATTRIBUTE_NAMES2 = Object.keys(ATTRIBUTES2);
 function escaped(text4) {
   return text4.replaceAll("#", "##");
 }
 function directive(style) {
   const attributes = ATTRIBUTE_NAMES2.filter((name) => style[name] === true).map(
     (name) => {
-      const tmux3 = ATTRIBUTES[name];
+      const tmux3 = ATTRIBUTES2[name];
       if (tmux3 === null)
         throw new Error(`frames: a tmux status line cannot draw ${name} text`);
       return tmux3;
