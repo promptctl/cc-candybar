@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-541",
-      "ref": "refs/pull/541/merge",
-      "sha": "d6d25e86f9630bb40ff72fd61a4bbe495d24434e",
-      "timestamp": "2026-11-01T06:24:34.574Z",
-      "commits": [
-        {
-          "sha": "d6d25e86f9630bb40ff72fd61a4bbe495d24434e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:23:48-06:00",
-          "message": "Merge 48f8e8e082a04439c1581f48ac7f6f6e76d1cfb1 into 86e9a73e4a4b54ee92437eaa6e42305f677421a5\n"
-        },
-        {
-          "sha": "48f8e8e082a04439c1581f48ac7f6f6e76d1cfb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:23:46-06:00",
-          "message": "Merge branch 'main' into candybar-testing-0x6u.v5t"
-        },
-        {
-          "sha": "4c745295fd9b2d8c56113e56bfdc67cdbb86192b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:15:22-06:00",
-          "message": "fix(proc): settled reads unreaped directly; tests pin exit removal (candybar-testing-0x6u.v5t)\n"
-        },
-        {
-          "sha": "abbcde6e09d239b61a111e4febaf68e0ec305d1c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:10:07-06:00",
-          "message": "fix(proc): capture owns its lifetime and a refused child leaves unreaped on exit (candybar-testing-0x6u.v5t)\n"
-        },
-        {
-          "sha": "d768bcc2e8e34080f6ad6052fede3d0efaa7d7d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:03:48-06:00",
-          "message": "fix(proc): a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "62bc62daea77f6e6c8b7543db42bf9736245ebaa",
-      "timestamp": "2026-11-01T06:02:16.504Z",
+      "sha": "63c79c571fe30da5a6ba1df1c66e3c0610a95c03",
+      "timestamp": "2026-11-01T06:32:30.828Z",
       "commits": [
         {
-          "sha": "62bc62daea77f6e6c8b7543db42bf9736245ebaa",
+          "sha": "63c79c571fe30da5a6ba1df1c66e3c0610a95c03",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:01:23-06:00",
-          "message": "fix(proc): a character split across two reads stays whole (candybar-testing-0x6u.71b) (#540)\n\n* fix(proc): a character split across two reads stays whole (candybar-testing-0x6u.71b)\n\n* fix(proc): a launch decodes its output once, at settle (candybar-testing-0x6u.71b)\n\n* fix(proc): each stream decodes as it reads, flushed at settle (candybar-testing-0x6u.71b)\n\n* docs(proc): capture's read flushes once (candybar-testing-0x6u.71b)\n\n* fix(site): the page bundles string_decoder (candybar-testing-0x6u.71b)"
+          "timestamp": "2026-11-01T00:31:34-06:00",
+          "message": "fix(proc): a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) (#541)\n\n* fix(proc): a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t)\n\n* fix(proc): capture owns its lifetime and a refused child leaves unreaped on exit (candybar-testing-0x6u.v5t)\n\n* fix(proc): settled reads unreaped directly; tests pin exit removal (candybar-testing-0x6u.v5t)"
         },
         {
-          "sha": "929674d3e264f536f5eb210476d4bed167c5ebd1",
+          "sha": "86e9a73e4a4b54ee92437eaa6e42305f677421a5",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T05:38:32Z",
-          "message": "chore(release): set `package.json` to 1.174.5 [skip ci]\n\n## [1.174.5](https://github.com/promptctl/cc-candybar/compare/v1.174.4...v1.174.5) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb) ([#538](https://github.com/promptctl/cc-candybar/issues/538)) ([6917276](https://github.com/promptctl/cc-candybar/commit/691727676169eed0e0826fea6dee07d1d902077d))\n* **var-sources:** a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8) ([#539](https://github.com/promptctl/cc-candybar/issues/539)) ([1435f5c](https://github.com/promptctl/cc-candybar/commit/1435f5c909561280b02fc77cc21e462541e582fb))\n"
+          "timestamp": "2026-11-01T06:10:32Z",
+          "message": "chore(release): set `package.json` to 1.174.6 [skip ci]\n\n## [1.174.6](https://github.com/promptctl/cc-candybar/compare/v1.174.5...v1.174.6) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a character split across two reads stays whole (candybar-testing-0x6u.71b) ([#540](https://github.com/promptctl/cc-candybar/issues/540)) ([62bc62d](https://github.com/promptctl/cc-candybar/commit/62bc62daea77f6e6c8b7543db42bf9736245ebaa))\n"
         }
       ]
     },
