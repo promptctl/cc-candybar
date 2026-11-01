@@ -4,7 +4,7 @@
 open, across the candidate jumps, keystones and open-menu colours, beside the
 bar as it ships. Every candidate is a row of `SHADES` or `VARIATIONS` in
 `src/themes/decor.ts` (named `<keystone>-<open>`; the same rows the settings
-menu offers under the theme's ⚙ › 🧪 trials), rendered through the bar's own
+menu marks 🧪 in the `🎼` and `🔆` lists), rendered through the bar's own
 path under session picks; `axes.mjs` labels the rows the page compares and
 names its themes.
 

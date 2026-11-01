@@ -52,13 +52,13 @@ export function settingControlDomain(field: ControlledField): ControlDomain {
   return rangedDomain(GLOBAL_FIELDS[field]);
 }
 
-// [LAW:one-source-of-truth] A row whose named domain is a catalogue is ranged
-// by that name, so the picker and the click gate resolve the one registration
-// that carries its descriptions; every other row by the members it declares.
+// [LAW:one-source-of-truth] A row with a named domain is ranged by that name,
+// so the picker and the click gate resolve the one registration that carries
+// its facets; every other row by the members it declares.
 function rangedDomain(
   row: Exclude<FieldRow, { readonly kind: "text" }>,
 ): ControlDomain {
-  return "optionDomain" in row && row.optionDomain?.library !== undefined
+  return "optionDomain" in row && row.optionDomain !== undefined
     ? { from: row.optionDomain.name }
     : row.domain;
 }

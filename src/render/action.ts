@@ -32,6 +32,7 @@ import { runDeclaration, type ActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
+  type OptionLabel,
   type OptionPalette,
   type RenderPalettes,
   type ResolvedDomain,
@@ -100,6 +101,8 @@ export type CompiledActionDecl =
       // key, `undefined` for every domain that is not, so a reader discriminates
       // on the kind it already has rather than on whether a field was spread in.
       readonly paletteOf: OptionPalette | undefined;
+      // The domain's display facet: what a list shows for a member.
+      readonly labelOf: OptionLabel | undefined;
       // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
       // same registry entry as `paletteOf`; `undefined` unless the domain is one.
       readonly library: DomainLibrary | undefined;
@@ -160,6 +163,8 @@ export type CompiledActionDecl =
       readonly options: readonly string[];
       // set-option's durability twin, so it carries the same domain facts.
       readonly paletteOf: OptionPalette | undefined;
+      // The domain's display facet: what a list shows for a member.
+      readonly labelOf: OptionLabel | undefined;
       // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
       // same registry entry as `paletteOf`; `undefined` unless the domain is one.
       readonly library: DomainLibrary | undefined;
@@ -205,6 +210,8 @@ export type CompiledActionDecl =
       // uniform over every option kind, not a list of kinds that qualify.
       // Segment names are not colour-valued, so this is `undefined` in practice.
       readonly paletteOf: OptionPalette | undefined;
+      // The domain's display facet: what a list shows for a member.
+      readonly labelOf: OptionLabel | undefined;
       // [LAW:one-source-of-truth] The domain's catalogue facet, resolved from the
       // same registry entry as `paletteOf`; `undefined` unless the domain is one.
       readonly library: DomainLibrary | undefined;
@@ -476,6 +483,7 @@ function compileAction(
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library,
       };
     }
@@ -515,6 +523,7 @@ function compileAction(
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library,
       };
     }
@@ -557,6 +566,7 @@ function compileAction(
         relation: action.relation,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library,
       };
     }

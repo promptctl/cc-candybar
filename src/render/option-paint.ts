@@ -20,8 +20,8 @@ import { swatch } from "./swatch.js";
 // swatches. The option was always sitting beside the call site and was never
 // passed, which is why no cell could be a function of the choice being offered
 // (brandon-picker-31z).
-// `label` is what names the option in the cell — the option itself, or a
-// catalogue's row of name and description.
+// `label` is what names the option in the cell — its domain's label for it, or
+// a catalogue's row of name and description — never the value a click writes.
 export type ItemPaint = (
   position: Position,
   option: string,

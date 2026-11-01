@@ -122,21 +122,12 @@ describe("each controlled field's control is generated from its declared domain"
         });
       }
       // A control per setting — its ring's action ranging the declared
-      // domain but the row's trials, and a second over the trials in the
-      // 🧪 trials submenu, so the two together range all of it — and a ↺ that
-      // resets its config field.
+      // domain — and a ↺ that resets its config field.
       const writers = writersOf(config, row.sessionKey);
       expect(writers.length).toBeGreaterThan(0);
       if (typeof domain === "object" && !("min" in domain)) {
         const declared = "from" in domain ? domain.from : domain.themes;
-        const here =
-          typeof declared === "string"
-            ? declared
-            : declared.filter((member) => !row.trials.includes(member));
-        expect(writers).toContainEqual({ set: row.sessionKey, from: here });
-        if (row.trials.length > 0) {
-          expect(writers).toContainEqual({ set: row.sessionKey, from: row.trials });
-        }
+        expect(writers).toContainEqual({ set: row.sessionKey, from: declared });
       }
       expect(
         Object.values(config.actions).some(
