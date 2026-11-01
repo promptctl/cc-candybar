@@ -13,7 +13,6 @@ describe("clickLaunch", () => {
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],
-          timeoutMs: 1000,
           category: "click.open",
         },
         "opening https://example.com",

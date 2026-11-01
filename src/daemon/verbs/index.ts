@@ -347,7 +347,7 @@ const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 // logged. Other failures are genuine errors that surface as RENDER_FAILED.
 export async function clickLaunch(
   launcher: Launcher,
-  opts: LaunchOpts,
+  opts: Omit<LaunchOpts, "timeoutMs">,
   what: string,
   log: DaemonContext["log"],
 ): Promise<void> {
