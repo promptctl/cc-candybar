@@ -2,52 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-527",
-      "ref": "refs/pull/527/merge",
-      "sha": "032ce5095488f36c7be59ed1b9a6e510289458b1",
-      "timestamp": "2026-11-01T00:05:23.589Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3439d4a05a61f8cd02c3099414d573b8e8e1cffc",
+      "timestamp": "2026-11-01T00:10:28.081Z",
       "commits": [
         {
-          "sha": "032ce5095488f36c7be59ed1b9a6e510289458b1",
+          "sha": "3439d4a05a61f8cd02c3099414d573b8e8e1cffc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T00:04:41Z",
-          "message": "Merge 52a030af9171a7746755848eaa985e88cdf92d6f into 8433e004510534547d91ea68a0e77f398becab3d\n"
+          "timestamp": "2026-10-31T18:09:34-06:00",
+          "message": "feat(settings): a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt) (#527)\n\n* feat(settings): a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt)\n\n* refactor(settings): an option's label is a facet of its domain (brandon-menus-sjhy.pyt)\n\nEvery picker over variations or shades now marks trials, not just the\nsettings menu's own. Authored labels had no caller, so they go with\ntheir loader, schema and cross-ref checks.\n\n* chore(settings): retire stale trials text and an unused import (brandon-menus-sjhy.pyt)\n\n* style(settings): format option-paint comment (brandon-menus-sjhy.pyt)"
         },
         {
-          "sha": "52a030af9171a7746755848eaa985e88cdf92d6f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T18:04:37-06:00",
-          "message": "Merge branch 'main' into settings-one-list-labelled-options"
-        },
-        {
-          "sha": "916f7566e0de2a0bcd3ba59b535666287c98370a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:57:17-06:00",
-          "message": "style(settings): format option-paint comment (brandon-menus-sjhy.pyt)\n"
-        },
-        {
-          "sha": "667b17bcd09d2ece7924e6a4254c730c4caae838",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:56:55-06:00",
-          "message": "chore(settings): retire stale trials text and an unused import (brandon-menus-sjhy.pyt)\n"
-        },
-        {
-          "sha": "1daa5a0e8950ef6361b49c642a96bafce505cf32",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:41:03-06:00",
-          "message": "refactor(settings): an option's label is a facet of its domain (brandon-menus-sjhy.pyt)\n\nEvery picker over variations or shades now marks trials, not just the\nsettings menu's own. Authored labels had no caller, so they go with\ntheir loader, schema and cross-ref checks.\n"
-        },
-        {
-          "sha": "89763793c1c106d3657f59b999ef0b7209db2f23",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:17:29-06:00",
-          "message": "feat(settings): a setting has one list, and an option's label is separate from its value (brandon-menus-sjhy.pyt)\n"
+          "sha": "8433e004510534547d91ea68a0e77f398becab3d",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-10-31T23:15:30Z",
+          "message": "chore(release): set `package.json` to 1.171.0 [skip ci]\n\n## [1.171.0](https://github.com/promptctl/cc-candybar/compare/v1.170.1...v1.171.0) (2026-10-31)\n\n### Features\n\n* **carousel:** the standard control names the setting it changes, not its value (brandon-menus-sjhy.vxr) ([#518](https://github.com/promptctl/cc-candybar/issues/518)) ([e0b1483](https://github.com/promptctl/cc-candybar/commit/e0b1483c0864fe01633d47904d1f453e411b8da2))\n"
         }
       ]
     },
@@ -91,21 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T17:23:41-06:00",
           "message": "feat(effect): the wheel turns each segment at a pace set by where it sits (brandon-menus-sjhy.ju8)\n\nThe wheel lives in rich-js, and 0.27.0 reads a segment's place from the\nframe it is handed, so moving to it is the feature and the row wrapping\nhere does not change.\n\n0.27.0's Palette is built from a total set of roles, so paletteRole's\nundefined branch cannot run. paletteRole, DecorRole and ThemePole go, and\nso do the two tests of a palette that can no longer be built.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "d5626ab64b0e678f0a09c8771897eabe600252a1",
-      "timestamp": "2026-10-31T23:06:19.816Z",
-      "commits": [
-        {
-          "sha": "d5626ab64b0e678f0a09c8771897eabe600252a1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T17:05:26-06:00",
-          "message": "test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo) (#526)\n\n* test(protocol): the glyph clip is pinned by the one table both runtimes assert (brandon-unfiled-3248.1izo)\n\nWhat the clip does to a string is behaviour, and either runtime could change it, update its own hand-mirrored test, and leave the other unaware. The shared fixture now carries clip cases, so a clip rule changed in one runtime fails the other's test. The Rust clip takes its budget as a parameter so those cases can drive it.\n\nThe mirrored tests were also the only proof a message reaches the clip, so each runtime keeps one test that every message-bearing cause clips at the budget, with the expected text derived from the clip itself.\n\n* docs(protocol): the glyph header names the one table that pins the clip (brandon-unfiled-3248.1izo)\n\n* test(protocol): each message-bearing cause's whole glyph is in the one table (brandon-unfiled-3248.1izo)\n\nThe wiring tests kept after the clip moved to the table were a hand-mirrored pair of their own: each runtime spelled the four labels, an all-x message could not tell a real clip from a UTF-16 or byte slice, and expected text derived from the constant left the budget's value unpinned. A row per cause with an astral message and the exact bytes closes all three, and replaces the wiring pair and the short-message tests. The budget constant goes back to private: nothing outside its module names it now.\n\n* test(protocol): every permanent cause's glyph text is in the one table (brandon-unfiled-3248.1izo)\n\nversion_mismatch was still a hand-mirrored pair, the defect this branch removes for the clip, so a row is now one outcome and its text and the table covers every cause. The style envelope comes out of the rows: check-protocol already owns it, and four copies of it in a fixture were a third place to edit. The combining-mark row is spelled with escapes, because a normalizing editor would silently change what it tests."
         }
       ]
     },

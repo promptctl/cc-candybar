@@ -34918,7 +34918,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.170.1";
+var PACKAGE_VERSION = "1.171.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -51125,10 +51125,9 @@ var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 // src/config/globals-fields.ts
 var control = (label2, place, {
   previews = [],
-  trials = [],
   shown = "true"
-} = {}) => ({ label: label2, place, previews, trials, shown });
-var enumValues = (members, optionDomain, library) => ({
+} = {}) => ({ label: label2, place, previews, shown });
+var enumValues = (members, optionDomain, facets = {}) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members },
   parse: (raw) => members.includes(raw) ? raw : null,
@@ -51136,10 +51135,11 @@ var enumValues = (members, optionDomain, library) => ({
     optionDomain: {
       name: optionDomain,
       members,
-      ...library !== void 0 && { library }
+      ...facets
     }
   }
 });
+var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
 var boolValues = {
   spec: optionalBooleanSpec(),
   domain: "bool",
@@ -51153,7 +51153,10 @@ var intValues = (range) => ({
 function enumSetting(members, floor2, shown, extra = {}) {
   return {
     kind: "session",
-    ...enumValues(members, extra.optionDomain, extra.library),
+    ...enumValues(members, extra.optionDomain, {
+      library: extra.library,
+      labelOf: extra.labelOf
+    }),
     floor: floor2,
     control: shown,
     themeDefault: extra.themeDefault ?? false
@@ -51324,10 +51327,13 @@ var GLOBAL_FIELDS = {
     VARIATION_NAMES,
     "accent",
     control("\u{1F3BC} variation", "gear", {
-      previews: ["layout"],
-      trials: TRIAL_VARIATION_NAMES
+      previews: ["layout"]
     }),
-    { optionDomain: "variations", themeDefault: true }
+    {
+      optionDomain: "variations",
+      labelOf: markTrials(TRIAL_VARIATION_NAMES),
+      themeDefault: true
+    }
   ),
   // Which of its role's shades each CELL of the closed bar wears — a named
   // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
@@ -51338,11 +51344,11 @@ var GLOBAL_FIELDS = {
     SHADE_NAMES,
     "middle",
     control("\u{1F506} shade", "gear", {
-      previews: ["layout"],
-      trials: TRIAL_SHADE_NAMES
+      previews: ["layout"]
     }),
     {
       optionDomain: "shades",
+      labelOf: markTrials(TRIAL_SHADE_NAMES),
       themeDefault: true
     }
   ),
@@ -52032,8 +52038,8 @@ var PLACEMENT_THEMES = "placementThemes";
 registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
   paletteOf: (option, render3) => placementPalette(option, render3.palette)
 });
-for (const { name, members, library } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library });
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
 }
 function perConfigDomainsFor(config2) {
   return /* @__PURE__ */ new Map([
@@ -52071,7 +52077,8 @@ function resolveOptionDomain(from, perConfigDomains) {
     return {
       members: entry.resolve(),
       paletteOf: entry.paletteOf,
-      library: entry.library
+      library: entry.library,
+      labelOf: entry.labelOf
     };
   }
   throw new Error(unknownOptionDomain(from, perConfigDomains));
@@ -52355,11 +52362,7 @@ var TAB_LABEL = Object.fromEntries(
 );
 var SUBMENUS = {
   gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" },
-  // The looks still on trial (Brandon: "put them in a separate menu"): the
-  // members of a setting's domain its row names as `trials`, each setting's
-  // in a picker of its own, off the control everyone turns.
-  trials: { beside: "shade", trigger: "\u{1F9EA} trials" }
+  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" }
 };
 var SUBMENU_NAMES = Object.keys(SUBMENUS);
 var PLACE = perSetting(
@@ -52389,7 +52392,7 @@ function settingControlDomain(field) {
   return rangedDomain(GLOBAL_FIELDS[field]);
 }
 function rangedDomain(row2) {
-  return "optionDomain" in row2 && row2.optionDomain?.library !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
+  return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
 }
 function fragmentRejection(description, message) {
   return {
@@ -54979,68 +54982,31 @@ var TRAIL = Object.fromEntries(
   laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
 );
 var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-var offeredHere = (name, domain, trials) => {
-  if (typeof domain === "object" && "from" in domain && typeof domain.from !== "string") {
-    return { from: domain.from.filter((member) => !trials.includes(member)) };
-  }
-  if (trials.length > 0) {
-    throw new Error(
-      `setting "${name}" names trials, but its control does not range a list of members to leave them out of`
-    );
-  }
-  return domain;
-};
-var menuControl = (name, id2, place, label2, domain, laidAfter) => {
+var menuControl = (name) => {
   const row2 = SETTINGS[name];
+  const place = PLACE[name];
   return {
     ...row2,
     name,
-    id: id2,
     place,
-    label: label2,
     control: settingControl(
-      { label: label2, domain },
+      {
+        label: row2.label,
+        domain: settingControlDomain(row2.configKey)
+      },
       row2.sessionKey,
       row2.effectiveVar,
-      controlApply(id2),
+      controlApply(name),
       accordionOf(place)
     ),
     beneath: row2.previews.map((preview) => PREVIEWS[preview]),
-    ...laidAfter
+    help: [HELP[name]].filter((h) => h !== void 0),
+    submenus: submenusBeside(name)
   };
 };
-var CONTROLS = Object.keys(SETTINGS).map(
-  (name) => menuControl(
-    name,
-    name,
-    PLACE[name],
-    SETTINGS[name].label,
-    offeredHere(
-      name,
-      settingControlDomain(SETTINGS[name].configKey),
-      SETTINGS[name].trials
-    ),
-    {
-      help: [HELP[name]].filter((h) => h !== void 0),
-      submenus: submenusBeside(name)
-    }
-  )
-);
-var TRIAL_CONTROLS = Object.keys(SETTINGS).filter((name) => SETTINGS[name].trials.length > 0).map(
-  (name) => menuControl(
-    name,
-    `${name}.trials`,
-    "trials",
-    // Beside the setting's own control and over the same key, so only the
-    // label says this one ranges the trial values.
-    `\u{1F9EA} ${name}`,
-    { from: SETTINGS[name].trials },
-    { help: [], submenus: [] }
-  )
-);
-var MENU_CONTROLS = [...CONTROLS, ...TRIAL_CONTROLS];
-var controlsIn = (place) => MENU_CONTROLS.filter((c) => c.place === place);
-var controlsUnder = (place) => MENU_CONTROLS.filter((c) => within(c.place, place));
+var CONTROLS = Object.keys(SETTINGS).map(menuControl);
+var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
 var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
   controlsUnder(place)
 )}))`;
@@ -55094,7 +55060,7 @@ var disarms = (out) => out.map((c) => c.step.disarm);
 var DOOR_DISARMS = disarms(CONFIRMS);
 var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
 function controlNode(c) {
-  const self2 = controlSeg(c.id);
+  const self2 = controlSeg(c.name);
   if (c.control.kind === "inline") return seg(self2);
   return disclosureNode(
     self2,
@@ -55103,7 +55069,7 @@ function controlNode(c) {
       kind: "container",
       direction: "vertical",
       children: [...c.control.list.rows, ...c.beneath].map(
-        (_, row2) => seg(controlRow(c.id, row2))
+        (_, row2) => seg(controlRow(c.name, row2))
       )
     },
     "drop"
@@ -55197,8 +55163,7 @@ var PLACE_BODY = {
     content: [],
     after: [seg(THEME_DEFAULT_SEG)]
   },
-  toggles: { direction: "horizontal", content: [], after: [] },
-  trials: { direction: "horizontal", content: [], after: [] }
+  toggles: { direction: "horizontal", content: [], after: [] }
 };
 function placeBody(place) {
   const { direction, content, after } = PLACE_BODY[place];
@@ -55403,7 +55368,7 @@ function declareDoctorRows(artifacts) {
   }
 }
 function declareSettingControls(artifacts) {
-  for (const c of MENU_CONTROLS) {
+  for (const c of CONTROLS) {
     Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
     artifacts.actions[reset] = { reset: c.configKey };
@@ -55415,7 +55380,7 @@ function declareSettingControls(artifacts) {
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
-    artifacts.segments[controlSeg(c.id)] = {
+    artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
     };
     if (c.control.kind === "picker") {
@@ -55423,7 +55388,7 @@ function declareSettingControls(artifacts) {
         ...c.control.list.rows.map((template) => ({ template })),
         ...c.beneath
       ].forEach((row2, i) => {
-        artifacts.segments[controlRow(c.id, i)] = row2;
+        artifacts.segments[controlRow(c.name, i)] = row2;
       });
     }
   }
@@ -71533,6 +71498,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library
       };
     }
@@ -71571,6 +71537,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library
       };
     }
@@ -71613,6 +71580,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         relation: action2.relation,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
         library: domain.library
       };
     }
@@ -72408,7 +72376,8 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
     groups: apply.library.groups,
     entries: apply.options.map(apply.library.entry)
   };
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, option)) : [];
+  const labelOf = apply.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply.options.map((option, i) => optionFace(i, labelOf(option))) : [];
   const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
     gridFaces.map((face) => face.cellLength),
     available,
@@ -72492,14 +72461,14 @@ function renderPicker(applyName, apply, page2, close2, paged, runtime, itemPaint
       );
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i) => cellWidth2(apply.options[i]))
+      ...section.indices.map((i) => cellWidth2(labelOf(apply.options[i])))
     );
     for (const i of section.indices) {
-      const option = apply.options[i];
+      const name = labelOf(apply.options[i]);
       const authored = catalogue.entries[i].description;
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
-      const gap = " ".repeat(nameWidth - cellWidth2(option) + 2);
-      const row2 = description === void 0 ? option : `${option}${gap}${description}`;
+      const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
+      const row2 = description === void 0 ? name : `${name}${gap}${description}`;
       lines2.push(
         assemble(
           [optionCell(optionFace(i, fitCells(row2, available)), i)],
