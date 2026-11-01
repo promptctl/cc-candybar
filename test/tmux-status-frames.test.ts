@@ -2,7 +2,6 @@
 // as tmux style directives a status line draws, and the links its ranges stand
 // for.
 
-import { laneEncoded } from "../src/render/frame";
 import {
   RANGE_PREFIX,
   rangeOf,
@@ -76,12 +75,10 @@ describe("tmuxStatusFrame", () => {
     ).toHaveLength(3);
   });
 
-  test("text tmux has no attribute for is refused, and the lane says why in a frame", () => {
-    const framed = barOf([{ text: "framed", attrs: ["frame"] }]);
-    expect(() => tmuxStatusFrame(framed)).toThrow(
-      "a tmux status line cannot draw frame text",
+  test("text tmux has no attribute for is a frame saying why", () => {
+    const { rows } = tmuxStatusFrame(
+      barOf([{ text: "framed", attrs: ["frame"] }]),
     );
-    const { rows } = laneEncoded(tmuxStatusFrame, framed);
     expect(rows.join("")).toContain("a tmux status line cannot draw frame text");
   });
 });

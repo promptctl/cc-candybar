@@ -12,7 +12,7 @@
 
 import type { BandOff } from "../../mod/types";
 import { bandFrame } from "../band/frames";
-import { laneEncoded, type Frame } from "../render/frame";
+import type { Frame } from "../render/frame";
 import { tmuxStatusFrame } from "../tmux-status/frames";
 import type { Lane } from "../config/lanes";
 import type { Response } from "./protocol";
@@ -22,11 +22,11 @@ import type { Response } from "./protocol";
 type LaneFrame = (bar: Frame, json: string) => string;
 
 export const LANE_FRAMES: Readonly<Record<Lane, LaneFrame>> = {
-  band: (bar) => JSON.stringify(laneEncoded(bandFrame, bar)),
+  band: (bar) => JSON.stringify(bandFrame(bar)),
   statusline: (_bar, json) => json,
   pane: (_bar, json) => json,
   tmuxStatus: (bar) =>
-    JSON.stringify({ ok: true, tmuxStatus: laneEncoded(tmuxStatusFrame, bar) }),
+    JSON.stringify({ ok: true, tmuxStatus: tmuxStatusFrame(bar) }),
 };
 
 // [LAW:types-are-the-program] The band's lane-off line is the daemon's own

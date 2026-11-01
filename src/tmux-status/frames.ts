@@ -13,6 +13,7 @@
 import { createHash } from "node:crypto";
 import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
 import {
+  laneEncoded,
   mergedRuns,
   type Attribute,
   type Frame,
@@ -115,10 +116,6 @@ const ATTRIBUTES = {
   encircle: null,
 } as const satisfies Record<Attribute, string | null>;
 
-const ATTRIBUTE_NAMES = Object.keys(ATTRIBUTES) as Array<
-  keyof typeof ATTRIBUTES
->;
-
 // tmux reads `#` as the start of a directive in what it draws, and `##` as a
 // `#` (measured, tmux 3.6a: a user option's value is not expanded again as a
 // format, but its `#[…]` directives are drawn).
@@ -129,20 +126,17 @@ function escaped(text: string): string {
 // A run's whole style, from nothing: `none` clears the attributes the run
 // before it set, so each run reads alone.
 function directive({ fg, bg, attrs = [] }: Run): string {
-  const attributes = ATTRIBUTE_NAMES.filter((name) => attrs.includes(name)).map(
-    (name) => {
-      const tmux = ATTRIBUTES[name];
-      if (tmux === null)
-        throw new Error(`frames: a tmux status line cannot draw ${name} text`);
-      return tmux;
-    },
-  );
+  const attributes = attrs.map((name) => {
+    const tmux = ATTRIBUTES[name];
+    if (tmux === null)
+      throw new Error(`frames: a tmux status line cannot draw ${name} text`);
+    return tmux;
+  });
   return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
 }
 
-// One drawn bar as the rows a status line draws. A linked run is a range whose
-// id names its link.
-export function tmuxStatusFrame(frame: Frame): TmuxStatusBar {
+// A linked run is a range whose id names its link.
+function encode(frame: Frame): TmuxStatusBar {
   const links: Record<string, string> = {};
   const drawn = (run: Run): string => {
     const text = directive(run) + escaped(run.text);
@@ -153,4 +147,9 @@ export function tmuxStatusFrame(frame: Frame): TmuxStatusBar {
   };
   const rows = frame.rows.map((row) => mergedRuns(row).map(drawn).join(""));
   return { rows, links };
+}
+
+// One drawn bar as the rows a status line draws.
+export function tmuxStatusFrame(frame: Frame): TmuxStatusBar {
+  return laneEncoded(encode, frame);
 }

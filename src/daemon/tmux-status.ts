@@ -39,7 +39,6 @@ import {
   encodeSegments,
   VERB_TMUX_STATUS_CLICK,
 } from "../click/wire.js";
-import { laneEncoded } from "../render/frame.js";
 import {
   RANGE_PREFIX,
   tmuxStatusFrame,
@@ -566,7 +565,7 @@ export class TmuxStatusLines {
     entry.unsubscribe = this.deps.subscribe(sessionId, {
       lane: "tmuxStatus",
       frame: (bar) => {
-        entry.frame = laneEncoded(tmuxStatusFrame, bar);
+        entry.frame = tmuxStatusFrame(bar);
         this.reconcile(entry.socket);
       },
       refused: (resp) => {

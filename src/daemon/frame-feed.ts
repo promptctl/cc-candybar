@@ -38,9 +38,10 @@ import { laneOffReason } from "../config/menu-places";
 // request's answer shows that it is polled.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
-// A frame's two answers: the bar, which a lane drawing it elsewhere draws,
-// and what Claude Code's statusline shows — the bar, or the handoff line in
-// its place while a lane draws it elsewhere (src/daemon/lane-handoff.ts).
+// A frame's two answers: `resp`, which a lane drawing the bar elsewhere is sent,
+// and `statusline`, what Claude Code's statusline shows — the bar, or the
+// handoff line in its place while a lane draws it elsewhere
+// (src/daemon/lane-handoff.ts).
 export interface FeedFrame {
   // [LAW:types-are-the-program] Every frame has a bar: one that failed draws
   // its diagnostic Frame, so a lane holds no failure branch. Its `nextChange`
@@ -248,14 +249,14 @@ export function noteSent(rate: Instant[], at: Instant): void {
 }
 
 interface Answers {
-  readonly bar: string;
+  readonly resp: string;
   readonly statusline: string;
 }
 
 // [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
 // the one drawing it in the statusline draws what the statusline shows.
 const answerOf = (answers: Answers, lane: Lane): string =>
-  LANES[lane].handsOff ? answers.bar : answers.statusline;
+  LANES[lane].handsOff ? answers.resp : answers.statusline;
 
 // [LAW:one-source-of-truth] The frames a second a spacing allows: the most a
 // feed draws its bar at, never a time it measured. It is drawn into the frame,
@@ -672,11 +673,11 @@ export class FrameFeeds<Req> {
     // the same links, so what they copy is this frame's, pushed or not.
     frame.delivered();
     const answers = {
-      bar: JSON.stringify(frame.resp),
+      resp: JSON.stringify(frame.resp),
       statusline: JSON.stringify(frame.statusline),
     };
     if (
-      feed.last?.answers.bar === answers.bar &&
+      feed.last?.answers.resp === answers.resp &&
       feed.last.answers.statusline === answers.statusline
     )
       return;

@@ -13,6 +13,7 @@
 import { ColorDepth, ColorSpec } from "@promptctl/rich-js";
 import type { BandBar, BandRun, RunColor } from "../../mod/types";
 import {
+  laneEncoded,
   mergedRuns,
   type Attribute,
   type Frame,
@@ -88,16 +89,11 @@ const ATTRIBUTES = {
   overline: null,
 } as const satisfies Record<Attribute, BandAttribute | null>;
 
-const ATTRIBUTE_NAMES = Object.keys(ATTRIBUTES) as Array<
-  keyof typeof ATTRIBUTES
->;
-
 function bandRun({ text, fg, bg, attrs = [], link }: Run): BandRun {
   const color = runColor(fg);
   const backgroundColor = runColor(bg);
   const attributes: Partial<Record<BandAttribute, true>> = {};
-  for (const name of ATTRIBUTE_NAMES) {
-    if (!attrs.includes(name)) continue;
+  for (const name of attrs) {
     const prop = ATTRIBUTES[name];
     if (prop === null)
       throw new Error(`frames: the band cannot draw ${name} text`);
@@ -112,10 +108,14 @@ function bandRun({ text, fg, bg, attrs = [], link }: Run): BandRun {
   };
 }
 
-// One drawn bar as the rows of runs the mod draws.
-export function bandFrame(frame: Frame): BandBar {
+function encode(frame: Frame): BandBar {
   return {
     ok: true,
     band: frame.rows.map((row) => mergedRuns(row).map(bandRun)),
   };
+}
+
+// One drawn bar as the rows of runs the mod draws.
+export function bandFrame(frame: Frame): BandBar {
+  return laneEncoded(encode, frame);
 }

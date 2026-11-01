@@ -7,7 +7,7 @@ import type { Attribute } from "../src/render/frame";
 import { bandFrame } from "../src/band/frames";
 import { LANE_FRAMES } from "../src/daemon/lane-frames";
 import { DIAGNOSTIC_ERROR_COLORS } from "../src/render/diagnostic-style";
-import { laneEncoded, renderFailedFrame } from "../src/render/frame";
+import { renderFailedFrame } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
 
 describe("bandFrame", () => {
@@ -118,31 +118,23 @@ describe("bandFrame", () => {
       ).band[0]!.map((run) => run.text),
     ).toEqual(["ab", "c", "de", "f"]);
   });
-
-  test.each(["conceal", "blink", "overline"] as const)(
-    "refuses %s text, which the mod's Text cannot draw",
-    (name) => {
-      expect(() =>
-        bandFrame(barOf([{ text: "x", attrs: [name] }])),
-      ).toThrow(`the band cannot draw ${name} text`);
-    },
-  );
 });
 
 describe("the lane's refusal", () => {
-  test("a bar the band cannot draw is a frame saying why, in the diagnostic colours", () => {
-    expect(
-      laneEncoded(bandFrame, barOf([{ text: "x", attrs: ["blink"] }])).band,
-    ).toEqual([
-      [
-        {
-          text: "⚠ cc-candybar frames: the band cannot draw blink text",
-          color: DIAGNOSTIC_ERROR_COLORS.fg,
-          backgroundColor: DIAGNOSTIC_ERROR_COLORS.bg,
-        },
-      ],
-    ]);
-  });
+  test.each(["conceal", "blink", "overline"] as const)(
+    "a bar of %s text, which the mod's Text cannot draw, is a frame saying why, in the diagnostic colours",
+    (name) => {
+      expect(bandFrame(barOf([{ text: "x", attrs: [name] }])).band).toEqual([
+        [
+          {
+            text: `⚠ cc-candybar frames: the band cannot draw ${name} text`,
+            color: DIAGNOSTIC_ERROR_COLORS.fg,
+            backgroundColor: DIAGNOSTIC_ERROR_COLORS.bg,
+          },
+        ],
+      ]);
+    },
+  );
 });
 
 describe("LANE_FRAMES", () => {
