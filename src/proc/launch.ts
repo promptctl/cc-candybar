@@ -48,6 +48,7 @@ import {
 import type { Socket } from "node:net";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
+import { setImmediate } from "node:timers";
 
 import type { LaunchStatsHandle } from "./stats-handle";
 
