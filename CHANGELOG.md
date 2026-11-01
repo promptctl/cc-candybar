@@ -1,3 +1,9 @@
+## [1.177.2](https://github.com/promptctl/cc-candybar/compare/v1.177.1...v1.177.2) (2026-11-01)
+
+### Bug Fixes
+
+* **daemon:** background and lifecycle launches go async (candybar-launch-q7o7.jqq) ([#549](https://github.com/promptctl/cc-candybar/issues/549)) ([722b6fe](https://github.com/promptctl/cc-candybar/commit/722b6fe4c0d62887ce180576956933793a7e8d12))
+
 ## [1.177.1](https://github.com/promptctl/cc-candybar/compare/v1.177.0...v1.177.1) (2026-11-01)
 
 ### Bug Fixes
