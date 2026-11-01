@@ -148,7 +148,7 @@ export function renderFrame(
       by: "feed",
       fps,
     });
-    const bar = RENDER_ANSWERS.ansi(drawn.body);
+    const answer = RENDER_ANSWERS.ansi(drawn.body);
     const statusline = statuslineOf(
       sessionId,
       drawn,
@@ -156,9 +156,10 @@ export function renderFrame(
     );
     return {
       bar: drawn.body,
-      resp: bar,
+      resp: answer,
+      // Mostly the bar itself, and one frame encodes once.
       statusline:
-        statusline === drawn.body ? bar : RENDER_ANSWERS.ansi(statusline),
+        statusline === drawn.body ? answer : RENDER_ANSWERS.ansi(statusline),
       evaluated,
       delivered,
       failure: null,

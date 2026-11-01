@@ -4,7 +4,7 @@
 // this reads them through rich-js's `osc8Sequences`, over the OSC 8 grammar — the same one the bytes are
 // written with — so a change to how a link is written is a change in one place,
 // not in a regex copied into every file that clicks something. Nothing in src,
-// site or scripts reads bytes back: a reader there asks the daemon for the Frame.
+// site or scripts decodes bytes: a reader there asks the daemon for the Frame.
 import { resolvedStyle } from "../../src/render/rich-theme.js";
 import {
   decodeAnsi,
