@@ -4,46 +4,46 @@
     {
       "version": "pr-545",
       "ref": "refs/pull/545/merge",
-      "sha": "76d98b5b8dd55762e7c5888b696212e2d3bd80c0",
-      "timestamp": "2026-11-01T09:22:11.576Z",
+      "sha": "6624a292bad041675d6f65f157c7a2d333808436",
+      "timestamp": "2026-11-01T09:23:30.019Z",
       "commits": [
         {
-          "sha": "76d98b5b8dd55762e7c5888b696212e2d3bd80c0",
+          "sha": "6624a292bad041675d6f65f157c7a2d333808436",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T09:21:19Z",
-          "message": "Merge 9f43015f530a251bc42bcb1929b9afff998f601a into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
+          "timestamp": "2026-11-01T09:22:42Z",
+          "message": "Merge d149b9c1178632e8f22c632a36c1f00ffd5989a4 into 38c5c173ef1558a6bd85ec48336591cc57874b90\n"
         },
         {
-          "sha": "9f43015f530a251bc42bcb1929b9afff998f601a",
+          "sha": "d149b9c1178632e8f22c632a36c1f00ffd5989a4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T02:21:08-07:00",
           "message": "fix(daemon): a launch keeps the program's own words, clickLaunch's bound cannot be passed (candybar-launch-q7o7.gp7)\n"
         },
         {
-          "sha": "09a7fcb5eac51f12ff5a9e4f7cd58f827a32975c",
+          "sha": "0fdfb0fa0fbb3f1a488dadfd075e3fcb12313851",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T02:11:12-07:00",
           "message": "test(launch): a timed-out launch says it timed out (candybar-launch-q7o7.gp7)\n"
         },
         {
-          "sha": "991e2896ce59e642ddaa1269e4ffdefe1565915c",
+          "sha": "a7da8bc4cec0d769b4bd973634696438932aba9c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T02:09:03-07:00",
           "message": "fix(daemon): clickLaunch owns its bound, a terminated launch says why, stats print the journal's turn (candybar-launch-q7o7.gp7)\n"
         },
         {
-          "sha": "d83089d651fb75adf1037cefd0f66603d5cabdba",
+          "sha": "4f845d197fab63539509f317c4876fbf28da4a82",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T01:59:53-07:00",
           "message": "fix(daemon): clientLeft is its own fact, an aborted click launch is closing, doctor probes run together (candybar-launch-q7o7.gp7)\n"
         },
         {
-          "sha": "5e5b20fc8ff2f74eaa5e929fb0c8e3af149537ad",
+          "sha": "9592506ea2c77c8979104f39927266b47ea4f4e9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T01:36:53-07:00",
