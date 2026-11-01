@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.0";
+var PACKAGE_VERSION = "1.174.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -66264,9 +66264,13 @@ async function answered(read2) {
     await current.landed;
   }
 }
-function waitWithin(work, ms, late) {
+var afterRealTime = (ms, fire) => {
+  const timer = setTimeout(fire, ms);
+  return () => clearTimeout(timer);
+};
+function waitWithin(work, ms, late, after) {
   const wait = new AbortController();
-  const timer = setTimeout(() => wait.abort(), Math.max(0, ms));
+  const clear = after(Math.max(0, ms), () => wait.abort());
   const ended = new Promise((resolve, reject2) => {
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
@@ -66277,7 +66281,7 @@ function waitWithin(work, ms, late) {
     );
   });
   return ended.finally(() => {
-    clearTimeout(timer);
+    clear();
     wait.abort();
   });
 }
@@ -76065,9 +76069,9 @@ function recordRequest(parts, req) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
 }
-async function answerRequest(parts, req, at, wait, facts) {
+async function answerRequest(parts, req, at, waitEndsAt, facts) {
   recordRequest(parts, req);
-  return drawAnswer(parts, req, at, wait, facts);
+  return drawAnswer(parts, req, at, waitEndsAt, facts);
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
@@ -76101,7 +76105,7 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
-async function drawAnswer(parts, req, at, wait, facts) {
+async function drawAnswer(parts, req, at, waitEndsAt, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
@@ -76111,21 +76115,25 @@ async function drawAnswer(parts, req, at, wait, facts) {
       req,
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
     );
-    noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
     const waitFrom = clock.monotonic();
+    const budget = waitEndsAt - waitFrom;
+    noteFacts(facts, {
+      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
+    });
     const refreshed = /* @__PURE__ */ new Map();
     const ended = await waitWithin(
       (signal) => Promise.all([
         settlePayload(setup.payloadInputs, at, refreshed),
         setup.view.registry.inFlight(signal)
       ]),
-      wait.endsAt - waitFrom,
+      budget,
       // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
       // it is a bug, said against the session, never one that ends the daemon.
       (e) => log(
         "error",
         `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
-      )
+      ),
+      clock.after
     );
     const drawFrom = clock.monotonic();
     noteFacts(facts, {
@@ -76701,18 +76709,17 @@ async function replyTo(parts, req, timedOut, accepted) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const waitFor = (req2) => {
-      const ms = waitBudgetMs(req2.deadline, accepted, {
-        epochMs: started2.getTime(),
-        monoMs: t0
-      });
-      return { stated: req2.deadline.kind, ms, endsAt: t0 + ms };
-    };
     const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(
       parts,
       checked.req,
       at,
-      waitFor(checked.req),
+      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+      // fixed at its arrival: early enough before its client hangs up to
+      // draw (src/daemon/request-deadline.ts).
+      t0 + waitBudgetMs(checked.req.deadline, accepted, {
+        epochMs: started2.getTime(),
+        monoMs: t0
+      }),
       facts
     ).then(
       ({ answer: answer2, motion, clickShown, delivered }) => {
@@ -83578,7 +83585,8 @@ var MenuIdle = class {
 // src/daemon/daemon.ts
 var SYSTEM_CLOCK = {
   date: () => /* @__PURE__ */ new Date(),
-  monotonic: () => performance.now()
+  monotonic: () => performance.now(),
+  after: afterRealTime
 };
 var liveDaemon = null;
 function createDaemon(inputs) {

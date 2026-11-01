@@ -2,74 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-533",
-      "ref": "refs/pull/533/merge",
-      "sha": "c327bd2c4698b27ad34c32605f14ddce5d16476c",
-      "timestamp": "2026-11-01T03:22:45.177Z",
-      "commits": [
-        {
-          "sha": "c327bd2c4698b27ad34c32605f14ddce5d16476c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:21:57Z",
-          "message": "Merge 951bf27a2cb073c1c31b5f5eac06c2a8b3e6d17a into 0db1339f6615f78932dd846c241ea893c99a82fc\n"
-        },
-        {
-          "sha": "951bf27a2cb073c1c31b5f5eac06c2a8b3e6d17a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:11:53-06:00",
-          "message": "fix(test): the claims about a held clock say what it holds, and the case drops what it cannot show (brandon-unfiled-3248.a5k3)\n"
-        },
-        {
-          "sha": "2cfdf2e1ea322aaae72ac289a4b625fcd8c12f22",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:03:18-06:00",
-          "message": "test(daemon): the answered-request case holds its client open, so it can fail (brandon-unfiled-3248.a5k3)\n"
-        },
-        {
-          "sha": "b323f2d666b338ea1ee10a7059fdedd4f618d2f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:01:07-06:00",
-          "message": "fix(daemon): a held clock fires as a real one does, and an answered request's backstop is cleared (brandon-unfiled-3248.a5k3)\n"
-        },
-        {
-          "sha": "303b1704cefaf588f820d831d862164ebdb068bb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:30:38-06:00",
-          "message": "fix(daemon): a request's timers run on its clock, so a held daemon holds them (brandon-unfiled-3248.a5k3)\n\nA budget was figured from DaemonClock while the wait and the backstop ran on\nreal setTimeout, so a held clock could not own a request's time. `after` on the\nclock gives both one owner: the deadline case holds its daemon and advances to\nexact figures, a stall in the worker can no longer reach the backstop first, and\narming the wait with anything but its budget fails the case.\n\nFrom the high review: RequestWait goes, since `stated` was req.deadline.kind, and\nthe process file's one case stops carrying shared fixtures.\n"
-        },
-        {
-          "sha": "e572296888ab703788b7625aeb79c17ccf649bcd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T20:19:01-06:00",
-          "message": "fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "96f1881bee934f602971a13dea41977a614a98e3",
-      "timestamp": "2026-11-01T03:07:36.561Z",
+      "sha": "4814ee778a28c55a7193789772cc2d681d409ab0",
+      "timestamp": "2026-11-01T03:31:11.011Z",
       "commits": [
         {
-          "sha": "96f1881bee934f602971a13dea41977a614a98e3",
+          "sha": "4814ee778a28c55a7193789772cc2d681d409ab0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:06:33-06:00",
-          "message": "fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz) (#534)\n\n* fix(proc): a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz)\n\n* fix(proc): a refusal is a child still running at the escalation (candybar-testing-0x6u.0mz)\n\nA pid probe cannot classify a group's EPERM: it missed a zombie left behind a\nreaped leader. The launch owns its child's end, so SIGKILL's answer decides.\n\n* fix(proc): the refusal verdict follows the poll that delivers the child's end (candybar-testing-0x6u.0mz)\n\n* test(proc): the stalled-loop case keeps its child alive past the abort (candybar-testing-0x6u.0mz)\n\n* fix(proc): a group's EPERM is a refusal only when its leader backs it (candybar-testing-0x6u.0mz)\n\nWaiting for Node's exit state cannot work: a child in teardown answers EPERM\nbefore its end can be delivered. The leader's answer to signal 0 is immediate\nand exact, so the grace, the deferred verdict and both try blocks go."
+          "timestamp": "2026-10-31T21:30:24-06:00",
+          "message": "fix(daemon): a request's timers run on its clock, and the deadline case holds them (brandon-unfiled-3248.a5k3) (#533)\n\n* fix(test): a render's event records the wait it armed, and the deadline case reads that (brandon-unfiled-3248.a5k3)\n\nThe case asserted Date.now() <= deadline right after the reply, which\ntimes the test worker's loop: on PR #474's CI it read 47 ms past. The\nunstated branch made the same comparison against a tighter bound.\n\nRequestWait carried one fact twice, `ms` for the event and `endsAt` for\nthe timer, so `deadline=` could disagree with the wait that ran. `ms` is\ngone, and the event notes the value `waitWithin` is armed with.\n\nThe case now reads that figure and its bound, with no clock read after\nthe reply. Nothing left about it is the process's, so it moves back to\nthe worker. `/^stated:\\d+ms$/` is gone with it: a request read late\nrecords a negative budget, and that regex refused it.\n\ntest/wait-within.test.ts gains the case that times when a wait ends. The\nexisting ones said only which arm ended it.\n\n* fix(daemon): a request's timers run on its clock, so a held daemon holds them (brandon-unfiled-3248.a5k3)\n\nA budget was figured from DaemonClock while the wait and the backstop ran on\nreal setTimeout, so a held clock could not own a request's time. `after` on the\nclock gives both one owner: the deadline case holds its daemon and advances to\nexact figures, a stall in the worker can no longer reach the backstop first, and\narming the wait with anything but its budget fails the case.\n\nFrom the high review: RequestWait goes, since `stated` was req.deadline.kind, and\nthe process file's one case stops carrying shared fixtures.\n\n* fix(daemon): a held clock fires as a real one does, and an answered request's backstop is cleared (brandon-unfiled-3248.a5k3)\n\n* test(daemon): the answered-request case holds its client open, so it can fail (brandon-unfiled-3248.a5k3)\n\n* fix(test): the claims about a held clock say what it holds, and the case drops what it cannot show (brandon-unfiled-3248.a5k3)"
         },
         {
-          "sha": "53151026ce55ad14b0f3f7ea270fa8f39a7ffb8f",
+          "sha": "0db1339f6615f78932dd846c241ea893c99a82fc",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T02:31:01Z",
-          "message": "chore(release): set `package.json` to 1.174.0 [skip ci]\n\n## [1.174.0](https://github.com/promptctl/cc-candybar/compare/v1.173.1...v1.174.0) (2026-11-01)\n\n### Features\n\n* **daemon:** close says when the launches it ended have ended (candybar-testing-0x6u.keo) ([#532](https://github.com/promptctl/cc-candybar/issues/532)) ([d189b5c](https://github.com/promptctl/cc-candybar/commit/d189b5c56cbf38da7151f2400b2ae226f8331328))\n"
+          "timestamp": "2026-11-01T03:13:35Z",
+          "message": "chore(release): set `package.json` to 1.174.1 [skip ci]\n\n## [1.174.1](https://github.com/promptctl/cc-candybar/compare/v1.174.0...v1.174.1) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a zombie child's group is no refusal of its signal (candybar-testing-0x6u.0mz) ([#534](https://github.com/promptctl/cc-candybar/issues/534)) ([96f1881](https://github.com/promptctl/cc-candybar/commit/96f1881bee934f602971a13dea41977a614a98e3))\n"
         }
       ]
     },
