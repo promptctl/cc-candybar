@@ -4,25 +4,46 @@
     {
       "version": "pr-540",
       "ref": "refs/pull/540/merge",
-      "sha": "f94f128a6f3011a39e065ee863e63d6d6d18a680",
-      "timestamp": "2026-11-01T05:39:02.348Z",
+      "sha": "1f1b00a07f4735aef4c24e2b6d5e7b1efff1bc72",
+      "timestamp": "2026-11-01T05:55:31.613Z",
       "commits": [
         {
-          "sha": "f94f128a6f3011a39e065ee863e63d6d6d18a680",
+          "sha": "1f1b00a07f4735aef4c24e2b6d5e7b1efff1bc72",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T05:38:11Z",
-          "message": "Merge 1f2de0042e3e649a1ae491ee693a4f4f1fc42066 into 691727676169eed0e0826fea6dee07d1d902077d\n"
+          "timestamp": "2026-11-01T05:54:40Z",
+          "message": "Merge 7559a7bc7a2c22db1ec63954f02963deb399426d into 929674d3e264f536f5eb210476d4bed167c5ebd1\n"
         },
         {
-          "sha": "1f2de0042e3e649a1ae491ee693a4f4f1fc42066",
+          "sha": "7559a7bc7a2c22db1ec63954f02963deb399426d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:54:27-06:00",
+          "message": "fix(site): the page bundles string_decoder (candybar-testing-0x6u.71b)\n"
+        },
+        {
+          "sha": "a79630995be07a76520842737286970232b0dd71",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:46:46-06:00",
+          "message": "docs(proc): capture's read flushes once (candybar-testing-0x6u.71b)\n"
+        },
+        {
+          "sha": "626a57e7b3d056df5d78d2ad6886798f613ff39f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:40:47-06:00",
+          "message": "fix(proc): each stream decodes as it reads, flushed at settle (candybar-testing-0x6u.71b)\n"
+        },
+        {
+          "sha": "b89089cacce6c7d233df4ca5101493661de48f4e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T23:38:00-06:00",
           "message": "fix(proc): a launch decodes its output once, at settle (candybar-testing-0x6u.71b)\n"
         },
         {
-          "sha": "bec6dbca193e8f1f57547337f43637b280e00a6b",
+          "sha": "6ec16690bec83f528f5906a81e08f2c595bdf8aa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T23:33:20-06:00",

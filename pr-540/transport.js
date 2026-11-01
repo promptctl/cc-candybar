@@ -10218,8 +10218,8 @@ var require_string_decoder = __commonJS({
       if (typeof nenc !== "string" && (Buffer5.isEncoding === isEncoding || !isEncoding(enc))) throw new Error("Unknown encoding: " + enc);
       return nenc || enc;
     }
-    exports.StringDecoder = StringDecoder;
-    function StringDecoder(encoding) {
+    exports.StringDecoder = StringDecoder2;
+    function StringDecoder2(encoding) {
       this.encoding = normalizeEncoding(encoding);
       var nb;
       switch (this.encoding) {
@@ -10246,7 +10246,7 @@ var require_string_decoder = __commonJS({
       this.lastTotal = 0;
       this.lastChar = Buffer5.allocUnsafe(nb);
     }
-    StringDecoder.prototype.write = function(buf) {
+    StringDecoder2.prototype.write = function(buf) {
       if (buf.length === 0) return "";
       var r;
       var i;
@@ -10261,9 +10261,9 @@ var require_string_decoder = __commonJS({
       if (i < buf.length) return r ? r + this.text(buf, i) : this.text(buf, i);
       return r || "";
     };
-    StringDecoder.prototype.end = utf8End;
-    StringDecoder.prototype.text = utf8Text;
-    StringDecoder.prototype.fillLast = function(buf) {
+    StringDecoder2.prototype.end = utf8End;
+    StringDecoder2.prototype.text = utf8Text;
+    StringDecoder2.prototype.fillLast = function(buf) {
       if (this.lastNeed <= buf.length) {
         buf.copy(this.lastChar, this.lastTotal - this.lastNeed, 0, this.lastNeed);
         return this.lastChar.toString(this.encoding, 0, this.lastTotal);
@@ -10542,7 +10542,7 @@ var require_readable = __commonJS({
     } = require_errors2();
     var { validateObject } = require_validators2();
     var kPaused = Symbol2("kPaused");
-    var { StringDecoder } = require_string_decoder();
+    var { StringDecoder: StringDecoder2 } = require_string_decoder();
     var from = require_from();
     ObjectSetPrototypeOf(Readable.prototype, Stream2.prototype);
     ObjectSetPrototypeOf(Readable, Stream2);
@@ -10636,7 +10636,7 @@ var require_readable = __commonJS({
       this.decoder = null;
       this.encoding = null;
       if (options && options.encoding) {
-        this.decoder = new StringDecoder(options.encoding);
+        this.decoder = new StringDecoder2(options.encoding);
         this.encoding = options.encoding;
       }
     }
@@ -10755,7 +10755,7 @@ var require_readable = __commonJS({
       return state[kPaused] === true || state.flowing === false;
     };
     Readable.prototype.setEncoding = function(enc) {
-      const decoder = new StringDecoder(enc);
+      const decoder = new StringDecoder2(enc);
       this._readableState.decoder = decoder;
       this._readableState.encoding = this._readableState.decoder.encoding;
       const buffer = this._readableState.buffer;
@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.4";
+var PACKAGE_VERSION = "1.174.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35558,6 +35558,9 @@ function spawnSync(cmd, args = [], opts = {}) {
   return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
 }
 
+// src/proc/launch.ts
+var import_node_string_decoder = __toESM(require_string_decoder(), 1);
+
 // site/shims/util.ts
 init_globals();
 var import_parseargs = __toESM(require_parseargs(), 1);
@@ -35736,6 +35739,14 @@ function leaderRefuses(pid2) {
     return err.code === "EPERM";
   }
 }
+function capture(stream) {
+  const decoder = new import_node_string_decoder.StringDecoder("utf8");
+  let text4 = "";
+  stream?.on("data", (chunk3) => {
+    text4 += decoder.write(chunk3);
+  });
+  return () => text4 + decoder.end();
+}
 async function launchWaited(state, opts) {
   const { stats } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
@@ -35767,12 +35778,9 @@ async function launchWaited(state, opts) {
     const group = child.pid;
     if (group !== void 0) guard(state, group);
     const exited = new Promise((end) => child.once("exit", end));
-    const stdoutChunks = [];
-    const stderrChunks = [];
-    const output = () => ({
-      stdout: import_buffer.Buffer.concat(stdoutChunks).toString("utf8"),
-      stderr: import_buffer.Buffer.concat(stderrChunks).toString("utf8")
-    });
+    const stdout2 = capture(child.stdout);
+    const stderr2 = capture(child.stderr);
+    const output = () => ({ stdout: stdout2(), stderr: stderr2() });
     let settled3 = false;
     let timer = null;
     let killTimer = null;
@@ -35852,8 +35860,6 @@ async function launchWaited(state, opts) {
         signal(pid2, "SIGTERM");
       }
     };
-    child.stdout?.on("data", (chunk3) => stdoutChunks.push(chunk3));
-    child.stderr?.on("data", (chunk3) => stderrChunks.push(chunk3));
     child.on("error", (err) => {
       settle3({
         ok: false,
