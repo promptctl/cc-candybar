@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-540",
+      "ref": "refs/pull/540/merge",
+      "sha": "d77a8d221830116ef617fbdf2244be169ac92a08",
+      "timestamp": "2026-11-01T05:34:21.228Z",
+      "commits": [
+        {
+          "sha": "d77a8d221830116ef617fbdf2244be169ac92a08",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:33:30-06:00",
+          "message": "Merge bec6dbca193e8f1f57547337f43637b280e00a6b into 691727676169eed0e0826fea6dee07d1d902077d\n"
+        },
+        {
+          "sha": "bec6dbca193e8f1f57547337f43637b280e00a6b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T23:33:20-06:00",
+          "message": "fix(proc): a character split across two reads stays whole (candybar-testing-0x6u.71b)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "691727676169eed0e0826fea6dee07d1d902077d",
