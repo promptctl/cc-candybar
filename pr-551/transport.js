@@ -76528,14 +76528,16 @@ function drawRender(parts, setup, drawing2) {
         return lanes[lane] && rows !== null ? [rows] : [];
       }) : []
     ),
-    colorCompatibility: effective.colorCompatibility
+    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
+    // the depth the frame is encoded at.
+    colorCompatibility: frame.depth
   };
   const viewing = viewedIndex(
     sessionState.get(sessionId2, DIAGNOSTICS_VIEWING),
     diagnostics
   );
   const body = viewing === null ? frame : {
-    ...frame,
+    depth: frame.depth,
     rows: viewerRows(
       diagnostics,
       viewing,
@@ -76544,7 +76546,8 @@ function drawRender(parts, setup, drawing2) {
       geometry
     ),
     nextChange: Infinity,
-    motion: frame.motion === "still" ? "still" : "can-move"
+    motion: frame.motion === "still" ? "still" : "can-move",
+    pending: []
   };
   const g = payloadProviders.gitProvider.getStats();
   const u = payloadProviders.usageStore.getStats();
@@ -76735,7 +76738,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
 function statuslineOf(sessionId2, drawn, output, elsewhere) {
   const [first2, ...rest2] = elsewhere;
   return first2 === void 0 || drawn.viewerOpen ? output : composeBar({
-    ...drawn.body,
+    depth: drawn.body.depth,
     rows: handoffRows(
       laneHandoff(sessionId2, [first2, ...rest2]),
       drawn.diagnostics,

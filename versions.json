@@ -4,15 +4,22 @@
     {
       "version": "pr-551",
       "ref": "refs/pull/551/merge",
-      "sha": "f5dd3a4c647118886cd2a817edc5c75dbc2a4552",
-      "timestamp": "2026-11-01T13:26:05.960Z",
+      "sha": "9f7861f2352bd3c5d305bbbeca244951a6a7dce1",
+      "timestamp": "2026-11-01T13:40:59.706Z",
       "commits": [
         {
-          "sha": "f5dd3a4c647118886cd2a817edc5c75dbc2a4552",
+          "sha": "9f7861f2352bd3c5d305bbbeca244951a6a7dce1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T06:25:15-07:00",
-          "message": "Merge 595d4f4f6e8728a0b54774e49ad329018bf9ac5e into 7a2b230a3590504f28701f135da02ae258381d66\n"
+          "timestamp": "2026-11-01T13:40:18Z",
+          "message": "Merge 305130dbba9a125efdc4255c260363d35b7341e2 into 7a2b230a3590504f28701f135da02ae258381d66\n"
+        },
+        {
+          "sha": "305130dbba9a125efdc4255c260363d35b7341e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T06:40:03-07:00",
+          "message": "fix(render): a composed frame states only what it drew (candybar-isolated-daemon-bfab.agt)\n\nReview of the diagnostics change found three things the Frame said falsely.\n\nThe viewer was drawn at the effective depth and encoded at the frame's, two\nsources for one fact that only agreed by luck. It now draws at the frame's depth.\n\nThe viewer's frame kept the hidden bar's pending sources, and the handoff line\nbuilt a Frame out of the bar's motion and nextChange to reach the encoder. The\nviewer now states none pending, and the encoder takes only what it reads, depth\nand rows, so the handoff line has no facts to borrow.\n\nmessageRows had no production caller, and its comment claimed the viewer paged\nit. It goes, and its test reads the row through the viewer.\n\nNo byte moves: the viewer and handoff entries of the before/after sweep compare\nidentical, 2304 of them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
           "sha": "595d4f4f6e8728a0b54774e49ad329018bf9ac5e",
