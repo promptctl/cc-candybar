@@ -35657,6 +35657,7 @@ function setFault(state, next2) {
 function lose(state, line, reason) {
   if (state.lifeline?.process !== line) return;
   state.lifeline = null;
+  line.ref();
   setFault(state, reason);
 }
 function lifelineWarnings(state) {
@@ -35820,8 +35821,8 @@ async function launchWaited(state, opts) {
         error: spawnErrorText(err, opts.cwd)
       });
     });
-    child.once("exit", () => state.unreaped.delete(child));
     child.on("close", (code, signal2) => {
+      state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
           ok: false,
@@ -36073,7 +36074,10 @@ function createLauncher(owner) {
     lifelineWarnings: () => lifelineWarnings(state),
     settled: async () => {
       await Promise.all(state.ending);
-      return { unreaped: [...state.unreaped.values()] };
+      const running = [...state.unreaped].filter(
+        ([child]) => child.exitCode === null && child.signalCode === null
+      );
+      return { unreaped: running.map(([, category]) => category) };
     },
     __lifelineForTest: () => {
       const line = state.lifeline;
