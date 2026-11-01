@@ -2048,8 +2048,8 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 export interface IdleClose {
   readonly idleS: number;
   readonly timeoutS: number;
-  // Whether the session has made no click since the timer fired, read in the
-  // close's turn.
+  // Whether the session is still known idle since the timer fired, read in the
+  // close's turn: a click, or its record's eviction, ends that.
   readonly stillIdle: () => boolean;
 }
 
@@ -2068,7 +2068,7 @@ export function closeIdleMenus(
     "menu-idle",
     (_value, c) => {
       if (!idle.stillIdle()) {
-        c.log("info", `menu-idle: a click came first, kept (session=${sid})`);
+        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
       }
       const roots = openRoots(nestOf(c, sid), (key) =>

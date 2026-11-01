@@ -147,7 +147,7 @@ describe("the idle close decides in its turn", () => {
     held.open();
     await jest.advanceTimersByTimeAsync(0);
     await Promise.all([slow, finished, ...m.fired]);
-    expect(logged).toContain(`menu-idle: a click came first, kept (session=${SID})`);
+    expect(logged).toContain(`menu-idle: no longer idle, kept (session=${SID})`);
     expect(logged.filter((l) => l.startsWith("menu-idle: closed="))).toEqual([]);
     m.idle.dispose();
   });
@@ -169,7 +169,7 @@ describe("the idle close decides in its turn", () => {
     held.open();
     await jest.advanceTimersByTimeAsync(0);
     await Promise.all([slow, ...m.fired]);
-    expect(logged).toContain(`menu-idle: a click came first, kept (session=${SID})`);
+    expect(logged).toContain(`menu-idle: no longer idle, kept (session=${SID})`);
     m.idle.dispose();
   });
 
