@@ -13,6 +13,7 @@ import {
   type DeclaredSources,
   type ViewFacts,
 } from "../render-payload.js";
+import type { FileEvents } from "./file-events.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
 import type { RefreshLedger } from "../../utils/refresh-ledger";
 import type { LinkSigner } from "../../click/link-signer.js";
@@ -72,7 +73,7 @@ import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import type { Launcher } from "../../proc/launch";
-import { SourceRegistry, type CatchUps } from "../../var-system/sources.js";
+import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateReader, SessionStateRW } from "../session-state.js";
 import {
@@ -172,8 +173,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The ledger its states' user sources record their refreshes in
   // (StateDeps).
   ledger?: RefreshLedger;
-  // The file-event catch-ups its states' user sources re-read on (StateDeps).
-  catchUps?: CatchUps;
+  // The delivery owner its states' user sources read (StateDeps). Required,
+  // so a daemon whose sources cannot hear a stall does not compile.
+  fileEvents: FileEvents;
   // What a view declares of the daemon's shared entries
   // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
   // source passes DECLARES_NOTHING.
@@ -214,9 +216,9 @@ export interface StateDeps {
   // ledger. A build outside the daemon (check, the doctor, a test) leaves it
   // out, and its registries keep their own.
   readonly ledger?: RefreshLedger;
-  // The daemon's file-event catch-ups, which a state's `watch_file` sources
-  // re-read on. A build outside the daemon leaves it out, and hears none.
-  readonly catchUps?: CatchUps;
+  // The daemon's delivery owner, which a state's `watch_file` sources read. A
+  // build outside the daemon leaves it out, and measures nothing.
+  readonly fileEvents?: FileEvents;
   // The daemon's one watcher registry, which holds a state's `watch_file`
   // watches. A build outside the daemon leaves it out, and its registries
   // keep their own.
@@ -907,7 +909,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     deps.sessionState,
     null,
     deps.ledger,
-    deps.catchUps,
+    deps.fileEvents,
     deps.watchers,
   );
 

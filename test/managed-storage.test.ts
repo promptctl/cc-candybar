@@ -7,11 +7,7 @@ import {
   STORAGE_FILE_MAX_AGE_MS,
   STORAGE_SWEEP_EVERY_MS,
 } from "../src/daemon/cache/managed-storage";
-import type {
-  Delivery,
-  DeliveryNotice,
-  FileEvents,
-} from "../src/daemon/cache/file-events";
+import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   statIdentity,
   type FolderIdentity,
@@ -28,6 +24,7 @@ import { ABSENT, ok } from "../src/utils/outcome";
 import type { Current } from "../src/utils/reading";
 import { until } from "./helpers/until";
 import { fakeWatches } from "./helpers/fake-watches";
+import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 
 // [LAW:behavior-not-structure] The managed storage owner through what it
 // shows: what a session's lane reads, the refresh and sweep events it writes,
@@ -35,37 +32,6 @@ import { fakeWatches } from "./helpers/fake-watches";
 
 const A = sessionIdOf("session-a");
 const B = sessionIdOf("session-b");
-
-// The daemon's one owner of file-event delivery, driven by hand: what it
-// reads, and the notices it sends.
-interface HandDelivery extends FileEvents {
-  set(delivery: Delivery, notice: DeliveryNotice): void;
-  notify(notice: DeliveryNotice): void;
-}
-
-function handDelivery(): HandDelivery {
-  let current: Delivery = {
-    kind: "delivering",
-    unreported: [],
-    missedSince: null,
-  };
-  const listeners = new Set<(notice: DeliveryNotice) => void>();
-  const notify = (notice: DeliveryNotice) => {
-    for (const listener of [...listeners]) listener(notice);
-  };
-  return {
-    delivery: () => current,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => void listeners.delete(listener);
-    },
-    set(delivery, notice) {
-      current = delivery;
-      notify(notice);
-    },
-    notify,
-  };
-}
 
 interface Rig {
   readonly root: string;

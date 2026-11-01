@@ -2,7 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SessionId } from "../session-id";
 import type { WatcherHandle, WatcherRegistry, Invalidation } from "./watchers";
-import type { DeliveryNotice, FileEvents } from "./file-events";
+import {
+  stallReason,
+  type DeliveryNotice,
+  type FileEvents,
+} from "./file-events";
 import {
   sameIdentity,
   statIdentity,
@@ -108,9 +112,6 @@ interface Watched {
   readonly sweep: NodeJS.Timeout;
   health: Health;
 }
-
-const stallReason = (storage: StorageKey, since: number): string =>
-  `cannot refresh: ${storage.folder}: file events stopped at ${new Date(since).toISOString()}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
 // the whole daemon (design-docs/PLUGIN-API.md, "Managed storage"). A plugin's
@@ -434,10 +435,10 @@ export class ManagedStorage {
       // usual: the bar's row already says it cannot be checked.
       case "watching":
       case "lost": {
-        const delivery = this.fileEvents.delivery();
-        return delivery.kind === "stalled"
-          ? stallReason(storage, delivery.missedSince)
-          : null;
+        const stall = stallReason(this.fileEvents.delivery());
+        return stall === null
+          ? null
+          : `cannot refresh: ${storage.folder}: ${stall}`;
       }
       case "closed":
         return null;

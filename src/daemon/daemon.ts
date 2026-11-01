@@ -437,12 +437,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       storage: managedStorage,
       signer: linkSigner,
       ledger: refreshLedger,
-      // [LAW:single-enforcer] The delivery owner's catch-ups, which a
-      // `watch_file` source's watch, riding the same OS stream, may have missed.
-      catchUps: (caughtUp) =>
-        fileEvents.subscribe((notice) => {
-          if (notice.kind === "caught-up") caughtUp();
-        }),
+      // [LAW:single-enforcer] The one delivery owner, whose OS stream a
+      // `watch_file` source's watch rides.
+      fileEvents,
       declare: (holds, facts, closure, sources) =>
         declareLanes(payloadProviders, holds, facts, closure, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload

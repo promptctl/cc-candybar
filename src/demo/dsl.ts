@@ -45,7 +45,7 @@ import {
   type DslRenderState,
 } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
-import { FileEventDelivery } from "../daemon/cache/file-events.js";
+import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
 import { processLauncher } from "../proc/launch.js";
@@ -107,8 +107,8 @@ const watchers = new WatcherRegistry({ logger: log });
 const providers = createPayloadProviders({
   launcher: processLauncher,
   watchers,
-  // Never started: the demo holds no folder and watches nothing.
-  fileEvents: new FileEventDelivery({ watchers, logger: log }),
+  // The demo holds no folder and watches nothing.
+  fileEvents: NO_FILE_EVENTS,
   logger: log,
   ledger: new RefreshLedger(log),
 });

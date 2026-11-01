@@ -36,6 +36,7 @@ import {
   COMPILE_BYTES,
   VIEW_BYTES,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
@@ -107,6 +108,7 @@ function makeCache(
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
+      fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       log,
@@ -1389,6 +1391,7 @@ describe("RenderCache idle sweep", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -1440,6 +1443,7 @@ describe("RenderCache idle sweep", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -1495,6 +1499,7 @@ describe("RenderCache idle sweep", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState,
         watchers,
         log: (_level, message) => logs.push(message),
@@ -1598,6 +1603,7 @@ describe("RenderCache frames and pins", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: (_level, line) => logs.push(line),
@@ -1745,6 +1751,7 @@ describe("RenderCache frames and pins", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: (_level, line) => logs.push(line),
@@ -1812,6 +1819,7 @@ describe("RenderCache frames and pins", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: () => {},
@@ -1849,6 +1857,7 @@ describe("RenderCache frames and pins", () => {
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
+        fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
         log: () => {},

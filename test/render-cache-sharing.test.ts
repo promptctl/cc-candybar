@@ -15,6 +15,7 @@ import {
   VIEW_BYTES,
   type SessionView,
 } from "../src/daemon/cache/render";
+import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import {
@@ -66,6 +67,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   const sessionState = new SessionState();
   const cache = new RenderCache(
     { launcher: processLauncher, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+ fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
