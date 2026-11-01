@@ -46,8 +46,7 @@ import { ABSENT, ok, PENDING } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
-import { ansiOf } from "../src/render/frame";
-import { stripAnsi } from "./helpers/daemon-e2e";
+import { textOf, ansiOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
@@ -191,7 +190,7 @@ function draw(view: SessionView<SessionSource>): {
     { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
     effective,
   );
-  return { text: stripAnsi(ansiOf(frame)), errors };
+  return { text: textOf(frame), errors };
 }
 
 // The view of session `sid`, held as a render holds it, released at cleanup.
@@ -238,7 +237,7 @@ describe("a source's declaration", () => {
   function clean(o: CheckOutcome): string {
     if (o.kind !== "clean")
       throw new Error(`expected clean, got ${JSON.stringify(o)}`);
-    return stripAnsi(o.rendered);
+    return textOf(o.rendered);
   }
   function fatal(o: CheckOutcome): string {
     if (o.kind !== "fatal")
@@ -507,8 +506,8 @@ describe("`cc-candybar check` on a source", () => {
     const outcome = await checkConfig(config(["mine", "plugins.p.gated"]), dir);
     if (outcome.kind !== "clean") throw new Error(JSON.stringify(outcome));
     expect(outcome.warnings).toEqual([]);
-    expect(stripAnsi(outcome.rendered)).toContain("mine");
-    expect(stripAnsi(outcome.rendered)).not.toContain("home=");
+    expect(textOf(outcome.rendered)).toContain("mine");
+    expect(textOf(outcome.rendered)).not.toContain("home=");
   });
 
   test("the same read unguarded exits fatal, naming the missing field", async () => {

@@ -23,7 +23,8 @@ import {
   type CheckOutcome,
 } from "../src/check";
 import { detectConfigEnv } from "../src/config-hint";
-import { stripAnsi } from "./helpers/daemon-e2e";
+import { ansiOf, textOf } from "../src/render/frame";
+import { barOf } from "./helpers/drawn-frame";
 import { answerRepo } from "./helpers/repo-approval";
 
 // The budget a verdict waits for a source that will not answer in time: long
@@ -80,7 +81,7 @@ describe("checkConfig — explicit target", () => {
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
-      expect(outcome.rendered.length).toBeGreaterThan(0);
+      expect(textOf(outcome.rendered).length).toBeGreaterThan(0);
     }
   });
 
@@ -136,8 +137,8 @@ describe("checkConfig — explicit target", () => {
     const outcome = await checkConfig(p, dir);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
-    expect(stripAnsi(outcome.rendered)).toContain("yielded");
-    expect(stripAnsi(outcome.rendered)).not.toContain("fallback");
+    expect(textOf(outcome.rendered)).toContain("yielded");
+    expect(textOf(outcome.rendered)).not.toContain("fallback");
     expect(outcome.warnings).toEqual([]);
   });
 
@@ -758,8 +759,8 @@ describe("checkConfig — explicit target", () => {
     const outcome = await checkConfig(p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
-    expect(outcome.rendered).toContain("BEE");
-    expect(outcome.rendered).not.toContain("AYE");
+    expect(textOf(outcome.rendered)).toContain("BEE");
+    expect(textOf(outcome.rendered)).not.toContain("AYE");
   });
 
   it("a globals.palette rule that resolves is clean — the slot accepts a rule at all", async () => {
@@ -784,7 +785,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.layers).toEqual([]);
-      expect(outcome.rendered.length).toBeGreaterThan(0);
+      expect(textOf(outcome.rendered).length).toBeGreaterThan(0);
     }
   });
 
@@ -863,7 +864,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       kind: "clean",
       layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       warnings: [],
-      rendered: "line",
+      rendered: barOf([{ text: "line" }]),
     });
     expect(plan.code).toBe(0);
     expect(plan.stdout).toContain("/tmp/x.json5");
@@ -875,7 +876,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       kind: "clean",
       layers: [],
       warnings: ["something advisory"],
-      rendered: "line",
+      rendered: barOf([{ text: "line" }]),
     });
     expect(plan.code).toBe(0);
     expect(plan.stdout).toContain("bundled default");
@@ -906,20 +907,20 @@ describe("checkPlan — the text/exit-code contract", () => {
   });
 
   // brandon-check-m2a. [LAW:one-source-of-truth] The bar that prints is the
-  // string the verdict was reached on — the same render, not a second one at
+  // frame the verdict was reached on — the same render, not a second one at
   // some other width, which would let `check` bless one bar and show another.
   it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
     const clean: CheckOutcome = {
       kind: "clean",
       layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       warnings: [],
-      rendered: " ~/c/x \n Opus 4.8 ",
+      rendered: barOf([{ text: " ~/c/x " }], [{ text: " Opus 4.8 " }]),
     };
     expect(checkPlan(clean).stdout).toBe("✓ /tmp/x.json5: config OK\n");
 
     const withBar = checkPlan(clean, true);
     expect(withBar.stdout).toBe(
-      `✓ /tmp/x.json5: config OK\n${clean.rendered}\n`,
+      `✓ /tmp/x.json5: config OK\n${ansiOf(clean.rendered)}\n`,
     );
     expect(withBar.code).toBe(0);
     expect(withBar.stderr).toBe("");
@@ -1002,13 +1003,13 @@ describe("checkCommandPlan — the argv edge", () => {
     const before = await run(["--render", p]);
     expect(before.code).toBe(0);
     expect(before.stdout).toContain(`✓ ${p}: config OK`);
-    expect(stripAnsi(before.stdout)).toContain("HELLO-BAR");
+    expect(before.stdout).toContain("HELLO-BAR");
 
     // Flag order is not a second contract: one parse, one request.
     expect((await run([p, "--render"])).stdout).toBe(before.stdout);
 
     // Opt-in: without the flag the verdict's stdout is what it always was.
-    expect(stripAnsi((await run([p])).stdout)).not.toContain("HELLO-BAR");
+    expect((await run([p])).stdout).not.toContain("HELLO-BAR");
   });
 
   // [LAW:no-silent-failure] A misspelled flag must not be read as a path (and

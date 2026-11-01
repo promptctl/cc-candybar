@@ -2,17 +2,21 @@
 // where its click has a pane to type into. Each of the client's three tmux
 // answers — a pane, "not in tmux", and nothing (a client too old to say) — is
 // driven through the daemon's own payload assembly (payloadOf) and the
-// real spine (registerDslConfig + renderDsl), over the bundled default with
+// real spine (registerDslConfig + drawDsl), over the bundled default with
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -28,7 +32,6 @@ import type { ClientHints } from "../src/daemon/protocol";
 import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { effectsOf } from "./helpers/click";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -108,8 +111,8 @@ async function bar(
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-  const render = (): string =>
-    renderDsl(
+  const render = (): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -117,7 +120,7 @@ async function bar(
       payload,
       instantOf(new Date()),
       OPTS,
-    );
+    ).frame;
   // Open the door by the write its own link carries, so the menu's session
   // tab — and its tray — is on the bar too.
   const door = linkUrls(render())
@@ -127,7 +130,7 @@ async function bar(
   const raw = render();
   registry.dispose();
   return {
-    text: stripAnsi(raw),
+    text: textOf(raw),
     lines: linkUrls(raw)
       .flatMap((u) => effectsOf(u))
       .filter((e) => e.verb === VERB_SLASH)

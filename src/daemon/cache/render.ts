@@ -99,7 +99,7 @@ import { projectionsOf } from "../../config/loader/projections.js";
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
 // registry it was registered against, the compiled segment closures, and
-// the resolved base palette. registerDslConfig + renderDsl are the
+// the resolved base palette. registerDslConfig + drawDsl are the
 // single render path — the cache only holds state across calls.
 //
 // [LAW:one-source-of-truth] Bounded by bytes, out of the daemon's one memory
@@ -234,7 +234,7 @@ export interface StateDeps {
 // from a debounced fs watcher, on the cache's own schedule — so anything that
 // must run AFTER a reload (an operator log of its outcome, a test asserting
 // on the state it wrote) needs the cache to say so, or it is left betting on
-// a clock. The same named-bag idiom as renderDsl's RenderObservers
+// a clock. The same named-bag idiom as drawDsl's RenderObservers
 // [LAW:locality-or-seam]: a caller states what it passes by name, and a new
 // observer is one field here, not a constructor signature every caller
 // re-counts.
@@ -962,7 +962,7 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // serves many sessions, but the effective theme is per-session SessionState;
   // freezing the palette per entry would let the rendered colors diverge from
   // the session's chosen theme. The server resolves basePalette per render
-  // from the effective theme (resolveThemeSelection, settled by renderDsl).
+  // from the effective theme (resolveThemeSelection, settled by drawDsl).
   return {
     kind: "built",
     state: {
@@ -1179,12 +1179,12 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // request name them and stop when it is disposed; the directory home reads
 // none itself, so it holds none (brandon-unfiled-3248.8ro6).
 //
-// `lastRenderCellsBySegment` is the per-segment StripCell sink that renderDsl
+// `lastRenderCellsBySegment` is the per-segment StripCell sink that drawDsl
 // writes on each render — pre-layout cells, NOT serialized ANSI. Storing cells
 // (not strings) keeps the hot path free of the per-segment renderStripCells
 // call: the debug projection serializes on demand only when a `debug segments`
 // request actually arrives. The map identity is stable for the view's
-// lifetime; renderDsl clears + repopulates it in place. A segment hidden by
+// lifetime; drawDsl clears + repopulates it in place. A segment hidden by
 // `when` is absent from the map — its presence in the keys is the "this
 // segment rendered" signal.
 export interface SessionView<
@@ -1264,7 +1264,7 @@ export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
 
 // A source answering nothing yet: every input of the view pending, and the
 // selections the config declares — what a test's views draw from until it
-// draws them through renderDsl, which binds a payload of its own.
+// draws them through drawDsl, which binds a payload of its own.
 export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
   fixedSource(
     PENDING,

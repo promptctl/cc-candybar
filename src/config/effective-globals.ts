@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] The ONE resolution of a session's globals: the
 // precedence chain (staged › session pick › active preset's globals › the
 // theme's default › floor) every renderer draws through. It sits below the
-// renderer so renderDsl resolves an omitted selection through it rather
+// renderer so drawDsl resolves an omitted selection through it rather
 // than through a copy of its own (candybar-theme-colours-6fq5.0ub).
 
 import { LANES, perLane, type LaneSwitches } from "./lanes.js";
@@ -28,7 +28,7 @@ import {
 import { themeDefaultsOf, underThemeDefault } from "./theme-defaults.js";
 
 // [LAW:one-source-of-truth] Each of these is resolved exactly ONCE per render,
-// here: by the daemon (draw-bar.ts, before both the payload build and renderDsl's
+// here: by the daemon (draw-bar.ts, before both the payload build and drawDsl's
 // BuildLineOptions), and by drawDsl itself for a caller that hands it no
 // selection — so the value a trigger label displays and the value that
 // actually shaped the render can never disagree.
@@ -45,19 +45,19 @@ export type EffectiveGlobals = ValuedGlobals & {
   // resolve to a `decided` arm carrying the name AND the base palette it
   // denotes, while a `globals.palette` holding a TEMPLATE resolves to an
   // `expression` arm, because the store does not hold this render's values
-  // until renderDsl pushes them. So renderDsl finishes that one rung, and is
+  // until drawDsl pushes them. So drawDsl finishes that one rung, and is
   // therefore also the one place `theme.effective` is published — which is why
-  // the payload carries no `theme` field and the server hands renderDsl no
+  // the payload carries no `theme` field and the server hands drawDsl no
   // separate base palette.
   readonly theme: ThemeSelection;
   // [LAW:types-are-the-program] The style as far as it can be resolved HERE
   // (brandon-looks-pe6). A session pick, a staged fragment and a plain
   // `globals.style` all resolve to a `decided` arm; a `globals.style` holding a
-  // TEMPLATE resolves to an `expression` arm, which renderDsl finishes — so it
+  // TEMPLATE resolves to an `expression` arm, which drawDsl finishes — so it
   // is also the one place `style.effective` is published.
   readonly style: StyleSelection;
   // The looping effect the bar wears, as far as it can be resolved here — the
-  // style's twin, settled by renderDsl under a rule for the same reason.
+  // style's twin, settled by drawDsl under a rule for the same reason.
   readonly effect: EffectSelection;
   // The active PRESET name — effectivePresetName(sessionState.preset,
   // globals.preset, presets), collapsed to the floor if stale. Unlike every

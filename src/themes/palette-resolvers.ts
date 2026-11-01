@@ -113,7 +113,7 @@ const TRANSPOSED = memoPerPalette<Palette>();
 // The theme instances of `Selection`/`Decided`. A theme's `value` is the base
 // Palette the name denotes — carried beside the name because ONE lookup produced
 // both, so a label and the palette the bar wears cannot disagree
-// [LAW:one-source-of-truth]. This is also what lets `renderDsl` take no
+// [LAW:one-source-of-truth]. This is also what lets `drawDsl` take no
 // `basePalette` argument: a palette handed in beside a name would be a second
 // clock, free to say gruvbox while the label said nord.
 export type ThemeSelection = Selection<Palette>;

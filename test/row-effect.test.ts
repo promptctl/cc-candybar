@@ -1,8 +1,11 @@
+import { ansiOf, plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.d2i: the whole bar wears a looping
 // effect chosen by `globals.effect`. An effect changes colours and nothing else,
 // starts calm when it comes into force, and `none` draws exactly what the bar
 // always drew.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -13,14 +16,13 @@ import {
   RichText,
   ColorDepth,
   Segment,
-  decodeAnsi,
   render as drawSegments,
 } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { EffectSessions, SessionEffects } from "../src/render/effect";
@@ -33,8 +35,7 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
-import { resolvedStyle } from "../src/render/rich-theme";
+import { drawnChars, shown } from "./helpers/seams";
 
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
@@ -79,7 +80,7 @@ function renderer(
     when: Instant,
     effects?: SessionEffects<RenderedLine>,
     payload?: object,
-  ) => string;
+  ) => Frame;
   readonly dispose: () => void;
 } {
   const store = new VariableStore();
@@ -94,12 +95,12 @@ function renderer(
   };
   return {
     render: (effect, when, effects, payload = {}) =>
-      renderDsl(config, compiled, store, registry, payload, when, opts, undefined,
+      drawPayload(config, compiled, store, registry, payload, when, opts, undefined,
         selectionFor(config, {
           ...(effect === undefined ? {} : { effect: decideEffectName(effect) }),
           ...(effects === undefined ? {} : { effects }),
         }),
-      ),
+      ).frame,
     dispose: () => registry.dispose(),
   };
 }
@@ -126,8 +127,8 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("none draws the bytes a render with no effect named draws", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(render("none", at(30), new SessionEffects<RenderedLine>("s"))).toBe(
-        render(undefined, at(30)),
+      expect(render("none", at(30), new SessionEffects<RenderedLine>("s")).rows).toEqual(
+        render(undefined, at(30)).rows,
       );
     } finally {
       dispose();
@@ -144,12 +145,12 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
         // Brought into force at the first instant, so t counts from there.
         const drawn = instants.map((s) => render(loop, at(s), effects));
         const still = instants.map((s) => render("none", at(s)));
-        drawn.forEach((bytes, i) => {
-          expect(stripAnsi(bytes)).toBe(stripAnsi(still[i]!));
-          expect(linkUrls(bytes)).toEqual(linkUrls(still[i]!));
+        drawn.forEach((frame, i) => {
+          expect(textOf(frame)).toBe(textOf(still[i]!));
+          expect(linkUrls(frame)).toEqual(linkUrls(still[i]!));
         });
         // [LAW:verifiable-goals] Otherwise the equalities above prove nothing.
-        expect(drawn.some((bytes, i) => bytes !== still[i])).toBe(true);
+        expect(drawn.some((frame, i) => ansiOf(frame) !== ansiOf(still[i]!))).toBe(true);
       } finally {
         dispose();
       }
@@ -159,8 +160,8 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("pulse starts at rest: its first frame is none's bytes", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(render("pulse", at(5), new SessionEffects<RenderedLine>("s"))).toBe(
-        render("none", at(5)),
+      expect(render("pulse", at(5), new SessionEffects<RenderedLine>("s")).rows).toEqual(
+        render("none", at(5)).rows,
       );
     } finally {
       dispose();
@@ -173,12 +174,12 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
       const late = new SessionEffects<RenderedLine>("s");
       render("none", at(0), late);
       // Pulse came into force at 300: its first frame is at rest.
-      expect(render("pulse", at(300), late)).toBe(render("none", at(300)));
+      expect(render("pulse", at(300), late).rows).toEqual(render("none", at(300)).rows);
       // On a session where pulse has been on since 0, the same stretch moves.
       const early = new SessionEffects<RenderedLine>("s");
       render("pulse", at(0), early);
       const moved = [100, 200, 300].some(
-        (s) => render("pulse", at(s), early) !== render("none", at(s)),
+        (s) => ansiOf(render("pulse", at(s), early)) !== ansiOf(render("none", at(s))),
       );
       expect(moved).toBe(true);
     } finally {
@@ -191,7 +192,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     try {
       const effects = new SessionEffects<RenderedLine>("s");
       for (const s of [0, 30, 200]) {
-        expect(render(loop, at(s), effects)).toBe(render("none", at(s)));
+        expect(ansiOf(render(loop, at(s), effects))).toBe(ansiOf(render("none", at(s))));
       }
     } finally {
       dispose();
@@ -203,7 +204,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     try {
       const effects = new SessionEffects<RenderedLine>("s");
       const quiet = render(undefined, at(0), effects);
-      expect(stripAnsi(quiet)).toContain("fx=none");
+      expect(textOf(quiet)).toContain("fx=none");
       // A tool starts: the rule names shimmer, whose clock starts now. Every
       // frame reads the same words, so a frame differing from the first is the
       // shimmer moving.
@@ -211,14 +212,14 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
         render(undefined, at(10 + s), effects, RUNNING),
       );
       for (const frame of frames) {
-        expect(stripAnsi(frame)).toBe(stripAnsi(frames[0]!));
+        expect(textOf(frame)).toBe(textOf(frames[0]!));
       }
-      expect(stripAnsi(frames[0]!)).toContain("fx=shimmer");
-      expect(frames.some((frame) => frame !== frames[0])).toBe(true);
-      // The tool finishes: still again, byte for byte.
+      expect(textOf(frames[0]!)).toContain("fx=shimmer");
+      expect(frames.some((frame) => ansiOf(frame) !== ansiOf(frames[0]!))).toBe(true);
+      // The tool finishes: still again, cell for cell.
       const after = render(undefined, at(200), effects);
-      expect(stripAnsi(after)).toContain("fx=none");
-      expect(after).toBe(render("none", at(200)));
+      expect(textOf(after)).toContain("fx=none");
+      expect(after.rows).toEqual(render("none", at(200)).rows);
     } finally {
       dispose();
     }
@@ -284,16 +285,16 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const closed = renderer(grouped(false));
     const opened = renderer(grouped(true));
     try {
-      const bottom = (bytes: string): string =>
-        bytes.split("\n").find((line) => stripAnsi(line).includes("bottom row"))!;
+      const bottom = ({ rows }: Frame): readonly Run[] =>
+        rows.find(({ runs }) => plainOf(runs).includes("bottom row"))!.runs;
       for (const loop of LOOPS) {
         const effects = new SessionEffects<RenderedLine>("s");
         closed.render(loop, at(0), effects);
         const before = closed.render(loop, at(30), effects);
         const after = opened.render(loop, at(30), effects);
         // [LAW:verifiable-goals] The body really added lines above the row.
-        expect(after.split("\n").length).toBeGreaterThan(before.split("\n").length);
-        expect(bottom(after)).toBe(bottom(before));
+        expect(after.rows.length).toBeGreaterThan(before.rows.length);
+        expect(bottom(after)).toEqual(bottom(before));
       }
     } finally {
       closed.dispose();
@@ -323,15 +324,13 @@ describe("the wheel paces each segment by where it sits", () => {
     DEFAULT_DSL_CONFIG,
   );
 
-  const fillOf = (rendered: string, word: string): string => {
-    const line = rendered.split("\n").find((l) => stripAnsi(l).includes(word));
-    if (line === undefined) throw new Error(`no line draws ${word}`);
-    const text = decodeAnsi(line);
-    const at = text.plain.indexOf(word);
-    const span = text.spans.find(({ start, end }) => start <= at && at < end);
-    const bgcolor = span === undefined ? undefined : resolvedStyle(span.style).bgcolor;
-    if (bgcolor === undefined) throw new Error(`${word} is drawn without its own ground`);
-    return bgcolor.getTruecolor().hex;
+  const fillOf = (rendered: Frame, word: string): string => {
+    const chars = drawnChars(rendered);
+    const at = chars.findIndex((_, i) => [...word].every((ch, j) => chars[i + j]?.ch === ch));
+    if (at === -1) throw new Error(`no line draws ${word}`);
+    const ground = shown(chars[at]!.bg);
+    if (ground === undefined) throw new Error(`${word} is drawn without its own ground`);
+    return ground;
   };
 
   test("segments of one fill at different places turn to different colours, from the frame they all began in", () => {
@@ -339,7 +338,7 @@ describe("the wheel paces each segment by where it sits", () => {
     try {
       const effects = new SessionEffects<RenderedLine>("s");
       const first = render("wheel", at(5), effects);
-      expect(first).toBe(render("none", at(5)));
+      expect(first.rows).toEqual(render("none", at(5)).rows);
       expect(new Set(SEGMENTS.map((word) => fillOf(first, word))).size).toBe(1);
       const later = render("wheel", at(65), effects);
       expect(new Set(SEGMENTS.map((word) => fillOf(later, word))).size).toBe(SEGMENTS.length);

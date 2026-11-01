@@ -9,7 +9,7 @@
 // the SAME function the render walk calls for that kind of cell
 // (`decorEntryColour` over the window, `bandFor`, the role lookup), on the
 // SAME palette object the walk colours every unpinned segment from
-// (the look renderDsl publishes, `renderLook`), with its text the one the
+// (the look drawDsl publishes, `renderLook`), with its text the one the
 // walk draws there — the shade's for a closed cell, `textOn` for the rest — so
 // a preview shows only colours its theme names, in the shades the bar deals.
 // Where one role's swatches meet the next's they are held apart by the rule a

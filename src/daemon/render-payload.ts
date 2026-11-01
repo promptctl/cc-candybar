@@ -103,7 +103,7 @@ import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
 
-// The resolved globals as the options renderDsl's joiner and cells read (its
+// The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
 // [LAW:one-source-of-truth] The daemon, `cc-candybar check` and the demo all
 // project THROUGH this, so a field added to EffectiveGlobals reaches every
@@ -190,7 +190,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
   // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
-  // brandon-effects-2gka.d2i), so each fold finishes inside renderDsl — which
+  // brandon-effects-2gka.d2i), so each fold finishes inside drawDsl — which
   // therefore injects `theme`, `style` and `effect: { effective }` into the
   // payload it pushes, exactly as it injects
   // `term: { cols }`. ONE producer per field, so the name a label displays and
@@ -730,7 +730,7 @@ function projectSpeedHistory(obs: SpeedObservation): string | undefined {
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
 // the active layout. Walk from the preset's resolved root (`presetRoot`, the
-// same tree renderDsl compiles for it) → its nodes → their segments → their
+// same tree drawDsl compiles for it) → its nodes → their segments → their
 // template strings → the declarations they read (value-reads.ts), and on
 // through what each of those reads. The transitive closure tells us which
 // input paths are actually reachable from a rendered segment; providers

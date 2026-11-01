@@ -2,7 +2,7 @@
 // closes THAT disclosure: its first row carries it, every later row a blank of
 // its width in its colour, so a panel has one way to close it and its rows
 // stay aligned. [LAW:behavior-not-structure] The contract is
-// read off the rendered lines (their leading OSC-8 link and what it writes)
+// read off the rendered rows (their leading link and what it writes)
 // and off the daemon's own verb handlers (a click actually closes), never off
 // the walk's shape:
 //   - the first row a body renders leads with one ✕ whose click writes the
@@ -20,12 +20,15 @@
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
 //     the bar, and not in the trigger's cell sink.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, type Row } from "../src/render/frame";
+import { linksOf, type DrawnLink } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
@@ -44,7 +47,6 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
-import { links, stripAnsi, type Link } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -75,8 +77,10 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
+const rowLinks = (row: Row): DrawnLink[] => linksOf({ rows: [row] });
+
 // Whether a link's click is exactly "write `key` closed" — the row ✕'s write.
-const closes = (link: Link, key: string): boolean =>
+const closes = (link: DrawnLink, key: string): boolean =>
   effectsOf(link.url).some(
     (e) =>
       e.verb === VERB_SET_STATE &&
@@ -89,21 +93,21 @@ const closes = (link: Link, key: string): boolean =>
 // band's. Every later row leads with the blank: its first cell holds only
 // spaces.
 function expectBodyLedBy(
-  rows: readonly string[],
+  rows: readonly Row[],
   key: string,
   glyph: string = DISCLOSURE_GLYPH_CLOSE,
 ): void {
   const [head, ...rest] = rows;
   if (head === undefined) throw new Error("no body rows");
-  const first = links(head)[0];
+  const first = rowLinks(head)[0];
   if (first === undefined) throw new Error(`no link on: ${JSON.stringify(head)}`);
-  expect(stripAnsi(first.text)).toBe(glyph);
+  expect(first.text).toBe(glyph);
   expect(closes(first, key)).toBe(true);
   const closing = rows
-    .flatMap(links)
-    .filter((l) => stripAnsi(l.text) === glyph && closes(l, key));
+    .flatMap(rowLinks)
+    .filter((l) => l.text === glyph && closes(l, key));
   expect(closing).toHaveLength(1);
-  for (const row of rest) expect(stripAnsi(row)).toMatch(/^\W*? +\S/u);
+  for (const row of rest) expect(plainOf(row.runs)).toMatch(/^\W*? +\S/u);
 }
 
 // A bar row as it reads once the door has risen out of it: the door's glyph
@@ -125,14 +129,14 @@ function build(src: string, withDefault: boolean) {
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
-  const render = (): string[] => {
+  const render = (): readonly Row[] => {
     const errors: string[] = [];
-    const out = renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
+    const out = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    });
+    }).frame;
     if (errors.length > 0) throw new Error(errors.join("\n"));
-    return out.split("\n");
+    return out.rows;
   };
   // Drive a click through the daemon's own handlers — the gate the row ✕
   // passes is the cycle action's, derived like every other set.
@@ -147,9 +151,9 @@ function build(src: string, withDefault: boolean) {
     }
   };
   // Click the first link on any rendered line that writes `key` = `value`.
-  const clickWriting = async (lines: string[], key: string, value: string): Promise<void> => {
+  const clickWriting = async (lines: readonly Row[], key: string, value: string): Promise<void> => {
     const link = lines
-      .flatMap(links)
+      .flatMap(rowLinks)
       .find((l) =>
         effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
       );
@@ -191,7 +195,7 @@ describe("brandon-disclosure-43z — a group body", () => {
     let lines = rt.render();
     // Closed: the two toggles on their own rows, no body, no ✕ anywhere.
     expect(lines).toHaveLength(3);
-    expect(lines.flatMap(links).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(lines.flatMap(rowLinks).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
 
     await rt.clickWriting(lines, "acc", "one");
     lines = rt.render();
@@ -199,13 +203,13 @@ describe("brandon-disclosure-43z — a group body", () => {
     expect(lines).toHaveLength(6);
     expectBodyLedBy(lines.slice(2, 5), "acc");
     // The first row is led once — by the container, not per cell.
-    expect(links(lines[2]!).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
+    expect(rowLinks(lines[2]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
     // Rows outside the body carry none.
     for (const row of [lines[0]!, lines[1]!, lines[5]!]) {
-      expect(links(row).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+      expect(rowLinks(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     }
 
-    await rt.click(links(lines[2]!)[0]!.url);
+    await rt.click(rowLinks(lines[2]!)[0]!.url);
     lines = rt.render();
     expect(lines).toHaveLength(3);
     rt.dispose();
@@ -232,8 +236,8 @@ const DROPS = `{
   ] },
 }`;
 
-const closeLinks = (line: string): Link[] =>
-  links(line).filter((l) => stripAnsi(l.text) === DISCLOSURE_GLYPH_CLOSE);
+const closeLinks = (line: Row): DrawnLink[] =>
+  rowLinks(line).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE);
 
 describe("brandon-disclosure-43z — lines dropped below a body's horizontal row", () => {
   test("a multi-line segment's continuation lines and a nested vertical's later rows are each led once", async () => {
@@ -248,7 +252,7 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     // below it, `B A` with D dropped below it; then toggle `bare`.
     expect(lines).toHaveLength(8);
     const body = lines.slice(2, 7);
-    expect(body.map((l) => stripAnsi(l))).toEqual([
+    expect(body.map(({ runs }) => plainOf(runs))).toEqual([
       expect.stringContaining("M1"),
       expect.stringContaining("M2"),
       expect.stringContaining("M3"),

@@ -20,6 +20,9 @@
 //   5. reset-config is gated by key membership and deletes the key's path
 //      from the file, so the next reload falls back to the bundled default.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
+import { linkUrls, boldUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
@@ -31,13 +34,13 @@ import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, boldUrls, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { encodeSegments, parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -59,7 +62,6 @@ import {
 import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
-import { linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
@@ -79,7 +81,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
 // which only reports the CURRENTLY-SELECTED region, a persist-option/reset
 // link is not always "active" (bold), so tests asserting on the click itself
 // (not the current-selection marking) need every link.
-function ownUrls(rendered: string): string[] {
+function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -411,8 +413,8 @@ function buildPersistRuntime(
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
-  const render = (width = Number.POSITIVE_INFINITY): string =>
-    renderDsl(
+  const render = (width = Number.POSITIVE_INFINITY): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -420,7 +422,7 @@ function buildPersistRuntime(
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
       opts(width),
-    );
+    ).frame;
   const ctx: VerbContext = testVerbContext(
     sessionState,
     durable.historyFor(sessionState),
@@ -566,8 +568,8 @@ describe("persist action click → the config file", () => {
       cwd: process.cwd(),
     });
     const basePalette = getThemePalette("textual-dark"!);
-    const render = (): string =>
-      renderDsl(
+    const render = (): Frame =>
+      drawPayload(
         config,
         compiled,
         store,
@@ -575,7 +577,7 @@ describe("persist action click → the config file", () => {
         { session_id: "s1", project_dir: "/tmp/proj" },
         instantOf(new Date()),
         opts(),
-      );
+      ).frame;
     const ctx: VerbContext = testVerbContext(
       sessionState,
       durable.historyFor(sessionState),

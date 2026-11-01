@@ -2,7 +2,7 @@
 // candybar-theme-colours-6fq5.e5n).
 //
 // Facts, each measured on what the user sees — the bundled default bar,
-// rendered under every palette through renderDsl — in ΔE_OK (rich-js
+// rendered under every palette through drawDsl — in ΔE_OK (rich-js
 // `Oklch.deltaE`), where ~.02 is the smallest difference the eye resolves:
 //
 //   1. Every background the closed bar draws is a colour its theme names:
@@ -20,11 +20,14 @@
 // name every accent alike, as Textual draws them — and fact 1 is what holds
 // a bar to its theme.
 
+import { drawPayload } from "../test/helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "../test/helpers/link-signer";
 import { DIVIDER, drawnChars, isRgb, seams, type Drawn } from "../test/helpers/seams";
 import {
   ColorDepth,
   ColorRgba,
+  ColorSpec,
   drawnColour,
   getThemePalette,
   listThemePalettes,
@@ -38,7 +41,7 @@ import { validateConfig } from "../test/helpers/parse-and-validate";
 import { unauthored } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import {
   SHADES,
   VARIATIONS,
@@ -76,7 +79,7 @@ const rgba = (c: Drawn): ColorRgba => {
   return new ColorRgba(...c);
 };
 
-function seamsIn(rendered: string): Seam[] {
+function seamsIn(rendered: Frame): Seam[] {
   const chars = drawnChars(rendered);
   // A divider is a seam too, so that one drawn anywhere is found and fails.
   const dividers = chars.flatMap(({ ch, bg, before }) =>
@@ -131,7 +134,7 @@ const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd:
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());
 
-function render(theme: string, calm: boolean, { variation, shade, look }: Variant): string {
+function render(theme: string, calm: boolean, { variation, shade, look }: Variant): Frame {
   const e = resolveEffectiveGlobals(
     CONFIG,
     (key) =>
@@ -158,7 +161,7 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
         ]),
       )
     : hot;
-  return renderDsl(
+  return drawPayload(
     CONFIG,
     COMPILED,
     STORE,
@@ -175,14 +178,14 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
     },
     undefined,
     e,
-  );
+  ).frame;
 }
 
 // Each (theme, calm, variant) bar is rendered once, on first read INSIDE a
 // test, so a render that throws fails that theme's test by name rather than
 // the suite's collection — and both facts read the one render.
-const BARS = new Map<string, string>();
-function bar(theme: string, calm: boolean, variant: Variant): string {
+const BARS = new Map<string, Frame>();
+function bar(theme: string, calm: boolean, variant: Variant): Frame {
   const key = `${theme}|${calm}|${named(variant)}`;
   const hit = BARS.get(key);
   if (hit !== undefined) return hit;
@@ -193,19 +196,13 @@ function bar(theme: string, calm: boolean, variant: Variant): string {
 const seamsOf = (theme: string, calm: boolean, variant: Variant): Seam[] =>
   seamsIn(bar(theme, calm, variant));
 
-// Every background colour a rendered bar draws, in order: each 48;2 SGR.
-function backgrounds(rendered: string): ColorRgba[] {
-  return [...rendered.matchAll(/\x1b\[([0-9;]*)m/g)].flatMap((m) => {
-    const p = m[1]!.split(";").map(Number);
-    const out: ColorRgba[] = [];
-    for (let i = 0; i < p.length; i++) {
-      if (p[i] === 48 && p[i + 1] === 2) {
-        out.push(new ColorRgba(p[i + 2]!, p[i + 3]!, p[i + 4]!));
-        i += 4;
-      }
-    }
-    return out;
-  });
+// Every truecolor background a drawn bar holds, in order.
+function backgrounds({ rows }: Frame): ColorRgba[] {
+  return rows.flatMap(({ runs }) =>
+    runs.flatMap(({ bg }) =>
+      bg?.startsWith("#") === true ? [ColorSpec.parse(bg).getTruecolor()] : [],
+    ),
+  );
 }
 
 describe("done-when: every background the closed bar draws is a colour its theme names", () => {

@@ -2,14 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  configFlag,
-  hookData,
-  killAndWait,
-  render,
-  runRealClient,
-  stripAnsi,
-} from "./helpers/daemon-e2e";
+import { composeBar, textOf } from "../src/render/frame";
+import { configFlag, hookData, killAndWait, render, runRealClient } from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -69,15 +63,18 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
     // tick would, but a warm entry keeps that the exception. The cache key is
     // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
     // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
-    // one this warmed.
-    await render(sockPath, sid, projectDir, { configEnv: override });
+    // one this warmed. Its stdout is the bar the daemon answers that hint.
+    const answered = await render(sockPath, sid, projectDir, {
+      configEnv: override,
+    });
     const client = runRealClient([], {
       cwd: projectDir,
       env: { ...env, CC_CANDYBAR_CONFIG: value() },
       input: JSON.stringify(hookData(sid, projectDir)),
     });
     expect(client.status).toBe(0);
-    const bar = stripAnsi(client.stdout);
+    expect(client.stdout).toBe(composeBar(answered));
+    const bar = textOf(answered);
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Invalid config");
     expect(bar).not.toContain("Config file not found");
@@ -90,14 +87,21 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
   // refused as a stray word and `--config` reaches the daemon.
   test("the real client relays --config with nothing refused", async () => {
     const sid = "cfg-flag-real-client";
-    await render(sockPath, sid, projectDir, {}, configFlag(override));
+    const answered = await render(
+      sockPath,
+      sid,
+      projectDir,
+      {},
+      configFlag(override),
+    );
     const client = runRealClient(["--config", override], {
       cwd: projectDir,
       env,
       input: JSON.stringify(hookData(sid, projectDir)),
     });
     expect(client.status).toBe(0);
-    const bar = stripAnsi(client.stdout);
+    expect(client.stdout).toBe(composeBar(answered));
+    const bar = textOf(answered);
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Unexpected arguments");
   });

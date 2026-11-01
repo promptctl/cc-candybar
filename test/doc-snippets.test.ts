@@ -24,10 +24,10 @@
 //                          IMMEDIATELY FOLLOWING fenced block, tagged `error`,
 //                          must quote a substring of the actual fatal message.
 //   ```render            — the bar the IMMEDIATELY PRECEDING check:pass config
-//                          renders, as `cc-candybar check --render` prints it
-//                          with SGR/OSC-8 stripped (a doc cannot hold escape
-//                          bytes). Trailing spaces and edge blank lines are
-//                          normalised on both sides; every other byte is exact.
+//                          renders, as the text of the frame `cc-candybar check
+//                          --render` prints (a doc cannot hold escape bytes).
+//                          Trailing spaces and edge blank lines are normalised
+//                          on both sides; every other character is exact.
 //   ```sh stub:<name>    — an executable the doc's `shell` snippets may run:
 //                          its body is written verbatim as `<name>` onto a PATH
 //                          prefix before any snippet runs, so a `shell` source
@@ -45,7 +45,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
-import { stripAnsi } from "./helpers/daemon-e2e";
+import { textOf } from "../src/render/frame";
 
 const ROOT = path.join(__dirname, "..");
 
@@ -299,7 +299,7 @@ describe("doc snippet contract", () => {
       }
       expect(checkPlan(outcome).code).toBe(0);
       expect(outcome.warnings).toEqual([]);
-      expect(outcome.rendered.length).toBeGreaterThan(0);
+      expect(textOf(outcome.rendered).length).toBeGreaterThan(0);
     },
   );
 
@@ -325,7 +325,7 @@ describe("doc snippet contract", () => {
       // test/cli-check.test.ts), so asserting against it pins the doc to the
       // command's own stdout without putting this machine's temp path in the
       // fence.
-      expect(previewText(stripAnsi(outcome.rendered))).toBe(
+      expect(previewText(textOf(outcome.rendered))).toBe(
         previewText(f.body),
       );
     },

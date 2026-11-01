@@ -12,7 +12,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { textOf, type Frame } from "../src/render/frame";
+import { frameRequest, hookData, sendClick } from "./helpers/daemon-e2e";
+import { barOf } from "./helpers/drawn-frame";
+import { linkUrls } from "./helpers/frame";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -149,19 +152,19 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
 
   // The session's request: its hook JSON, and the Claude Code directory its
   // client reports.
-  const renderRaw = (): Promise<string> =>
-    renderRequest(daemon, {
+  const renderRaw = (): Promise<Frame> =>
+    frameRequest(daemon, {
       hookData: hookData(SESSION, projectDir),
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
       claudeConfigDir: claudeDir,
     });
 
-  const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<string> => {
-    let raw = "";
+  const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<Frame> => {
+    let raw = barOf();
     await until(
-      async () => shows(stripAnsi((raw = await renderRaw()))),
-      () => `the bar showing ${what}; last:\n${stripAnsi(raw)}`,
+      async () => shows(textOf((raw = await renderRaw()))),
+      () => `the bar showing ${what}; last:\n${textOf(raw)}`,
       10_000,
     );
     return raw;
@@ -181,7 +184,7 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
         fs.renameSync(tmp, path.join(storage(), `${SESSION}.json`));
       },
       async () => {
-        bar = stripAnsi(await renderRaw());
+        bar = textOf(await renderRaw());
         return bar.includes(shows);
       },
       () => `the bar showing ${shows}; last:\n${bar}`,
@@ -197,8 +200,8 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
           .map((l) => JSON.parse(l) as Call)
       : [];
 
-  // The link the bar drew for a move, read out of its bytes.
-  const moveLink = (rendered: string, action: string): { url: string; drawn: EvaluatedRun } => {
+  // The link the bar drew for a move, read off its frame.
+  const moveLink = (rendered: Frame, action: string): { url: string; drawn: EvaluatedRun } => {
     for (const url of linkUrls(rendered)) {
       const run = effectsOf(url).find((e) => e.verb === VERB_RUN && e.args[1] === action);
       if (run !== undefined) return { url, drawn: JSON.parse(run.args[2]!) as EvaluatedRun };
@@ -207,7 +210,7 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
   };
 
   test("it loads, and its segment hides until the program writes the session's file", async () => {
-    const bar = stripAnsi(await renderRaw());
+    const bar = textOf(await renderRaw());
     expect(bar).toContain("mine");
     expect(bar).not.toContain("limit");
     expect(bar).not.toContain("was not loaded");

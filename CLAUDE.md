@@ -50,7 +50,7 @@ How they show up here:
 - `.claude/memory/interaction.md`: actions and gates, pickers, disclosures, the settings menu, slash commands. Read before you add an action, a menu or a control.
 - `.claude/memory/frames-and-lanes.md`: pushed frames, the animation lanes, relaunching Claude Code, the tmux status line. Read before you touch feeds, lanes or tmux.
 - `.claude/memory/doctor.md`: the doctor's checks and the traps behind its probes. Read before you change a check.
-- `.claude/memory/testing.md`: test isolation and the traps in reading rendered bytes. Read before you write a test.
+- `.claude/memory/testing.md`: test isolation and the traps in reading a draw. Read before you write a test.
 
 If you're authoring a config or a custom segment, read `docs/interaction-authoring.md` and `docs/segment-authoring.md`. Their snippets are tested against the live loader, so they stay current.
 

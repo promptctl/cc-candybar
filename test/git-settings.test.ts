@@ -2,12 +2,13 @@
 // shows (brandon-segment-settings-i4n.u36). Each case places the segment twice
 // on one bar — a bare copy on every default and a copy with one setting off —
 // so it pins both the setting's effect and that two copies never share a value.
+import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -70,7 +71,7 @@ function renderPair(
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    renderDsl(
+    drawPayload(
       config,
       compiled,
       store,
@@ -85,7 +86,7 @@ function renderPair(
         width: Number.POSITIVE_INFINITY,
       },
       { perSegmentSink: sink },
-    );
+    ).frame;
   } finally {
     registry.dispose();
   }

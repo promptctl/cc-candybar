@@ -14,6 +14,9 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { textOf } from "../src/render/frame";
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -33,7 +36,7 @@ import {
   DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -215,7 +218,7 @@ describe("the bundled host segment", () => {
     JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2),
   );
 
-  function render(host: Record<string, unknown>): string {
+  function render(host: Record<string, unknown>): Frame {
     const store = new VariableStore();
     const registry = new SourceRegistry(
       processLauncher,
@@ -228,7 +231,7 @@ describe("the bundled host segment", () => {
         signer: TEST_SIGNER,
         cwd: "/tmp",
       });
-      return renderDsl(
+      return drawPayload(
         CONFIG,
         compiled,
         store,
@@ -242,14 +245,14 @@ describe("the bundled host segment", () => {
           padding: 1,
           width: Number.POSITIVE_INFINITY,
         },
-      );
+      ).frame;
     } finally {
       registry.dispose();
     }
   }
 
   test("renders user@host when the session came in over SSH", () => {
-    expect(render({ name: "bigbox", user: "brandon", ssh: true })).toContain(
+    expect(textOf(render({ name: "bigbox", user: "brandon", ssh: true }))).toContain(
       "⇄ brandon@bigbox",
     );
   });
@@ -257,17 +260,17 @@ describe("the bundled host segment", () => {
   // [LAW:dataflow-not-control-flow] Presence IS the signal — no mode, no flag.
   test("is entirely absent on a local session", () => {
     expect(
-      render({ name: "bigbox", user: "brandon", ssh: false }),
+      textOf(render({ name: "bigbox", user: "brandon", ssh: false })),
     ).not.toContain("bigbox");
   });
 
   test("is absent when the client never reported, matching pre-feature output", () => {
-    expect(render({ name: "bigbox", user: "brandon" })).not.toContain("bigbox");
+    expect(textOf(render({ name: "bigbox", user: "brandon" }))).not.toContain("bigbox");
   });
 
   // A failed hostname/username read must still say "you are remote" rather than
   // rendering a blank that reads as a rendering bug [LAW:no-silent-failure].
   test("still marks the session remote when the identity could not be read", () => {
-    expect(render({ ssh: true })).toContain("⇄ ?@?");
+    expect(textOf(render({ ssh: true }))).toContain("⇄ ?@?");
   });
 });

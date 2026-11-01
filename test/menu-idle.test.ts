@@ -3,6 +3,8 @@
 // each session's idle clock, the close it makes — a click's own journaled
 // write — and the flash on the rendered bar.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { linkUrls } from "./helpers/frame";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -10,7 +12,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { drawPayload, registerDslConfig } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import {
   ANIMATION_SPEED_NAMES,
@@ -27,7 +29,6 @@ import {
   clickSessionOf,
   type VerbContext,
 } from "../src/daemon/verbs/index";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -45,7 +46,7 @@ import {
 } from "../src/config/menu-timeout";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import { selectionFor } from "./helpers/selection";
-import { ansiOf, type Frame } from "../src/render/frame";
+import { textOf, ansiOf, type Frame, type Row } from "../src/render/frame";
 
 const at = (s: number): Instant => s as Instant;
 
@@ -348,7 +349,7 @@ function buildRuntime(src: string) {
     log: (_level, line) => logged.push(line),
   };
   const clickWriting = async (key: string, value: string): Promise<void> => {
-    const url = linkUrls(ansiOf(draw(instantOf(new Date())))).find((u) =>
+    const url = linkUrls(draw(instantOf(new Date()))).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
@@ -436,8 +437,6 @@ describe("the flash on the bar", () => {
   const DARK = at(1114);
   const BEFORE = at(1010);
 
-  const rows = (text: string): string[] => text.split("\n");
-
   test("menu rows light while lit; bar rows never do", async () => {
     const rt = buildRuntime(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
@@ -446,17 +445,17 @@ describe("the flash on the bar", () => {
     expect(menuRows(calm)).toBeGreaterThan(0);
     const bar = calm.rows.filter((row) => row.kind === "bar").length;
     // The risen door's rows stack over the bar's: the bar is the last rows.
-    expect(rows(ansiOf(lit)).slice(-bar)).toEqual(rows(ansiOf(calm)).slice(-bar));
-    const menu = (text: string) => rows(text).slice(0, -bar);
-    expect(menu(ansiOf(lit))).not.toEqual(menu(ansiOf(calm)));
+    expect(lit.rows.slice(-bar)).toEqual(calm.rows.slice(-bar));
+    const menu = ({ rows }: Frame) => rows.slice(0, -bar);
+    expect(menu(lit)).not.toEqual(menu(calm));
     // Light changes colour, never the words.
-    expect(stripAnsi(ansiOf(lit))).toBe(stripAnsi(ansiOf(calm)));
+    expect(textOf(lit)).toBe(textOf(calm));
     expect(lit.motion).toBe("moves");
     // Lit, a menu row is one colour: every cell on the flash's fill.
-    const grounds = (row: string): Set<string> =>
-      new Set([...row.matchAll(/48;2;(\d+;\d+;\d+)m/g)].map((m) => m[1]!));
-    for (const row of menu(ansiOf(lit))) expect(grounds(row).size).toBe(1);
-    expect(grounds(menu(ansiOf(calm))[0]!).size).toBeGreaterThan(1);
+    const grounds = ({ runs }: Row): Set<string> =>
+      new Set(runs.flatMap(({ bg }) => bg ?? []));
+    for (const row of menu(lit)) expect(grounds(row).size).toBe(1);
+    expect(grounds(menu(calm)[0]!).size).toBeGreaterThan(1);
   });
 
   test("dark between flashes, and before the flash begins, the bar is as it was", async () => {

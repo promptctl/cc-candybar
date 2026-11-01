@@ -1,27 +1,27 @@
+import { ansiOf, plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.bm1: a placement can carry its own
 // effect. Its `effect` setting moves that placement's cells and the seams that
 // show its colour, on a clock of its own, and every other cell of the row is
 // drawn exactly as it is without the setting.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
-import { decodeAnsi } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { settingsOf, type ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import { menuStateKey } from "../src/config/menu-keys";
-import { resolvedStyle } from "../src/render/rich-theme";
 import { decideEffectName, EFFECT_NAMES, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -68,7 +68,7 @@ function renderer(
     bar: EffectName,
     when: Instant,
     effects: SessionEffects<RenderedLine>,
-  ) => string;
+  ) => Frame;
   readonly dispose: () => void;
 } {
   const store = new VariableStore();
@@ -85,31 +85,26 @@ function renderer(
   };
   return {
     render: (bar, when, effects) =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, when, opts, undefined,
+      drawPayload(config, compiled, store, registry, PAYLOAD, when, opts, undefined,
         selectionFor(config, { effect: decideEffectName(bar), effects }),
-      ),
+      ).frame,
     dispose: () => registry.dispose(),
   };
 }
 
-// Each screen cell of a line: its glyph and the style it is drawn in, read
-// through rich-js's own decoder (the inverse of the writer).
-function screenCells(line: string): string[] {
-  const text = decodeAnsi(line);
-  const cells = [...text.plain].map((glyph) => glyph);
-  const styles = cells.map(() => "");
-  for (const { start, end, style } of text.spans) {
-    const resolved = JSON.stringify(resolvedStyle(style));
-    for (let i = start; i < end; i++) styles[i] = resolved;
-  }
-  return cells.map((glyph, i) => `${glyph}${styles[i]}`);
+// Each screen cell of a line: its glyph and the look it is drawn in.
+function screenCells(line: readonly Run[]): string[] {
+  return line.flatMap(({ text, ...look }) => {
+    const drawn = JSON.stringify(look);
+    return [...text].map((glyph) => `${glyph}${drawn}`);
+  });
 }
 
 // The columns the middle placement's colours show in: its cell (the text and
 // the padding each side of it) and the seam either side of it — the one into it
-// shows its fill as ground, the one out of it as ink.
-function middleColumns(line: string): { from: number; to: number } {
-  const at = [...stripAnsi(line)].join("").indexOf("MIDDLE");
+// shows its fill as ground, the one out of it as ink. Counted as screen cells.
+function middleColumns(line: readonly Run[]): { from: number; to: number } {
+  const at = [...plainOf(line).split("MIDDLE")[0]!].length;
   const padding = 1;
   const seam = 1;
   return {
@@ -143,18 +138,17 @@ describe("a placement's effect setting", () => {
         for (const s of INSTANTS) {
           const before = plain.render(bar, at(s), plainFx);
           const after = pulsing.render(bar, at(s), pulsingFx);
-          expect(stripAnsi(after)).toBe(stripAnsi(before));
+          expect(textOf(after)).toBe(textOf(before));
           expect(linkUrls(after)).toEqual(linkUrls(before));
-          const beforeLines = before.split("\n");
-          const afterLines = after.split("\n");
-          afterLines.forEach((line, i) => {
-            if (!stripAnsi(line).includes("MIDDLE")) {
-              expect(line).toBe(beforeLines[i]);
+          after.rows.forEach(({ runs }, i) => {
+            const held = before.rows[i]!.runs;
+            if (!plainOf(runs).includes("MIDDLE")) {
+              expect(runs).toEqual(held);
               return;
             }
-            const { from, to } = middleColumns(line);
-            const was = screenCells(beforeLines[i]!);
-            const is = screenCells(line);
+            const { from, to } = middleColumns(runs);
+            const was = screenCells(held);
+            const is = screenCells(runs);
             is.forEach((cell, col) => {
               if (col < from || col >= to) expect(cell).toBe(was[col]);
             });
@@ -179,8 +173,8 @@ describe("a placement's effect setting", () => {
       // the middle placement at 300, so its first frame is at rest.
       const effects = new SessionEffects<RenderedLine>("s");
       plain.render("none", at(0), effects);
-      expect(pulsing.render("none", at(300), effects)).toBe(
-        plain.render("none", at(300), new SessionEffects<RenderedLine>("s")),
+      expect(pulsing.render("none", at(300), effects).rows).toEqual(
+        plain.render("none", at(300), new SessionEffects<RenderedLine>("s")).rows,
       );
       expect(effects.lastFrame().own).toEqual([
         { placement: "middle", effect: "pulse", t: 0 },
@@ -204,14 +198,14 @@ describe("a placement's effect setting", () => {
       const effects = new SessionEffects<RenderedLine>("s");
       const frames = INSTANTS.map((s) => still.render("shimmer", at(s), effects));
       const middle = frames.map((frame) => {
-        const line = frame.split("\n").find((l) => stripAnsi(l).includes("MIDDLE"))!;
-        const { from, to } = middleColumns(line);
+        const { runs } = frame.rows.find((r) => plainOf(r.runs).includes("MIDDLE"))!;
+        const { from, to } = middleColumns(runs);
         // Its own cell, short of the seams, which show its neighbours too.
-        return screenCells(line).slice(from + 1, to - 1).join();
+        return screenCells(runs).slice(from + 1, to - 1).join();
       });
       for (const cells of middle) expect(cells).toBe(middle[0]);
       // [LAW:verifiable-goals] The bar around it did move.
-      expect(frames.some((frame) => frame !== frames[0])).toBe(true);
+      expect(frames.some((frame) => ansiOf(frame) !== ansiOf(frames[0]!))).toBe(true);
     } finally {
       still.dispose();
     }
@@ -229,8 +223,8 @@ describe("a placement's effect setting", () => {
       const namedFx = new SessionEffects<RenderedLine>("s");
       const differs = INSTANTS.some(
         (s) =>
-          named.render("shimmer", at(s), namedFx) !==
-          plain.render("shimmer", at(s), plainFx),
+          ansiOf(named.render("shimmer", at(s), namedFx)) !==
+          ansiOf(plain.render("shimmer", at(s), plainFx)),
       );
       expect(differs).toBe(true);
       expect(namedFx.lastFrame().own).toEqual([
@@ -263,14 +257,13 @@ describe("a placement's effect setting", () => {
     });
     try {
       const effects = new SessionEffects<RenderedLine>("s");
-      const frames = INSTANTS.map((s) =>
-        open.render("shimmer", at(s), effects).split("\n"),
-      );
-      const band = frames.map((lines) => lines.find((l) => l.includes("✕"))!);
+      const frames = INSTANTS.map((s) => open.render("shimmer", at(s), effects));
+      const band = frames.map(({ rows }) => rows.find((r) => plainOf(r.runs).includes("✕"))!);
       expect(band[0]).toBeDefined();
-      for (const line of band) expect(line).toBe(band[0]);
+      for (const row of band) expect(row).toEqual(band[0]);
       // [LAW:verifiable-goals] The bar above it did move.
-      expect(frames.some((lines) => lines[0] !== frames[0]![0])).toBe(true);
+      const top = ({ depth, rows }: Frame) => ansiOf({ depth, rows: rows.slice(0, 1) });
+      expect(frames.some((frame) => top(frame) !== top(frames[0]!))).toBe(true);
     } finally {
       open.dispose();
     }

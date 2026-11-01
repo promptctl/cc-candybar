@@ -1,3 +1,4 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] candybar-config-engine-71o.5's headline acceptance:
 // the epic's claim ("mutate the configuration via the menu system,
 // durably") is a COMPOSITION property — click, gate, persistent write,
@@ -25,28 +26,23 @@
 // releases the picks. Asserted on the wire and the file — not on the compiled
 // action — so the draft/save split is proven where it actually happens.
 
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
-import { stripAnsi } from "./helpers/ansi";
 
 // The theme picker on the door's first line, open, naming `theme` beside its swatch
 // (brandon-theme-swatch-8v9r), read off the visible text.
-const showsTheme = (out: string, theme: string): boolean =>
-  stripAnsi(out).includes(`${theme} ▀▀▀`);
+const showsTheme = (out: Frame, theme: string): boolean =>
+  textOf(out).includes(`${theme} ▀▀▀`);
 // Opening the theme picker: the write its label's click makes.
 const OPEN_THEME_PICKER = ["menus.candybar_pickers", "candybar.apply.theme"];
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  click,
-  linkUrls,
-  findUrl,
-  render,
-  renderUntil,
-} from "./helpers/daemon-e2e";
+import { click, findUrl, render, renderUntil } from "./helpers/daemon-e2e";
 import { startDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -172,7 +168,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
         ),
       ).toBeUndefined();
       // Nothing picked yet, so nothing to save.
-      expect(sessionOnly).not.toContain("💾");
+      expect(textOf(sessionOnly)).not.toContain("💾");
 
       // Take the click, then read a CONCURRENT session over the same
       // socket: the picker changed this conversation and left the other one
@@ -201,11 +197,11 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       expect(showsTheme(otherBar, "tokyo-night")).toBe(true); // its own default, shown
       // Not named as current (a swatch beside it may well write it).
       expect(showsTheme(otherBar, sessionTheme)).toBe(false);
-      expect(otherBar).not.toContain("💾"); // the draft is this session's alone
+      expect(textOf(otherBar)).not.toContain("💾"); // the draft is this session's alone
 
       // ── The draft is counted, and the file is untouched.
       const drafted = await render(daemon, SID, projectDir);
-      expect(drafted).toContain("💾 save 1");
+      expect(textOf(drafted)).toContain("💾 save 1");
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
 
       // Two more picks — the theme to keep, and a padding step — still drafts.
@@ -238,7 +234,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       expect(paddingUpUrl).toBeDefined();
       await click(daemon, paddingUpUrl!);
       const twoDrafts = await render(daemon, SID, projectDir);
-      expect(twoDrafts).toContain("💾 save 2");
+      expect(textOf(twoDrafts)).toContain("💾 save 2");
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
 
       // ── Save: one click writes both drafts to the file and releases them.
@@ -271,7 +267,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
         `the committed theme "${targetTheme}" on the session that committed it`,
       );
       expect(showsTheme(committing, sessionTheme)).toBe(false);
-      expect(committing).not.toContain("💾");
+      expect(textOf(committing)).not.toContain("💾");
 
       // [LAW:verifiable-goals] The ticket's acceptance: the hand-authored file
       // is byte-identical OUTSIDE the two value spans the clicks replaced —

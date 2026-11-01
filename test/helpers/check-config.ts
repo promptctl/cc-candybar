@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { checkConfig, checkPlan, type CheckOutcome } from "../../src/check";
+import { textOf } from "../../src/render/frame";
 
 // Run `fn` against a real temp config file holding `text`. The file outlives
 // the whole of `fn` (checkConfig is async: it awaits its sources' first run).
@@ -39,7 +40,7 @@ export function expectClean(
     );
   }
   expect(checkPlan(outcome).code).toBe(0);
-  expect(outcome.rendered.length).toBeGreaterThan(0);
+  expect(textOf(outcome.rendered).length).toBeGreaterThan(0);
   return outcome;
 }
 

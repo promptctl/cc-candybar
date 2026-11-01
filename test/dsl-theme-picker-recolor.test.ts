@@ -1,24 +1,27 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
 // recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
 // prove the click writes SessionState and the active-marking moves, but they
 // omit the theme selection entirely — so they render the floor theme every time
 // and never exercise the recolor. The recolor lives in the daemon's PER-RENDER
-// theme resolution (resolveThemeSelection), OUTSIDE renderDsl. This test
+// theme resolution (resolveThemeSelection), OUTSIDE drawDsl. This test
 // replicates that resolution exactly as src/daemon/draw-bar.ts does, so it proves
-// the end-to-end loop: a set-state `theme` click changes the bytes a
+// the end-to-end loop: a set-state `theme` click changes the colours a
 // non-picker segment renders.
 //
-// [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
+// [LAW:single-enforcer] Drives the real spine — registerDslConfig + drawDsl
 // for rendering, parseHandlerUrl + VERBS for the click, and the same
 // resolveThemeSelection the daemon calls. No parallel rig.
 //
 // [LAW:behavior-not-structure] A cell's colour is read BY SEGMENT NAME, off the
 // `perSegmentSink` the daemon itself renders with, never by position in the
-// byte string. Position is a fact about the layout, not about the recolor: a
-// regex that measures "the first background SGR" measures whichever cell
-// happens to lead the row, and silently starts measuring a different segment
-// the day a cell is added ahead of it.
+// row. Position is a fact about the layout, not about the recolor: a read of
+// "the first background" measures whichever cell happens to lead the row, and
+// silently starts measuring a different segment the day a cell is added ahead
+// of it.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { boldUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -26,15 +29,9 @@ import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import {
-  recordRender,
-  testVerbContext,
-  effectsOf,
-  clickUrl,
-  boldUrls,
-} from "./helpers/click";
+import { recordRender, testVerbContext, effectsOf, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
@@ -78,9 +75,9 @@ const DECLARED = ["plain", "pickers"] as const;
 
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
-/** One render: the bytes, and the background each named segment painted. */
+/** One render: the frame, and the background each named segment painted. */
 interface Painted {
-  readonly bar: string;
+  readonly bar: Frame;
   readonly bgOf: (segment: string) => string;
 }
 
@@ -95,12 +92,12 @@ function buildRuntime() {
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
-  // pass while the real daemon recolors. (draw-bar.ts hands renderDsl
+  // pass while the real daemon recolors. (draw-bar.ts hands drawDsl
   // `theme: resolveThemeSelection(staged, sessionState.get(sid,'theme'),
   // globals.palette)`, and the SELECTION carries the palette, so there is no
   // separate base palette here to fall out of step with the name.)
   const render = (): Painted => {
-    const bar = renderDsl(
+    const bar = drawPayload(
       config,
       compiled,
       store,
@@ -110,8 +107,8 @@ function buildRuntime() {
       OPTS,
       { perSegmentSink: sink },
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-    );
-    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. renderDsl
+    ).frame;
+    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. drawDsl
     // clears it at the top of the next call, so a colour read deferred past
     // that call would measure a render this Painted never described.
     const bgs = new Map(
@@ -134,14 +131,14 @@ function buildRuntime() {
   return { config, sessionState, render };
 }
 
-// Every truecolor background SGR in a rendered line — `48;2;r;g;b`. The set of
-// these is the bar's palette footprint; a recolor changes it.
-function bgColors(rendered: string): Set<string> {
-  const re = /48;2;(\d+;\d+;\d+)/g;
-  const out = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) out.add(m[1]!);
-  return out;
+// Every truecolor background a frame draws. The set of these is the bar's
+// palette footprint; a recolor changes it.
+function bgColors({ rows }: Frame): Set<string> {
+  return new Set(
+    rows.flatMap(({ runs }) =>
+      runs.flatMap(({ bg }) => (bg?.startsWith("#") ? [bg] : [])),
+    ),
+  );
 }
 
 async function clickTheme(

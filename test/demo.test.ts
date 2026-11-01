@@ -3,8 +3,6 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { stripAnsi } from "./helpers/ansi";
-
 // `pnpm demo` claims to print what production produces. That holds only while
 // its payload is the daemon's own (payloadOf over a faked hook event):
 // the fields below are ones no hook event carries and the daemon always
@@ -54,13 +52,14 @@ describe("pnpm demo", () => {
       },
       segments: {
         probe: {
-          template: "home={{ .home }} undo={{ .undo }} unsaved={{ .unsaved }} file={{ .file }}",
+          // One value, so one run holds all of it on the raw stdout.
+          template: '{{ printf "home=%v undo=%v unsaved=%v file=%v" .home .undo .unsaved .file }}',
         },
       },
       root: "probe",
     }`);
     expect(r.status).toBe(0);
-    expect(stripAnsi(r.stdout)).toContain(
+    expect(r.stdout).toContain(
       `home=${join(dir, "home")} undo=0 unsaved=0 file=${join(dir, "config.json5")}`,
     );
   });
@@ -105,14 +104,12 @@ describe("pnpm demo", () => {
   test("reports the session the client's environment describes", () => {
     const probe = `{
       variables: { ssh: { kind: "input", path: "host.ssh", default: "absent" } },
-      segments: { probe: { template: "ssh={{ .ssh }}" } },
+      segments: { probe: { template: '{{ printf "ssh=%v" .ssh }}' } },
       root: "probe",
     }`;
-    expect(stripAnsi(runDemo(probe).stdout)).toContain("ssh=false");
+    expect(runDemo(probe).stdout).toContain("ssh=false");
     expect(
-      stripAnsi(
-        runDemo(probe, { SSH_CONNECTION: "1.2.3.4 5 6.7.8.9 22" }).stdout,
-      ),
+      runDemo(probe, { SSH_CONNECTION: "1.2.3.4 5 6.7.8.9 22" }).stdout,
     ).toContain("ssh=true");
   });
 });

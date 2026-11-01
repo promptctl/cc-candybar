@@ -141,7 +141,7 @@ Added by me, at Brandon's request to fill out the list:
 
 ## Widths at 80 columns
 
-`pnpm exec tsx design-docs/settings-menu-map-render.mts` printed these numbers until it stopped running (brandon-menus-sjhy.bc0). The rows brandon-menus-sjhy.ek7 changed were re-measured through `renderDsl` on the bundled default at 200 columns, the others are the script's last output. Widths are at padding 1, and each padding step adds two cells per cell. "Drifted" is every setting resettable, one draft, one undo and one redo step.
+`pnpm exec tsx design-docs/settings-menu-map-render.mts` printed these numbers until it stopped running (brandon-menus-sjhy.bc0). The rows brandon-menus-sjhy.ek7 changed were re-measured through `drawDsl` on the bundled default at 200 columns, the others are the script's last output. Widths are at padding 1, and each padding step adds two cells per cell. "Drifted" is every setting resettable, one draft, one undo and one redo step.
 
 | Row | Cells |
 |---|---|

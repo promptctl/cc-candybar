@@ -19,7 +19,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { render, stripAnsi } from "./helpers/daemon-e2e";
+import { textOf, type Frame } from "../src/render/frame";
+import { render } from "./helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "./helpers/diagnostics-viewer";
 import {
   heldClock,
@@ -138,7 +139,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       await draw();
       const bar = await draw();
       // The bar renders under every case: a warning never takes it away.
-      expect(stripAnsi(bar)).toContain("mark");
+      expect(textOf(bar)).toContain("mark");
       expect(indicatorOf(bar)).toBe(
         shown.length === 0 ? null : `⚠ ${shown.length}`,
       );
@@ -215,7 +216,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
       // [LAW:no-ambient-temporal-coupling] The write is re-applied until the
       // watch has heard it.
       rmSync(`${link}.other`, { force: true });
-      let healed = "";
+      let healed!: Frame;
       await untilHeard(
         () => {
           rmSync(link, { force: true });

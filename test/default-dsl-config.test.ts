@@ -8,6 +8,9 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
@@ -29,7 +32,7 @@ import {
   unauthored,
 } from "../src/config/dsl-loader";
 import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -38,7 +41,6 @@ import {
   ColorRgba,
   ColorSpec,
   contrastRatio,
-  decodeAnsi,
 } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes";
@@ -57,17 +59,21 @@ import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
 import { resolveEffectiveGlobals, type EffectiveGlobals } from "../src/config/effective-globals";
-import { resolvedStyle } from "../src/render/rich-theme";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
-import { INVISIBLE, linkUrls, stripAnsi } from "./helpers/ansi";
 import { POLLED } from "../src/config/settings-menu";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 
-// Visible segment text: every zero-width escape, plus the powerline cap glyphs.
-const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
+// The powerline cap glyphs, which visible segment text is read without.
+const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
+
+// The run that draws the character at `at` of a line.
+const runAt = (runs: readonly Run[], at: number): Run | undefined => {
+  let end = 0;
+  return runs.find(({ text }) => (end += text.length) > at);
+};
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -196,7 +202,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
-  test("registerDslConfig + renderDsl produce a non-empty line", () => {
+  test("registerDslConfig + drawDsl produce a non-empty line", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const store = new VariableStore();
     // The default now carries `kind: "state"` vars (the style picker); a
@@ -226,16 +232,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
           added_dirs: [],
         },
       };
-      const line = renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
+      const line = drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
         endcaps: "powerline",
         colorCompatibility: "truecolor",
         wrap: true,
         padding: 1,
         width: Number.POSITIVE_INFINITY,
-      });
+      }).frame;
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
-      expect(line.length).toBeGreaterThan(0);
+      expect(textOf(line).length).toBeGreaterThan(0);
     } finally {
       registry.dispose();
     }
@@ -268,7 +274,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       theme: string,
       config: ValidatedConfig = parsed,
     ): {
-      row: (effort: { level: string } | undefined, when?: Instant) => string;
+      row: (effort: { level: string } | undefined, when?: Instant) => Row;
       dispose: () => void;
     } {
       const effective = resolveEffectiveGlobals(
@@ -290,13 +296,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const row = (
         effort: { level: string } | undefined,
         when: Instant = at,
-      ): string => {
+      ): Row => {
         const { effort: _fixtureEffort, ...payload } = {
           ...checkPayload(config, effective, null, when),
           today: CHECK_TODAY,
         };
         const errors: string[] = [];
-        const rendered = renderDsl(
+        const rendered = drawPayload(
           config,
           compiled,
           store,
@@ -306,11 +312,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
           renderOptionsOf(effective, Number.POSITIVE_INFINITY),
           { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
           effective,
-        );
+        ).frame;
         expect(errors).toEqual([]);
-        const found = rendered
-          .split("\n")
-          .find((line) => stripAnsi(line).includes(NAME));
+        const found = rendered.rows.find(({ runs }) =>
+          plainOf(runs).includes(NAME),
+        );
         if (found === undefined)
           throw new Error(`${theme}: no row holds the model cell`);
         return found;
@@ -321,22 +327,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // [LAW:parse-dont-validate] A colour the terminal draws, or a loud
     // failure naming what was not one.
     const drawn = (
-      spec: string | ColorSpec | undefined,
+      color: string | undefined,
       what: string,
     ): ColorRgba => {
-      if (!(spec instanceof ColorSpec)) {
-        throw new Error(
-          `the rung's ${what} is not a drawn colour: ${String(spec)}`,
-        );
+      if (color === undefined) {
+        throw new Error(`the rung's ${what} is not a drawn colour`);
       }
-      return spec.getTruecolor();
+      return ColorSpec.parse(color).getTruecolor();
     };
 
-    // The rung after the model's name (past `skip` characters: max's cap) — its glyph, its colour, and the
-    // contrast it is drawn at on its ground — read through rich-js's own
-    // decoder (the inverse of the writer).
+    // The rung after the model's name (past `skip` characters: max's cap) — its
+    // glyph, its colour, and the contrast it is drawn at on its ground — read
+    // off the run that draws it.
     function rungOf(
-      row: string,
+      { runs }: Row,
       skip = 0,
     ): {
       glyph: string;
@@ -344,17 +348,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
       ground: string;
       contrast: number;
     } {
-      const text = decodeAnsi(row);
-      const start = text.plain.indexOf(NAME) + NAME.length + skip;
-      const span = text.spans.findLast(
-        (s) => s.start <= start && start < s.end,
-      );
-      if (span === undefined) throw new Error(`no span draws the rung: ${row}`);
-      const { color, bgcolor } = resolvedStyle(span.style);
-      const fg = drawn(color, "colour");
-      const ground = drawn(bgcolor, "ground");
+      const text = plainOf(runs);
+      const start = text.indexOf(NAME) + NAME.length + skip;
+      const run = runAt(runs, start);
+      if (run === undefined) throw new Error(`no run draws the rung: ${text}`);
+      const fg = drawn(run.fg, "colour");
+      const ground = drawn(run.bg, "ground");
       return {
-        glyph: String.fromCodePoint(text.plain.codePointAt(start)!),
+        glyph: String.fromCodePoint(text.codePointAt(start)!),
         colour: fg.hex,
         ground: ground.hex,
         contrast: contrastRatio(fg, ground),
@@ -393,7 +394,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           );
           expect(colourOf.get("low")).not.toBe(colourOf.get("medium"));
           // No effort level draws no rung at all.
-          const none = stripAnsi(row(undefined));
+          const none = plainOf(row(undefined).runs);
           expect(none).toContain(NAME);
           for (const { glyph } of Object.values(RUNGS)) {
             expect(none).not.toContain(`${NAME}${glyph}`);
@@ -425,13 +426,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const painted = (["low", "medium", "high", "xhigh"] as const).flatMap(
           (level) => {
-            const text = decodeAnsi(row({ level }));
-            const start = text.plain.indexOf(NAME) + NAME.length;
-            const span = text.spans.findLast(
-              (s) => s.start <= start && start < s.end,
-            );
-            const { bgcolor } = resolvedStyle(span!.style);
-            return bgcolor === undefined ? [] : [`${level}: ${String(bgcolor)}`];
+            const { runs } = row({ level });
+            const start = plainOf(runs).indexOf(NAME) + NAME.length;
+            const { bg } = runAt(runs, start)!;
+            return bg === undefined ? [] : [`${level}: ${bg}`];
           },
         );
         expect(painted).toEqual([]);
@@ -492,7 +490,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
               .map(({ glyph, contrast }) => `${glyph}: ${contrast.toFixed(2)}`),
           ).toEqual([]);
           const cell = drawn(
-            ColorSpec.parse(rungOf(row({ level: "xhigh" })).ground),
+            rungOf(row({ level: "xhigh" })).ground,
             "cell",
           );
           expect(new Set(frames.map(({ ground }) => ground))).toEqual(
@@ -500,12 +498,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
           );
           expect(
             contrastRatio(
-              drawn(ColorSpec.parse(frames[0]!.ground), "bubble"),
+              drawn(frames[0]!.ground, "bubble"),
               cell,
             ),
           ).toBeGreaterThanOrEqual(EFFORT_BUBBLE_CONTRAST);
           // The bubble's caps sit either side of the climb.
-          const plain = stripAnsi(row({ level: "max" }));
+          const plain = plainOf(row({ level: "max" }).runs);
           expect(plain).toMatch(
             new RegExp(`${NAME}\u{E0B6}.\u{E0B4}`, "u"),
           );
@@ -543,8 +541,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       padding: 1,
       width: Number.POSITIVE_INFINITY,
     };
-    const render = (): string => {
-      return renderDsl(
+    const render = (): Frame => {
+      return drawPayload(
         parsed,
         compiled,
         store,
@@ -563,11 +561,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
         instantOf(new Date()),
         opts,
         undefined,
-        // Both `.effective` fields are renderDsl's to publish, so the payload
+        // Both `.effective` fields are drawDsl's to publish, so the payload
         // carries neither and the SELECTION is what crosses the seam — resolved
         // over the session's picks, as src/daemon/draw-bar.ts resolves it.
         selectionFor(parsed, {}, (key) => sessionState.get(SID, key)),
-      );
+      ).frame;
     };
     try {
       // The theme control lives on the synthesized settings menu's first
@@ -598,8 +596,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       }
       // The open theme picker names the current theme beside its swatch, so
       // the name is read off the visible text, as the current value.
-      const names = (out: string, shown: string): boolean =>
-        stripAnsi(out).includes(shown);
+      const names = (out: Frame, shown: string): boolean =>
+        textOf(out).includes(shown);
       const before = render();
       expect(names(before, `${targetTheme} ▀▀▀`)).toBe(false);
 
@@ -611,7 +609,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       const afterTheme = render();
       expect(names(afterTheme, `${targetTheme} ▀▀▀`)).toBe(true);
-      expect(afterTheme).not.toBe(before);
+      expect(afterTheme.rows).not.toEqual(before.rows);
 
       const targetStyle = Object.keys(parsed.styles).find(
         (name) => name !== "none",
@@ -640,7 +638,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === after),
         ),
       ).toBe(true);
-      expect(afterStyle).not.toBe(afterTheme);
+      expect(afterStyle.rows).not.toEqual(afterTheme.rows);
     } finally {
       registry.dispose();
     }
@@ -670,13 +668,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
+        return textOf(drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
           padding,
           width: Number.POSITIVE_INFINITY,
-        }).replace(INVISIBLE, "");
+        }).frame);
       } finally {
         registry.dispose();
       }
@@ -691,7 +689,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
   // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
   // default's two informational rows (identity row, status row) must lower to
-  // a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root (the
+  // a root drawing the very rows of DEFAULT_DSL_CONFIG.root (the
   // canonical container tree). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
@@ -724,7 +722,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       width: Number.POSITIVE_INFINITY,
     };
 
-    function render(cfg: typeof configA): string {
+    function render(cfg: typeof configA): Frame {
       const store = new VariableStore();
       const registry = new SourceRegistry(
         processLauncher,
@@ -735,13 +733,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
-        return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), opts);
+        return drawPayload(cfg, compiled, store, registry, payload, instantOf(new Date()), opts).frame;
       } finally {
         registry.dispose();
       }
     }
 
-    expect(render(configA)).toBe(render(configDefault));
+    expect(render(configA).rows).toEqual(render(configDefault).rows);
   });
 
   // [LAW:one-source-of-truth] Deep-nesting equivalence: { v: [{ h: [a, b] }, { h: [c, d] }] }
@@ -783,7 +781,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       width: Number.POSITIVE_INFINITY,
     };
 
-    function render(cfg: typeof configA): string {
+    function render(cfg: typeof configA): Frame {
       const store = new VariableStore();
       const registry = new SourceRegistry(
         processLauncher,
@@ -794,13 +792,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), opts);
+        return drawPayload(cfg, compiled, store, registry, payload, instantOf(new Date()), opts).frame;
       } finally {
         registry.dispose();
       }
     }
 
-    expect(render(configA)).toBe(render(configVerbose));
+    expect(render(configA).rows).toEqual(render(configVerbose).rows);
   });
 
   // brandon-segments-e99: the quick-action tray's fourth glyph opens the repo's
@@ -812,7 +810,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     function renderToolbar(
       git: Record<string, unknown>,
       extra: Record<string, unknown> = {},
-    ): string {
+    ): Frame {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore();
@@ -830,7 +828,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const basePalette = getThemePalette(
           toolbarOnly.globals.palette ?? "textual-dark",
         )!;
-        return renderDsl(
+        return drawPayload(
           toolbarOnly,
           compiled,
           store,
@@ -857,7 +855,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             padding: 1,
             width: Number.POSITIVE_INFINITY,
           },
-        );
+        ).frame;
       } finally {
         registry.dispose();
       }
@@ -868,7 +866,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         branch: "main",
         repoUrl: "https://github.com/promptctl/cc-candybar",
       });
-      expect(line).toContain("↗ repo");
+      expect(textOf(line)).toContain("↗ repo");
       // The URL rides an OSC-8 hyperlink, not the visible text — a click
       // target, not a printed URL cluttering the bar.
       expect(linkUrls(line)).toContain("https://github.com/promptctl/cc-candybar");
@@ -876,9 +874,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     test("a repo with no browsable remote renders the tray without the glyph", () => {
       const line = renderToolbar({ branch: "main" });
-      expect(line).toContain("↗ proj");
-      expect(line).toContain("↗ log");
-      expect(line).not.toContain("↗ repo");
+      expect(textOf(line)).toContain("↗ proj");
+      expect(textOf(line)).toContain("↗ log");
+      expect(textOf(line)).not.toContain("↗ repo");
     });
 
     // brandon-menu-ia-q30.ge5: `⎘ resume` copies the daemon's resume command
@@ -890,8 +888,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         { branch: "main" },
         { resumeCommand: resume, configPath: "/tmp/c.json5" },
       );
-      expect(line).toContain("⎘ resume");
-      expect(line).toContain("↗ config");
+      expect(textOf(line)).toContain("⎘ resume");
+      expect(textOf(line)).toContain("↗ config");
       const effects = linkUrls(line).flatMap(effectsOf);
       expect(effects).toContainEqual(expect.objectContaining({ args: [resume] }));
       expect(effects).toContainEqual(
@@ -901,16 +899,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     test("no resume command and no config file render neither glyph", () => {
       const line = renderToolbar({ branch: "main" });
-      expect(line).toContain("⎘ id");
-      expect(line).not.toContain("⎘ resume");
-      expect(line).not.toContain("↗ config");
+      expect(textOf(line)).toContain("⎘ id");
+      expect(textOf(line)).not.toContain("⎘ resume");
+      expect(textOf(line)).not.toContain("↗ config");
     });
   });
 
   // [LAW:verifiable-goals] The directory segment's template has boundary
   // cases that round-9 fixed: project root collapse, subdir relative path,
   // home boundary safety. Each case sets up a focused single-segment
-  // runtime, renders, and strips ANSI for assertion against visible text.
+  // runtime, renders, and reads the visible text for assertion.
   describe("DIR_TEMPLATE", () => {
     function renderDirectoryText(opts: {
       home: string;
@@ -951,18 +949,18 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
           home: opts.home,
         };
-        const line = renderDsl(dirOnly, compiled, store, registry, payload, instantOf(new Date()), {
+        const line = drawPayload(dirOnly, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
           colorCompatibility: "truecolor",
           wrap: true,
           padding: 1,
           width: Number.POSITIVE_INFINITY,
-        });
-        // Strip ANSI escapes AND the Powerline joiner glyphs
+        }).frame;
+        // Drop the Powerline joiner glyphs
         // (U+E0B0..U+E0BC, the reverse-video lead included) so assertions can probe visible
         // segment text only.
-        return line.replace(
-          ANSI_AND_CAPS,
+        return textOf(line).replace(
+          CAPS,
           "",
         );
       } finally {
@@ -1057,59 +1055,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
       },
     };
 
-    // Every SGR run across the rendered line, in order, with the escape's
-    // start offset and its truecolor fg (if any) — the ONE parser every
-    // helper below builds on. [LAW:one-source-of-truth] this used to be two
-    // independently-typed copies (distinctForegrounds here, a narrower
-    // fgBeforeText added by brandon-segments-3eo.1.1) that had already begun
-    // to drift on the exact bug this comment describes; one parser closes
-    // that gap for good instead of patching the newer copy to match the
-    // older one. Walks params sequentially (not `indexOf`) and SKIPS a
-    // recognized `48;2;r;g;b` background run's components before looking for
-    // `38` — otherwise a bg color component that happens to equal 38 could be
-    // misread as the fg introducer, or (mirror bug) mask a real one that
-    // follows it. Same class of collision
-    // test/segment-interior-color.test.ts's skipTruecolorRun fixes.
-    interface SgrRun {
-      offset: number;
-      fg?: string;
-      bg?: string;
-    }
-    function sgrRuns(line: string): SgrRun[] {
-      const runs: SgrRun[] = [];
-      for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
-        const params = (m[1] ?? "").split(";");
-        let fg: string | undefined;
-        let bg: string | undefined;
-        for (let i = 0; i < params.length; i++) {
-          const triplet = `${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
-          if (params[i] === "38" && params[i + 1] === "2") {
-            fg = triplet;
-            i += 4;
-          } else if (params[i] === "48" && params[i + 1] === "2") {
-            bg = triplet;
-            i += 4;
-          }
-        }
-        runs.push({ offset: m.index ?? 0, fg, bg });
-      }
-      return runs;
-    }
+    // [LAW:one-source-of-truth] Every run of a drawn segment, across its rows,
+    // in order: the one walk every helper below builds on.
+    const runsOf = ({ rows }: Frame): readonly Run[] =>
+      rows.flatMap(({ runs }) => runs);
 
-    // An SGR triplet back to a color, so a contrast assertion can be a
-    // measurement rather than a hardcoded hex. rich-js owns the arithmetic.
-    function sgrToRgba(triplet: string): ColorRgba {
-      const [r, g, b] = triplet.split(";").map(Number);
-      return new ColorRgba(r!, g!, b!);
-    }
-
-    // Distinct truecolor foregrounds across the rendered line — one per
-    // SGR-introduced run, deduped. A basic-code fg would also count but
-    // every semantic palette function here resolves to truecolor.
-    function distinctForegrounds(line: string): Set<string> {
-      const fgs = new Set<string>();
-      for (const r of sgrRuns(line)) if (r.fg !== undefined) fgs.add(r.fg);
-      return fgs;
+    // Distinct foregrounds across the drawn segment, the terminal's own being
+    // none. A standard colour would also count, but every semantic palette
+    // function here resolves to truecolor.
+    function distinctForegrounds(line: Frame): Set<string> {
+      return new Set(
+        runsOf(line).flatMap(({ fg }) =>
+          fg === undefined || fg === "default" ? [] : [fg],
+        ),
+      );
     }
 
     // `theme` defaults to the config's own palette; passing one renders the
@@ -1130,7 +1089,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       git: Record<string, unknown> = GIT_PAYLOAD.git,
       variables: DslConfig["variables"] = {},
       sessionState: SessionState = new SessionState(),
-    ): string {
+    ): Frame {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const narrowed = narrowToSegment(parsed, segment);
       const cfg = {
@@ -1144,7 +1103,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const basePalette = paletteForThemeName(
           theme ?? cfg.globals.palette ?? "textual-dark",
         );
-        return renderDsl(
+        return drawPayload(
           cfg,
           compiled,
           store,
@@ -1158,7 +1117,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             padding: 1,
             width: Number.POSITIVE_INFINITY,
           },
-        );
+        ).frame;
       } finally {
         registry.dispose();
       }
@@ -1227,20 +1186,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
       ["collapsed", { branch: "" }, "/tmp"],
       ["expanded", { branch: "" }, "/tmp"],
     ] as const)("%s: %j reads %j", (detail, git, text) => {
-      const visible = renderSegment(
+      const visible = textOf(renderSegment(
         "gitaculous",
         undefined,
         git,
         {},
         detailState(detail),
-      ).replace(ANSI_AND_CAPS, "");
+      )).replace(CAPS, "");
       expect(visible.trim()).toBe(text);
     });
 
     // A session that never clicked starts collapsed: the form is the state
     // variable's default, which a user redeclares to start expanded.
     test("a session starts in the form git.detail defaults to", () => {
-      const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
+      const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
       expect(strip(renderSegment("gitaculous"))).toBe("/tmp ⎇ main +1/-1 SU?!1 ▸");
       expect(
         strip(
@@ -1262,12 +1221,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const state = new SessionState();
       recordRender(state, GIT_PAYLOAD.session_id);
       const ctx = testVerbContext(state, undefined, parsed);
-      const arrow = (line: string) => {
+      const arrow = (line: Frame) => {
         const urls = linkUrls(line);
         expect(urls).toHaveLength(2);
         return urls[1]!;
       };
-      const strip = (line: string) => line.replace(ANSI_AND_CAPS, "").trim();
+      const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
       const collapsed = renderSegment(
         "gitaculous",
         undefined,
@@ -1302,29 +1261,23 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // variables; these assert the two forms agree, not just that the full
     // form has "more than one color".
     //
-    // The truecolor fg immediately preceding `text`'s first occurrence — every
-    // colored token here is wrapped by exactly one palette function, which
-    // opens its SGR run directly before the token, so the last run starting
-    // before the match IS that token's color.
-    // [LAW:one-source-of-truth] fg and bg are the same lookup over the same
-    // parser differing only in WHICH slot is read — the slot is a parameter,
-    // not a second copy of the walk. (Two copies of exactly this helper are
-    // what drifted in brandon-segments-3eo.1.1; see the sgrRuns comment.)
-    function colorBeforeText(
-      line: string,
+    // The colour of the run drawing `text`'s first occurrence.
+    // [LAW:one-source-of-truth] fg and bg are the same lookup differing only in
+    // WHICH slot is read — the slot is a parameter, not a second copy of the
+    // walk.
+    function colorOfText(
+      line: Frame,
       text: string,
       slot: "fg" | "bg",
     ): string | undefined {
-      const idx = line.indexOf(text);
-      if (idx === -1) return undefined;
-      return sgrRuns(line)
-        .filter((r) => r.offset < idx && r[slot] !== undefined)
-        .at(-1)?.[slot];
+      const runs = runsOf(line);
+      const at = plainOf(runs).indexOf(text);
+      return at === -1 ? undefined : runAt(runs, at)?.[slot];
     }
-    const fgBeforeText = (line: string, text: string) =>
-      colorBeforeText(line, text, "fg");
-    const bgBeforeText = (line: string, text: string) =>
-      colorBeforeText(line, text, "bg");
+    const fgOfText = (line: Frame, text: string) =>
+      colorOfText(line, text, "fg");
+    const bgOfText = (line: Frame, text: string) =>
+      colorOfText(line, text, "bg");
 
     // A fact's colour is a variable, so overriding one variable recolours
     // exactly that fact.
@@ -1338,23 +1291,23 @@ describe("DEFAULT_DSL_CONFIG", () => {
           "git.color.behind": { kind: "literal", value: "error" },
         },
       );
-      const errorFg = fgBeforeText(stock, "!1"); // conflicts are painted `error`
-      expect(fgBeforeText(stock, "-1")).not.toBe(errorFg);
-      expect(fgBeforeText(recoloured, "-1")).toBe(errorFg);
+      const errorFg = fgOfText(stock, "!1"); // conflicts are painted `error`
+      expect(fgOfText(stock, "-1")).not.toBe(errorFg);
+      expect(fgOfText(recoloured, "-1")).toBe(errorFg);
     });
 
     test("unstaged and untracked are colored distinctly, not merged into one indicator", () => {
       const line = renderSegment("gitaculous");
-      const unstagedFg = fgBeforeText(line, "U");
-      const untrackedFg = fgBeforeText(line, "?");
+      const unstagedFg = fgOfText(line, "U");
+      const untrackedFg = fgOfText(line, "?");
       expect(unstagedFg).toBeDefined();
       expect(untrackedFg).toBeDefined();
       expect(unstagedFg).not.toBe(untrackedFg);
     });
 
     test("both forms color the branch alike", () => {
-      const collapsedFg = fgBeforeText(renderSegment("gitaculous"), "main");
-      const expandedFg = fgBeforeText(
+      const collapsedFg = fgOfText(renderSegment("gitaculous"), "main");
+      const expandedFg = fgOfText(
         renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, EXPANDED()),
         "main",
       );
@@ -1370,8 +1323,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         {},
         EXPANDED(),
       );
-      const stashFg = fgBeforeText(line, "(2 stashed)");
-      const plainFg = fgBeforeText(line, "abc1234"); // sha: structural, never painted
+      const stashFg = fgOfText(line, "(2 stashed)");
+      const plainFg = fgOfText(line, "abc1234"); // sha: structural, never painted
       expect(stashFg).toBeDefined();
       expect(stashFg).not.toBe(plainFg);
     });
@@ -1396,11 +1349,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
           {},
           EXPANDED(),
         );
-        const quiet = fgBeforeText(line, STRUCTURAL[0]!);
+        const quiet = fgOfText(line, STRUCTURAL[0]!);
         expect(quiet).toBeDefined();
         // Every other structural token shares that one color...
         for (const text of STRUCTURAL.slice(1)) {
-          expect(fgBeforeText(line, text)).toBe(quiet);
+          expect(fgOfText(line, text)).toBe(quiet);
         }
         // ...and it is distinct from the facts, which is the whole point:
         // more than one color on the line, with the quiet one not among the
@@ -1427,14 +1380,17 @@ describe("DEFAULT_DSL_CONFIG", () => {
             {},
             EXPANDED(),
           );
-          const quiet = fgBeforeText(line, "abc1234");
+          const quiet = fgOfText(line, "abc1234");
           expect(quiet).toBeDefined();
-          const bg = bgBeforeText(line, "abc1234");
+          const bg = bgOfText(line, "abc1234");
           expect(bg).toBeDefined();
           // 2.99 not 3: ensureContrast bisects to the threshold, and the 8-bit
           // quantization of the result can land a hair under the exact target.
           expect(
-            contrastRatio(sgrToRgba(quiet!), sgrToRgba(bg!)),
+            contrastRatio(
+              ColorSpec.parse(quiet!).getTruecolor(),
+              ColorSpec.parse(bg!).getTruecolor(),
+            ),
           ).toBeGreaterThan(2.99);
         },
       );
@@ -1486,7 +1442,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
           metrics,
         };
-        const line = renderDsl(
+        const line = drawPayload(
           metricsOnly,
           compiled,
           store,
@@ -1500,9 +1456,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
             padding: 1,
             width: Number.POSITIVE_INFINITY,
           },
-        );
-        return line.replace(
-          ANSI_AND_CAPS,
+        ).frame;
+        return textOf(line).replace(
+          CAPS,
           "",
         );
       } finally {
@@ -1546,10 +1502,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
     test("a placement's errorAt setting flows through to bg classification", () => {
       // [LAW:one-source-of-truth] The threshold lives in one place — the
       // placement's `errorAt` setting. Same percentage, different threshold
-      // → different bg classification → different ANSI bytes. If the
+      // → different bg classification → different drawn rows. If the
       // template were still reading a literal 80 these two renders would be
-      // byte-identical.
-      const renderBlock = (errorAt: number, util: number): string => {
+      // the same.
+      const renderBlock = (errorAt: number, util: number): Frame => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore();
@@ -1583,13 +1539,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
               resetsAt: Math.floor(Date.now() / 1000) + 600,
             },
           };
-          return renderDsl(blockOnly, compiled, store, registry, payload, instantOf(new Date()), {
+          return drawPayload(blockOnly, compiled, store, registry, payload, instantOf(new Date()), {
             endcaps: "powerline",
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
             width: Number.POSITIVE_INFINITY,
-          });
+          }).frame;
         } finally {
           registry.dispose();
         }
@@ -1597,7 +1553,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
       const defaultThresh = renderBlock(80, 70); // 70 < 80 → warning
       const tightThresh = renderBlock(50, 70); // 70 ≥ 50 → error
-      expect(defaultThresh).not.toEqual(tightThresh);
+      expect(defaultThresh.rows).not.toEqual(tightThresh.rows);
     });
 
     test("no metrics fields renders no cell", () => {
@@ -1618,7 +1574,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       payload: Record<string, unknown>,
       userSource?: string,
       settings?: Readonly<Record<string, number>>,
-    ): string => {
+    ): Frame => {
       const source = userSource ?? "{}";
       const raw = parseDslConfig("<user>", source);
       const config = validateConfig(
@@ -1647,7 +1603,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const basePalette = getThemePalette(
           sessionOnly.globals.palette ?? "textual-dark",
         )!;
-        return renderDsl(
+        return drawPayload(
           sessionOnly,
           compiled,
           store,
@@ -1672,7 +1628,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             padding: 1,
             width: Number.POSITIVE_INFINITY,
           },
-        );
+        ).frame;
       } finally {
         registry.dispose();
       }
@@ -1697,20 +1653,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
         }),
       );
-      expect(renderSession(PAYLOAD)).toEqual(preBudget);
+      expect(renderSession(PAYLOAD).rows).toEqual(preBudget.rows);
     });
 
     test("a placement's budget setting surfaces the budgetStatus suffix", () => {
       // [LAW:one-source-of-truth] The knob is the placement's `budget`
       // setting. cost 8.5 / budget 10 = 85% ≥ warn 80 → " !85%".
       const line = renderSession(PAYLOAD, undefined, { budget: 10 });
-      expect(stripAnsi(line)).toContain("!85%");
+      expect(textOf(line)).toContain("!85%");
     });
 
     test("a placement's warnAt setting reclassifies the suffix", () => {
       // cost 6 / budget 10 = 60%: below the default warn 80 → " +60%";
       // with warn 50 the same spend reads " !60%". Same cost, different
-      // threshold → different bytes, proving the template reads the setting,
+      // threshold → different text, proving the template reads the setting,
       // not a baked-in literal.
       const spend = { session: { cost: 6, tokens: 1000 } };
       const defaultWarn = renderSession(spend, undefined, { budget: 10 });
@@ -1718,8 +1674,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         budget: 10,
         warnAt: 50,
       });
-      expect(stripAnsi(defaultWarn)).toContain("+60%");
-      expect(stripAnsi(tightWarn)).toContain("!60%");
+      expect(textOf(defaultWarn)).toContain("+60%");
+      expect(textOf(tightWarn)).toContain("!60%");
     });
   });
 });
@@ -1728,7 +1684,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 // preset renders without error cells at 80, 120, and 200 columns" — the
 // compact one is pointless if it does not actually fit. Drives the exact
 // pipeline the daemon and `cc-candybar check` drive (registerDslConfig +
-// renderDsl, onSegmentError as the observer seam check.ts uses) against the
+// drawDsl, onSegmentError as the observer seam check.ts uses) against the
 // SAME rich fixture payload check.ts ships (checkPayload) — a minimal payload
 // would let a field-name typo in a gated branch (git worktree counts, the
 // burnrate/speed telemetry verbose surfaces) slip through untested, because
@@ -1739,7 +1695,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 // diverge from what a real render would compute for that preset.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];
-  // [LAW:single-enforcer] The real validated shape registerDslConfig/renderDsl
+  // [LAW:single-enforcer] The real validated shape registerDslConfig/drawDsl
   // require (the `ValidatedConfig` brand `validateConfig` stamps) — the same
   // gate every production caller (daemon, check.ts) passes through, run once
   // here since DEFAULT_DSL_CONFIG itself is validated but not re-branded.
@@ -1765,7 +1721,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       base,
     ) => base,
     sessionPick: (key: string, preset: string) => string | null = freshSession,
-  ): { rendered: string; segmentErrors: string[] } {
+  ): { rendered: Frame; segmentErrors: string[] } {
     // [LAW:one-source-of-truth] THE daemon's resolution, driven by a session
     // that has picked exactly this preset (and, for the edit-mode sweep below,
     // has edit mode open). Restating the chain here as a struct literal is what
@@ -1794,7 +1750,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         cwd: "/tmp",
       });
       const segmentErrors: string[] = [];
-      const rendered = renderDsl(
+      const rendered = drawPayload(
         VALIDATED,
         compiled,
         store,
@@ -1817,7 +1773,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
             segmentErrors.push(`segment "${segName}": ${message}`),
         },
         effective,
-      );
+      ).frame;
       return { rendered, segmentErrors };
     } finally {
       registry.dispose();
@@ -1836,7 +1792,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       for (const width of WIDTHS) {
         const { rendered, segmentErrors } = renderPreset(name, width);
         expect(segmentErrors).toEqual([]);
-        expect(rendered.length).toBeGreaterThan(0);
+        expect(textOf(rendered).length).toBeGreaterThan(0);
       }
     },
   );
@@ -1858,7 +1814,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
           editingSession,
         );
         expect(segmentErrors).toEqual([]);
-        expect(rendered.length).toBeGreaterThan(0);
+        expect(textOf(rendered).length).toBeGreaterThan(0);
       }
     },
   );
@@ -1873,8 +1829,8 @@ describe("bundled preset library renders clean at every width — brandon-preset
       const afterDoor = new RegExp(`${DOOR_GLYPH}[^\\p{L}\\p{N}]*${POLLED}`, "u");
       const plain = renderPreset(name, 120);
       expect(plain.segmentErrors).toEqual([]);
-      expect(stripAnsi(plain.rendered)).toMatch(afterDoor);
-      const editing = stripAnsi(
+      expect(textOf(plain.rendered)).toMatch(afterDoor);
+      const editing = textOf(
         renderPreset(name, 120, undefined, editingSession).rendered,
       );
       expect(editing).toMatch(afterDoor);
@@ -1888,7 +1844,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     for (const name of presetNames(DEFAULT_DSL_CONFIG.presets)) {
       const editing = renderPreset(name, 120, undefined, editingSession);
       expect(editing.segmentErrors).toEqual([]);
-      expect(editing.rendered).toContain(
+      expect(textOf(editing.rendered)).toContain(
         DEFAULT_DSL_CONFIG.editGlobals.default_separator,
       );
     }
@@ -1896,9 +1852,8 @@ describe("bundled preset library renders clean at every width — brandon-preset
 
   // The powerline joiner's arrow (rich-js's glyph).
   const POWERLINE_ARROW = "\uE0B0";
-  const visible = (rendered: string): string => rendered.replace(INVISIBLE, "");
-  const visibleLines = (rendered: string): string[] =>
-    visible(rendered).split("\n");
+  const visibleLines = (rendered: Frame): string[] =>
+    textOf(rendered).split("\n");
   // gitPr and tokenSparkline gate on data checkPayload's bundled fixture
   // doesn't carry (no live PR, no speed history yet); the tests that promise
   // their content supply both through `withPayload`.
@@ -1919,8 +1874,8 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // where the default doesn't — pin that it actually renders NARROWER than
   // the floor at the same width, not merely that it renders.
   test("compact renders a shorter visible line than the default floor", () => {
-    const compactLine = visible(renderPreset("compact", 200).rendered);
-    const defaultLine = visible(renderPreset("default", 200).rendered);
+    const compactLine = textOf(renderPreset("compact", 200).rendered);
+    const defaultLine = textOf(renderPreset("default", 200).rendered);
     expect(compactLine.length).toBeLessThan(defaultLine.length);
   });
 
@@ -1932,7 +1887,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // both via `withPayload` rather than either skipping the assertion or
   // mutating the shared fixture other suites assert literal values against.
   test("verbose surfaces every opt-in segment's own content", () => {
-    const line = visible(
+    const line = textOf(
       renderPreset("verbose", 200, payloadWithPrAndHistory).rendered,
     );
     expect(line).toContain("⇆ #181"); // gitPr
@@ -1954,16 +1909,16 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(effective.style).toMatchObject({ kind: "decided", name: "dim" });
     const zen = renderPreset("zen", 200).rendered;
     expect(visibleLines(zen)).toHaveLength(1);
-    // The bytes, not only the resolution: no powerline arrow, and the style
+    // The drawn row, not only the resolution: no powerline arrow, and the style
     // recolours the bar — a session that picks `none` over the preset's
     // style draws the same row in other colours.
-    expect(renderPreset("default", 200).rendered).toContain(POWERLINE_ARROW);
-    expect(zen).not.toContain(POWERLINE_ARROW);
+    expect(textOf(renderPreset("default", 200).rendered)).toContain(POWERLINE_ARROW);
+    expect(textOf(zen)).not.toContain(POWERLINE_ARROW);
     const undimmed = renderPreset("zen", 200, undefined, (key, preset) =>
       key === "style" ? "none" : freshSession(key, preset),
     ).rendered;
-    expect(visible(undimmed)).toBe(visible(zen));
-    expect(undimmed).not.toBe(zen);
+    expect(textOf(undimmed)).toBe(textOf(zen));
+    expect(undimmed.rows).not.toEqual(zen.rows);
   });
 
   test("git puts the open PR beside the git state", () => {
@@ -1973,12 +1928,12 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(lines.find((l) => l.includes("⇆ #181"))).toContain("~/c/c/src ⎇ main");
     // What sets it apart from verbose, which also stages gitPr: the status
     // row drops the rate-limit windows the default shows.
-    expect(visible(renderPreset("default", 200).rendered)).toContain("◑ ");
+    expect(textOf(renderPreset("default", 200).rendered)).toContain("◑ ");
     expect(lines.join("\n")).not.toContain("◑ ");
   });
 
   test("usage shows spend: this session and today", () => {
-    const line = visible(
+    const line = textOf(
       renderPreset("usage", 200, payloadWithPrAndHistory).rendered,
     );
     expect(line).toContain("§ "); // session
@@ -2007,31 +1962,31 @@ describe("bundled preset library renders clean at every width — brandon-preset
       ...base,
       preset: { effective: "default", customized: true },
     });
-    const editing = renderPreset(
+    const editing = textOf(renderPreset(
       "default",
       200,
       withCustomized,
       editingSession,
-    ).rendered.replace(INVISIBLE, "");
+    ).rendered);
     expect(editing).toContain("↺ reset layout");
 
     // A hand-authored root is "customized" from its first render; outside
     // edit mode that must not put a one-click reset of it on the bar.
-    const viewing = renderPreset(
+    const viewing = textOf(renderPreset(
       "default",
       200,
       withCustomized,
-    ).rendered.replace(INVISIBLE, "");
+    ).rendered);
     // The banner's own text, not its glyph: the bar's autocompact control
     // carries a ↺ of its own.
     expect(viewing).not.toContain("↺ reset layout");
 
-    const clean = renderPreset(
+    const clean = textOf(renderPreset(
       "default",
       200,
       undefined,
       editingSession,
-    ).rendered.replace(INVISIBLE, "");
+    ).rendered);
     expect(clean).not.toContain("↺ reset layout");
   });
 });

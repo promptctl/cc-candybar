@@ -213,8 +213,6 @@ export function testVerbContext(
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
 
-export { boldUrls } from "./ansi";
-
 // Drive a rendered click URL through the real parse → dispatch path.
 export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = parseHandlerUrl(url);

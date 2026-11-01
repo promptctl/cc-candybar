@@ -225,7 +225,7 @@ export function perConfigDomainsFor(config: {
         members: Object.keys(config.styles),
         // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
         // construction of an adapted palette is transposedPalette — the same
-        // call renderDsl makes for the style actually in force. One
+        // call drawDsl makes for the style actually in force. One
         // transposition of the BASE, never a second over an already-styled
         // palette (see OptionPalette).
         // [LAW:no-defensive-null-guards] The members above ARE this map's keys,

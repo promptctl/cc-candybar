@@ -5,8 +5,8 @@
 // across the turn wears. No bundled frame puts a trigger there; these authored
 // rows do, under `alt` (a turn every three cells) and under a keystone tuning
 // (a turn after each line's first cell), each drawn with its menu open under
-// every bundled theme at 256 colours and ansi, and read off the bytes a
-// terminal is sent.
+// every bundled theme at 256 colours and ansi, and read off the colours the
+// frame draws.
 
 import { ColorDepth, getThemePalette, listThemePalettes } from "@promptctl/rich-js";
 import { menuStateKey } from "../src/config/menu-keys";
@@ -75,7 +75,7 @@ describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
       for (const theme of listThemePalettes()) {
         const palette = getThemePalette(theme)!;
         bar.pick("theme", theme);
-        const { text, segments } = bar.render(AT);
+        const { frame: drawn, segments } = bar.render(AT);
         // A cell on the bar is the first its segment draws: an open trigger's
         // body follows it, dropped below the row.
         const onBar = (cell: string) => segments.get(cell)![0]!;
@@ -93,7 +93,7 @@ describe.each(FRAMES)("an open trigger standing at a hue turn", (frame) => {
         const noneToGive = pressHasNoneToGive(palette, decor, 0, drawnAt);
         const dealtTones = new Set(DECOR_HUES.flatMap((hue) => windowAt(palette, hue, decor.shade, drawnAt).map((tone) => decorEntryColour(palette, { hue, shade: tone }).hex)));
         const [trigger, other] = [visible(onBar(TRIGGER).plain), visible(onBar(across).plain)] as const;
-        const chars = drawnChars(text);
+        const chars = drawnChars(drawn);
         for (const { left, right, at } of seams(chars)) {
           const cells = [cellBefore(chars, at), cellAfter(chars, at)];
           if (!cells.includes(trigger)) continue;

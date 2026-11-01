@@ -21,6 +21,10 @@
 // (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
 // menus left to pin are edit mode's `+` insert affordances.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { ansiOf, textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linksOf, type DrawnLink } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { createEngine } from "@promptctl/go-template-js";
@@ -28,7 +32,7 @@ import { createEngine } from "@promptctl/go-template-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -48,7 +52,6 @@ import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig } from "../src/config/dsl-types";
-import { links as rawLinks, stripAnsi, type Link } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -85,13 +88,6 @@ const PAYLOAD = {
   padding: { effective: 1 },
 };
 
-
-// The OSC-8 spans of a render, paired with the text each one wraps — enough to
-// click an affordance by the label a user would click.
-function links(rendered: string): Link[] {
-  return rawLinks(rendered).map((l) => ({ url: l.url, text: stripAnsi(l.text) }));
-}
-
 // [LAW:dataflow-not-control-flow] A menu's opener identifies itself in its own
 // click: the disclosure toggle is the coupled batch `renderMenu` emits, so its
 // 4th arg is by construction the PAGE key of its 2nd, and its 3rd is a member
@@ -101,11 +97,11 @@ function links(rendered: string): Link[] {
 // a picker is already open. So this test needs to know no key names — the member
 // it writes IS the menu's apply-action name, which is also how each snapshot
 // below gets its label.
-interface Opener extends Link {
+interface Opener extends DrawnLink {
   readonly member: string;
 }
-function menuOpeners(rendered: string): Opener[] {
-  return links(rendered).flatMap(({ url, text }) =>
+function menuOpeners(rendered: Frame): Opener[] {
+  return linksOf(rendered).flatMap(({ url, text }) =>
     effectsOf(url)
       .filter(
         (e) =>
@@ -128,15 +124,15 @@ function buildRuntime(root: string) {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  // No theme handed in: renderDsl resolves it from `globals.palette`, so these
+  // No theme handed in: drawDsl resolves it from `globals.palette`, so these
   // bytes are the bundled default's own declared theme (tokyo-night) — the ones
   // the daemon really emits for this config. Before brandon-themes-dzl this rig
   // passed a textual-dark palette beside a config declaring tokyo-night, and the
   // snapshot pinned a bar production never renders.
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-  const render = (): string =>
-    renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
+  const render = (): Frame =>
+    drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;
   const click = async (url: string): Promise<void> => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -150,8 +146,8 @@ function buildRuntime(root: string) {
   // Click by the label a user clicks. Loud when absent: a silently skipped
   // click would snapshot a closed menu under an "open" name and prove the
   // opposite of what this file claims [LAW:no-silent-failure].
-  const clickLabel = async (rendered: string, label: string): Promise<void> => {
-    const link = links(rendered).find((l) => l.text.includes(label));
+  const clickLabel = async (rendered: Frame, label: string): Promise<void> => {
+    const link = linksOf(rendered).find((l) => l.text.includes(label));
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
     await click(link.url);
   };
@@ -207,7 +203,7 @@ describe("every {{ menu }} the bundled default renders", () => {
     const rig = await openConfigMenu();
     const out = rig.render();
     expect(menuOpeners(out)).toEqual([]);
-    expect(out).toMatchSnapshot("closed");
+    expect(ansiOf(out)).toMatchSnapshot("closed");
   });
 
   // brandon-menus-sjhy.5zy: ⚙ config's 🧪 toggles opens onto the three lane
@@ -217,9 +213,9 @@ describe("every {{ menu }} the bundled default renders", () => {
     await rig.clickLabel(rig.render(), "🧪 toggles");
     const out = rig.render();
     for (const label of ["🧪 band (A)", "🧪 statusline (B)", "🧪 tmux pane (C)"]) {
-      expect(stripAnsi(out)).toContain(`☐ ${label}`);
+      expect(textOf(out)).toContain(`☐ ${label}`);
     }
-    expect(out).toMatchSnapshot("toggles open");
+    expect(ansiOf(out)).toMatchSnapshot("toggles open");
     await rig.clickLabel(out, "🧪 band (A)");
     expect(rig.sessionState.get(SID, "experimentalBand")).toBe("true");
   });
@@ -236,8 +232,8 @@ describe("every {{ menu }} the bundled default renders", () => {
     };
 
     // The bar's first row: the one the door leads, below edit mode's own.
-    const barRow = (out: string): string =>
-      stripAnsi(out)
+    const barRow = (out: Frame): string =>
+      textOf(out)
         .split("\n")
         .find((line) => line.includes(DOOR_GLYPH))!;
 
@@ -253,7 +249,7 @@ describe("every {{ menu }} the bundled default renders", () => {
       expect(row).toContain(ADD_GLYPH);
       expect(row).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_CLOSED}`);
       expect(row).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
-      expect(out).toMatchSnapshot("closed");
+      expect(ansiOf(out)).toMatchSnapshot("closed");
     });
 
     test("one + opened: exact bytes", async () => {
@@ -265,7 +261,7 @@ describe("every {{ menu }} the bundled default renders", () => {
       await rig.click(opener.url);
       const out = rig.render();
       expect(barRow(out)).not.toContain(`${ADD_GLYPH}${DISCLOSURE_GLYPH_OPEN}`);
-      expect(out).toMatchSnapshot("open");
+      expect(ansiOf(out)).toMatchSnapshot("open");
     });
 
     // [LAW:verifiable-goals] The regression removing the glyph invites, pinned

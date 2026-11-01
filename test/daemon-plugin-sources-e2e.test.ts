@@ -12,7 +12,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { click, hookData, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { textOf, type Frame } from "../src/render/frame";
+import { click, frameRequest, hookData, sendClick } from "./helpers/daemon-e2e";
+import { barOf } from "./helpers/drawn-frame";
+import { linkUrls } from "./helpers/frame";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { startDaemon, statsOf, type InWorkerDaemon } from "./helpers/in-worker-daemon";
@@ -96,24 +99,24 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     cwd: projectDir,
   });
 
-  // A render as the client asks for one, retried on TIMEOUT: the bytes it drew.
-  const renderRaw = (): Promise<string> => renderRequest(daemon, body());
-  const render = async (): Promise<string> => stripAnsi(await renderRaw());
+  // A render of the client's request, retried on TIMEOUT: the Frame it drew.
+  const renderRaw = (): Promise<Frame> => frameRequest(daemon, body());
+  const render = async (): Promise<string> => textOf(await renderRaw());
 
-  // Renders until the bar (escapes stripped) shows what is waited for; the
-  // bytes of that render.
-  const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<string> => {
-    let raw = "";
+  // Renders until the bar's text shows what is waited for; the Frame of that
+  // render.
+  const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<Frame> => {
+    let raw = barOf();
     await until(
-      async () => shows(stripAnsi((raw = await renderRaw()))),
-      () => `the bar showing ${what}; last:\n${stripAnsi(raw)}`,
+      async () => shows(textOf((raw = await renderRaw()))),
+      () => `the bar showing ${what}; last:\n${textOf(raw)}`,
       10_000,
     );
     return raw;
   };
 
-  // The run link the bar drew, read out of its bytes.
-  const runLink = (rendered: string): string => {
+  // The run link the bar drew, read off its frame.
+  const runLink = (rendered: Frame): string => {
     const url = linkUrls(rendered).find((u) => effectsOf(u).some((e) => e.verb === VERB_RUN));
     if (url === undefined) throw new Error(`no run link in ${JSON.stringify(rendered)}`);
     return url;
@@ -189,7 +192,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const bar = await renderUntil((b) => b.includes("⚠ 1"), "the forged link's refusal");
     const open = viewerLink(bar, "open")!;
     expect((await sendClick(daemon, open.url)).ok).toBe(true);
-    const shown = stripAnsi(await renderRaw());
+    const shown = textOf(await renderRaw());
     expect(shown).toContain("signature does not match");
     expect(shown).not.toContain("/h/forged");
     expect((await sendClick(daemon, viewerLink(await renderRaw(), "✕")!.url)).ok).toBe(true);

@@ -5,7 +5,7 @@
 //
 // [LAW:single-enforcer] The config is prepared and each row rendered by
 // `check`'s own pipeline (prepareConfig + renderEffective: the daemon's
-// buildState, settled sources, then renderDsl), with the theme chosen the way
+// buildState, settled sources, then drawDsl), with the theme chosen the way
 // a click chooses it: a session pick of `theme`, resolved by the daemon's own
 // resolveEffectiveGlobals. So a row is exactly the bar picking that theme
 // produces, never a gallery-only approximation of it.
@@ -22,6 +22,7 @@ import process from "node:process";
 import { resolveUserPath } from "../utils/user-path.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { prepareConfig, renderEffective } from "../check.js";
+import { ansiOf } from "../render/frame.js";
 import { homeLayer } from "../config/dsl-loader.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
@@ -78,7 +79,7 @@ try {
       process.stderr.write(`${theme}: warning: ${advisory}\n`);
     }
     process.stdout.write(
-      rendered
+      ansiOf(rendered)
         .split("\n")
         .map((row, i) => (i === 0 ? theme : "").padEnd(LABEL) + row)
         .join("\n") + "\n\n",

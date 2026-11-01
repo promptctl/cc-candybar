@@ -1,8 +1,11 @@
+import { textOf } from "../src/render/frame";
 // [LAW:behavior-not-structure] The gate for brandon-activity-ue7: what the bar
 // SAYS Claude is doing, for a given transcript. Every test writes real JSONL and
 // reads either the provider's record, the payload the daemon would send, or the
 // rendered cell — never the fold's internal state.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -29,7 +32,7 @@ import {
 } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
@@ -620,13 +623,7 @@ describe("the payload projection", () => {
 // and the var-system defaults for an absent family are all the production ones.
 
 describe("the bundled activity segment renders the payload", () => {
-  const plain = (line: string): string =>
-    // eslint-disable-next-line no-control-regex
-    line
-      .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
-      .replace(/\x1b\[[\d;]*m/g, "");
-
-  const render = (activity?: Record<string, unknown>): string => {
+  const render = (activity?: Record<string, unknown>): Frame => {
     const narrowed = narrowToSegment(
       parseAndValidate("<default>", JSON.stringify(RAW_DEFAULT_DSL_CONFIG)),
       "activity",
@@ -643,38 +640,36 @@ describe("the bundled activity segment renders the payload", () => {
         signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
-      return plain(
-        renderDsl(
-          narrowed,
-          compiled,
-          store,
-          registry,
-          {
-            hook_event_name: "Status",
-            session_id: "x",
-            cwd: "/tmp",
-            model: { id: "x", display_name: "x" },
-            workspace: {
-              current_dir: "/tmp",
-              project_dir: "/tmp",
-              added_dirs: [],
-            },
-            ...(activity !== undefined && { activity }),
+      return drawPayload(
+        narrowed,
+        compiled,
+        store,
+        registry,
+        {
+          hook_event_name: "Status",
+          session_id: "x",
+          cwd: "/tmp",
+          model: { id: "x", display_name: "x" },
+          workspace: {
+            current_dir: "/tmp",
+            project_dir: "/tmp",
+            added_dirs: [],
           },
-          instantOf(new Date()),
-          {
-            // Plain, because what is under test is the cell's TEXT: the
-            // powerline joiner's end-cap glyphs are not whitespace, so they
-            // would ride into every expectation as chrome this gate never
-            // meant to pin (test/decor-wiring.test.ts owns the chrome).
-            endcaps: "plain" as const,
-            colorCompatibility: "truecolor" as const,
-            wrap: true,
-            padding: 1,
-            width: Number.POSITIVE_INFINITY,
-          },
-        ),
-      );
+          ...(activity !== undefined && { activity }),
+        },
+        instantOf(new Date()),
+        {
+          // Plain, because what is under test is the cell's TEXT: the
+          // powerline joiner's end-cap glyphs are not whitespace, so they
+          // would ride into every expectation as chrome this gate never
+          // meant to pin (test/decor-wiring.test.ts owns the chrome).
+          endcaps: "plain" as const,
+          colorCompatibility: "truecolor" as const,
+          wrap: true,
+          padding: 1,
+          width: Number.POSITIVE_INFINITY,
+        },
+      ).frame;
     } finally {
       registry.dispose();
     }
@@ -685,72 +680,72 @@ describe("the bundled activity segment renders the payload", () => {
   // read those two as the same answer. (It did, until the bundled-config
   // equivalence pin caught the `when` that was visible on an idle session.)
   test("an idle session renders no cell at all", () => {
-    expect(render()).toBe("");
+    expect(textOf(render())).toBe("");
   });
 
   test("the in-progress todo reads as its position over the total", () => {
     expect(
-      render({
+      textOf(render({
         todo: {
           total: 7,
           completed: 2,
           position: 3,
           active: "Writing the gate",
         },
-      }).trim(),
+      })).trim(),
     ).toBe("☐ 3/7 Writing the gate");
   });
 
   // `completed`, not `position`, is what tells a finished list from an
   // all-pending one: both have no item in progress, and both readings are true.
   test("a list with nothing in progress reads as completed over total", () => {
-    expect(render({ todo: { total: 7, completed: 7 } }).trim()).toBe("☑ 7/7");
-    expect(render({ todo: { total: 7, completed: 0 } }).trim()).toBe("☑ 0/7");
+    expect(textOf(render({ todo: { total: 7, completed: 7 } })).trim()).toBe("☑ 7/7");
+    expect(textOf(render({ todo: { total: 7, completed: 0 } })).trim()).toBe("☑ 0/7");
   });
 
   test("a long task is abbreviated rather than widening the bar without bound", () => {
-    const out = render({
+    const out = textOf(render({
       todo: {
         total: 1,
         completed: 0,
         position: 1,
         active: "Writing the open-source voice replacement spec",
       },
-    }).trim();
+    })).trim();
     // sprig's `abbrev` ellipsis is three dots, not U+2026.
     expect(out).toContain("...");
     expect(out.length).toBeLessThan(45);
   });
 
   test("a tool tally reads by name, a count of one carrying no multiplier", () => {
-    expect(render({ tool: { running: "Bash:3,Read:1" } }).trim()).toBe(
+    expect(textOf(render({ tool: { running: "Bash:3,Read:1" } })).trim()).toBe(
       "⟳ Bash×3 Read",
     );
   });
 
   test("a tally past two names is capped with an overflow count", () => {
-    expect(render({ tool: { running: "A:1,B:1,C:1,D:2" } }).trim()).toBe(
+    expect(textOf(render({ tool: { running: "A:1,B:1,C:1,D:2" } })).trim()).toBe(
       "⟳ A B +2",
     );
   });
 
   test("running and completed tools read through the same helper", () => {
-    expect(render({ tool: { running: "Bash:1", done: "Read:4" } }).trim()).toBe(
+    expect(textOf(render({ tool: { running: "Bash:1", done: "Read:4" } })).trim()).toBe(
       "⟳ Bash ✓ Read×4",
     );
   });
 
   test("the slash command leads the cell", () => {
-    expect(render({ command: "/next" }).trim()).toBe("⌘ /next");
+    expect(textOf(render({ command: "/next" })).trim()).toBe("⌘ /next");
   });
 
   test("every part composes in one cell", () => {
     expect(
-      render({
+      textOf(render({
         command: "/next",
         todo: { total: 4, completed: 1, position: 2, active: "Mutating it" },
         tool: { running: "Bash:2", done: "Read:3" },
-      }).trim(),
+      })).trim(),
     ).toBe("⌘ /next ☐ 2/4 Mutating it ⟳ Bash×2 ✓ Read×3");
   });
 });

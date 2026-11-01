@@ -27,11 +27,17 @@ import {
 } from "../src/daemon/daemon";
 import { pidAlive } from "../src/daemon/parent-watchdog";
 import { sessionStatePath, settingsHistoryPath } from "../src/daemon/paths";
-import { PROTOCOL_VERSION, type RenderRequest } from "../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  type ReaderRenderRequest,
+  type Response,
+} from "../src/daemon/protocol";
 import type { SessionStorage } from "../src/daemon/session-state";
 import { parseHandlerUrl } from "../src/install/index";
+import { parseFrame, textOf, type Frame } from "../src/render/frame";
 import { PACKAGE_VERSION } from "../src/version";
-import { hookData, linkUrls, stripAnsi } from "./helpers/daemon-e2e";
+import { hookData } from "./helpers/daemon-e2e";
+import { linkUrls } from "./helpers/frame";
 import { buildDaemon, bundleAt, statsOf } from "./helpers/in-worker-daemon";
 import { until } from "./helpers/until";
 
@@ -106,9 +112,10 @@ describe("the daemon is a value", () => {
   const renderRequest = (
     sessionId: string,
     deadlineMs = 2_000,
-  ): RenderRequest => ({
+  ): ReaderRenderRequest => ({
     v: PROTOCOL_VERSION,
     kind: "render",
+    encoding: "frame",
     hookData: hookData(sessionId, projectDir),
     args: ["cc-candybar", "--config", config],
     cwd: projectDir,
@@ -117,10 +124,10 @@ describe("the daemon is a value", () => {
     deadline: Date.now() + deadlineMs,
   });
 
-  const answer = async (
+  const reply = async (
     daemon: Daemon,
-    req: RenderRequest | Parameters<Daemon["reply"]>[0],
-  ): Promise<string> => {
+    req: Parameters<Daemon["reply"]>[0],
+  ): Promise<Response> => {
     const handled = await daemon.handle(
       req,
       () => false,
@@ -130,12 +137,23 @@ describe("the daemon is a value", () => {
     if (handled.kind !== "reply") throw new Error("expected a reply");
     handled.delivered();
     if (!handled.resp.ok) throw new Error(handled.resp.error);
-    return "output" in handled.resp ? handled.resp.output : "";
+    return handled.resp;
   };
 
-  const clickLink = (daemon: Daemon, url: string): Promise<string> => {
+  // A render's answer.
+  const answer = async (
+    daemon: Daemon,
+    req: ReaderRenderRequest,
+  ): Promise<Frame> => {
+    const resp = await reply(daemon, req);
+    if (!("frame" in resp))
+      throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+    return parseFrame(resp.frame);
+  };
+
+  const clickLink = (daemon: Daemon, url: string): Promise<Response> => {
     const { verb, value } = parseHandlerUrl(url);
-    return answer(daemon, {
+    return reply(daemon, {
       v: PROTOCOL_VERSION,
       kind: "click",
       verb,
@@ -184,7 +202,7 @@ describe("the daemon is a value", () => {
     },
     root: { h: ["pad"] },
   }`;
-  const width = (bar: string): number => stripAnsi(bar).trimEnd().length;
+  const width = (bar: Frame): number => textOf(bar).trimEnd().length;
 
   test("a closed daemon refuses what reaches it, and a click writes nothing", async () => {
     writeConfig(PADDED);
@@ -254,7 +272,7 @@ describe("the daemon is a value", () => {
     const daemon = construct();
 
     const before = await answer(daemon, renderRequest("value-click"));
-    expect(stripAnsi(before)).toContain("[wide]");
+    expect(textOf(before)).toContain("[wide]");
     const [url] = linkUrls(before);
     await clickLink(daemon, url!);
 
@@ -291,7 +309,7 @@ describe("the daemon is a value", () => {
     });
 
     const bar = await answer(daemon, renderRequest("value-clock"));
-    expect(stripAnsi(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
+    expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
   test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", async () => {

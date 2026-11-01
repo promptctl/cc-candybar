@@ -1,5 +1,5 @@
 // [LAW:single-enforcer] These tests pin the multi-line layout contract
-// directly against the render spine. renderDsl walks the canonical node tree
+// directly against the render spine. drawDsl walks the canonical node tree
 // (renderNode); a vertical container stacks its children's rendered lines with
 // exactly one `\n` between them. Single-line is the degenerate one-child case —
 // not a separate code path. They also pin the two vertical-line sources: an
@@ -11,15 +11,17 @@
 // Internal refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
-import { stripAnsi } from "./helpers/ansi";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { instantOf } from "../src/utils/instant";
 
@@ -39,7 +41,7 @@ function buildRuntime(source: string) {
   return { config, compiled, store, registry };
 }
 
-describe("renderDsl — multi-line layout", () => {
+describe("drawDsl — multi-line layout", () => {
   test("single-row layout produces exactly one line (no trailing newline)", () => {
     const source = `{
       globals: { palette: 'textual-dark' },
@@ -48,9 +50,9 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    expect(out.includes("\n")).toBe(false);
-    expect(stripAnsi(out)).toContain("A");
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    expect(textOf(out).includes("\n")).toBe(false);
+    expect(textOf(out)).toContain("A");
   });
 
   test("two-row layout produces two lines separated by exactly one newline", () => {
@@ -67,14 +69,14 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n");
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
-    expect(stripAnsi(lines[0]!)).toContain("TOP");
-    expect(stripAnsi(lines[1]!)).toContain("BOT");
+    expect(lines[0]!).toContain("TOP");
+    expect(lines[1]!).toContain("BOT");
     // No segment cross-contamination.
-    expect(stripAnsi(lines[0]!)).not.toContain("BOT");
-    expect(stripAnsi(lines[1]!)).not.toContain("TOP");
+    expect(lines[0]!).not.toContain("BOT");
+    expect(lines[1]!).not.toContain("TOP");
   });
 
   test("row segments render in column order; rows render in row order", () => {
@@ -95,8 +97,8 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [{ h: ['sa', 'sb'] }, { h: ['sc', 'sd'] }] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     // Row 0: A precedes B
     expect(lines[0]!.indexOf("A")).toBeLessThan(lines[0]!.indexOf("B"));
@@ -112,10 +114,10 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
     // No row of the author's: one line, the door every bar carries.
-    expect(out.split("\n")).toHaveLength(1);
-    expect(stripAnsi(out)).toContain(DOOR_GLYPH);
+    expect(textOf(out).split("\n")).toHaveLength(1);
+    expect(textOf(out)).toContain(DOOR_GLYPH);
   });
 
   test("layout: key is rejected with migration error (removed in 2de.19)", () => {
@@ -150,8 +152,8 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: [{ h: ['sa', 'sb'] }, 'sc'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     // Row 0 still emits even though `sa` hid — it just contains only B.
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("B");
@@ -171,8 +173,8 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
     expect(lines[0]!).not.toContain("BOT");
@@ -194,18 +196,18 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("ABCDE");
     expect(lines[1]!).toContain("FGHIJ");
     // The second line is not truncated away, and no truncation marker appears.
-    expect(out).not.toContain("…");
+    expect(textOf(out)).not.toContain("…");
   });
 
   test("OSC-8 link survives an authored \\n split (both pieces keep the URL)", () => {
-    // A linked fragment carrying a "\n" splits into two lines; the OSC-8 hyperlink
-    // span must be preserved on each piece, not dropped at the boundary.
+    // A linked fragment carrying a "\n" splits into two lines; the link must be
+    // preserved on each piece, not dropped at the boundary.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'UP\\nDN' } },
@@ -218,12 +220,11 @@ describe("renderDsl — multi-line layout", () => {
       root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n");
-    expect(lines).toHaveLength(2);
-    // Each visual line carries an OSC-8 open sequence for the same URL.
-    for (const line of lines) {
-      expect(line).toContain("cc-candybar://x/1");
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    expect(out.rows).toHaveLength(2);
+    // Each visual line carries a link to the same URL.
+    for (const row of out.rows) {
+      expect(linkUrls({ rows: [row] })).toContain("cc-candybar://x/1");
     }
   });
 
@@ -242,8 +243,8 @@ describe("renderDsl — multi-line layout", () => {
       root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("TOP");
     expect(lines[1]!).toContain("BOT");
@@ -254,7 +255,7 @@ describe("renderDsl — multi-line layout", () => {
     // composes CELLS (not serialized blocks), so the joiner caps across the
     // seam exactly as if the segments lived in one node. Abut would serialize
     // each child first and string-concat — producing a triangle-into-void seam
-    // and DIFFERENT bytes. Byte-equality is the precise refutation of abut.
+    // and DIFFERENT rows. Equal rows are the precise refutation of abut.
     const segs = `
       segments: {
         sa: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
@@ -271,10 +272,10 @@ describe("renderDsl — multi-line layout", () => {
       root: { kind: 'container', direction: 'horizontal', children: ['sa', 'sb'] } }`;
     const hArm = buildRuntime(hArmSrc);
     const horiz = buildRuntime(horizSrc);
-    const hArmOut = renderDsl(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, instantOf(new Date()), OPTS);
-    const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, instantOf(new Date()), OPTS);
-    expect(horizOut).toBe(hArmOut);
-    expect(horizOut.split("\n")).toHaveLength(1);
+    const hArmOut = drawPayload(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, instantOf(new Date()), OPTS).frame;
+    const horizOut = drawPayload(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, instantOf(new Date()), OPTS).frame;
+    expect(horizOut.rows).toEqual(hArmOut.rows);
+    expect(textOf(horizOut).split("\n")).toHaveLength(1);
   });
 
   test("horizontal container of multi-line children zips cells per row (ragged rows carry fewer cells, no padding)", () => {
@@ -301,8 +302,8 @@ describe("renderDsl — multi-line layout", () => {
       },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
-    const lines = out.split("\n").map(stripAnsi);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
+    const lines = textOf(out).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("L1");
     expect(lines[0]!).toContain("R1");
@@ -330,11 +331,10 @@ describe("renderDsl — multi-line layout", () => {
       ] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
-    const out = renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), OPTS);
+    const out = drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), OPTS).frame;
     // The settings door takes its own ungated row above a gated first node.
-    const lines = out
+    const lines = textOf(out)
       .split("\n")
-      .map(stripAnsi)
       .filter((line) => !line.includes(DOOR_GLYPH));
     expect(lines).toHaveLength(1);
     expect(lines[0]!).toContain("B");

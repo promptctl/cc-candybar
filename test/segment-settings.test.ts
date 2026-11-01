@@ -2,13 +2,17 @@
 // DECLARES its settings, each PLACEMENT in `root` is an instance with its own
 // id and values, and the segment's templates read `.settings.<name>` scoped to
 // the placement being rendered.
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -16,7 +20,6 @@ import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { mintPlacement } from "../src/config/layout-ops";
 import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
@@ -33,8 +36,8 @@ function buildRuntime(src: string) {
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (): string =>
-    renderDsl(
+  const render = (): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -49,7 +52,7 @@ function buildRuntime(src: string) {
         width: Number.POSITIVE_INFINITY,
       },
       { perSegmentSink: sink },
-    );
+    ).frame;
   recordRender(sessionState, "s1");
   const ctx = testVerbContext(sessionState, undefined, config);
   const click = async (url: string): Promise<void> => {
@@ -201,7 +204,7 @@ describe("a placement is named by its id", () => {
       },
       root: { h: ['tag', { seg: 'tag', id: 'broken', settings: { boom: true } }] },
     }`);
-    const text = stripAnsi(rt.render());
+    const text = textOf(rt.render());
     expect(rt.textOf("tag")).toBe("ok");
     expect(text).toContain("⚠ broken: ");
   });

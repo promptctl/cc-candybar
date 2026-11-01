@@ -19,10 +19,11 @@
 // DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
 // helper bodies the shipped statusline uses — not a test-local copy.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
-import { stripAnsi } from "./helpers/ansi";
 
 import { validateConfig } from "./helpers/parse-and-validate";
 import {
@@ -33,7 +34,7 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
@@ -55,7 +56,7 @@ const VARS = `{
 
 // Render one segment whose template is `call`, merged onto DEFAULT_DSL_CONFIG so
 // the production helpers are in scope, against the frozen clock. Returns the
-// plain (ANSI/OSC-8-stripped) text the segment produced.
+// text the segment produced.
 function render(call: string, payload: Record<string, number>): string {
   const source = `{
     variables: ${VARS},
@@ -70,7 +71,7 @@ function render(call: string, payload: Record<string, number>): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-  const out = renderDsl(
+  const out = drawPayload(
     config,
     compiled,
     store,
@@ -78,8 +79,8 @@ function render(call: string, payload: Record<string, number>): string {
     payload,
     instantOf(FROZEN_CLOCK()),
     OPTS,
-  );
-  return stripAnsi(out);
+  ).frame;
+  return textOf(out);
 }
 
 describe("bdi.4 — formatTimeSince helper (byte-parity with retired JS)", () => {

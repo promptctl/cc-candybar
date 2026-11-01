@@ -6,24 +6,24 @@
 // until the dissolve is over, then closes up in one step. A write to the
 // session's state, the width or the palette ends every dissolve in flight.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
-import { decodeAnsi } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import { SessionEffects } from "../src/render/effect";
-import { resolvedStyle } from "../src/render/rich-theme";
 import { decideEffectName, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -88,8 +88,8 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
       effects: SessionEffects<RenderedLine>,
       transitions: boolean,
       bar: EffectName = "none",
-    ): string =>
-      renderDsl(
+    ): DrawnFrame =>
+      drawPayload(
         cfg,
         compiled,
         store,
@@ -99,30 +99,24 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         { ...opts, width },
         undefined,
         selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions }),
-      ),
+      ).frame,
     dispose: () => registry.dispose(),
   };
 }
 
-const firstRow = (out: string): string => out.split("\n")[0]!;
+const firstRow = (out: DrawnFrame): readonly Run[] => out.rows[0]!.runs;
 
-// Each screen cell of a line: its glyph and the colours it is drawn in, read
-// through rich-js's own decoder (the inverse of the writer).
-function screenCells(line: string): string[] {
-  const text = decodeAnsi(line);
-  const colours = [...text.plain].map(() => "");
-  for (const { start, end, style } of text.spans) {
-    const { color, bgcolor } = resolvedStyle(style);
-    for (let i = start; i < end; i++)
-      colours[i] = `${color?.name ?? "-"}/${bgcolor?.name ?? "-"}`;
-  }
-  return [...text.plain].map((glyph, i) => `${glyph}${colours[i]}`);
+// Each screen cell of a line: its glyph and the colours it is drawn in.
+function screenCells(line: readonly Run[]): string[] {
+  return line.flatMap(({ text, fg, bg }) =>
+    [...text].map((glyph) => `${glyph}${fg ?? "-"}/${bg ?? "-"}`),
+  );
 }
 
 // The columns the middle placement's colours show in: its cell (the text and
-// the padding each side of it) and the seam either side of it.
-function middleColumns(line: string): { from: number; to: number } {
-  const col = stripAnsi(line).indexOf("MIDDLE");
+// the padding each side of it) and the seam either side of it, as screen cells.
+function middleColumns(line: readonly Run[]): { from: number; to: number } {
+  const col = [...plainOf(line).split("MIDDLE")[0]!].length;
   return { from: col - 2, to: col + "MIDDLE".length + 2 };
 }
 
@@ -150,19 +144,19 @@ describe.each(["segment", "container"] as const)(
           });
           both({ shown: true, when: at(0) });
           const drawn = both(before).on;
-          expect(stripAnsi(drawn)).toContain("MIDDLE");
+          expect(textOf(drawn)).toContain("MIDDLE");
 
           // It leaves: its text stays where it was, and so does every other.
           const left = both(leaving(0));
-          expect(stripAnsi(firstRow(left.off))).not.toContain("MIDDLE");
-          expect(stripAnsi(firstRow(left.on))).toBe(
-            stripAnsi(firstRow(drawn)),
+          expect(plainOf(firstRow(left.off))).not.toContain("MIDDLE");
+          expect(plainOf(firstRow(left.on))).toBe(
+            plainOf(firstRow(drawn)),
           );
 
           // Mid-dissolve: its cells thin and nothing else moves; the row
           // keeps its width.
           const mid = both(leaving(15));
-          expect(stripAnsi(firstRow(mid.on))).toBe(stripAnsi(firstRow(drawn)));
+          expect(plainOf(firstRow(mid.on))).toBe(plainOf(firstRow(drawn)));
           const thinned = screenCells(firstRow(mid.on));
           const whole = screenCells(firstRow(left.on));
           const { from, to } = middleColumns(firstRow(drawn));
@@ -171,20 +165,18 @@ describe.each(["segment", "container"] as const)(
             expect(thinned.slice(0, from)).toEqual(whole.slice(0, from));
             expect(thinned.slice(to)).toEqual(whole.slice(to));
           }
-          expect(mid.on.split("\n").slice(1)).toEqual(
-            mid.off.split("\n").slice(1),
-          );
+          expect(mid.on.rows.slice(1)).toEqual(mid.off.rows.slice(1));
 
           // Just short of the end it still holds the row's width.
-          expect(stripAnsi(firstRow(both(leaving(29)).on))).toBe(
-            stripAnsi(firstRow(drawn)),
+          expect(plainOf(firstRow(both(leaving(29)).on))).toBe(
+            plainOf(firstRow(drawn)),
           );
           // Over: the row closes up in one step, as if it had never been
           // drawn under a transition.
           const done = both(leaving(30));
-          expect(done.on).toBe(done.off);
+          expect(done.on.rows).toEqual(done.off.rows);
           const after = both(leaving(35));
-          expect(after.on).toBe(after.off);
+          expect(after.on.rows).toEqual(after.off.rows);
         } finally {
           on.dispose();
           off.dispose();
@@ -200,10 +192,10 @@ describe.each(["segment", "container"] as const)(
         expect(linkUrls(on.render(before, fx, true))).toContain(LINK);
         for (const since of [0, 1, 15, 29]) {
           const out = on.render(leaving(since), fx, true);
-          expect(stripAnsi(out)).toContain("MIDDLE");
+          expect(textOf(out)).toContain("MIDDLE");
           expect(linkUrls(out)).not.toContain(LINK);
           // Its template fails on this payload: drawn again, it would be a ⚠.
-          expect(stripAnsi(out)).not.toContain("⚠");
+          expect(textOf(out)).not.toContain("⚠");
         }
       } finally {
         on.dispose();
@@ -278,7 +270,7 @@ describe("a trigger replays its own row only while nothing hangs open under it",
       if (open) on.session.set("s", "groups.more", "more");
       const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: true, when: at(0) }, fx, true);
-      const drawn = stripAnsi(on.render({ shown: true, when: at(1) }, fx, true));
+      const drawn = textOf(on.render({ shown: true, when: at(1) }, fx, true));
       expect(drawn).toContain("MORE");
       expect(drawn.includes("EXTRA")).toBe(open);
       const frame = { shown: false, when: at(S) };
@@ -296,13 +288,13 @@ describe("a trigger replays its own row only while nothing hangs open under it",
   test("open: it goes at once, with its body, rather than replaying an open trigger over nothing", () => {
     const { fx, on, off } = hiddenWith(true);
     expect(fx.lastFrame().leaves).toEqual([]);
-    expect(on).toBe(off);
+    expect(on.rows).toEqual(off.rows);
   });
 
   test("closed: it dissolves, holding its row", () => {
     const { fx, on } = hiddenWith(false);
     expect(fx.lastFrame().leaves).toEqual([{ placement: "groups.more", t: 0 }]);
-    expect(stripAnsi(on)).toContain("MORE");
+    expect(textOf(on)).toContain("MORE");
   });
 });
 
@@ -310,7 +302,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
   const ROW = config("segment");
   const midDissolve = (
     write: (session: SessionState) => void,
-  ): { on: string; off: string } => {
+  ): { on: DrawnFrame; off: DrawnFrame } => {
     const on = renderer(ROW);
     const off = renderer(ROW, on.session);
     try {
@@ -337,16 +329,16 @@ describe("a write to the session's state ends every dissolve in flight", () => {
     const { on, off } = midDissolve((session) =>
       session.set("s", "groups.more", "more"),
     );
-    expect(stripAnsi(on)).toContain("EXTRA");
-    expect(stripAnsi(on)).not.toContain("MIDDLE");
-    expect(on).toBe(off);
+    expect(textOf(on)).toContain("EXTRA");
+    expect(textOf(on)).not.toContain("MIDDLE");
+    expect(on.rows).toEqual(off.rows);
   });
 
   test("✎ arrange: the first frame after it is byte-identical to no transitions", () => {
     const { on, off } = midDissolve((session) =>
       session.set("s", "edit.mode", "arrange"),
     );
-    expect(on).toBe(off);
+    expect(on.rows).toEqual(off.rows);
   });
 });
 
@@ -398,8 +390,8 @@ describe("another width ends every dissolve in flight; another palette does not"
   test("another width: the next frame is byte-identical to no transitions", () => {
     const { fx, on, off } = leaveThen({ width: 120 });
     expect(fx.lastFrame()).toMatchObject({ basis: "fresh", leaves: [] });
-    expect(stripAnsi(on)).not.toContain("MIDDLE");
-    expect(on).toBe(off);
+    expect(textOf(on)).not.toContain("MIDDLE");
+    expect(on.rows).toEqual(off.rows);
   });
 
   test("a rule moving the theme on the same payload: it keeps dissolving", () => {
@@ -408,7 +400,7 @@ describe("another width ends every dissolve in flight; another palette does not"
       basis: "compared",
       leaves: [{ placement: "middle", t: 1 }],
     });
-    expect(stripAnsi(on)).toContain("MIDDLE");
+    expect(textOf(on)).toContain("MIDDLE");
   });
 });
 

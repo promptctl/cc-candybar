@@ -22,6 +22,9 @@
 //   9. Undo refuses loudly when a target changed since the step — a hand
 //      edit or another session's write — and never overwrites it.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
@@ -30,7 +33,7 @@ import { dirname } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -42,7 +45,6 @@ import { SettingsHistory } from "../src/daemon/settings-history";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/verbs/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -57,7 +59,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function ownUrls(rendered: string): string[] {
+function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -162,8 +164,8 @@ function buildRuntime(
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (): string =>
-    renderDsl(
+  const render = (): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -171,7 +173,7 @@ function buildRuntime(
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
       opts(),
-    );
+    ).frame;
   // The config a click is gated by and a save compares against, re-read from
   // the file on a reload.
   let current: DslConfig = config;

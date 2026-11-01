@@ -28,9 +28,10 @@ import {
 import type { HandledRequest, Reply } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import { sessionIdOf } from "../src/daemon/session-id";
+import { textOf } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
 import { RuntimeStats } from "../src/daemon/stats";
-import { render, renderBody, stripAnsi } from "./helpers/daemon-e2e";
+import { render, renderBody } from "./helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "./helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import { memoryConnection } from "./helpers/memory-connection";
@@ -508,12 +509,14 @@ describe("a connection to a daemon built in this worker", () => {
     return opened.received[0]!;
   };
 
-  // What an answer drew. Anything else is named, where a bare read of `output`
+  // What a band frame drew. Anything else is named, where a bare read of `band`
   // would leave the assertion to fail without saying what came back.
   const drawn = (resp: Response): string => {
-    if (!("output" in resp))
-      throw new Error(`no drawn output: ${JSON.stringify(resp)}`);
-    return stripAnsi(resp.output);
+    if (!("band" in resp))
+      throw new Error(`no drawn band: ${JSON.stringify(resp)}`);
+    return resp.band
+      .map((row) => row.map(({ text }) => text).join(""))
+      .join("\n");
   };
 
   // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
@@ -523,7 +526,7 @@ describe("a connection to a daemon built in this worker", () => {
     daemon: InWorkerDaemon,
     sessionId: string,
   ): Promise<string> =>
-    stripAnsi(
+    textOf(
       await render(
         daemon,
         sessionId,
@@ -539,7 +542,7 @@ describe("a connection to a daemon built in this worker", () => {
     config = path.join(root, "bar.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'a drawn mark' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a drawn mark' } }, root: { h: ['mark'] } }`,
     );
   });
 
@@ -564,7 +567,11 @@ describe("a connection to a daemon built in this worker", () => {
     await rendered(running, "connection-feed");
 
     const feed = openedOn(running.connect());
-    feed.send({ ...SUBSCRIBE, sessionId: "connection-feed" } as Request);
+    feed.send({
+      ...SUBSCRIBE,
+      sessionId: "connection-feed",
+      lane: "band",
+    } as Request);
     expect(drawn(await answered(feed))).toContain("a drawn mark");
     expect(running.daemon.stats.inFlight).toBe(0);
     feed.client.destroy();

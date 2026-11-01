@@ -1,6 +1,6 @@
-import { decodeAnsi, type ColorRgba } from "@promptctl/rich-js";
+import { ColorSpec, type ColorRgba } from "@promptctl/rich-js";
 import { DOOR_CLOSE_GLYPH } from "../../src/config/disclosure";
-import { resolvedStyle } from "../../src/render/rich-theme";
+import type { Frame } from "../../src/render/frame";
 
 // The settings door's open ✖ as a frame draws it, and the reds a theme names
 // for its error role: what the door's tests read the ✖ by and hold it to,
@@ -20,24 +20,18 @@ export const ERROR_REDS = [
 export type ErrorRed = (typeof ERROR_REDS)[number];
 
 /**
- * The one ✖ in `rendered`: its ink and its ground, each as the terminal shows
- * the colour the frame writes for it (at 256 colours the cube or grey entry,
- * at ansi the sixteen rich-js assumes), read through rich-js's `decodeAnsi`.
+ * The one ✖ in a frame: its ink and its ground, each as the terminal shows the
+ * colour drawn for it (at 256 colours the cube or grey entry, at ansi the
+ * sixteen rich-js assumes).
  */
-export function doorClose(rendered: string): { readonly ink: ColorRgba; readonly ground: ColorRgba } {
-  const found = rendered.split("\n").flatMap((line) => {
-    const text = decodeAnsi(line);
-    const at = text.plain.indexOf(DOOR_CLOSE_GLYPH);
-    const span = text.spans.find(({ start, end }) => start <= at && at < end);
-    if (span === undefined) return [];
-    const { color, bgcolor } = resolvedStyle(span.style);
-    // [LAW:no-silent-failure] An unset colour would be measured as the
-    // terminal's own, which no theme names.
-    if (color === undefined || bgcolor === undefined) {
-      throw new Error(`the door's ✖ is drawn without its own ${color === undefined ? "ink" : "ground"}`);
-    }
-    return [{ ink: color.getTruecolor(), ground: bgcolor.getTruecolor() }];
-  });
+export function doorClose({ rows }: Pick<Frame, "rows">): { readonly ink: ColorRgba; readonly ground: ColorRgba } {
+  const found = rows.flatMap(({ runs }) => runs.filter(({ text }) => text.includes(DOOR_CLOSE_GLYPH)));
   if (found.length !== 1) throw new Error(`expected one ${DOOR_CLOSE_GLYPH} in the frame, found ${found.length}`);
-  return found[0]!;
+  const { fg, bg } = found[0]!;
+  // [LAW:no-silent-failure] An unset colour would be measured as the terminal's
+  // own, which no theme names.
+  if (fg === undefined || bg === undefined) {
+    throw new Error(`the door's ✖ is drawn without its own ${fg === undefined ? "ink" : "ground"}`);
+  }
+  return { ink: ColorSpec.parse(fg).getTruecolor(), ground: ColorSpec.parse(bg).getTruecolor() };
 }

@@ -1,28 +1,29 @@
 // [LAW:verifiable-goals] A setting's trial looks sit in its one list, each
 // marked 🧪: its label is what the list shows, and its value is what the click
-// writes. Driven through the real loader and `renderDsl`.
+// writes. Driven through the real loader and `drawDsl`.
 
+import { linksOf } from "../src/click/read";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { resolveOptionDomain } from "../src/config/option-domain";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
+import type { Frame } from "../src/render/frame";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf } from "./helpers/click";
-import { links, stripAnsi } from "./helpers/ansi";
 import { sessionBar } from "./helpers/session-bar";
 
 function menu() {
   const bar = sessionBar(`{}`, 400);
-  const raw = (): string => bar.render(instantOf(new Date())).text;
-  const open = (list: string): string => {
+  const raw = (): Frame => bar.render(instantOf(new Date())).frame;
+  const open = (list: string): Frame => {
     bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
     bar.pick(sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
     bar.pick(sharedMenuStateKey(`${SETTINGS_NS}gearPickers`), list);
     return raw();
   };
-  const writes = (text: string, key: string): string[] =>
-    links(text)
+  const writes = (frame: Frame, key: string): string[] =>
+    linksOf(frame)
       .flatMap((l) => effectsOf(l.url))
       .filter((e) => e.args[1] === key)
       .map((e) => e.args[2]!);
@@ -41,7 +42,7 @@ test.each([
   (setting, trials, shipped) => {
     const { open, writes } = menu();
     const list = open(`${SETTINGS_NS}apply.${setting}`);
-    const shown = links(list).map((l) => stripAnsi(l.text).trim());
+    const shown = linksOf(list).map((l) => l.text);
     for (const trial of trials) {
       expect(shown).toContain(`🧪 ${trial}`);
       expect(writes(list, setting)).toContain(trial);
@@ -54,8 +55,8 @@ test.each([
 test("a value on trial is on its ring: ▶ steps on from it", () => {
   const { open, set } = menu();
   set("shade", TRIAL_SHADE_NAMES[0]!);
-  const next = links(open(`${SETTINGS_NS}apply.shade`))
-    .filter((l) => stripAnsi(l.text) === "▶")
+  const next = linksOf(open(`${SETTINGS_NS}apply.shade`))
+    .filter((l) => l.text === "▶")
     .flatMap((l) => effectsOf(l.url))
     .filter((e) => e.args[1] === "shade");
   expect(next.map((e) => e.args[2])).toEqual([TRIAL_SHADE_NAMES[1]]);

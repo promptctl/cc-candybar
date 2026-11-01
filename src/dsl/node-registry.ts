@@ -70,7 +70,7 @@ import { readPending } from "../var-system/types.js";
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
 // [LAW:dataflow-not-control-flow] The compiled mirror of a LayoutNode: the same
-// recursive shape with every `when` parsed ONCE at registration. renderDsl walks
+// recursive shape with every `when` parsed ONCE at registration. drawDsl walks
 // this compiled tree — never the raw config — so the parse-once guarantee covers
 // every node.
 export interface CompiledSegmentNode {
@@ -747,7 +747,7 @@ function drawSegment(
 ): RenderedLines {
   const seg = ctx.lookupSegment(node.name);
   // [LAW:no-defensive-null-guards] The loader validates every segment ref
-  // against the segments map; a miss is a caller bug (renderDsl given a
+  // against the segments map; a miss is a caller bug (drawDsl given a
   // mismatched config).
   if (seg === undefined) {
     throw new Error(`Layout segment "${node.name}" has no matching segment`);

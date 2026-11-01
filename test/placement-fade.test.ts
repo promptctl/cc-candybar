@@ -5,13 +5,14 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import {
   DEFAULT_TERMINAL_THEME,
   RichText,
-  decodeAnsi,
   resolveColorRef,
 } from "@promptctl/rich-js";
 
@@ -19,23 +20,15 @@ import { SessionState } from "../src/daemon/session-state";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import {
-  compileDslConfig,
-  compileInputOf,
-  compileKey,
-  declareDslVariables,
-  EVERY_SCOPE,
-  renderDsl,
-  type CompiledConfig,
-} from "../src/dsl/render";
+import { compileDslConfig, compileInputOf, compileKey, declareDslVariables, EVERY_SCOPE, type CompiledConfig } from "../src/dsl/render";
 import { lastBinding } from "./helpers/render-binding";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects, type RowItem } from "../src/render/effect";
 import { FrameMemory } from "../src/render/frame-memory";
 import { framed } from "./helpers/frames";
+import { drawnChars, shown } from "./helpers/seams";
 import type { RenderedLine } from "../src/dsl/node-registry";
-import { resolvedStyle } from "../src/render/rich-theme";
 import {
   decideEffectName,
   paletteForThemeName,
@@ -43,7 +36,6 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { stripAnsi } from "./helpers/ansi";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -109,8 +101,8 @@ function renderer(
       { shown, when }: Frame,
       effects: SessionEffects<RenderedLine>,
       selection: { transitions?: boolean; bar?: EffectName } = {},
-    ): string =>
-      renderDsl(
+    ): DrawnFrame =>
+      drawPayload(
         cfg,
         compiled,
         store,
@@ -126,27 +118,23 @@ function renderer(
             transitions: selection.transitions,
           }),
         }),
-      ),
+      ).frame,
     dispose: () => registry.dispose(),
   };
 }
 
-// Each screen cell of a line: its glyph and the style it is drawn in, read
-// through rich-js's own decoder (the inverse of the writer).
-function screenCells(line: string): string[] {
-  const text = decodeAnsi(line);
-  const styles = [...text.plain].map(() => "");
-  for (const { start, end, style } of text.spans) {
-    const resolved = JSON.stringify(resolvedStyle(style));
-    for (let i = start; i < end; i++) styles[i] = resolved;
-  }
-  return [...text.plain].map((glyph, i) => `${glyph}${styles[i]}`);
+// Each screen cell of a line: its glyph and the look it is drawn in.
+function screenCells(line: readonly Run[]): string[] {
+  return line.flatMap(({ text, ...look }) => {
+    const drawn = JSON.stringify(look);
+    return [...text].map((glyph) => `${glyph}${drawn}`);
+  });
 }
 
 // The columns the middle placement's colours show in: its cell (the text and
-// the padding each side of it) and the seam either side of it.
-function middleColumns(line: string): { from: number; to: number } {
-  const col = [...stripAnsi(line)].join("").indexOf("MIDDLE");
+// the padding each side of it) and the seam either side of it, as screen cells.
+function middleColumns(line: readonly Run[]): { from: number; to: number } {
+  const col = [...plainOf(line).split("MIDDLE")[0]!].length;
   return { from: col - 2, to: col + "MIDDLE".length + 2 };
 }
 
@@ -169,13 +157,13 @@ describe("a placement that appears fades in", () => {
           const plain = off.render(frame, offFx, { transitions: false, bar });
           const since = (frame.when - START) - S;
           // A fade changes colours, never text.
-          expect(stripAnsi(faded)).toBe(stripAnsi(plain));
+          expect(textOf(faded)).toBe(textOf(plain));
           if (since < 0 || since >= 20) {
-            expect(faded).toBe(plain);
+            expect(faded.rows).toEqual(plain.rows);
             continue;
           }
           // In flight: the middle placement's cells move and nothing else does.
-          const row = (out: string) => out.split("\n")[0]!;
+          const row = (out: DrawnFrame) => out.rows[0]!.runs;
           const a = screenCells(row(faded));
           const b = screenCells(row(plain));
           const { from, to } = middleColumns(row(plain));
@@ -185,7 +173,7 @@ describe("a placement that appears fades in", () => {
           // whole before its fade is done; through +10 it is still veiled.
           if (since <= 10)
             expect(a.slice(from, to)).not.toEqual(b.slice(from, to));
-          expect(faded.split("\n").slice(1)).toEqual(plain.split("\n").slice(1));
+          expect(faded.rows.slice(1)).toEqual(plain.rows.slice(1));
         }
       } finally {
         on.dispose();
@@ -196,29 +184,26 @@ describe("a placement that appears fades in", () => {
 
   // Wholly veiled at its t = 0, the middle placement's ink and fill are both
   // the ground it rises from.
-  const risesFrom = (cfg: ValidatedConfig): { row: string; bar: string } => {
+  const risesFrom = (cfg: ValidatedConfig): { row: DrawnFrame; bar: string } => {
     const on = renderer(cfg);
     try {
       const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
-      const row = on
-        .render({ shown: true, when: at(S) }, fx, { transitions: true })
-        .split("\n")[0]!;
+      const row = on.render({ shown: true, when: at(S) }, fx, { transitions: true });
       const bar = resolveColorRef(on.palette(), "background").hex.toLowerCase();
       return { row, bar };
     } finally {
       on.dispose();
     }
   };
-  const expectGround = (row: string, ground: string): void => {
-    const text = decodeAnsi(row);
-    const col = text.plain.indexOf("MIDDLE");
-    for (let i = col; i < col + "MIDDLE".length; i++) {
-      const style = resolvedStyle(
-        text.spans.find(({ start, end }) => start <= i && i < end)!.style,
-      );
-      expect(style.bgcolor?.name.toLowerCase()).toBe(ground);
-      expect(style.color?.name.toLowerCase()).toBe(ground);
+  const expectGround = ({ rows }: DrawnFrame, ground: string): void => {
+    const chars = drawnChars({ rows: rows.slice(0, 1) });
+    const [before, after] = chars.map(({ ch }) => ch).join("").split("MIDDLE");
+    expect(after).toBeDefined();
+    const col = [...before!].length;
+    for (const { fg, bg } of chars.slice(col, col + "MIDDLE".length)) {
+      expect(shown(bg)).toBe(ground);
+      expect(shown(fg)).toBe(ground);
     }
   };
 
@@ -274,7 +259,7 @@ describe("a placement that appears fades in", () => {
       on.render({ shown: false, when: at(0) }, onFx);
       off.render({ shown: false, when: at(0) }, offFx);
       const shown = { shown: true, when: at(S + 10) };
-      expect(on.render(shown, onFx)).not.toBe(off.render(shown, offFx));
+      expect(on.render(shown, onFx).rows).not.toEqual(off.render(shown, offFx).rows);
       expect(onFx.lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
     } finally {
       on.dispose();
@@ -289,8 +274,8 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const off = renderer(ROW);
     try {
       const frame = { shown: true, when: at(S) };
-      expect(on.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: true })).toBe(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }),
+      expect(on.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: true }).rows).toEqual(
+        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }).rows,
       );
     } finally {
       on.dispose();
@@ -310,14 +295,14 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       on.session.set("s", "groups.more", "more");
       const frame = { shown: true, when: at(S + 5) };
       const opened = on.render(frame, fx, { transitions: true });
-      expect(stripAnsi(opened)).toContain("EXTRA");
+      expect(textOf(opened)).toContain("EXTRA");
       expect(fx.lastFrame()).toMatchObject({
         basis: "fresh",
         revision: on.session.revision("s"),
         fades: [],
       });
-      expect(opened).toBe(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }),
+      expect(opened.rows).toEqual(
+        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }).rows,
       );
     } finally {
       on.dispose();

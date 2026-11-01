@@ -476,9 +476,9 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
 // colorCompatibility/autoWrap/padding are style's twins — this pins
 // that payloadOf projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
-// with no `wants` gate — unlike theme/style, which renderDsl produces).
+// with no `wants` gate — unlike theme/style, which drawDsl produces).
 describe("payloadOf — effective globals projection", () => {
-  test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two renderDsl-produced fields have none", async () => {
+  test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two drawDsl-produced fields have none", async () => {
     // The bundled default's globals with every kind of valued field moved
     // off its floor: a word, a flag, an integer, a config-only depth, a lane.
     const effective: EffectiveGlobals = {
@@ -504,7 +504,7 @@ describe("payloadOf — effective globals projection", () => {
       NO_CONFIG_FILE,
     );
     // `theme` and `style` are the two fields this projection does NOT carry:
-    // renderDsl injects both `.effective` values, because under a RULE in that
+    // drawDsl injects both `.effective` values, because under a RULE in that
     // globals slot it is the only thing that knows the answer (brandon-looks-pe6
     // for `style`, brandon-themes-dzl for `theme`). Asserted absent rather than
     // left unmentioned, so re-adding a second producer fails here.

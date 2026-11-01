@@ -1,12 +1,13 @@
 // The git segment's location: what `checkoutLocation` reads off a real
 // checkout, and what `gitaculous` draws from it.
+import { drawPayload } from "./helpers/draw-payload";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { processLauncher } from "../src/proc/launch";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -65,7 +66,7 @@ function draw(payload: Record<string, unknown>, variables: object = {}): string 
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    renderDsl(
+    drawPayload(
       config,
       compiled,
       store,
@@ -74,7 +75,7 @@ function draw(payload: Record<string, unknown>, variables: object = {}): string 
       instantOf(new Date(0)),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 0, width: Number.POSITIVE_INFINITY },
       { perSegmentSink: sink },
-    );
+    ).frame;
   } finally {
     registry.dispose();
   }

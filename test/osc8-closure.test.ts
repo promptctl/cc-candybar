@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] The OSC-8 closure invariant, machine-checked through
-// the REAL render spine (registerDslConfig + renderDsl + the real loader) — the
+// the REAL render spine (registerDslConfig + drawDsl + the real loader) — the
 // same path the daemon renders through.
 //
 // THE INVARIANT (render-bugs-pdu.1): every clickable region is exactly one
@@ -12,17 +12,19 @@
 // to the terminal; this test makes that lie unrepresentable-by-test.
 //
 // [FRAMING:representation] The sibling test segment-render-unit.test.ts asserts
-// link spans SURVIVE (counts opens); this asserts they are CLOSED (the open/
+// link spans SURVIVE (counts links); this asserts they are CLOSED (the open/
 // close walk returns to "not linked" and never ends mid-link). Presence and
 // closure are two different theorems — the bleed defect satisfied the first and
 // broke the second, so closure needs its own guard.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { ansiOf, type Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
@@ -63,13 +65,13 @@ function osc8Walk(rendered: string): {
   return { opens, closes, endsLinked: linked };
 }
 
-function render(src: string, opts: BuildLineOptions): string {
+function render(src: string, opts: BuildLineOptions): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  return renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), opts);
+  return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
 }
 
 // A multi-link toolbar with PLAIN text trailing the final link — the shape that
@@ -94,11 +96,11 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
   // re-open a split link region, never leave a visual line ending mid-link.
   for (const width of [Number.POSITIVE_INFINITY, 80, 40, 20, 12]) {
     test(`every link is closed and output never ends mid-link (width=${width})`, () => {
-      const out = render(TOOLBAR, {
+      const out = ansiOf(render(TOOLBAR, {
         endcaps: "powerline",
         colorCompatibility: "truecolor", wrap: true, padding: 0,
         width,
-      });
+      }));
       const { opens, closes, endsLinked } = osc8Walk(out);
       // Three authored links → at least three open/close pairs (a width-wrap may
       // add more as it splits-and-re-wraps a region across visual lines).
@@ -129,11 +131,11 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       root: { v: ['${SETTINGS_ANCHOR}', 'bar'] },
     }`;
     // The bar's own row; the settings door (a link of its own) sits above it.
-    const out = render(src, {
+    const out = ansiOf(render(src, {
       endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
-    }).split("\n")[1]!;
+    })).split("\n")[1]!;
     const { opens, closes, endsLinked } = osc8Walk(out);
     expect(opens).toBe(2);
     expect(closes).toBe(2);
@@ -153,11 +155,11 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       },
       root: 'bar',
     }`;
-    const out = render(src, {
+    const out = ansiOf(render(src, {
       endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
-    });
+    }));
     const idsByUrl = new Map<string, string[]>();
     for (const seq of osc8Sequences(out)) {
       if (seq.uri === "") continue;

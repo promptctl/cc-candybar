@@ -6,19 +6,21 @@
 // resolution, not a parallel one — under every state, and as the three
 // states painting three different colours.
 //
-// Same rig as test/dsl-theme-picker-recolor.test.ts: renderDsl with the
+// Same rig as test/dsl-theme-picker-recolor.test.ts: drawDsl with the
 // base palette resolved per render the way the daemon does
 // (resolveThemeSelection, whose decided arm carries the palette), the style the same way
 // (resolveStyleSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -83,8 +85,8 @@ function buildRuntime() {
   // clicks travel the road a real click travels.
   recordRender(sessionState, SID);
 
-  const render = (payload: { pct: number; stop: string }): string => {
-    return renderDsl(
+  const render = (payload: { pct: number; stop: string }): Frame => {
+    return drawPayload(
       config,
       compiled,
       store,
@@ -94,7 +96,7 @@ function buildRuntime() {
       OPTS,
       undefined,
       selectionFor(config, {}, (key) => sessionState.get(SID, key)),
-    );
+    ).frame;
   };
   const click = async (key: "theme" | "style", value: string): Promise<void> =>
     await clickUrl(
@@ -104,11 +106,11 @@ function buildRuntime() {
   return { render, click };
 }
 
-// The bg SGR that paints a cell's text — the `48;2;r;g;b` run before it.
-function bgOf(rendered: string, text: string): string {
-  const m = rendered.match(new RegExp(`48;2;(\\d+;\\d+;\\d+)[^\\x1b]*?${text}`));
-  expect(m).not.toBeNull();
-  return m![1]!;
+// The bg of the run that paints a cell's text.
+function bgOf({ rows }: Frame, cell: string): string {
+  const run = rows.flatMap(({ runs }) => runs).find(({ text }) => text.includes(cell));
+  expect(run?.bg).toBeDefined();
+  return run!.bg!;
 }
 
 describe("ramp over palette-name stops follows the live theme", () => {

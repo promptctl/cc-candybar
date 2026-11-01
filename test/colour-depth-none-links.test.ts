@@ -4,6 +4,10 @@
 // the bar draws no SGR yet keeps every link it draws in colour, and the open
 // tab still reads as open.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { ansiOf, textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -13,7 +17,7 @@ import { VERB_SET_STATE } from "../src/click/wire";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import {
   effectiveInputs,
 } from "../src/daemon/render-payload";
@@ -29,7 +33,6 @@ import {
   recordRender,
   testVerbContext,
 } from "./helpers/click";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 const SGR = /\x1b\[[0-9;]*m/g;
@@ -60,8 +63,8 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
       );
     const effectiveDepth = (): ColorCompatibility =>
       effective().colorCompatibility;
-    const render = (drawnAt: ColorCompatibility = effectiveDepth()): string =>
-      renderDsl(
+    const render = (drawnAt: ColorCompatibility = effectiveDepth()): Frame =>
+      drawPayload(
         config,
         compiled,
         store,
@@ -85,10 +88,10 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
           width: 200,
           colorCompatibility: drawnAt,
         },
-      );
+      ).frame;
     // The links on `rendered` that write `key` a value `member` accepts.
     const writers = (
-      rendered: string,
+      rendered: Frame,
       key: string,
       member: (v: string) => boolean,
     ): string[] =>
@@ -101,7 +104,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
         ),
       );
     const click = async (
-      rendered: string,
+      rendered: Frame,
       key: string,
       member: (v: string) => boolean,
     ): Promise<void> => {
@@ -117,10 +120,10 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
 
     expect(effectiveDepth()).toBe("none");
     const none = render();
-    expect(none.match(SGR)).toBeNull();
+    expect(ansiOf(none).match(SGR)).toBeNull();
     // With no colour, the open tab is still marked: it alone leads with ▾.
-    expect(stripAnsi(none)).toContain("▾ ⚙ config");
-    expect(stripAnsi(none).match(/▾ (⚡ session|🎨 look|📐 layout|🧰 tools)/)).toBeNull();
+    expect(textOf(none)).toContain("▾ ⚙ config");
+    expect(textOf(none).match(/▾ (⚡ session|🎨 look|📐 layout|🧰 tools)/)).toBeNull();
     // The same state drawn in colour carries exactly the same links.
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
 

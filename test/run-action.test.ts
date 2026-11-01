@@ -6,6 +6,7 @@
 // cache over the payload providers, declared by `declareLanes`, drawn from
 // `sessionSource`.
 
+import { linkUrls } from "./helpers/frame";
 import { processLauncher, type Launcher } from "../src/proc/launch";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
@@ -47,14 +48,12 @@ import {
 } from "../src/daemon/verbs";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
-import { stripAnsi } from "./helpers/daemon-e2e";
-import { linkUrls } from "./helpers/ansi";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
-import { ansiOf } from "../src/render/frame";
+import { textOf } from "../src/render/frame";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -239,8 +238,7 @@ function draw(view: SessionView<SessionSource>): {
     { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
     effective,
   );
-  const ansi = ansiOf(frame);
-  return { text: stripAnsi(ansi), links: linkUrls(ansi), errors };
+  return { text: textOf(frame), links: linkUrls(frame), errors };
 }
 
 function viewOf(r: Rig, configFile: string, sid = SID): SessionView<SessionSource> {

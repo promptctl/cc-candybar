@@ -1,11 +1,13 @@
 // [LAW:verifiable-goals] The shipped gitPr segment, driven through the REAL
-// spine (registerDslConfig + renderDsl) and the REAL loader — the same path the
+// spine (registerDslConfig + drawDsl) and the REAL loader — the same path the
 // daemon renders through. Asserts the three render-distinguishable states the
-// forge outcome produces, and that the OSC-8 link region opens AND closes
-// cleanly (the link-bleed guard: a region that opens but never closes bleeds
-// the hyperlink onto the rest of the terminal).
+// forge outcome produces, and that an open PR draws one link region.
 
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -13,9 +15,8 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
-import { linkCloseCount, linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
@@ -30,7 +31,7 @@ const OPTS = {
 };
 
 
-function renderGitPr(git: Record<string, unknown>): string {
+function renderGitPr(git: Record<string, unknown>): Frame {
   const base = parseAndValidate("<default>", SERIALIZED);
   // Narrow the spread default to just the gitPr segment so the rendered line is
   // exactly that segment's output.
@@ -73,14 +74,14 @@ function renderGitPr(git: Record<string, unknown>): string {
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
       git,
     };
-    return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), OPTS);
+    return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), OPTS).frame;
   } finally {
     registry.dispose();
   }
 }
 
 describe("gitPr segment render", () => {
-  test("open PR → one OSC-8 link to the PR url, opened AND closed", () => {
+  test("open PR → one link to the PR url", () => {
     const url = "https://github.com/promptctl/cc-candybar/pull/76";
     const out = renderGitPr({
       branch: "brandon-git-76s",
@@ -92,10 +93,8 @@ describe("gitPr segment render", () => {
     // Exactly one clickable region, carrying the PR url verbatim (the terminal
     // opens https directly — no cc-candybar:// verb round-trip).
     expect(linkUrls(out)).toEqual([url]);
-    // The number is shown; the region closes cleanly (no link bleed).
-    expect(out).toContain("#76");
-    // Exactly one open and one close — the region is balanced.
-    expect(linkCloseCount(out)).toBe(1);
+    // The number is shown.
+    expect(textOf(out)).toContain("#76");
   });
 
   test("lookup failed → distinct ⚠ marker, NO link", () => {
@@ -105,8 +104,8 @@ describe("gitPr segment render", () => {
     });
 
     expect(linkUrls(out)).toEqual([]);
-    expect(out).toContain("⚠");
-    expect(out).toContain("PR");
+    expect(textOf(out)).toContain("⚠");
+    expect(textOf(out)).toContain("PR");
   });
 
   test.each(["merged", "closed"])(
@@ -119,14 +118,14 @@ describe("gitPr segment render", () => {
         prUrl: "https://github.com/promptctl/cc-candybar/pull/76",
       });
       expect(linkUrls(out)).toEqual([]);
-      expect(out).not.toContain("#76");
+      expect(textOf(out)).not.toContain("#76");
     },
   );
 
   test("no PR → segment absent (when-gated, empty line)", () => {
     const out = renderGitPr({ branch: "brandon-git-76s" });
     expect(linkUrls(out)).toEqual([]);
-    expect(out).not.toContain("PR");
-    expect(out).not.toContain("#");
+    expect(textOf(out)).not.toContain("PR");
+    expect(textOf(out)).not.toContain("#");
   });
 });

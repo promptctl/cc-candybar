@@ -22,6 +22,7 @@ import { applyLayoutOp } from "../src/daemon/config-file-store";
 import { walkNodes } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { loadConfigOnce } from "../src/doctor/cli";
+import { textOf, type Frame } from "../src/render/frame";
 
 let dir: string;
 let project: string;
@@ -75,8 +76,8 @@ test("a project file that places one segment renders over the user's whole confi
     { path: userFile, scope: "plugins" },
     { path: projectFile, scope: "repo" },
   ]);
-  expect(outcome.rendered).toContain("USERSEG");
-  expect(outcome.rendered).toContain("PROJSEG");
+  expect(textOf(outcome.rendered)).toContain("USERSEG");
+  expect(textOf(outcome.rendered)).toContain("PROJSEG");
   const prepared = await prepareConfig(outcome.layers, NO_REPO, project, [], instantOf(new Date()));
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
@@ -197,8 +198,8 @@ describe("a project layer inserting into the user's row", () => {
       projectFile,
       `{ segments: { ${segments} }, insert: ${insert} }`,
     );
-  const order = (rendered: string, ...marks: string[]) =>
-    marks.map((m) => rendered.indexOf(m));
+  const order = (rendered: Frame, ...marks: string[]) =>
+    marks.map((m) => textOf(rendered).indexOf(m));
   // The trees one insert notice names as missed: its closing `(in …)`.
   const missedTrees = (w: string) => /\(in (.*)\)$/.exec(w)?.[1] ?? "";
   // The warnings about the config's own root.
@@ -295,8 +296,8 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     answerRepo(project, "declined");
     const outcome = clean(await checkConfig(undefined, project));
-    expect(outcome.rendered).toContain("USERSEG");
-    expect(outcome.rendered).not.toContain("THEIRSEG");
+    expect(textOf(outcome.rendered)).toContain("USERSEG");
+    expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
     expect(warnedFor(outcome.warnings, projectFile)).toEqual([]);
   });
 
@@ -304,8 +305,8 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
     const outcome = clean(await checkConfig(undefined, project));
-    expect(outcome.rendered).toContain("USERSEG");
-    expect(outcome.rendered).not.toContain("THEIRSEG");
+    expect(textOf(outcome.rendered)).toContain("USERSEG");
+    expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
     const warned = warnedFor(outcome.warnings, "insert.0");
     expect(warned).toHaveLength(1);
     expect(warned[0]).toContain(projectFile);
@@ -320,7 +321,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(await checkConfig(undefined, project));
-    expect(outcome.rendered.split("THEIRSEG")).toHaveLength(2);
+    expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(2);
     expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
   });
 
@@ -330,8 +331,8 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(await checkConfig(undefined, project));
-    expect(outcome.rendered).toContain("OTHERSEG");
-    expect(outcome.rendered).not.toContain("THEIRSEG");
+    expect(textOf(outcome.rendered)).toContain("OTHERSEG");
+    expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
     const warned = warnedFor(outcome.warnings, "insert.0");
     expect(warned).toHaveLength(1);
     expect(warned[0]).toContain(projectFile);
@@ -543,7 +544,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(await checkConfig(undefined, project));
-    expect(outcome.rendered.split("THEIRSEG")).toHaveLength(2);
+    expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(2);
     expect(outcome.warnings.filter((w) => w.includes("insert.0"))).toEqual([]);
   });
 
@@ -554,7 +555,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", id: "t2", after: "mine" }]`);
     const outcome = clean(await checkConfig(undefined, project));
-    expect(outcome.rendered.split("THEIRSEG")).toHaveLength(3);
+    expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(3);
   });
 
   test("a missed anchor warns for the root only when a config file writes it", async () => {
@@ -565,7 +566,7 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
     const outcome = clean(await checkConfig(undefined, project));
     expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
-    expect(outcome.rendered).not.toContain("THEIRSEG");
+    expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
   });
 
   test("a clash only the cell brings refuses the cell, at its entry, and the user's bar draws", () => {

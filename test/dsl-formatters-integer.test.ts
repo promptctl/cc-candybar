@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] bdi.5 acceptance: formatInteger is RESOLVED to a
 // retained JS primitive (Option B), not migrated to a DSL define-template. This
 // pins the chosen behavior across the enumerated boundary table on the same
-// production path the shipped statusline uses (registerDslConfig → renderDsl,
+// production path the shipped statusline uses (registerDslConfig → drawDsl,
 // merged onto DEFAULT_DSL_CONFIG).
 //
 // WHY retained (the rejected alternative): formatInteger = n.toLocaleString(),
@@ -20,10 +20,11 @@
 // SENSITIVITY itself (the retention rationale, what Option A would break) is
 // pinned separately below.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
-import { stripAnsi } from "./helpers/ansi";
 
 import { validateConfig } from "./helpers/parse-and-validate";
 import {
@@ -34,7 +35,7 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { formatInteger } from "../src/utils/formatters";
 import { instantOf } from "../src/utils/instant";
 
@@ -46,8 +47,7 @@ const OPTS = {
 const VARS = `{ n: { kind: "input", path: "n", type: "number", default: 0 } }`;
 
 // Render `{{ formatInteger .n }}` through the production path, merged onto
-// DEFAULT_DSL_CONFIG so the shipped FuncMap is in scope. Returns ANSI/OSC-8-
-// stripped text.
+// DEFAULT_DSL_CONFIG so the shipped FuncMap is in scope. Returns its text.
 function render(n: number): string {
   const source = `{
     variables: ${VARS},
@@ -62,7 +62,7 @@ function render(n: number): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-  const out = renderDsl(
+  const out = drawPayload(
     config,
     compiled,
     store,
@@ -70,8 +70,8 @@ function render(n: number): string {
     { n },
     instantOf(new Date()),
     OPTS,
-  );
-  return stripAnsi(out);
+  ).frame;
+  return textOf(out);
 }
 
 describe("bdi.5 — formatInteger retained primitive (production path)", () => {

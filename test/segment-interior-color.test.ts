@@ -7,13 +7,15 @@
 // segment could pass while the SHIPPED gitaculous regresses.
 
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame, Run } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
@@ -44,71 +46,14 @@ const GIT_PAYLOAD = {
   },
 };
 
-interface Run {
-  readonly sgr: string;
-  readonly text: string;
-}
+// A colour a run sets itself, as a truecolor hex or a palette `color(n)`: the
+// terminal's own `default` is none. `Run.fg` is the value pdu.3's defect
+// collapsed to a single segment fg, so comparing it across runs is the
+// behavioral invariant. Compositing means every interior glyph keeps the
+// SEGMENT's bg, so `Run.bg` must match across the segment and its colored glyphs.
+const SET = /^(#|color\()/;
 
-function parseRuns(ansi: string): Run[] {
-  const runs: Run[] = [];
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\[([0-9;]*)m([^\x1b]*)/g;
-  for (const m of ansi.matchAll(re)) {
-    const text = m[2] ?? "";
-    if (text.length > 0) runs.push({ sgr: m[1] ?? "", text });
-  }
-  return runs;
-}
-
-// A truecolor RGB component (0-255) can numerically fall inside a basic-code
-// range (e.g. a blue of 106 collides with the 100-107 bright-bg range), so
-// the scan must SKIP a recognized `38;2;r;g;b` / `48;2;r;g;b` run's three
-// component tokens rather than re-inspecting them as standalone codes —
-// otherwise an unrelated color's component number gets misread as a legacy
-// ANSI introducer.
-function skipTruecolorRun(params: readonly string[], i: number): number {
-  return params[i + 1] === "2" ? i + 4 : i;
-}
-
-// The foreground a run sets — the value pdu.3's defect collapsed to a single
-// segment fg; comparing it across runs is the behavioral invariant. Both the
-// truecolor `38;2;r;g;b` form and a basic ANSI code (30-37/90-97) count.
-function foregroundKey(sgr: string): string | null {
-  const params = sgr.split(";");
-  for (let i = 0; i < params.length; i++) {
-    if (params[i] === "38" && params[i + 1] === "2") {
-      return `tc:${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
-    }
-    if (params[i] === "48") {
-      i = skipTruecolorRun(params, i);
-      continue;
-    }
-    const n = Number(params[i]);
-    if ((n >= 30 && n <= 37) || (n >= 90 && n <= 97)) return `basic:${n}`;
-  }
-  return null;
-}
-
-// The background a run sets (truecolor `48;2;r;g;b` or basic 40-47/100-107) —
-// compositing means every interior glyph keeps the SEGMENT's bg, so this must
-// match across the segment and its colored glyphs.
-function backgroundKey(sgr: string): string | null {
-  const params = sgr.split(";");
-  for (let i = 0; i < params.length; i++) {
-    if (params[i] === "48" && params[i + 1] === "2") {
-      return `tc:${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
-    }
-    if (params[i] === "38") {
-      i = skipTruecolorRun(params, i);
-      continue;
-    }
-    const n = Number(params[i]);
-    if ((n >= 40 && n <= 47) || (n >= 100 && n <= 107)) return `basic:${n}`;
-  }
-  return null;
-}
-
-function render(): string {
+function render(): Frame {
   const userSource = JSON.stringify({ root: { seg: "gitaculous" } });
   const config = parseAndValidate(
     "<interior-color>",
@@ -121,18 +66,18 @@ function render(): string {
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {
+    return drawPayload(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
-    });
+    }).frame;
   } finally {
     registry.dispose();
   }
 }
 
 describe("interior per-part colors survive powerline serialization (pdu.3)", () => {
-  const runs = parseRuns(render());
+  const runs = render().rows.flatMap((row) => row.runs);
   const runFor = (glyph: string): Run | undefined =>
     runs.find((r) => r.text.trim() === glyph);
   // The structural text the segment's own fg paints: the branch glyph, which
@@ -148,28 +93,28 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
   });
 
   test("each interior-colored glyph's fg is DISTINCT from the segment fg (no collapse)", () => {
-    const segFg = foregroundKey(segmentRun!.sgr);
-    expect(segFg).not.toBeNull();
+    const segFg = segmentRun!.fg;
+    expect(segFg).toMatch(SET);
     for (const glyph of ["S", "U", "+1", "-1"]) {
-      const fg = foregroundKey(runFor(glyph)!.sgr);
-      expect(fg).not.toBeNull();
+      const { fg } = runFor(glyph)!;
+      expect(fg).toMatch(SET);
       expect(fg).not.toBe(segFg);
     }
   });
 
   test("green (staged/ahead) and red (unstaged/behind) are distinct from each other", () => {
-    const green = foregroundKey(runFor("S")!.sgr);
-    const red = foregroundKey(runFor("U")!.sgr);
+    const green = runFor("S")!.fg;
+    const red = runFor("U")!.fg;
     expect(green).not.toBe(red);
-    expect(foregroundKey(runFor("+1")!.sgr)).toBe(green);
-    expect(foregroundKey(runFor("-1")!.sgr)).toBe(red);
+    expect(runFor("+1")!.fg).toBe(green);
+    expect(runFor("-1")!.fg).toBe(red);
   });
 
   test("every colored glyph is painted over the segment bg (composited, not bare)", () => {
-    const segBg = backgroundKey(segmentRun!.sgr);
-    expect(segBg).not.toBeNull();
+    const segBg = segmentRun!.bg;
+    expect(segBg).toMatch(SET);
     for (const glyph of ["S", "U", "+1", "-1"]) {
-      expect(backgroundKey(runFor(glyph)!.sgr)).toBe(segBg);
+      expect(runFor(glyph)!.bg).toBe(segBg);
     }
   });
 });

@@ -7,6 +7,8 @@
 // no validation error and no error cell (⚠) in the output — so any future drift
 // fails CI, not a user's status line.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { readdirSync } from "node:fs";
@@ -19,7 +21,7 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
@@ -66,18 +68,20 @@ describe("shipped examples load and render through the real cascade", () => {
     // thrown — surface it here so a broken example var fails the test loudly.
     expect(compiled.loadWarnings).toEqual([]);
 
-    const rendered = renderDsl(
-      config,
-      compiled,
-      store,
-      registry,
-      PAYLOAD,
-      instantOf(new Date()),
-      {
-        endcaps: "powerline",
-        colorCompatibility: "truecolor", wrap: true, padding: 0,
-        width: 200,
-      },
+    const rendered = textOf(
+      drawPayload(
+        config,
+        compiled,
+        store,
+        registry,
+        PAYLOAD,
+        instantOf(new Date()),
+        {
+          endcaps: "powerline",
+          colorCompatibility: "truecolor", wrap: true, padding: 0,
+          width: 200,
+        },
+      ).frame,
     );
 
     expect(typeof rendered).toBe("string");

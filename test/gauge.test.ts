@@ -7,11 +7,12 @@
 // the author's ramp says at cell i's position" — is about the binding to `{{ ramp }}`
 // and cannot be seen from the drawing function alone.
 
+import { textOf } from "../src/render/frame";
 import { renderToString } from "@promptctl/rich-js";
 
 import { renderGauge } from "../src/template-engine/gauge";
 import { checkText } from "./helpers/check-config";
-import { stripAnsi } from "./helpers/ansi";
+import { drawnChars, same } from "./helpers/seams";
 
 const glyphs = { filled: "█", empty: "░" };
 
@@ -136,12 +137,15 @@ describe("{{ gauge }} in a real config", () => {
       }`,
     );
     // checkPayload puts contextLeft at 24, so two cells of ten are lit.
-    const visible = stripAnsi(clean.rendered);
+    const visible = textOf(clean.rendered);
     expect(visible).toContain("##--------");
     // Painted per cell from the step cascade: both lit cells sit below the 40 stop,
     // so both wear `error` — and the gauge carries a colour of its own at all,
     // which is what distinguishes it from the monochrome form.
-    expect(clean.rendered).toMatch(/\x1b\[[0-9;]*m#/);
+    const lit = drawnChars(clean.rendered).filter(({ ch }) => ch === "#");
+    expect(lit).toHaveLength(2);
+    expect(lit[0]!.fg).toBeDefined();
+    expect(same(lit[0]!.fg, lit[1]!.fg)).toBe(true);
   });
 
   test("without a ramp the gauge carries no colour, so the segment's fg owns it", async () => {
@@ -154,7 +158,7 @@ describe("{{ gauge }} in a real config", () => {
         root: { h: ["g"] },
       }`,
     );
-    expect(stripAnsi(clean.rendered)).toContain("##--------");
+    expect(textOf(clean.rendered)).toContain("##--------");
   });
 
   // [LAW:no-silent-failure] A malformed stop is an authoring mistake and says so

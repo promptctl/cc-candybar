@@ -2,11 +2,12 @@
 // render request samples its clock once, the bar is drawn at that instant, and
 // the daemon's one event per render — its `render sid=…` log line — names it.
 
+import { textOf } from "../src/render/frame";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { render, stripAnsi } from "./helpers/daemon-e2e";
+import { render } from "./helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -43,7 +44,7 @@ describe("a daemon render is drawn at the instant its request sampled, and logs 
   test("the bar's `now` and the render event's `at=` are one instant, inside the request", async () => {
     const sessionId = "instant-e2e-session";
     const before = Date.now() / 1000;
-    const bar = stripAnsi(
+    const bar = textOf(
       await render(daemon, sessionId, projectDir, {}, [
         "cc-candybar",
         "--config",

@@ -68,7 +68,7 @@ The port changes no observable behaviour. Same socket path, same wire format and
 
 **Renderer and colour**
 
-- One renderer, `renderDsl`, called verbatim by the daemon, the demo, and the tests; no parallel render path `[LAW:one-source-of-truth]`.
+- One renderer, `drawDsl`, called verbatim by the daemon, the demo, and the tests; no parallel render path `[LAW:one-source-of-truth]`.
 - Decorative colour by tree address (`decorFor`), bands by disclosure (`bandFor`), state colour by hue; OKLCH and every other colour operation live in the styled-text library, never in the daemon.
 
 **Variable system and sources**
@@ -116,7 +116,7 @@ The TypeScript daemon is 39,534 lines of `src/` and 47,711 lines of `test/`. The
 | `src/daemon/server.ts`, `protocol.ts`, `paths.ts`, `limits.ts`, `parent-watchdog.ts` | — | `daemon` module | Socket, framing, pid mutex, parent-death watchdog; `limits.ts` is deleted, not ported |
 | `src/daemon/cache/git.ts`, `src/daemon/cache/session-usage-store.ts`, `src/daemon/cache/render.ts`, `src/daemon/session-state.ts` | — | `cache` module | Git watchers, PR TTL cache, byte-cursor usage fold, render LRU with `Drop`-driven dispose |
 | `src/var-system/` | — | `var_system` module | Boxes, computeds, the nine source kinds, `SourceParse`, documents |
-| `src/dsl/render.ts`, `src/render/`, `src/themes/` | — | `render` module | `registerDslConfig` + `renderDsl`, decor and bands, actions, picker, diagnostic strip |
+| `src/dsl/render.ts`, `src/render/`, `src/themes/` | — | `render` module | `registerDslConfig` + `drawDsl`, decor and bands, actions, picker, diagnostic strip |
 | `src/config/` (loader, merge, schema emitter, `json5-edit.ts`) | — | `config` module | Validation with the same error text; the span-tracking JSON5 editor; the JSON schema emitter stays one source with the validator |
 | `src/doctor/` | — | `doctor` module | `CHECKS` as data, `runDoctor` as the one fold, effects behind `DoctorEdge` |
 | `src/install/`, `src/click/`, URL handler | — | Unchanged unless verified | The macOS URL handler app and Launch Services registration are deploy-time artifacts; whether they and `cc-candybar install` stay in Node is an open question |
@@ -187,7 +187,7 @@ Each phase has an exit criterion. The TypeScript daemon keeps shipping and recei
 
 **Phase 1: the three libraries as crates.** `cc-rich`, `cc-gotmpl`, and the reactive runtime (a spike deciding `reactive_graph` against an own runtime, on the four translation points), each in its own crate with its own tests ported from the TypeScript libraries' suites. Exit: every ported test passes; the crate versions of `palette`, `unicode-width`, and `unicode-segmentation` are verified and pinned; the memo-with-zero-observers behaviour is pinned by a test.
 
-**Phase 2: daemon core.** Protocol and framing, socket, pid mutex, the parent-death watchdog, the four caches, the variable system with its nine source kinds, config loading and merge, `registerDslConfig` and `renderDsl`. Exit, the parity gate: for every existing test payload, a request over the socket to the Rust daemon returns byte-identical output to the TypeScript daemon, diagnostics strip included. The gate is a test that runs both daemons on isolated sockets and diffs; it stays in the suite until phase 4 deletes one side.
+**Phase 2: daemon core.** Protocol and framing, socket, pid mutex, the parent-death watchdog, the four caches, the variable system with its nine source kinds, config loading and merge, `registerDslConfig` and `drawDsl`. Exit, the parity gate: for every existing test payload, a request over the socket to the Rust daemon returns byte-identical output to the TypeScript daemon, diagnostics strip included. The gate is a test that runs both daemons on isolated sockets and diffs; it stays in the suite until phase 4 deletes one side.
 
 **Phase 3: verbs and the loop.** The click verbs, session state, the durable config editing path (span editor, undo/redo, `durableConfigPath` at click time), the doctor, the update notice, `daemon-stats`. Exit: the click-path tests pass against the Rust daemon; a live session drives the settings menu end to end through the real URL handler.
 

@@ -32,6 +32,10 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
@@ -39,7 +43,7 @@ import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseHandlerUrl } from "../src/install/index";
@@ -72,7 +76,6 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { testVerbContext } from "./helpers/click";
-import { linkUrls, links, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
@@ -88,7 +91,7 @@ function opts(width = Number.POSITIVE_INFINITY) {
   };
 }
 
-function ownUrls(rendered: string): string[] {
+function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
   // The global settings menu and the edit toggle it reaches are on every bar;
   // this file's assertions are about the fixture's OWN clickable regions.
@@ -284,8 +287,8 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (width = Number.POSITIVE_INFINITY): string =>
-    renderDsl(
+  const render = (width = Number.POSITIVE_INFINITY): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -293,7 +296,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
       opts(width),
-    );
+    ).frame;
   const ctx: VerbContext = testVerbContext(
     sessionState,
     durable.historyFor(sessionState),
@@ -429,7 +432,7 @@ describe("segment-palette persist action click → the config file", () => {
     // By label: `directory` itself is a link now (its copy-the-path click).
     const rendered = render();
     const urlOf = (label: string): string => {
-      const matches = links(rendered).filter((l) => stripAnsi(l.text).trim() === label);
+      const matches = linksOf(rendered).filter((l) => l.text === label);
       expect(matches).toHaveLength(1);
       return matches[0]!.url;
     };

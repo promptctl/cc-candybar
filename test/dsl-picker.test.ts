@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] 2de.13 acceptance for the picker helper, driven through
-// the real spine (registerDslConfig + renderDsl), the real loader
+// the real spine (registerDslConfig + drawDsl), the real loader
 // (parseAndValidate), and the real set-state gate (the loaded config's own
 // `stateGate`) — never a parallel rig:
 //
@@ -14,12 +14,16 @@
 //   5. The active option (current value) renders bold.
 //   6. The loader rejects a picker referencing an undeclared action.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls, boldUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { paginate } from "../src/render/picker";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -28,8 +32,7 @@ import {
   stateGate,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf, boldUrls } from "./helpers/click";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
+import { effectsOf } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -78,8 +81,8 @@ function buildRuntime(src: string, sessionId = "s1") {
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (width: number): string =>
-    renderDsl(
+  const render = (width: number): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -87,7 +90,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       instantOf(new Date()),
       opts(width),
-    );
+    ).frame;
   const gate = stateGate(config);
   const click = (url: string): void => {
     for (const { verb, args } of effectsOf(url)) {
@@ -109,7 +112,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       pickerConfig(true, true),
     );
     // Closed: the when-gate (page>=0) drops the row entirely — only the trigger.
-    const closed = stripAnsi(render(80));
+    const closed = textOf(render(80));
     expect(closed).toContain("▸");
     expect(closed).not.toContain("✕");
 
@@ -124,7 +127,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(sessionState.get("s1", "theme-page")).toBe("0");
 
     const open = render(80);
-    expect(stripAnsi(open)).toContain("✕");
+    expect(textOf(open)).toContain("✕");
     // The default theme (current) renders bold (active).
     expect(boldUrls(open).join(" ")).toContain(THEMES[0]!);
   });
@@ -178,7 +181,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     const { render, sessionState } = buildRuntime(src);
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
-    expect(stripAnsi(open)).toContain("✕"); // open: the close affordance is present
+    expect(textOf(open)).toContain("✕"); // open: the close affordance is present
     const themeUrl = linkUrls(open).find((u) => {
       const e = effectsOf(u)[0]!;
       return e.verb === "set-state" && e.args.includes("theme-pick");
@@ -194,7 +197,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     );
     sessionState.set("s1", "theme-page", "0");
     const open = render(30); // narrow → forces multiple pages
-    const plain = stripAnsi(open);
+    const plain = textOf(open);
     expect(plain).toContain("→");
     // Not every theme fits on the first narrow page.
     const shown = THEMES.filter((t) => plain.includes(t));
@@ -215,7 +218,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       pickerConfig(true, false),
     );
     sessionState.set("s1", "theme-page", "0");
-    const plain = stripAnsi(render(30));
+    const plain = textOf(render(30));
     expect(plain).toContain("✕");
     expect(plain).not.toContain("→");
     expect(plain).not.toContain("←");

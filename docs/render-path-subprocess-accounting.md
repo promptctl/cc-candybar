@@ -28,16 +28,16 @@ Current categories (13):
 - `daemon-spawn` — bootstrap
 - `process-fingerprint` — `ps -o lstart=` for socket-lease liveness, at daemon start and EADDRINUSE arbitration only
 
-### renderDsl itself does not spawn
+### drawDsl itself does not spawn
 
-`src/dsl/render.ts:renderDsl` is pure CPU: reads from MobX store, evaluates pre-compiled templates, builds strip cells, assembles ANSI. It does not import `launch` and does not transitively call any subprocess-spawning code.
+`src/dsl/render.ts:drawDsl` is pure CPU: reads from MobX store, evaluates pre-compiled templates, builds strip cells, assembles ANSI. It does not import `launch` and does not transitively call any subprocess-spawning code.
 
 The render-hot-path call chain (daemon side, per request):
 ```
 handleRequest (reply.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
   └─ settlePayload / payloadOf          — reads provider snapshots, no spawn
-  └─ renderDsl(...)                  — pure CPU
+  └─ drawDsl(...)                  — pure CPU
   └─ collectDiagnostics / viewerRows     — string assembly
 ```
 
@@ -81,7 +81,7 @@ subprocesses
 
 ## Known gaps (not regressions, just things the type system doesn't enforce)
 
-1. **`types-are-the-program` only partial here.** The type system enforces "every spawn appears in metering" via the single enforcer. It does NOT statically guarantee "no spawn is reachable transitively from `renderDsl`." That invariant is enforced by architecture (the cache layer's existence + the render path's purity), not by a brand or phantom type. Strengthening this would require branding the render path as no-launch-reachable, which is expensive in TS for marginal gain given the architectural locality.
+1. **`types-are-the-program` only partial here.** The type system enforces "every spawn appears in metering" via the single enforcer. It does NOT statically guarantee "no spawn is reachable transitively from `drawDsl`." That invariant is enforced by architecture (the cache layer's existence + the render path's purity), not by a brand or phantom type. Strengthening this would require branding the render path as no-launch-reachable, which is expensive in TS for marginal gain given the architectural locality.
 
 2. **`depends_on` and `key` cache policies have no per-spawn floor.** A user config with `kind: "shell", cache: { depends_on: ["cwd"] }` re-spawns whenever the `cwd` input changes between renders. The cache policy is the user's authoring choice; the system trusts it is sound. A misauthored config could drive 1 spawn per render if its dependency churns at render frequency. Mitigation today is the metering — daemon-stats surfaces the rate; future tightening could add a per-config-key spawn-rate guard.
 

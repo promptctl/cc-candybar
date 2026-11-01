@@ -1,3 +1,4 @@
+import type { Frame } from "../src/render/frame";
 // [LAW:verifiable-goals] candybar-settings-ui-aok.1's headline acceptance,
 // measured the only way the ticket accepts: from a USER CONFIG FILE whose
 // `root` is a whole tree of one row of two segments, resolved by the daemon's
@@ -12,17 +13,14 @@
 // isolated `XDG_CONFIG_HOME` must be the daemon's — a client-side override
 // would resolve nothing.
 
+import { textOf } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
+import { linkUrls, boldUrls } from "./helpers/frame";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  click,
-  linkUrls,
-  render,
-  stripAnsi,
-  urlWriting,
-} from "./helpers/daemon-e2e";
+import { click, render, urlWriting } from "./helpers/daemon-e2e";
 import { startDaemon } from "./helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -33,7 +31,6 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
-import { boldUrls, links } from "./helpers/ansi";
 import { effectsOf } from "./helpers/click";
 
 jest.setTimeout(30_000);
@@ -60,14 +57,14 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
 
       // 1. The door exists, from a config that declared only two segments.
       const closed = await render(daemon, SID, projectDir);
-      expect(stripAnsi(closed)).toContain(DOOR_GLYPH);
-      expect(stripAnsi(closed)).not.toContain("✎ arrange");
+      expect(textOf(closed)).toContain(DOOR_GLYPH);
+      expect(textOf(closed)).not.toContain("✎ arrange");
 
       // 2. Its click opens the body — found in the rendered bytes and
       //    dispatched through the real click gate, so a menu the derived
       //    validators did not admit would fail here rather than no-op.
       await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, "open"));
-      const opened = stripAnsi(await render(daemon, SID, projectDir));
+      const opened = textOf(await render(daemon, SID, projectDir));
       expect(opened).toContain(DOOR_CLOSE_GLYPH);
       expect(opened).not.toContain(DOOR_GLYPH);
       expect(opened).toContain("✎ arrange"); // edit mode, on the first line
@@ -77,11 +74,11 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       //    row's edit chrome is on screen the moment edit mode is, and the
       //    menu stays open above it.
       const bodyOut = await render(daemon, SID, projectDir);
-      expect(stripAnsi(bodyOut)).toContain("✎ arrange");
+      expect(textOf(bodyOut)).toContain("✎ arrange");
       await click(daemon, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));
       const editing = await render(daemon, SID, projectDir);
-      expect(stripAnsi(editing)).toContain(DOOR_CLOSE_GLYPH);
-      expect(stripAnsi(editing)).toContain("📐 layout");
+      expect(textOf(editing)).toContain(DOOR_CLOSE_GLYPH);
+      expect(textOf(editing)).toContain("📐 layout");
       expect(
         linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,
@@ -112,7 +109,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
     const daemon = startDaemon(env);
     try {
       const SID = "preset-stays-open-1";
-      const bar = (): Promise<string> => render(daemon, SID, projectDir);
+      const bar = (): Promise<Frame> => render(daemon, SID, projectDir);
 
       await click(daemon, urlWriting(await bar(), SETTINGS_ANCHOR, "open"));
       await click(
@@ -128,14 +125,14 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         const pick = urlWriting(await bar(), "preset", preset);
         await click(daemon, pick);
         const after = await bar();
-        expect(stripAnsi(after)).toContain("◀ ▦ preset ▶");
+        expect(textOf(after)).toContain("◀ ▦ preset ▶");
         // Still open: the list draws the other preset as an option, by name —
         // the ◀/▶ beside the control write a preset too, but read as arrows.
         const other = preset === "compact" ? "default" : "compact";
         const option = (name: string) =>
-          links(after).find(
+          linksOf(after).find(
             (l) =>
-              stripAnsi(l.text) === name &&
+              l.text === name &&
               effectsOf(l.url).some(
                 (e) => e.args[1] === "preset" && e.args[2] === name,
               ),

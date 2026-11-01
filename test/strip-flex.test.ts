@@ -1,12 +1,22 @@
 import { POWERLINE } from "./helpers/powerline";
-import { buildLineStrip } from "../src/render/strip";
+import { stripCell, type PlainSegment } from "./helpers/strip-cell";
+import { renderStripCells, type BuildLineOptions } from "../src/render/strip";
 
-const seg = (text: string) => ({ type: "x", text });
+const seg = (text: string): PlainSegment => ({ text });
 
-describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
+const stripOf = (
+  segments: readonly PlainSegment[],
+  options: BuildLineOptions,
+): string =>
+  renderStripCells(
+    segments.map((segment) => stripCell(segment, options.padding)),
+    options,
+  );
+
+describe("renderStripCells wrap behavior", () => {
   describe("plain style", () => {
     it("very wide width keeps everything on one row", () => {
-      const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
+      const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1,
@@ -21,7 +31,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       // " alpha " (7) + " | " (3) + " beta " (6) + " | " (3) + " gamma " (7) = 26
       const oneLine = " alpha  |  beta  |  gamma ";
       expect(oneLine.length).toBe(26);
-      const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
+      const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1,
@@ -33,7 +43,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
     it("narrow width forces multi-row wrapping", () => {
       // 16 cells fits two segments + sep + leading/trailing pad but not all three.
-      const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
+      const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1,
@@ -49,7 +59,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     // brandon-display-dam.2: intra-cell padding derives from the one resolved
     // globals.padding on BuildLineOptions — 0 renders flush, N widens N per side.
     it("padding: 0 renders cells flush (no synthesized spaces)", () => {
-      const out = buildLineStrip([seg("alpha"), seg("beta")], {
+      const out = stripOf([seg("alpha"), seg("beta")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true,
@@ -60,7 +70,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     });
 
     it("padding: 2 widens each cell by two spaces per side", () => {
-      const out = buildLineStrip([seg("alpha"), seg("beta")], {
+      const out = stripOf([seg("alpha"), seg("beta")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true,
@@ -73,7 +83,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     it("wrap:false keeps a too-wide row on one unbounded line", () => {
       // Same narrow width that forces wrapping above; disabling wrap must
       // render one line with overflow allowed, NOT clip or break.
-      const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
+      const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: false, padding: 1,
@@ -91,12 +101,12 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         endcaps: "plain" as const,
         colorCompatibility: "none" as const,
       };
-      const noWrap = buildLineStrip(segments, {
+      const noWrap = stripOf(segments, {
         ...base,
         wrap: false, padding: 1,
         width: 16,
       });
-      const unbounded = buildLineStrip(segments, {
+      const unbounded = stripOf(segments, {
         ...base,
         wrap: true, padding: 1,
         width: Number.POSITIVE_INFINITY,
@@ -111,16 +121,16 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         wrap: true, padding: 1,
       };
       const segments = [seg("a"), seg("bb"), seg("ccc")];
-      const unbounded = buildLineStrip(segments, {
+      const unbounded = stripOf(segments, {
         ...base,
         width: Number.POSITIVE_INFINITY,
       });
-      const wideFinite = buildLineStrip(segments, { ...base, width: 200 });
+      const wideFinite = stripOf(segments, { ...base, width: 200 });
       expect(wideFinite).toBe(unbounded);
     });
 
     it("empty segment list yields empty string", () => {
-      const out = buildLineStrip([], {
+      const out = stripOf([], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1,
@@ -130,13 +140,13 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
     });
 
     it("never emits a trailing newline", () => {
-      const wide = buildLineStrip([seg("a")], {
+      const wide = stripOf([seg("a")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1,
         width: 80,
       });
-      const wrapped = buildLineStrip([seg("alpha"), seg("beta")], {
+      const wrapped = stripOf([seg("alpha"), seg("beta")], {
         endcaps: "plain",
         colorCompatibility: "none",
         wrap: true, padding: 1,
@@ -152,8 +162,8 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       // The powerline cap is painted in the segment's bg (the colour bleeding
       // out), so the segments must carry a bg for a cap to exist \u2014 a fg-only
       // segment has no colour to paint and correctly gets no arrow.
-      const lit = (text: string) => ({ type: "x", text, bgHex: "#445566" });
-      const out = buildLineStrip([lit("aaa"), lit("bbb"), lit("ccc")], {
+      const lit = (text: string): PlainSegment => ({ text, bgHex: "#445566" });
+      const out = stripOf([lit("aaa"), lit("bbb"), lit("ccc")], {
         endcaps: "powerline",
         colorCompatibility: "none",
         wrap: true, padding: 1,
@@ -174,9 +184,9 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
   // downsamples to. One truecolor-authored segment, four depths — the SGR
   // vocabulary in the output is the observable contract, not rich-js internals.
   describe("colorCompatibility", () => {
-    const colored = [{ type: "x", text: "aaa", bgHex: "#445566" }];
+    const colored: PlainSegment[] = [{ text: "aaa", bgHex: "#445566" }];
     const at = (colorCompatibility: "truecolor" | "256" | "ansi" | "none") =>
-      buildLineStrip(colored, {
+      stripOf(colored, {
         endcaps: "plain",
         colorCompatibility,
         wrap: true,

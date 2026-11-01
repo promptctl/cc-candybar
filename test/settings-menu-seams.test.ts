@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] brandon-menus-sjhy.b9w: every pair of neighbouring
 // segments in the open settings menu is joined by a filled arrow, never by the
 // thin divider U+E0B1. Driven through the
-// real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
+// real loader, `resolveEffectiveGlobals` and `drawDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
 //
 // brandon-menus-sjhy.57p: no theme excuses a divider. Where a theme spells two
@@ -9,12 +9,12 @@
 // accent at `middle`), the two cells share a ground and the joiner lifts the
 // arrow's ink off it, so any divider on any row fails.
 
+import { textOf } from "../src/render/frame";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { instantOf } from "../src/utils/instant";
-import { stripAnsi } from "./helpers/ansi";
 import { POWERLINE } from "./helpers/powerline";
 import { sessionBar } from "./helpers/session-bar";
 
@@ -34,7 +34,7 @@ function menuSeams(
   tabs: readonly (typeof TABS)[number][],
 ): { divided: string[]; arrows: number } {
   const bar = sessionBar(`{ globals: { colorCompatibility: '${colorCompatibility}' } }`, COLS);
-  const render = () => ({ lines: bar.render(instantOf(new Date())).text.split("\n") });
+  const render = () => ({ lines: textOf(bar.render(instantOf(new Date())).frame).split("\n") });
 
   const divided: string[] = [];
   let arrows = 0;
@@ -47,9 +47,8 @@ function menuSeams(
     bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
     for (const tab of tabs) {
       bar.pick(`${SETTINGS_NS}tab`, tab);
-      const { lines } = render();
+      const { lines: rows } = render();
       // The menu opens ABOVE the bar: its rows are the ones over the bar's.
-      const rows = lines.map(stripAnsi);
       const menu = rows.slice(0, rows.length - barRows);
       expect(menu.length).toBeGreaterThan(2);
       for (const row of menu) arrows += row.split(POWERLINE.glyph).length - 1;

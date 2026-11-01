@@ -1,3 +1,7 @@
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linksOf } from "../src/click/read";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -18,20 +22,12 @@ import {
 import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
-import {
-  compileDslConfig,
-  compileInputOf,
-  declareDslVariables,
-  EVERY_SCOPE,
-  renderDsl,
-  type CompiledConfig,
-} from "../src/dsl/render";
+import { compileDslConfig, compileInputOf, declareDslVariables, EVERY_SCOPE, type CompiledConfig } from "../src/dsl/render";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
-import { links, stripAnsi } from "./helpers/ansi";
 import { effectsOf } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { VERBS } from "../src/daemon/verbs";
@@ -90,10 +86,10 @@ function file(rel: string, text: string): string {
 }
 
 // A session's frame, drawn through its view as the daemon draws one.
-const drawn = (view: SessionView): string => stripAnsi(drawnBytes(view));
+const drawn = (view: SessionView): string => textOf(drawnBytes(view));
 
-const drawnBytes = (view: SessionView): string =>
-    renderDsl(
+const drawnBytes = (view: SessionView): Frame =>
+    drawPayload(
       view.state.config,
       view.state.compiled,
       view.store,
@@ -101,10 +97,10 @@ const drawnBytes = (view: SessionView): string =>
       { session_id: view.sessionId, project_dir: dir },
       instantOf(new Date()),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
-    );
+    ).frame;
 
 // A frame of `state` through a view of its own, disposed after.
-const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
+const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): Frame => {
   const view = openView(state, dir, viewFacts(dir, "s"), {
     sessionState: new SessionState(),
     source: SOURCES_NOTHING,
@@ -126,7 +122,7 @@ const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableS
   const store = new VariableStore();
   const registry = new SourceRegistry(processLauncher, store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
-  renderDsl(
+  drawPayload(
     config,
     compiled,
     store,
@@ -134,7 +130,7 @@ const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableS
     { session_id: "s", project_dir: dir },
     instantOf(new Date()),
     { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
-  );
+  ).frame;
   registry.dispose();
   return store;
 };
@@ -146,8 +142,8 @@ const exposeGc = (): (() => void) => {
 
 // Where a frame's carousel's ▶ steps to. Over its two options that is the one
 // the key does not hold, so it shows which variable the ring read back.
-const nextOf = (bytes: string): string | undefined =>
-  effectsOf(links(bytes).find((l) => stripAnsi(l.text) === "▶")!.url)[0]!.args[2];
+const nextOf = (bytes: Frame): string | undefined =>
+  effectsOf(linksOf(bytes).find((l) => l.text === "▶")!.url)[0]!.args[2];
 
 // One action over session key `k`, and a carousel centred on what reads it
 // back; `reader` names the state variable over `k`, `value` its default.
@@ -430,8 +426,8 @@ test("an entry, a compile and a view hold no more than the cache charges for the
     const ctx = testVerbContext(sessionState, undefined, held.state.config);
     let last = drawnBytes(held.view);
     for (const text of MENU_WALK) {
-      const hit = links(last).find((l) => stripAnsi(l.text).trim() === text);
-      if (hit === undefined) throw new Error(`no link "${text}" in:\n${stripAnsi(last)}`);
+      const hit = linksOf(last).find((l) => l.text === text);
+      if (hit === undefined) throw new Error(`no link "${text}" in:\n${textOf(last)}`);
       const { verb, value } = parseHandlerUrl(hit.url);
       const effects = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
       for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);

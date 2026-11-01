@@ -20,6 +20,8 @@
 //     opens is the depth-0 band of the bar's lineage every bar trigger opens —
 //     the anchor of the chain.
 
+import { drawPayload } from "./helpers/draw-payload";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
@@ -28,7 +30,7 @@ import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -194,12 +196,12 @@ function build(src: string, withDefault = false) {
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   // [LAW:no-silent-failure] A segment that throws renders a ⚠ cell and skips
   // the sink, which would read here as "did not render"; say what it was.
-  const render = (): string => {
+  const render = (): Frame => {
     const errors: string[] = [];
-    const out = renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
+    const out = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
       perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    });
+    }).frame;
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return out;
   };
@@ -337,7 +339,7 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       rt.dispose();
       return out;
     }));
-    expect(outputs[1]).toBe(outputs[0]);
+    expect(outputs[1]!.rows).toEqual(outputs[0]!.rows);
   });
 });
 

@@ -216,7 +216,7 @@ The ai7 change was expected to be net-subtractive, with the design counted wrong
 
 ## The demo
 
-`design-docs/colour-demo.html` predates brandon-theme-picker-bgw.8fp and renders the superseded per-cell vocabulary (every hue × three bases); it is kept as the evidence the ai7 rule was chosen with, rendering all 23 themes through the real rich-js palettes under that superseded rule, and the ai7-era separations, contrasts and spreads quoted here were measured with it. The 8fp measurements in "A row is one hue; its cells differ by tone" come from the bundled bar rendered through `renderDsl`, which `audits/theme-identity.audit.ts` re-measured on every run until e5n retired its chroma and theme-to-theme facts; it still re-measures the seams, nightly (audits/README.md).
+`design-docs/colour-demo.html` predates brandon-theme-picker-bgw.8fp and renders the superseded per-cell vocabulary (every hue × three bases); it is kept as the evidence the ai7 rule was chosen with, rendering all 23 themes through the real rich-js palettes under that superseded rule, and the ai7-era separations, contrasts and spreads quoted here were measured with it. The 8fp measurements in "A row is one hue; its cells differ by tone" come from the bundled bar rendered through `drawDsl`, which `audits/theme-identity.audit.ts` re-measured on every run until e5n retired its chroma and theme-to-theme facts; it still re-measures the seams, nightly (audits/README.md).
 
 Its rich-js browser bundle is gitignored. Regenerate it from the repo root with:
 

@@ -1,6 +1,6 @@
 // [LAW:verifiable-goals] candybar-settings-ui-aok.6 acceptance — the reusable
 // `(?)`, driven through the real loader (parse → merge → validate), the real
-// spine (registerDslConfig + renderDsl), the real click wire, and the daemon's
+// spine (registerDslConfig + drawDsl), the real click wire, and the daemon's
 // own `resolveEffectiveGlobals`. No parallel rig: a test that restated any of
 // those would pass while the bar diverged.
 //
@@ -15,13 +15,17 @@
 //   3. It is declared as every `(?)` is: one `declareHelp` call.
 //   4. Width, mechanically, at 80 and 120 columns.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
+import { linkUrls } from "./helpers/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
@@ -40,7 +44,6 @@ import {
   recordRender,
 } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
-import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { instantOf } from "../src/utils/instant";
@@ -82,13 +85,13 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   // way the daemon calls it — so edit mode's staged look (plain joiner, " | "
   // separator) reaches this render exactly as it reaches the bar. A hand-built
   // opts literal would measure a width the user never sees.
-  const render = (width: number): string => {
+  const render = (width: number): Frame => {
     const effective = resolveEffectiveGlobals(
       config,
       (key) => sessionState.get(SID, key),
       () => false,
     );
-    return renderDsl(
+    return drawPayload(
       config,
       compiled,
       store,
@@ -108,7 +111,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
       // from — so the bar cannot be painted from one resolution and labelled
       // from another.
       effective,
-    );
+    ).frame;
   };
 
   const click = async (url: string): Promise<void> =>
@@ -124,7 +127,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   );
 
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = async (out: string, key: string, value: string): Promise<void> => {
+  const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -137,7 +140,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   // its current state, so an open help offers "closed" and a closed one offers
   // "open". A helper that only found one of those would silently stop being
   // able to close what it opened.
-  const toggleHelp = async (out: string): Promise<void> => {
+  const toggleHelp = async (out: Frame): Promise<void> => {
     // A (?)'s own click writes its key and nothing else; the door's click
     // also writes every help key, folding them closed.
     const url = linkUrls(out).find((u) => {
@@ -153,7 +156,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   };
 
   const lines = (width: number): string[] =>
-    stripAnsi(render(width)).split("\n");
+    textOf(render(width)).split("\n");
 
   return {
     config,
@@ -221,13 +224,13 @@ describe("edit mode's (?)", () => {
     const rt = buildRuntime();
     await enterEditMode(rt);
 
-    const closed = stripAnsi(rt.render(200));
+    const closed = textOf(rt.render(200));
     expect(closed).toContain(HELP_GLYPH_CLOSED);
     // Closed help costs no content: none of its lines are on the bar.
     for (const line of EDIT_MODE_HELP) expect(closed).not.toContain(line);
 
     await rt.toggleHelp(rt.render(200));
-    const open = stripAnsi(rt.render(200));
+    const open = textOf(rt.render(200));
     // The trigger now wears ✕ instead of (?) — the open state is readable in
     // plain text, which matters to a colourless client (colorCompatibility
     // "none", `cc-candybar check`) that never sees the band's state colour.
@@ -238,7 +241,7 @@ describe("edit mode's (?)", () => {
     for (const line of EDIT_MODE_HELP) expect(open).toContain(line);
 
     await rt.toggleHelp(rt.render(200));
-    const reclosed = stripAnsi(rt.render(200));
+    const reclosed = textOf(rt.render(200));
     for (const line of EDIT_MODE_HELP) expect(reclosed).not.toContain(line);
   });
 
@@ -253,7 +256,7 @@ describe("edit mode's (?)", () => {
 
   test("is absent entirely when edit mode is off", () => {
     const rt = buildRuntime();
-    const out = stripAnsi(rt.render(200));
+    const out = textOf(rt.render(200));
     expect(out).not.toContain(HELP_GLYPH_CLOSED);
   });
 });

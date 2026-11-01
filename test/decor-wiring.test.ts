@@ -14,6 +14,9 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
+import { drawPayload } from "./helpers/draw-payload";
+import { textOf } from "../src/render/frame";
+import type { Frame } from "../src/render/frame";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
@@ -21,7 +24,7 @@ import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig } from "../src/dsl/render";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
@@ -92,8 +95,8 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const registry = new SourceRegistry(processLauncher, store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): string =>
-    renderDsl(
+  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>
+    drawPayload(
       config,
       compiled,
       store,
@@ -107,7 +110,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
         ...(variation === undefined ? {} : { variation }),
         ...(shade === undefined ? {} : { shade }),
       }),
-    );
+    ).frame;
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {
     const cell = sink.get(name)?.[0];
@@ -232,7 +235,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
         for (const gate of [...FIVE, "g"]) {
           const drawn = grouped.render({ [`s${gate}`]: false }, undefined, shade);
           const gone: readonly string[] = gate === "g" ? group : [gate];
-          expect([cells, gate, FIVE.filter((n) => drawn.includes(`«${n}»`))]).toEqual([cells, gate, FIVE.filter((n) => !gone.includes(n))]);
+          expect([cells, gate, FIVE.filter((n) => textOf(drawn).includes(`«${n}»`))]).toEqual([cells, gate, FIVE.filter((n) => !gone.includes(n))]);
           for (const name of FIVE.filter((n) => !gone.includes(n))) {
             expect([cells, shade, gate, name, grouped.bgOf(name)]).toEqual([cells, shade, gate, name, before.get(name)]);
           }
@@ -408,7 +411,6 @@ import type { SemanticRole } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { selectionFor } from "./helpers/selection";
-import { stripAnsi } from "./helpers/ansi";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.
@@ -742,7 +744,7 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     // outside the row, where a count-reading distribution places nothing.
     const rt = build(groupedRow("[ 'a', { v: [ 'b', { h: [ 'c', 'd', 'e' ] } ] } ]", ", distribution: 'monotonic'"));
     const drawn = rt.render();
-    const lines = stripAnsi(drawn)
+    const lines = textOf(drawn)
       .split("\n")
       .map((line) => [...line.matchAll(/«(\w)»/g)].map(([, name]) => name))
       .filter((names) => names.length > 0);
@@ -773,7 +775,7 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
 
   test("an empty container draws no line, so a { v } whose first child is empty draws its next child on the row's line, at a place of its own", () => {
     const rt = build(groupedRow("[ 'a', { v: [ { h: [] }, 'b' ] }, 'c' ]"));
-    const lines = stripAnsi(rt.render())
+    const lines = textOf(rt.render())
       .split("\n")
       .map((line) => [...line.matchAll(/«(\w)»/g)].map(([, name]) => name))
       .filter((names) => names.length > 0);

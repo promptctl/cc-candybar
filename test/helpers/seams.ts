@@ -1,33 +1,30 @@
-// A rendered frame read back as the terminal draws it: every visible
+// A drawn frame read cell by cell, as the terminal shows it: every visible
 // character with its ink and ground at the frame's depth, and every seam the
 // joiner drew between two cells.
 //
 // [LAW:one-source-of-truth] The one reader of a seam. The closing sweep, the
-// 256-colour and ansi checks and the nightly theme-identity audit all decode a
+// 256-colour and ansi checks and the nightly theme-identity audit all read a
 // join through here, so "the cell an arrow leaves" means one thing in all of
 // them: the ground of the column drawn just before it on its line, spaces
 // included, read through reverse video.
 
 import { ColorSpec } from "@promptctl/rich-js";
-import { INVISIBLE } from "./ansi";
+import type { Frame } from "../../src/render/frame";
 import { POWERLINE } from "./powerline";
 
 export type Rgb = readonly [number, number, number];
 /** A colour as drawn: an RGB triple, or at ansi one of the terminal's sixteen slots. */
 export type Drawn = Rgb | { readonly ansi: number };
 
-// The xterm 256-colour table: the 6×6×6 cube's levels and the grey ramp. The
-// first sixteen entries are the terminal theme's own slots, so they have no
-// RGB.
-const LEVELS = [0, 95, 135, 175, 215, 255];
-const xterm = (n: number): Drawn => {
-  if (n < 16) return { ansi: n };
-  if (n >= 232) {
-    const g = 8 + 10 * (n - 232);
-    return [g, g, g];
-  }
-  const i = n - 16;
-  return [LEVELS[Math.floor(i / 36)]!, LEVELS[Math.floor(i / 6) % 6]!, LEVELS[i % 6]!];
+// A run's colour as this reader holds it. The first sixteen are the terminal
+// theme's own slots, so they have no RGB, and `default` is the terminal's own
+// colour.
+const drawnOf = (color: string | undefined): Drawn | undefined => {
+  if (color === undefined || color === "default") return undefined;
+  const spec = ColorSpec.parse(color);
+  if (spec.number !== undefined && spec.number < 16) return { ansi: spec.number };
+  const { hex } = spec.getTruecolor();
+  return [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as unknown as Rgb;
 };
 
 // The joiner's glyphs, read off the shape rich-js renders with: the arrow
@@ -51,57 +48,21 @@ export interface Char {
   readonly before?: Drawn;
 }
 
-/** Every non-space character of `rendered` with the fg and bg it is drawn in. */
-export function drawnChars(rendered: string): Char[] {
-  const out: Char[] = [];
-  let fg: Drawn | undefined;
-  let bg: Drawn | undefined;
-  let reverse = false;
-  let before: Drawn | undefined;
-  let pos = 0;
-  const text = (t: string) => {
-    for (const ch of t) {
-      if (ch === "\n") {
-        before = undefined;
-        continue;
-      }
-      if (ch.trim() !== "") out.push({ ch, fg, bg, joiner: JOINERS.has(ch), reverse, before });
-      before = reverse ? fg : bg;
-    }
-  };
-  // Every zero-width escape, read by the renderer's own pattern (rich-js's
-  // OSC 8 grammar); only SGR carries colour.
-  for (const m of rendered.matchAll(INVISIBLE)) {
-    text(rendered.slice(pos, m.index));
-    pos = m.index + m[0].length;
-    const sgr = /^\x1b\[([0-9;]*)m$/.exec(m[0]);
-    if (sgr === null) continue;
-    const ps = sgr[1]!.split(";").map((p) => (p === "" ? 0 : Number(p)));
-    for (let i = 0; i < ps.length; i++) {
-      const p = ps[i]!;
-      if (p === 0) [fg, bg, reverse] = [undefined, undefined, false];
-      else if (p === 7) reverse = true;
-      else if (p === 27) reverse = false;
-      else if (p === 39) fg = undefined;
-      else if (p === 49) bg = undefined;
-      else if ((p === 38 || p === 48) && ps[i + 1] === 2) {
-        const c: Rgb = [ps[i + 2]!, ps[i + 3]!, ps[i + 4]!];
-        if (p === 38) fg = c;
-        else bg = c;
-        i += 4;
-      } else if ((p === 38 || p === 48) && ps[i + 1] === 5) {
-        const c = xterm(ps[i + 2]!);
-        if (p === 38) fg = c;
-        else bg = c;
-        i += 2;
-      } else if (p >= 30 && p <= 37) fg = { ansi: p - 30 };
-      else if (p >= 90 && p <= 97) fg = { ansi: p - 90 + 8 };
-      else if (p >= 40 && p <= 47) bg = { ansi: p - 40 };
-      else if (p >= 100 && p <= 107) bg = { ansi: p - 100 + 8 };
-    }
-  }
-  text(rendered.slice(pos));
-  return out;
+/** Every non-space character of a frame with the fg and bg it is drawn in. */
+export function drawnChars({ rows }: Pick<Frame, "rows">): Char[] {
+  return rows.flatMap(({ runs }) => {
+    let before: Drawn | undefined;
+    return runs.flatMap((run) => {
+      const fg = drawnOf(run.fg);
+      const bg = drawnOf(run.bg);
+      const reverse = run.attrs?.includes("reverse") === true;
+      return [...run.text].flatMap((ch) => {
+        const char: Char = { ch, fg, bg, joiner: JOINERS.has(ch), reverse, before };
+        before = reverse ? fg : bg;
+        return ch.trim() === "" ? [] : [char];
+      });
+    });
+  });
 }
 
 export const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
@@ -111,8 +72,8 @@ export const hex = (c: Rgb): string => `#${c.map((v) => v.toString(16).padStart(
 
 /**
  * A drawn colour as the terminal shows it, by hex: a slot in the VGA colours
- * rich-js assumes, as its `drawnColour` shows one, so a colour read off the
- * bytes compares with one the policy names at any depth. `undefined` is the
+ * rich-js assumes, as its `drawnColour` shows one, so a colour read off a
+ * frame compares with one the policy names at any depth. `undefined` is the
  * terminal's own colour.
  */
 export const shown = (c: Drawn | undefined): string | undefined =>
