@@ -24,7 +24,8 @@ import { memoryLimitBytes } from "../../src/daemon/limits";
 import { fileStorage } from "../../src/daemon/file-storage";
 import { drained } from "../../src/daemon/log";
 import { logPath, stateDir } from "../../src/daemon/paths";
-import { sendOne, type Request } from "../../src/daemon/protocol";
+import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
+import type { StatsSnapshot } from "../../src/daemon/stats";
 import { reserveUpdateKeys } from "../../src/daemon/update-notice";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
@@ -95,6 +96,18 @@ export function buildDaemon(overrides: DaemonOverrides = {}): Daemon {
       ...overrides.storage?.(log),
     }),
   });
+}
+
+// The daemon's counts from its request handling, past the connection: the 200 ms
+// guard is the connection's, and a busy machine is no fact about them.
+export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
+  const { resp } = await daemon.reply(
+    { v: PROTOCOL_VERSION, kind: "stats" },
+    () => false,
+    daemon.clock.monotonic(),
+  );
+  if (!resp.ok || !("stats" in resp)) throw new Error(`stats failed: ${JSON.stringify(resp)}`);
+  return resp.stats;
 }
 
 export interface InWorkerDaemon extends DaemonEndpoint {

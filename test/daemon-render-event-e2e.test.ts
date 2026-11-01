@@ -50,6 +50,7 @@ import { until } from "./helpers/until";
 import {
   heldClock,
   startDaemon,
+  statsOf,
   type InWorkerDaemon,
 } from "./helpers/in-worker-daemon";
 import {
@@ -488,16 +489,9 @@ describe("every render request writes one render event, whatever its outcome", (
         l.includes('schema: unknown field "novel_field_9b04"'),
       ),
     ).toHaveLength(1);
-    const resp = await sendDaemonRequest(daemon, {
-      v: PROTOCOL_VERSION,
-      kind: "stats",
-    });
-    expect(
-      resp.ok && "stats" in resp ? resp.stats.unknownHookFields : resp,
-    ).toContain("novel_field_9b04");
-    expect(
-      resp.ok && "stats" in resp ? resp.stats.unknownHookFields : resp,
-    ).not.toContain("refused_field_9b04");
+    const { unknownHookFields } = await statsOf(daemon.daemon);
+    expect(unknownHookFields).toContain("novel_field_9b04");
+    expect(unknownHookFields).not.toContain("refused_field_9b04");
     expect(
       logLines(env).filter((l) => l.includes("refused_field_9b04")),
     ).toEqual([]);
@@ -546,14 +540,8 @@ describe("every render request writes one render event, whatever its outcome", (
         deadline: Date.now() + 5_000,
       });
     };
-    const revision = async (): Promise<number> => {
-      const resp = await sendDaemonRequest(daemon, {
-        v: PROTOCOL_VERSION,
-        kind: "stats",
-      });
-      return (resp as { stats: { sessionState: { revision: number } } }).stats
-        .sessionState.revision;
-    };
+    const revision = async (): Promise<number> =>
+      (await statsOf(daemon.daemon)).sessionState.revision;
     // The first request compiles the config's entry in its arrival turn,
     // which can spend its whole deadline: what it draws is not this case's.
     // Its run lands on its own.
