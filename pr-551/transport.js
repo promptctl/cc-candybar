@@ -76589,7 +76589,7 @@ function drawRender(parts, setup, drawing2) {
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(evaluated2),
     // The sources it drew as not answered yet; `-` for none.
-    pending: frame.pending.join(",") || "-",
+    pending: body.pending.join(",") || "-",
     // Each globals rule in force, as its slot settled it: `kept` outside the
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",

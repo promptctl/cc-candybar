@@ -4,15 +4,22 @@
     {
       "version": "pr-551",
       "ref": "refs/pull/551/merge",
-      "sha": "9f7861f2352bd3c5d305bbbeca244951a6a7dce1",
-      "timestamp": "2026-11-01T13:40:59.706Z",
+      "sha": "2c437cb322ec26d7c8b5eb1d88ec8df2f4d61cb3",
+      "timestamp": "2026-11-01T13:46:11.742Z",
       "commits": [
         {
-          "sha": "9f7861f2352bd3c5d305bbbeca244951a6a7dce1",
+          "sha": "2c437cb322ec26d7c8b5eb1d88ec8df2f4d61cb3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T13:40:18Z",
-          "message": "Merge 305130dbba9a125efdc4255c260363d35b7341e2 into 7a2b230a3590504f28701f135da02ae258381d66\n"
+          "timestamp": "2026-11-01T13:45:20Z",
+          "message": "Merge 46fbecec902dc60f799f70e47b252af64d285098 into 7a2b230a3590504f28701f135da02ae258381d66\n"
+        },
+        {
+          "sha": "46fbecec902dc60f799f70e47b252af64d285098",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T06:45:05-07:00",
+          "message": "fix(render): the render event says what the body left pending (candybar-isolated-daemon-bfab.agt)\n\nThe event's motion read the body and its pending read the bar behind it, so with\nthe viewer open it named sources the frame on screen never drew. Frame.depth's\ncomment also said a depth is always the view's, which a frame with no draw behind\nit is not.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
           "sha": "305130dbba9a125efdc4255c260363d35b7341e2",
