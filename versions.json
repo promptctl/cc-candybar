@@ -4,15 +4,22 @@
     {
       "version": "pr-554",
       "ref": "refs/pull/554/merge",
-      "sha": "889371698b4ef6cc4c7dab41c5134b40b15fa20f",
-      "timestamp": "2026-11-01T18:06:14.945Z",
+      "sha": "26250797b218eee03a3c948ed4f212ca91876817",
+      "timestamp": "2026-11-01T18:16:50.188Z",
       "commits": [
         {
-          "sha": "889371698b4ef6cc4c7dab41c5134b40b15fa20f",
+          "sha": "26250797b218eee03a3c948ed4f212ca91876817",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T18:05:19Z",
-          "message": "Merge 85d878d26c1d197d63c9d49e78a7f94d186fed9e into 7636ce26043a3cb0640f9fa33ff75084e9b1af7a\n"
+          "timestamp": "2026-11-01T18:15:53Z",
+          "message": "Merge 512785765bba8d6122b11d90f68f65493d1b70c2 into 7636ce26043a3cb0640f9fa33ff75084e9b1af7a\n"
+        },
+        {
+          "sha": "512785765bba8d6122b11d90f68f65493d1b70c2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T11:15:43-07:00",
+          "message": "fix(test): draws compare by rows, and a reader finds the run under its text (candybar-isolated-daemon-bfab.bzq)\n\nTests that compared draws through the encoder now compare rows, as the testing memory says. runUnder matches a needle exactly where a search of spaceless characters matched across gaps. A failed click's error on Claude Code's bar is pinned with the statusline lane followed. The real client's literals read what it printed, rather than one draw equalling another. The fit test uses a fixed bar, since a cell wider than the width cannot wrap and a branch name is one.\n"
         },
         {
           "sha": "85d878d26c1d197d63c9d49e78a7f94d186fed9e",
