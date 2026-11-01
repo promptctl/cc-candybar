@@ -35720,7 +35720,18 @@ function signalGroup(pid2, sig) {
   try {
     process_default.kill(-pid2, sig);
   } catch (err) {
-    if (err.code !== "ESRCH") throw err;
+    const code = err.code;
+    if (code !== "ESRCH" && !(code === "EPERM" && !leaderRefuses(pid2))) {
+      throw err;
+    }
+  }
+}
+function leaderRefuses(pid2) {
+  try {
+    process_default.kill(pid2, 0);
+    return false;
+  } catch (err) {
+    return err.code === "EPERM";
   }
 }
 async function launchWaited(state, opts) {
