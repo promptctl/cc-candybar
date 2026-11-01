@@ -113,15 +113,15 @@ export interface PaneClaude {
 export interface LaneEdge {
   readonly claudeInput: ClaudeInputEdge;
   // The bar panes the daemon opened for `tmux.pane`.
-  readonly barPanes: (tmux: TmuxHint) => readonly string[];
+  readonly barPanes: (tmux: TmuxHint) => Promise<readonly string[]>;
   // Split a pane under `tmux.pane` running `argv` with `env`, tagged as its
   // bar pane; answers the new pane's id.
   readonly openBarPane: (
     tmux: TmuxHint,
     argv: readonly string[],
     env: Readonly<Record<string, string>>,
-  ) => string;
-  readonly closePane: (tmux: TmuxHint, pane: string) => void;
+  ) => Promise<string>;
+  readonly closePane: (tmux: TmuxHint, pane: string) => Promise<void>;
   // Run the `claude` CLI in the session's process environment; rejects with
   // its own words when it fails.
   readonly claude: (
@@ -160,7 +160,7 @@ export interface LaneEdge {
   readonly exited: (pid: number, withinMs: number) => Promise<boolean>;
   // Type `line` into the pane's shell and run it, as the user would: it
   // lands in the shell's history.
-  readonly typeShellLine: (tmux: TmuxHint, line: string) => void;
+  readonly typeShellLine: (tmux: TmuxHint, line: string) => Promise<void>;
   // Resolves true once a subscriber of `lane` follows `sessionId`'s frames,
   // false if none does within `withinMs`.
   readonly followed: (
@@ -211,7 +211,7 @@ type Plan = (
   session: LaneSession,
   host: LaneHost,
   edge: LaneEdge,
-) => LaneOutcome;
+) => Promise<LaneOutcome>;
 
 const done = (said: string): LaneOutcome => ({ kind: "done", said });
 
@@ -226,7 +226,7 @@ function paneOf(session: LaneSession): TmuxHint {
 // and off takes.
 export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
   band: {
-    on: (session, host, edge) => {
+    on: async (session, host, edge) => {
       const checkout = sourceCheckoutOf(host.bundle);
       if (checkout === null) {
         throw new BadVerbArgs(
@@ -247,11 +247,11 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
     },
     // The installed mod draws nothing while the lane is off: the daemon
     // refuses its subscriber, and it hands the band on.
-    off: () =>
+    off: async () =>
       done("nothing to stop: the band mod draws nothing while the lane is off"),
   },
   statusline: {
-    on: (session, host, edge) => {
+    on: async (session, host, edge) => {
       const tmux = paneOf(session);
       // The preload starts the launcher beside itself (src/attach-preload.ts).
       const launcher = attachLauncherOf(host.preload);
@@ -276,21 +276,21 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
     },
     // Lane off, the attached statusline is refused frames and shows its
     // command's output, as a stock one does.
-    off: () =>
+    off: async () =>
       done(
         "nothing to stop: the attached statusline draws its command's output while the lane is off",
       ),
   },
   pane: {
-    on: (session, host, edge) => {
+    on: async (session, host, edge) => {
       const tmux = paneOf(session);
-      const open = edge.barPanes(tmux);
+      const open = await edge.barPanes(tmux);
       if (open.length > 0) {
         return done(
           `bar pane ${open.join(", ")} already draws ${tmux.pane}'s bar`,
         );
       }
-      const opened = edge.openBarPane(
+      const opened = await edge.openBarPane(
         tmux,
         [...host.node, host.bundle, "bar-pane", tmux.pane],
         { CC_CANDYBAR_SOCKET: host.socket },
@@ -299,14 +299,14 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
     },
     // Off is "no bar pane draws this session's bar", which a session with no
     // tmux pane already is.
-    off: (session, _host, edge) => {
+    off: async (session, _host, edge) => {
       const pane = tmuxPaneOf(session.hints.tmux);
       if (pane.kind === "refused") {
         return done(`no bar pane to close: ${pane.reason}`);
       }
       const tmux = pane.hint;
-      const open = edge.barPanes(tmux);
-      for (const pane of open) edge.closePane(tmux, pane);
+      const open = await edge.barPanes(tmux);
+      for (const pane of open) await edge.closePane(tmux, pane);
       return done(
         open.length === 0
           ? `no bar pane draws ${tmux.pane}'s bar`
@@ -318,11 +318,11 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
   // switch is on (src/daemon/tmux-status.ts), so there is nothing to start or
   // stop — only a session outside tmux to tell why nothing will be drawn.
   tmuxStatus: {
-    on: (session) => {
+    on: async (session) => {
       const tmux = paneOf(session);
       return done(`the daemon draws ${tmux.pane}'s bar in its status line`);
     },
-    off: () =>
+    off: async () =>
       done(
         "nothing to stop: the daemon puts the status line back once the lane is off",
       ),
@@ -343,7 +343,11 @@ async function installBand(
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = typeSlash(edge.claudeInput, session.hints.tmux, RELOAD_PLUGINS);
+  const typed = await typeSlash(
+    edge.claudeInput,
+    session.hints.tmux,
+    RELOAD_PLUGINS,
+  );
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} — or type /reload-plugins yourself`,
@@ -426,7 +430,7 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
     );
   }
-  const loses = endingLoses(edge.claudeInput.read(tmux));
+  const loses = endingLoses(await edge.claudeInput.read(tmux));
   if (loses !== null) {
     throw new Error(
       `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,
@@ -522,7 +526,7 @@ async function restartUnderAttach(
     );
   }
   try {
-    edge.typeShellLine(tmux, line);
+    await edge.typeShellLine(tmux, line);
   } catch (e) {
     throw stranded(
       `the line could not be typed into its pane (${(e as Error).message})`,
@@ -656,8 +660,8 @@ export class LaneSetups {
       readonly log: (level: "info" | "warn", msg: string) => void;
       readonly now: () => Instant;
       // [LAW:effects-at-boundaries] Runs a setup in the turn after the click
-      // or request that started it: the click's journal has committed, and
-      // lane C's tmux calls are synchronous.
+      // or request that started it, so what that turn still does after
+      // `clicked` (the click's view follow) lands first.
       readonly defer: (run: () => void) => void;
     },
   ) {}
@@ -756,7 +760,7 @@ export class LaneSetups {
   }
 
   // Resolves once the setup has finished, however it ended.
-  private sync(
+  private async sync(
     session: LaneSession,
     lane: Lane,
     on: boolean,
@@ -770,26 +774,25 @@ export class LaneSetups {
     };
     let outcome: LaneOutcome;
     try {
-      outcome = LANE_SETUP[lane][on ? "on" : "off"](
+      outcome = await LANE_SETUP[lane][on ? "on" : "off"](
         session,
         this.deps.host,
         this.deps.edge,
       );
     } catch (error) {
       failed(error);
-      return Promise.resolve();
+      return;
     }
     this.deps.log(
       "info",
       `lane: ${lane} ${on ? "on" : "off"} — ${outcome.said} ${where}`,
     );
     if (outcome.kind === "underway") {
-      return outcome.finished.then(
+      await outcome.finished.then(
         (finished) =>
           this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
         failed,
       );
     }
-    return Promise.resolve();
   }
 }

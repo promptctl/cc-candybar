@@ -18,6 +18,7 @@ import type {
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
 import { VERBS, clickLaunch, clickSessionOf, BadVerbArgs } from "./verbs";
+import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
 import type { ClickArrival } from "../doctor/sightings";
@@ -126,6 +127,7 @@ export async function handleRequest(
   req: Request,
   timedOut: () => boolean,
   accepted: number,
+  clientLeft: () => boolean,
 ): Promise<HandledRequest> {
   if (
     !req ||
@@ -178,7 +180,7 @@ export async function handleRequest(
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(parts, req, timedOut, accepted));
+  return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
 
 // The reply to a request of any kind but a subscribe, past the connection's
@@ -188,6 +190,7 @@ export async function replyTo(
   req: ReplyRequest,
   timedOut: () => boolean,
   accepted: number,
+  clientLeft: () => boolean,
 ): Promise<Reply> {
   const {
     stats,
@@ -199,6 +202,7 @@ export async function replyTo(
     runs,
     effectSessions,
     menuIdle,
+    journalTurns,
     sessionState,
     tmuxStatusLines,
     watcherRegistry,
@@ -254,6 +258,7 @@ export async function replyTo(
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
         menuIdle: menuIdle.getStats(),
+        journalTurns: journalTurns.getStats(),
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),
@@ -380,6 +385,7 @@ export async function replyTo(
     // there.
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N",
       queued: `${queuedMs}ms`,
     });
     const { level, line } = requestEvent(
@@ -404,10 +410,19 @@ export async function replyTo(
     // stopped before it.
     const t0 = clock.monotonic();
     const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = await clickOutcome(parts, req, facts);
-    // Whether the client was already told TIMEOUT while the click waited or
-    // ran: its effect still lands, and the client reported a failure.
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const outcome = await clickOutcome(
+      parts,
+      req,
+      facts,
+      () => timedOut() || clientLeft(),
+    );
+    // Whether the client was told TIMEOUT, and whether it hung up, while the
+    // click ran: its effect lands though the client reported a failure. One
+    // still waiting for its turn at either moment was refused (`abandoned`).
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      clientLeft: clientLeft() ? "Y" : "N",
+    });
     const { level, line } = requestEvent(
       "click",
       facts,
@@ -576,6 +591,7 @@ async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
   facts: RequestFacts,
+  clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { verb, value } = req as { verb: unknown; value: unknown };
   if (typeof verb !== "string" || typeof value !== "string") {
@@ -593,11 +609,14 @@ async function clickOutcome(
       value,
       { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
       facts,
+      clientGone,
     );
   } catch (error) {
-    return error instanceof BadVerbArgs
-      ? { kind: "bad-request", problems: [error.message] }
-      : { kind: "threw", error };
+    if (error instanceof BadVerbArgs)
+      return { kind: "bad-request", problems: [error.message] };
+    if (error instanceof DaemonClosing) return { kind: "closing", error };
+    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
+    return { kind: "threw", error };
   }
 }
 
@@ -623,11 +642,12 @@ async function handleClick(
   value: string,
   arrival: ClickArrival,
   facts: RequestFacts,
+  clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { clock, menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
-    return statusLineClick(parts, value, facts);
+    return statusLineClick(parts, value, facts, clientGone);
   }
   const handler = VERBS.get(verb);
   if (!handler) {
@@ -647,6 +667,7 @@ async function handleClick(
     ...verbCtx,
     arrival,
     turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+    clientGone,
   });
   return { kind: "ok" };
 }
@@ -664,6 +685,8 @@ function clickReply(outcome: RequestOutcome): Response {
         daemonV: PROTOCOL_VERSION,
       };
     case "threw":
+    case "closing":
+    case "abandoned":
       return renderFailed(outcome.error);
   }
 }
@@ -676,6 +699,7 @@ async function statusLineClick(
   parts: DaemonParts,
   value: string,
   facts: RequestFacts,
+  clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { tmuxStatusLines } = parts;
   const refused = (problem: string): RequestOutcome => ({
@@ -699,9 +723,10 @@ async function statusLineClick(
       parsed.value,
       { via: "tmux-status" },
       facts,
+      clientGone,
     );
   }
-  clickLaunch(
+  await clickLaunch(
     parts.launcher,
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",

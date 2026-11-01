@@ -57,6 +57,7 @@ import {
   PaneVisibility,
 } from "./pane-visibility.js";
 import { runTmux, runTmuxAsync } from "../proc/tmux.js";
+import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
@@ -152,6 +153,7 @@ export interface Daemon {
     req: Request,
     timedOut: () => boolean,
     accepted: number,
+    clientLeft: () => boolean,
   ) => Promise<HandledRequest>;
   // The reply to a request of any kind but a subscribe, past the connection's
   // checkpoint: what the page in site/ calls with requests it built.
@@ -159,6 +161,7 @@ export interface Daemon {
     req: ReplyRequest,
     timedOut: () => boolean,
     accepted: number,
+    clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];
   // Re-read the config a render origin resolves to, now: what a durable click
@@ -296,7 +299,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
     failed: (sessionId, error) =>
       log(
-        "error",
+        error instanceof DaemonClosing ? "info" : "error",
         `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
       ),
   });
@@ -367,8 +370,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     render: (sessionId, fps, at) => renderFrame(parts, sessionId, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn, so a click's whole run of writes and its
-    // journal commit land before a frame of it is drawn.
+    // which fires in a later turn. A click that awaits gives up the loop, so a
+    // frame may show its writes ahead of its commit; the step stays whole.
     watch: (sessionId, onChange) =>
       reaction(() => sessionState.revision(sessionId), onChange),
     lanes: (sessionId) => viewLanes(parts, sessionId),
@@ -631,6 +634,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     sessionState,
     effectSessions,
     menuIdle,
+    journalTurns,
     linkSigner,
     runs,
     laneSetups,
@@ -658,13 +662,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // the way in. A click that got in holds or waits for a journal's turn, and
     // close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
-    handle: async (req, timedOut, accepted) => {
+    handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted);
+      return handleRequest(parts, req, timedOut, accepted, clientLeft);
     },
-    reply: async (req, timedOut, accepted) => {
+    reply: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted);
+      return replyTo(parts, req, timedOut, accepted, clientLeft);
     },
     subscribe: (sessionId, subscriber) => {
       closing.signal.throwIfAborted();

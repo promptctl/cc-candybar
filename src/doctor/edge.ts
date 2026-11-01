@@ -24,7 +24,7 @@ import {
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
-import { runTmux } from "../proc/tmux.js";
+import { runTmuxAsync } from "../proc/tmux.js";
 import type { LaunchResult, Launcher } from "../proc/launch.js";
 import {
   FORGE_CLI,
@@ -214,10 +214,10 @@ export const readStores = (stores: DoctorStores): StoresRead => ({
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient | null>;
+  readonly probeTmux: (hint: TmuxHint) => Promise<Asked<TmuxClient | null>>;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
-  readonly remoteLogin: (pid: number) => Asked<boolean>;
+  readonly remoteLogin: (pid: number) => Promise<Asked<boolean>>;
   // The font a configured terminal draws the bar's glyphs with, read where
   // the terminal reads it (src/doctor/font-edge.ts).
   readonly fontInUse: (
@@ -227,7 +227,7 @@ export interface DoctorEdge {
     },
     env: TerminalEnvHint,
     glyphs: string,
-  ) => Asked<FontInUse>;
+  ) => Promise<Asked<FontInUse>>;
   // What loading the config at an origin finds now — the daemon reloads the
   // render-cache entry the session's bar is drawn from and answers from it
   // (so the doctor and the bar's strip report one load), the CLI runs one
@@ -240,10 +240,10 @@ export interface DoctorEdge {
   readonly managedSettingsDir: string;
   readonly install: InstallEdge;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
-  readonly daemons: () => Asked<readonly DaemonProcess[]>;
+  readonly daemons: () => Promise<Asked<readonly DaemonProcess[]>>;
   // Whether the forge CLI the checkout's remote names is installed and logged
   // in to its host — null when it names no forge (`forgeLogin`).
-  readonly forge: (cwd: string) => Asked<ForgeLogin | null>;
+  readonly forge: (cwd: string) => Promise<Asked<ForgeLogin | null>>;
   // The tail of a session's transcript, read as the bar reads it — absent
   // when no file is at the path (`readTranscriptWindow`).
   readonly transcript: (path: string) => Outcome<TranscriptWindow>;
@@ -330,8 +330,11 @@ export function descendsFromRemoteLogin(
   return { kind: "ok", value: false };
 }
 
-function remoteLogin(launcher: Launcher, pid: number): Asked<boolean> {
-  const run = launcher.launchSync({
+async function remoteLogin(
+  launcher: Launcher,
+  pid: number,
+): Promise<Asked<boolean>> {
+  const run = await launcher.launch({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
     timeoutMs: 2000,
@@ -400,8 +403,10 @@ export function ownsEntry(entry: string): boolean {
   );
 }
 
-function daemons(launcher: Launcher): Asked<readonly DaemonProcess[]> {
-  const run = launcher.launchSync({
+async function daemons(
+  launcher: Launcher,
+): Promise<Asked<readonly DaemonProcess[]>> {
+  const run = await launcher.launch({
     bin: "ps",
     args: [
       "-U",
@@ -423,11 +428,11 @@ function daemons(launcher: Launcher): Asked<readonly DaemonProcess[]> {
   return { kind: "ok", value: daemonProcesses(run.stdout, ownsEntry) };
 }
 
-function probeTmux(
+async function probeTmux(
   launcher: Launcher,
   hint: TmuxHint,
-): Asked<TmuxClient | null> {
-  const run = runTmux(launcher, hint, "doctor.tmux", [
+): Promise<Asked<TmuxClient | null>> {
+  const run = await runTmuxAsync(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
@@ -552,13 +557,13 @@ const FORGE_PROBE: Readonly<
 // remotesOf, forgeRemoteUrl, detectForge), then its CLI asked about the
 // remote's host. Under the daemon's environment for a click — the one the
 // bar's lookup runs with — and the shell's for `cc-candybar doctor`.
-export function forgeLogin(
+export async function forgeLogin(
   launcher: Launcher,
   cwd: string,
-): Asked<ForgeLogin | null> {
+): Promise<Asked<ForgeLogin | null>> {
   if (gitRootOf(cwd) === undefined) return { kind: "ok", value: null };
   const remotes = remotesOf(
-    launcher.launchSync({
+    await launcher.launch({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd,
@@ -576,7 +581,7 @@ export function forgeLogin(
   const probe = FORGE_PROBE[forge];
   // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
   const host = probe.loginHost(remoteHost(url)!);
-  const run = launcher.launchSync({
+  const run = await launcher.launch({
     bin: cli,
     args: [...probe.args(host)],
     cwd,
@@ -677,10 +682,13 @@ function settingsChains(
 // [LAW:dataflow-not-control-flow] The three wire states of the recorded hint
 // become the three arms of TmuxFacts — a total projection, and the ONLY place
 // the tmux query runs: once, exactly when there is a server to ask.
-function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
+async function tmuxFacts(
+  edge: DoctorEdge,
+  hint: ClientHints["tmux"],
+): Promise<TmuxFacts> {
   if (hint === undefined) return { kind: "unreported" };
   if (hint === null) return { kind: "outside" };
-  return { kind: "inside", hint, client: edge.probeTmux(hint) };
+  return { kind: "inside", hint, client: await edge.probeTmux(hint) };
 }
 
 // [LAW:dataflow-not-control-flow] Which terminal draws the bar: inside tmux
@@ -718,12 +726,12 @@ function terminalIdentity(
 
 // How the terminal drawing the bar gets its glyphs — and for one that draws
 // only from its font, that font, read once, exactly when there is one to read.
-function terminalFacts(
+async function terminalFacts(
   edge: DoctorEdge,
   identity: TerminalIdentity,
   hints: Pick<ClientHints, "terminalEnv" | "ssh">,
   glyphs: string,
-): TerminalFacts {
+): Promise<TerminalFacts> {
   if (identity.kind !== "seen") return identity;
   const { identified, tmuxClient: client } = identity;
   const env = hints.terminalEnv;
@@ -740,7 +748,7 @@ function terminalFacts(
   const remote: Asked<boolean> =
     client === null
       ? { kind: "ok", value: hints.ssh === true }
-      : edge.remoteLogin(client.pid);
+      : await edge.remoteLogin(client.pid);
   return {
     kind: "configured",
     name,
@@ -759,7 +767,7 @@ function terminalFacts(
               reason:
                 "the terminal is on the far side of a remote login, so its font is on the machine it runs on",
             }
-          : edge.fontInUse(
+          : await edge.fontInUse(
               { name, version },
               client === null ? (env ?? {}) : unattached,
               glyphs,
@@ -790,22 +798,25 @@ export function clickArrived(arrival: ClickArrival): UrlHandlerFacts {
 // [LAW:dataflow-not-control-flow] A source is asked exactly when a segment
 // needs it: the segments are the arm's discriminator, and a source no segment
 // needs is never probed.
-function need<T>(segments: readonly string[], fact: () => T): DataNeed<T> {
+async function need<T>(
+  segments: readonly string[],
+  fact: () => T | Promise<T>,
+): Promise<DataNeed<T>> {
   const [first, ...rest] = segments;
   return first === undefined
     ? { kind: "unneeded" }
-    : { kind: "needed", segments: [first, ...rest], fact: fact() };
+    : { kind: "needed", segments: [first, ...rest], fact: await fact() };
 }
 
-function segmentDataFacts(
+async function segmentDataFacts(
   edge: DoctorEdge,
   needs: DataNeeds,
   origin: RenderOrigin,
   rateLimits: Asked<readonly RateLimitsSeen[]>,
-): SegmentDataFacts {
+): Promise<SegmentDataFacts> {
   return {
-    pullRequests: need(needs.pullRequests, () => edge.forge(origin.cwd)),
-    rateLimits: need(needs.rateLimits, () => rateLimits),
+    pullRequests: await need(needs.pullRequests, () => edge.forge(origin.cwd)),
+    rateLimits: await need(needs.rateLimits, () => rateLimits),
   };
 }
 
@@ -843,7 +854,7 @@ export function sessionWidth(
 //
 // `sessionPick` reads the session's own picks — the daemon's SessionState for
 // the clicking session, `() => null` for the CLI, which has no session.
-export function gatherFacts(
+export async function gatherFacts(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
   origin: RenderOrigin,
@@ -871,7 +882,7 @@ export function gatherFacts(
   // What the doctor's stores hold: the click's daemon's own, or the ones
   // `cc-candybar doctor` was answered.
   stores: StoresRead,
-): Omit<DoctorFacts, "urlHandler" | "install"> {
+): Promise<Omit<DoctorFacts, "urlHandler" | "install">> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
   // the bar cannot disagree about which preset is placed, or which joiner
@@ -881,7 +892,7 @@ export function gatherFacts(
     sessionPick,
     () => false,
   );
-  const tmux = tmuxFacts(edge, hints.tmux);
+  const tmux = await tmuxFacts(edge, hints.tmux);
   const terminal = terminalIdentity(tmux, hints.terminalEnv);
   // The joiner's glyphs, then every one the config's own text writes — a
   // Nerd icon in a template or a menu glyph is drawn as surely as a cap.
@@ -891,36 +902,42 @@ export function gatherFacts(
       ...privateGlyphsIn(JSON.stringify(load.config)),
     ]),
   ].join("");
-  return {
-    tmux,
-    width,
-    terminal,
+  // Independent stages, together: a click holds the journal's turn through
+  // them, so they add the slowest stage's bound to the hold, not their sum.
+  const [nerdFont, processes, data] = await Promise.all([
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.
-    nerdFont:
-      glyphs === ""
-        ? { kind: "none" }
-        : {
-            kind: "glyphs",
-            glyphs,
-            terminal: terminalFacts(edge, terminal, hints, glyphs),
-          },
-    marks: stores.marks,
-    clicked: stores.clicked,
-    daemon: {
-      serving,
-      processes: edge.daemons(),
-      read: stores.postMortemsRead,
-    },
-    config: configFacts(load, origin.target),
-    sighted,
-    frames: bars.kind === "failed" ? bars : { kind: "read" },
-    data: segmentDataFacts(
+    glyphs === ""
+      ? ({ kind: "none" } as const)
+      : terminalFacts(edge, terminal, hints, glyphs).then((read) => ({
+          kind: "glyphs" as const,
+          glyphs,
+          terminal: read,
+        })),
+    edge.daemons(),
+    segmentDataFacts(
       edge,
       dataNeeds(load.config, globals.preset),
       origin,
       rateLimits,
     ),
+  ]);
+  return {
+    tmux,
+    width,
+    terminal,
+    nerdFont,
+    marks: stores.marks,
+    clicked: stores.clicked,
+    daemon: {
+      serving,
+      processes,
+      read: stores.postMortemsRead,
+    },
+    config: configFacts(load, origin.target),
+    sighted,
+    frames: bars.kind === "failed" ? bars : { kind: "read" },
+    data,
     transcripts: transcriptReads(edge, transcripts),
     claudeSettings: settingsChains(
       {

@@ -14,7 +14,10 @@ export type RequestKind = "render" | "click";
 export type RequestOutcome =
   | { readonly kind: "ok" }
   | { readonly kind: "bad-request"; readonly problems: readonly string[] }
-  | { readonly kind: "threw"; readonly error: unknown };
+  | { readonly kind: "threw"; readonly error: unknown }
+  // The click met the daemon's close, or its client had left: neither failed.
+  | { readonly kind: "closing"; readonly error: Error }
+  | { readonly kind: "abandoned"; readonly error: Error };
 
 // What a request has learned so far, in the order it learned it. A request
 // that stops early carries only the facts it reached, so a field absent from
@@ -32,6 +35,8 @@ const LEVEL: Record<RequestOutcome["kind"], LogLevel> = {
   ok: "info",
   "bad-request": "warn",
   threw: "error",
+  closing: "info",
+  abandoned: "info",
 };
 
 // The outcome's own detail. A thrown value is described by `inspect`, which
@@ -44,6 +49,10 @@ function detailOf(outcome: RequestOutcome): RequestFacts {
       return [["problems", outcome.problems.join("; ")]];
     case "threw":
       return [["error", inspect(outcome.error)]];
+    case "closing":
+      return [["closing", outcome.error.message]];
+    case "abandoned":
+      return [["abandoned", "1"]];
   }
 }
 

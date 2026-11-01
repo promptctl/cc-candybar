@@ -78,18 +78,18 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
   };
   const edge: LaneEdge = {
     claudeInput: {
-      read: () => ({ inMode: false, screen: READY_SCREEN }),
-      type: (_hint, line) => {
+      read: async () => ({ inMode: false, screen: READY_SCREEN }),
+      type: async (_hint, line) => {
         did.push(`type ${line}`);
         return { kind: "typed" };
       },
     },
-    barPanes: () => [],
-    openBarPane: (hint, argv, env) => {
+    barPanes: async () => [],
+    openBarPane: async (hint, argv, env) => {
       did.push(`open under ${hint.pane}: ${argv.join(" ")} ${JSON.stringify(env)}`);
       return "%9";
     },
-    closePane: (_hint, pane) => void did.push(`close ${pane}`),
+    closePane: async (_hint, pane) => void did.push(`close ${pane}`),
     claude: async (args, session) =>
       void did.push(`claude ${args.join(" ")} [${session.claudeConfigDir ?? "-"}]`),
     fileExists: () => true,
@@ -110,7 +110,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     },
     terminate: (pid) => void did.push(`terminate ${pid}`),
     exited: async () => true,
-    typeShellLine: (_hint, line) => void did.push(`shell ${line}`),
+    typeShellLine: async (_hint, line) => void did.push(`shell ${line}`),
     followed: async (sessionId, lane) => {
       did.push(`followed ${sessionId} ${lane}`);
       return true;
@@ -132,64 +132,64 @@ const RESTART_LINE = (start = `--resume ${SID}`): string =>
   `cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions ${start}`;
 
 describe("lane C, pane", () => {
-  test("on opens a bar pane under the session's pane, following this daemon", () => {
+  test("on opens a bar pane under the session's pane, following this daemon", async () => {
     const { edge, did } = fakeEdge();
-    const out = LANE_SETUP.pane.on(session(), HOST, edge);
+    const out = await LANE_SETUP.pane.on(session(), HOST, edge);
     expect(out).toEqual({ kind: "done", said: "opened bar pane %9 under %7" });
     expect(did).toEqual([
       `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
     ]);
   });
 
-  test("on with a bar pane already open opens no second one", () => {
-    const { edge, did } = fakeEdge({ barPanes: () => ["%9"] });
-    expect(LANE_SETUP.pane.on(session(), HOST, edge)).toEqual({
+  test("on with a bar pane already open opens no second one", async () => {
+    const { edge, did } = fakeEdge({ barPanes: async () => ["%9"] });
+    expect(await LANE_SETUP.pane.on(session(), HOST, edge)).toEqual({
       kind: "done",
       said: "bar pane %9 already draws %7's bar",
     });
     expect(did).toEqual([]);
   });
 
-  test("off in a session with no tmux pane has nothing to close, and says so", () => {
+  test("off in a session with no tmux pane has nothing to close, and says so", async () => {
     const { edge, did } = fakeEdge();
-    expect(LANE_SETUP.pane.off(session({ tmux: null }), HOST, edge)).toEqual({
+    expect(await LANE_SETUP.pane.off(session({ tmux: null }), HOST, edge)).toEqual({
       kind: "done",
       said: expect.stringMatching(/^no bar pane to close: .*not running inside tmux/),
     });
     expect(did).toEqual([]);
   });
 
-  test("off closes every bar pane drawing the session's bar", () => {
-    const { edge, did } = fakeEdge({ barPanes: () => ["%9", "%11"] });
-    LANE_SETUP.pane.off(session(), HOST, edge);
+  test("off closes every bar pane drawing the session's bar", async () => {
+    const { edge, did } = fakeEdge({ barPanes: async () => ["%9", "%11"] });
+    await LANE_SETUP.pane.off(session(), HOST, edge);
     expect(did).toEqual(["close %9", "close %11"]);
   });
 
   test.each([
     [undefined, "predates this daemon"],
     [null, "not running inside tmux"],
-  ])("a session with tmux hint %p is refused, saying why", (tmux, why) => {
+  ])("a session with tmux hint %p is refused, saying why", async (tmux, why) => {
     const { edge } = fakeEdge();
-    expect(() => LANE_SETUP.pane.on(session({ tmux }), HOST, edge)).toThrow(
+    await expect(LANE_SETUP.pane.on(session({ tmux }), HOST, edge)).rejects.toThrow(
       new RegExp(why),
     );
   });
 });
 
 describe("lane C, tmux status line", () => {
-  test("on and off run nothing: the daemon draws the status line by the switch", () => {
+  test("on and off run nothing: the daemon draws the status line by the switch", async () => {
     const { edge, did } = fakeEdge();
-    expect(LANE_SETUP.tmuxStatus.on(session(), HOST, edge)).toEqual({
+    expect(await LANE_SETUP.tmuxStatus.on(session(), HOST, edge)).toEqual({
       kind: "done",
       said: "the daemon draws %7's bar in its status line",
     });
-    expect(LANE_SETUP.tmuxStatus.off(session(), HOST, edge).kind).toBe("done");
+    expect((await LANE_SETUP.tmuxStatus.off(session(), HOST, edge)).kind).toBe("done");
     expect(did).toEqual([]);
   });
 
-  test("on in a session outside tmux is refused, saying why", () => {
+  test("on in a session outside tmux is refused, saying why", async () => {
     const { edge } = fakeEdge();
-    expect(() => LANE_SETUP.tmuxStatus.on(session({ tmux: null }), HOST, edge)).toThrow(
+    await expect(LANE_SETUP.tmuxStatus.on(session({ tmux: null }), HOST, edge)).rejects.toThrow(
       /not running inside tmux/,
     );
   });
@@ -205,7 +205,7 @@ describe("lane A, band", () => {
   test("on installs the band mod from the checkout's marketplace, then reloads plugins, off the click", async () => {
     const { root, bundle } = checkout();
     const { edge, did } = fakeEdge();
-    const out = LANE_SETUP.band.on(
+    const out = await LANE_SETUP.band.on(
       session({ tmux: TMUX, claudeConfigDir: "/home/u/.claude" }),
       { ...HOST, bundle },
       edge,
@@ -220,16 +220,16 @@ describe("lane A, band", () => {
     ]);
   });
 
-  test("a daemon not run from a checkout is refused in the click, before anything is installed", () => {
+  test("a daemon not run from a checkout is refused in the click, before anything is installed", async () => {
     const { edge, did } = fakeEdge();
-    expect(() => LANE_SETUP.band.on(session(), HOST, edge)).toThrow(BadVerbArgs);
+    await expect(LANE_SETUP.band.on(session(), HOST, edge)).rejects.toThrow(BadVerbArgs);
     expect(did).toEqual([]);
   });
 
-  test("an unbuilt native client is refused in the click, naming the build", () => {
+  test("an unbuilt native client is refused in the click, naming the build", async () => {
     const { bundle } = checkout();
     const { edge, did } = fakeEdge({ fileExists: () => false });
-    expect(() => LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge)).toThrow(
+    await expect(LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge)).rejects.toThrow(
       /just install-rust/,
     );
     expect(did).toEqual([]);
@@ -239,12 +239,12 @@ describe("lane A, band", () => {
     const { bundle } = checkout();
     const { edge } = fakeEdge({
       claudeInput: {
-        read: () => ({ inMode: true, screen: READY_SCREEN }),
-        type: () => ({ kind: "typed" }),
+        read: async () => ({ inMode: true, screen: READY_SCREEN }),
+        type: async () => ({ kind: "typed" }),
       },
     });
     await expect(
-      finished(LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge)),
+      finished(await LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge)),
     ).rejects.toThrow(/installed, but \/reload-plugins was not typed: .*copy mode/);
   });
 });
@@ -252,9 +252,7 @@ describe("lane A, band", () => {
 describe("lane B, statusline", () => {
   test("on ends Claude Code, then types one line into its shell that starts it again under the launcher, back in its worktree, on the same session", async () => {
     const { edge, did } = fakeEdge();
-    const out = LANE_SETUP.statusline.on(session(), HOST, edge);
-    // The click itself does nothing in the pane.
-    expect(did).toEqual([]);
+    const out = await LANE_SETUP.statusline.on(session(), HOST, edge);
     // The line is the restart's report, which LaneSetups logs.
     await expect(finished(out)).resolves.toBe(
       `restarted Claude Code in %7 under the attach launcher with \`${RESTART_LINE()}\`, resuming ${SID}, and its statusline follows lane B`,
@@ -275,7 +273,7 @@ describe("lane B, statusline", () => {
   test("a restart whose statusline never follows lane B again is a failure naming the line", async () => {
     const { edge } = fakeEdge({ followed: async () => false });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
       `did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of \`${RESTART_LINE()}\` — the pane says why`,
     );
@@ -288,7 +286,7 @@ describe("lane B, statusline", () => {
       launcherNode: () => ({ kind: "refused", why: "no `node` on PATH to run the attach launcher" }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
       "Claude Code in %7 was left running, under the PATH it was started with: no `node` on PATH to run the attach launcher",
     );
@@ -299,7 +297,7 @@ describe("lane B, statusline", () => {
   // reruns from history after it.
   test("a release the shell would not find as `claude` is named by its path", async () => {
     const { edge, did } = fakeEdge({ onPath: () => "/usr/local/bin/claude-other" });
-    await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    await finished(await LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did).toContain(
       `shell cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' /u/.local/share/claude/versions/2.1.299 --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
     );
@@ -325,7 +323,7 @@ describe("lane B, statusline", () => {
         ],
       }),
     });
-    await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    await finished(await LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did.join("\n")).not.toContain("secret");
     expect(did).toContain(
       `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
@@ -338,7 +336,7 @@ describe("lane B, statusline", () => {
     const { edge, did } = fakeEdge({
       paneDir: async () => "/work/.claude/worktrees/feat+tree/sub",
     });
-    await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    await finished(await LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did).toContain(
       `shell cd /work/.claude/worktrees/feat+tree/sub && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --dangerously-skip-permissions --resume ${SID}`,
     );
@@ -351,7 +349,7 @@ describe("lane B, statusline", () => {
       },
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
       `exited, but the directory it was started in could not be read (no such pane), so it was not started again — start it with \`cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}\``,
     );
@@ -361,7 +359,7 @@ describe("lane B, statusline", () => {
   test("a Claude Code that does not exit has no line typed for it", async () => {
     const { edge, did } = fakeEdge({ exited: async () => false });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/did not exit within/);
     expect(did.at(-1)).toBe("terminate 4242");
   });
@@ -369,11 +367,11 @@ describe("lane B, statusline", () => {
   test.each([
     ["attach-preload.cjs", "/opt/candybar/dist/attach-preload.cjs"],
     ["bun-attach.js", "/opt/candybar/dist/cc-extra/src/bun-attach.js"],
-  ])("a build with no %s is refused before anything in the pane is touched", (missing, file) => {
+  ])("a build with no %s is refused before anything in the pane is touched", async (missing, file) => {
     const { edge, did } = fakeEdge({
       fileExists: (f) => !f.endsWith(missing),
     });
-    expect(() => LANE_SETUP.statusline.on(session(), HOST, edge)).toThrow(
+    await expect(LANE_SETUP.statusline.on(session(), HOST, edge)).rejects.toThrow(
       `${file} is not there — run \`cc-candybar install\``,
     );
     expect(did).toEqual([]);
@@ -386,7 +384,7 @@ describe("lane B, statusline", () => {
   test("a session with no conversation yet starts afresh on the same id, and its statusline follows lane B", async () => {
     const { edge, did } = fakeEdge({ presence: () => "absent" });
     await expect(
-      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
     ).resolves.toContain(`starting ${SID} afresh, since it had no conversation yet`);
     expect(did.slice(-2)).toEqual([
       `shell ${RESTART_LINE(`--session-id ${SID}`)}`,
@@ -407,7 +405,7 @@ describe("lane B, statusline", () => {
       },
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
     ).resolves.toContain(`resuming ${SID}`);
     expect(did.indexOf(`shell ${RESTART_LINE()}`)).toBeGreaterThan(
       did.indexOf("terminate 4242"),
@@ -424,7 +422,7 @@ describe("lane B, statusline", () => {
     async (answered, reason) => {
       const { edge, did } = fakeEdge({ presence: () => "absent" });
       await expect(
-        finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, answered), HOST, edge)),
+        finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, answered), HOST, edge)),
       ).rejects.toThrow(reason);
       expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
     },
@@ -438,7 +436,7 @@ describe("lane B, statusline", () => {
       presence: (file) => ({ path: file, error: "EACCES" }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/was left running: whether session .* could not be seen \(EACCES\)/);
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
@@ -452,7 +450,7 @@ describe("lane B, statusline", () => {
       },
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(`(ELOOP), so it was not started again — start it with \`${RESTART_LINE()}\``);
     expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
@@ -460,12 +458,12 @@ describe("lane B, statusline", () => {
   test("a line that cannot be typed once Claude Code exited is named for the user to type", async () => {
     const { edge } = fakeEdge({
       presence: () => "absent",
-      typeShellLine: () => {
+      typeShellLine: async () => {
         throw new Error("server exited");
       },
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
     ).rejects.toThrow(
       `exited, but the line could not be typed into its pane (server exited), so it was not started again — start it with \`${RESTART_LINE(`--session-id ${SID}`)}\``,
     );
@@ -474,7 +472,7 @@ describe("lane B, statusline", () => {
   test("a Claude Code that does not exit is not started again, and the wait says why", async () => {
     const { edge, did } = fakeEdge({ exited: async () => false });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(`did not exit within ${EXIT_PATIENCE_MS / 1000} s`);
     expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
@@ -485,18 +483,18 @@ describe("lane B, statusline", () => {
   test("a Claude Code in the middle of a turn is refused before Claude Code is ended", async () => {
     const { edge, did } = fakeEdge({
       claudeInput: {
-        read: () => ({
+        read: async () => ({
           inMode: false,
           screen: [
             "✽ Processing… (26s · ↓ 2.0k tokens · thought for 15s)",
             ...READY_SCREEN,
           ],
         }),
-        type: () => ({ kind: "typed" }),
+        type: async () => ({ kind: "typed" }),
       },
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/in the middle of a turn/);
     // Refused at the kill, before anything is typed.
     expect(did.some((d) => /^(shell|terminate)/.test(d))).toBe(false);
@@ -510,10 +508,10 @@ describe("lane B, statusline", () => {
     ["a dialog", { inMode: false, screen: ["Allow this tool call?", "  ❯ 1. Yes"] }, /not at its prompt/],
   ])("a pane showing %s is refused before Claude Code is ended", async (_what, snapshot, reason) => {
     const { edge, did } = fakeEdge({
-      claudeInput: { read: () => snapshot, type: () => ({ kind: "typed" }) },
+      claudeInput: { read: async () => snapshot, type: async () => ({ kind: "typed" }) },
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(reason);
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
@@ -526,7 +524,7 @@ describe("lane B, statusline", () => {
       paneClaude: async () => (reads++ === 0 ? first : { ...first, pid: 5151 }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/no longer the process the restart read \(pid 4242\)/);
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
@@ -535,7 +533,7 @@ describe("lane B, statusline", () => {
     ["❯ ", false],
     ["❯\u00a0", false],
     ["❯ half a thought", true],
-  ])("draftShown with the prompt row %j is %p", (row, draft) => {
+  ])("draftShown with the prompt row %j is %p", async (row, draft) => {
     expect(
       draftShown({
         inMode: false,
@@ -549,7 +547,7 @@ describe("lane B, statusline", () => {
     ["✻ Cogitating… (1m 4s · esc to interrupt)", true],
     ["  ⏺ I'll look at the file… (it is long)", false],
     ["❯ ", false],
-  ])("turnRunning(%j) is %p", (line, running) => {
+  ])("turnRunning(%j) is %p", async (line, running) => {
     expect(turnRunning({ inMode: false, screen: [line] })).toBe(running);
   });
 
@@ -567,7 +565,7 @@ describe("lane B, statusline", () => {
       }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).resolves.toContain("already runs under the attach launcher");
     expect(did).toEqual([]);
   });
@@ -586,7 +584,7 @@ describe("lane B, statusline", () => {
       }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/first process of pane %7/);
     expect(did).toEqual([]);
   });
@@ -601,7 +599,7 @@ describe("lane B, statusline", () => {
       }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
       /runs \/u\/\.local\/share\/claude\/versions\/2\.1\.299, which the attach launcher cannot start \(no-bun-module-graph-trailer\) — .*native Claude Code install .*left running/,
     );
@@ -614,7 +612,7 @@ describe("lane B, statusline", () => {
     ["", null],
     ["Error: Cannot find module", null],
     ['{"ok":true}', null],
-  ])("the module graph reader's output %j refuses with %p", (stdout, reason) => {
+  ])("the module graph reader's output %j refuses with %p", async (stdout, reason) => {
     expect(refusalOf(stdout)).toBe(reason);
   });
 
@@ -632,21 +630,19 @@ describe("lane B, statusline", () => {
       }),
     });
     await expect(
-      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/--brand-new-flag/);
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 
-  test("a session with no tmux pane is refused in the click", () => {
+  test("a session with no tmux pane is refused in the click", async () => {
     const { edge } = fakeEdge();
-    expect(() =>
-      LANE_SETUP.statusline.on(session({ tmux: null }), HOST, edge),
-    ).toThrow(/not running inside tmux/);
+    await expect(LANE_SETUP.statusline.on(session({ tmux: null }), HOST, edge)).rejects.toThrow(/not running inside tmux/);
   });
 
-  test("off stops nothing", () => {
+  test("off stops nothing", async () => {
     const { edge, did } = fakeEdge();
-    expect(LANE_SETUP.statusline.off(session(), HOST, edge).kind).toBe("done");
+    expect((await LANE_SETUP.statusline.off(session(), HOST, edge)).kind).toBe("done");
     expect(did).toEqual([]);
   });
 });
@@ -708,14 +704,14 @@ describe("relaunchArgs", () => {
     // The worktree is read off the directory the session runs in.
     [["claude", "--worktree", "gone"], []],
     [["claude", "-w", "fix", "--model", "opus"], ["--model", "opus"]],
-  ])("%j carries %j", (argv, kept) => {
+  ])("%j carries %j", async (argv, kept) => {
     expect(relaunchArgs(argv)).toEqual({ kind: "args", args: kept });
   });
 
   test.each([
     [["claude", "--mystery"], /--mystery/],
     [["claude", "--model"], /--model and no value/],
-  ])("%j is refused", (argv, reason) => {
+  ])("%j is refused", async (argv, reason) => {
     const out = relaunchArgs(argv);
     expect(out.kind).toBe("refused");
     expect(out.kind === "refused" && out.reason).toMatch(reason);
@@ -723,7 +719,7 @@ describe("relaunchArgs", () => {
 
   // `--resume` of a session with no transcript finds no conversation; a fresh
   // start on the same id keeps the id the session's picks are held under.
-  test("a session is resumed, or with no conversation yet started afresh, on the same id", () => {
+  test("a session is resumed, or with no conversation yet started afresh, on the same id", async () => {
     expect(sessionArgs({ kind: "resume", sessionId: SID })).toEqual(["--resume", SID]);
     expect(sessionArgs({ kind: "fresh", sessionId: SID })).toEqual(["--session-id", SID]);
   });
@@ -752,18 +748,18 @@ describe("startPlace", () => {
     // it runs.
     [null, "/src/.claude/worktrees/fix/sub", "/src", ["--worktree", "fix"]],
     [null, "/src/sub", "/src/sub", []],
-  ])("started in %s, running in %s, starts in %s with %j", (startDir, cwd, dir, args) => {
+  ])("started in %s, running in %s, starts in %s with %j", async (startDir, cwd, dir, args) => {
     expect(startPlace(startDir, cwd)).toEqual({ dir, args });
   });
 });
 
 describe("the production edge's readers", () => {
-  test("taggedBarPanes names the panes tagged with the session's pane", () => {
+  test("taggedBarPanes names the panes tagged with the session's pane", async () => {
     expect(taggedBarPanes("%1 \n%9 %7\n%10 %8\n%11 %7\n", "%7")).toEqual(["%9", "%11"]);
     expect(BAR_PANE_OPTION).toBe("@cc-candybar-bar-pane");
   });
 
-  test("runsAttached reads a cc-attach launcher at or above the foreground job, below the pane", () => {
+  test("runsAttached reads a cc-attach launcher at or above the foreground job, below the pane", async () => {
     const table = [
       "  10     1 /bin/zsh -l",
       "  20    10 node /home/u/cc-extra/bin/cc-attach --resume x",
@@ -775,7 +771,7 @@ describe("the production edge's readers", () => {
     expect(runsAttached(table, 40, 10)).toBe(false);
   });
 
-  test("runsAttached reads a cc-attach launcher that is the pane's own first process", () => {
+  test("runsAttached reads a cc-attach launcher that is the pane's own first process", async () => {
     const table = [
       "  10     1 node /home/u/cc-extra/bin/cc-attach",
       "  20     1 /bin/zsh -l",
@@ -785,7 +781,7 @@ describe("the production edge's readers", () => {
     expect(runsAttached("  20 10 /bin/zsh\n  10 1 cc-attach", 20, 20)).toBe(false);
   });
 
-  test("the claude CLI runs under the session's directory, never the daemon's", () => {
+  test("the claude CLI runs under the session's directory, never the daemon's", async () => {
     // The session's process environment (src/daemon/session-env.ts) the
     // edge's `claude` spawns with.
     const daemon = { CLAUDE_CONFIG_DIR: "/daemon/spawner/.claude", PATH: "/usr/bin" };
@@ -969,7 +965,7 @@ describe("LaneSetups", () => {
   });
 
   test("a switch turned off brings the lane down", async () => {
-    const { edge, did } = fakeEdge({ barPanes: () => ["%9"] });
+    const { edge, did } = fakeEdge({ barPanes: async () => ["%9"] });
     const { setups, settle } = owner(edge);
     setups.clicked(SID, session(), switches({ pane: true }), switches({}));
     await settle();

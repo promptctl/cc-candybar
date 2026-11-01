@@ -19,6 +19,7 @@ import type { TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
 import type { VerbContext } from "./verbs";
 import type { DoctorStores } from "../doctor/edge";
+import type { JournalTurns } from "./journal-turns";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
@@ -55,5 +56,6 @@ export interface DaemonParts {
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
-  readonly verbCtx: Omit<VerbContext, "arrival" | "turnWaited">;
+  readonly journalTurns: Pick<JournalTurns, "getStats">;
+  readonly verbCtx: Omit<VerbContext, "arrival" | "turnWaited" | "clientGone">;
 }

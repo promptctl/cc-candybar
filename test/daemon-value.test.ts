@@ -124,6 +124,7 @@ describe("the daemon is a value", () => {
       req,
       () => false,
       daemon.clock.monotonic(),
+      () => false,
     );
     if (handled.kind !== "reply") throw new Error("expected a reply");
     handled.delivered();
@@ -355,6 +356,7 @@ describe("the daemon is a value", () => {
       renderRequest("value-close", 20_000),
       () => false,
       daemon.clock.monotonic(),
+      () => false,
     );
 
     const sessionFile = sessionStatePath();

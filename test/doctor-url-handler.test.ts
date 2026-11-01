@@ -44,17 +44,17 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
 const APP = "/Users/u/Applications/CCCandybarURLHandler.app";
 
 describe("urlHandler probe", () => {
-  test("a platform with no URL handler is ok", () => {
+  test("a platform with no URL handler is ok", async () => {
     expect(verdict({ kind: "unsupported" })).toEqual({ ok: true });
   });
 
-  test("a link delivered by the version the bar runs is ok", () => {
+  test("a link delivered by the version the bar runs is ok", async () => {
     expect(
       verdict({ kind: "arrived", handler: "1.2.3", bar: "1.2.3" }),
     ).toEqual({ ok: true });
   });
 
-  test("a link delivered by another version names both", () => {
+  test("a link delivered by another version names both", async () => {
     expect(
       verdict({ kind: "arrived", handler: "1.2.0", bar: "1.2.3" }),
     ).toEqual({
@@ -64,7 +64,7 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("a handler too old to report its version is not ok", () => {
+  test("a handler too old to report its version is not ok", async () => {
     expect(verdict({ kind: "arrived", handler: null, bar: "1.2.3" })).toEqual({
       ok: false,
       reason:
@@ -72,14 +72,14 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("a probe that could not be attempted says why", () => {
+  test("a probe that could not be attempted says why", async () => {
     expect(verdict({ kind: "unprobed", reason: "no daemon" })).toEqual({
       ok: false,
       reason: "no daemon",
     });
   });
 
-  test("a lost link with nothing registered leads with the registration", () => {
+  test("a lost link with nothing registered leads with the registration", async () => {
     expect(
       verdict({
         kind: "lost",
@@ -96,7 +96,7 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("a lost link names each file the handler app runs that is gone", () => {
+  test("a lost link names each file the handler app runs that is gone", async () => {
     expect(
       verdict({
         kind: "lost",
@@ -115,7 +115,7 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("a lost link whose handler app is intact reports the loss alone", () => {
+  test("a lost link whose handler app is intact reports the loss alone", async () => {
     expect(
       verdict({
         kind: "lost",
@@ -133,7 +133,7 @@ describe("urlHandler probe", () => {
     });
   });
 
-  test("an app whose script cannot be read, and a lookup that failed, are named", () => {
+  test("an app whose script cannot be read, and a lookup that failed, are named", async () => {
     expect(
       verdict({
         kind: "lost",
@@ -368,7 +368,7 @@ describe("probeUrlHandler", () => {
 // ─── The handler app's script ────────────────────────────────────────────────
 
 describe("handlerCommand", () => {
-  test("reads back the two paths the installer bakes in", () => {
+  test("reads back the two paths the installer bakes in", async () => {
     const node = "/opt/homebrew/Cellar/node/26.7.0/bin/node";
     const script = "/Users/u/Library/Application Support/CCCandybar/dist/index.mjs";
     expect(handlerCommand(install.appleScriptSource(node, script))).toEqual({
@@ -377,17 +377,17 @@ describe("handlerCommand", () => {
     });
   });
 
-  test("a path holding a double quote survives the script's escaping", () => {
+  test("a path holding a double quote survives the script's escaping", async () => {
     expect(
       handlerCommand(install.appleScriptSource('/a "b"/node', "/s.mjs")),
     ).toEqual({ node: '/a "b"/node', script: "/s.mjs" });
   });
 
-  test("a script that is not the installer's is not read as one", () => {
+  test("a script that is not the installer's is not read as one", async () => {
     expect(handlerCommand('do shell script "open " & L')).toBeNull();
   });
 
-  test("the compiled script sits where osacompile puts it", () => {
+  test("the compiled script sits where osacompile puts it", async () => {
     expect(handlerScriptPath(APP)).toBe(
       `${APP}/Contents/Resources/Scripts/main.scpt`,
     );
@@ -433,14 +433,14 @@ describe("the daemon's side of the round trip", () => {
         ...healthyDaemonEdge(),
         ...healthyDataEdge(),
         ...noManagedSettings(),
-        probeTmux: () => ({
+        probeTmux: async () => ({
           kind: "ok",
           value: { features: [], termtype: "", termname: "", pid: 4242, utf8: true },
         }),
-        remoteLogin: () => {
+        remoteLogin: async () => {
           throw new Error("remoteLogin must not run in this case");
         },
-        fontInUse: () => {
+        fontInUse: async () => {
           throw new Error("fontInUse must not run in this case");
         },
         loadConfig: () => ({
@@ -481,7 +481,7 @@ describe("the daemon's side of the round trip", () => {
     expect(d.probes.list()).toEqual([]);
   });
 
-  test("only the newest arrivals are kept", () => {
+  test("only the newest arrivals are kept", async () => {
     const probes = new ProbeArrivals();
     for (let i = 0; i < 20; i++) {
       probes.arrive({ nonce: `n${i}`, handler: null });
@@ -542,7 +542,7 @@ describe("the daemon's side of the round trip", () => {
     expect(d.probes.list()).toEqual([]);
   });
 
-  test("a click's handler version is this daemon's own beside it", () => {
+  test("a click's handler version is this daemon's own beside it", async () => {
     expect(clickArrived({ via: "link", handler: null })).toEqual({
       kind: "arrived",
       handler: null,
@@ -550,7 +550,7 @@ describe("the daemon's side of the round trip", () => {
     });
   });
 
-  test("the wire's client version is a short non-empty string or nothing", () => {
+  test("the wire's client version is a short non-empty string or nothing", async () => {
     expect(sanitizeClientVersion("1.2.3")).toBe("1.2.3");
     expect(sanitizeClientVersion(undefined)).toBeNull();
     expect(sanitizeClientVersion("")).toBeNull();

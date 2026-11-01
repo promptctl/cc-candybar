@@ -23,6 +23,8 @@ interface Idle {
   // The instant of the frame `shown` and `timeoutS` were read off.
   drawnAt: Instant;
   timer: { readonly at: Instant; readonly handle: NodeJS.Timeout } | null;
+  // A close is waiting for its turn or running: no second one is due.
+  closing: boolean;
 }
 
 export interface MenuIdleStats {
@@ -109,6 +111,7 @@ export class MenuIdle {
       shown: false,
       drawnAt: at,
       timer: null,
+      closing: false,
     };
     // Touched last, so evicted last.
     this.sessions.delete(sessionId);
@@ -127,7 +130,9 @@ export class MenuIdle {
     // [LAW:no-ambient-temporal-coupling] Disposed, nothing is due: a render
     // that was awaiting when the daemon closed arms no timer as it lands.
     const due =
-      idle.shown && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
+      idle.shown && !idle.closing && !this.disposed
+        ? closesAt(idle.since, idle.timeoutS)
+        : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -152,7 +157,9 @@ export class MenuIdle {
   // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
   // among the journals, so whether the session is still idle is read in that
   // turn: a click since this firing, or one landing ahead of it, keeps what
-  // it opened.
+  // it opened. The record follows that decision (`closed`), and until the
+  // close settles no frame arms another. A close that failed waits a timeout
+  // too, so it is retried at that pace and not at every frame.
   private fire(sessionId: string): void {
     const idle = this.sessions.get(sessionId)!;
     idle.timer = null;
@@ -164,11 +171,23 @@ export class MenuIdle {
       // An evicted record stops counting, so its session is no longer known idle.
       stillIdle: () =>
         this.sessions.get(sessionId) === idle && idle.clicks === lastClick,
+      closed: () => {
+        idle.since = now;
+        idle.shown = false;
+      },
     };
-    idle.since = now;
-    idle.shown = false;
+    idle.closing = true;
     this.deps
       .close(sessionId, closing)
-      .catch((e: unknown) => this.deps.failed(sessionId, e));
+      .catch((e: unknown) => {
+        closing.closed();
+        this.deps.failed(sessionId, e);
+      })
+      .finally(() => {
+        idle.closing = false;
+        // [LAW:no-ambient-temporal-coupling] A record evicted or disposed
+        // meanwhile has no timer left to follow it.
+        if (this.sessions.get(sessionId) === idle) this.settle(sessionId);
+      });
   }
 }

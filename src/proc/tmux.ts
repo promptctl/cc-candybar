@@ -48,8 +48,8 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
   return { kind: "failed", reason: `tmux ${args[0]} failed (${detail})` };
 }
 
-// Holds the daemon's loop until tmux answers: for a click, which must finish
-// before its handler returns.
+// Holds the daemon's loop until tmux answers: for what must finish before the
+// process does, the status lines put back at exit, where no later turn comes.
 export function runTmux(
   launcher: Launcher,
   hint: Pick<TmuxHint, "socket">,
@@ -63,7 +63,7 @@ export function runTmux(
   );
 }
 
-// The same invocation off the loop: for a render lane.
+// The same invocation off the loop: for everything else the daemon asks.
 export async function runTmuxAsync(
   launcher: Launcher,
   hint: Pick<TmuxHint, "socket">,

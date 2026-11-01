@@ -124,6 +124,7 @@ export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
     { v: PROTOCOL_VERSION, kind: "stats" },
     () => false,
     daemon.clock.monotonic(),
+    () => false,
   );
   if (!resp.ok || !("stats" in resp)) throw new Error(`stats failed: ${JSON.stringify(resp)}`);
   return resp.stats;

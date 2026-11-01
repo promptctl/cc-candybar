@@ -99,7 +99,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
 
   // Per-request timeout protects the daemon from a single slow request
   // (e.g. a hung git call) blocking subsequent connections. It abandons the
-  // RESPONSE, not the work — the handler promise keeps running.
+  // RESPONSE, not the work in hand — the handler promise keeps running — though
+  // a click still waiting for its turn is refused then (src/daemon/journal-turns.ts).
   //
   // [LAW:one-source-of-truth] That is safe for the transcript-fs path because
   // the work is bounded + shared, not orphaned: the today aggregate and
@@ -128,7 +129,12 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const reader = makeFrameReader(
     (frame) => {
       void daemon
-        .handle(frame as Request, () => timedOut, accepted)
+        .handle(
+          frame as Request,
+          () => timedOut,
+          accepted,
+          () => sock.destroyed,
+        )
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush, r.delivered)

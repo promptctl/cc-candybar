@@ -98,8 +98,11 @@ function run(argv) {
 }
 `;
 
-function jxa<T>(launcher: Launcher, args: readonly string[]): Asked<T> {
-  const run = launcher.launchSync({
+async function jxa<T>(
+  launcher: Launcher,
+  args: readonly string[],
+): Promise<Asked<T>> {
+  const run = await launcher.launch({
     bin: "osascript",
     args: ["-l", "JavaScript", "-e", JXA, ...args],
     timeoutMs: 3000,
@@ -137,17 +140,15 @@ interface Coverage {
   readonly lacks: readonly string[] | null;
 }
 
-function macCoverage(
+async function macCoverage(
   launcher: Launcher,
   ref: FontRef,
   glyphs: string,
-): Asked<Coverage> {
-  const answer = jxa<{ readonly lacks: readonly string[] | null }>(launcher, [
-    "font",
-    ref.kind,
-    ref.name,
-    pointsArg(glyphs),
-  ]);
+): Promise<Asked<Coverage>> {
+  const answer = await jxa<{ readonly lacks: readonly string[] | null }>(
+    launcher,
+    ["font", ref.kind, ref.name, pointsArg(glyphs)],
+  );
   if (answer.kind === "failed") return answer;
   const { lacks } = answer.value;
   return {
@@ -242,17 +243,17 @@ export function itermFontInUse(
   };
 }
 
-function itermFont(
+async function itermFont(
   launcher: Launcher,
   version: string | null,
   env: TerminalEnvHint,
   glyphs: string,
-): Asked<FontInUse> {
+): Promise<Asked<FontInUse>> {
   if (process.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
   const wanted = env.ITERM_PROFILE ?? null;
-  const answer = jxa<{
+  const answer = await jxa<{
     readonly profiles: ReadonlyArray<
       Omit<ItermProfile, "lacks"> & { readonly lacks: string[] | null }
     >;
@@ -316,12 +317,12 @@ const fcEscape = (value: string): string => value.replace(/[\\:,=-]/g, "\\$&");
 
 // What fontconfig draws a family with — the font a fontconfig terminal ends
 // up using, alias or not, and the fonts it falls back to.
-function fcCoverage(
+async function fcCoverage(
   launcher: Launcher,
   family: string,
   glyphs: string,
-): Asked<Coverage> {
-  const run = launcher.launchSync({
+): Promise<Asked<Coverage>> {
+  const run = await launcher.launch({
     bin: "fc-match",
     args: [
       "--sort",
@@ -344,7 +345,7 @@ function coverage(
   launcher: Launcher,
   ref: FontRef,
   glyphs: string,
-): Asked<Coverage> {
+): Promise<Asked<Coverage>> {
   return process.platform === "darwin"
     ? macCoverage(launcher, ref, glyphs)
     : fcCoverage(launcher, ref.name, glyphs);
@@ -439,11 +440,11 @@ function alacrittyFamilyIn(
 
 // The config is found under the SESSION's XDG_CONFIG_HOME (the client's
 // hint), never the detached daemon's own.
-function alacrittyFont(
+async function alacrittyFont(
   launcher: Launcher,
   env: TerminalEnvHint,
   glyphs: string,
-): Asked<FontInUse> {
+): Promise<Asked<FontInUse>> {
   const home = os.homedir();
   const config = alacrittyConfigPaths(home, env.XDG_CONFIG_HOME).find((p) =>
     fs.existsSync(p),
@@ -460,7 +461,11 @@ function alacrittyFont(
     (config === undefined
       ? "Alacritty's default, no config file"
       : `Alacritty's default, ${config} sets none`);
-  const drawn = coverage(launcher, { kind: "family", name: family }, glyphs);
+  const drawn = await coverage(
+    launcher,
+    { kind: "family", name: family },
+    glyphs,
+  );
   if (drawn.kind === "failed") return drawn;
   const { font, lacks } = drawn.value;
   return {
@@ -484,7 +489,7 @@ const READERS: Readonly<
       version: string | null,
       env: TerminalEnvHint,
       glyphs: string,
-    ) => Asked<FontInUse>
+    ) => Promise<Asked<FontInUse>>
   >
 > = {
   iterm2: itermFont,
@@ -500,6 +505,6 @@ export function fontInUse(
   },
   env: TerminalEnvHint,
   glyphs: string,
-): Asked<FontInUse> {
+): Promise<Asked<FontInUse>> {
   return READERS[terminal.name](launcher, terminal.version, env, glyphs);
 }

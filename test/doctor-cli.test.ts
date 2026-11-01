@@ -48,7 +48,7 @@ const EDGE: DoctorEdge = {
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
   ...noManagedSettings(),
-  probeTmux: () => ({
+  probeTmux: async () => ({
     kind: "ok",
     // A terminal that ships its own Nerd Font symbols and draws links, which
     // tmux passes through, so the Nerd Font and links checks are ok and
@@ -61,10 +61,10 @@ const EDGE: DoctorEdge = {
       utf8: true,
     },
   }),
-  remoteLogin: () => {
+  remoteLogin: async () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  fontInUse: () => {
+  fontInUse: async () => {
     throw new Error("fontInUse must not run in this case");
   },
   loadConfig: () => ({
@@ -180,8 +180,8 @@ describe("doctorPlan", () => {
   test("tmux without hyperlinks for its client fails links, naming the line to add", async () => {
     const edge: DoctorEdge = {
       ...EDGE,
-      probeTmux: (hint) => {
-        const asked = EDGE.probeTmux(hint);
+      probeTmux: async (hint) => {
+        const asked = await EDGE.probeTmux(hint);
         if (asked.kind !== "ok" || asked.value === null) throw new Error("EDGE answers a client");
         return {
           kind: "ok",
@@ -382,7 +382,7 @@ describe("doctorPlan over a real config", () => {
 
   // The doctor reads the one load the daemon settles, so a warning only the
   // build earns (a variable that failed to declare) reaches its verdict too.
-  test("a load's warning carries what its build earned", () => {
+  test("a load's warning carries what its build earned", async () => {
     fs.writeFileSync(
       projectConfig(),
       `{ variables: { v: { kind: "template", template: "{{ if }}" } } }`,
@@ -478,7 +478,7 @@ describe("doctorPlan over a real config", () => {
   // `check` and the bar decide it, not at the gate. One table, so the diff of
   // a regression names its row: reintroducing `args[0] === ""` shows the
   // `[""]` row as usage where run is expected.
-  test("parseDoctorArgs refuses two files or an option, never an empty name", () => {
+  test("parseDoctorArgs refuses two files or an option, never an empty name", async () => {
     const USAGE = "Usage: cc-candybar doctor [config-file]\n";
     const ARITY = `doctor: expected at most one config file\n${USAGE}`;
     const table = [[], [""], ["a.json5"], ["a.json5", "b.json5"], ["--help"], ["a.json5", "--verbose"]];
@@ -594,7 +594,7 @@ describe("doctorPlan over a real config", () => {
     // Run in a session's shell, the command judges that session's bar alone.
     // The project a shell's session reads its settings from is the one its
     // render recorded, whichever directory under it the shell has cd'd into.
-    test("run in a session, its own chain is the session's project's, not the shell's cwd", () => {
+    test("run in a session, its own chain is the session's project's, not the shell's cwd", async () => {
       const said = [s1(), s2()];
       expect(ownProject({ kind: "shell", sessionId: "s1" }, said, path.join(other, "sub"))).toBe(other);
       expect(ownProject({ kind: "shell", sessionId: "s9" }, said, "/here")).toBe("/here");
@@ -631,7 +631,7 @@ describe("doctorPlan over a real config", () => {
       `{ actions: { a: { copy: "t" }, b: { copy: "t" } }, helpers: { h: "x" } }`,
     );
     const reports = runDoctor({
-      ...gatherFacts(
+      ...(await gatherFacts(
         REAL,
         { tmux: null, claudeConfigDir: dir },
         { projectDir: project, cwd: project, target: { source: "search" } },
@@ -643,7 +643,7 @@ describe("doctorPlan over a real config", () => {
         sightedIn(project, dir, STILL),
         { kind: "ok", value: { columns: 148, of: { kind: "command" } } },
         EMPTY_STORES,
-      ),
+      )),
       urlHandler: { kind: "unsupported" },
       install: HEALTHY_FACTS.install,
     });

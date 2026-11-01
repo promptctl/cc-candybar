@@ -12,7 +12,7 @@ import { clickUrl, testVerbContext } from "./helpers/click";
 const launched: LaunchOpts[] = [];
 const recording = {
   ...processLauncher,
-  launchSync: (opts: LaunchOpts) => {
+  launch: async (opts: LaunchOpts) => {
     launched.push(opts);
     return { ok: true as const, exitCode: 0, stdout: "", stderr: "" };
   },

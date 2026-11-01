@@ -3,6 +3,7 @@
 // each session's idle clock, the close it makes — a click's own journaled
 // write — and the flash on the rendered bar.
 
+import { DaemonClosing } from "../src/daemon/verb-error";
 import { processLauncher } from "../src/proc/launch";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
@@ -86,7 +87,8 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     failures = [];
     idle = new MenuIdle({
       now: () => at(now),
-      close: async (sid, { idleS, timeoutS }) => {
+      close: async (sid, { idleS, timeoutS, closed }) => {
+        closed();
         closes.push({ sid, idleS, timeoutS });
       },
       failed: (sid, e) => failures.push(`${sid}: ${String(e)}`),
@@ -184,9 +186,10 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     expect(closes).toEqual([]);
   });
 
-  test("a menu still drawn after a close closes a timeout later, never at once", () => {
+  test("a menu still drawn after a close closes a timeout later, never at once", async () => {
     idle.observe("s", at(now), true, 30);
     advance(30);
+    await jest.advanceTimersByTimeAsync(0);
     // The render after the close still draws a menu (a group open by default).
     idle.observe("s", at(now), true, 30);
     advance(29);
@@ -225,6 +228,62 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     await jest.advanceTimersByTimeAsync(0);
     expect(failures).toHaveLength(2);
     failing.dispose();
+  });
+});
+
+describe("a close that waits its turn", () => {
+  let now = 1000;
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const tick = (s: number): void => {
+    now += s;
+    jest.advanceTimersByTime(s * 1000);
+  };
+
+  test("frames during the wait queue no second close, and a kept close changes nothing", async () => {
+    let release = (): void => {};
+    let closes = 0;
+    const idle = new MenuIdle({
+      now: () => at(now),
+      close: () => {
+        closes++;
+        return new Promise((resolve) => (release = resolve));
+      },
+      failed: () => {},
+    });
+    idle.observe("s", at(now), true, 30);
+    const since = idle.since("s", at(now));
+    tick(30);
+    for (let i = 0; i < 5; i++) {
+      idle.observe("s", at(now), true, 30);
+      tick(1);
+    }
+    expect(closes).toBe(1);
+    expect(idle.since("s", at(now))).toBe(since);
+    release();
+    await jest.advanceTimersByTimeAsync(0);
+    idle.dispose();
+  });
+
+  test("a close settling after dispose or eviction throws nothing and reports its failure", async () => {
+    let reject = (_e: Error): void => {};
+    const failures: unknown[] = [];
+    const heard: unknown[] = [];
+    const note = (e: unknown): void => void heard.push(e);
+    process.on("unhandledRejection", note);
+    const idle = new MenuIdle({
+      now: () => at(now),
+      close: () => new Promise((_resolve, no) => (reject = no)),
+      failed: (_sid, e) => failures.push(e),
+    });
+    idle.observe("s", at(now), true, 30);
+    tick(30);
+    idle.dispose();
+    reject(new DaemonClosing("menu-idle"));
+    await jest.advanceTimersByTimeAsync(0);
+    process.off("unhandledRejection", note);
+    expect(failures).toHaveLength(1);
+    expect(heard).toEqual([]);
   });
 });
 
@@ -302,7 +361,7 @@ function buildRuntime(src: string) {
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
-const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true };
+const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
 

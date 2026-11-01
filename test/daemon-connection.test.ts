@@ -307,7 +307,7 @@ describe("a connection over a stream", () => {
         handle: async (req, timedOut, accepted) =>
           req.kind === "subscribe"
             ? SUBSCRIBED
-            : request.handle(req, timedOut, accepted),
+            : request.handle(req, timedOut, accepted, () => false),
       }),
     );
     send(STATS);
