@@ -568,7 +568,11 @@ describe("a connection to a daemon built in this worker", () => {
     let monotonic = 1_000_000;
     const at = new Date();
     const opened = openedOn(
-      start({ date: () => at, monotonic: () => monotonic }).connect(),
+      start({
+        ...SYSTEM_CLOCK,
+        date: () => at,
+        monotonic: () => monotonic,
+      }).connect(),
     );
     monotonic += 500;
     opened.send(renderRequest("connection-clock", at.getTime() + 2_000));

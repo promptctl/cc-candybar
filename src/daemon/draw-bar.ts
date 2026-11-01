@@ -81,7 +81,6 @@ import {
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { type Instant } from "../utils/instant.js";
-import { type ClientDeadline } from "./request-deadline.js";
 import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
@@ -845,11 +844,11 @@ export async function answerRequest(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
-  wait: RequestWait,
+  waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(parts, req);
-  return drawAnswer(parts, req, at, wait, facts);
+  return drawAnswer(parts, req, at, waitEndsAt, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -916,18 +915,11 @@ export function laneClicked(
     tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
 }
 
-// A request's wait, fixed at its arrival: whether its client stated its
-// deadline, and when the wait ends, on the monotonic clock.
-export interface RequestWait {
-  readonly stated: ClientDeadline["kind"];
-  readonly endsAt: number;
-}
-
 async function drawAnswer(
   parts: DaemonParts,
   req: CheckedRenderRequest,
   at: Instant,
-  wait: RequestWait,
+  waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
@@ -947,8 +939,10 @@ async function drawAnswer(
   // [LAW:one-source-of-truth] The event's figure is the wait as armed, read
   // once, so the two cannot disagree. Setup has spent part of what the
   // request arrived with.
-  const budget = wait.endsAt - waitFrom;
-  noteFacts(facts, { deadline: `${wait.stated}:${Math.round(budget)}ms` });
+  const budget = waitEndsAt - waitFrom;
+  noteFacts(facts, {
+    deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
+  });
   const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
@@ -964,6 +958,7 @@ async function drawAnswer(
         "error",
         `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
       ),
+    clock.after,
   );
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.

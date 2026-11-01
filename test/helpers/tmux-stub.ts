@@ -18,10 +18,10 @@ export const HELD_CONFIG = `{ segments: { mark: { template: '{{ .tmux.session }}
 //
 // The stub's life is the connection's. One the daemon launched dies with the
 // daemon too, by the launcher's lifeline, but a test of the gate starts one
-// itself, which only its gate ends. Closing the gate, which afterAll does and
-// the kernel does when the worker dies, ends the stub's read, and it exits 1; a
-// stub started once the gate is closed finds nothing listening and exits at
-// once. So a run that ends before its gate opens, however it ends, leaves no
+// itself, which only its gate ends. Closing the gate, which a test's teardown
+// does and the kernel does when the worker dies, ends the stub's read, and it
+// exits 1; a stub started once the gate is closed finds nothing listening and
+// exits at once. So a run that ends before its gate opens, however it ends, leaves no
 // stub behind. The stub runs on the worker's own node, so it needs nothing
 // from the daemon's PATH, and it says back through the gate that it heard.
 const STUB_TMUX = [

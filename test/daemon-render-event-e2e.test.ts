@@ -570,12 +570,9 @@ describe("a request's deadline", () => {
   // still doing (brandon-unfiled-3248.8ro6, §4c): a source still reading then
   // draws as pending, and lands for the session's next render. The tmux stub
   // answers only once the test opens the gate, so the source provably outlives
-  // the deadline, an ordering the test owns. The bound is read from the wait
-  // the event says was armed, because a reply's arrival on a wall clock times
-  // the runner; the rest of it is test/wait-within.test.ts's and
-  // test/draw-reserve.process.test.ts's. The clock moves: a held one leaves a
-  // wait its whole budget however late its request was read, and the backstop
-  // is on real timers.
+  // the deadline, an ordering the test owns. The clock is held, and a request's
+  // timers are on it, so the wait ends at the instant the test moves it to, and
+  // no stall of this worker can reach the connection's backstop first.
   test("a source that outlives its client's deadline draws pending, and lands for the next render", async () => {
     const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-event-deadline",
@@ -589,17 +586,11 @@ describe("a request's deadline", () => {
     const tmuxDir = path.join(projectDir, "bin");
     mkdirSync(tmuxDir);
     const stub = await tmuxStub(tmuxDir);
-    const daemon = startDaemon({
-      ...env,
-      PATH: `${tmuxDir}${path.delimiter}${env.PATH ?? ""}`,
-    });
-    // The wait a request was armed with, below zero for one read past its
-    // deadline.
-    const armedMs = (event: Event, kind: string): number => {
-      const [stated, ms] = field(event, "deadline")!.split(":");
-      expect(stated).toBe(kind);
-      return Number.parseInt(ms!, 10);
-    };
+    const clock = heldClock();
+    const daemon = startDaemon(
+      { ...env, PATH: `${tmuxDir}${path.delimiter}${env.PATH ?? ""}` },
+      { clock },
+    );
     try {
       const tmuxBody = (sid: string, pane: string) =>
         renderBody(
@@ -627,21 +618,29 @@ describe("a request's deadline", () => {
       });
       // A client that states its deadline, as the native one does: its budget
       // counted from before it connects.
-      const stated = await sendDaemonRequest(daemon, {
+      const answer = sendDaemonRequest(daemon, {
         v: PROTOCOL_VERSION,
         kind: "render",
         ...tmuxBody("ev-late", "%1"),
         deadline: daemon.now() + TOTAL_BUDGET_MS,
       });
+      // The stub's start follows the arrival that armed the wait, so the wait
+      // is running. A moment short of its end the hold is still out, and the
+      // next moment ends it, whatever the source is doing.
+      await stub.asked(1);
+      const waitMs = TOTAL_BUDGET_MS - DRAW_RESERVE_MS;
+      clock.advance(waitMs - 1);
+      await expect(stats()).resolves.toMatchObject({
+        stats: { renderCache: { held: 1 } },
+      });
+      clock.advance(1);
+      const stated = await answer;
       expect(stated).toMatchObject({ ok: true });
       expect(stripAnsi((stated as { output: string }).output)).toContain("…");
-      await stub.asked(1);
       const late = only(await landedEvents(env, "ev-late", 1));
       expect(field(late, "outcome")).toBe("ok");
       expect(field(late, "timedOut")).toBe("N");
-      expect(armedMs(late, "stated")).toBeLessThanOrEqual(
-        TOTAL_BUDGET_MS - DRAW_RESERVE_MS,
-      );
+      expect(field(late, "deadline")).toBe(`stated:${waitMs}ms`);
       expect(field(late, "ended")).toBe("deadline");
       expect(field(late, "pending")).toBe("tmux.session");
       // Answered, it holds nothing, though its source reads on: `using`
@@ -666,22 +665,22 @@ describe("a request's deadline", () => {
       expect(field((await landedEvents(env, "ev-late", 2))[1]!, "ended")).toBe("answered");
 
       // A client too old to state its deadline is answered by the earliest an
-      // old client gives up at — the native client's, whose budget runs from
-      // before its connect — so within its whole budget, the connect included.
-      await expect(
-        sendDaemonRequest(daemon, {
-          v: PROTOCOL_VERSION,
-          kind: "render",
-          ...tmuxBody("ev-late-unstated", "%2"),
-        }),
-      ).resolves.toMatchObject({ ok: true });
+      // old client gives up at: the native client's, whose budget runs from
+      // before its connect, so the connect comes off its wait too.
+      const unstatedAnswer = sendDaemonRequest(daemon, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...tmuxBody("ev-late-unstated", "%2"),
+      });
+      await stub.asked(2);
+      const unstatedWaitMs =
+        TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS - DRAW_RESERVE_MS;
+      clock.advance(unstatedWaitMs);
+      await expect(unstatedAnswer).resolves.toMatchObject({ ok: true });
       const unstated = only(await landedEvents(env, "ev-late-unstated", 1));
-      expect(armedMs(unstated, "unstated")).toBeLessThanOrEqual(
-        TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS - DRAW_RESERVE_MS,
-      );
+      expect(field(unstated, "deadline")).toBe(`unstated:${unstatedWaitMs}ms`);
       expect(field(unstated, "ended")).toBe("deadline");
       // Its stub is still reading: let it answer rather than be killed.
-      await stub.asked(2);
       await stub.open(2);
     } finally {
       await daemon.stop();

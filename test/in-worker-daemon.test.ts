@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
+import { SYSTEM_CLOCK } from "../src/daemon/daemon";
 import { dlog, logLines } from "../src/daemon/log";
 import { logPath } from "../src/daemon/paths";
 import {
@@ -110,7 +111,7 @@ describe("a daemon in this worker", () => {
     const sid = "in-worker-delivered";
     let now = Date.now();
     daemon = startDaemon(env, {
-      clock: { date: () => new Date(now), monotonic: () => performance.now() },
+      clock: { ...SYSTEM_CLOCK, date: () => new Date(now) },
     });
     await render(daemon, sid, projectDir);
     const refused = await sendClick(

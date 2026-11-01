@@ -19,7 +19,11 @@ import path from "node:path";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import type { RenderOrigin } from "../src/config-hint";
 import { LANES } from "../src/config/lanes";
-import type { Daemon, DaemonClock } from "../src/daemon/daemon";
+import {
+  SYSTEM_CLOCK,
+  type Daemon,
+  type DaemonClock,
+} from "../src/daemon/daemon";
 import { pidAlive } from "../src/daemon/parent-watchdog";
 import { sessionStatePath, settingsHistoryPath } from "../src/daemon/paths";
 import { PROTOCOL_VERSION, type RenderRequest } from "../src/daemon/protocol";
@@ -281,7 +285,7 @@ describe("the daemon is a value", () => {
     );
     const frozen = new Date("2031-02-03T04:05:06Z");
     const daemon = construct({
-      clock: { date: () => frozen, monotonic: () => performance.now() },
+      clock: { ...SYSTEM_CLOCK, date: () => frozen },
     });
 
     const bar = await answer(daemon, renderRequest("value-clock"));

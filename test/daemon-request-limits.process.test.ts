@@ -15,52 +15,37 @@ import { field, landedEvents, only } from "./helpers/request-event";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
-  type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
 const TEST_TIMEOUT_MS = 30_000;
 
 jest.setTimeout(TEST_TIMEOUT_MS);
 
-describe("a request's time limits", () => {
-  let env: NodeJS.ProcessEnv;
-  let sockPath: string;
-  let removeTmpDirs: () => void;
-  let projectDir: string;
-  let daemon: RunningDaemon | undefined;
-
-  beforeAll(async () => {
-    const prepared = prepareIsolatedDaemonEnv("cc-candybar-event-deadline");
-    ({ sockPath, env, removeTmpDirs } = prepared);
-    projectDir = mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-render-event-e2e-"),
-    );
-    daemon = await spawnDaemonWithEnv(env);
-  });
-
-  afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
-    rmSync(projectDir, { recursive: true, force: true });
-    removeTmpDirs();
-  });
-
-  // The connection's backstop answers TIMEOUT whatever the render is still
-  // doing. A wait ends before it, so what outlives it is a synchronous turn:
-  // here the first request's compile of a config big enough to take several
-  // times the backstop. The render's event says the client read another
-  // reply, and the hold it drew under is released when it ends.
-  test("a render that outlives its request timeout writes timedOut=Y", async () => {
-    const segments = Object.fromEntries(
-      Array.from({ length: 600 }, (_, i) => [
-        `s${i}`,
-        { template: `{{ .session.id }} ${i}` },
-      ]),
-    );
-    const config = path.join(projectDir, "heavy.json5");
-    writeFileSync(
-      config,
-      JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
-    );
+// The connection's backstop answers TIMEOUT whatever the render is still
+// doing. A wait ends before it, so what outlives it is a synchronous turn: here
+// the first request's compile of a config big enough to take several times the
+// backstop. The render's event says the client read another reply, and the hold
+// it drew under is released when it ends.
+test("a render that outlives its request timeout writes timedOut=Y", async () => {
+  const { sockPath, env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-request-limits",
+  );
+  const projectDir = mkdtempSync(
+    path.join(os.tmpdir(), "cc-candybar-request-limits-"),
+  );
+  const segments = Object.fromEntries(
+    Array.from({ length: 600 }, (_, i) => [
+      `s${i}`,
+      { template: `{{ .session.id }} ${i}` },
+    ]),
+  );
+  const config = path.join(projectDir, "heavy.json5");
+  writeFileSync(
+    config,
+    JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
+  );
+  const daemon = await spawnDaemonWithEnv(env);
+  try {
     // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
     // task on the daemon's loop, so it cannot be written until the
     // synchronous compile yields: this client's wait is bounded by the
@@ -93,5 +78,9 @@ describe("a request's time limits", () => {
     await expect(
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
     ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
-  });
+  } finally {
+    await killAndWait(daemon);
+    rmSync(projectDir, { recursive: true, force: true });
+    removeTmpDirs();
+  }
 });

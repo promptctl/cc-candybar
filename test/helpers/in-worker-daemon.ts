@@ -52,20 +52,34 @@ export function bundleAt(
   };
 }
 
-// A clock a test moves by hand. Both of its readings stand still until then, so
-// it belongs on a daemon its case owns, whose clients state their deadlines on
-// it: a request's budget is that deadline less this clock's arrival.
+// A clock a test moves by hand. Both of its readings and a request's timers
+// stand still until then, so it belongs on a daemon its case owns, whose clients
+// state their deadlines on it: a request's budget is that deadline less this
+// clock's arrival.
 export interface HeldClock extends DaemonClock {
   advance(ms: number): void;
 }
 
 export function heldClock(start: Date = new Date()): HeldClock {
   let elapsed = 0;
+  const timers = new Set<{ at: number; fire: () => void }>();
   return {
     date: () => new Date(start.getTime() + elapsed),
     monotonic: () => elapsed,
+    after: (ms, fire) => {
+      const timer = { at: elapsed + ms, fire };
+      timers.add(timer);
+      return () => timers.delete(timer);
+    },
     advance: (ms) => {
       elapsed += ms;
+      [...timers]
+        .filter((timer) => timer.at <= elapsed)
+        .sort((a, b) => a.at - b.at)
+        .forEach((timer) => {
+          timers.delete(timer);
+          timer.fire();
+        });
     },
   };
 }

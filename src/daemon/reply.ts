@@ -3,12 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import {
-  answerRequest,
-  NOTHING_DELIVERED,
-  renderFailed,
-  type RequestWait,
-} from "./draw-bar.js";
+import { answerRequest, NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import {
   checkRenderRequest,
   type CheckedRenderRequest,
@@ -332,15 +327,12 @@ export async function replyTo(
     // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
     // at its arrival: early enough before its client hangs up to draw
     // (src/daemon/request-deadline.ts).
-    const waitFor = (req: CheckedRenderRequest): RequestWait => ({
-      stated: req.deadline.kind,
-      endsAt:
-        t0 +
-        waitBudgetMs(req.deadline, accepted, {
-          epochMs: started.getTime(),
-          monoMs: t0,
-        }),
-    });
+    const waitEndsAt = (req: CheckedRenderRequest): number =>
+      t0 +
+      waitBudgetMs(req.deadline, accepted, {
+        epochMs: started.getTime(),
+        monoMs: t0,
+      });
     const rendered: {
       outcome: RequestOutcome;
       resp: Response;
@@ -351,7 +343,7 @@ export async function replyTo(
           parts,
           checked.req,
           at,
-          waitFor(checked.req),
+          waitEndsAt(checked.req),
           facts,
         ).then(
           ({ answer, motion, clickShown, delivered }) => {
