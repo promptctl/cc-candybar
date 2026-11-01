@@ -35770,7 +35770,7 @@ async function launchWaited(state, opts) {
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
-    let closed = false;
+    let released = false;
     let timer = null;
     let killTimer = null;
     let groupEndTimer = null;
@@ -35807,21 +35807,18 @@ async function launchWaited(state, opts) {
         });
       }
     };
-    const release3 = () => setImmediate(() => {
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-    });
     const concludeWithGroup = () => {
+      released = true;
+      if (groupEndTimer) clearTimeout(groupEndTimer);
       for (const pipe of [child.stdout, child.stderr]) {
         pipe?.removeAllListeners("data").resume();
         pipe?.unref();
       }
-      state.unreaped.delete(child);
       conclude(child.exitCode, child.signalCode);
     };
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
-        if (closed) return;
+        if (released) return;
         if (groupGone(group)) {
           setImmediate(concludeWithGroup);
           return;
@@ -35837,6 +35834,11 @@ async function launchWaited(state, opts) {
       );
     }
     const terminate = (cause) => {
+      const ended = child.exitCode !== null || child.signalCode !== null;
+      if (ended && group !== void 0 && groupGone(group)) {
+        setImmediate(concludeWithGroup);
+        return;
+      }
       terminated = cause;
       if (timer) clearTimeout(timer);
       unlisten();
@@ -35844,7 +35846,7 @@ async function launchWaited(state, opts) {
       if (pid2 !== void 0) {
         killTimer = setTimeout(() => {
           signal(pid2, "SIGKILL");
-          void exited.then(release3);
+          void exited.then(() => setImmediate(concludeWithGroup));
         }, TIMEOUT_KILL_GRACE_MS);
         signal(pid2, "SIGTERM");
       }
@@ -35867,6 +35869,7 @@ async function launchWaited(state, opts) {
       });
     });
     const conclude = (code, signal2) => {
+      state.unreaped.delete(child);
       if (terminated !== null) {
         settle3({
           ok: false,
@@ -35893,9 +35896,8 @@ async function launchWaited(state, opts) {
       });
     };
     child.on("close", (code, signal2) => {
-      closed = true;
+      released = true;
       if (groupEndTimer) clearTimeout(groupEndTimer);
-      state.unreaped.delete(child);
       conclude(code, signal2);
     });
     if (opts.timeoutMs && opts.timeoutMs > 0) {
