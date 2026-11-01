@@ -3,6 +3,7 @@ import { getEventListeners } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 import {
   createLauncher,
@@ -276,6 +277,40 @@ describe("launch (async)", () => {
       });
     } finally {
       spy.mockRestore();
+    }
+  });
+
+  it("a refused child's later output is drained unread, past a pipe's buffer on both streams", async () => {
+    const survived = path.join(scratch, "refused-survived");
+    const kill = jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+    });
+    const decoded = jest.spyOn(StringDecoder.prototype, "write");
+    try {
+      const r = await launch({
+        bin: "/bin/sh",
+        args: [
+          "-c",
+          'sleep 0.2; head -c 300000 /dev/zero; head -c 300000 /dev/zero >&2; : > "$1"',
+          "sh",
+          survived,
+        ],
+        timeoutMs: 50,
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      decoded.mockClear();
+      await until(
+        () => fs.existsSync(survived),
+        "the refused child's last write",
+      );
+      const read = decoded.mock.calls.map(([chunk]) => (chunk as Buffer).length);
+      expect(read.reduce((sum, length) => sum + length, 0)).toBeLessThan(
+        300_000,
+      );
+    } finally {
+      decoded.mockRestore();
+      kill.mockRestore();
     }
   });
 

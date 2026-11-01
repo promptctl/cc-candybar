@@ -98,14 +98,14 @@ describe("a launcher settles", () => {
     process.kill(escaped, "SIGKILL");
   });
 
-  test("naming a launch the OS would not let it end, until that child exits", async () => {
+  test("naming a launch the OS would not let it end, until that child exits, whatever holds its pipes", async () => {
     const { closing, launcher } = scope();
     const pidFile = path.join(dir, "refused");
     const run = launcher.launch({
       bin: "/bin/sh",
       args: [
         "-c",
-        `echo $$ > '${pidFile}.tmp'; mv '${pidFile}.tmp' '${pidFile}'; exec sleep 30`,
+        `echo $$ > '${pidFile}.tmp'; mv '${pidFile}.tmp' '${pidFile}'; sleep 8 & exec sleep 30`,
       ],
       category: "user-shell",
     });
