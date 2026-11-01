@@ -1,3 +1,10 @@
+## [1.174.5](https://github.com/promptctl/cc-candybar/compare/v1.174.4...v1.174.5) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a job group that refuses a signal no longer ends the daemon (candybar-testing-0x6u.zrb) ([#538](https://github.com/promptctl/cc-candybar/issues/538)) ([6917276](https://github.com/promptctl/cc-candybar/commit/691727676169eed0e0826fea6dee07d1d902077d))
+* **var-sources:** a watch_file variable says when a stall has stopped it refreshing (brandon-unfiled-3248.fme8) ([#539](https://github.com/promptctl/cc-candybar/issues/539)) ([1435f5c](https://github.com/promptctl/cc-candybar/commit/1435f5c909561280b02fc77cc21e462541e582fb))
+
 ## [1.174.4](https://github.com/promptctl/cc-candybar/compare/v1.174.3...v1.174.4) (2026-11-01)
 
 ### Bug Fixes
