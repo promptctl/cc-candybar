@@ -70406,8 +70406,8 @@ var back = async (value, ctx) => {
 var rewind = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
-  const restored = ctx.history.rewind(sid);
   ctx.journal.wrote();
+  const restored = ctx.history.rewind(sid);
   reloadIfWritten(ctx, sid, restored);
   ctx.log(
     "info",
@@ -70491,7 +70491,8 @@ async function clickGather(ctx, sid, doctor, load) {
     ),
     current: async (now2) => {
       const stands = doctor.loadConfig(sessionOrigin(now2, sid));
-      return stands.config === load.config ? gathered : clickGather(now2, sid, doctor, stands);
+      const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
+      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
     }
   };
   return gathered;
@@ -70866,14 +70867,10 @@ async function perform(verb, value, ctx, gathered) {
   const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
   await step4(ctx);
 }
-async function leadingGathers(rawValue, ctx) {
-  const gathered = [];
-  for (const { verb, value } of batchAdjacentWrites(parseEffects(rawValue))) {
-    const leaf = LEAF_VERBS.get(verb);
-    if (leaf === void 0 || !leaf.gathers) break;
-    gathered.push(await hoisted(leaf, value, ctx));
-  }
-  return gathered;
+async function headGather(rawValue, ctx) {
+  const [head] = batchAdjacentWrites(parseEffects(rawValue));
+  const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
+  return leaf?.gathers ? [await hoisted(leaf, head.value, ctx)] : [];
 }
 async function foldEffects(rawValue, ctx, gathered) {
   const errors2 = [];
@@ -70995,6 +70992,7 @@ function click(verb, gather, handler) {
       verb,
       sid,
       {
+        placed: ctx.placeWaited,
         waited: ctx.turnWaited,
         gone: ctx.clientGone,
         gathered: ctx.gatherTook
@@ -71021,7 +71019,9 @@ var VERBS = new Map([
       )
     ]
   ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, leadingGathers, foldEffects)],
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
+  // After the leaves, so it replaces the click they built: a probe writes no
+  // journal, so nothing may refuse it for a turn.
   [VERB_DOCTOR_PROBE, doctorProbe]
 ]);
 var VERB_NAMES = Object.freeze([
@@ -77291,6 +77291,7 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     await handler(value, {
       ...verbCtx,
       arrival,
+      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
       gatherTook: (ms) => noteFacts(facts, { gatherMs: `${ms}` }),
       turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
       clientGone
@@ -83928,8 +83929,10 @@ var JournalTurns = class {
   // gather while the turn was awaited, refuses the click; one that left during
   // the gather does not, since a gather outlasts a client's budget through no
   // fault of a re-click. With no gather `left` is false, as it was just read.
-  click(verb, session, { waited, gone, gathered }, gather, body) {
+  click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
+    const arrived3 = this.deps.monotonic();
     const inPlace = async () => {
+      placed2(Math.round(this.deps.monotonic() - arrived3));
       this.refuseClosed(verb);
       if (gone()) throw new ClickAbandoned(verb);
       const started2 = this.deps.monotonic();
@@ -84007,9 +84010,10 @@ var MenuIdle = class {
   // When the idle period of the menus the session's last frame drew began —
   // its last click, or the first frame that drew them, whichever is later —
   // or nothing, while it drew none: a menu that appears now has only begun.
+  // Nothing too while a click is in flight: no close is due to count down to.
   since(sessionId2, at) {
     const idle = this.record(sessionId2, at);
-    return idle.shown ? idle.since : void 0;
+    return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
   }
   // What the session's newest frame drew: whether a menu row, and the
   // timeout its settings resolve to. Frames are taken by their instant, not
@@ -84082,9 +84086,10 @@ var MenuIdle = class {
   // after this one: never at once, and never for a session that stopped
   // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
   // among the journals, so whether the session is still idle is read in that
-  // turn: a click since this firing keeps what it opened. The record follows that decision (`closed`), and until the
-  // close settles no frame arms another. A close that failed waits a timeout
-  // too, so it is retried at that pace and not at every frame.
+  // turn: a click since this firing keeps what it opened. The record follows
+  // that decision (`closed`), and until the close settles no frame arms
+  // another. A close that failed waits a timeout too, so it is retried at that
+  // pace and not at every frame.
   fire(sessionId2) {
     const idle = this.sessions.get(sessionId2);
     idle.timer = null;
@@ -84480,8 +84485,8 @@ function createDaemon(inputs) {
     clock,
     exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn, and
-    // close ends those (src/daemon/journal-turns.ts); a subscribe its request
+    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
+    // and close ends those (src/daemon/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
