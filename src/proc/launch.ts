@@ -558,9 +558,9 @@ function leaderRefuses(pid: number): boolean {
   }
 }
 
-// Decodes a stream as it reads and answers with the text so far. An owned
-// decoder, not setEncoding: a launch can end before EOF, and only this one can
-// be flushed then, so a character cut short still shows as U+FFFD.
+// Decodes a stream as it reads; the returned read flushes, once, at settle. An
+// owned decoder, not setEncoding: a launch can end before EOF, and only this
+// one can be flushed then, so a character cut short still shows as U+FFFD.
 function capture(stream: Readable | null): () => string {
   const decoder = new StringDecoder("utf8");
   let text = "";
