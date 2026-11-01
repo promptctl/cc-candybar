@@ -35122,7 +35122,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.174.1";
+var PACKAGE_VERSION = "1.174.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -35649,7 +35649,8 @@ function refusalOf(state, category, signal) {
   return gate2.allowed ? null : rateLimitedResult(category, gate2.minIntervalMs, gate2.sinceLastMs);
 }
 var TIMEOUT_KILL_GRACE_MS = 250;
-var GROUP_END_POLL_MS = 25;
+var GROUP_END_POLL_MIN_MS = 25;
+var GROUP_END_POLL_MAX_MS = 1e3;
 var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
 function setFault(state, next2) {
   if (next2 === state.fault) return;
@@ -35769,6 +35770,7 @@ async function launchWaited(state, opts) {
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
+    let closed = false;
     let timer = null;
     let killTimer = null;
     let groupEndTimer = null;
@@ -35783,7 +35785,6 @@ async function launchWaited(state, opts) {
       settled3 = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
-      if (groupEndTimer) clearTimeout(groupEndTimer);
       unlisten();
       if (group !== void 0) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
@@ -35810,17 +35811,30 @@ async function launchWaited(state, opts) {
       child.stdout?.destroy();
       child.stderr?.destroy();
     });
-    const awaitGroupEnd = (pid2) => {
-      if (settled3) return;
-      if (groupGone(pid2)) {
-        release3();
-        return;
+    const concludeWithGroup = () => {
+      for (const pipe of [child.stdout, child.stderr]) {
+        pipe?.removeAllListeners("data").resume();
+        pipe?.unref();
       }
-      groupEndTimer = setTimeout(() => awaitGroupEnd(pid2), GROUP_END_POLL_MS);
-      groupEndTimer.unref();
+      state.unreaped.delete(child);
+      conclude(child.exitCode, child.signalCode);
     };
     if (group !== void 0) {
-      void exited.then(() => setImmediate(() => awaitGroupEnd(group)));
+      const awaitGroupEnd = (delayMs) => {
+        if (closed) return;
+        if (groupGone(group)) {
+          setImmediate(concludeWithGroup);
+          return;
+        }
+        groupEndTimer = setTimeout(
+          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
+          delayMs
+        );
+        groupEndTimer.unref();
+      };
+      void exited.then(
+        () => setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
+      );
     }
     const terminate = (cause) => {
       terminated = cause;
@@ -35852,8 +35866,7 @@ async function launchWaited(state, opts) {
         error: spawnErrorText(err, opts.cwd)
       });
     });
-    child.on("close", (code, signal2) => {
-      state.unreaped.delete(child);
+    const conclude = (code, signal2) => {
       if (terminated !== null) {
         settle3({
           ok: false,
@@ -35878,6 +35891,12 @@ async function launchWaited(state, opts) {
         exitCode: code,
         signal: signal2
       });
+    };
+    child.on("close", (code, signal2) => {
+      closed = true;
+      if (groupEndTimer) clearTimeout(groupEndTimer);
+      state.unreaped.delete(child);
+      conclude(code, signal2);
     });
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);

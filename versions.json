@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-535",
+      "ref": "refs/pull/535/merge",
+      "sha": "4dd62740d83b7bf21bc2eb56047d583e0ac6773f",
+      "timestamp": "2026-11-01T03:45:26.336Z",
+      "commits": [
+        {
+          "sha": "4dd62740d83b7bf21bc2eb56047d583e0ac6773f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:44:34-06:00",
+          "message": "Merge cd1e87fb9afd928148eebeeeb573d68943a6dbf2 into 4d4639cbd084a07eec9bca7f571f170bf9fa8fd5\n"
+        },
+        {
+          "sha": "cd1e87fb9afd928148eebeeeb573d68943a6dbf2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:44:23-06:00",
+          "message": "fix(proc): a launch concludes with its group and leaves the holder its pipes (candybar-testing-0x6u.425)\n"
+        },
+        {
+          "sha": "6d1c712e7a50ed409f91153c0b957e7b11cb6453",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-31T21:35:11-06:00",
+          "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-536",
       "ref": "refs/pull/536/merge",
       "sha": "acd96abd46c61fceb582e7721b125d6b655fe4af",
@@ -20,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T21:36:53-06:00",
           "message": "test(diagnostics): a config folder the OS refuses shows on every bar drawn from its entry (brandon-unfiled-3248.fyvh)\n\ncandybar-plugins-vf6g.8uk (#507) carried a refused config directory to the\nindicator, but only the link-chain half was proven at a drawn bar. This\ndrives a refusal through the daemon's own render to the ⚠, the viewer and\nthe render event, over a failed load too.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-535",
-      "ref": "refs/pull/535/merge",
-      "sha": "0511c4852b188df687b9fb593f002e5db7429f8c",
-      "timestamp": "2026-11-01T03:36:13.745Z",
-      "commits": [
-        {
-          "sha": "0511c4852b188df687b9fb593f002e5db7429f8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:35:28-06:00",
-          "message": "Merge 6d1c712e7a50ed409f91153c0b957e7b11cb6453 into 4814ee778a28c55a7193789772cc2d681d409ab0\n"
-        },
-        {
-          "sha": "6d1c712e7a50ed409f91153c0b957e7b11cb6453",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-31T21:35:11-06:00",
-          "message": "fix(proc): a launch ends with its group, not with whoever holds its pipes (candybar-testing-0x6u.425)\n"
         }
       ]
     },
