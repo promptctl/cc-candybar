@@ -4,15 +4,22 @@
     {
       "version": "pr-553",
       "ref": "refs/pull/553/merge",
-      "sha": "3fda6172b21504d042cfd3b4b485415339194569",
-      "timestamp": "2026-11-01T15:58:50.191Z",
+      "sha": "45622d70ea6e1f73366d4da744419b172fe72152",
+      "timestamp": "2026-11-01T16:14:17.220Z",
       "commits": [
         {
-          "sha": "3fda6172b21504d042cfd3b4b485415339194569",
+          "sha": "45622d70ea6e1f73366d4da744419b172fe72152",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T15:57:57Z",
-          "message": "Merge f412a67ad38954342384f8745956bd7a1bb13823 into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+          "timestamp": "2026-11-01T16:13:25Z",
+          "message": "Merge 6985de4d793fa8bbc5bfadd3f4eceeaf85bb2239 into ef5e1fd23a63c3bd27493e045e98c9877f67e0fe\n"
+        },
+        {
+          "sha": "6985de4d793fa8bbc5bfadd3f4eceeaf85bb2239",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T09:13:10-07:00",
+          "message": "refactor(daemon): a feed frame's answer is named once, and comments say what no feed and no script does (candybar-isolated-daemon-bfab.dnr)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "f412a67ad38954342384f8745956bd7a1bb13823",
