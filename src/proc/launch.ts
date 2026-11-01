@@ -807,10 +807,12 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
     const stdout = typeof result.stdout === "string" ? result.stdout : "";
     const stderr = typeof result.stderr === "string" ? result.stderr : "";
 
-    // Node sets `error` for ETIMEDOUT and ENOENT; distinguish by code. EPIPE is
-    // input the child left unread, and its exit stays the verdict as in `launch`.
+    // Node sets `error` for ETIMEDOUT and ENOENT; distinguish by code.
+    // [LAW:no-silent-failure] exception: EPIPE and ECONNRESET (macOS, a peer
+    // mid-close) are input the child left unread; its exit stays the verdict,
+    // as in `launch`.
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
-    if (result.error && code !== "EPIPE") {
+    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
       const reason: "timeout" | "spawn-error" =
         code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
