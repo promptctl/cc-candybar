@@ -1,6 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { untilHeard } from "./helpers/reload-signal";
-import { throughout } from "./helpers/until";
 import { DEBOUNCE_MS } from "../src/daemon/cache/watchers";
 
 // Past the round cadence, so the probe outlives the round that made it.
@@ -11,26 +10,47 @@ const lateThrow = async (): Promise<boolean> => {
   throw new Error("late");
 };
 
-describe("a probe that outlives its wait", () => {
-  it("fails the untilHeard that left it, though a later round held", async () => {
-    let round = 0;
+describe("a probe that outlives its round", () => {
+  it("fails the wait with its late throw", async () => {
+    let probes = 0;
     await expect(
       untilHeard(
-        () => { round++; },
-        () => (round === 1 ? lateThrow() : true),
+        () => {},
+        () => {
+          probes++;
+          return lateThrow();
+        },
         "heard",
       ),
     ).rejects.toThrow("late");
+    expect(probes).toBe(1);
   });
 
-  it("fails the throughout that left it, at the expiry that would have passed", async () => {
-    await expect(throughout(lateThrow, "held", DEBOUNCE_MS)).rejects.toThrow("late");
-  });
-
-  it("does not hold an untilHeard that failed by name", async () => {
-    const never = new Promise<boolean>(() => {});
-    await expect(untilHeard(() => {}, () => never, "heard")).rejects.toThrow(
-      "heard did not hold after",
+  it("ends the wait with its late answer", async () => {
+    let probes = 0;
+    await untilHeard(
+      () => {},
+      async () => {
+        probes++;
+        await sleep(LATE_MS);
+        return true;
+      },
+      "heard",
     );
-  }, 25_000);
+    expect(probes).toBe(1);
+  });
+
+  it("does not hold a wait that a later round's mutation failed", async () => {
+    let round = 0;
+    const never = new Promise<boolean>(() => {});
+    await expect(
+      untilHeard(
+        () => {
+          if (++round === 2) throw new Error("mutate");
+        },
+        () => never,
+        "heard",
+      ),
+    ).rejects.toThrow("mutate");
+  });
 });

@@ -102,28 +102,28 @@ const MAX_ROUNDS = 48;
 // path or a plain overwrite does), and `heard` is read until it holds, so a
 // condition over something a later event can move (a count) must be
 // at-least, never exactly. [LAW:no-silent-failure] A throw from `mutate`
-// lands on the caller's own await, not in a detached timer callback, and a
-// probe still in flight when its round expires is awaited once a later round
-// holds, so its late throw lands there too, while the test that made it and
-// its daemon are alive. A wait that fails has already failed by name, so its
-// leftovers are dropped; `after`'s never settles when no reload came.
+// lands on the caller's own await, not in a detached timer callback.
+// [LAW:no-ambient-temporal-coupling] One probe runs at a time: a probe still
+// in flight when its round expires is carried into the next round, so its
+// late answer counts and its late throw ends the wait, while the test that
+// made it and its daemon are alive. `after`'s never settles when no reload
+// came, and the wait still ends at MAX_ROUNDS.
 export async function untilHeard(
   mutate: () => void,
   heard: Condition,
   what: What,
 ): Promise<void> {
-  const leftovers: Promise<void>[] = [];
+  let asked: Promise<boolean> | null = null;
+  const answer: Condition = () => {
+    asked ??= Promise.resolve(heard()).then((held) => {
+      if (!held) asked = null;
+      return held;
+    });
+    return asked;
+  };
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     mutate();
-    const ending = await holdsWithin(heard, RETRY_MS);
-    if (ending.kind === "held") {
-      await Promise.all(leftovers);
-      return;
-    }
-    if (ending.inFlight) {
-      ending.inFlight.catch(() => undefined);
-      leftovers.push(ending.inFlight);
-    }
+    if (await holdsWithin(answer, RETRY_MS)) return;
   }
   throw new Error(
     `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations ${RETRY_MS} ms apart`,
