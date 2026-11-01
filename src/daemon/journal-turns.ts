@@ -62,10 +62,12 @@ export interface ClickAsker extends TurnAsker {
 }
 
 const DAEMON_WIDE = "journals";
+const GATHERS = "gathers";
 
 export class JournalTurns {
   private readonly queue = new KeyedSerialQueue<typeof DAEMON_WIDE>();
   private readonly sessions = new KeyedSerialQueue<string>();
+  private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
   private open = true;
   private inFlight: InFlight | null = null;
   private holder: { readonly verb: string; readonly since: number } | null =
@@ -140,6 +142,12 @@ export class JournalTurns {
       );
     };
     return session === null ? inPlace() : this.sessions.run(session, inPlace);
+  }
+
+  // A click's gather, one at a time daemon-wide and in no turn: its probes share
+  // a rate window across sessions, so two at once would refuse the second.
+  gathering<G>(gather: () => Promise<G>): Promise<G> {
+    return this.gathers.run(GATHERS, gather);
   }
 
   getStats(): JournalTurnStats {

@@ -669,7 +669,7 @@ async function handleClick(
       ...verbCtx,
       arrival,
       placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gatherMs: `${ms}` }),
+      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
       clientGone,
     });

@@ -219,7 +219,7 @@ export interface DaemonContext {
   readonly navigation: NavigationHistory;
   // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
   // (src/daemon/journal-turns.ts).
-  readonly journalTurns: Pick<JournalTurns, "take" | "click">;
+  readonly journalTurns: Pick<JournalTurns, "take" | "click" | "gathering">;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
   // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
   readonly clickLanded: (sessionId: string) => void;
@@ -275,8 +275,8 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
-  // [LAW:nothing-unseen] How long THIS click gathered and then waited for its
-  // turn, for its event.
+  // [LAW:nothing-unseen] How long THIS click waited for its place in its
+  // session, gathered, and waited for its turn, for its event.
   readonly placeWaited: (ms: number) => void;
   readonly gatherTook: (ms: number) => void;
   readonly turnWaited: (ms: number) => void;
@@ -330,8 +330,8 @@ type ClickStep = (ctx: ClickContext) => Promise<void>;
 
 // [LAW:types-are-the-program] An effect of the click table. `prepare` is its
 // read-only part, handed the unjournaled context, and what it answers is the
-// rest. A gathering effect's launches only inform, so they need no turn while
-// nothing the click wrote comes before them (`leadingGathers`). `slash` is no
+// rest. A gathering effect's launches only inform, so they need no turn when
+// the effect opens its click (`headGather`). `slash` is no
 // gathering effect though its first await is a pane read: that read is the
 // guard for its typing, and a guard split from its act guards nothing.
 interface Verb {
@@ -1619,9 +1619,9 @@ const doctorFix: Verb = {
 // under the sighting they are — never a sighting cached from the render that
 // drew the ✓ and ✗, since the session's terminal or joiner may have moved —
 // then re-run over those same facts with the mark folded in.
-// [LAW:single-enforcer] One gathering per click, as doctorFix: a second would
-// spawn the rate-limited tmux and font probes again inside their window, and
-// the refused spawn would read as a different terminal than the one marked.
+// [LAW:single-enforcer] One gathering per click, as doctorFix: a second asks
+// only what a new config changed (`oneAskPerClick`), since a refused spawn
+// would read as a different terminal than the one marked.
 const doctorMark: Verb = {
   gathers: true,
   prepare: async (value, ctx) => {
@@ -2016,11 +2016,13 @@ const hoisted = (
   value: string,
   ctx: VerbContext,
 ): Promise<ClickStep> =>
-  verb.prepare(value, ctx).catch(
-    (e: unknown): ClickStep =>
-      () =>
-        Promise.reject(e),
-  );
+  ctx.journalTurns
+    .gathering(() => verb.prepare(value, ctx))
+    .catch(
+      (e: unknown): ClickStep =>
+        () =>
+          Promise.reject(e),
+    );
 
 // An effect's turn: its gather's rest, or, gathering in the turn, the whole of
 // it, which then reads what the click wrote before it.
@@ -2041,16 +2043,16 @@ async function perform(
 async function headGather(
   rawValue: string,
   ctx: VerbContext,
-): Promise<readonly ClickStep[]> {
+): Promise<ClickStep | undefined> {
   const [head] = batchAdjacentWrites(parseEffects(rawValue));
   const leaf = head === undefined ? undefined : LEAF_VERBS.get(head.verb);
-  return leaf?.gathers ? [await hoisted(leaf, head!.value, ctx)] : [];
+  return leaf?.gathers ? hoisted(leaf, head!.value, ctx) : undefined;
 }
 
 async function foldEffects(
   rawValue: string,
   ctx: ClickContext,
-  gathered: readonly ClickStep[],
+  gathered: ClickStep | undefined,
 ): Promise<void> {
   const errors: string[] = [];
   let operational = false;
@@ -2065,7 +2067,7 @@ async function foldEffects(
       continue;
     }
     try {
-      await perform(leaf, value, ctx, gathered[i]);
+      await perform(leaf, value, ctx, i === 0 ? gathered : undefined);
     } catch (e) {
       // [LAW:single-enforcer] The turn is over: no later effect runs, and the
       // journal holdClickError writes through is finished. What failed before
@@ -2214,11 +2216,11 @@ async function journaled<C extends DaemonContext>(
 // ahead of its turn, then a journal around the rest (src/daemon/journal-turns.ts).
 function click(
   verb: string,
-  gather: (value: string, ctx: VerbContext) => Promise<readonly ClickStep[]>,
+  gather: (value: string, ctx: VerbContext) => Promise<ClickStep | undefined>,
   handler: (
     value: string,
     ctx: ClickContext,
-    gathered: readonly ClickStep[],
+    gathered: ClickStep | undefined,
   ) => Promise<void>,
 ): (value: string, ctx: VerbContext) => Promise<void> {
   return async (value, ctx) => {
@@ -2260,8 +2262,8 @@ export const VERBS: ReadonlyMap<
         click(
           verb,
           async (value, ctx) =>
-            leaf.gathers ? [await hoisted(leaf, value, ctx)] : [],
-          (value, ctx, [gathered]) => perform(leaf, value, ctx, gathered),
+            leaf.gathers ? hoisted(leaf, value, ctx) : undefined,
+          (value, ctx, gathered) => perform(leaf, value, ctx, gathered),
         ),
       ] as const,
   ),

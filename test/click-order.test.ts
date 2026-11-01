@@ -136,6 +136,19 @@ describe("a gather holds no turn", () => {
     expect(reports()).toHaveLength(1);
   });
 
+  test("two sessions' doctor gathers run one at a time, while a toggle passes both", async () => {
+    const { held, gathers, doctor, toggle, toggled, reports } = setup();
+    const a = doctor(A);
+    const b = doctor(B);
+    await drain();
+    expect(gathers).toHaveLength(1);
+    await toggle("session-c");
+    expect(toggled("session-c")).toBe("1");
+    held.open();
+    await Promise.all([a, b]);
+    expect(reports()).toHaveLength(2);
+  });
+
   test("a doctor click whose client left during the gather still files its report", async () => {
     const { held, doctor, ctx, reports } = setup();
     let gone = false;
@@ -479,7 +492,7 @@ describe("the idle clock", () => {
   });
 });
 
-test("the click path counts a click pending from arrival, through a refusal, and logs gatherMs", async () => {
+test("the click path counts a click pending from arrival, through a refusal, and logs its gather", async () => {
   const { ctx, held } = setup();
   const idle = new MenuIdle({
     now: () => instantOf(new Date()),
@@ -509,7 +522,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   held.open();
   await sent;
   expect(idle.getStats().pending).toBe(0);
-  expect(events[0]).toMatch(/ gatherMs=\d+ /);
+  expect(events[0]).toMatch(/ gather=\d+ms /);
   await send(() => true);
   expect(idle.getStats().pending).toBe(0);
   idle.dispose();

@@ -111,7 +111,8 @@ export class MenuIdle {
     this.settle(sessionId);
   }
 
-  // The sessions whose clocks are kept, and those whose close timer is armed.
+  // The sessions whose clocks are kept, those whose close timer is armed, and
+  // the clicks in flight.
   getStats(): MenuIdleStats {
     let armed = 0;
     for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
