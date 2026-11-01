@@ -629,9 +629,9 @@ describe("RenderCache", () => {
   });
 
   // A config folder the OS refused is retried by the registry's period, never
-  // by a reload, so the fault the bar shows clears within one period of the
-  // OS watching it again.
-  test("a refused config directory is heard again on the period's judgment, and a reload leaves it as it is", () => {
+  // by a reload, so the fault the bar shows stands while the OS still refuses
+  // and clears within one period of the OS watching it again.
+  test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
     const { dir, cleanup } = mkConfigDir();
     const at = realpathSync(dir);
     const watch = fs.watch.bind(fs);
@@ -645,6 +645,8 @@ describe("RenderCache", () => {
     const { cache, cleanups, watchers } = makeCache();
     try {
       const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      watchers.judge();
       expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
       refuse = false;
       cache.reload(dir, dir, undefined, { kind: "doctor" });

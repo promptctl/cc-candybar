@@ -1,10 +1,11 @@
 // [LAW:nothing-unseen] candybar-theme-colours-6fq5.ge6, measured on the
 // daemon's own request handling: a render's event — its `render sid=…` log line — names every warning
-// that render met, by kind and in order: the config load's own (`load`) and
-// each one the render itself reported (`RenderWarning`), `-` for none. The
-// cases enumerate both sources whole — a load warning or not, a render warning
-// or not — and read the messages the bar's indicator offers beside the event,
-// so the two cannot disagree unseen. A render warning is known only after the
+// that render met, by kind and in order: a config watch that cannot hear
+// (`config-watch`), the config load's own (`load`) and each one the render
+// itself reported (`RenderWarning`), `-` for none. The table enumerates the
+// last two whole — a load warning or not, a render warning or not — and every
+// case reads the messages the bar's indicator offers beside the event, so the
+// two cannot disagree unseen. A render warning is known only after the
 // walk, so the bar counts it from the frame after the one that met it, and a
 // renderer records every frame's warnings by value.
 
@@ -234,32 +235,33 @@ describe("a daemon render's event names every warning, and the indicator offers 
     const broken = path.join(dir, "broken.json5");
     writeFileSync(broken, "{ nope");
     const refusal = `config watch: cannot watch ${dir} — EMFILE`;
+    // Every attempt the helper retried met the same warning.
+    const everyEventNamesTheWatch = async (sid: string, answers: number) => {
+      for (const line of await renderLines(env, sid, answers))
+        expect(fieldOf("warn")(line)).toBe("config-watch");
+    };
     fakeWatches(new Set([dir]));
     try {
-      const bar = await render(daemon, "refused", dir);
+      const sid = "refused";
+      const bar = await render(daemon, sid, dir);
       expect(indicatorOf(bar)).toBe("⚠ 1");
-      expect(indicatorOf(await render(daemon, "refused", dir))).toBe("⚠ 1");
-      expect(indicatorOf(await render(daemon, "refused-too", dir))).toBe("⚠ 1");
-      const events = (await renderLines(env, "refused", 2)).map(
-        fieldOf("warn"),
-      );
-      expect(events).toEqual(["config-watch", "config-watch"]);
-      const pages = await readDiagnostics(daemon, "refused", dir, bar, {}, []);
+      expect(indicatorOf(await render(daemon, sid, dir))).toBe("⚠ 1");
+      await everyEventNamesTheWatch(sid, 2);
+      const pages = await readDiagnostics(daemon, sid, dir, bar);
       expect(pages.map((p) => p.text)).toEqual([
         expect.stringContaining(refusal),
       ]);
 
+      const another = "refused-too";
+      expect(indicatorOf(await render(daemon, another, dir))).toBe("⚠ 1");
+      await everyEventNamesTheWatch(another, 1);
+
+      const failedSid = "refused-broken";
       const args = ["cc-candybar", "--config", broken];
-      const failed = await render(daemon, "refused-broken", dir, {}, args);
+      const failed = await render(daemon, failedSid, dir, {}, args);
       expect(indicatorOf(failed)).toBe("⚠ 2");
-      const both = await readDiagnostics(
-        daemon,
-        "refused-broken",
-        dir,
-        failed,
-        {},
-        args,
-      );
+      await everyEventNamesTheWatch(failedSid, 1);
+      const both = await readDiagnostics(daemon, failedSid, dir, failed, {}, args);
       expect(both.map((p) => p.text)).toEqual([
         expect.stringContaining(`Invalid config in ${broken}`),
         expect.stringContaining(refusal),
