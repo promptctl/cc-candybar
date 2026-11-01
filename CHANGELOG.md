@@ -1,3 +1,9 @@
+## [1.174.6](https://github.com/promptctl/cc-candybar/compare/v1.174.5...v1.174.6) (2026-11-01)
+
+### Bug Fixes
+
+* **proc:** a character split across two reads stays whole (candybar-testing-0x6u.71b) ([#540](https://github.com/promptctl/cc-candybar/issues/540)) ([62bc62d](https://github.com/promptctl/cc-candybar/commit/62bc62daea77f6e6c8b7543db42bf9736245ebaa))
+
 ## [1.174.5](https://github.com/promptctl/cc-candybar/compare/v1.174.4...v1.174.5) (2026-11-01)
 
 ### Bug Fixes
