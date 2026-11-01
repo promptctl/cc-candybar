@@ -26,7 +26,8 @@ export const nameOf = (what: What): string =>
 // accepts) still ends the wait at its budget, but the outcome is read off
 // what the probe wrote, not off which promise won: an answer that landed is
 // honoured whichever settled first, and a probe still in flight at expiry
-// is left behind, its late answer unread.
+// is left behind. [LAW:no-silent-failure] exception: its late answer is
+// unread; the caller's wait ends loudly by name.
 // [LAW:one-source-of-truth] THE poll loop: both named waits below, and the
 // watch-liveness retry's rounds, are one loop, so no test
 // file keeps a copy that answers false at its deadline.

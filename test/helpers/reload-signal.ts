@@ -84,16 +84,17 @@ export class ReloadSignal {
 // [LAW:one-source-of-truth] Derived from the registry's own debounce floor —
 // a retry must at least outwait the debounce, or every round re-mutates before
 // the first one could possibly have reloaded.
-const RETRY_MS = 4 * DEBOUNCE_MS;
-// 48 fresh chances: far above any delivery latency seen, and ~12 s at the
+export const RETRY_MS = 4 * DEBOUNCE_MS;
+// 48 fresh mutations: far above any delivery latency seen, and ~12 s at the
 // cadence above (a round is the cadence plus at most one poll tick), so two
 // waits in sequence still end below Jest's 30 s testTimeout and the failure
 // is this error, with the test's cleanup run.
 const MAX_ROUNDS = 48;
 
 // [LAW:single-enforcer] THE retry-until-heard loop for a watch: `mutate` is
-// applied at once and then once per round until `heard` holds within the
-// round's cadence, or the wait fails by name after MAX_ROUNDS rounds.
+// applied at once and then once per round until `heard` holds, or the wait
+// fails by name after MAX_ROUNDS rounds. Rounds refresh the mutation, not a
+// probe still in flight.
 // [LAW:one-source-of-truth] The cadence and the chances are the constants
 // above, so every watch a test proves live gets the same budget. Only a
 // delivered event proves a watch live, so `after` is this loop with "heard"
@@ -106,8 +107,9 @@ const MAX_ROUNDS = 48;
 // [LAW:no-ambient-temporal-coupling] One probe runs at a time: a probe still
 // in flight when its round expires is carried into the next round, so its
 // late answer counts and its late throw ends the wait, while the test that
-// made it and its daemon are alive. A probe that outlasts every round leaves
-// the wait to fail by name; `after`'s never settles when no reload came.
+// made it and its daemon are alive. [LAW:no-silent-failure] exception: a probe
+// that outlasts every round goes unread and the wait fails by name; `after`'s
+// never settles when no reload came.
 export async function untilHeard(
   mutate: () => void,
   heard: Condition,

@@ -1,9 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { untilHeard } from "./helpers/reload-signal";
-import { DEBOUNCE_MS } from "../src/daemon/cache/watchers";
+import { RETRY_MS, untilHeard } from "./helpers/reload-signal";
 
 // Past the round cadence, so the probe outlives the round that made it.
-const LATE_MS = 8 * DEBOUNCE_MS;
+const LATE_MS = 2 * RETRY_MS;
 
 const lateThrow = async (): Promise<boolean> => {
   await sleep(LATE_MS);
