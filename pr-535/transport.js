@@ -35770,7 +35770,6 @@ async function launchWaited(state, opts) {
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
-    let released = false;
     let timer = null;
     let killTimer = null;
     let groupEndTimer = null;
@@ -35785,6 +35784,7 @@ async function launchWaited(state, opts) {
       settled3 = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      if (groupEndTimer) clearTimeout(groupEndTimer);
       unlisten();
       if (group !== void 0) unguard(state, group);
       stats?.onEnd(opts.category, Date.now() - t0);
@@ -35808,8 +35808,6 @@ async function launchWaited(state, opts) {
       }
     };
     const concludeWithGroup = () => {
-      released = true;
-      if (groupEndTimer) clearTimeout(groupEndTimer);
       for (const pipe of [child.stdout, child.stderr]) {
         pipe?.removeAllListeners("data").resume();
         pipe?.unref();
@@ -35818,7 +35816,7 @@ async function launchWaited(state, opts) {
     };
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
-        if (released) return;
+        if (settled3) return;
         if (groupGone(group)) {
           setImmediate(concludeWithGroup);
           return;
@@ -35827,7 +35825,6 @@ async function launchWaited(state, opts) {
           () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
           delayMs
         );
-        groupEndTimer.unref();
       };
       void exited.then(
         () => setImmediate(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
@@ -35835,7 +35832,7 @@ async function launchWaited(state, opts) {
     }
     const terminate = (cause) => {
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== void 0 && groupGone(group)) {
+      if (cause === "timeout" && ended && group !== void 0 && groupGone(group)) {
         setImmediate(concludeWithGroup);
         return;
       }
@@ -35895,11 +35892,7 @@ async function launchWaited(state, opts) {
         signal: signal2
       });
     };
-    child.on("close", (code, signal2) => {
-      released = true;
-      if (groupEndTimer) clearTimeout(groupEndTimer);
-      conclude(code, signal2);
-    });
+    child.on("close", conclude);
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
