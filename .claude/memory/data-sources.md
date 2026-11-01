@@ -54,7 +54,7 @@ A watch the OS has stopped feeding reports nothing, exactly as a folder nobody w
 
 An edit made while the daemon can't vouch for delivery may never have been heard. So the span opens at a stall or at the move into unable-to-check, only an event the watch reports closes it, and closing it re-reads every config, every held plugin file and every source a config watches a file for, however the span ended. The bar's row stands for as long as the span is open, so a probe that lands but is not yet heard still warns.
 
-While file events are stalled, every `watch_file` variable carries the stall as its standing fault, read from the delivery owner, so a stale value never reads as current. Every move of delivery re-reads them as a catch-up does, because a stall can end in unable-to-check with no catch-up to come, and no variable may drop the fault still holding a value from before it. The fault follows the stall and not the span, because unable-to-check is no finding about delivery: faulting on it would mark every variable for the life of a daemon whose watches may be hearing everything. The bar's row carries the rest of the span.
+While file events are stalled, every `watch_file` variable carries the stall as its standing fault, read from the delivery owner, so a stale value never reads as current. Every move of delivery re-reads them as a catch-up does, because a stall can end in unable-to-check with no catch-up to come, and no variable may drop the fault without reading again. The fault follows the stall and not the span, because unable-to-check is no finding about delivery: faulting on it would mark every variable for the life of a daemon whose watches may be hearing everything. The bar's row carries the rest of the span.
 
 ## Plugin storage
 

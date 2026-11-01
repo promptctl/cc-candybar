@@ -1540,8 +1540,8 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       }
     });
 
-    // No variable drops the fault still holding a value from before the stall,
-    // and a span still open cannot be left to close it: `end()` never does.
+    // No variable drops the fault without reading again, and a span still open
+    // cannot be left to close it: `end()` never does.
     it("a stall that moves to unmeasured clears the fault by re-reading, with no catch-up", async () => {
       const { dir, cleanup } = makeTmpDir();
       try {
@@ -1559,6 +1559,29 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
 
         expect(registry.cachePolicyFaults().size).toBe(0);
         await until(() => store.read("val") === "edited", "the edit landing");
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("one stall is one publish, however many variables it faults", () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry, cache } = rig(dir);
+        registry.declareFile("one", data, { parse: TEXT, cache });
+        registry.declareFile("two", data, { parse: TEXT, cache });
+        registry.declareFile("three", data, { parse: TEXT, cache });
+        let publishes = 0;
+        const stop = reaction(
+          () => registry.published(),
+          () => publishes++,
+        );
+
+        events.set(stalled, { kind: "moved" });
+        stop();
+
+        expect(registry.cachePolicyFaults().size).toBe(3);
+        expect(publishes).toBe(1);
       } finally {
         cleanup();
       }

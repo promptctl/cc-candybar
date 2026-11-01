@@ -212,7 +212,7 @@ describe("FileEventDelivery", () => {
       kind: "unmeasured",
       since: failedAt,
       reason: expect.stringMatching(
-        /^the probe could not be written: EACCES: permission denied/,
+        /^the probe could not be written: EACCES: permission denied[^;]*$/,
       ),
       missedSince: failedAt,
     });
@@ -303,6 +303,33 @@ describe("FileEventDelivery", () => {
       expect(r.periods()).toBe(periods + 4);
     }
 
+    test("a folder it cannot make", async () => {
+      fakeWatches();
+      fakeClock();
+      const r = rig();
+      fs.writeFileSync(r.folder, "");
+      r.events.start(path.join(r.folder, "under-a-file"));
+      expect(r.events.delivery()).toMatchObject({
+        kind: "unmeasured",
+        reason: expect.stringMatching(
+          /^the probe folder could not be made: ENOTDIR.*; restart the daemon$/,
+        ),
+      });
+      await staysEnded(r, () => {});
+    });
+
+    test("a folder gone as it was made", async () => {
+      fakeWatches();
+      fakeClock();
+      const r = rig({ identityOf: () => "gone" });
+      r.events.start(r.folder);
+      expect(r.events.delivery()).toMatchObject({
+        kind: "unmeasured",
+        reason: "the probe folder was removed as it was made; restart the daemon",
+      });
+      await staysEnded(r, () => {});
+    });
+
     test("a watch the OS refused", async () => {
       const r = rig();
       const watches = fakeWatches(new Set([r.folder]));
@@ -351,6 +378,27 @@ describe("FileEventDelivery", () => {
         since: at,
         reason: "the probe folder was removed; restart the daemon",
         missedSince: at,
+      });
+      await staysEnded(r, () => {});
+    });
+
+    test("its folder unreadable", async () => {
+      fakeWatches();
+      fakeClock();
+      let refused = false;
+      const identityOf: IdentityRead = (folder) => {
+        if (refused) throw new Error("EACCES: permission denied");
+        return statIdentity(folder);
+      };
+      const r = rig({ identityOf });
+      r.events.start(r.folder);
+      await probes(r, 1);
+      refused = true;
+      period();
+      expect(r.events.delivery()).toMatchObject({
+        kind: "unmeasured",
+        reason:
+          "the probe folder cannot be read: EACCES: permission denied; restart the daemon",
       });
       await staysEnded(r, () => {});
     });
@@ -505,7 +553,7 @@ describe("the bar's row and daemon-stats' line", () => {
         kind: "file-events",
         state: "unmeasured",
         message:
-          "the daemon cannot check whether file events are arriving: the probe could not be written: ENOSPC, since 2026-10-27T04:00:00.000Z",
+          "since 2026-10-27T04:00:00.000Z, the daemon cannot check whether file events are arriving: the probe could not be written: ENOSPC",
       },
     ]);
   });

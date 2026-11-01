@@ -23,7 +23,6 @@ import {
 import {
   NO_FILE_EVENTS,
   stallReason,
-  type Delivery,
   type DeliveryNotice,
   type FileEvents,
 } from "../daemon/cache/file-events.js";
@@ -337,11 +336,16 @@ interface WatchEntry {
 // level deeper.
 class PathWatches {
   private readonly entries = new Map<string, WatchEntry>();
+  private readonly releaseDelivery: () => void;
 
   constructor(
     private readonly watchers: WatcherRegistry,
     private readonly fileEvents: FileEvents,
-  ) {}
+  ) {
+    this.releaseDelivery = fileEvents.subscribe((notice) =>
+      this.noticed(notice),
+    );
+  }
 
   subscribe(
     filePath: string,
@@ -350,7 +354,7 @@ class PathWatches {
   ): () => void {
     const entry = this.entries.get(filePath) ?? this.arm(filePath);
     entry.subscribers.set(callback, onFault);
-    onFault(faultOf(filePath, entry, this.fileEvents.delivery()));
+    onFault(this.faultOf(filePath, entry));
     return () => this.unsubscribe(filePath, callback);
   }
 
@@ -397,25 +401,39 @@ class PathWatches {
   }
 
   private report(filePath: string, entry: WatchEntry): void {
-    const fault = faultOf(filePath, entry, this.fileEvents.delivery());
+    const fault = this.faultOf(filePath, entry);
     for (const onFault of entry.subscribers.values()) onFault(fault);
+  }
+
+  // The watch's fault, derived from what it holds now and whether the OS is
+  // delivering what it would hear. A stall is every watch's: it rides the
+  // delivery owner's one stream.
+  private faultOf(filePath: string, entry: WatchEntry): string | null {
+    return watchFault(
+      `watch_file ${filePath}`,
+      entry.bound,
+      stallReason(this.fileEvents.delivery()),
+    );
   }
 
   // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
   // may have missed events: each watch re-derives where its path can change,
   // since a directory may have appeared unheard, which says its fault, and
   // every subscriber re-reads as if its own watch had reported. Both together,
-  // so no variable drops a stall's fault still holding a value from before it.
-  noticed(notice: DeliveryNotice): void {
+  // so no variable drops a stall's fault without reading again, and in one
+  // action, so one change of delivery is one publish.
+  private noticed(notice: DeliveryNotice): void {
     switch (notice.kind) {
       case "period":
         return;
       case "moved":
       case "caught-up":
-        for (const [filePath, entry] of this.entries) {
-          this.rederive(filePath, entry);
-          for (const cb of entry.subscribers.keys()) cb();
-        }
+        runInAction(() => {
+          for (const [filePath, entry] of this.entries) {
+            this.rederive(filePath, entry);
+            for (const cb of entry.subscribers.keys()) cb();
+          }
+        });
         return;
     }
   }
@@ -431,6 +449,7 @@ class PathWatches {
   }
 
   dispose(): void {
+    this.releaseDelivery();
     for (const entry of this.entries.values())
       entry.bound.held.handle.release();
     this.entries.clear();
@@ -445,16 +464,6 @@ class PathWatches {
 // path itself when it is a directory.
 const derived = (filePath: string): PathsWatch =>
   watchTargetsOf({ named: [filePath], whole: [filePath] });
-
-// The watch's fault, derived from what it holds now and whether the OS is
-// delivering what it would hear. A stall is every watch's: it rides the
-// delivery owner's one stream.
-const faultOf = (
-  filePath: string,
-  entry: WatchEntry,
-  delivery: Delivery,
-): string | null =>
-  watchFault(`watch_file ${filePath}`, entry.bound, stallReason(delivery));
 
 // ─── TtlBucketManager ────────────────────────────────────────────────────────
 
@@ -734,9 +743,6 @@ export class SourceRegistry {
   ) {
     this.sessionState = sessionState;
     this.watchMgr = new PathWatches(watchers, fileEvents);
-    this.cleanups.push(
-      fileEvents.subscribe((notice) => this.watchMgr.noticed(notice)),
-    );
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home

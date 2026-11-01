@@ -437,6 +437,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       storage: managedStorage,
       signer: linkSigner,
       ledger: refreshLedger,
+      // [LAW:single-enforcer] The one delivery owner, whose OS stream a
+      // `watch_file` source's watch rides.
       fileEvents,
       declare: (holds, facts, closure, sources) =>
         declareLanes(payloadProviders, holds, facts, closure, sources),

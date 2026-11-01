@@ -514,8 +514,9 @@ export function drawRender(
   // watch cannot hear, and the warning this config's load carried.
   // [LAW:no-silent-failure] A config whose link chain the watch cannot walk,
   // or whose folder the OS will not watch, may miss an edit: the bar says so.
+  // A stall is no reason of this watch's: it has the bar's own row.
   const configWatch =
-    entry.watch === null ? null : watchFault("config watch", entry.watch);
+    entry.watch === null ? null : watchFault("config watch", entry.watch, null);
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launcher.lifelineWarnings(),

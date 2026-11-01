@@ -177,7 +177,7 @@ export interface BoundWatch {
 export function watchFault(
   label: string,
   watch: BoundWatch,
-  beyond: string | null = null,
+  beyond: string | null,
 ): string | null {
   const reasons = [
     ...watch.derived.unresolved.map(

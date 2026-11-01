@@ -335,7 +335,7 @@ export class FileEventDelivery {
   }
 
   // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, restarting is the way out.
+  // measures again, so whatever ended it, only a restart can.
   private end(period: NodeJS.Timeout, reason: string): void {
     const inst = this.instrument;
     if (inst.kind === "probing") inst.handle.release();
@@ -412,7 +412,7 @@ export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
       case "stalled":
         return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
       case "unmeasured":
-        return `the daemon cannot check whether file events are arriving: ${d.reason}, since ${since}`;
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
   };
   return [{ kind: "file-events", state: d.kind, message: message() }];
