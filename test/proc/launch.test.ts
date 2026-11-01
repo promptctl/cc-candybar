@@ -272,7 +272,7 @@ describe("launch (async)", () => {
       const controller = new AbortController();
       const run = launch({
         bin: "/bin/sh",
-        args: ["-c", "exit 0"],
+        args: ["-c", "sleep 0.1"],
         category: "user-shell",
         signal: controller.signal,
       });
