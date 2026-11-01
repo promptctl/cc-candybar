@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "52c69beb5b01d9c842ae7f38fbb59f0c64086cb1",
+      "timestamp": "2026-11-01T08:30:19.192Z",
+      "commits": [
+        {
+          "sha": "52c69beb5b01d9c842ae7f38fbb59f0c64086cb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T01:29:32-07:00",
+          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (#543)\n\n* feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n\n* fix(git): an armed init stays shown, and a relative directory reads no location"
+        }
+      ]
+    },
+    {
       "version": "pr-544",
       "ref": "refs/pull/544/merge",
       "sha": "0840797cfd5e62053eeeb3a82e312f320a9dd675",
@@ -181,57 +196,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-25T22:31:20-06:00",
           "message": "Survey: the 1,000 most-committed Claude Code statuslines — clones, new ideas, why so many\n\nRanks the styling survey's 9,558 projects by commits, reads the top 1,000\nfrom source with haiku agents, fingerprints their code for copies, and\nanswers whether they are clones, what is new in them, and why there are\nso many. README.md has the answers; projects.md and projects.tsv hold one\nentry per project; tools/ holds the scripts and agent briefs.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-543",
-      "ref": "refs/pull/543/merge",
-      "sha": "40783ee6b96f457fea188673caefdba2e453fd25",
-      "timestamp": "2026-11-01T08:25:26.627Z",
-      "commits": [
-        {
-          "sha": "40783ee6b96f457fea188673caefdba2e453fd25",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T08:24:39Z",
-          "message": "Merge dd13cdec8d104cbfeac7b0d3209265515c23e208 into e7c7caacfb9c807a1424dde9d75a66559451e5ed\n"
-        },
-        {
-          "sha": "dd13cdec8d104cbfeac7b0d3209265515c23e208",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:15:54-07:00",
-          "message": "fix(git): an armed init stays shown, and a relative directory reads no location\n"
-        },
-        {
-          "sha": "55e03e0a73bd9ee040b291c62aad1e7863b34647",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:06:48-07:00",
-          "message": "feat(git): gitaculous shows a worktree-aware location, and offers init outside a repo (brandon-unfiled-3248.wp90)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e7c7caacfb9c807a1424dde9d75a66559451e5ed",
-      "timestamp": "2026-11-01T08:12:42.361Z",
-      "commits": [
-        {
-          "sha": "e7c7caacfb9c807a1424dde9d75a66559451e5ed",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T01:11:52-07:00",
-          "message": "feat(daemon): journals take turns so click handlers can await (candybar-launch-q7o7.rs0) (#542)\n\n* feat(daemon): journals take turns in one queue, across awaited clicks (candybar-launch-q7o7.rs0)\n\n* fix(daemon): a turn's commits both run, and an evicted idle record is not idle (candybar-launch-q7o7.rs0)\n\nStep 10 fixes. navigation.commit throwing no longer skips the journal commit. inFlight clears at commit, replacing the committed flag, so close never reports a finished click as cut off. Tests now exercise the live gate.\n\n* fix(daemon): an idle close skipped for eviction no longer blames a click (candybar-launch-q7o7.rs0)\n\n* test(daemon): the landing stamp runs on a real verb, even when it throws (candybar-launch-q7o7.rs0)"
-        },
-        {
-          "sha": "2ab2c84d94b2e8cf40c0ce69e56bcc80dca85cf8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-01T06:41:59Z",
-          "message": "chore(release): set `package.json` to 1.174.7 [skip ci]\n\n## [1.174.7](https://github.com/promptctl/cc-candybar/compare/v1.174.6...v1.174.7) (2026-11-01)\n\n### Bug Fixes\n\n* **proc:** a settled launch stops reading what outlives it (candybar-testing-0x6u.v5t) ([#541](https://github.com/promptctl/cc-candybar/issues/541)) ([63c79c5](https://github.com/promptctl/cc-candybar/commit/63c79c571fe30da5a6ba1df1c66e3c0610a95c03))\n"
         }
       ]
     },
