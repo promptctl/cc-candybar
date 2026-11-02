@@ -1,3 +1,9 @@
+## [1.180.4](https://github.com/promptctl/cc-candybar/compare/v1.180.3...v1.180.4) (2026-11-02)
+
+### Bug Fixes
+
+* **bar-pane:** a frame overwrites its rows and lands whole, so the pane stops flickering ([#558](https://github.com/promptctl/cc-candybar/issues/558)) ([3b03eb3](https://github.com/promptctl/cc-candybar/commit/3b03eb3ede4c45763df73f0f81301f74444e40a3))
+
 ## [1.180.3](https://github.com/promptctl/cc-candybar/compare/v1.180.2...v1.180.3) (2026-11-02)
 
 ### Bug Fixes
