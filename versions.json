@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-568",
+      "ref": "refs/pull/568/merge",
+      "sha": "f810b4e6f18653dfe2bf5e341b947691e368a5c7",
+      "timestamp": "2026-11-02T12:40:19.920Z",
+      "commits": [
+        {
+          "sha": "f810b4e6f18653dfe2bf5e341b947691e368a5c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:39:20-07:00",
+          "message": "Merge 9e6efa7f274019b532fd9976f082570fafd67d4d into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
+        },
+        {
+          "sha": "9e6efa7f274019b532fd9976f082570fafd67d4d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:39:08-07:00",
+          "message": "fix(daemon): an opener's click hands off, so the browser outlives the 5s bound (candybar-launch-q7o7.hx4)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-567",
       "ref": "refs/pull/567/merge",
       "sha": "4e585ca14073d83b87fd56d16de14917872d279e",
