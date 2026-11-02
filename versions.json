@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "17024dd1e5797082d8999dc8ba586f4bf97d1911",
+      "timestamp": "2026-11-02T13:28:49.236Z",
+      "commits": [
+        {
+          "sha": "17024dd1e5797082d8999dc8ba586f4bf97d1911",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T06:27:46-07:00",
+          "message": "fix(test): the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd) (#571)\n\nThe stub serves on the jest worker's own loop, so the statusline's 50 ms connect budget\ncould pass before its accept: the stated-budget case read CONNECT_TIMEOUT (1 of 20 runs\nunder CPU load), and the never-answers case passed without the request ever reaching the stub.\ntryRenderViaDaemon takes its budgets as a value, defaulting to the wire facts the statusline\nuses; the cases state wide ones, and the never-answers case asserts it ended at its own\ndeadline (TIMEOUT) having reached the stub."
+        },
+        {
+          "sha": "6d91c387cf1c1c941185bbc0ee4fc9247e21e41b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T13:09:10Z",
+          "message": "chore(release): set `package.json` to 1.179.3 [skip ci]\n\n## [1.179.3](https://github.com/promptctl/cc-candybar/compare/v1.179.2...v1.179.3) (2026-11-02)\n\n### Bug Fixes\n\n* **daemon:** an opener's click hands off, so the browser outlives the 5s bound ([#568](https://github.com/promptctl/cc-candybar/issues/568)) ([1cacad3](https://github.com/promptctl/cc-candybar/commit/1cacad328e17c86fb91323df437230b3957ec6a0))\n* **test:** the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb) ([#570](https://github.com/promptctl/cc-candybar/issues/570)) ([2b55ee9](https://github.com/promptctl/cc-candybar/commit/2b55ee999dbc13d1647e8946ffdb6557934b017a))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-572",
       "ref": "refs/pull/572/merge",
       "sha": "30077b5d255015266dc771d115bd0bc9e97ff971",
@@ -31,28 +53,6 @@
       ]
     },
     {
-      "version": "pr-571",
-      "ref": "refs/pull/571/merge",
-      "sha": "ea859a5fa7cc6d2770429378cfe98f50dd5ab8f3",
-      "timestamp": "2026-11-02T13:22:41.314Z",
-      "commits": [
-        {
-          "sha": "ea859a5fa7cc6d2770429378cfe98f50dd5ab8f3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T13:20:54Z",
-          "message": "Merge 3a52a3d56c22020f5562a452b52f7015a1349324 into 6d91c387cf1c1c941185bbc0ee4fc9247e21e41b\n"
-        },
-        {
-          "sha": "3a52a3d56c22020f5562a452b52f7015a1349324",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:14:22-07:00",
-          "message": "fix(test): the client-deadline cases state budgets a loaded loop cannot miss (brandon-unfiled-3248.5lkd)\n\nThe stub serves on the jest worker's own loop, so the statusline's 50 ms connect budget\ncould pass before its accept: the stated-budget case read CONNECT_TIMEOUT (1 of 20 runs\nunder CPU load), and the never-answers case passed without the request ever reaching the stub.\ntryRenderViaDaemon takes its budgets as a value, defaulting to the wire facts the statusline\nuses; the cases state wide ones, and the never-answers case asserts it ended at its own\ndeadline (TIMEOUT) having reached the stub.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-569",
       "ref": "refs/pull/569/merge",
       "sha": "2abec362fd8b19fa91d39ae49f91cc1fb54f3417",
@@ -78,21 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:40:11-07:00",
           "message": "feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "edd464d9ae036acae50b1c96726d85e30fe89c16",
-      "timestamp": "2026-11-02T12:59:33.405Z",
-      "commits": [
-        {
-          "sha": "edd464d9ae036acae50b1c96726d85e30fe89c16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:57:54-07:00",
-          "message": "test(e2e): the cap and the assertion limit are enforced (candybar-testing-ihvy.7dc) (#567)\n\n* test(e2e): the cap and the assertion limit are enforced (candybar-testing-ihvy.7dc)\n\nThe sign-off file (.claude/e2e-signoff.json) holds the end-to-end cap and the\nassertion limit. jest.e2e.config.js adds a reporter that fails a run holding\nmore tests than the cap and a setup file that fails a test whose assertion\ncount is not the limit; every other config ignores test/e2e/, so no run\nreaches an end-to-end test without them. Fixtures that break each check, run\nthrough the real config by test/integration/e2e-checks, turn red if a check is\nunplugged. The e2e-signoff hook now refuses an agent's edit to the sign-off,\nthe checks, their tests and fixtures, itself, and any test/e2e/ file that\norigin/main holds, and fails closed.\n\nA workflow check fails CI on a step that reaches a script importing\ndaemonArgs or createDaemon. load-gate.yml is excused on a transitional list\n(test/transitional-daemon-workflows) that a CI step holds to shrinking;\ncandybar-testing-ihvy.4vv deletes the directory.\n\n* fix(e2e): the sign-off guard sees directories, quoted paths and worktrees; shrink check fails on git errors (candybar-testing-ihvy.7dc)\n\n* fix(e2e): the sign-off guard splits on & and substitutions, follows cd, and probes each path once (candybar-testing-ihvy.7dc)"
         }
       ]
     },
