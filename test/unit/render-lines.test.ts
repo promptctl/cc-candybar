@@ -46,4 +46,12 @@ describe("keptRenders", () => {
     const other = rendered("t", "timedOut=N ended=settled pending=-");
     expect(keptRenders([timedOut, retried, kept, other], "s")).toEqual([kept]);
   });
+
+  test("a render that drew only a superseded source pending is kept", () => {
+    const superseded = rendered(
+      "s",
+      "timedOut=N ended=deadline pending=plug sourcesPending=plug:superseded",
+    );
+    expect(keptRenders([superseded], "s")).toEqual([superseded]);
+  });
 });

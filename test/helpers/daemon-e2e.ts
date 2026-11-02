@@ -34,8 +34,12 @@ import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
-import { valueOf } from "../../src/utils/logfmt";
-import { drewAwaitedPending, retriedRender } from "./daemon-log";
+import {
+  answeredRender,
+  drewAwaitedPending,
+  renderEventsOf,
+  retriedRender,
+} from "./daemon-log";
 import { until } from "./until";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
@@ -69,11 +73,7 @@ const PENDING_RETRY_BUDGET = 20;
 
 // A session's render events whose reply its client read, in log order.
 export function answeredEvents(log: string, sessionId: string): string[] {
-  return logLines(log).filter(
-    (l) =>
-      l.includes(`] render sid=${valueOf(sessionId)} `) &&
-      l.includes(" timedOut=N "),
-  );
+  return renderEventsOf(logLines(log), sessionId).filter(answeredRender);
 }
 
 // The click events whose client had already been told TIMEOUT, in log order.
