@@ -40,7 +40,9 @@ export type FailureOutcome = TransientOutcome | PermanentOutcome;
 
 export interface TransientOutcome {
   kind: "transient";
-  cause: "unreachable" | "timeout" | "io_error";
+  // `busy` is the daemon's own TIMEOUT: it answered, so it is up, and the
+  // request may still be running in it. `timeout` is a wait the client gave up.
+  cause: "unreachable" | "timeout" | "busy" | "io_error";
   message: string;
 }
 
@@ -166,10 +168,10 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive but didn't answer in time — same recovery as
+      // Daemon is alive but didn't answer in time. A render recovers as from
       // unreachable: kick and emit stale/blank. This is the *only* non-ok
       // wire code that maps to transient.
-      return { kind: "transient", cause: "timeout", message: errorMessage };
+      return { kind: "transient", cause: "busy", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };
     case "RENDER_FAILED":
@@ -268,6 +270,9 @@ function connectWithTimeout(
 // permanent failure the daemon is demonstrably running, and suggesting a
 // respawn would send the operator down the wrong path.
 export function describeFailure(outcome: FailureOutcome): string {
+  if (outcome.kind === "transient" && outcome.cause === "busy") {
+    return `daemon busy (${outcome.message})`;
+  }
   if (outcome.kind === "transient") {
     return (
       `daemon unavailable (${outcome.cause}: ${outcome.message})\n` +

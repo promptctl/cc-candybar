@@ -581,6 +581,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
     const transientCauses: TransientOutcome["cause"][] = [
       "unreachable",
       "timeout",
+      "busy",
       "io_error",
     ];
     for (const cause of transientCauses) {

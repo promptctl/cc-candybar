@@ -459,10 +459,17 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(0);
   }
 
+  if (outcome.kind === "transient" && outcome.cause === "busy") {
+    // The daemon answered, so it is up and the click may still land in it.
+    // Kicking would respawn a live daemon mid-click.
+    process.stderr.write(`url-handle: daemon busy (${outcome.message})\n`);
+    process.exit(1);
+  }
+
   if (outcome.kind === "transient") {
     // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
-    // is lost (the daemon couldn't service it), but the next click hits a
-    // warm daemon. Mirrors the render-path's transient recovery.
+    // is lost (no daemon answered it), but the next click hits a warm
+    // daemon. Mirrors the render-path's transient recovery.
     obtainDaemonKick();
     process.stderr.write(
       `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,

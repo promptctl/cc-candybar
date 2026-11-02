@@ -19,7 +19,7 @@ import {
 import type { Request, Response } from "./protocol";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
-import { requestTimeoutMs } from "./request-deadline.js";
+import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
 
 // What a connection reads of its daemon.
 export type ConnectionDaemon = Pick<
@@ -111,35 +111,23 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
   let timedOut = false;
-  // [LAW:single-enforcer] One backstop per connection, measured from its
-  // accept. It is armed before the frame is read and re-armed once the
-  // request's kind is known, so a click is held to a click's bound.
-  const backstop = (kind: Request["kind"] | undefined): (() => void) => {
-    const boundMs = requestTimeoutMs(kind);
-    return daemon.clock.after(
-      Math.max(0, accepted + boundMs - daemon.clock.monotonic()),
-      () => {
-        timedOut = true;
-        daemon.stats.requestsTimedOut++;
-        respond(
-          {
-            ok: false,
-            error: `request exceeded ${boundMs}ms`,
-            code: "TIMEOUT",
-            daemonV: PROTOCOL_VERSION,
-          },
-          null,
-          NOTHING_DELIVERED,
-        );
+  const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () => {
+    timedOut = true;
+    daemon.stats.requestsTimedOut++;
+    respond(
+      {
+        ok: false,
+        error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
+        code: "TIMEOUT",
+        daemonV: PROTOCOL_VERSION,
       },
+      null,
+      NOTHING_DELIVERED,
     );
-  };
-  let clearBackstop = backstop(undefined);
+  });
 
   const reader = makeFrameReader(
     (frame) => {
-      clearBackstop();
-      clearBackstop = backstop((frame as Request).kind);
       void daemon
         .handle(
           frame as Request,

@@ -6,29 +6,11 @@
 // it, as `deadline` on the request, and the wait ends early enough for the
 // draw to fit before it. A value still not answered then draws as pending.
 
-import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS, type Request } from "./protocol";
+import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "./protocol";
 
 // [LAW:single-enforcer] Every handler's backstop: the connection's own timer
 // answers TIMEOUT at this, whatever its request is still doing.
 export const REQUEST_TIMEOUT_MS = 200;
-
-// How long a program a click launches has before the click fails: a handful of
-// seconds at most for a clipboard or an opener, each of which hands off and exits.
-export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
-
-// A click's backstop. A click is not on the statusline's clock: nothing draws
-// while it runs, and its handler awaits the program it launches, so its bound
-// covers that launch plus a turn's wait. Held to the render's bound, a click
-// that launches anything is answered TIMEOUT while its effect still lands, and
-// its client kicks a daemon that was never down.
-export const CLICK_TIMEOUT_MS = CLICK_PROGRAM_TIMEOUT_MS + 1000;
-
-// [LAW:dataflow-not-control-flow] The connection's backstop for a request, by
-// its kind. Before the frame is read the kind is unknown and the request's
-// own bound applies.
-export function requestTimeoutMs(kind: Request["kind"] | undefined): number {
-  return kind === "click" ? CLICK_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
-}
 
 // What a request's wait leaves for its draw: the synchronous turn that reads
 // the view and turns it into the answer's bytes. Held to at p99 by
