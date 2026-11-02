@@ -18,7 +18,10 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import type { LaunchOpts, Launcher } from "../../proc/launch";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { readJobEnd, type LaunchOpts, type Launcher } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
@@ -411,6 +414,53 @@ export async function clickLaunch(
   throw new Error(
     `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`,
   );
+}
+
+// How often a handoff looks for its opener's verdict while the click waits.
+const HANDOFF_POLL_MS = 50;
+
+// [LAW:one-type-per-behavior] A click that hands a URL to the platform's
+// opener. Unlike `clickLaunch`, what the opener starts must outlive the click:
+// xdg-open with no browser running stays the browser's parent, so a launch the
+// bound ends would end the browser with it. The opener runs as a job, whose
+// group nothing aimed at the daemon reaches, and the click waits on its
+// verdict for the same bound. [LAW:no-silent-failure] An opener that exits
+// non-zero inside the bound fails the click with what it wrote to stderr; one
+// still running at the bound has handed off, and is left running.
+export async function clickHandoff(
+  launcher: Launcher,
+  opts: Omit<LaunchOpts, "timeoutMs">,
+  what: string,
+): Promise<void> {
+  const dir = mkdtempSync(path.join(tmpdir(), "cc-candybar-handoff-"));
+  // The job's files go when the click is answered: a program still running
+  // keeps the descriptors it already holds, and its sh's verdict, written to a
+  // directory that is gone, has no reader left to miss it.
+  try {
+    const files = {
+      stdout: path.join(dir, "stdout"),
+      stderr: path.join(dir, "stderr"),
+      status: path.join(dir, "status"),
+    };
+    const job = launcher.launchJobSync(opts, files);
+    if (!job.ok) throw new Error(`${what} failed (spawn-error): ${job.error}`);
+    job.release();
+    const deadline = Date.now() + CLICK_PROGRAM_TIMEOUT_MS;
+    for (;;) {
+      const end = readJobEnd(files.status);
+      if (end?.kind === "exit") {
+        if (end.code === 0) return;
+        const said = readFileSync(files.stderr, "utf8").trim();
+        throw new Error(
+          `${what} failed (non-zero, exit ${end.code})${said === "" ? "" : `: ${said}`}`,
+        );
+      }
+      if (Date.now() >= deadline) return;
+      await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // One clipboard primitive, no decode — both the `copy` verb (decodes a wire
