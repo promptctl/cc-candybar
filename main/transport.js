@@ -76707,7 +76707,7 @@ function resolvePath2(obj, dotPath) {
 // src/daemon/request-deadline.ts
 init_globals();
 var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 40;
+var DRAW_RESERVE_MS = 60;
 function parseClientDeadline(raw) {
   if (raw === void 0) return { kind: "unstated" };
   return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {

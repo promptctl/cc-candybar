@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ec506aab1199cd0694cb9e8a7cd9996f75b797c1",
+      "timestamp": "2026-11-02T11:12:18.818Z",
+      "commits": [
+        {
+          "sha": "ec506aab1199cd0694cb9e8a7cd9996f75b797c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:11:29-07:00",
+          "message": "fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw) (#560)\n\n* fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw)\n\nOn CI's runner, its cores shared with the other process-tier suites, a cold\ndraw that does a few ms of work reads up to 48 ms of wall time, failing the\n40 ms reserve. Reproduced locally with every core busy: median 2 ms, p99 48 ms.\nA larger reserve costs only more pending values; a smaller one blanks the bar.\n\n* docs(daemon): keep the user-config figure behind the draw reserve; process runs land within it (candybar-launch-q7o7.qjw)\n\n* docs(daemon): the draw reserve's comment claims no user-config coverage; process margin stays thin (candybar-launch-q7o7.qjw)\n\n* test(daemon): the held client's stated budget follows the draw reserve (candybar-launch-q7o7.qjw)"
+        }
+      ]
+    },
+    {
       "version": "pr-561",
       "ref": "refs/pull/561/merge",
       "sha": "88dda1359df80246c17ad2aa6b1e8f52a8700621",
@@ -34,64 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:01:14-07:00",
           "message": "test: delete the menu and colour tests that pin the look (candybar-testing-0x6u.4bt)\n\nThree whole files and nine cases asserted exact shades, tones and bytes of menus\nand turns, so any design change was an edit to them. The seam sweep keeps its\ncoverage in the nightly audit, which now walks every variation.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-560",
-      "ref": "refs/pull/560/merge",
-      "sha": "ac5e3319d5f975f1d789fba55db43a2c5e7c5667",
-      "timestamp": "2026-11-02T11:06:59.098Z",
-      "commits": [
-        {
-          "sha": "ac5e3319d5f975f1d789fba55db43a2c5e7c5667",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:06:01Z",
-          "message": "Merge 954959d7de4c32d6b6ca5e398367efd7fce85d90 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
-        },
-        {
-          "sha": "954959d7de4c32d6b6ca5e398367efd7fce85d90",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:05:45-07:00",
-          "message": "test(daemon): the held client's stated budget follows the draw reserve (candybar-launch-q7o7.qjw)\n"
-        },
-        {
-          "sha": "21bea47b4c76e8c2c8861ec84ff213e823ff51c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T03:58:40-07:00",
-          "message": "docs(daemon): the draw reserve's comment claims no user-config coverage; process margin stays thin (candybar-launch-q7o7.qjw)\n"
-        },
-        {
-          "sha": "6fb23e5ceac4b397304224649f9057321c401bb2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T03:57:14-07:00",
-          "message": "docs(daemon): keep the user-config figure behind the draw reserve; process runs land within it (candybar-launch-q7o7.qjw)\n"
-        },
-        {
-          "sha": "6c31deedb47944c6fda8c2d898a007f4d72c96bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T03:55:09-07:00",
-          "message": "fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw)\n\nOn CI's runner, its cores shared with the other process-tier suites, a cold\ndraw that does a few ms of work reads up to 48 ms of wall time, failing the\n40 ms reserve. Reproduced locally with every core busy: median 2 ms, p99 48 ms.\nA larger reserve costs only more pending values; a smaller one blanks the bar.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "040ba694b11dd01c6bce64b56acd016dabbf0578",
-      "timestamp": "2026-11-02T05:17:32.372Z",
-      "commits": [
-        {
-          "sha": "040ba694b11dd01c6bce64b56acd016dabbf0578",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T22:16:42-07:00",
-          "message": "docs(testing): the five have no exceptions, and the Load gate stops booting the daemon (#557)\n\n* docs(testing): the five have no exceptions, and the Load gate stops booting the daemon (candybar-testing-ihvy.84o)\n\nBrandon ruled that the rule has no exceptions, and that the contract and end-to-end sections failed what he asked for. Ticket 42 moves all 15 of the Load gate's checks to the pieces that own them and states what that loses. Ticket 3's check now reads the workflows, because the start judge sees jest only. One assertion is defined, setup checks leave the tests, and the file stat and the log get contracts.\n\n* docs(testing): agents change the required checks, and it is in the done criteria (candybar-testing-ihvy.84o)\n\nBrandon ruled that updating main-protection is agent work, not a hand-off. Tickets 42 and 37 now do it before merging and prove it with gh api, and ticket 3 needs no hand edit to the hook wiring.\n\n* chore(hooks): agents may PUT main-protection, and the end-to-end sign-off hook is wired (candybar-testing-ihvy.84o)"
         }
       ]
     },
