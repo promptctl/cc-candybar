@@ -4,15 +4,22 @@
     {
       "version": "pr-557",
       "ref": "refs/pull/557/merge",
-      "sha": "828d4ba0f6444d8026eac38b67e3d043a683d9f0",
-      "timestamp": "2026-11-02T02:44:16.648Z",
+      "sha": "65bc5a8d5a76d47d13a01c1f6d0b76524875cd2f",
+      "timestamp": "2026-11-02T02:48:08.178Z",
       "commits": [
         {
-          "sha": "828d4ba0f6444d8026eac38b67e3d043a683d9f0",
+          "sha": "65bc5a8d5a76d47d13a01c1f6d0b76524875cd2f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T02:43:21Z",
-          "message": "Merge cccb8a41f4105e1102bf4a086bd599f7b4802c7f into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+          "timestamp": "2026-11-02T02:47:24Z",
+          "message": "Merge 4902af00c55842314b2040274ca2b112a1ed358d into ec9fa5454b16e8eff68525c059c5214d0a98a8d5\n"
+        },
+        {
+          "sha": "4902af00c55842314b2040274ca2b112a1ed358d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T19:47:13-07:00",
+          "message": "chore(hooks): agents may PUT main-protection, and the end-to-end sign-off hook is wired (candybar-testing-ihvy.84o)\n"
         },
         {
           "sha": "cccb8a41f4105e1102bf4a086bd599f7b4802c7f",
