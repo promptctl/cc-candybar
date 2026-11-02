@@ -4,15 +4,22 @@
     {
       "version": "pr-575",
       "ref": "refs/pull/575/merge",
-      "sha": "a9bd6400d383ba72187ef621630bdc6673beeb05",
-      "timestamp": "2026-11-02T14:44:41.368Z",
+      "sha": "90ec398570da291e6303a74c9315e46c1aea7e6c",
+      "timestamp": "2026-11-02T14:47:18.990Z",
       "commits": [
         {
-          "sha": "a9bd6400d383ba72187ef621630bdc6673beeb05",
+          "sha": "90ec398570da291e6303a74c9315e46c1aea7e6c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:43:21-07:00",
-          "message": "Merge 02d43ae5e2198ca8199b8098899fb78a8e7f33d3 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+          "timestamp": "2026-11-02T14:46:09Z",
+          "message": "Merge e2d00ccc351c4727476311510e477fea9f2228c0 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+        },
+        {
+          "sha": "e2d00ccc351c4727476311510e477fea9f2228c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:45:56-07:00",
+          "message": "docs(render): busy comments say a daemon holds the socket, not that it answered (candybar-launch-q7o7.6wi)\n"
         },
         {
           "sha": "02d43ae5e2198ca8199b8098899fb78a8e7f33d3",
