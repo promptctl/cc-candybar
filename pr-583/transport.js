@@ -23155,7 +23155,6 @@ function daemonPaths(env2 = process_default.env) {
     socket: socketPath(env2),
     lease: leasePath(env2),
     state: stateDir(env2),
-    cache: cacheDir(env2),
     registry: daemonRegistryDir(env2),
     log: logPath(env2),
     sessionState: sessionStatePath(env2),

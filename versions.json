@@ -4,15 +4,22 @@
     {
       "version": "pr-583",
       "ref": "refs/pull/583/merge",
-      "sha": "a00345afd74562034ccd0ae1d1f79830071d6e91",
-      "timestamp": "2026-11-02T18:19:54.721Z",
+      "sha": "486d8ce8897b4cf97e55c722b9bbd4cfeb1df819",
+      "timestamp": "2026-11-02T18:27:15.223Z",
       "commits": [
         {
-          "sha": "a00345afd74562034ccd0ae1d1f79830071d6e91",
+          "sha": "486d8ce8897b4cf97e55c722b9bbd4cfeb1df819",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:18:54-07:00",
-          "message": "Merge 589594eddfd271aad5e8610f99d311e3c92635d6 into ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456\n"
+          "timestamp": "2026-11-02T18:26:23Z",
+          "message": "Merge 5e7e8f028a7147910a5195fec2a38712112c0102 into ab8efc3e14af20e9b4e8fd57aabe300f8a2c3456\n"
+        },
+        {
+          "sha": "5e7e8f028a7147910a5195fec2a38712112c0102",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:26:09-07:00",
+          "message": "refactor(daemon): DaemonInputs.paths names only what createDaemon reads, and the harness ends every log it opens (candybar-testing-ihvy.yfv)\n\nReview of #583: DaemonPaths drops the unread cache member and DaemonInputs\nnarrows to socket, state and watchProbe; the harness handle reports the log\npath the daemon was built with, a failed build ends the log it opened, and\ndaemon-value ends every log a case opened. The memory lines that gave the\nenv-at-write-time reason for one live daemon and for paths-not-inputs now say\nwhat is true.\n"
         },
         {
           "sha": "589594eddfd271aad5e8610f99d311e3c92635d6",
