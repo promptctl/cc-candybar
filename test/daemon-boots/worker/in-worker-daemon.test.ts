@@ -16,7 +16,7 @@ import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/click-error";
-import { SYSTEM_CLOCK } from "../../../src/daemon/daemon";
+import { systemTimekeeper } from "../../../src/time";
 import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
 import {
@@ -32,10 +32,10 @@ import { click, frameRequest, render, renderBody, renderRequest, renderUntil, se
 import { renderLines } from "../../helpers/daemon-log";
 import { linkUrls } from "../../helpers/frame";
 import {
-  heldClock,
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { heldClock } from "../../helpers/held-clock";
 import { LEDGER_ENV, TEST_FILE_ENV, parseLedger } from "../../helpers/process-tier.cjs";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { throughout, until } from "../../helpers/until";
@@ -117,7 +117,7 @@ describe("a daemon in this worker", () => {
     const sid = "in-worker-delivered";
     let now = Date.now();
     daemon = startDaemon(env, {
-      clock: { ...SYSTEM_CLOCK, date: () => new Date(now) },
+      clock: { ...systemTimekeeper, now: () => now },
     });
     await render(daemon, sid, projectDir);
     const refused = await sendClick(

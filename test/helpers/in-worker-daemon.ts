@@ -15,9 +15,7 @@ import { pathToFileURL } from "node:url";
 import { handleConnection } from "../../src/daemon/connection";
 import {
   createDaemon,
-  SYSTEM_CLOCK,
   type Daemon,
-  type DaemonClock,
   type DaemonInputs,
   type DaemonStorage,
   type RunningBundle,
@@ -28,6 +26,7 @@ import { DaemonLog } from "../../src/daemon/log";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
+import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/stats";
 import { daemonGates } from "../../src/daemon/update-keys";
 import type { DaemonLogger } from "../../src/utils/logger";
@@ -72,43 +71,6 @@ export function bundleAt(
   };
 }
 
-// A clock a test moves by hand. Both of its readings and a request's timers
-// stand still until then, so it belongs on a daemon its case owns, whose clients
-// state their deadlines on it: a request's budget is that deadline less this
-// clock's arrival.
-export interface HeldClock extends DaemonClock {
-  advance(ms: number): void;
-}
-
-export function heldClock(start: Date = new Date()): HeldClock {
-  let elapsed = 0;
-  const timers = new Set<{ at: number; fire: () => void }>();
-  const nextDue = (end: number) =>
-    [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
-  // Each timer fires at its own moment, and one cleared by an earlier firing
-  // does not fire at all.
-  const fireThrough = (end: number): void => {
-    for (let due = nextDue(end); due; due = nextDue(end)) {
-      elapsed = due.at;
-      timers.delete(due);
-      due.fire();
-    }
-    elapsed = end;
-  };
-  return {
-    date: () => new Date(start.getTime() + elapsed),
-    monotonic: () => elapsed,
-    after: (ms, fire) => {
-      const timer = { at: elapsed + ms, fire };
-      timers.add(timer);
-      // Already due, it fires on the loop's next turn, as a real timer does.
-      if (ms <= 0) setImmediate(() => fireThrough(elapsed));
-      return () => timers.delete(timer);
-    },
-    advance: (ms) => fireThrough(elapsed + ms),
-  };
-}
-
 // A daemon with the log it writes to, which the case that built it ends.
 export interface BuiltDaemon {
   readonly daemon: Daemon;
@@ -141,7 +103,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       memoryLimitBytes: memoryLimitBytes(process.env),
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
-      clock: SYSTEM_CLOCK,
+      clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.
       gates: daemonGates(),
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
@@ -287,7 +249,7 @@ export function startDaemon(
   return {
     daemon,
     log: paths.log,
-    now: () => daemon.clock.date().getTime(),
+    now: () => daemon.clock.now(),
     connect,
     listen: (sockPath) =>
       new Promise((resolve, reject) => {

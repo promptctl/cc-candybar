@@ -9,7 +9,7 @@
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
-import { createDaemon, SYSTEM_CLOCK } from "../src/daemon/daemon";
+import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/update-keys";
 import { DaemonLog } from "../src/daemon/log";
@@ -70,7 +70,8 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 // socket was won. Nothing it holds outlives the page.
 // The page is a process main of its own: it reads the machine it runs on (the
 // simulated one, under the node shims) once.
-const HOST = processWorld().host;
+const WORLD = processWorld();
+const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log)),
@@ -90,7 +91,7 @@ const pageDaemon = createDaemon({
   }),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
-  clock: SYSTEM_CLOCK,
+  clock: WORLD.clock,
   exit: (code) => {
     throw new Error(`the page's daemon asked to exit ${code}`);
   },

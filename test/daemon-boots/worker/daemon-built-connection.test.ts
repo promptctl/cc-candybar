@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { SYSTEM_CLOCK, type DaemonClock } from "../../../src/daemon/daemon";
+import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { PROTOCOL_VERSION, type Request, type Response } from "../../../src/daemon/protocol";
 import { textOf } from "../../../src/render/frame";
 import { render, renderBody } from "../../helpers/daemon-e2e";
@@ -32,7 +32,7 @@ describe("a connection to a daemon built in this worker", () => {
   let started: InWorkerDaemon | null = null;
   const exit = jest.fn();
 
-  const start = (clock: DaemonClock = SYSTEM_CLOCK): InWorkerDaemon => {
+  const start = (clock: Timekeeper = systemTimekeeper): InWorkerDaemon => {
     started = startDaemon(process.env, { clock, exit });
     return started;
   };
@@ -135,8 +135,8 @@ describe("a connection to a daemon built in this worker", () => {
     const at = new Date();
     const opened = openedOn(
       start({
-        ...SYSTEM_CLOCK,
-        date: () => at,
+        ...systemTimekeeper,
+        now: () => at.getTime(),
         monotonic: () => monotonic,
       }).connect(),
     );

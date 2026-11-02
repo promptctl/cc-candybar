@@ -270,6 +270,7 @@ export default [
         performance: "readonly",
         AbortSignal: "readonly",
         AbortController: "readonly",
+        DOMException: "readonly",
         Response: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",

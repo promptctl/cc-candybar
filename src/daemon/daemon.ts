@@ -33,7 +33,7 @@ import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
-import { afterRealTime, type After } from "../utils/reading";
+import type { Timekeeper } from "../time";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import {
   configLoadedLine,
@@ -66,7 +66,6 @@ import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
-import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeInputEdge } from "../claude-input/edge.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
@@ -95,23 +94,6 @@ export interface RunningBundle {
   // daemon.
   readonly targets: readonly string[];
 }
-
-// [LAW:effects-at-boundaries] The two clocks a daemon draws and times requests
-// by, as values, so a test can hold the instant a bar is drawn at. Its counters
-// keep their own wall clock (RuntimeStats).
-// [LAW:one-source-of-truth] `after` runs a request's wait and its backstop, on
-// the same clock its budget is figured from, so a held clock holds all three.
-export interface DaemonClock {
-  date(): Date;
-  monotonic(): number;
-  after: After;
-}
-
-export const SYSTEM_CLOCK: DaemonClock = {
-  date: () => new Date(),
-  monotonic: () => performance.now(),
-  after: afterRealTime,
-};
 
 // Where the session's picks and its settings history persist.
 export interface DaemonStorage {
@@ -178,7 +160,11 @@ export interface DaemonInputs extends DaemonAdapters {
   readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
   readonly memoryLimitBytes: number;
   readonly registryUrl: string;
-  readonly clock: DaemonClock;
+  // [LAW:effects-at-boundaries] The daemon's clock: what it draws and times
+  // requests by, and every timer its pieces set. A test holds it by hand.
+  // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
+  // the same clock its budget is figured from, so a held clock holds all three.
+  readonly clock: Timekeeper;
   // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
   // value, built by the root with `daemonGates` (the update notice's links need
   // the keys it holds), so two daemons in one process share none.
@@ -198,7 +184,7 @@ export interface Daemon {
   // What this daemon's work logs through.
   readonly log: DaemonLogger;
   readonly memoryLimitBytes: number;
-  readonly clock: DaemonClock;
+  readonly clock: Timekeeper;
   // [LAW:one-source-of-truth] The funnel this daemon was built with, which a
   // connection reaches once a reply carrying an exit has flushed.
   readonly exit: DaemonInputs["exit"];
@@ -247,7 +233,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
-  const instant = (): Instant => instantOf(clock.date());
+  const instant = (): Instant => instantOf(new Date(clock.now()));
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
   const closing = new AbortController();
@@ -397,7 +383,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     state: sessionState,
     log,
     now: instant,
-    defer: (run) => void setImmediate(run),
+    defer: (run) => void clock.defer(run),
   });
   // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
   // state (src/daemon/tmux-status.ts).

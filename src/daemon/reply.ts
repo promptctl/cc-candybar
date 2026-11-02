@@ -276,7 +276,7 @@ export async function replyTo(
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: renderSightings.list(instantOf(clock.date())),
+        clients: renderSightings.list(instantOf(new Date(clock.now()))),
         bundle,
         sourceDigest,
         daemon: limits.serving(),
@@ -290,7 +290,7 @@ export async function replyTo(
     // instant the bar is drawn at (every time read in the render reads it),
     // and the monotonic start its wait and duration are measured from, so a
     // clock stepped meanwhile moves neither.
-    const started = clock.date();
+    const started = new Date(clock.now());
     const at = instantOf(started);
     const t0 = clock.monotonic();
     const queuedMs = Math.round(t0 - accepted);

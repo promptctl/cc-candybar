@@ -10,7 +10,7 @@ import {
   handleConnection,
   type ConnectionDaemon,
 } from "../src/daemon/connection";
-import { SYSTEM_CLOCK } from "../src/daemon/daemon";
+import { systemTimekeeper } from "../src/time";
 import { NOTHING_DELIVERED } from "../src/daemon/draw-bar";
 import type { Subscriber } from "../src/daemon/frame-feed";
 import {
@@ -89,7 +89,7 @@ describe("a connection over a stream", () => {
   ): ConnectionDaemon & { stats: RuntimeStats } => ({
     stats: new RuntimeStats(),
     log: () => {},
-    clock: SYSTEM_CLOCK,
+    clock: systemTimekeeper,
     handle: async () => replyWith(),
     subscribe: (_sessionId, subscriber) => {
       subscriptions.push(subscriber);

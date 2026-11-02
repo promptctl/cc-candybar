@@ -39,12 +39,7 @@ import type { World } from "../host";
 import type { OneShotLauncher } from "../proc/launch";
 import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
-import {
-  createDaemon,
-  SYSTEM_CLOCK,
-  type Daemon,
-  type RunningBundle,
-} from "./daemon.js";
+import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
 import { daemonGates } from "./update-keys.js";
 import { handleConnection } from "./connection.js";
@@ -207,7 +202,7 @@ async function boot(): Promise<void> {
     paths,
     memoryLimitBytes: memoryLimit,
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
-    clock: SYSTEM_CLOCK,
+    clock: world.clock,
     gates: daemonGates(),
     exit: shutdown,
   });

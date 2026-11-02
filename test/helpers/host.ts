@@ -2,6 +2,7 @@ import os from "node:os";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
 import { createOneShotLauncher } from "../../src/proc/launch";
+import { systemTimekeeper } from "../../src/time";
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
 // this worker's own environment, home and temporary directory. A test that
@@ -24,7 +25,11 @@ export function hostOf(
 
 // A process main's world over `host`: its launcher's children inherit `host.env`.
 export function worldOf(host: Host): World {
-  return { host, launcher: createOneShotLauncher({ inherited: host.env }) };
+  return {
+    host,
+    launcher: createOneShotLauncher({ inherited: host.env }),
+    clock: systemTimekeeper,
+  };
 }
 
 export const WORLD: World = worldOf(HOST);

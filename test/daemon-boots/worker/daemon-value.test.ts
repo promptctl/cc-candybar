@@ -22,11 +22,8 @@ import path from "node:path";
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
-import {
-  SYSTEM_CLOCK,
-  type Daemon,
-  type DaemonClock,
-} from "../../../src/daemon/daemon";
+import type { Daemon } from "../../../src/daemon/daemon";
+import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { pidAlive } from "../../../src/daemon/parent-watchdog";
 import {
   daemonPaths,
@@ -99,7 +96,7 @@ describe("the daemon is a value", () => {
 
   const construct = (
     inputs: {
-      clock?: DaemonClock;
+      clock?: Timekeeper;
       checkout?: string;
       digest?: string;
       session?: SessionStorage;
@@ -327,7 +324,7 @@ describe("the daemon is a value", () => {
     );
     const frozen = new Date("2031-02-03T04:05:06Z");
     const daemon = construct({
-      clock: { ...SYSTEM_CLOCK, date: () => frozen },
+      clock: { ...systemTimekeeper, now: () => frozen.getTime() },
     });
 
     const bar = await answer(daemon, renderRequest("value-clock"));
