@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-563",
+      "ref": "refs/pull/563/merge",
+      "sha": "5e688b1de6e9f007ce57e59c8574cf1c5815880c",
+      "timestamp": "2026-11-02T11:43:27.141Z",
+      "commits": [
+        {
+          "sha": "5e688b1de6e9f007ce57e59c8574cf1c5815880c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T11:41:39Z",
+          "message": "Merge 7b51d6a90bfc016b36b8c2a6304434be1d0993e3 into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
+        },
+        {
+          "sha": "7b51d6a90bfc016b36b8c2a6304434be1d0993e3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:41:31-07:00",
+          "message": "docs(launch): comments and the audit doc say what the one-shot split guarantees (candybar-launch-q7o7.4em)\n"
+        },
+        {
+          "sha": "2c8b1ee310fe0390821ae670e63e49b49f741099",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:38:28-07:00",
+          "message": "fix(launch): the daemon's launcher carries no launchSync at runtime; narrow the processLauncher owners (candybar-launch-q7o7.4em)\n"
+        },
+        {
+          "sha": "fca394107925139470874abf46abec8d756f702d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:32:14-07:00",
+          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-562",
       "ref": "refs/pull/562/merge",
       "sha": "a382e0f45248a72c5de7e41082e1ae194e81305a",
@@ -63,35 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:31:43-07:00",
           "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-563",
-      "ref": "refs/pull/563/merge",
-      "sha": "4b0a34219382e22ac3ed465f8b84ab63ac8d2c5d",
-      "timestamp": "2026-11-02T11:39:38.771Z",
-      "commits": [
-        {
-          "sha": "4b0a34219382e22ac3ed465f8b84ab63ac8d2c5d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T11:38:50Z",
-          "message": "Merge 2c8b1ee310fe0390821ae670e63e49b49f741099 into 9b26334ab54c1c9fbad087ff535c804d167c9ce5\n"
-        },
-        {
-          "sha": "2c8b1ee310fe0390821ae670e63e49b49f741099",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:38:28-07:00",
-          "message": "fix(launch): the daemon's launcher carries no launchSync at runtime; narrow the processLauncher owners (candybar-launch-q7o7.4em)\n"
-        },
-        {
-          "sha": "fca394107925139470874abf46abec8d756f702d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:32:14-07:00",
-          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n"
         }
       ]
     },
