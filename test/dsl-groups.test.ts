@@ -15,72 +15,25 @@
 //   5. The loader proves the group invariants (identifier name, unique names,
 //      reserved namespace, ancestor/descendant key sharing, one open per key).
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { buildRig } from "./helpers/rig";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
-import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { effectsOf } from "./helpers/click";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-function opts() {
-  return {
-    endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
-    wrap: true,
-    padding: 0,
-    width: Number.POSITIVE_INFINITY,
-  };
-}
-
-
 // Same real-spine harness as dsl-actions: real loader, real render, clicks
 // dispatched through the real daemon verb handlers against the derived gate.
-function buildRuntime(src: string, sessionId = "s1") {
-  const config = parseAndValidate("<test>", src, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const render = (): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      opts(),
-    ).frame;
-  recordRender(sessionState, sessionId);
-  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = parseHandlerUrl(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
-  };
+function groupsBar(source: string, sessionId = "s1") {
+  const rig = buildRig({ source, sessionId });
+  const render = (): Frame => rig.draw().frame;
+  const { click } = rig;
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
@@ -90,7 +43,7 @@ function buildRuntime(src: string, sessionId = "s1") {
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
     await click(url);
   };
-  return { config, store, sessionState, render, click, clickToggle };
+  return { ...rig, render, clickToggle };
 }
 
 // ─── The toggle round trip ───────────────────────────────────────────────────
@@ -112,7 +65,7 @@ const DETAILS_SRC = `{
 
 describe("2de.4 — group sugar: toggle round trip", () => {
   test("closed by default: toggle renders ▸, body absent (no blank line)", () => {
-    const { render } = buildRuntime(DETAILS_SRC);
+    const { render } = groupsBar(DETAILS_SRC);
     const out = textOf(render());
     expect(out).toContain("details ▸");
     expect(out).not.toContain("METRICS-BODY");
@@ -121,7 +74,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
 
   test("click opens: ▾ + body rendered; second click closes", async () => {
     const { render, clickToggle, sessionState } =
-      buildRuntime(DETAILS_SRC);
+      groupsBar(DETAILS_SRC);
     await clickToggle(render(), "groups.details", "details");
     expect(sessionState.get("s1", "groups.details")).toBe("details");
     const open = textOf(render());
@@ -136,7 +89,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
       "label: 'details',",
       "label: 'details', open: true,",
     );
-    const { render } = buildRuntime(src);
+    const { render } = groupsBar(src);
     const out = textOf(render());
     expect(out).toContain("details ▾");
     expect(out).toContain("METRICS-BODY");
@@ -169,7 +122,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
       "label: 'details',",
       `label: 'say "hi" \\\\ ok',`,
     );
-    const { render } = buildRuntime(src);
+    const { render } = groupsBar(src);
     expect(textOf(render())).toContain('say "hi" \\ ok ▸');
   });
 });
@@ -197,7 +150,7 @@ const ACCORDION_SRC = `{
 
 describe("2de.4 — accordion (shared key)", () => {
   test("one key holds one open group: opening B auto-closes A", async () => {
-    const { render, clickToggle } = buildRuntime(ACCORDION_SRC);
+    const { render, clickToggle } = groupsBar(ACCORDION_SRC);
     await clickToggle(render(), "menu", "files");
     let out = textOf(render());
     expect(out).toContain("files ▾");
@@ -258,7 +211,7 @@ describe("2de.4 — nested groups (distinct keys)", () => {
   });
 
   test("a closed parent hides the whole subtree, and closes what was open in it", async () => {
-    const { render, clickToggle } = buildRuntime(SRC);
+    const { render, clickToggle } = groupsBar(SRC);
     // Closed outer: inner toggle not rendered at all.
     expect(textOf(render())).not.toContain("inner");
     await clickToggle(render(), "groups.outer", "outer");

@@ -14,39 +14,22 @@
 //   5. The active option (current value) renders bold.
 //   6. The loader rejects a picker referencing an undeclared action.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
 import { cellLen } from "@promptctl/rich-js";
 
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { VariableStore } from "../src/var-system/store";
-import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig } from "../src/dsl/render";
 import { paginate } from "../src/render/picker";
-import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
-import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { buildRig } from "./helpers/rig";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
-
-function opts(width: number, wrap = true) {
-  return {
-    endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const, wrap, padding: 0,
-    width,
-  };
-}
-
 
 // The standard theme picker: a trigger that opens the menu (literal 0 on the
 // int-gated page key), and a width-gated menu segment. closeOnPick/paged vary.
@@ -76,22 +59,11 @@ function pickerConfig(closeOnPick: boolean, paged: boolean): string {
   }`;
 }
 
-function buildRuntime(src: string, sessionId = "s1") {
-  const config = parseAndValidate("<test>", src, ALLOWED);
-  const sessionState = new SessionState();
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(processLauncher, store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+function pickerBar(source: string, sessionId = "s1") {
+  const rig = buildRig({ source, sessionId });
+  const { config, sessionState } = rig;
   const render = (width: number, wrap = true): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
-      instantOf(new Date()),
-      opts(width, wrap),
-    ).frame;
+    rig.draw({ opts: { width, wrap } }).frame;
   const gate = stateGate(config);
   const click = (url: string): void => {
     for (const { verb, args } of effectsOf(url)) {
@@ -104,12 +76,12 @@ function buildRuntime(src: string, sessionId = "s1") {
       }
     }
   };
-  return { config, store, sessionState, render, click };
+  return { ...rig, render, click };
 }
 
 describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   test("a closed menu (page -1) is absent; opening shows ✕ + a page + active mark", () => {
-    const { render, click, sessionState } = buildRuntime(
+    const { render, click, sessionState } = pickerBar(
       pickerConfig(true, true),
     );
     // Closed: the when-gate (page>=0) drops the row entirely — only the trigger.
@@ -134,7 +106,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("clicking a theme applies AND closes (closeOnPick=true): adjacent session writes, one batch", () => {
-    const { render, click, sessionState } = buildRuntime(
+    const { render, click, sessionState } = pickerBar(
       pickerConfig(true, true),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -159,7 +131,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("closeOnPick=false: a theme click applies only (no page reset)", () => {
-    const { render, sessionState } = buildRuntime(
+    const { render, sessionState } = pickerBar(
       pickerConfig(false, true),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -179,7 +151,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       '{{ picker "applyTheme" "themePage" true true }}',
       '{{ picker "applyTheme" "themePage" }}',
     );
-    const { render, sessionState } = buildRuntime(src);
+    const { render, sessionState } = pickerBar(src);
     sessionState.set("s1", "theme-page", "0");
     const open = render(80);
     expect(textOf(open)).toContain("✕"); // open: the close affordance is present
@@ -193,7 +165,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("paged: a narrow width slices into pages with → ; clicking → advances the cursor", () => {
-    const { render, click, sessionState } = buildRuntime(
+    const { render, click, sessionState } = pickerBar(
       pickerConfig(true, true),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -215,7 +187,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("wrap (paged=false): one page of ALL themes, no ←/→ even when narrow", () => {
-    const { render, sessionState } = buildRuntime(
+    const { render, sessionState } = pickerBar(
       pickerConfig(true, false),
     );
     sessionState.set("s1", "theme-page", "0");
@@ -229,7 +201,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("wrap (paged=false) with autoWrap off keeps the row one unbounded line", () => {
-    const { render, sessionState } = buildRuntime(pickerConfig(true, false));
+    const { render, sessionState } = pickerBar(pickerConfig(true, false));
     sessionState.set("s1", "theme-page", "0");
     const lines = textOf(render(30, false)).split("\n");
     expect(
