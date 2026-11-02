@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-569",
+      "ref": "refs/pull/569/merge",
+      "sha": "81f206e393ade46d40441fdaef4da5ceb347178c",
+      "timestamp": "2026-11-02T12:41:47.400Z",
+      "commits": [
+        {
+          "sha": "81f206e393ade46d40441fdaef4da5ceb347178c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:40:36-07:00",
+          "message": "Merge 7126b5deb3a49d3fa4770d0faf769ffc53575000 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
+        },
+        {
+          "sha": "7126b5deb3a49d3fa4770d0faf769ffc53575000",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:40:11-07:00",
+          "message": "feat(templates): array-form segment templates and segment-scoped partials (candybar-templates-zh8b.53s)\n\nA segment's `template` may now be an array of strings (joined with no\nseparator) for a long conditional that would otherwise be one unreadable\nline, and a segment may declare `partials`: named sub-templates scoped to\nit, compiled onto their own Defines chained from the shared `helpers`, so\ntwo segments can reuse a partial name with no collision and a partial can\ncall a helper but never another segment's partial. Dispatch is via the\nexisting static `{{ template \"name\" ctx }}` builtin.\n\nThe dynamic `partial` function (a computed name) needs a capability\n(`include`) that exists only on @promptctl/go-template-js's unreleased\nmaster, not its published npm version — split into a follow-up ticket\n(candybar-templates-zh8b.ph5), blocked on that release. Static unused-\npartial detection needs unused.ts to carry per-template segment identity,\nwhich it does not today — split into its own follow-up\n(candybar-templates-zh8b.mfn), not blocked on anything upstream.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-568",
       "ref": "refs/pull/568/merge",
       "sha": "f810b4e6f18653dfe2bf5e341b947691e368a5c7",
