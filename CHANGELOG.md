@@ -1,3 +1,10 @@
+## [1.179.2](https://github.com/promptctl/cc-candybar/compare/v1.179.1...v1.179.2) (2026-11-02)
+
+### Bug Fixes
+
+* **frame-feed:** a timer that fires before its moment waits it out, so no turn is drawn twice ([#566](https://github.com/promptctl/cc-candybar/issues/566)) ([e9865fa](https://github.com/promptctl/cc-candybar/commit/e9865fa4807325c4bf8e73c86195d8ea246a2775))
+* **url-handle:** a daemon's TIMEOUT is busy, so a click no longer kicks a live daemon ([#565](https://github.com/promptctl/cc-candybar/issues/565)) ([938e467](https://github.com/promptctl/cc-candybar/commit/938e46704e2e803c9a983b478618dda5cea40cc3))
+
 ## [1.179.1](https://github.com/promptctl/cc-candybar/compare/v1.179.0...v1.179.1) (2026-11-02)
 
 ### Bug Fixes
