@@ -37,6 +37,7 @@ export const MODULES: ReadonlyArray<readonly [Surface, string, Guarding]> = [
   ["network", "http2", { functions: among("createServer", "createSecureServer", "connect") }],
   ["network", "dns", { functions: lookups, classes: ["Resolver"] }],
   ["network", "dns/promises", { functions: lookups, classes: ["Resolver"] }],
+  ["clock", "os", { functions: among("uptime") }],
   // Jest's fake timers install on the sandbox's globals and leave these
   // modules on real time, so nothing here has a fake to defer to.
   ["clock", "timers", { functions: timers }],

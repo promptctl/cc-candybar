@@ -67,7 +67,7 @@ test("the table refuses every module that reaches the machine", () => {
   expect(MODULES.map(([, name]) => name).sort()).toEqual(
     [
       "child_process", "cluster", "dgram", "dns", "dns/promises", "fs", "fs/promises", "http", "http2",
-      "https", "net", "timers", "timers/promises", "tls", "worker_threads",
+      "https", "net", "os", "timers", "timers/promises", "tls", "worker_threads",
     ].sort(),
   );
 });
