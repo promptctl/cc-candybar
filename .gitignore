@@ -30,3 +30,6 @@ bin/cc-candybar-native
 
 # The page build (explorer/build.sh): generated, rebuilt from the survey directory.
 design-docs/peer-exploration/5-landscape/site/
+
+# One record per test file of a run; CI keeps it as an artifact
+test-records/

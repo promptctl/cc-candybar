@@ -52,6 +52,21 @@ jobs:
       - name: Test the process tier
         run: pnpm test:process
 
+      # One record per test file, kept so a number about the suite is read from
+      # a run and not remembered. `always()` because a red run is the one whose
+      # records matter most.
+      - name: Report tests by layer
+        if: always()
+        run: pnpm test:report --runs worker,process
+
+      - name: Keep the test records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-records
+          path: test-records/
+          if-no-files-found: error
+
       - name: Protocol-version guard
         run: pnpm run check:protocol
 

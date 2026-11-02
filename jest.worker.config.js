@@ -2,10 +2,11 @@
 // and not `--testPathIgnorePatterns`, whose array form swallows a positional
 // path and runs everything but the file asked for.
 
-import base from "./jest.config.js";
+import base, { reportersFor } from "./jest.config.js";
 import { PROCESS_TIER_PATTERN } from "./test/helpers/process-tier.cjs";
 
 export default {
   ...base,
+  reporters: reportersFor("worker"),
   testPathIgnorePatterns: [PROCESS_TIER_PATTERN],
 };
