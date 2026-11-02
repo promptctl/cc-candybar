@@ -13,7 +13,7 @@
 // reproducible: `node scripts/heap-retainers.mjs snap.heapsnapshot FSReqPromise`.
 //
 // USAGE
-//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json]
+//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json] [--strong]
 //
 //   <match-RE>   JS regexp matched against "<type> / <name>"; instances of
 //                matching nodes are the BFS targets.
@@ -21,6 +21,11 @@
 //                LOUD, not silent: a "(N more matching nodes not traced)" line
 //                is printed so truncation is never mistaken for completeness.
 //   --json       emit { paths: [[ "<root>", ..., "<target>" ], ...] }.
+//   --strong     follow only edges that keep their target alive. A weak edge
+//                (a WeakRef's, a WeakMap key's) holds nothing, so a path
+//                through one names the observer as the holder; with --strong a
+//                target no strong path reaches has no path, and so is absent
+//                from `paths`.
 //
 // A retaining path is printed root-first: the GC root, then each retaining
 // edge's owner down to the target instance. Edge labels (.field / [index])
@@ -38,9 +43,16 @@ function edgeLabel(s, rec) {
   return s.strings[nameOrIndex] ?? `#${nameOrIndex}`;
 }
 
+// Whether edge record `rec` keeps its target alive: V8 marks a weak edge, and
+// a shortcut is a view the snapshot adds for the UI, not a reference.
+function holds(s, rec) {
+  const type = s.edgeTypes[s.edges[rec * s.edgeStride + s.edgeTypeIdx]];
+  return type !== "weak" && type !== "shortcut";
+}
+
 // Build reverse adjacency: for every directed edge from→to, record (from, edgeRec)
 // under `to`, so BFS can walk from a target up toward its retainers.
-function buildReverse(s) {
+function buildReverse(s, strong) {
   const firstEdge = new Int32Array(s.nodeCount + 1);
   for (let i = 0; i < s.nodeCount; i++) {
     firstEdge[i + 1] = firstEdge[i] + s.nodes[i * s.nodeStride + s.edgeCountIdx];
@@ -48,6 +60,7 @@ function buildReverse(s) {
   const reverse = Array.from({ length: s.nodeCount }, () => []);
   for (let from = 0; from < s.nodeCount; from++) {
     for (let rec = firstEdge[from]; rec < firstEdge[from + 1]; rec++) {
+      if (strong && !holds(s, rec)) continue;
       const to = s.edges[rec * s.edgeStride + s.edgeToIdx] / s.nodeStride;
       reverse[to].push({ from, rec });
     }
@@ -88,8 +101,8 @@ function pathToRoot(s, reverse, target) {
   return chain;
 }
 
-export function retainerPaths(s, re, limit) {
-  const reverse = buildReverse(s);
+export function retainerPaths(s, re, limit, { strong = false } = {}) {
+  const reverse = buildReverse(s, strong);
   const targets = [];
   for (let i = 0; i < s.nodeCount; i++) {
     if (re.test(nodeLabel(s, i))) targets.push(i);
@@ -101,11 +114,12 @@ export function retainerPaths(s, re, limit) {
 
 function parseArgs(argv) {
   const positional = [];
-  const opts = { limit: 5, json: false };
+  const opts = { limit: 5, json: false, strong: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--limit") opts.limit = Number(argv[++i]);
     else if (a === "--json") opts.json = true;
+    else if (a === "--strong") opts.strong = true;
     else positional.push(a);
   }
   return { positional, opts };
@@ -115,13 +129,13 @@ function main() {
   const { positional, opts } = parseArgs(process.argv.slice(2));
   if (positional.length !== 2) {
     process.stderr.write(
-      "usage: heap-retainers.mjs <snapshot> <match-RE> [--limit N] [--json]\n",
+      "usage: heap-retainers.mjs <snapshot> <match-RE> [--limit N] [--json] [--strong]\n",
     );
     process.exit(2);
   }
   const s = parseSnapshot(positional[0]);
   const re = new RegExp(positional[1]);
-  const { paths, totalTargets, traced } = retainerPaths(s, re, opts.limit);
+  const { paths, totalTargets, traced } = retainerPaths(s, re, opts.limit, opts);
 
   if (opts.json) {
     process.stdout.write(JSON.stringify({ paths, totalTargets, traced }) + "\n");

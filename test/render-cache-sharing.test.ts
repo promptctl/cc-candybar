@@ -145,24 +145,6 @@ const exposeGc = (): (() => void) => {
   return vm.runInNewContext("gc") as () => void;
 };
 
-// [LAW:no-ambient-temporal-coupling] exception: whether `ref`'s target is
-// collected, asked over event-loop turns and not after two gc() calls. A
-// collection cannot tell a holder that a later job of this process lets go of
-// (a closing handle, a settling promise) from a holder that never does, and a
-// deref() keeps its target alive until the job that made it ends, so each
-// round yields before it asks again. The bound counts turns, not time: a
-// target held through all of them is held by something that is not waiting on
-// a turn, and the caller reads the holder off the heap (retainer-path.ts).
-const COLLECT_ROUNDS = 50;
-const collected = async (ref: WeakRef<object>, gc: () => void, rounds = COLLECT_ROUNDS): Promise<boolean> => {
-  for (let round = 0; round < rounds; round++) {
-    gc();
-    if (ref.deref() === undefined) return true;
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-  return false;
-};
-
 // Where a frame's carousel's ▶ steps to. Over its two options that is the one
 // the key does not hold, so it shows which variable the ring read back.
 const nextOf = (bytes: Frame): string | undefined =>
@@ -359,41 +341,35 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // render once that render returns: the store, the scope its layout rows were
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
-test("a compile keeps nothing of a render once it returns", async () => {
-  const gc = exposeGc();
+test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
-  const drawn = new WeakRef(drawAlone(config, compiled));
-  // A WeakRef holds its target until the job that made it ends, so the first
-  // gc() runs in a later one.
-  await new Promise((resolve) => setImmediate(resolve));
-  const released = await collected(drawn, gc);
-  // A failure prints the path from the heap's roots to the store that is
-  // still there, so what holds it is named by the run that saw it.
-  expect({ released, holders: released ? [] : await retainerPathsTo("ProbeStore") }).toEqual({
-    released: true,
-    holders: [],
-  });
+  // The result is dropped here, so a store the snapshot finds reachable is
+  // held by something the draw left behind.
+  drawAlone(config, compiled);
+  // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
+  // collects first and follows only strong edges, so no collection count or
+  // wait is in the verdict. A holder still there at the snapshot is named by
+  // its path from the heap's roots (retainer-path.ts).
+  expect(retainerPathsTo("ProbeStore")).toEqual([]);
   expect(compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
-// The controls for the case above: the poll says held for a target that is
-// held, and the path names the holder of one.
-const heldStores: object[] = [];
-test("an object something still holds is reported as held, with the path to its holder", async () => {
-  // Nothing in this frame names the store, so the only strong path to it is
-  // the one through heldStores.
-  const watch = (): WeakRef<object> => {
-    heldStores.push(new ProbeStore());
-    return new WeakRef(heldStores[0]!);
-  };
+// The control for the case above: a store something holds is found, as a path
+// that ends in it, so the case's empty answer is one the reader can fail to
+// give. Its class is its own and extends nothing: a subclass would put its
+// parent's prototype on the heap under the parent's name, where the case above
+// would read it as an instance.
+class HeldProbe {}
+const heldProbes: object[] = [];
+test("an object something still holds is found by the path to it", () => {
+  heldProbes.push(new HeldProbe());
   try {
-    expect(await collected(watch(), exposeGc(), 3)).toBe(false);
-    const [path] = await retainerPathsTo("ProbeStore");
-    expect(path).toContain("heldStores");
-    expect(path).toMatch(/ProbeStore$/);
+    const paths = retainerPathsTo("HeldProbe");
+    expect(paths).toHaveLength(1);
+    expect(paths[0]!.at(-1)).toBe("object / HeldProbe");
   } finally {
-    heldStores.length = 0;
+    heldProbes.length = 0;
   }
 });
 

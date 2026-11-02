@@ -258,4 +258,41 @@ describe("heap-analysis scripts", () => {
     expect(paths[0]![0]).toMatch(/synthetic/);
     expect(paths[0]![paths[0]!.length - 1]).toMatch(/FSReqPromise/);
   });
+
+  test("heap-retainers --strong names the holder, not a WeakRef that observes the object", () => {
+    // One object held by a deep strong chain and watched by a WeakRef at the
+    // global's top level, which is the shorter way to it. The snapshot is
+    // taken in a later job: until the job that made a WeakRef ends, V8 holds
+    // its target through a root of its own.
+    const snapshot = join(root, "weak.heapsnapshot");
+    execFileSync(
+      process.execPath,
+      [
+        "-e",
+        `
+        class Watched {}
+        (() => {
+          const held = new Watched();
+          globalThis.watcher = new WeakRef(held);
+          globalThis.strongRoot = { one: { two: { three: { held } } } };
+        })();
+        setImmediate(() => require("node:v8").writeHeapSnapshot(process.argv[1]));
+        `,
+        snapshot,
+      ],
+      { stdio: "inherit" },
+    );
+    const pathsOf = (...flags: string[]): string => {
+      const out = execFileSync(
+        process.execPath,
+        [join(scriptsDir, "heap-retainers.mjs"), snapshot, "^object / Watched$", "--json", ...flags],
+        { encoding: "utf8" },
+      );
+      return JSON.stringify((JSON.parse(out) as { paths: string[][] }).paths);
+    };
+    expect(pathsOf()).toMatch(/WeakRef/);
+    const strong = pathsOf("--strong");
+    expect(strong).not.toMatch(/WeakRef/);
+    expect(strong).toMatch(/held-->/);
+  });
 });
