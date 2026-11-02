@@ -1,5 +1,6 @@
-// The git segment's location: what `checkoutLocation` reads off a real
-// checkout, and what `gitaculous` draws from it.
+// The checkout's location: what `checkoutLocation` reads off a real
+// checkout, and what `directory` draws from it. `gitaculous` reads the same
+// payload fields only to decide whether it has a branch to show at all.
 import { drawPayload } from "./helpers/draw-payload";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -54,10 +55,13 @@ describe("checkoutLocation", () => {
   });
 });
 
-function draw(payload: Record<string, unknown>, variables: object = {}): string {
+function drawAll(
+  payload: Record<string, unknown>,
+  variables: object = {},
+): Map<string, string> {
   const config = parseAndValidate(
     "<user>",
-    JSON.stringify({ variables, root: { h: ["gitaculous"] } }),
+    JSON.stringify({ variables, root: { h: ["directory", "gitaculous"] } }),
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
@@ -79,10 +83,19 @@ function draw(payload: Record<string, unknown>, variables: object = {}): string 
   } finally {
     registry.dispose();
   }
-  return (sink.get("gitaculous") ?? []).map((t) => t.plain).join("").trim();
+  return new Map(
+    ["directory", "gitaculous"].map((name) => [
+      name,
+      (sink.get(name) ?? []).map((t) => t.plain).join("").trim(),
+    ]),
+  );
 }
 
-describe("gitaculous location", () => {
+function draw(payload: Record<string, unknown>, variables: object = {}): string {
+  return drawAll(payload, variables).get("gitaculous") ?? "";
+}
+
+describe("directory, the worktree-aware location", () => {
   const MAIN = "/home/me/projects/cc-candybar";
   const located = (worktree: string, subpath: string) => ({
     cwd: `/home/me/projects/cc-candybar/.claude/worktrees/x${subpath}`,
@@ -91,23 +104,49 @@ describe("gitaculous location", () => {
   });
 
   test("main checkout has no parenthetical", () => {
-    expect(draw(located("", ""))).toBe("~/p/cc-candybar ⎇ main ▸");
+    expect(drawAll(located("", "")).get("directory")).toBe("~/p/cc-candybar");
   });
   test("linked worktree is named", () => {
-    expect(draw(located("jumping", ""))).toBe("~/p/cc-candybar (⊫ jumping) ⎇ main ▸");
+    expect(drawAll(located("jumping", "")).get("directory")).toBe("~/p/cc-candybar (⊫ jumping)");
   });
   test("worktree subdirectory keeps the subpath", () => {
-    expect(draw(located("jumping", "/src"))).toBe("~/p/cc-candybar/src (⊫ jumping) ⎇ main ▸");
+    expect(drawAll(located("jumping", "/src")).get("directory")).toBe("~/p/cc-candybar/src (⊫ jumping)");
   });
-  test("no repo shows the plain path and init", () => {
+  test("no repo falls back to the session directory", () => {
+    expect(
+      drawAll({ workspace: { current_dir: "/home/me/scratch/notes" }, location: { main: "", worktree: "", subpath: "", noRepo: true, gitPending: false } }).get("directory"),
+    ).toBe("~/s/notes");
+  });
+  test("draws while git is still pending", () => {
+    expect(
+      drawAll({ ...located("jumping", ""), git: undefined, location: { main: MAIN, worktree: "jumping", subpath: "", gitPending: true } }).get("directory"),
+    ).toBe("~/p/cc-candybar (⊫ jumping)");
+  });
+});
+
+describe("gitaculous, the git lane alone", () => {
+  const MAIN = "/home/me/projects/cc-candybar";
+  const located = (worktree: string, subpath: string) => ({
+    cwd: `/home/me/projects/cc-candybar/.claude/worktrees/x${subpath}`,
+    location: { main: MAIN, worktree, subpath, gitPending: false },
+    git: { branch: "main" },
+  });
+
+  test("shows the git state, no path", () => {
+    expect(draw(located("", ""))).toBe("⎇ main ▸");
+  });
+  test("a linked worktree draws the same git state", () => {
+    expect(draw(located("jumping", ""))).toBe("⎇ main ▸");
+  });
+  test("no repo shows only the init offer", () => {
     expect(
       draw({ workspace: { current_dir: "/home/me/scratch/notes" }, location: { main: "", worktree: "", subpath: "", noRepo: true, gitPending: false } }),
-    ).toBe("~/s/notes init");
+    ).toBe("init");
   });
-  test("the path stays while git is loading", () => {
+  test("draws nothing while git is still pending", () => {
     expect(
       draw({ ...located("jumping", ""), git: undefined, location: { main: MAIN, worktree: "jumping", subpath: "", gitPending: true } }),
-    ).toBe("~/p/cc-candybar (⊫ jumping)");
+    ).toBe("");
   });
 });
 
@@ -118,13 +157,14 @@ test("a directory with no repo beside a live git answer keeps the git state", ()
       location: { main: "", worktree: "", subpath: "", noRepo: true, gitPending: false },
       git: { branch: "main" },
     }),
-  ).toBe("/t/x ⎇ main ▸ init");
+  ).toBe("⎇ main ▸ init");
 });
 
-test("git.location repo restores the repo name in expanded and drops the path", () => {
+test("gitExpanded always shows the repo name, never the path", () => {
   const out = draw(
     { git: { branch: "main", repoName: "repo" }, location: { main: "/r", worktree: "", subpath: "", noRepo: false, gitPending: false } },
-    { "git.location": { kind: "literal", value: "repo" }, "git.detail": { kind: "state", key: "git-detail", default: "expanded" } },
+    { "git.detail": { kind: "state", key: "git-detail", default: "expanded" } },
   );
   expect(out).toContain("(git) repo ");
+  expect(out).not.toContain("/r");
 });

@@ -118,6 +118,7 @@ function rig(
         cwd: "/tmp",
         model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+        git: { branch: "main" },
         term: { cols },
         endcaps: { effective: sessionState.get(SID, "endcaps") ?? style },
         preset: { effective: effective.preset },
