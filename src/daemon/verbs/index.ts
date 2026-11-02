@@ -21,7 +21,12 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readJobEnd, type LaunchOpts, type Launcher } from "../../proc/launch";
+import {
+  jobGroupAlive,
+  readJobEnd,
+  type LaunchOpts,
+  type Launcher,
+} from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
@@ -381,15 +386,37 @@ function oneArg(value: string): string {
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
-// How long a program a click launches has before the click fails: a handful of
-// seconds at most for a clipboard or an opener, each of which hands off and exits.
-const CLICK_PROGRAM_TIMEOUT_MS = 5000;
+// How long a program a click launches has before the click fails, or, for an
+// opener's handoff, before it counts as handed off: a handful of seconds at most.
+export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 
-// [LAW:single-enforcer] The one launch a click makes of a program — the
-// clipboard, an editor, a status-line link's opener — so its failure handling
-// lives in one place. [LAW:dataflow-not-control-flow] Rate-limit rejection is
-// one outcome among many — the click is acknowledged and the rejection is
-// logged. Other failures are genuine errors that surface as RENDER_FAILED.
+// [LAW:single-enforcer] What a click's launch that ended badly does to the
+// click, for both of the launches a click makes (`clickLaunch`, `clickHandoff`).
+// [LAW:dataflow-not-control-flow] Rate-limit rejection is one outcome among
+// many — the click is acknowledged and the rejection is logged. A closing
+// daemon is its own outcome; every other failure surfaces as RENDER_FAILED,
+// saying what the launch itself said: the spawn's error, or the program's stderr.
+function clickFailed(
+  end: {
+    reason: string;
+    exitCode: number | null;
+    said: string;
+  },
+  what: string,
+  log: DaemonContext["log"],
+): void {
+  if (end.reason === "rate-limited") {
+    log("warn", `${what} rate-limited: ${end.said}`);
+    return;
+  }
+  if (end.reason === "aborted") throw new DaemonClosing(what);
+  throw new Error(
+    `${what} failed (${end.reason}, exit ${end.exitCode ?? "null"})${end.said === "" ? "" : `: ${end.said}`}`,
+  );
+}
+
+// [LAW:one-type-per-behavior] A click's launch of a program it waits out —
+// the clipboard, an editor — each of which hands off and exits.
 export async function clickLaunch(
   launcher: Launcher,
   opts: Omit<LaunchOpts, "timeoutMs">,
@@ -403,16 +430,14 @@ export async function clickLaunch(
     timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
   });
   if (result.ok) return;
-  if (result.reason === "rate-limited") {
-    log("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
-    return;
-  }
-  if (result.reason === "aborted") throw new DaemonClosing(what);
-  // What the launch itself said of its failure: the spawn's error, or what
-  // the program wrote to stderr before it exited.
-  const said = result.error ?? result.stderr.trim();
-  throw new Error(
-    `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`,
+  clickFailed(
+    {
+      reason: result.reason,
+      exitCode: result.exitCode,
+      said: result.error ?? result.stderr.trim(),
+    },
+    what,
+    log,
   );
 }
 
@@ -423,14 +448,17 @@ const HANDOFF_POLL_MS = 50;
 // opener. Unlike `clickLaunch`, what the opener starts must outlive the click:
 // xdg-open with no browser running stays the browser's parent, so a launch the
 // bound ends would end the browser with it. The opener runs as a job, whose
-// group nothing aimed at the daemon reaches, and the click waits on its
-// verdict for the same bound. [LAW:no-silent-failure] An opener that exits
-// non-zero inside the bound fails the click with what it wrote to stderr; one
+// group nothing aimed at the daemon reaches — a closing daemon included — and
+// the click waits on its verdict for `boundMs`. [LAW:no-silent-failure] An
+// opener that exits non-zero inside the bound fails the click with what it
+// wrote to stderr, and a job whose group is gone with no verdict was lost; one
 // still running at the bound has handed off, and is left running.
 export async function clickHandoff(
   launcher: Launcher,
   opts: Omit<LaunchOpts, "timeoutMs">,
   what: string,
+  log: DaemonContext["log"],
+  boundMs: number,
 ): Promise<void> {
   const dir = mkdtempSync(path.join(tmpdir(), "cc-candybar-handoff-"));
   // The job's files go when the click is answered: a program still running
@@ -438,28 +466,51 @@ export async function clickHandoff(
   // directory that is gone, has no reader left to miss it.
   try {
     const files = {
-      stdout: path.join(dir, "stdout"),
+      // Unread, and a handed-off browser would write to it for its whole life.
+      stdout: "/dev/null",
       stderr: path.join(dir, "stderr"),
       status: path.join(dir, "status"),
     };
     const job = launcher.launchJobSync(opts, files);
-    if (!job.ok) throw new Error(`${what} failed (spawn-error): ${job.error}`);
+    if (!job.ok) {
+      clickFailed(
+        { reason: job.reason, exitCode: null, said: job.error },
+        what,
+        log,
+      );
+      return;
+    }
     job.release();
-    const deadline = Date.now() + CLICK_PROGRAM_TIMEOUT_MS;
+    const deadline = Date.now() + boundMs;
     for (;;) {
+      // Liveness before the verdict: the sh writes its verdict before it exits,
+      // so a group seen gone and then no verdict means none is coming.
+      const alive = jobGroupAlive(job.pid);
       const end = readJobEnd(files.status);
       if (end?.kind === "exit") {
         if (end.code === 0) return;
-        const said = readFileSync(files.stderr, "utf8").trim();
-        throw new Error(
-          `${what} failed (non-zero, exit ${end.code})${said === "" ? "" : `: ${said}`}`,
+        clickFailed(
+          {
+            reason: "non-zero",
+            exitCode: end.code,
+            said: readFileSync(files.stderr, "utf8").trim(),
+          },
+          what,
+          log,
         );
+        return;
       }
+      if (!alive)
+        throw new Error(
+          `${what} failed (lost): the opener ended with no verdict`,
+        );
       if (Date.now() >= deadline) return;
       await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // A sh writing its verdict as the click is answered can add a file between
+    // the listing and the rmdir; the retry takes it with the rest.
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
   }
 }
 

@@ -989,7 +989,12 @@ export type JobLaunch =
       // Closes the gate unopened: the sh exits, and the program never runs.
       withdraw(): void;
     }
-  | { readonly ok: false; readonly error: string };
+  // [LAW:one-source-of-truth] The refusal's own reason, as `launch` reports it.
+  | {
+      readonly ok: false;
+      readonly reason: Refusal["reason"];
+      readonly error: string;
+    };
 
 // [LAW:single-enforcer] The one launch with the job's lifetime. Detached, so
 // it leads its own group, which nothing aimed at the launcher reaches; never
@@ -1001,7 +1006,8 @@ function launchJob(
 ): JobLaunch {
   const { stats } = state.scope;
   const refused = admit(state, opts.category);
-  if (refused !== null) return { ok: false, error: refused.error };
+  if (refused !== null)
+    return { ok: false, reason: refused.reason, error: refused.error };
   const t0 = Date.now();
   stats?.onStart(opts.category);
   let child: ChildProcess;
@@ -1027,7 +1033,11 @@ function launchJob(
     );
   } catch (err) {
     stats?.onEnd(opts.category, Date.now() - t0);
-    return { ok: false, error: spawnErrorText(err, opts.cwd) };
+    return {
+      ok: false,
+      reason: "spawn-error",
+      error: spawnErrorText(err, opts.cwd),
+    };
   }
   stats?.onEnd(opts.category, Date.now() - t0);
   // An async spawn failure has no pid; its `error` needs a listener or Node
@@ -1043,6 +1053,7 @@ function launchJob(
     gate.destroy();
     return {
       ok: false,
+      reason: "spawn-error",
       error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`,
     };
   }

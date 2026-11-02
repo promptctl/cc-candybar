@@ -2,7 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { clickHandoff, clickLaunch } from "../src/daemon/verbs";
@@ -31,13 +31,48 @@ describe("clickHandoff", () => {
         category: "click.open",
       },
       "opening a browser",
+      () => {},
+      200,
     );
+    // A loaded machine can answer the bound before the opener has started.
+    while (!existsSync(pidFile)) await new Promise((r) => setTimeout(r, 20));
     const pid = Number(readFileSync(pidFile, "utf8"));
-    // Past the kill grace a timed-out launch would have used.
-    await new Promise((r) => setTimeout(r, 500));
-    expect(alive(pid)).toBe(true);
-    process.kill(pid, "SIGKILL");
-  }, 10_000);
+    try {
+      // Past the kill grace a timed-out launch would have used.
+      await new Promise((r) => setTimeout(r, 500));
+      expect(alive(pid)).toBe(true);
+    } finally {
+      process.kill(pid, "SIGKILL");
+    }
+  });
+
+  test("an opener whose sh dies with no verdict fails the click as lost", async () => {
+    await expect(
+      clickHandoff(
+        createLauncher({}),
+        // Kills the job's whole group, the verdict-writing sh with it.
+        { bin: "/bin/sh", args: ["-c", "kill -9 0"], category: "click.open" },
+        "opening https://example.com",
+        () => {},
+        2000,
+      ),
+    ).rejects.toThrow("opening https://example.com failed (lost)");
+  });
+
+  test("a rate-limited opener is logged and the click acknowledged", async () => {
+    const launcher = createLauncher({});
+    const opts = { bin: "/usr/bin/true", category: "click.open" } as const;
+    await clickHandoff(launcher, opts, "first", () => {}, 2000);
+    const logged: string[] = [];
+    await clickHandoff(
+      launcher,
+      opts,
+      "second",
+      (_l, m) => logged.push(m),
+      2000,
+    );
+    expect(logged).toEqual([expect.stringMatching(/^second rate-limited: /)]);
+  });
 
   test("an opener that exits non-zero fails the click with its stderr", async () => {
     await expect(
@@ -49,6 +84,8 @@ describe("clickHandoff", () => {
           category: "click.open",
         },
         "opening https://example.com",
+        () => {},
+        2000,
       ),
     ).rejects.toThrow(
       "opening https://example.com failed (non-zero, exit 3): no method available",
@@ -61,6 +98,8 @@ describe("clickHandoff", () => {
       createLauncher({}),
       { bin: "/usr/bin/true", category: "click.open" },
       "opening https://example.com",
+      () => {},
+      2000,
     );
     expect(Date.now() - t0).toBeLessThan(2000);
   });

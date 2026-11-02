@@ -17,7 +17,13 @@ import type {
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
-import { VERBS, clickHandoff, clickSessionOf, BadVerbArgs } from "./verbs";
+import {
+  VERBS,
+  CLICK_PROGRAM_TIMEOUT_MS,
+  clickHandoff,
+  clickSessionOf,
+  BadVerbArgs,
+} from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
@@ -742,6 +748,8 @@ async function statusLineClick(
       category: "click.open",
     },
     `opening ${click.url}`,
+    parts.log,
+    CLICK_PROGRAM_TIMEOUT_MS,
   );
   return { kind: "ok" };
 }
