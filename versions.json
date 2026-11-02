@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-570",
+      "ref": "refs/pull/570/merge",
+      "sha": "56f0c0a01aca7f458496d9c9063965348d2e55c7",
+      "timestamp": "2026-11-02T12:50:15.124Z",
+      "commits": [
+        {
+          "sha": "56f0c0a01aca7f458496d9c9063965348d2e55c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T12:43:50Z",
+          "message": "Merge 9d59e55f25a8dbad01cac6a32ad3c6e618eb4d26 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
+        },
+        {
+          "sha": "9d59e55f25a8dbad01cac6a32ad3c6e618eb4d26",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:43:38-07:00",
+          "message": "test: say why zero in flight means the gone client's side left (brandon-unfiled-3248.cbyb)\n"
+        },
+        {
+          "sha": "7c3d087049fbfdff921ff019074ae989c44ec917",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:40:44-07:00",
+          "message": "fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb)\n\nThe case's `gone` client half-closed at once and assumed the daemon saw the\nclose before it wrote the answer. Nothing ordered them: when the render won, the\nend-write succeeded, the error was marked answered, and the next request read\n`over` where the test expects `owed`.\n\nThe gone render now reads tmux through the gated stub, and the test opens the\ngate only once the daemon's side has closed with the client's (inFlight back to\n0), so the answer meets an ended end by construction. Making respond call\ndelivered regardless of the write error fails the case with owed/over.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-567",
       "ref": "refs/pull/567/merge",
       "sha": "729c04024696cc5a26f64896754895fd79b7735e",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T05:36:52-07:00",
           "message": "test(e2e): the cap and the assertion limit are enforced (candybar-testing-ihvy.7dc)\n\nThe sign-off file (.claude/e2e-signoff.json) holds the end-to-end cap and the\nassertion limit. jest.e2e.config.js adds a reporter that fails a run holding\nmore tests than the cap and a setup file that fails a test whose assertion\ncount is not the limit; every other config ignores test/e2e/, so no run\nreaches an end-to-end test without them. Fixtures that break each check, run\nthrough the real config by test/integration/e2e-checks, turn red if a check is\nunplugged. The e2e-signoff hook now refuses an agent's edit to the sign-off,\nthe checks, their tests and fixtures, itself, and any test/e2e/ file that\norigin/main holds, and fails closed.\n\nA workflow check fails CI on a step that reaches a script importing\ndaemonArgs or createDaemon. load-gate.yml is excused on a transitional list\n(test/transitional-daemon-workflows) that a CI step holds to shrinking;\ncandybar-testing-ihvy.4vv deletes the directory.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-570",
-      "ref": "refs/pull/570/merge",
-      "sha": "dabc35002e184579ece856d6b5d163aefd52f1bf",
-      "timestamp": "2026-11-02T12:43:39.756Z",
-      "commits": [
-        {
-          "sha": "dabc35002e184579ece856d6b5d163aefd52f1bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:41:07-07:00",
-          "message": "Merge 7c3d087049fbfdff921ff019074ae989c44ec917 into e9865fa4807325c4bf8e73c86195d8ea246a2775\n"
-        },
-        {
-          "sha": "7c3d087049fbfdff921ff019074ae989c44ec917",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T05:40:44-07:00",
-          "message": "fix(test): the click-error e2e holds its unanswered render until the daemon's side has ended (brandon-unfiled-3248.cbyb)\n\nThe case's `gone` client half-closed at once and assumed the daemon saw the\nclose before it wrote the answer. Nothing ordered them: when the render won, the\nend-write succeeded, the error was marked answered, and the next request read\n`over` where the test expects `owed`.\n\nThe gone render now reads tmux through the gated stub, and the test opens the\ngate only once the daemon's side has closed with the client's (inFlight back to\n0), so the answer meets an ended end by construction. Making respond call\ndelivered regardless of the write error fails the case with owed/over.\n"
         }
       ]
     },
