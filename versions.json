@@ -4,15 +4,22 @@
     {
       "version": "pr-560",
       "ref": "refs/pull/560/merge",
-      "sha": "eab47103bc416ff760541671560c1dca88dad7fa",
-      "timestamp": "2026-11-02T10:58:26.415Z",
+      "sha": "96615bcd514b6172128b71733950c9dd4b4d426d",
+      "timestamp": "2026-11-02T10:59:53.338Z",
       "commits": [
         {
-          "sha": "eab47103bc416ff760541671560c1dca88dad7fa",
+          "sha": "96615bcd514b6172128b71733950c9dd4b4d426d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T10:57:26Z",
-          "message": "Merge 6fb23e5ceac4b397304224649f9057321c401bb2 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+          "timestamp": "2026-11-02T10:58:55Z",
+          "message": "Merge 21bea47b4c76e8c2c8861ec84ff213e823ff51c7 into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "21bea47b4c76e8c2c8861ec84ff213e823ff51c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T03:58:40-07:00",
+          "message": "docs(daemon): the draw reserve's comment claims no user-config coverage; process margin stays thin (candybar-launch-q7o7.qjw)\n"
         },
         {
           "sha": "6fb23e5ceac4b397304224649f9057321c401bb2",
