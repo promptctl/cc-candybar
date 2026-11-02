@@ -27,7 +27,6 @@ describe("clickHandoff", () => {
     const pidFile = path.join(dir, "pid");
     await clickHandoff(
       createLauncher({ inherited: process.env }, systemTimekeeper),
-      systemTimekeeper,
       {
         bin: "/bin/sh",
         args: ["-c", `echo $$ > ${pidFile}; exec sleep 30`],
@@ -57,7 +56,6 @@ describe("clickHandoff", () => {
     await expect(
       clickHandoff(
         createLauncher({ inherited: process.env }, systemTimekeeper),
-        systemTimekeeper,
         // Kills the job's whole group, the verdict-writing sh with it.
         { bin: "/bin/sh", args: ["-c", "kill -9 0"], category: "click.open" },
         "opening https://example.com",
@@ -76,7 +74,6 @@ describe("clickHandoff", () => {
     const opts = { bin: "/usr/bin/true", category: "click.open" } as const;
     await clickHandoff(
       launcher,
-      systemTimekeeper,
       opts,
       "first",
       () => {},
@@ -86,7 +83,6 @@ describe("clickHandoff", () => {
     const logged: string[] = [];
     await clickHandoff(
       launcher,
-      systemTimekeeper,
       opts,
       "second",
       (_l, m) => logged.push(m),
@@ -102,7 +98,6 @@ describe("clickHandoff", () => {
     await expect(
       clickHandoff(
         createLauncher({ inherited: process.env }, systemTimekeeper),
-        systemTimekeeper,
         {
           bin: "/bin/sh",
           args: ["-c", "echo no method available >&2; exit 3"],
@@ -122,7 +117,6 @@ describe("clickHandoff", () => {
     const t0 = Date.now();
     await clickHandoff(
       createLauncher({ inherited: process.env }, systemTimekeeper),
-      systemTimekeeper,
       { bin: "/usr/bin/true", category: "click.open" },
       "opening https://example.com",
       () => {},

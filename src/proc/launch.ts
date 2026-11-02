@@ -1190,6 +1190,9 @@ export function endJob(
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
 // (the header), and all of them cross the owner's gate and report to its stats.
 export interface Launcher {
+  // The machine's clock, which its children live on: a caller that waits on a
+  // launched child's own progress waits by this one, never by a held daemon's.
+  readonly clock: Timekeeper;
   launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
@@ -1260,6 +1263,7 @@ function launcherWithState(
   state: LaunchState;
 } {
   const launcher: TestableLauncher = {
+    clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),

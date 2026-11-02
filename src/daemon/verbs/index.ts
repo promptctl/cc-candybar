@@ -31,7 +31,7 @@ import type { Locations } from "../paths";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
-import { sleep, type Timekeeper } from "../../time";
+import { sleep } from "../../time";
 import { stateKeySeed } from "./key-seeds";
 import {
   disclosureNest,
@@ -468,8 +468,6 @@ const HANDOFF_POLL_MS = 50;
 // still running at the bound has handed off, and is left running.
 export async function clickHandoff(
   launcher: Launcher,
-  // [LAW:effects-at-boundaries] The daemon's clock: the bound and the poll.
-  clock: Pick<Timekeeper, "monotonic" | "after">,
   opts: Omit<LaunchOpts, "timeoutMs">,
   what: string,
   log: DaemonContext["log"],
@@ -500,7 +498,7 @@ export async function clickHandoff(
     job.release();
     // [LAW:no-ambient-temporal-coupling] A monotonic clock, so a wall-clock
     // step neither stretches nor cuts the bound.
-    const deadline = clock.monotonic() + boundMs;
+    const deadline = launcher.clock.monotonic() + boundMs;
     for (;;) {
       // Liveness before the verdict: the sh writes its verdict before it exits,
       // so a group seen gone and then no verdict means none is coming.
@@ -526,7 +524,7 @@ export async function clickHandoff(
         throw new Error(
           `${what} failed (lost): the opener ended with no verdict`,
         );
-      if (clock.monotonic() >= deadline) {
+      if (launcher.clock.monotonic() >= deadline) {
         // [LAW:nothing-unseen] What the click leaves running is said once.
         log(
           "info",
@@ -534,7 +532,7 @@ export async function clickHandoff(
         );
         return;
       }
-      await sleep(clock, HANDOFF_POLL_MS);
+      await sleep(launcher.clock, HANDOFF_POLL_MS);
     }
   } finally {
     // A sh writing its verdict as the click is answered can add a file between
