@@ -1,5 +1,6 @@
 import net from "node:net";
-import { hostOf } from "./helpers/host";
+import { heldClock } from "./helpers/held-clock";
+import { memoryConnection } from "./helpers/memory-connection";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -9,13 +10,14 @@ import {
   makeFrameReader,
 } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
+import { RENDER_BUDGETS, renderOutcomeOf } from "../src/daemon/client";
 import type { ClientOutcome } from "../src/daemon/client";
+import { exchangeOutcome } from "../src/daemon/client-transport";
 import type {
   PermanentOutcome,
   TransientOutcome,
 } from "../src/daemon/client-transport";
 import { planOutcome } from "../src/render/outcome-plan";
-import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] These tests assert the contract — what a
 // version-mismatched client sees and how the daemon responds — not the
@@ -201,7 +203,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
 // --- client.ts interpretResponse() decoding ---
 //
 // [LAW:behavior-not-structure] The client's typed outcome is the contract.
-// We exercise it via tryRenderViaDaemon against a stubbed socket. This
+// We exercise it via renderOutcomeOf on wire answers. This
 // proves the wire→type translation matches the runtime: VERSION_MISMATCH
 // → `permanent`/`version_mismatch` carrying clientV and daemonV.
 
@@ -288,72 +290,19 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
 // code the client doesn't recognize must not cause the function to silently
 // fall off the bottom and return undefined. The default branch maps unknown
 // codes to `permanent/malformed_response` with the unknown code preserved in
-// the message — explicit failure, mirrored on the Rust side. This test
-// exercises that boundary against a stubbed daemon, since interpretResponse
-// itself is intentionally private to client.ts.
-
-function spinUpRawCodeSocket(
-  sockPath: string,
-  response: object,
-): Promise<net.Server> {
-  return new Promise((resolve) => {
-    const server = net.createServer((sock) => {
-      const reader = makeFrameReader(
-        () => {
-          sock.write(encodeFrame(response));
-          sock.end();
-        },
-        () => {
-          /* parse error ignored on daemon side */
-        },
-      );
-      sock.on("data", reader);
-    });
-    server.listen(sockPath, () => resolve(server));
-  });
-}
+// the message — explicit failure, mirrored on the Rust side. These cases
+// exercise that boundary through renderOutcomeOf, the render path's entry to
+// interpretResponse.
 
 describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
-  async function runWithStubDaemon(
-    response: object,
-  ): Promise<ClientOutcome> {
-    const tmpRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-trust-"),
-    );
-    const stateDir = path.join(tmpRoot, "cc-candybar");
-    fs.mkdirSync(stateDir, { recursive: true });
-    const sockPath = path.join(stateDir, "socket");
+  // [LAW:effects-at-boundaries] What the client makes of a wire answer is
+  // decided by renderOutcomeOf alone, so each case hands it the answer: there
+  // is no listener whose accept a loaded loop can land after a budget.
+  const outcomeOf = (response: object): ClientOutcome =>
+    renderOutcomeOf(response as Response);
 
-    const server = await spinUpRawCodeSocket(sockPath, response);
-    const host = hostOf({
-      ...process.env,
-      XDG_STATE_HOME: tmpRoot,
-      CC_CANDYBAR_SOCKET: sockPath,
-    });
-    try {
-      const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      return await tryRenderViaDaemon({ host, clock: systemTimekeeper },
-        {
-          session_id: "test-trust-boundary",
-          workspace: { project_dir: "/tmp" },
-          model: { id: "x", display_name: "X" },
-        } as never,
-        ["cc-candybar"],
-        "/tmp",
-        {},
-      );
-    } finally {
-      await new Promise<void>((r) => server.close(() => r()));
-      try {
-        fs.rmSync(tmpRoot, { recursive: true, force: true });
-      } catch {
-        /* best-effort */
-      }
-    }
-  }
-
-  test("unknown error code yields permanent/malformed_response with the code in the message", async () => {
-    const outcome = await runWithStubDaemon({
+  test("unknown error code yields permanent/malformed_response with the code in the message", () => {
+    const outcome = outcomeOf({
       ok: false,
       error: "something happened",
       code: "MYSTERIOUS_FOO",
@@ -366,8 +315,8 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     expect(outcome.message).toContain("MYSTERIOUS_FOO");
   });
 
-  test("missing code field yields permanent/malformed_response (does not crash)", async () => {
-    const outcome = await runWithStubDaemon({
+  test("missing code field yields permanent/malformed_response (does not crash)", () => {
+    const outcome = outcomeOf({
       ok: false,
       error: "no code field at all",
     });
@@ -384,8 +333,8 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
   // into ClientOutcome and crash downstream code (e.g. truncate() iterating
   // a non-string message).
 
-  test("non-string error field is replaced with a safe fallback message", async () => {
-    const outcome = await runWithStubDaemon({
+  test("non-string error field is replaced with a safe fallback message", () => {
+    const outcome = outcomeOf({
       ok: false,
       code: "RENDER_FAILED",
       error: 42, // wrong type — daemon promised a string
@@ -399,8 +348,8 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     expect(outcome.message.length).toBeGreaterThan(0);
   });
 
-  test("non-number daemonV is replaced with 0 (renders as 'unknown' in glyph)", async () => {
-    const outcome = await runWithStubDaemon({
+  test("non-number daemonV is replaced with 0 (renders as 'unknown' in glyph)", () => {
+    const outcome = outcomeOf({
       ok: false,
       code: "VERSION_MISMATCH",
       error: "mismatch",
@@ -421,8 +370,8 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
   // payload. Without this, a daemon sending `daemonV: -1` or `daemonV:
   // 3.14` would yield different ClientOutcome values across runtimes for
   // the same input.
-  test("negative daemonV is replaced with 0 (matches Rust's as_u64 fallback)", async () => {
-    const outcome = await runWithStubDaemon({
+  test("negative daemonV is replaced with 0 (matches Rust's as_u64 fallback)", () => {
+    const outcome = outcomeOf({
       ok: false,
       code: "VERSION_MISMATCH",
       error: "mismatch",
@@ -434,8 +383,8 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     expect(outcome.daemonV).toBe(0);
   });
 
-  test("fractional daemonV is replaced with 0 (matches Rust's as_u64 fallback)", async () => {
-    const outcome = await runWithStubDaemon({
+  test("fractional daemonV is replaced with 0 (matches Rust's as_u64 fallback)", () => {
+    const outcome = outcomeOf({
       ok: false,
       code: "VERSION_MISMATCH",
       error: "mismatch",
@@ -460,55 +409,35 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
 // for "frame too large" and JSON parse errors so the recovery class agrees
 // across runtimes.
 
-function spinUpRawBytesSocket(
-  sockPath: string,
-  responseBytes: Buffer,
-): Promise<net.Server> {
-  return new Promise((resolve) => {
-    const server = net.createServer((sock) => {
-      sock.once("data", () => {
-        sock.write(responseBytes);
-        sock.end();
-      });
-    });
-    server.listen(sockPath, () => resolve(server));
-  });
-}
-
 describe("wire trust boundary: protocol-violation exceptions are permanent", () => {
+  // [LAW:locality-or-seam] The daemon's end of an in-memory connection writes
+  // `bytes` once it has read the request, and the client runs the real exchange
+  // over the other end on a held clock: sendOne's reject path and the
+  // classification are exercised as shipped, with no socket and no real timer.
   async function runWithRawBytes(bytes: Buffer): Promise<ClientOutcome> {
-    const tmpRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-proto-"),
-    );
-    const stateDir = path.join(tmpRoot, "cc-candybar");
-    fs.mkdirSync(stateDir, { recursive: true });
-    const sockPath = path.join(stateDir, "socket");
-    const server = await spinUpRawBytesSocket(sockPath, bytes);
-    const host = hostOf({
-      ...process.env,
-      XDG_STATE_HOME: tmpRoot,
-      CC_CANDYBAR_SOCKET: sockPath,
+    const { daemonEnd, client } = memoryConnection();
+    daemonEnd.once("data", () => {
+      daemonEnd.write(bytes);
+      daemonEnd.end();
     });
-    try {
-      const { tryRenderViaDaemon } = await import("../src/daemon/client");
-      return await tryRenderViaDaemon({ host, clock: systemTimekeeper },
-        {
+    return exchangeOutcome(
+      client,
+      heldClock(new Date()),
+      (deadline) => ({
+        kind: "render",
+        hookData: {
           session_id: "test-proto",
           workspace: { project_dir: "/tmp" },
           model: { id: "x", display_name: "X" },
         } as never,
-        ["cc-candybar"],
-        "/tmp",
-        {},
-      );
-    } finally {
-      await new Promise<void>((r) => server.close(() => r()));
-      try {
-        fs.rmSync(tmpRoot, { recursive: true, force: true });
-      } catch {
-        /* best-effort */
-      }
-    }
+        args: ["cc-candybar"],
+        cwd: "/tmp",
+        deadline,
+      }),
+      RENDER_BUDGETS,
+      // No ok response arrives in these cases, so nothing is projected.
+      (): string | undefined => undefined,
+    );
   }
 
   test("oversized frame from daemon produces permanent/malformed_response (no kick)", async () => {
