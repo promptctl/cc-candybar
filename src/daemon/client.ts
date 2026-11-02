@@ -58,15 +58,19 @@ export function renderOutcomeOf(resp: Response): ClientOutcome {
 // [LAW:one-source-of-truth] `hints` carries every fact the daemon cannot
 // observe for itself; it is spread onto the request verbatim so this relay
 // never becomes a second place that decides what the client saw.
+// [LAW:dataflow-not-control-flow] The budgets are a value the caller may state;
+// the statusline states none and gets the wire facts. A test whose subject is
+// the deadline, not the speed of a loaded runner's loop, states wider ones.
 export function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
   hints: ClientHints,
+  budgets: RoundTripBudgets = RENDER_BUDGETS,
 ): Promise<ClientOutcome> {
   return requestOutcome(
     (deadline) => ({ kind: "render", hookData, args, cwd, deadline, ...hints }),
-    RENDER_BUDGETS,
+    budgets,
     projectOutput,
   );
 }
