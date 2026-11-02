@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-578",
-      "ref": "refs/pull/578/merge",
-      "sha": "00eea65471dea7ace5f028fe3cc43dbe7caa103f",
-      "timestamp": "2026-11-02T15:50:51.817Z",
-      "commits": [
-        {
-          "sha": "00eea65471dea7ace5f028fe3cc43dbe7caa103f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:49:55Z",
-          "message": "Merge 601cc6b23bca07656db4520bc4e6d7849779957f into 7e8ae4a5476db0139bc294069ca8a1e4cf5e3085\n"
-        },
-        {
-          "sha": "601cc6b23bca07656db4520bc4e6d7849779957f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:40:38-07:00",
-          "message": "test: review fixes — a run with no records is named, not a raw ENOENT; the shrink check reads own keys; the ledger test no longer pins its own path (candybar-testing-ihvy.icq)\n"
-        },
-        {
-          "sha": "3b2f6443dc8398d7c0921a505402dde947b5e142",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:35:05-07:00",
-          "message": "test: review fixes — a worker boot with no ledger fails at load, the null-file fault names both causes, the preload note sits with the ledger (candybar-testing-ihvy.icq)\n"
-        },
-        {
-          "sha": "def8e68015fe9091218dee304e76f19c02fb0f74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:30:18-07:00",
-          "message": "test: the cases that boot no daemon leave test/daemon-boots/, and the ratchet falls from 372 to 214 (candybar-testing-ihvy.icq)\n\nA probe over a worker and a process run found 158 cases in five files that reach no boot: plugins, the connection over a stand-in daemon, the session-id checkpoint and click verbs, the jest temp-directory sweep and the tmux stub's gate. Each splits on a describe boundary, so the booting remainder keeps its own file and the rest moves to the test/ root, which the unit refusal sends them to by their clock reads at load. The judge proves the split: a moved case that boots fails the worker run.\n"
-        },
-        {
-          "sha": "9a857350a447af161a60eb2e7b1ab1ed60a54340",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:17:49-07:00",
-          "message": "test: daemon boots in a worker are on the ledger, and the cases that boot are counted and only fall (candybar-testing-ihvy.icq)\n\nThe harness writes the same ledger line a real daemon's preload writes, route harness, and the judge allows it only under test/daemon-boots/. A ratchet file holds the number of cases there and the ceiling on real starts; CI fails unless the case count equals it, and a pull request that raises either over main. The over-ceiling message no longer offers a raise.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "96106ff8a15730879c3089b407e2191fe629e15b",
-      "timestamp": "2026-11-02T15:24:51.339Z",
+      "sha": "f131b11e8cd2772af9e7476f28873e7473d2a93e",
+      "timestamp": "2026-11-02T15:56:45.002Z",
       "commits": [
         {
-          "sha": "96106ff8a15730879c3089b407e2191fe629e15b",
+          "sha": "f131b11e8cd2772af9e7476f28873e7473d2a93e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T08:23:43-07:00",
-          "message": "fix(render): a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z) (#577)\n\n* fix(render): a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z)\n\ninterpretException matched the message strings CONNECT_TIMEOUT and TIMEOUT, so a\nreworded or wrapped error fell through to transient and kicked a live daemon.\nClientTimeoutError, thrown at both sites, carries the classification and the\nphase (connect | deadline); BusyOutcome carries the phase too.\n\nurl-handle now exits 1 on a connect timeout, where the click was never written,\ninstead of exiting 0 and losing it behind a stderr line. A deadline, ours or the\ndaemon's own TIMEOUT, still exits 0: the click reached the daemon.\n\n* style(test): wrap the busy plan literal and restore the import spacing (candybar-launch-q7o7.04z)"
+          "timestamp": "2026-11-02T08:55:25-07:00",
+          "message": "test: daemon boots in a worker are on the ledger, and the cases that boot are counted and only fall (candybar-testing-ihvy.icq) (#578)\n\n* test: daemon boots in a worker are on the ledger, and the cases that boot are counted and only fall (candybar-testing-ihvy.icq)\n\nThe harness writes the same ledger line a real daemon's preload writes, route harness, and the judge allows it only under test/daemon-boots/. A ratchet file holds the number of cases there and the ceiling on real starts; CI fails unless the case count equals it, and a pull request that raises either over main. The over-ceiling message no longer offers a raise.\n\n* test: the cases that boot no daemon leave test/daemon-boots/, and the ratchet falls from 372 to 214 (candybar-testing-ihvy.icq)\n\nA probe over a worker and a process run found 158 cases in five files that reach no boot: plugins, the connection over a stand-in daemon, the session-id checkpoint and click verbs, the jest temp-directory sweep and the tmux stub's gate. Each splits on a describe boundary, so the booting remainder keeps its own file and the rest moves to the test/ root, which the unit refusal sends them to by their clock reads at load. The judge proves the split: a moved case that boots fails the worker run.\n\n* test: review fixes — a worker boot with no ledger fails at load, the null-file fault names both causes, the preload note sits with the ledger (candybar-testing-ihvy.icq)\n\n* test: review fixes — a run with no records is named, not a raw ENOENT; the shrink check reads own keys; the ledger test no longer pins its own path (candybar-testing-ihvy.icq)"
         },
         {
-          "sha": "132e8896fcbc010047cf52b78a3594f93f7c254c",
+          "sha": "7e8ae4a5476db0139bc294069ca8a1e4cf5e3085",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T15:20:39Z",
-          "message": "chore(release): set `package.json` to 1.180.2 [skip ci]\n\n## [1.180.2](https://github.com/promptctl/cc-candybar/compare/v1.180.1...v1.180.2) (2026-11-02)\n\n### Bug Fixes\n\n* **render:** a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi) ([#575](https://github.com/promptctl/cc-candybar/issues/575)) ([bddbf3b](https://github.com/promptctl/cc-candybar/commit/bddbf3b6871d4e9cf9437cb08386aac83e066245))\n* **render:** a render the daemon answers TIMEOUT kicks nothing (candybar-launch-q7o7.g6w) ([#574](https://github.com/promptctl/cc-candybar/issues/574)) ([685dfc6](https://github.com/promptctl/cc-candybar/commit/685dfc67e4662552cac9a0924249992f5225cbbe))\n"
+          "timestamp": "2026-11-02T15:34:11Z",
+          "message": "chore(release): set `package.json` to 1.180.3 [skip ci]\n\n## [1.180.3](https://github.com/promptctl/cc-candybar/compare/v1.180.2...v1.180.3) (2026-11-02)\n\n### Bug Fixes\n\n* **render:** a client timeout is a typed error that carries its phase (candybar-launch-q7o7.04z) ([#577](https://github.com/promptctl/cc-candybar/issues/577)) ([96106ff](https://github.com/promptctl/cc-candybar/commit/96106ff8a15730879c3089b407e2191fe629e15b))\n"
         }
       ]
     },
