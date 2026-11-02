@@ -770,13 +770,20 @@ export function buildNeededPrefixes(
   return inputClosure(config, seeds);
 }
 
-// One segment's own templates — what it seeds the closure with.
+// One segment's own templates — what it seeds the closure with. A partial's
+// body is seeded directly (not resolved through its segment's `{{ template
+// "name" }}` dispatch) so a payload read inside it is reached whether or not
+// the fold can resolve the dispatch name — the same gap b72c93e5 closed for
+// unused-declaration and reachability checks (candybar-templates-zh8b.53s).
 function segmentTemplates(config: DslConfig, name: string): string[] {
   const seg = config.segments[name];
   if (!seg) return [];
-  return [seg.template, seg.when, seg.bg, seg.fg].flatMap((src) =>
-    src ? [src] : [],
-  );
+  return [
+    ...[seg.template, seg.when, seg.bg, seg.fg].flatMap((src) =>
+      src ? [src] : [],
+    ),
+    ...Object.values(seg.partials ?? {}),
+  ];
 }
 
 // [LAW:single-enforcer] The payload paths ONE segment's placements read — its

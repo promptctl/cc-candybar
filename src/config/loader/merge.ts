@@ -90,19 +90,29 @@ export function mergeWithDefault(
 // inherits, which the bundled templates go on reading. Laid over the base's
 // before the overlay replaces the member's `settings` field whole — the
 // preset `globals` fold below, over a different field.
+//
+// [LAW:one-source-of-truth] `partials` gets the identical treatment, for the
+// identical reason: a delta that retunes one partial of a multi-partial
+// bundled segment must not silently drop the base's other partials — its
+// own `template` (inherited, untouched by this delta) may still dispatch to
+// them by name, and a whole-field replace would blank that dispatch with no
+// diagnostic (candybar-templates-zh8b.53s).
 function segmentDeltas(
   base: Readonly<Record<string, SegmentDecl>>,
   over: Readonly<Record<string, Partial<SegmentDecl>>>,
 ): Readonly<Record<string, Partial<SegmentDecl>>> {
+  const byName = (
+    name: string,
+    field: "settings" | "partials",
+    delta: Partial<SegmentDecl>,
+  ): Partial<SegmentDecl> =>
+    delta[field] === undefined
+      ? delta
+      : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
   return Object.fromEntries(
     Object.entries(over).map(([name, delta]) => [
       name,
-      delta.settings === undefined
-        ? delta
-        : {
-            ...delta,
-            settings: { ...base[name]?.settings, ...delta.settings },
-          },
+      byName(name, "partials", byName(name, "settings", delta)),
     ]),
   );
 }

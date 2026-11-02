@@ -316,6 +316,29 @@ export function checkMenuDecls(
         );
       }
     }
+    // [LAW:no-silent-failure] Same rule as a global helper, and the same
+    // reason: `synthesizePlacementMenus` below scans a segment's own
+    // `template` string directly, never following a `{{ template "name" }}`
+    // dispatch into a partial's body — so a menu reached only through one
+    // would parse clean and never synthesize its backing state, failing at
+    // render (candybar-templates-zh8b.53s). A partial DOES know its segment
+    // (unlike a shared helper), but that doesn't help: the gap is the
+    // synthesis walk's reach, not the menu's identity. Reject it loudly here
+    // too, rather than widen that walk — [LAW:no-mode-explosion].
+    for (const [name, body] of Object.entries(seg.partials ?? {})) {
+      if (segmentReferencesMenu(body)) {
+        ctx.issues.push({
+          path: `segments.${segName}.partials.${name}`,
+          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string — the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
+          line: findKeyLine(ctx.source, [
+            "segments",
+            segName,
+            "partials",
+            name,
+          ]),
+        });
+      }
+    }
   }
 
   // Reject {{ menu }} in node `when` predicates (same template-only rule).

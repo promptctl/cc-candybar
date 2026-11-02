@@ -35,7 +35,6 @@ import {
   record,
   recordJson,
   reject,
-  requireString,
   type FieldSpec,
   type FieldSpecMap,
   type JsonNode,
@@ -91,6 +90,50 @@ export function validateSegments(
   return out;
 }
 
+// [LAW:types-are-the-program] A template body as JSON5 authors it: one string,
+// or an array of strings joined with "" — no injected separator, since a
+// template already controls every space and newline it wants, and an array is
+// solely a readability device for a long conditional that would otherwise be
+// one unreadable line (candybar-templates-zh8b.53s). Non-string elements are
+// each their own issue, named by position, so one bad line doesn't blame the
+// whole array. Shared by `template` and every `partials` entry.
+function joinTemplateBody(
+  ctx: ValidateCtx,
+  path: string,
+  field: string,
+  raw: Record<string, unknown>,
+): string | undefined {
+  const v = raw[field];
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    let ok = true;
+    const parts: string[] = [];
+    for (const [i, el] of v.entries()) {
+      if (typeof el === "string") {
+        parts.push(el);
+        continue;
+      }
+      ok = false;
+      ctx.issues.push({
+        path: `${path}.${field}[${i}]`,
+        message: `${path}.${field}[${i}] must be a string, got ${describeType(el)}`,
+        line: findKeyLine(ctx.source, [...path.split("."), field]),
+      });
+    }
+    return ok ? parts.join("") : undefined;
+  }
+  ctx.issues.push({
+    path: `${path}.${field}`,
+    message: `${path}.${field} must be a string or an array of strings, got ${describeType(v)}`,
+    line: findKeyLine(ctx.source, [...path.split("."), field]),
+  });
+  return undefined;
+}
+
+const TEMPLATE_BODY_JSON: JsonNode = {
+  anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+};
+
 // [LAW:no-silent-failure] A declaration under a name no base carries must
 // bring its own template. The message states the one way an absent template
 // is legal, so an author who meant a delta learns which name they misspelled
@@ -99,7 +142,7 @@ export function validateSegments(
 function ownTemplateSpec(): FieldSpec<string> {
   return {
     required: true,
-    json: { type: "string" },
+    json: TEMPLATE_BODY_JSON,
     parse: (ctx, path, field, raw) =>
       raw[field] === undefined
         ? (reject<string>(
@@ -107,7 +150,55 @@ function ownTemplateSpec(): FieldSpec<string> {
             `${path}.${field}`,
             `${path} declares no template — only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path.slice("segments.".length))}`,
           ) ?? undefined)
-        : (requireString(ctx, path, raw, field) ?? undefined),
+        : joinTemplateBody(ctx, path, field, raw),
+  };
+}
+
+// The delta schema's twin: an own-template field is optional (inherits the
+// bundled template when absent), same body shape otherwise.
+function optionalTemplateBodySpec(): FieldSpec<string> {
+  return {
+    required: false,
+    json: TEMPLATE_BODY_JSON,
+    parse: (ctx, path, field, raw) =>
+      raw[field] === undefined
+        ? undefined
+        : joinTemplateBody(ctx, path, field, raw),
+  };
+}
+
+// [LAW:one-source-of-truth] Named sub-templates scoped to one segment: each
+// value is a template body (string, or array joined the same way as
+// `template`). Null-prototype so a partial named "__proto__"/"constructor" is
+// an ordinary own property, matching `helpers` (loader/helpers.ts).
+function partialsSpec(): FieldSpec<Readonly<Record<string, string>>> {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      additionalProperties: TEMPLATE_BODY_JSON,
+    },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v === undefined) return undefined;
+      if (!isPlainObject(v)) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `${path}.${field} must be an object, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [...path.split("."), field]),
+        });
+        return undefined;
+      }
+      const out: Record<string, string> = Object.create(null) as Record<
+        string,
+        string
+      >;
+      for (const name of Object.keys(v)) {
+        const body = joinTemplateBody(ctx, `${path}.${field}`, name, v);
+        if (body !== undefined) out[name] = body;
+      }
+      return out;
+    },
   };
 }
 
@@ -182,6 +273,7 @@ const SEGMENT_FIELDS: FieldSpecMap<SegmentDecl> = {
   vars: varsSpec(),
   settings: settingsDeclSpec(),
   missingData: optionalEnumSpec(MISSING_DATA),
+  partials: partialsSpec(),
 };
 
 const SEGMENT_SCHEMA: RecordSchema<SegmentDecl> = {
@@ -194,7 +286,7 @@ const SEGMENT_SCHEMA: RecordSchema<SegmentDecl> = {
 // delta-settable the same day with no edit here.
 const SEGMENT_DELTA_SCHEMA: RecordSchema<RawSegmentDecl> = {
   noun: "segment key",
-  fields: { ...SEGMENT_FIELDS, template: optionalStringSpec() },
+  fields: { ...SEGMENT_FIELDS, template: optionalTemplateBodySpec() },
 };
 
 export const SEGMENT_DEF_NAME = "Segment";

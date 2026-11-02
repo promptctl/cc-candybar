@@ -57,6 +57,10 @@ function* templatesOf(config: DslConfig): IterableIterator<string> {
     for (const t of [seg.template, seg.bg, seg.fg, seg.when]) {
       if (t !== undefined) yield t;
     }
+    // A partial's body calls a helper exactly as its owning segment's other
+    // fields do (candybar-templates-zh8b.53s) — omitting it here would flag
+    // a helper reached only through a partial as unused.
+    yield* Object.values(seg.partials ?? {});
   }
   for (const preset of presetNames(config.presets)) {
     for (const node of walkNodes(presetRoot(config, preset).node)) {
