@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-562",
+      "ref": "refs/pull/562/merge",
+      "sha": "7764c30aef1b749b9201dbb31e1a147eb5a17c12",
+      "timestamp": "2026-11-02T11:25:09.064Z",
+      "commits": [
+        {
+          "sha": "7764c30aef1b749b9201dbb31e1a147eb5a17c12",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:24:15-07:00",
+          "message": "Merge 5371cd4c2b742ff84442c8b9844927db69becb97 into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
+        },
+        {
+          "sha": "5371cd4c2b742ff84442c8b9844927db69becb97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:23:42-07:00",
+          "message": "fix(layout): directory draws the worktree-aware path, gitaculous stops drawing it\n\nReverses #548's resolution the other way: directory carries the main\ncheckout's path (~-collapsed, fish-abbreviated, with the subpath and a\nlinked worktree's name in a parenthetical) in every bundled preset,\nand gitaculous is the git state alone — it draws nothing until git\nanswers with a branch, instead of filling the gap with the path.\ngit.location and gitPath are now dead and removed; gitExpanded always\nshows the repo name.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-517",
       "ref": "refs/pull/517/merge",
       "sha": "68184ddce703284948eca4e631cc0b425f2f2a4f",
