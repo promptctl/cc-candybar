@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-588",
+      "ref": "refs/pull/588/merge",
+      "sha": "3576f499df6d85755cc2b67bc24f9114aaacdd6e",
+      "timestamp": "2026-11-02T23:55:14.996Z",
+      "commits": [
+        {
+          "sha": "3576f499df6d85755cc2b67bc24f9114aaacdd6e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T23:53:15Z",
+          "message": "Merge 49df890babad8c24b19754ea2cae24b41cbd56a5 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
+        },
+        {
+          "sha": "49df890babad8c24b19754ea2cae24b41cbd56a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:52:58-07:00",
+          "message": "fix(sources): a closed keyed source answers a late declaration as closed, as the git cache does (candybar-testing-ihvy.dbg)\n\nReview: tmux, host, managed storage and usage reach the same late\ndeclaration through KeyedSource, whose close set no closed state.\n"
+        },
+        {
+          "sha": "c2e17351ef472727862029915b92805aed158b38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:27:33-07:00",
+          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c566bb07016fbae3ad97df6abf6cc28e94fc129b",
@@ -71,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-01T20:15:07-07:00",
           "message": "docs(design): the isolated daemon, tmux events and browser surface designs\n\nGoals, architecture, contracts and one document per area, with the surveys and probes behind them. The Frame is recorded as built, and the browser surface is un-parked.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-588",
-      "ref": "refs/pull/588/merge",
-      "sha": "ac311454384c8fd37fb17643c7f43d50f0cffcfd",
-      "timestamp": "2026-11-02T23:42:08.649Z",
-      "commits": [
-        {
-          "sha": "ac311454384c8fd37fb17643c7f43d50f0cffcfd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:41:06-07:00",
-          "message": "Merge c2e17351ef472727862029915b92805aed158b38 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
-        },
-        {
-          "sha": "c2e17351ef472727862029915b92805aed158b38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T16:27:33-07:00",
-          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
         }
       ]
     }

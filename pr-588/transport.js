@@ -78008,8 +78008,9 @@ var GitDataProvider = class {
   // the effective gitDir is the state + watch identity, and an absent (not a
   // repo) or failed resolution is the answer. [LAW:single-enforcer] A closed
   // provider builds no state: a declaration landing after close (a render
-  // that was mid-wait) would otherwise hold a fresh repo whose period re-arms
-  // after every pass, with no close left to drop it.
+  // that was mid-wait) would otherwise build a repo, and its watch, that
+  // nothing drops, whose period re-arms after every pass while that home
+  // holds it.
   asked(holds2, workingDir, options, projectDir) {
     if (this.closed) return { kind: "settled", outcome: CLOSED };
     const dir = this.resolution(workingDir, projectDir);
@@ -78936,6 +78937,7 @@ var KeyedSource = class {
   spec;
   entries = /* @__PURE__ */ new Map();
   refreshes;
+  closed = false;
   // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
   // home holds it until a declaration of the home's takes it no more, or the
   // home is disposed, which keeps the entry for its next hold — and the lane
@@ -78946,6 +78948,7 @@ var KeyedSource = class {
   // by that refresh — so its caller logs none. A declaration that THROWS is a
   // bug none of those saw, reported by the view's declaration (declareLanes).
   declare(holds2, input) {
+    if (this.closed) return settledLane(failed(`${this.spec.name} closed`));
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
     holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
@@ -78960,6 +78963,8 @@ var KeyedSource = class {
   // one fresh read. A key never read is created for it, and its first read is
   // that resume's.
   supersede(input) {
+    if (this.closed) return () => {
+    };
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.created(key, input);
     entry.superseding++;
@@ -79002,6 +79007,7 @@ var KeyedSource = class {
   // Ends every entry's period: a held entry's period re-arms on every landing,
   // so an owner that is not closed keeps its timers for good.
   close() {
+    this.closed = true;
     for (const entry of [...this.entries.values()]) this.drop(entry);
   }
   // LRU touch: re-inserting moves the entry to the newest end.
