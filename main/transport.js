@@ -83337,7 +83337,6 @@ function takeWhile(xs, ok3) {
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
 var BAND_CLIENT = import_node_path43.default.join("bin", "cc-candybar-native");
-var BAR_PANE_OPTION = "@cc-candybar-bar-pane";
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
@@ -83806,9 +83805,13 @@ function refusalOf2(stdout2) {
   }
   return null;
 }
-var PANE_TAGS_FORMAT = `#{pane_id} #{${BAR_PANE_OPTION}}`;
-function taggedBarPanes(listPanes, pane) {
-  return listPanes.split("\n").map((line) => line.trim().split(" ")).filter(([, tag]) => tag === pane).map(([id2]) => id2);
+var PANE_STARTS_FORMAT = "#{pane_id} #{pane_start_command}";
+var BAR_PANE_START = /(?:^|\s)bar-pane\s+["'\\]*(%\d+)["']*\s*$/;
+function barPanesOf(listPanes, pane) {
+  return listPanes.split("\n").flatMap((line) => {
+    const [id2, ...start] = line.trim().split(" ");
+    return BAR_PANE_START.exec(start.join(" "))?.[1] === pane ? [id2] : [];
+  });
 }
 var ATTACH = /(^|\/)(cc-attach|bun-attach\.js)(\s|$)/;
 function runsAttached(table, pid2, panePid) {
@@ -83919,43 +83922,34 @@ function productionLaneEdge(launcher, following, closing) {
   const wait = (ms) => setTimeout2(ms, void 0, { signal: closing });
   return {
     claudeInput: productionClaudeInputEdge(launcher),
-    barPanes: async (hint) => taggedBarPanes(
+    barPanes: async (hint) => barPanesOf(
       await tmux2(launcher, hint, [
         "list-panes",
         "-a",
         "-F",
-        PANE_TAGS_FORMAT
+        PANE_STARTS_FORMAT
       ]),
       hint.pane
     ),
     // Two or more words after the options are run as they are, with no shell
     // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
-    openBarPane: async (hint, argv2, env2) => {
-      const split2 = await tmux2(launcher, hint, [
-        "split-window",
-        "-d",
-        "-v",
-        "-l",
-        "1",
-        "-t",
-        hint.pane,
-        "-P",
-        "-F",
-        "#{pane_id}",
-        ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
-        ...argv2
-      ]);
-      const opened = split2.trim();
-      await tmux2(launcher, hint, [
-        "set-option",
-        "-p",
-        "-t",
-        opened,
-        BAR_PANE_OPTION,
-        hint.pane
-      ]);
-      return opened;
-    },
+    // [LAW:no-ambient-temporal-coupling] One launch: the split records the
+    // pane's owner in its command (`barPanesOf`), so a daemon closing after it
+    // leaves no bar pane `pane off` cannot find. `-d` leaves focus untouched.
+    openBarPane: async (hint, argv2, env2) => (await tmux2(launcher, hint, [
+      "split-window",
+      "-d",
+      "-v",
+      "-l",
+      "1",
+      "-t",
+      hint.pane,
+      "-P",
+      "-F",
+      "#{pane_id}",
+      ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+      ...argv2
+    ])).trim(),
     closePane: async (hint, pane) => void await tmux2(launcher, hint, ["kill-pane", "-t", pane]),
     // [LAW:single-enforcer] The session's process environment: the
     // session's facts, never those of whichever shell spawned this detached

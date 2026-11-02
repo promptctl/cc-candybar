@@ -2,81 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-572",
-      "ref": "refs/pull/572/merge",
-      "sha": "99fdc77e80f8e8c2a38e12ba48f1bb1eac3c8e44",
-      "timestamp": "2026-11-02T14:16:50.379Z",
-      "commits": [
-        {
-          "sha": "99fdc77e80f8e8c2a38e12ba48f1bb1eac3c8e44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:15:46Z",
-          "message": "Merge 258b382ebc6e2510d79efbad6474bde624241fe3 into 5cc2f6df487350a4af03357477193519098afd0c\n"
-        },
-        {
-          "sha": "258b382ebc6e2510d79efbad6474bde624241fe3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:15:41-07:00",
-          "message": "Merge branch 'main' into candybar-launch-q7o7.0oo"
-        },
-        {
-          "sha": "2b0e3429b317dd4811a2b187c4f76145bbcc3da7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:44:23-07:00",
-          "message": "Merge branch 'main' into candybar-launch-q7o7.0oo"
-        },
-        {
-          "sha": "d4c36d433da31e84f99be181069af357047a9684",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:35:51-07:00",
-          "message": "fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo)\n\nThe split records the pane's owner in its argv (bar-pane <pane>), so finding\nbar panes reads pane_start_command instead of a tag written after the split.\nOne plain split-window -d: no focus change, no chained commands to escape or\nmisname, and panes opened by earlier daemons are found the same way.\n"
-        },
-        {
-          "sha": "1ba8f09a76bbb2fb7fcbfc0a151955bc7b1945c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:30:16-07:00",
-          "message": "fix(lanes): a bar pane open gives focus back to the pane that had it (candybar-launch-q7o7.0oo)\n"
-        },
-        {
-          "sha": "bacf3a74cad0214bcd7a9153cfbbec944b0de84f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:25:59-07:00",
-          "message": "fix(lanes): tag the bar pane by the split's own target, not a pane hook (candybar-launch-q7o7.0oo)\n\nPane-level after-split-window hooks fire only on tmux 3.8; earlier versions\naccept and ignore them, so the pane went untagged. A split without -d makes\nthe new pane the queue's current target, which works from tmux 3.0 and leaves\nno hook state to clean up.\n"
-        },
-        {
-          "sha": "97ef73186e67639dc5c8f150ac2a09f0e8a83565",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T06:20:01-07:00",
-          "message": "fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5cc2f6df487350a4af03357477193519098afd0c",
-      "timestamp": "2026-11-02T14:15:23.710Z",
+      "sha": "7d58c47f329eb86d364d736a324acf02c5b59295",
+      "timestamp": "2026-11-02T14:25:05.752Z",
       "commits": [
         {
-          "sha": "5cc2f6df487350a4af03357477193519098afd0c",
+          "sha": "7d58c47f329eb86d364d736a324acf02c5b59295",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:13:55-07:00",
-          "message": "test: each layer is a directory, and the unit tier refuses what a unit test may not touch (candybar-testing-ihvy.oso) (#573)\n\n* test: the booting files live under test/daemon-boots/{worker,process}, and the process tier is a directory (candybar-testing-ihvy.oso)\n\nThe 31 files that start the in-worker daemon and the 14 *.process.test.ts files move, with their relative imports rewritten and nothing else changed. The process-tier judge and both jest configs read the directory in place of the suffix.\n\n* test: the unit project refuses disk, sockets, fetch, child processes, watchers and the real clock at the call (candybar-testing-ihvy.oso)\n\ntest/unit runs only through jest.unit.config.js, which installs the refusal from test/unit-setup.ts; every other config ignores the directory, as test/e2e already was. A refusal is kept until the test ends, so code that catches it still fails the test. Reads of files under the package root pass. Where each run's files live is one table, test/helpers/tiers.cjs. pnpm test runs the unit, worker and process tiers in turn, and CI reports all three.\n\n* test: the 75 in-process files that pass the unit refusal move to test/unit (candybar-testing-ihvy.oso)\n\nA file enters test/unit by passing the refusal, so the unit count is true. Moves and the relative-path rewrite only. The files that stay at the test/ root touch the temp directory, spawn, or read the clock; src/daemon/stats.ts reads new Date() at module load, which keeps many of them out until the daemon takes a clock.\n\n* test: the base jest config selects nothing, and the unit refusal covers timers, socket classes and run state (candybar-testing-ihvy.oso)\n\njest.config.js holds what the tiers share and no test, so bare jest, --watch and --coverage cannot run a file outside its tier's checks; test:watch and test:coverage name the unit config. The refusal now guards node:timers and node:timers/promises (jest's fake timers leave both on real time), refuses constructing socket, server, watcher and child-process classes, hands the guard back when fake time ends, and reads nothing a run or a checkout produces (.git, dist, coverage, test-records, .claude/worktrees). reload-signal sleeps on timers/promises, so it returns to the test/ root.\n\n* test: one test holds every file to exactly one tier, and the refusal reaches the last constructed classes and clock routes (candybar-testing-ihvy.oso)\n\ntier-selection lists what each tier config selects with --listTests and fails unless every test file is selected once. jest.e2e.config.js reads the tier table. The refusal also covers ReadStream, http.ClientRequest, dns.Resolver, net.Stream, AbortSignal.timeout and process.uptime; install-currency reaches AbortSignal.timeout through fetchLatestVersion, so it returns to the test/ root. The plan doc states the read allowance once.\n\n* test: the unit refusal's routes are one table that installs the guards and drives their proof (candybar-testing-ihvy.oso)\n\nunit-refusal-routes.ts lists the routes per module; the sandbox setup installs a guard on each, routes.fixture.ts reaches each from a test, and unit-refusal.test.ts requires every one to fail naming its call, so no guard exists without a case. The read allowance is what git does not ignore (read once per run by the unit global setup), apart from node_modules and .git, in place of a list of five directories. worker_threads, cluster and WebSocket are refused. tier-selection also checks that each tier has a script and that pnpm test and CI run it.\n\n* test: the unit refusal covers os.uptime, and the plan doc states the read rule the code applies (candybar-testing-ihvy.oso)\n\nperf_hooks stays unguarded: TypeScript reads its performance object while it loads, and test/unit/e2e-checks, which is under the sign-off guard, uses TypeScript, so refusing it would fail a file this ticket cannot move. The count holds for the named routes, as the doc now says.\n\n* test: the unit refusal's header names the fixtures config it runs through (candybar-testing-ihvy.oso)\n\n* test: the unit refusal honours a test's own clock, carries promisify, and sees modules the setup loaded (candybar-testing-ihvy.oso)\n\n* test: fs.open with a callback reads, and a unit run without git says what it needs git for (candybar-testing-ihvy.oso)"
-        },
-        {
-          "sha": "cbfa2521a80698fc81a68c45641893de153aaa2d",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T14:02:04Z",
-          "message": "chore(release): set `package.json` to 1.180.0 [skip ci]\n\n## [1.180.0](https://github.com/promptctl/cc-candybar/compare/v1.179.4...v1.180.0) (2026-11-02)\n\n### Features\n\n* **templates:** array-form segment templates and segment-scoped partials ([#569](https://github.com/promptctl/cc-candybar/issues/569)) ([d1a536c](https://github.com/promptctl/cc-candybar/commit/d1a536cb6c3ddd00dbea84c59587c1dbc6c9a1f9))\n"
+          "timestamp": "2026-11-02T07:24:13-07:00",
+          "message": "fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo) (#572)\n\n* fix(lanes): a bar pane is split and tagged in one tmux invocation (candybar-launch-q7o7.0oo)\n\nA daemon closing between the split and its set-option refused the tag,\nleaving a bar pane pane off could not find. A pane-scoped after-split-window\nhook now tags the new pane inside the split's own command queue; a failed\nsplit removes the hook so it cannot tag the user's next split.\n\n* fix(lanes): tag the bar pane by the split's own target, not a pane hook (candybar-launch-q7o7.0oo)\n\nPane-level after-split-window hooks fire only on tmux 3.8; earlier versions\naccept and ignore them, so the pane went untagged. A split without -d makes\nthe new pane the queue's current target, which works from tmux 3.0 and leaves\nno hook state to clean up.\n\n* fix(lanes): a bar pane open gives focus back to the pane that had it (candybar-launch-q7o7.0oo)\n\n* fix(lanes): a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo)\n\nThe split records the pane's owner in its argv (bar-pane <pane>), so finding\nbar panes reads pane_start_command instead of a tag written after the split.\nOne plain split-window -d: no focus change, no chained commands to escape or\nmisname, and panes opened by earlier daemons are found the same way."
         }
       ]
     },
