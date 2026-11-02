@@ -11,7 +11,10 @@ import { createRequire } from "node:module";
 import type { OneShotLauncher } from "../proc/launch";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
-import type { PermanentOutcome } from "../daemon/client-transport";
+import type {
+  FailureOutcome,
+  PermanentOutcome,
+} from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
@@ -459,33 +462,50 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(0);
   }
 
-  if (outcome.kind === "busy") {
-    // A daemon holds the socket, either answering TIMEOUT or leaving our
-    // clock to run out. If the click reached it, it runs it or refuses it as
-    // stale and its log says which. Kicking would respawn a live daemon
-    // mid-click, and a non-zero exit is an error dialog from the handler app
-    // over a click that may well have landed.
-    process.stderr.write(`url-handle: daemon busy (${outcome.message})\n`);
-    process.exit(0);
-  }
+  const plan = urlHandlePlan(outcome);
+  // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
+  // is lost (no daemon answered it), but the next click hits a warm daemon.
+  // Mirrors the render-path's transient recovery.
+  if (plan.kick) obtainDaemonKick();
+  process.stderr.write(plan.stderr);
+  process.exit(plan.code);
+}
 
-  if (outcome.kind === "transient") {
-    // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
-    // is lost (no daemon answered it), but the next click hits a warm
-    // daemon. Mirrors the render-path's transient recovery.
-    obtainDaemonKick();
-    process.stderr.write(
-      `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
-    );
-    process.exit(1);
-  }
+// [LAW:effects-at-boundaries] What a failed click does, as data: the stderr
+// line, the exit code, and whether to kick a daemon. runUrlHandle performs it.
+export interface UrlHandlePlan {
+  readonly stderr: string;
+  readonly code: 0 | 1;
+  readonly kick: boolean;
+}
 
-  // [LAW:dataflow-not-control-flow] Format each permanent cause from its
-  // own typed payload, not by probing for "message" on a generic outcome.
-  // The PermanentOutcome union already discriminates by `cause`; the switch
-  // mirrors that discriminator one-to-one and pulls the right fields.
-  process.stderr.write(formatPermanent(outcome) + "\n");
-  process.exit(1);
+export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
+  switch (outcome.kind) {
+    // A daemon holds the socket. Kicking would respawn a live daemon
+    // mid-click. A non-zero exit is an error dialog from the handler app, so
+    // it follows whether the click got to the listener (`phase`): sent
+    // ("deadline"), it runs or is refused as stale and the daemon's log says
+    // which — exit 0, as the click may well have landed; never written
+    // ("connect"), nothing will run it — exit 1, so the user is told.
+    case "busy":
+      return {
+        stderr: `url-handle: daemon busy (${outcome.message})\n`,
+        code: outcome.phase === "connect" ? 1 : 0,
+        kick: false,
+      };
+    case "transient":
+      return {
+        stderr: `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
+        code: 1,
+        kick: true,
+      };
+    // [LAW:dataflow-not-control-flow] Format each permanent cause from its
+    // own typed payload, not by probing for "message" on a generic outcome.
+    // The PermanentOutcome union already discriminates by `cause`; the switch
+    // mirrors that discriminator one-to-one and pulls the right fields.
+    case "permanent":
+      return { stderr: formatPermanent(outcome) + "\n", code: 1, kick: false };
+  }
 }
 
 // [LAW:single-enforcer] One place that turns a PermanentOutcome into a

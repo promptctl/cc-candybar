@@ -14,7 +14,11 @@ import type {
   PermanentOutcome,
   TransientOutcome,
 } from "../../src/daemon/client-transport";
-import { PROTOCOL_VERSION, type Response } from "../../src/daemon/protocol";
+import {
+  ClientTimeoutError,
+  PROTOCOL_VERSION,
+  type Response,
+} from "../../src/daemon/protocol";
 
 const HINT = "daemon may not be running";
 
@@ -29,23 +33,38 @@ test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
   } as Response;
   expect(interpretResponse("click", resp, () => undefined)).toEqual({
     kind: "busy",
+    phase: "deadline",
     message: "request exceeded 200ms",
   });
 });
 
 // A dead daemon never times out (a missing socket is ENOENT, an unbound one
 // ECONNREFUSED, both immediate), so a client timeout is a listener that has not
-// answered: a kick's candidate would lose the bind to it. The connect's timeout
-// and the deadline's reach the classifier as these two messages.
-test.each(["CONNECT_TIMEOUT", "TIMEOUT"])(
-  "a client %s reads as busy, so nothing is kicked",
-  (message) => {
-    expect(interpretException(new Error(message))).toEqual({
+// answered: a kick's candidate would lose the bind to it. The classification is
+// carried by the error's type and its phase, never by its message.
+test.each(["connect", "deadline"] as const)(
+  "a client %s timeout reads as busy in that phase, so nothing is kicked",
+  (phase) => {
+    const e = new ClientTimeoutError(phase);
+    expect(interpretException(e)).toEqual({
       kind: "busy",
-      message,
+      phase,
+      message: e.message,
     });
   },
 );
+
+test("a timeout is told by its type, so a reworded one still classifies and a lookalike string does not", () => {
+  const reworded = Object.assign(new ClientTimeoutError("deadline"), {
+    message: "gave up waiting",
+  });
+  expect(interpretException(reworded)).toMatchObject({ kind: "busy" });
+  for (const message of ["TIMEOUT", "CONNECT_TIMEOUT"]) {
+    expect(interpretException(new Error(message))).toMatchObject({
+      kind: "transient",
+    });
+  }
+});
 
 test("a dead daemon's immediate refusals stay transient", () => {
   for (const code of ["ECONNREFUSED", "ENOENT"]) {
@@ -58,7 +77,11 @@ test("a dead daemon's immediate refusals stay transient", () => {
 
 describe("describeFailure", () => {
   test("a busy daemon carries no spawn hint", () => {
-    const text = describeFailure({ kind: "busy", message: "x" });
+    const text = describeFailure({
+      kind: "busy",
+      phase: "deadline",
+      message: "x",
+    });
     expect(text).not.toContain(HINT);
     expect(text).toContain("busy");
   });
