@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-579",
+      "ref": "refs/pull/579/merge",
+      "sha": "14504f7e8e4738853d906132146cfce8023c34d2",
+      "timestamp": "2026-11-02T16:16:52.227Z",
+      "commits": [
+        {
+          "sha": "14504f7e8e4738853d906132146cfce8023c34d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T09:15:24-07:00",
+          "message": "Merge cd881d269ae19e43ae3b17d5477cf744864295b6 into f131b11e8cd2772af9e7476f28873e7473d2a93e\n"
+        },
+        {
+          "sha": "cd881d269ae19e43ae3b17d5477cf744864295b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T09:15:00-07:00",
+          "message": "docs(testing): 60 of the last 100 failed Release runs were flakes, and two product defects hid among them (candybar-testing-ihvy.w13)\n\nRecounts the last 100 Release runs whose final attempt failed, plus the 22 that failed their first attempt and passed on rerun, by failing case, verdict, cause and evidence. Feeds plan tickets 7 and 22. The frame feed's early-timer double draw and the timers armed after daemon close read as flakes and are not; the second is filed as brandon-unfiled-3248.q4r5.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f131b11e8cd2772af9e7476f28873e7473d2a93e",
