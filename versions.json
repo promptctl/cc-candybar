@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-564",
+      "ref": "refs/pull/564/merge",
+      "sha": "931ef53f174583dc6c391301e888bc5dca43a092",
+      "timestamp": "2026-11-02T11:33:35.193Z",
+      "commits": [
+        {
+          "sha": "931ef53f174583dc6c391301e888bc5dca43a092",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:32:35-07:00",
+          "message": "Merge e8d8e54f8ed46c97d8dd65a2f199039276b3cb0b into ecc5a9d77a7c5be79a3a6fd09167de0b8deb838e\n"
+        },
+        {
+          "sha": "e8d8e54f8ed46c97d8dd65a2f199039276b3cb0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:31:43-07:00",
+          "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-517",
       "ref": "refs/pull/517/merge",
       "sha": "0d2d7cacfc85b4795bf5c1ac0d09bec5f7ab81de",
