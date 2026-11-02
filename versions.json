@@ -4,15 +4,22 @@
     {
       "version": "pr-565",
       "ref": "refs/pull/565/merge",
-      "sha": "4ada9e3bdbcdb08c569342a86d149050254904b9",
-      "timestamp": "2026-11-02T12:17:36.379Z",
+      "sha": "ec5ce6cf256419e8ce68f16ebf0d7823065494a3",
+      "timestamp": "2026-11-02T12:22:41.114Z",
       "commits": [
         {
-          "sha": "4ada9e3bdbcdb08c569342a86d149050254904b9",
+          "sha": "ec5ce6cf256419e8ce68f16ebf0d7823065494a3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:16:44Z",
-          "message": "Merge 3a3fe33129e6b0285e1ef8257368166a666c6662 into c2a649577d11945c26d035121a186062bf34327f\n"
+          "timestamp": "2026-11-02T12:21:44Z",
+          "message": "Merge 2e981a44660a2d81720aa8a4e473f5101f1f11a8 into c2a649577d11945c26d035121a186062bf34327f\n"
+        },
+        {
+          "sha": "2e981a44660a2d81720aa8a4e473f5101f1f11a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:21:21-07:00",
+          "message": "fix(url-handle): a busy click exits 0, and frames-cli takes its kick from the render policy (candybar-launch-q7o7.4yv)\n"
         },
         {
           "sha": "3a3fe33129e6b0285e1ef8257368166a666c6662",
