@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-560",
+      "ref": "refs/pull/560/merge",
+      "sha": "21734a50daec1c83dc60b92f56b7d1b058f2286c",
+      "timestamp": "2026-11-02T10:56:07.111Z",
+      "commits": [
+        {
+          "sha": "21734a50daec1c83dc60b92f56b7d1b058f2286c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T03:55:21-07:00",
+          "message": "Merge 6c31deedb47944c6fda8c2d898a007f4d72c96bc into 040ba694b11dd01c6bce64b56acd016dabbf0578\n"
+        },
+        {
+          "sha": "6c31deedb47944c6fda8c2d898a007f4d72c96bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T03:55:09-07:00",
+          "message": "fix(daemon): the draw's reserve holds a draw descheduled on a busy machine (candybar-launch-q7o7.qjw)\n\nOn CI's runner, its cores shared with the other process-tier suites, a cold\ndraw that does a few ms of work reads up to 48 ms of wall time, failing the\n40 ms reserve. Reproduced locally with every core busy: median 2 ms, p99 48 ms.\nA larger reserve costs only more pending values; a smaller one blanks the bar.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "040ba694b11dd01c6bce64b56acd016dabbf0578",
@@ -57,28 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-31T03:57:33-06:00",
           "message": "fix(bar-pane): a frame overwrites its rows and lands whole, so the pane stops flickering\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-548",
-      "ref": "refs/pull/548/merge",
-      "sha": "b0a67c7f2ad8392eae57b128fd5f01767442ca2f",
-      "timestamp": "2026-11-01T10:16:30.891Z",
-      "commits": [
-        {
-          "sha": "b0a67c7f2ad8392eae57b128fd5f01767442ca2f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:15:34-07:00",
-          "message": "Merge 31e1f435e34fbe04cf5c72fa45e46bc81379dfa9 into ccd8859d6c6eb75cc4501ef1a1636fd4202ebda0\n"
-        },
-        {
-          "sha": "31e1f435e34fbe04cf5c72fa45e46bc81379dfa9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-01T03:15:15-07:00",
-          "message": "gitaculous already shows the location, so the default layout drops directory\n\nThe default identity row and five bundled presets (compact, verbose, zen,\ngit, dense) still placed `directory` beside `gitaculous`, which now draws\nthe checkout path itself. Every default user saw the path twice. The\ndirectory segment stays defined in the library; only its placement goes.\n\nTests that read the bundled layout now name a segment the bar still places,\nand the doc fence shows the one path it renders.\n\nKnown consequence: `zen` now holds only `context`, so it no longer shows\nwhere you are. Its comment still describes the old intent.\n"
         }
       ]
     },
