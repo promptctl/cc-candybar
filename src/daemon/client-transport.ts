@@ -26,7 +26,7 @@ export interface RoundTripBudgets {
 }
 
 // [LAW:types-are-the-program] The outcome carries its own recovery
-// semantics. `transient` failures mean the daemon was unavailable/slow —
+// semantics. `transient` failures mean no daemon answered in time —
 // kicking a fresh daemon is the right response. `permanent` failures mean
 // the daemon refused our request semantically — kicking does NOT help
 // because the next daemon will refuse the same request the same way. `busy`

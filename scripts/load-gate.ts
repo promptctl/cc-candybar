@@ -919,7 +919,7 @@ async function run(): Promise<{
         .join("")}`,
     },
     {
-      // The client's own budget is the verdict: a click past it is a timeout.
+      // The daemon's backstop is the verdict: a click past it is busy.
       name: "steady clicks",
       pass:
         clicks.length >= expectedClicks * 0.9 &&

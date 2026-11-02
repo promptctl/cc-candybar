@@ -21,9 +21,9 @@ export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: TOTAL_BUDGET_MS,
 };
-// [LAW:one-source-of-truth] A click waits past the daemon's own backstop, so
-// a slow click hears the daemon's TIMEOUT (busy, no kick) rather than giving
-// up first and kicking a daemon that is up.
+// [LAW:one-source-of-truth] A click or pane lookup waits past the daemon's
+// own backstop, so a slow one hears the daemon's TIMEOUT (busy, no kick)
+// rather than giving up first and kicking a daemon that is up.
 const CLICK_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS,
