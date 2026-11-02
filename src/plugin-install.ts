@@ -15,7 +15,7 @@ import {
   userPluginRoot,
 } from "./config/loader/plugin-folders.js";
 import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
-import { processLauncher } from "./proc/launch.js";
+import { oneShotLauncher } from "./proc/launch.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -90,7 +90,7 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // every call acts on the clone. `shown` stands for `url` in messages.
 function cloneRepo(url: string, shown: string, into: string): void {
   const git = (env: NodeJS.ProcessEnv, ...args: string[]): string => {
-    const run = processLauncher.launchSync({
+    const run = oneShotLauncher.launchSync({
       bin: "git",
       args,
       env,

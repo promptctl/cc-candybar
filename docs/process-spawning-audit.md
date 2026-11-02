@@ -72,7 +72,7 @@ and the unrelated `scripts/release.mjs`).
 | Function | Behavior | When to use |
 |---|---|---|
 | `launch(opts)` | async pipe stdio, capture stdout/stderr, optional timeout | Default — anything that produces output you need to read. |
-| `launchSync(opts)` | sync via `spawnSync`, same shape as `launch` | Only when caller genuinely cannot be async (e.g. install path, sync click handlers in daemon). |
+| `launchSync(opts)` | sync via `spawnSync`, same shape as `launch` | `OneShotLauncher` only — a process serving no loop (install, the doctor's CLI probe, the daemon's tmux restore after serving stops). The daemon's `Launcher` has no `launchSync`. |
 | `launchDetachedSync(opts)` | sync `spawn({detached:true, stdio:"ignore"})` + `unref()`, returns spawn-success-or-failure | Fire-and-forget daemon kicks. The synchronous typed return distinguishes "ENOENT" from "spawned" — replaces an earlier `void launch({detached:true})` form that discarded failure. |
 
 `LAUNCH_CATEGORIES` (closed list, `src/proc/launch.ts`):

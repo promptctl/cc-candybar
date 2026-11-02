@@ -31,11 +31,25 @@ const OWNED_IMPORTS = {
       "src/daemon/fork-bomb-breaker.ts",
       "src/daemon/server.ts",
       "src/demo/dsl.ts",
+    ],
+    message: "Daemon work launches through its daemon's Launcher.",
+  },
+  // The launch that holds the loop to pipe EOF: only where no loop is served.
+  // The daemon's server takes it for the tmux restore, after serving stops.
+  oneShotLauncher: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [
+      "src/daemon/server.ts",
       "src/doctor/cli.ts",
       "src/index.ts",
       "src/plugin-install.ts",
     ],
-    message: "Daemon work launches through its daemon's Launcher.",
+    message: "Only a process serving no loop holds its loop for a launch.",
+  },
+  createOneShotLauncher: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [],
+    message: "The process has its one-shot launcher: take oneShotLauncher.",
   },
   // The composition root of the one owner that is not the process.
   createLauncher: {

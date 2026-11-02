@@ -209,6 +209,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const stats = new RuntimeStats();
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
+  // The tmux restore at exit is the exception: it runs through the process's
+  // one-shot launcher, after the last stats anyone reads.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
   const launcher = createLauncher({
@@ -694,8 +696,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // the journal in flight commits what landed; none opens after.
         ["journalTurns close", () => journalTurns.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
-        // comes before the abort that ends the daemon's launches.
+        // back before it goes (src/daemon/tmux-status.ts).
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the

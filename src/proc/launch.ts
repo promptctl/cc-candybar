@@ -1153,12 +1153,20 @@ export function endJob(pid: number, status: string, end: JobEnd): JobEnding {
 // (the header), and all of them cross the owner's gate and report to its stats.
 export interface Launcher {
   launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
-  // For callers that genuinely cannot be async: the spawn outcome must be
-  // settled before the function returns.
-  launchSync(opts: LaunchOpts): LaunchResult;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
   lifelineWarnings(): LifelineWarning[];
+}
+
+// [LAW:types-are-the-program] The launch that holds its caller's loop until the
+// child's pipes close, so a detached descendant holding them holds the loop.
+// Only a process holding no loop that anyone waits on takes it: install, the
+// doctor's CLI probe, the daemon's tmux restore once serving has stopped. A
+// daemon's launcher has no such property at all. The process's launcher is
+// this one-shot launcher under a narrower type, so its owners are held to
+// `Launcher` by the type and the lint rule, not by the object's shape.
+export interface OneShotLauncher extends Launcher {
+  launchSync(opts: LaunchOpts): LaunchResult;
 }
 
 export interface Settled {
@@ -1180,10 +1188,27 @@ export interface TestableLauncher extends Launcher {
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
+// [LAW:one-type-per-behavior] The daemon's launcher has no blocking form at
+// all, so no cast or `in` check reaches one.
 export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
+  return launcherWithState(owner).launcher;
+}
+
+// The same launcher, with its blocking form added: for the process's one-shot
+// launcher and the tests of that form.
+export function createOneShotLauncher(
+  owner: Partial<LaunchScope>,
+): TestableLauncher & OneShotLauncher {
+  const { launcher, state } = launcherWithState(owner);
+  return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
+}
+
+function launcherWithState(owner: Partial<LaunchScope>): {
+  launcher: TestableLauncher;
+  state: LaunchState;
+} {
   const launcher: TestableLauncher = {
     launch: (opts) => track(state, launchWaited(state, opts)),
-    launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
@@ -1229,11 +1254,13 @@ export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
     },
     { once: true },
   );
-  return launcher;
+  return { launcher, state };
 }
 
 // What a process with no daemon launches through: the CLI, bar-pane, and a
 // daemon's shell before it has a daemon. Nothing closes it. Daemon work never
 // reaches for this: it holds its daemon's, which is what the close refuses
-// (eslint.config.mjs).
-export const processLauncher: Launcher = createLauncher({});
+// (eslint.config.mjs). `oneShotLauncher` is the same launcher with its
+// blocking form named, for what holds no loop.
+export const oneShotLauncher: OneShotLauncher = createOneShotLauncher({});
+export const processLauncher: Launcher = oneShotLauncher;

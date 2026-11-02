@@ -7,6 +7,8 @@ import { StringDecoder } from "node:string_decoder";
 
 import {
   createLauncher,
+  createOneShotLauncher,
+  type OneShotLauncher,
   type LaunchCategory,
   type LaunchScope,
   type Launcher,
@@ -75,13 +77,14 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 // The launcher a case launches through. `ending` closes it, so no case leaves
 // a lifeline behind it.
-let launcher: TestableLauncher;
+let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
-  launcher = createLauncher({ signal: ending.signal, ...scope });
+  launcher = createOneShotLauncher({ signal: ending.signal, ...scope });
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
-const launchSync: Launcher["launchSync"] = (opts) => launcher.launchSync(opts);
+const launchSync: OneShotLauncher["launchSync"] = (opts) =>
+  launcher.launchSync(opts);
 const launchDetachedSync: Launcher["launchDetachedSync"] = (opts) =>
   launcher.launchDetachedSync(opts);
 const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>
@@ -753,6 +756,13 @@ describe("a launcher's scope", () => {
     expect(next.refused).toEqual([]);
   });
 
+  it("a daemon's launcher has no blocking launch to reach", () => {
+    const daemons = createLauncher({});
+    // @ts-expect-error A Launcher offers no launchSync.
+    expect(daemons.launchSync).toBeUndefined();
+    expect("launchSync" in daemons).toBe(false);
+  });
+
   it("a launcher's rate limits are its own", () => {
     const once = { bin: "/bin/echo", category: "click.open" } as const;
     expect(launcher.launchSync(once)).toMatchObject({ ok: true });
@@ -760,7 +770,7 @@ describe("a launcher's scope", () => {
       ok: false,
       reason: "rate-limited",
     });
-    const next = createLauncher({ signal: ending.signal });
+    const next = createOneShotLauncher({ signal: ending.signal });
     expect(next.launchSync(once)).toMatchObject({ ok: true });
   });
 

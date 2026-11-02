@@ -9,7 +9,7 @@ import { cellLen } from "@promptctl/rich-js";
 
 import { textOf, type Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { processLauncher } from "../src/proc/launch";
+import { oneShotLauncher } from "../src/proc/launch";
 import {
   cpSync,
   mkdtempSync,
@@ -262,7 +262,7 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
     await daemon.listen(sockPath);
     const delivered: Promise<unknown>[] = [];
     const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(processLauncher),
+      ...productionHandlerProbeEdge(oneShotLauncher),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon.
       sockets: { own: sockPath, handler: sockPath },

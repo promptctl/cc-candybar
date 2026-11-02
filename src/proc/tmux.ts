@@ -10,6 +10,7 @@ import type {
   LaunchOpts,
   LaunchResult,
   Launcher,
+  OneShotLauncher,
 } from "./launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
 
@@ -50,8 +51,8 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
 
 // Holds the caller's loop until tmux answers: for what must finish before the
 // process does, the status lines put back at exit, where no later turn comes.
-export function runTmux(
-  launcher: Launcher,
+export function runTmuxAtExit(
+  launcher: OneShotLauncher,
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
