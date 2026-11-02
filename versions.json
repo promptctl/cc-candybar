@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-576",
+      "ref": "refs/pull/576/merge",
+      "sha": "76325c6df49a11c5f1b94f3d91ae7b16cd0f1f90",
+      "timestamp": "2026-11-02T14:54:42.387Z",
+      "commits": [
+        {
+          "sha": "76325c6df49a11c5f1b94f3d91ae7b16cd0f1f90",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:51:30Z",
+          "message": "Merge 875f7b4ef4856198ec4dda8a0035f9a62566a5cc into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
+        },
+        {
+          "sha": "875f7b4ef4856198ec4dda8a0035f9a62566a5cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T07:49:06-07:00",
+          "message": "test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl)\n\ntest/quarantine.txt lists a case by date, lit ticket and name. A jest test\nenvironment lets a listed case's own failure through the gate: jest counts it\npending, the run passes, and the failure is kept with a mark naming the ticket.\nThe record reads the mark, the shape report prints a Quarantine section, and a\nline older than 7 days (or dated more than a day ahead) is red and fails\nnothing. na7i is the first entry; 8c9u is not listed because it has not failed\non CI.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-575",
       "ref": "refs/pull/575/merge",
       "sha": "a53a2cd9608a5eb99bb69717664070167e36f0f8",
@@ -41,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T07:43:01-07:00",
           "message": "fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi)\n\nA dead daemon never times out: a missing socket is ENOENT and an unbound one\nECONNREFUSED, both immediate. A timeout therefore means a live listener, and a\nkick's candidate loses the bind to it (socket-lease arbitration). Both runtimes\nnow classify the client's own connect/deadline timeouts as busy, and the\nunreachable-by-construction transient 'timeout' cause is removed.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-576",
-      "ref": "refs/pull/576/merge",
-      "sha": "e568c52ef1e0de8eb05120212297245fcff034d5",
-      "timestamp": "2026-11-02T14:51:19.587Z",
-      "commits": [
-        {
-          "sha": "e568c52ef1e0de8eb05120212297245fcff034d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:49:42-07:00",
-          "message": "Merge 4a33899cd57c423ad0528811a7eac16ab24a3618 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
-        },
-        {
-          "sha": "4a33899cd57c423ad0528811a7eac16ab24a3618",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:49:06-07:00",
-          "message": "test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl)\n\ntest/quarantine.txt lists a case by date, lit ticket and name. A jest test\nenvironment lets a listed case's own failure through the gate: jest counts it\npending, the run passes, and the failure is kept with a mark naming the ticket.\nThe record reads the mark, the shape report prints a Quarantine section, and a\nline older than 7 days (or dated more than a day ahead) is red and fails\nnothing. na7i is the first entry; 8c9u is not listed because it has not failed\non CI.\n"
         }
       ]
     },
