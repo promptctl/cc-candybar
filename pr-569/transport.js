@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.179.2";
+var PACKAGE_VERSION = "1.179.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -53207,7 +53207,13 @@ function fileWantsEditMode(out) {
     return true;
   }
   for (const seg2 of Object.values(out.segments ?? {})) {
-    for (const field of [seg2.template, seg2.bg, seg2.fg]) {
+    const fields2 = [
+      seg2.template,
+      seg2.bg,
+      seg2.fg,
+      ...Object.values(seg2.partials ?? {})
+    ];
+    for (const field of fields2) {
       if (typeof field === "string" && referencesEditToggle(field)) {
         return true;
       }
@@ -59474,6 +59480,709 @@ function templateInstants(basis) {
   return (template) => instantRead(template, basis) !== null;
 }
 
+// src/config/loader/plugins.ts
+init_globals();
+var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_json52 = __toESM(require_dist(), 1);
+function droppedPluginNotice(d) {
+  return `plugin ${d.path} was not loaded: ${d.reason}`;
+}
+var DEFINITION_KEYS = /* @__PURE__ */ new Set([
+  "data",
+  "sources",
+  "variables",
+  "segments",
+  "helpers",
+  "actions"
+]);
+var DEFINITION_FILE = "plugin.json5";
+var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
+function pluginDefinition(definition, scope) {
+  const name = import_node_path19.default.basename(import_node_path19.default.dirname(definition));
+  return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
+}
+function pluginDataVar(ns) {
+  return `${ns}.data`;
+}
+var STORAGE_FOLDER = "session";
+function sessionFileName(sessionId2) {
+  return `${sessionId2}.json`;
+}
+function attempt2(run3) {
+  try {
+    return { ok: true, value: run3() };
+  } catch (err) {
+    return { ok: false, reason: reasonOf(err) };
+  }
+}
+function reasonOf(err) {
+  if (err instanceof ConfigError) {
+    return err.issues.map(
+      (i) => i.path === "" || i.message.includes(i.path) ? i.message : `${i.path}: ${i.message}`
+    ).join("; ");
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+function listedPlugins(refs, from, scope) {
+  return refs.map(
+    (ref) => pluginDefinition(resolveUserPath(import_node_path19.default.dirname(from), ref), scope)
+  );
+}
+function applyPlugins(definitions, ctx, base, validate) {
+  const taken = /* @__PURE__ */ new Map();
+  return definitions.reduce(
+    (layer, definition) => {
+      const file = definition.path;
+      const ns = definition.name === void 0 ? void 0 : pluginNs(definition);
+      const drop2 = (reason, config2) => {
+        const rendering = new Map(layer.rendering);
+        if (ns !== void 0 && config2 !== layer.config) rendering.delete(ns);
+        return {
+          ...layer,
+          config: config2,
+          rendering,
+          dropped: [...layer.dropped, { ...definition, reason }]
+        };
+      };
+      if (import_node_path19.default.basename(file) !== DEFINITION_FILE) {
+        const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+        return drop2(
+          reason,
+          ns === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, ns), ns, {
+            ...definition,
+            reason
+          })
+        );
+      }
+      if (definition.name === void 0 || ns === void 0) {
+        return drop2(
+          `its folder "${import_node_path19.default.basename(import_node_path19.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          layer.config
+        );
+      }
+      const first2 = taken.get(ns);
+      if (first2 !== void 0) {
+        return drop2(
+          `plugin "${definition.name}" is already listed, from ${first2}`,
+          layer.config
+        );
+      }
+      taken.set(ns, file);
+      const under2 = withoutPlugin(layer.config, ns);
+      const merged = attempt2(() => {
+        const source = fs_default.readFileSync(file, "utf-8");
+        const config2 = mergeWithDefault(
+          fragmentOf(
+            file,
+            definition,
+            { source, json: import_json52.default.parse(source) },
+            ctx
+          ),
+          under2
+        );
+        requireOneSourcePerFile(file, ns, config2);
+        validate(config2, ns, under2 !== layer.config);
+        return config2;
+      });
+      if (merged.ok) {
+        return {
+          ...layer,
+          config: merged.value,
+          loaded: [...layer.loaded, definition],
+          rendering: new Map([...layer.rendering, [ns, definition]])
+        };
+      }
+      const dropped2 = { ...definition, reason: merged.reason };
+      return drop2(merged.reason, tombstone(under2, ns, dropped2));
+    },
+    { config: base.config, rendering: base.rendering, loaded: [], dropped: [] }
+  );
+}
+function withoutPlugin(config2, plugin) {
+  const owned = ownedBy(plugin);
+  const keep2 = (r) => Object.fromEntries(Object.entries(r).filter(([name]) => !owned(name)));
+  const held = [
+    config2.variables,
+    config2.segments,
+    config2.helpers,
+    config2.actions
+  ].some((r) => Object.keys(r).some(owned));
+  if (!held) return config2;
+  return {
+    ...config2,
+    variables: keep2(config2.variables),
+    segments: keep2(config2.segments),
+    helpers: keep2(config2.helpers),
+    actions: keep2(config2.actions)
+  };
+}
+function tombstone(config2, ns, dropped2) {
+  return {
+    ...config2,
+    variables: {
+      ...config2.variables,
+      [ns]: {
+        kind: "dropped",
+        reason: droppedPluginNotice(dropped2),
+        definition: dropped2.path
+      }
+    }
+  };
+}
+function tombstonesOf(config2) {
+  const tombstones = Object.entries(config2.variables).flatMap(
+    ([ns, v]) => v.kind === "dropped" ? [{ ns, definition: v.definition, notice: v.reason }] : []
+  );
+  return (name) => tombstones.find(({ ns }) => ownedBy(ns)(name));
+}
+function dropsOwning(layer, beneath) {
+  const tombstoned = tombstonesOf(layer.config);
+  const rendering = [...layer.rendering.keys()].map(ownedBy);
+  const unnamed = [...beneath, ...layer.dropped].filter(
+    (d) => d.name === void 0
+  );
+  return (name) => {
+    const scope = scopeOf(name);
+    if (scope === void 0) return [];
+    const cause = tombstoned(name);
+    if (cause !== void 0)
+      return [{ definition: cause.definition, notice: cause.notice }];
+    if (rendering.some((owns) => owns(name))) return [];
+    return unnamed.filter((d) => d.scope === scope).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
+  };
+}
+function withDroppedPlacements(config2, owning, inserted) {
+  const placements = presetNames(config2.presets).flatMap((preset) => [...walkNodes(presetRoot(config2, preset).node)]).flatMap((node) => node.kind === "segment" ? [node] : []);
+  const names = /* @__PURE__ */ new Set([
+    ...placements.map((n) => n.name),
+    ...inserted,
+    ...Object.keys(config2.segments)
+  ]);
+  const caused = [...names].map((name) => ({ name, cause: owning(name) })).filter(({ cause }) => cause.length > 0);
+  const standIns = Object.fromEntries(
+    caused.map(({ name, cause }) => [
+      name,
+      standIn2(
+        name,
+        cause.map((c) => c.notice),
+        placements.filter((n) => n.name === name)
+      )
+    ])
+  );
+  const tombstoned = tombstonesOf(config2);
+  const anyTombstone = Object.values(config2.variables).some(
+    (v) => v.kind === "dropped"
+  );
+  const templates = anyTombstone ? Object.values(config2.segments).flatMap((seg2) => [
+    ...SEGMENT_TEMPLATE_FIELDS.flatMap(
+      (f) => seg2[f] === void 0 ? [] : [seg2[f]]
+    ),
+    // A partial can bind an action exactly as template/bg/fg/when can —
+    // its own calls must stand in for a dropped plugin's action too
+    // (candybar-templates-zh8b.53s).
+    ...Object.values(seg2.partials ?? {})
+  ]) : [];
+  const doMembers = anyTombstone ? Object.values(config2.actions).flatMap((a) => "do" in a ? [...a.do] : []) : [];
+  const missing = (names2, declared) => [...new Set(names2)].flatMap((name) => {
+    const cause = name in declared ? void 0 : tombstoned(name);
+    return cause === void 0 ? [] : [[name, cause]];
+  });
+  const actionStandIns = missing(
+    [
+      ...templates.flatMap(
+        (t2) => templateActionRefs(t2, config2.helpers).map((r) => r.name)
+      ),
+      ...doMembers
+    ],
+    config2.actions
+  );
+  const helperStandIns = missing(
+    templates.flatMap((t2) => [...templateHelperCalls(t2, config2.helpers)]),
+    config2.helpers
+  );
+  const lowered = Object.entries(config2.actions).flatMap(([name, a]) => {
+    if (!("run" in a)) return [];
+    const gone = new Map(missing(a.refreshes, config2.variables));
+    return gone.size === 0 ? [] : [
+      {
+        name,
+        action: {
+          ...a,
+          refreshes: a.refreshes.filter((r) => !gone.has(r))
+        },
+        causes: [...gone.values()]
+      }
+    ];
+  });
+  const reached = /* @__PURE__ */ new Set([
+    ...caused.flatMap(({ cause }) => cause.map((c) => c.definition)),
+    ...[...actionStandIns, ...helperStandIns].map(([, c]) => c.definition),
+    ...lowered.flatMap(({ causes }) => causes.map((c) => c.definition))
+  ]);
+  return {
+    config: {
+      ...config2,
+      segments: { ...config2.segments, ...standIns },
+      // An action's copy reads the tombstone: the cell binding it renders ⚠
+      // with the drop.
+      actions: {
+        ...config2.actions,
+        ...Object.fromEntries(
+          lowered.map(({ name, action: action2 }) => [name, action2])
+        ),
+        ...Object.fromEntries(
+          actionStandIns.map(([name, { ns }]) => [
+            name,
+            { copy: `{{ .${ns} }}` }
+          ])
+        )
+      },
+      // A helper is called with the caller's dot, so its stand-in cannot
+      // read the tombstone by path: the drop's notice is baked in.
+      helpers: {
+        ...config2.helpers,
+        ...Object.fromEntries(
+          helperStandIns.map(([name, c]) => [
+            name,
+            `{{ fail ${JSON.stringify(c.notice)} }}`
+          ])
+        )
+      }
+    },
+    reached
+  };
+}
+function standIn2(name, cause, placements) {
+  const text4 = `\u26A0 ${name}: ${cause.join("; ")}`;
+  const values2 = /* @__PURE__ */ new Map();
+  for (const n of placements) {
+    for (const [key, value] of Object.entries(n.settings ?? {})) {
+      const prev = values2.get(key);
+      values2.set(key, prev === void 0 ? [value] : [...prev, value]);
+    }
+  }
+  const settings = Object.fromEntries(
+    [...values2].map(([key, vs]) => [key, settingFor(key, vs)])
+  );
+  return {
+    template: `{{ ${JSON.stringify(text4)} }}`,
+    bg: "error",
+    description: "stands in for a segment whose plugin did not load",
+    settings
+  };
+}
+function settingFor(label2, values2) {
+  const [first2] = values2;
+  const numbers = values2.filter((v) => typeof v === "number");
+  return typeof first2 === "boolean" ? { label: label2, domain: "bool", default: first2 } : typeof first2 === "number" ? {
+    label: label2,
+    domain: {
+      min: Math.min(...numbers),
+      max: Math.max(...numbers),
+      step: 1
+    },
+    default: first2
+  } : {
+    label: label2,
+    domain: [...new Set(values2.map(String))],
+    default: first2
+  };
+}
+function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
+  const ns = pluginNs(id2);
+  const issues = [];
+  const fail2 = () => {
+    throw new ConfigError(file, issues);
+  };
+  if (!isPlainObject3(json2)) {
+    issues.push({
+      path: "",
+      message: `a plugin definition must be an object, got ${describeType2(json2)}`
+    });
+    return fail2();
+  }
+  for (const key of Object.keys(json2)) {
+    if (!DEFINITION_KEYS.has(key)) {
+      issues.push({
+        path: key,
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path19.default.basename(import_node_path19.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+      });
+    }
+  }
+  const dataPath = json2.data === void 0 ? void 0 : dataPathOf(json2.data, file, checkout, issues);
+  const sources = json2.sources === void 0 ? {} : sourcesOf(json2.sources, file, issues);
+  if (issues.length > 0) return fail2();
+  const ctx = {
+    source,
+    issues,
+    allowedPalettes: new Set(listResolvablePaletteNames()),
+    groups: [],
+    unplaced: [],
+    inherited: []
+  };
+  const data = dataPath === void 0 ? {} : validateVariables(ctx, "data", {
+    [pluginDataVar(ns)]: {
+      kind: "file",
+      path: dataPath,
+      parse: { json: true },
+      cache: { watch_file: dataPath },
+      default: {}
+    }
+  });
+  const variables = validateVariables(ctx, "variables", json2.variables);
+  for (const [table, names] of [
+    ["variables", Object.keys(variables)],
+    ["sources", Object.keys(sources)]
+  ]) {
+    if (names.includes("data")) {
+      issues.push({
+        path: `${table}.data`,
+        message: `"data" names the plugin's data file (.${pluginDataVar(ns)}), declared by the definition's own "data" key: give this ${table === "sources" ? "source" : "variable"} another name`
+      });
+    }
+  }
+  for (const name of Object.keys(sources)) {
+    if (Object.hasOwn(variables, name)) {
+      issues.push({
+        path: `sources.${name}`,
+        message: `source "${name}" and variable "${name}" are one name (.${ns}.${name}): give one of them another name`
+      });
+    }
+  }
+  const authored = {
+    variables: {
+      ...data,
+      ...prefixed(ns, sources),
+      ...prefixed(
+        ns,
+        Object.fromEntries(
+          Object.entries(variables).map(([name, decl]) => [
+            name,
+            stateKeyUnder(ns, decl)
+          ])
+        )
+      )
+    },
+    segments: prefixed(
+      ns,
+      stateKeysUnder(ns, validateSegments(ctx, json2.segments, /* @__PURE__ */ new Set()))
+    ),
+    helpers: prefixed(ns, validateHelpers(ctx, json2.helpers)),
+    // [LAW:one-source-of-truth] A plugin's `run` runs in its folder, the
+    // real path its storage is resolved under.
+    actions: prefixed(
+      ns,
+      setKeysUnder(
+        ns,
+        validateActions(ctx, json2.actions, {
+          dir: fs_default.realpathSync(import_node_path19.default.dirname(file))
+        })
+      )
+    )
+  };
+  issues.push(...wrongScopeRefs(authored, id2));
+  const fragment = boundToSelf(ns, authored);
+  for (const [where, template] of fragmentTemplates(fragment)) {
+    try {
+      SYNTAX_ENGINE.parse(template);
+    } catch (e) {
+      issues.push({
+        path: where,
+        message: `Template parse error in ${where}: ${e.message}`
+      });
+    }
+  }
+  if (issues.length > 0) fail2();
+  return fragment;
+}
+function boundToSelf(ns, fragment) {
+  const bind = (template) => bindSelf(template, SELF, ns);
+  const named3 = (name) => ownedBy(SELF)(name) ? `${ns}${name.slice(SELF.length)}` : name;
+  const each = (table, f) => Object.fromEntries(
+    Object.entries(table ?? {}).map(([name, value]) => [name, f(value)])
+  );
+  return {
+    ...fragment,
+    variables: each(
+      fragment.variables,
+      (v) => selfDepends(mapVariableTemplates(v, bind), named3)
+    ),
+    segments: each(fragment.segments, (seg2) => ({
+      ...seg2,
+      ...Object.fromEntries(
+        SEGMENT_TEMPLATE_FIELDS.flatMap(
+          (f) => seg2[f] === void 0 ? [] : [[f, bind(seg2[f])]]
+        )
+      ),
+      // A partial is a template surface of its segment, same as
+      // template/bg/fg/when — `self` binds inside one exactly as it does
+      // there (candybar-templates-zh8b.53s).
+      ...seg2.partials !== void 0 && {
+        partials: each(seg2.partials, bind)
+      },
+      ...seg2.vars !== void 0 && {
+        vars: each(
+          seg2.vars,
+          (v) => selfDepends(mapVariableTemplates(v, bind), named3)
+        )
+      }
+    })),
+    helpers: each(fragment.helpers, bind),
+    actions: each(
+      fragment.actions,
+      (a) => mapActionNames(mapActionTemplates(a, bind), named3)
+    )
+  };
+}
+function selfDepends(v, named3) {
+  return hasCacheField(v) && "depends_on" in v.cache ? {
+    ...v,
+    cache: { depends_on: v.cache.depends_on.map(named3) }
+  } : v;
+}
+function mapActionNames(a, f) {
+  const seg2 = "segments.";
+  const out = { ...a };
+  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
+  for (const field of ["removeSegment", "insertSegment", "anchor"])
+    if (field in a)
+      out[field] = f(a[field], field);
+  if ("persist" in a && a.persist.startsWith(seg2))
+    out.persist = seg2 + f(a.persist.slice(seg2.length), "persist");
+  return out;
+}
+var SEGMENT_TEMPLATE_FIELDS = [
+  "template",
+  "bg",
+  "fg",
+  "when"
+];
+function wrongScopeRefs(fragment, id2) {
+  const helpers = fragment.helpers ?? {};
+  const elsewhere = PLUGIN_SCOPES.filter((s) => s !== id2.scope).map(
+    (scope) => ({ scope, ns: pluginNs({ scope, name: id2.name }) })
+  );
+  const issues = /* @__PURE__ */ new Map();
+  const check = (where, ref, read2) => {
+    const other = elsewhere.find(({ ns }) => ownedBy(ns)(ref));
+    if (other === void 0) return;
+    const dot = read2 ? "." : "";
+    issues.set(`${where}\0${ref}`, {
+      path: where,
+      message: `${where} names ${dot}${ref}, this plugin under "${other.scope}", but it loads as ${pluginNs(id2)}: a plugin names itself without its scope \u2014 write ${dot}${SELF}${ref.slice(other.ns.length)}`
+    });
+  };
+  const templates = [
+    ...[...fragmentTemplates(fragment)].filter(
+      ([where]) => !where.startsWith("helpers.")
+    ),
+    ...Object.entries(helpers).map(
+      ([name, body]) => [`helpers.${name}`, body]
+    )
+  ];
+  for (const [where, template] of templates) {
+    for (const [ref, via] of templateReads(template, helpers))
+      if (via === null) check(where, ref, true);
+    for (const { name, via } of templateActionRefs(template, helpers))
+      if (via === null) check(where, name, false);
+    for (const name of templateHelperCalls(template, {}))
+      check(where, name, false);
+  }
+  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
+    mapActionNames(a, (ref, field) => {
+      check(`actions.${name}.${field}`, ref, false);
+      return ref;
+    });
+  }
+  const variables = [
+    ...Object.entries(fragment.variables ?? {}).map(
+      ([name, v]) => [`variables.${name}`, v]
+    ),
+    ...Object.entries(fragment.segments ?? {}).flatMap(
+      ([seg2, decl]) => Object.entries(decl.vars ?? {}).map(
+        ([name, v]) => [`segments.${seg2}.vars.${name}`, v]
+      )
+    )
+  ];
+  for (const [where, v] of variables) {
+    if (hasCacheField(v) && "depends_on" in v.cache)
+      for (const d of v.cache.depends_on)
+        check(`${where}.cache.depends_on`, d, false);
+  }
+  return [...issues.values()];
+}
+function* fragmentTemplates(fragment) {
+  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
+    for (const [field, t2] of variableTemplates(v)) {
+      yield [`variables.${name}.${field}`, t2];
+    }
+  }
+  for (const [name, seg2] of Object.entries(fragment.segments ?? {})) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
+      const t2 = seg2[field];
+      if (t2 !== void 0) yield [`segments.${name}.${field}`, t2];
+    }
+    for (const [partialName, body] of Object.entries(seg2.partials ?? {})) {
+      yield [`segments.${name}.partials.${partialName}`, body];
+    }
+    for (const [varName, v] of Object.entries(seg2.vars ?? {})) {
+      for (const [field, t2] of variableTemplates(v)) {
+        yield [`segments.${name}.vars.${varName}.${field}`, t2];
+      }
+    }
+  }
+  for (const [name, body] of Object.entries(fragment.helpers ?? {})) {
+    yield [`helpers.${name}`, `{{ define "${name}" }}${body}{{ end }}`];
+  }
+  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
+    for (const [field, source] of actionTemplates(a)) {
+      yield [`actions.${name}.${field}`, source];
+    }
+  }
+}
+function prefixed(ns, decls) {
+  return Object.fromEntries(
+    Object.entries(decls).map(([name, d]) => [`${ns}.${name}`, d])
+  );
+}
+function keyUnder(ns, key) {
+  return `${ns}.${key}`;
+}
+function stateKeyUnder(ns, decl) {
+  return decl.kind === "state" ? { ...decl, key: keyUnder(ns, decl.key) } : decl;
+}
+function stateKeysUnder(ns, segments) {
+  return Object.fromEntries(
+    Object.entries(segments).map(([name, seg2]) => [
+      name,
+      seg2.vars === void 0 ? seg2 : {
+        ...seg2,
+        vars: Object.fromEntries(
+          Object.entries(seg2.vars).map(([v, decl]) => [
+            v,
+            stateKeyUnder(ns, decl)
+          ])
+        )
+      }
+    ])
+  );
+}
+function setKeysUnder(ns, actions) {
+  return Object.fromEntries(
+    Object.entries(actions).map(([name, a]) => [
+      name,
+      "set" in a ? { ...a, set: keyUnder(ns, a.set) } : "run" in a ? { ...a, refreshes: a.refreshes.map((r) => keyUnder(ns, r)) } : a
+    ])
+  );
+}
+var SOURCE_NAME = PLUGIN_NAME;
+var BUILT_SOURCE = {
+  scope: "session",
+  refresh: { watch: true },
+  read: { file: { json: true } }
+};
+function sourcesOf(sources, file, issues) {
+  if (!isPlainObject3(sources)) {
+    issues.push({
+      path: "sources",
+      message: `"sources" must be an object of named sources, got ${describeType2(sources)}`
+    });
+    return {};
+  }
+  const storage = import_node_path19.default.join(
+    fs_default.realpathSync(import_node_path19.default.dirname(file)),
+    STORAGE_FOLDER
+  );
+  const built = JSON.stringify(BUILT_SOURCE);
+  const lowered = {};
+  for (const [name, source] of Object.entries(sources)) {
+    const at = `sources.${name}`;
+    if (!SOURCE_NAME.test(name)) {
+      issues.push({
+        path: at,
+        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .<scope>.<plugin>.${name})`
+      });
+      continue;
+    }
+    const wrong = unbuilt(source, BUILT_SOURCE, at);
+    for (const { field, is: is2 } of wrong) {
+      issues.push({
+        path: field,
+        message: `${field} ${is2}: what is built is a source ${built} \u2014 a session's JSON file in the plugin's managed storage, re-read when it changes`
+      });
+    }
+    if (wrong.length === 0) lowered[name] = { kind: "source", storage };
+  }
+  return lowered;
+}
+function requireOneSourcePerFile(file, plugin, config2) {
+  const readers = Object.entries(config2.variables).reduce(
+    (byFile, [name, v]) => {
+      if (v.kind !== "source") return byFile;
+      const read2 = sourceFileOf(v);
+      return byFile.set(read2, [...byFile.get(read2) ?? [], name]);
+    },
+    /* @__PURE__ */ new Map()
+  );
+  const owned = ownedBy(plugin);
+  const issues = [...readers].filter(([, names]) => names.length > 1 && names.some(owned)).map(([read2, names]) => ({
+    path: `sources.${names.find(owned).slice(`${plugin}.`.length)}`,
+    message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read2}: a session's file is one document, read by one source`
+  }));
+  if (issues.length > 0) throw new ConfigError(file, issues);
+}
+function sourceFileOf(source) {
+  return import_node_path19.default.join(source.storage, sessionFileName("<session id>"));
+}
+function unbuilt(authored, built, at) {
+  if (!isPlainObject3(built) || !isPlainObject3(authored)) {
+    return JSON.stringify(authored) === JSON.stringify(built) ? [] : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
+  }
+  return [
+    .../* @__PURE__ */ new Set([...Object.keys(built), ...Object.keys(authored)])
+  ].flatMap((key) => {
+    const field = `${at}.${key}`;
+    if (!Object.hasOwn(built, key)) return [{ field, is: "is not built" }];
+    if (!Object.hasOwn(authored, key)) return [{ field, is: "is missing" }];
+    return unbuilt(authored[key], built[key], field);
+  });
+}
+function dataPathOf(data, file, checkout, issues) {
+  if (typeof data === "string" && data !== "") {
+    return resolveUserPath(import_node_path19.default.dirname(file), data);
+  }
+  if (isPlainObject3(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
+    const rel = data.checkout;
+    if (import_node_path19.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path19.default.normalize(rel).split(import_node_path19.default.sep)[0] === "..") {
+      issues.push({
+        path: "data.checkout",
+        message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
+      });
+      return void 0;
+    }
+    if (checkout === null) {
+      issues.push({
+        path: "data.checkout",
+        message: `data is read from the session's checkout, and this load has no session`
+      });
+      return void 0;
+    }
+    return import_node_path19.default.resolve(checkout.root, rel);
+  }
+  if (isPlainObject3(data) && "project" in data) {
+    issues.push({
+      path: "data.project",
+      message: `data: { project } is now data: { checkout }: the same path, relative to the root of the git checkout the session works in (a linked worktree is its own checkout)`
+    });
+    return void 0;
+  }
+  issues.push({
+    path: "data",
+    message: `"data" must be the path of the plugin's JSON data file relative to this definition, or { checkout: "<path>" } relative to the root of the session's checkout`
+  });
+  return void 0;
+}
+
 // src/config/loader/cross-ref.ts
 var UNREAD_DISTRIBUTION = {
   nested: (nodePath2) => `${nodePath2} sets "distribution" on a container inside a row \u2014 the row's own container places every cell along it, through any { h } or { v } nested in it, so this one would place nothing. Set it on the row (the outermost horizontal container), or, on the bar, on the root, which places the rows.`,
@@ -60280,7 +60989,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       { ...templateScope, helpers: segHelpers },
       settings
     );
-    for (const field of ["template", "bg", "fg", "when"]) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const tpl = seg2[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
@@ -60409,704 +61118,6 @@ function validateNoNesting(ctx, cfg, names) {
       });
     }
   }
-}
-
-// src/config/loader/plugins.ts
-init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
-var import_json52 = __toESM(require_dist(), 1);
-function droppedPluginNotice(d) {
-  return `plugin ${d.path} was not loaded: ${d.reason}`;
-}
-var DEFINITION_KEYS = /* @__PURE__ */ new Set([
-  "data",
-  "sources",
-  "variables",
-  "segments",
-  "helpers",
-  "actions"
-]);
-var DEFINITION_FILE = "plugin.json5";
-var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
-function pluginDefinition(definition, scope) {
-  const name = import_node_path19.default.basename(import_node_path19.default.dirname(definition));
-  return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
-}
-function pluginDataVar(ns) {
-  return `${ns}.data`;
-}
-var STORAGE_FOLDER = "session";
-function sessionFileName(sessionId2) {
-  return `${sessionId2}.json`;
-}
-function attempt2(run3) {
-  try {
-    return { ok: true, value: run3() };
-  } catch (err) {
-    return { ok: false, reason: reasonOf(err) };
-  }
-}
-function reasonOf(err) {
-  if (err instanceof ConfigError) {
-    return err.issues.map(
-      (i) => i.path === "" || i.message.includes(i.path) ? i.message : `${i.path}: ${i.message}`
-    ).join("; ");
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-function listedPlugins(refs, from, scope) {
-  return refs.map(
-    (ref) => pluginDefinition(resolveUserPath(import_node_path19.default.dirname(from), ref), scope)
-  );
-}
-function applyPlugins(definitions, ctx, base, validate) {
-  const taken = /* @__PURE__ */ new Map();
-  return definitions.reduce(
-    (layer, definition) => {
-      const file = definition.path;
-      const ns = definition.name === void 0 ? void 0 : pluginNs(definition);
-      const drop2 = (reason, config2) => {
-        const rendering = new Map(layer.rendering);
-        if (ns !== void 0 && config2 !== layer.config) rendering.delete(ns);
-        return {
-          ...layer,
-          config: config2,
-          rendering,
-          dropped: [...layer.dropped, { ...definition, reason }]
-        };
-      };
-      if (import_node_path19.default.basename(file) !== DEFINITION_FILE) {
-        const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
-        return drop2(
-          reason,
-          ns === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, ns), ns, {
-            ...definition,
-            reason
-          })
-        );
-      }
-      if (definition.name === void 0 || ns === void 0) {
-        return drop2(
-          `its folder "${import_node_path19.default.basename(import_node_path19.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
-          layer.config
-        );
-      }
-      const first2 = taken.get(ns);
-      if (first2 !== void 0) {
-        return drop2(
-          `plugin "${definition.name}" is already listed, from ${first2}`,
-          layer.config
-        );
-      }
-      taken.set(ns, file);
-      const under2 = withoutPlugin(layer.config, ns);
-      const merged = attempt2(() => {
-        const source = fs_default.readFileSync(file, "utf-8");
-        const config2 = mergeWithDefault(
-          fragmentOf(
-            file,
-            definition,
-            { source, json: import_json52.default.parse(source) },
-            ctx
-          ),
-          under2
-        );
-        requireOneSourcePerFile(file, ns, config2);
-        validate(config2, ns, under2 !== layer.config);
-        return config2;
-      });
-      if (merged.ok) {
-        return {
-          ...layer,
-          config: merged.value,
-          loaded: [...layer.loaded, definition],
-          rendering: new Map([...layer.rendering, [ns, definition]])
-        };
-      }
-      const dropped2 = { ...definition, reason: merged.reason };
-      return drop2(merged.reason, tombstone(under2, ns, dropped2));
-    },
-    { config: base.config, rendering: base.rendering, loaded: [], dropped: [] }
-  );
-}
-function withoutPlugin(config2, plugin) {
-  const owned = ownedBy(plugin);
-  const keep2 = (r) => Object.fromEntries(Object.entries(r).filter(([name]) => !owned(name)));
-  const held = [
-    config2.variables,
-    config2.segments,
-    config2.helpers,
-    config2.actions
-  ].some((r) => Object.keys(r).some(owned));
-  if (!held) return config2;
-  return {
-    ...config2,
-    variables: keep2(config2.variables),
-    segments: keep2(config2.segments),
-    helpers: keep2(config2.helpers),
-    actions: keep2(config2.actions)
-  };
-}
-function tombstone(config2, ns, dropped2) {
-  return {
-    ...config2,
-    variables: {
-      ...config2.variables,
-      [ns]: {
-        kind: "dropped",
-        reason: droppedPluginNotice(dropped2),
-        definition: dropped2.path
-      }
-    }
-  };
-}
-function tombstonesOf(config2) {
-  const tombstones = Object.entries(config2.variables).flatMap(
-    ([ns, v]) => v.kind === "dropped" ? [{ ns, definition: v.definition, notice: v.reason }] : []
-  );
-  return (name) => tombstones.find(({ ns }) => ownedBy(ns)(name));
-}
-function dropsOwning(layer, beneath) {
-  const tombstoned = tombstonesOf(layer.config);
-  const rendering = [...layer.rendering.keys()].map(ownedBy);
-  const unnamed = [...beneath, ...layer.dropped].filter(
-    (d) => d.name === void 0
-  );
-  return (name) => {
-    const scope = scopeOf(name);
-    if (scope === void 0) return [];
-    const cause = tombstoned(name);
-    if (cause !== void 0)
-      return [{ definition: cause.definition, notice: cause.notice }];
-    if (rendering.some((owns) => owns(name))) return [];
-    return unnamed.filter((d) => d.scope === scope).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
-  };
-}
-function withDroppedPlacements(config2, owning, inserted) {
-  const placements = presetNames(config2.presets).flatMap((preset) => [...walkNodes(presetRoot(config2, preset).node)]).flatMap((node) => node.kind === "segment" ? [node] : []);
-  const names = /* @__PURE__ */ new Set([
-    ...placements.map((n) => n.name),
-    ...inserted,
-    ...Object.keys(config2.segments)
-  ]);
-  const caused = [...names].map((name) => ({ name, cause: owning(name) })).filter(({ cause }) => cause.length > 0);
-  const standIns = Object.fromEntries(
-    caused.map(({ name, cause }) => [
-      name,
-      standIn2(
-        name,
-        cause.map((c) => c.notice),
-        placements.filter((n) => n.name === name)
-      )
-    ])
-  );
-  const tombstoned = tombstonesOf(config2);
-  const anyTombstone = Object.values(config2.variables).some(
-    (v) => v.kind === "dropped"
-  );
-  const templates = anyTombstone ? Object.values(config2.segments).flatMap((seg2) => [
-    ...SEGMENT_TEMPLATE_FIELDS.flatMap(
-      (f) => seg2[f] === void 0 ? [] : [seg2[f]]
-    ),
-    // A partial can bind an action exactly as template/bg/fg/when can —
-    // its own calls must stand in for a dropped plugin's action too
-    // (candybar-templates-zh8b.53s).
-    ...Object.values(seg2.partials ?? {})
-  ]) : [];
-  const doMembers = anyTombstone ? Object.values(config2.actions).flatMap((a) => "do" in a ? [...a.do] : []) : [];
-  const missing = (names2, declared) => [...new Set(names2)].flatMap((name) => {
-    const cause = name in declared ? void 0 : tombstoned(name);
-    return cause === void 0 ? [] : [[name, cause]];
-  });
-  const actionStandIns = missing(
-    [
-      ...templates.flatMap(
-        (t2) => templateActionRefs(t2, config2.helpers).map((r) => r.name)
-      ),
-      ...doMembers
-    ],
-    config2.actions
-  );
-  const helperStandIns = missing(
-    templates.flatMap((t2) => [...templateHelperCalls(t2, config2.helpers)]),
-    config2.helpers
-  );
-  const lowered = Object.entries(config2.actions).flatMap(([name, a]) => {
-    if (!("run" in a)) return [];
-    const gone = new Map(missing(a.refreshes, config2.variables));
-    return gone.size === 0 ? [] : [
-      {
-        name,
-        action: {
-          ...a,
-          refreshes: a.refreshes.filter((r) => !gone.has(r))
-        },
-        causes: [...gone.values()]
-      }
-    ];
-  });
-  const reached = /* @__PURE__ */ new Set([
-    ...caused.flatMap(({ cause }) => cause.map((c) => c.definition)),
-    ...[...actionStandIns, ...helperStandIns].map(([, c]) => c.definition),
-    ...lowered.flatMap(({ causes }) => causes.map((c) => c.definition))
-  ]);
-  return {
-    config: {
-      ...config2,
-      segments: { ...config2.segments, ...standIns },
-      // An action's copy reads the tombstone: the cell binding it renders ⚠
-      // with the drop.
-      actions: {
-        ...config2.actions,
-        ...Object.fromEntries(
-          lowered.map(({ name, action: action2 }) => [name, action2])
-        ),
-        ...Object.fromEntries(
-          actionStandIns.map(([name, { ns }]) => [
-            name,
-            { copy: `{{ .${ns} }}` }
-          ])
-        )
-      },
-      // A helper is called with the caller's dot, so its stand-in cannot
-      // read the tombstone by path: the drop's notice is baked in.
-      helpers: {
-        ...config2.helpers,
-        ...Object.fromEntries(
-          helperStandIns.map(([name, c]) => [
-            name,
-            `{{ fail ${JSON.stringify(c.notice)} }}`
-          ])
-        )
-      }
-    },
-    reached
-  };
-}
-function standIn2(name, cause, placements) {
-  const text4 = `\u26A0 ${name}: ${cause.join("; ")}`;
-  const values2 = /* @__PURE__ */ new Map();
-  for (const n of placements) {
-    for (const [key, value] of Object.entries(n.settings ?? {})) {
-      const prev = values2.get(key);
-      values2.set(key, prev === void 0 ? [value] : [...prev, value]);
-    }
-  }
-  const settings = Object.fromEntries(
-    [...values2].map(([key, vs]) => [key, settingFor(key, vs)])
-  );
-  return {
-    template: `{{ ${JSON.stringify(text4)} }}`,
-    bg: "error",
-    description: "stands in for a segment whose plugin did not load",
-    settings
-  };
-}
-function settingFor(label2, values2) {
-  const [first2] = values2;
-  const numbers = values2.filter((v) => typeof v === "number");
-  return typeof first2 === "boolean" ? { label: label2, domain: "bool", default: first2 } : typeof first2 === "number" ? {
-    label: label2,
-    domain: {
-      min: Math.min(...numbers),
-      max: Math.max(...numbers),
-      step: 1
-    },
-    default: first2
-  } : {
-    label: label2,
-    domain: [...new Set(values2.map(String))],
-    default: first2
-  };
-}
-function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
-  const ns = pluginNs(id2);
-  const issues = [];
-  const fail2 = () => {
-    throw new ConfigError(file, issues);
-  };
-  if (!isPlainObject3(json2)) {
-    issues.push({
-      path: "",
-      message: `a plugin definition must be an object, got ${describeType2(json2)}`
-    });
-    return fail2();
-  }
-  for (const key of Object.keys(json2)) {
-    if (!DEFINITION_KEYS.has(key)) {
-      issues.push({
-        path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path19.default.basename(import_node_path19.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
-      });
-    }
-  }
-  const dataPath = json2.data === void 0 ? void 0 : dataPathOf(json2.data, file, checkout, issues);
-  const sources = json2.sources === void 0 ? {} : sourcesOf(json2.sources, file, issues);
-  if (issues.length > 0) return fail2();
-  const ctx = {
-    source,
-    issues,
-    allowedPalettes: new Set(listResolvablePaletteNames()),
-    groups: [],
-    unplaced: [],
-    inherited: []
-  };
-  const data = dataPath === void 0 ? {} : validateVariables(ctx, "data", {
-    [pluginDataVar(ns)]: {
-      kind: "file",
-      path: dataPath,
-      parse: { json: true },
-      cache: { watch_file: dataPath },
-      default: {}
-    }
-  });
-  const variables = validateVariables(ctx, "variables", json2.variables);
-  for (const [table, names] of [
-    ["variables", Object.keys(variables)],
-    ["sources", Object.keys(sources)]
-  ]) {
-    if (names.includes("data")) {
-      issues.push({
-        path: `${table}.data`,
-        message: `"data" names the plugin's data file (.${pluginDataVar(ns)}), declared by the definition's own "data" key: give this ${table === "sources" ? "source" : "variable"} another name`
-      });
-    }
-  }
-  for (const name of Object.keys(sources)) {
-    if (Object.hasOwn(variables, name)) {
-      issues.push({
-        path: `sources.${name}`,
-        message: `source "${name}" and variable "${name}" are one name (.${ns}.${name}): give one of them another name`
-      });
-    }
-  }
-  const authored = {
-    variables: {
-      ...data,
-      ...prefixed(ns, sources),
-      ...prefixed(
-        ns,
-        Object.fromEntries(
-          Object.entries(variables).map(([name, decl]) => [
-            name,
-            stateKeyUnder(ns, decl)
-          ])
-        )
-      )
-    },
-    segments: prefixed(
-      ns,
-      stateKeysUnder(ns, validateSegments(ctx, json2.segments, /* @__PURE__ */ new Set()))
-    ),
-    helpers: prefixed(ns, validateHelpers(ctx, json2.helpers)),
-    // [LAW:one-source-of-truth] A plugin's `run` runs in its folder, the
-    // real path its storage is resolved under.
-    actions: prefixed(
-      ns,
-      setKeysUnder(
-        ns,
-        validateActions(ctx, json2.actions, {
-          dir: fs_default.realpathSync(import_node_path19.default.dirname(file))
-        })
-      )
-    )
-  };
-  issues.push(...wrongScopeRefs(authored, id2));
-  const fragment = boundToSelf(ns, authored);
-  for (const [where, template] of fragmentTemplates(fragment)) {
-    try {
-      SYNTAX_ENGINE.parse(template);
-    } catch (e) {
-      issues.push({
-        path: where,
-        message: `Template parse error in ${where}: ${e.message}`
-      });
-    }
-  }
-  if (issues.length > 0) fail2();
-  return fragment;
-}
-function boundToSelf(ns, fragment) {
-  const bind = (template) => bindSelf(template, SELF, ns);
-  const named3 = (name) => ownedBy(SELF)(name) ? `${ns}${name.slice(SELF.length)}` : name;
-  const each = (table, f) => Object.fromEntries(
-    Object.entries(table ?? {}).map(([name, value]) => [name, f(value)])
-  );
-  return {
-    ...fragment,
-    variables: each(
-      fragment.variables,
-      (v) => selfDepends(mapVariableTemplates(v, bind), named3)
-    ),
-    segments: each(fragment.segments, (seg2) => ({
-      ...seg2,
-      ...Object.fromEntries(
-        SEGMENT_TEMPLATE_FIELDS.flatMap(
-          (f) => seg2[f] === void 0 ? [] : [[f, bind(seg2[f])]]
-        )
-      ),
-      // A partial is a template surface of its segment, same as
-      // template/bg/fg/when — `self` binds inside one exactly as it does
-      // there (candybar-templates-zh8b.53s).
-      ...seg2.partials !== void 0 && {
-        partials: each(seg2.partials, bind)
-      },
-      ...seg2.vars !== void 0 && {
-        vars: each(
-          seg2.vars,
-          (v) => selfDepends(mapVariableTemplates(v, bind), named3)
-        )
-      }
-    })),
-    helpers: each(fragment.helpers, bind),
-    actions: each(
-      fragment.actions,
-      (a) => mapActionNames(mapActionTemplates(a, bind), named3)
-    )
-  };
-}
-function selfDepends(v, named3) {
-  return hasCacheField(v) && "depends_on" in v.cache ? {
-    ...v,
-    cache: { depends_on: v.cache.depends_on.map(named3) }
-  } : v;
-}
-function mapActionNames(a, f) {
-  const seg2 = "segments.";
-  const out = { ...a };
-  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
-  for (const field of ["removeSegment", "insertSegment", "anchor"])
-    if (field in a)
-      out[field] = f(a[field], field);
-  if ("persist" in a && a.persist.startsWith(seg2))
-    out.persist = seg2 + f(a.persist.slice(seg2.length), "persist");
-  return out;
-}
-var SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"];
-function wrongScopeRefs(fragment, id2) {
-  const helpers = fragment.helpers ?? {};
-  const elsewhere = PLUGIN_SCOPES.filter((s) => s !== id2.scope).map(
-    (scope) => ({ scope, ns: pluginNs({ scope, name: id2.name }) })
-  );
-  const issues = /* @__PURE__ */ new Map();
-  const check = (where, ref, read2) => {
-    const other = elsewhere.find(({ ns }) => ownedBy(ns)(ref));
-    if (other === void 0) return;
-    const dot = read2 ? "." : "";
-    issues.set(`${where}\0${ref}`, {
-      path: where,
-      message: `${where} names ${dot}${ref}, this plugin under "${other.scope}", but it loads as ${pluginNs(id2)}: a plugin names itself without its scope \u2014 write ${dot}${SELF}${ref.slice(other.ns.length)}`
-    });
-  };
-  const templates = [
-    ...[...fragmentTemplates(fragment)].filter(
-      ([where]) => !where.startsWith("helpers.")
-    ),
-    ...Object.entries(helpers).map(
-      ([name, body]) => [`helpers.${name}`, body]
-    )
-  ];
-  for (const [where, template] of templates) {
-    for (const [ref, via] of templateReads(template, helpers))
-      if (via === null) check(where, ref, true);
-    for (const { name, via } of templateActionRefs(template, helpers))
-      if (via === null) check(where, name, false);
-    for (const name of templateHelperCalls(template, {}))
-      check(where, name, false);
-  }
-  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
-    mapActionNames(a, (ref, field) => {
-      check(`actions.${name}.${field}`, ref, false);
-      return ref;
-    });
-  }
-  const variables = [
-    ...Object.entries(fragment.variables ?? {}).map(
-      ([name, v]) => [`variables.${name}`, v]
-    ),
-    ...Object.entries(fragment.segments ?? {}).flatMap(
-      ([seg2, decl]) => Object.entries(decl.vars ?? {}).map(
-        ([name, v]) => [`segments.${seg2}.vars.${name}`, v]
-      )
-    )
-  ];
-  for (const [where, v] of variables) {
-    if (hasCacheField(v) && "depends_on" in v.cache)
-      for (const d of v.cache.depends_on)
-        check(`${where}.cache.depends_on`, d, false);
-  }
-  return [...issues.values()];
-}
-function* fragmentTemplates(fragment) {
-  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
-    for (const [field, t2] of variableTemplates(v)) {
-      yield [`variables.${name}.${field}`, t2];
-    }
-  }
-  for (const [name, seg2] of Object.entries(fragment.segments ?? {})) {
-    for (const field of SEGMENT_TEMPLATE_FIELDS) {
-      const t2 = seg2[field];
-      if (t2 !== void 0) yield [`segments.${name}.${field}`, t2];
-    }
-    for (const [partialName, body] of Object.entries(seg2.partials ?? {})) {
-      yield [`segments.${name}.partials.${partialName}`, body];
-    }
-    for (const [varName, v] of Object.entries(seg2.vars ?? {})) {
-      for (const [field, t2] of variableTemplates(v)) {
-        yield [`segments.${name}.vars.${varName}.${field}`, t2];
-      }
-    }
-  }
-  for (const [name, body] of Object.entries(fragment.helpers ?? {})) {
-    yield [`helpers.${name}`, `{{ define "${name}" }}${body}{{ end }}`];
-  }
-  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
-    for (const [field, source] of actionTemplates(a)) {
-      yield [`actions.${name}.${field}`, source];
-    }
-  }
-}
-function prefixed(ns, decls) {
-  return Object.fromEntries(
-    Object.entries(decls).map(([name, d]) => [`${ns}.${name}`, d])
-  );
-}
-function keyUnder(ns, key) {
-  return `${ns}.${key}`;
-}
-function stateKeyUnder(ns, decl) {
-  return decl.kind === "state" ? { ...decl, key: keyUnder(ns, decl.key) } : decl;
-}
-function stateKeysUnder(ns, segments) {
-  return Object.fromEntries(
-    Object.entries(segments).map(([name, seg2]) => [
-      name,
-      seg2.vars === void 0 ? seg2 : {
-        ...seg2,
-        vars: Object.fromEntries(
-          Object.entries(seg2.vars).map(([v, decl]) => [
-            v,
-            stateKeyUnder(ns, decl)
-          ])
-        )
-      }
-    ])
-  );
-}
-function setKeysUnder(ns, actions) {
-  return Object.fromEntries(
-    Object.entries(actions).map(([name, a]) => [
-      name,
-      "set" in a ? { ...a, set: keyUnder(ns, a.set) } : "run" in a ? { ...a, refreshes: a.refreshes.map((r) => keyUnder(ns, r)) } : a
-    ])
-  );
-}
-var SOURCE_NAME = PLUGIN_NAME;
-var BUILT_SOURCE = {
-  scope: "session",
-  refresh: { watch: true },
-  read: { file: { json: true } }
-};
-function sourcesOf(sources, file, issues) {
-  if (!isPlainObject3(sources)) {
-    issues.push({
-      path: "sources",
-      message: `"sources" must be an object of named sources, got ${describeType2(sources)}`
-    });
-    return {};
-  }
-  const storage = import_node_path19.default.join(
-    fs_default.realpathSync(import_node_path19.default.dirname(file)),
-    STORAGE_FOLDER
-  );
-  const built = JSON.stringify(BUILT_SOURCE);
-  const lowered = {};
-  for (const [name, source] of Object.entries(sources)) {
-    const at = `sources.${name}`;
-    if (!SOURCE_NAME.test(name)) {
-      issues.push({
-        path: at,
-        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .<scope>.<plugin>.${name})`
-      });
-      continue;
-    }
-    const wrong = unbuilt(source, BUILT_SOURCE, at);
-    for (const { field, is: is2 } of wrong) {
-      issues.push({
-        path: field,
-        message: `${field} ${is2}: what is built is a source ${built} \u2014 a session's JSON file in the plugin's managed storage, re-read when it changes`
-      });
-    }
-    if (wrong.length === 0) lowered[name] = { kind: "source", storage };
-  }
-  return lowered;
-}
-function requireOneSourcePerFile(file, plugin, config2) {
-  const readers = Object.entries(config2.variables).reduce(
-    (byFile, [name, v]) => {
-      if (v.kind !== "source") return byFile;
-      const read2 = sourceFileOf(v);
-      return byFile.set(read2, [...byFile.get(read2) ?? [], name]);
-    },
-    /* @__PURE__ */ new Map()
-  );
-  const owned = ownedBy(plugin);
-  const issues = [...readers].filter(([, names]) => names.length > 1 && names.some(owned)).map(([read2, names]) => ({
-    path: `sources.${names.find(owned).slice(`${plugin}.`.length)}`,
-    message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read2}: a session's file is one document, read by one source`
-  }));
-  if (issues.length > 0) throw new ConfigError(file, issues);
-}
-function sourceFileOf(source) {
-  return import_node_path19.default.join(source.storage, sessionFileName("<session id>"));
-}
-function unbuilt(authored, built, at) {
-  if (!isPlainObject3(built) || !isPlainObject3(authored)) {
-    return JSON.stringify(authored) === JSON.stringify(built) ? [] : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
-  }
-  return [
-    .../* @__PURE__ */ new Set([...Object.keys(built), ...Object.keys(authored)])
-  ].flatMap((key) => {
-    const field = `${at}.${key}`;
-    if (!Object.hasOwn(built, key)) return [{ field, is: "is not built" }];
-    if (!Object.hasOwn(authored, key)) return [{ field, is: "is missing" }];
-    return unbuilt(authored[key], built[key], field);
-  });
-}
-function dataPathOf(data, file, checkout, issues) {
-  if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path19.default.dirname(file), data);
-  }
-  if (isPlainObject3(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
-    const rel = data.checkout;
-    if (import_node_path19.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path19.default.normalize(rel).split(import_node_path19.default.sep)[0] === "..") {
-      issues.push({
-        path: "data.checkout",
-        message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
-      });
-      return void 0;
-    }
-    if (checkout === null) {
-      issues.push({
-        path: "data.checkout",
-        message: `data is read from the session's checkout, and this load has no session`
-      });
-      return void 0;
-    }
-    return import_node_path19.default.resolve(checkout.root, rel);
-  }
-  if (isPlainObject3(data) && "project" in data) {
-    issues.push({
-      path: "data.project",
-      message: `data: { project } is now data: { checkout }: the same path, relative to the root of the git checkout the session works in (a linked worktree is its own checkout)`
-    });
-    return void 0;
-  }
-  issues.push({
-    path: "data",
-    message: `"data" must be the path of the plugin's JSON data file relative to this definition, or { checkout: "<path>" } relative to the root of the session's checkout`
-  });
-  return void 0;
 }
 
 // src/config/loader/plugin-folders.ts
@@ -67021,9 +67032,12 @@ function buildNeededPrefixes(config2, preset) {
 function segmentTemplates(config2, name) {
   const seg2 = config2.segments[name];
   if (!seg2) return [];
-  return [seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
-    (src) => src ? [src] : []
-  );
+  return [
+    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
+      (src) => src ? [src] : []
+    ),
+    ...Object.values(seg2.partials ?? {})
+  ];
 }
 function segmentInputPaths(config2, name, whens) {
   return inputClosure(config2, [...segmentTemplates(config2, name), ...whens]);
@@ -75478,9 +75492,10 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
       seen === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen.where}, ${where}`, template: seen.template }
     );
   }
+  const instantNames = new Set(projections.map(([name]) => name));
   const basis = {
     reads: valueReads({
-      names: new Set(projections.map(([name]) => name)),
+      names: instantNames,
       helpers: config2.helpers,
       actions: config2.actions
     }),
@@ -75492,15 +75507,30 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   const layoutReadsInstant = gates.some(
     (gate2) => gateReadsInstant(sources.get(gate2))
   );
-  const readsInstant = layoutReadsInstant ? templateInstants({
-    ...basis,
-    clock: /* @__PURE__ */ new Set([...basis.clock, LAYOUT_PREVIEW])
-  }) : gateReadsInstant;
+  const finalClock = layoutReadsInstant ? /* @__PURE__ */ new Set([...basis.clock, LAYOUT_PREVIEW]) : basis.clock;
+  const readsInstant = templateInstants({ ...basis, clock: finalClock });
   const instant = new Set(
     [...sources].flatMap(
       ([template, source]) => readsInstant(source) ? [template] : []
     )
   );
+  for (const [segName, seg2] of Object.entries(config2.segments)) {
+    if (seg2.partials === void 0) continue;
+    const segReadsInstant = templateInstants({
+      reads: valueReads({
+        names: instantNames,
+        helpers: { ...config2.helpers, ...seg2.partials },
+        actions: config2.actions
+      }),
+      projections: basis.projections,
+      clock: finalClock
+    });
+    for (const field of ["when", "bg", "fg", "template"]) {
+      const parsed2 = compiled[segName][field];
+      if (parsed2 === void 0) continue;
+      if (segReadsInstant(sources.get(parsed2))) instant.add(parsed2);
+    }
+  }
   return {
     segments: compiled,
     roots,
