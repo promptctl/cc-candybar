@@ -4,15 +4,22 @@
     {
       "version": "pr-579",
       "ref": "refs/pull/579/merge",
-      "sha": "14504f7e8e4738853d906132146cfce8023c34d2",
-      "timestamp": "2026-11-02T16:16:52.227Z",
+      "sha": "67f938447f3834f8caa74cd5c56334889949098a",
+      "timestamp": "2026-11-02T16:20:47.568Z",
       "commits": [
         {
-          "sha": "14504f7e8e4738853d906132146cfce8023c34d2",
+          "sha": "67f938447f3834f8caa74cd5c56334889949098a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T09:15:24-07:00",
-          "message": "Merge cd881d269ae19e43ae3b17d5477cf744864295b6 into f131b11e8cd2772af9e7476f28873e7473d2a93e\n"
+          "timestamp": "2026-11-02T16:19:42Z",
+          "message": "Merge 4a2639a8b9b44f1cc4f0b32261ea12d3e3d609aa into f131b11e8cd2772af9e7476f28873e7473d2a93e\n"
+        },
+        {
+          "sha": "4a2639a8b9b44f1cc4f0b32261ea12d3e3d609aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T09:19:22-07:00",
+          "message": "docs(testing): the run table names each run's groups, so the group counts can be counted from it (candybar-testing-ihvy.w13)\n"
         },
         {
           "sha": "cd881d269ae19e43ae3b17d5477cf744864295b6",
