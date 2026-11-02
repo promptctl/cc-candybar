@@ -2,38 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-576",
-      "ref": "refs/pull/576/merge",
-      "sha": "e3d0b742349f6873a89b49ee58eb275117a4afbf",
-      "timestamp": "2026-11-02T14:58:26.622Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "de3659bcf2648fda4cf4014ad37116365f6ea7cd",
+      "timestamp": "2026-11-02T15:07:29.425Z",
       "commits": [
         {
-          "sha": "e3d0b742349f6873a89b49ee58eb275117a4afbf",
+          "sha": "de3659bcf2648fda4cf4014ad37116365f6ea7cd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T14:57:29Z",
-          "message": "Merge 6fce54c3c55c8ed06b4a484927bb5b6d851a8578 into 685dfc67e4662552cac9a0924249992f5225cbbe\n"
-        },
-        {
-          "sha": "6fce54c3c55c8ed06b4a484927bb5b6d851a8578",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:57:17-07:00",
-          "message": "test: the quarantine report says 1 day, not 1 days (candybar-testing-ihvy.hcl)\n"
-        },
-        {
-          "sha": "4a4699bced337b1d3fb7dca917c5f7c0aab7451e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:55:37-07:00",
-          "message": "test: the late-throw fixture waits on its timer, the pragma scan covers audits, jest-environment-node tracks jest's range (candybar-testing-ihvy.hcl)\n"
-        },
-        {
-          "sha": "875f7b4ef4856198ec4dda8a0035f9a62566a5cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:49:06-07:00",
-          "message": "test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl)\n\ntest/quarantine.txt lists a case by date, lit ticket and name. A jest test\nenvironment lets a listed case's own failure through the gate: jest counts it\npending, the run passes, and the failure is kept with a mark naming the ticket.\nThe record reads the mark, the shape report prints a Quarantine section, and a\nline older than 7 days (or dated more than a day ahead) is red and fails\nnothing. na7i is the first entry; 8c9u is not listed because it has not failed\non CI.\n"
+          "timestamp": "2026-11-02T08:06:15-07:00",
+          "message": "test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl) (#576)\n\n* test: a flake is quarantined by one line, and a line older than a week shows red (candybar-testing-ihvy.hcl)\n\ntest/quarantine.txt lists a case by date, lit ticket and name. A jest test\nenvironment lets a listed case's own failure through the gate: jest counts it\npending, the run passes, and the failure is kept with a mark naming the ticket.\nThe record reads the mark, the shape report prints a Quarantine section, and a\nline older than 7 days (or dated more than a day ahead) is red and fails\nnothing. na7i is the first entry; 8c9u is not listed because it has not failed\non CI.\n\n* test: the late-throw fixture waits on its timer, the pragma scan covers audits, jest-environment-node tracks jest's range (candybar-testing-ihvy.hcl)\n\n* test: the quarantine report says 1 day, not 1 days (candybar-testing-ihvy.hcl)"
         }
       ]
     },
@@ -77,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T07:43:01-07:00",
           "message": "fix(render): a client timeout, on the connect or after it, kicks nothing (candybar-launch-q7o7.6wi)\n\nA dead daemon never times out: a missing socket is ENOENT and an unbound one\nECONNREFUSED, both immediate. A timeout therefore means a live listener, and a\nkick's candidate loses the bind to it (socket-lease arbitration). Both runtimes\nnow classify the client's own connect/deadline timeouts as busy, and the\nunreachable-by-construction transient 'timeout' cause is removed.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "685dfc67e4662552cac9a0924249992f5225cbbe",
-      "timestamp": "2026-11-02T14:39:16.655Z",
-      "commits": [
-        {
-          "sha": "685dfc67e4662552cac9a0924249992f5225cbbe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T07:38:24-07:00",
-          "message": "fix(render): a render the daemon answers TIMEOUT kicks nothing (candybar-launch-q7o7.g6w) (#574)\n\n* fix(render): a render the daemon answers TIMEOUT kicks nothing, in both runtimes (candybar-launch-q7o7.g6w)\n\nThe daemon's own TIMEOUT proves it is up; each kick spawned a candidate\nthat lost the bind to it. planOutcome stops kicking on busy and the Rust\nclient gets a Busy variant that emits the stale frame without a kick.\n\n* docs(render): the Timeout cause is the client's own clock, and the Busy comments say what they mean (candybar-launch-q7o7.g6w)\n\n* docs(protocol): TIMEOUT is busy, not a respawn-curable transient (candybar-launch-q7o7.g6w)"
-        },
-        {
-          "sha": "3bc3d45db19c1310320ce78c345442c0b2e381a8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-02T14:36:32Z",
-          "message": "chore(release): set `package.json` to 1.180.1 [skip ci]\n\n## [1.180.1](https://github.com/promptctl/cc-candybar/compare/v1.180.0...v1.180.1) (2026-11-02)\n\n### Bug Fixes\n\n* **lanes:** a bar pane is known by the command it was split with (candybar-launch-q7o7.0oo) ([#572](https://github.com/promptctl/cc-candybar/issues/572)) ([7d58c47](https://github.com/promptctl/cc-candybar/commit/7d58c47f329eb86d364d736a324acf02c5b59295))\n"
         }
       ]
     },
