@@ -694,8 +694,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // the journal in flight commits what landed; none opens after.
         ["journalTurns close", () => journalTurns.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
-        // comes before the abort that ends the daemon's launches.
+        // back before it goes (src/daemon/tmux-status.ts).
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the

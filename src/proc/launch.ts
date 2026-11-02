@@ -1186,18 +1186,27 @@ export interface TestableLauncher extends Launcher {
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
+// [LAW:one-type-per-behavior] The daemon's launcher has no blocking form at
+// all, so no cast or `in` check reaches one.
 export function createLauncher(owner: Partial<LaunchScope>): TestableLauncher {
-  return createOneShotLauncher(owner);
+  return launcherWithState(owner).launcher;
 }
 
-// The same launcher, with its blocking form named: for the process's one-shot
+// The same launcher, with its blocking form added: for the process's one-shot
 // launcher and the tests of that form.
 export function createOneShotLauncher(
   owner: Partial<LaunchScope>,
 ): TestableLauncher & OneShotLauncher {
-  const launcher: TestableLauncher & OneShotLauncher = {
+  const { launcher, state } = launcherWithState(owner);
+  return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
+}
+
+function launcherWithState(owner: Partial<LaunchScope>): {
+  launcher: TestableLauncher;
+  state: LaunchState;
+} {
+  const launcher: TestableLauncher = {
     launch: (opts) => track(state, launchWaited(state, opts)),
-    launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
@@ -1243,7 +1252,7 @@ export function createOneShotLauncher(
     },
     { once: true },
   );
-  return launcher;
+  return { launcher, state };
 }
 
 // What a process with no daemon launches through: the CLI, bar-pane, and a

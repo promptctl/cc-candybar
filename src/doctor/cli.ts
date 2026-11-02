@@ -13,7 +13,7 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
-import { oneShotLauncher, processLauncher } from "../proc/launch.js";
+import { oneShotLauncher } from "../proc/launch.js";
 import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
@@ -101,7 +101,7 @@ function reportLine({ check, verdict }: CheckReport): string {
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(origin: RenderOrigin): ConfigLoad {
   const deps = {
-    launcher: processLauncher,
+    launcher: oneShotLauncher,
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
     signer: linkSignerFromKeyFile(),
@@ -350,7 +350,7 @@ export async function doctorCommandPlan(
   return parsed.kind === "usage"
     ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
     : await doctorPlan(
-        productionEdge(processLauncher, loadConfigOnce),
+        productionEdge(oneShotLauncher, loadConfigOnce),
         productionHandlerProbeEdge(oneShotLauncher),
         askDaemon,
         process.env,

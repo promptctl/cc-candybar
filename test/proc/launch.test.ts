@@ -755,6 +755,13 @@ describe("a launcher's scope", () => {
     expect(next.refused).toEqual([]);
   });
 
+  it("a daemon's launcher has no blocking launch to reach", () => {
+    const daemons = createLauncher({});
+    // @ts-expect-error A Launcher offers no launchSync.
+    expect(daemons.launchSync).toBeUndefined();
+    expect("launchSync" in daemons).toBe(false);
+  });
+
   it("a launcher's rate limits are its own", () => {
     const once = { bin: "/bin/echo", category: "click.open" } as const;
     expect(launcher.launchSync(once)).toMatchObject({ ok: true });
