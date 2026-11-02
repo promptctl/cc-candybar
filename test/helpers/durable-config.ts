@@ -31,10 +31,8 @@ import {
   type Step,
 } from "../../src/daemon/settings-history";
 import { settingsHistoryPath } from "../../src/daemon/paths";
-import {
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-} from "../../src/daemon/verbs";
+import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 
 export interface DurableConfig {
   /** The session's projectDir AND cwd — the temp root. */

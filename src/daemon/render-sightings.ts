@@ -18,26 +18,18 @@
 // start and never pruned, so a session an older daemon recorded would answer
 // for a client nothing runs any more.
 
-import type { ClientHint } from "../client-hint.js";
 import { DRAWN_MOTIONS } from "../render/drawn-motion.js";
 import type { ClaudeHookData } from "../utils/claude.js";
+import type { ClientHint } from "../client-hint.js";
 import type { Instant } from "../utils/instant.js";
+import {
+  answeredOf,
+  roleOf,
+  type SightingRole,
+} from "./foundations/sighting-roles.js";
 
 // The newest sightings kept; a daemon serves a handful of sessions at once.
 export const SIGHTINGS_KEPT = 64;
-
-// [LAW:one-source-of-truth] What the one mark Claude Code leaves says of
-// whether it has answered: `current_usage` is null before the first response
-// and right after a /compact. A payload without the field — a Claude Code
-// before 2.0.70, or before `context_window` — says nothing either way.
-export type Answered = "yes" | "no" | "unknown";
-
-export function answeredOf(
-  hookData: Pick<ClaudeHookData, "context_window">,
-): Answered {
-  const usage = hookData.context_window?.current_usage;
-  return usage === null ? "no" : usage === undefined ? "unknown" : "yes";
-}
 
 // [LAW:types-are-the-program] What one hook payload says of the rate-limit
 // windows. `unanswered` is a session with no API response to report on, so
@@ -86,14 +78,6 @@ export function transcriptSaid(
 // bar does. `drawing`: the request arrived and its render has not settled.
 export const FRAMES_SEEN = [...DRAWN_MOTIONS, "failed", "drawing"] as const;
 export type FrameSeen = (typeof FRAMES_SEEN)[number];
-
-// [LAW:one-source-of-truth] Which client drew a sighting: Claude Code's
-// statusline (native, the Node fallback, or a client too old to report), or
-// a `cc-candybar frames` display, whose motion the daemon's feed pushes.
-export const SIGHTING_ROLES = ["statusline", "frames"] as const;
-export type SightingRole = (typeof SIGHTING_ROLES)[number];
-export const roleOf = (client: ClientHint | null): SightingRole =>
-  client?.kind === "frames" ? "frames" : "statusline";
 
 // What one client drew of a session's bar.
 export interface FrameSighting {

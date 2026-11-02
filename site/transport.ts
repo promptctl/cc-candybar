@@ -10,6 +10,7 @@ import { VERB_COPY } from "../src/click/wire";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon, SYSTEM_CLOCK } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
+import { daemonGates } from "../src/daemon/update-keys";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
@@ -69,6 +70,7 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 const paths = daemonPaths(process.env);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log)),
+  gates: daemonGates(),
   paths,
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",

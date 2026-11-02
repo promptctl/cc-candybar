@@ -16,8 +16,7 @@ import {
   type ResolvedDomain,
 } from "../../config/option-domain";
 import { configOptionDomains } from "../../config/edit-chrome";
-import type { DslConfig, Globals } from "../../config/dsl-types";
-import { numericGlobalsSeeds } from "../../config/loader/globals";
+import type { DslConfig } from "../../config/dsl-types";
 import { encodeLayoutOp } from "../../config/layout-ops";
 import {
   parsePersistTarget,
@@ -26,27 +25,16 @@ import {
 import {
   createKeyspace,
   mergeContributions,
-  type Gate,
+  type Keyspace,
   type KeySpecContribution,
 } from "./validator-registry";
 
 // [LAW:no-silent-failure] No built-in keys: a config globals field is
 // writable ONLY when some `persist` action names it.
-const keyspace = createKeyspace({}, "config", deriveConfigActionValidators);
-
-// A config key every session may write, whatever config it renders.
-export function registerConfigValidator(
-  key: string,
-  allowed: readonly string[],
-): () => void {
-  return keyspace.register(key, allowed);
-}
-
-// [LAW:single-enforcer] The gate every durable write passes: the config-file
-// writes the sessions rendering `config` may make — what its action table
-// derives, over the daemon-wide keys.
-export function configGate(config: DslConfig): Gate {
-  return keyspace.gateFor(config);
+// [LAW:no-shared-mutable-globals] A config-file keyspace is a value the root
+// builds (gates.ts) and passes in: the keys a daemon holds are its own.
+export function makeConfigKeyspace(): Keyspace<DslConfig> {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
 }
 
 // [LAW:one-source-of-truth] The ONE place mapping a `persist` ACTION to the
@@ -146,14 +134,6 @@ function actionKeySpecs(
       spec: { kind: "range", min: a.min, max: a.max },
     },
   ];
-}
-
-// [LAW:one-source-of-truth] What a stepped config key holds before the file
-// declares it: the field in the globals the bar renders under its preset, or
-// the field's floor (numericGlobalsSeeds). null for a key that is no numeric globals field.
-export function configKeySeed(globals: Globals, key: string): string | null {
-  const seed = numericGlobalsSeeds(globals).get(key);
-  return seed === undefined ? null : String(seed);
 }
 
 // [LAW:one-source-of-truth] Every key a config's action table can CLEAR is a

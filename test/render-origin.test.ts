@@ -3,12 +3,9 @@
 
 import type { RequestedOrigin } from "../src/config-hint";
 import { BadVerbArgs } from "../src/daemon/verb-error";
-import {
-  encodeRenderOrigin,
-  parseRenderOrigin,
-  sessionRenderOrigin,
-  SESSION_CONFIG_OVERRIDE_KEY,
-} from "../src/daemon/verbs/index";
+import { parseRenderOrigin, sessionRenderOrigin } from "../src/daemon/verbs/index";
+import { SESSION_CONFIG_OVERRIDE_KEY } from "../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 
 const AT = { projectDir: "/p", cwd: "/p/sub" };
 

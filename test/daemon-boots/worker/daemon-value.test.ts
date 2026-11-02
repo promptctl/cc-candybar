@@ -244,15 +244,17 @@ describe("the daemon is a value", () => {
     expect(() => daemon.reloadConfig({} as RenderOrigin)).toThrow(closed);
   });
 
-  test("a second daemon while one is live is refused before it builds anything", async () => {
+  // [LAW:no-shared-mutable-globals] What a daemon's loads accept is its own
+  // value, so a second daemon built beside a live one is a daemon like any other.
+  test("a second daemon beside a live one is built and answers", async () => {
     writeConfig(PADDED);
-    const daemon = construct();
-    const load = jest.fn(() => ({}));
-    expect(() =>
-      construct({ session: { load, save: () => {}, flush: () => {} } }),
-    ).toThrow("a daemon is already live");
-    expect(load).not.toHaveBeenCalled();
-    await close(daemon);
+    const first = construct();
+    const second = construct();
+    expect(second).not.toBe(first);
+    await answer(first, renderRequest("value-first"));
+    await answer(second, renderRequest("value-second"));
+    await close(first);
+    await close(second);
   });
 
   test("a build that throws stands in the way of no next build", async () => {

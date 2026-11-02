@@ -50,7 +50,8 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, SESSION_CLIENT_HINTS_KEY, BadVerbArgs } from "../src/daemon/verbs";
+import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../src/daemon/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/edge";

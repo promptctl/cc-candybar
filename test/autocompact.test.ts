@@ -24,11 +24,8 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
 import { VERB_SLASH } from "../src/click/wire";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-} from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import type { ClaudeInputEdge } from "../src/claude-input/edge";
 import {
   AUTOCOMPACT_WINDOWS,

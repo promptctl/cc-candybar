@@ -12,7 +12,7 @@
 //      a BASELINE key (theme/style) reuses the baseline gate (derives nothing);
 //      copy/open derive nothing.
 //   3. A config's gate is its own derived specs over the daemon-wide keys
-//      (registerStateValidator) — same-key daemon-wide registrations union, and
+//      (register) — same-key daemon-wide registrations union, and
 //      each one's dispose takes only its own members back out.
 //   4. The action table is the SOLE interaction authority — multiple actions
 //      writing one key merge at one site.
@@ -33,11 +33,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  deriveActionValidators,
-  registerStateValidator,
-  stateGate,
-} from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
+import { bareGates, stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
@@ -365,7 +362,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
 // ─── Registry-backed domains are open (candybar-config-engine-71o.1) ───────────
 // Acceptance: adding a domain is DATA (a registerOptionDomain call), never a
 // touch to action.ts / loader/actions.ts / render/action.ts /
-// daemon/verbs/state-validators.ts — this test proves it by registering a
+// daemon/foundations/state-validators.ts — this test proves it by registering a
 // brand-new domain and driving it through the exact same `from:` seam
 // "themes"/"endcaps" use, with zero special-casing anywhere in that path.
 
@@ -594,7 +591,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
 // ─── per-key merge: daemon-wide keys, and one config's actions ─────────────────
 
 describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
-  // `k` is a daemon-wide key here on purpose: registerStateValidator is the
+  // `k` is a daemon-wide key here on purpose: the keyspace's `register` is the
   // subject. No config declares it, so what a config's gate says about `k` is
   // exactly what the daemon-wide registrations contribute.
   test("same-key daemon-wide allow-lists union; each dispose takes its own back, down to removal", () => {
@@ -608,9 +605,11 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
       }`,
       ALLOWED,
     );
-    const validate = (v: string) => stateGate(config).validate("k", v);
-    const d1 = registerStateValidator("k", ["a", "b"]);
-    const d2 = registerStateValidator("k", ["b", "c"]);
+    const gates = bareGates();
+    const validate = (v: string) =>
+      gates.state.gateFor(config).validate("k", v);
+    const d1 = gates.state.register("k", ["a", "b"]);
+    const d2 = gates.state.register("k", ["b", "c"]);
     // Union of both registrations is accepted.
     for (const v of ["a", "b", "c"]) {
       expect(validate(v).ok).toBe(true);

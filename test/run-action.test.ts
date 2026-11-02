@@ -39,13 +39,9 @@ import { linkSigner } from "../src/click/link-signer";
 import { linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
-import {
-  BadVerbArgs,
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-  encodeRenderOrigin,
-  type VerbContext,
-} from "../src/daemon/verbs";
+import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
@@ -55,6 +51,8 @@ import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
+import { daemonGates } from "../src/daemon/update-keys";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -188,7 +186,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       log,
       declare: (holds, facts, closure, sources) =>
@@ -348,7 +346,7 @@ describe("a run's declaration", () => {
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -374,7 +372,7 @@ describe("a run's declaration", () => {
       launcher: processLauncher,
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -398,7 +396,7 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(file, dir));
+    const message = fatal(await checkConfig(daemonGates(), file, dir));
     expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
     expect(message).toContain(said);
     expect(message).toContain("a run refreshes only a declared source");
@@ -409,7 +407,7 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ actions: { mine: { run: ["true"], refreshes: ["status"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(file, dir));
+    const message = fatal(await checkConfig(daemonGates(), file, dir));
     expect(message).toContain(`actions.mine refreshes "status", which is not declared`);
   });
 
@@ -424,7 +422,7 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ actions: { mine: ${decl} }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(file, dir));
+    const message = fatal(await checkConfig(daemonGates(), file, dir));
     expect(message).toContain(field);
     expect(message).toContain(said);
   });

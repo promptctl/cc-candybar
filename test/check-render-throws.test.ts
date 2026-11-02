@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { checkConfig } from "../src/check";
+import { daemonGates } from "../src/daemon/update-keys";
 
 jest.mock("../src/dsl/render", () => {
   const actual =
@@ -52,7 +53,7 @@ test("a render that throws under one preset is reported with that preset, beside
       root: { h: ['broken'] },
     }`,
   );
-  const outcome = await checkConfig(p, dir);
+  const outcome = await checkConfig(daemonGates(), p, dir);
   expect(outcome.kind).toBe("fatal");
   const message = outcome.kind === "fatal" ? outcome.message : "";
   expect(message).toContain("config renders with 2 render errors");

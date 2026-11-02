@@ -46,6 +46,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
 import { textOf } from "../src/render/frame";
+import { daemonGates } from "../src/daemon/update-keys";
 
 const ROOT = path.join(__dirname, "..");
 
@@ -224,7 +225,7 @@ afterAll(() => {
 function checkSnippet(f: Fence): ReturnType<typeof checkConfig> {
   const p = path.join(dir, `${path.basename(f.doc)}-L${f.line}.json5`);
   fs.writeFileSync(p, f.body);
-  return checkConfig(p, dir);
+  return checkConfig(daemonGates(), p, dir);
 }
 
 const ofKind =

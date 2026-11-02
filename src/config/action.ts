@@ -2,7 +2,7 @@
 // ACTION — the config-file schema for `DslConfig.actions`. Pure data (no engine,
 // no rich-js): the strongest theorem about what a user can declare. The loader
 // narrows `unknown` to these; the runtime (render/action.ts) and the validator
-// derivation (daemon/verbs/state-validators.ts) consume them.
+// derivation (daemon/foundations/state-validators.ts) consume them.
 //
 // [LAW:locality-or-seam] An action is the SEAM between the clickable
 // REPRESENTATION (a template region, `{{ action "name" … }}`) and the BEHAVIOR

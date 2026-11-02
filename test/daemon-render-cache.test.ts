@@ -42,7 +42,7 @@ import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { Holds } from "../src/utils/holds";
-import { stateGate } from "../src/daemon/verbs/state-validators";
+import { stateGate } from "./helpers/gates";
 import {
   WatcherRegistry,
   type WatcherCounters,
@@ -65,6 +65,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
+import { bareGates } from "./helpers/gates";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -107,7 +108,7 @@ function makeCache(
     { stateDir: stateDir(),
       launcher: processLauncher,
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
+      signer: TEST_SIGNER, gates: bareGates(),
       fileEvents: NO_FILE_EVENTS,
       sessionState,
       watchers,
@@ -1390,7 +1391,7 @@ describe("RenderCache idle sweep", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1442,7 +1443,7 @@ describe("RenderCache idle sweep", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1498,7 +1499,7 @@ describe("RenderCache idle sweep", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState,
         watchers,
@@ -1602,7 +1603,7 @@ describe("RenderCache frames and pins", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1750,7 +1751,7 @@ describe("RenderCache frames and pins", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1818,7 +1819,7 @@ describe("RenderCache frames and pins", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,
@@ -1856,7 +1857,7 @@ describe("RenderCache frames and pins", () => {
       { stateDir: stateDir(),
         launcher: processLauncher,
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
+        signer: TEST_SIGNER, gates: bareGates(),
         fileEvents: NO_FILE_EVENTS,
         sessionState: new SessionState(),
         watchers,

@@ -37,10 +37,11 @@ import {
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { rootNode } from "../src/config/root";
-import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
 import { instantOf } from "../src/utils/instant";
+import { daemonGates } from "../src/daemon/update-keys";
 
 const SID = "s-presets";
 const THEME = "textual-dark";
@@ -472,7 +473,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset naming a nonexistent segment is FATAL, and the message locates it", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory', 'no-such-segment'] } } } }`,
-      (p) => checkConfig(p),
+      (p) => checkConfig(daemonGates(), p),
     );
     expect(outcome.kind).toBe("fatal");
     if (outcome.kind !== "fatal") throw new Error("unreachable");
@@ -485,7 +486,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset staging only real segments is clean", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory'] } } } }`,
-      (p) => checkConfig(p),
+      (p) => checkConfig(daemonGates(), p),
     );
     expect(outcome.kind).toBe("clean");
   });

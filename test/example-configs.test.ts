@@ -28,6 +28,7 @@ import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
+import { daemonGates } from "../src/daemon/update-keys";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -39,7 +40,7 @@ const exampleFiles = fs
 // Run one example through the shipped check pipeline; the rendered line for
 // content assertions.
 async function renderExample(file: string): Promise<Frame> {
-  return expectClean(file, await checkConfig(path.join(examplesDir, file)))
+  return expectClean(file, await checkConfig(daemonGates(), path.join(examplesDir, file)))
     .rendered;
 }
 
@@ -59,7 +60,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   test.each(exampleFiles)(
     "%s is clean under `cc-candybar check` (exit 0) and renders",
     async (file) => {
-      expectClean(file, await checkConfig(path.join(examplesDir, file)));
+      expectClean(file, await checkConfig(daemonGates(), path.join(examplesDir, file)));
     },
   );
 
@@ -85,7 +86,7 @@ describe("shipped example configs (examples/*.json5)", () => {
         }
         const target = path.join(dir, file);
         const loads = linkUrls(
-          expectClean(file, await checkConfig(target)).rendered,
+          expectClean(file, await checkConfig(daemonGates(), target)).rendered,
         )
           .filter((url) => url.startsWith("cc-candybar://load-config/"))
           .map((url) => decodeURIComponent(url.split("/").pop() ?? ""));
@@ -124,7 +125,7 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
     'a config picking preset "%s" is clean under check (exit 0) and renders',
     async (preset) => {
       await withPresetConfig(preset, async (p) =>
-        expectClean(`preset "${preset}"`, await checkConfig(p)),
+        expectClean(`preset "${preset}"`, await checkConfig(daemonGates(), p)),
       );
     },
   );

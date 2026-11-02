@@ -46,10 +46,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
-import {
-  deriveActionValidators,
-  stateGate,
-} from "../src/daemon/verbs/state-validators";
+import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
+import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";

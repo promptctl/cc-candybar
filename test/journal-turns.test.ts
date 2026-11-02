@@ -8,12 +8,8 @@ import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { replyTo } from "../src/daemon/reply";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { SessionState } from "../src/daemon/session-state";
-import {
-  closeIdleMenus,
-  SESSION_CLIENT_HINTS_KEY,
-  VERBS,
-  type VerbContext,
-} from "../src/daemon/verbs";
+import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_COPY,
   VERB_DISPATCH,

@@ -61,7 +61,7 @@ import {
   startPlace,
   type SessionStart,
 } from "./claude-relaunch.js";
-import type { Answered } from "./render-sightings.js";
+import type { Answered } from "./foundations/sighting-roles.js";
 import type { Presence } from "../utils/presence.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import {

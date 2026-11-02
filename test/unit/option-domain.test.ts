@@ -1,6 +1,6 @@
 // [LAW:one-source-of-truth] Direct unit coverage of the option-domain registry
 // itself — resolveOptionDomain is the ONE place render/action.ts and
-// daemon/verbs/state-validators.ts resolve a `from` value, so its contract
+// daemon/foundations/state-validators.ts resolve a `from` value, so its contract
 // (inline arrays are self-resolving, named domains check per-config overrides
 // before the global registry, unknown names throw naming what IS known,
 // built-ins can never be reclaimed) is pinned here rather than only exercised

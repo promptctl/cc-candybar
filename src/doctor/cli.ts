@@ -15,6 +15,7 @@
 
 import { oneShotLauncher } from "../proc/launch.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { daemonGates } from "../daemon/update-keys.js";
 import { stateDir } from "../daemon/paths.js";
 import { openSync } from "node:fs";
 import process from "node:process";
@@ -106,6 +107,7 @@ export function loadConfigOnce(origin: RenderOrigin): ConfigLoad {
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
     signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+    gates: daemonGates(),
     stateDir: stateDir(),
   };
   const loaded = loadFromDisk(

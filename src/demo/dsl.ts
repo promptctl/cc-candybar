@@ -23,6 +23,7 @@
 // populate, exactly as the daemon re-renders on each status-line tick.
 
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { daemonGates } from "../daemon/update-keys.js";
 import { stateDir } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
@@ -145,6 +146,7 @@ function loadState(): DslRenderState {
       sessionState,
       storage: UNOWNED_STORAGE,
       signer: linkSignerFromKeyFile(linkKeyFile(stateDir())),
+      gates: daemonGates(),
       stateDir: stateDir(),
     },
   );

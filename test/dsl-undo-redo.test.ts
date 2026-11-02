@@ -43,7 +43,7 @@ import { parseHandlerUrl } from "../src/install/index";
 import { VERBS } from "../src/daemon/verbs";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import type { VerbContext } from "../src/daemon/verbs";
-import { deriveConfigActionValidators } from "../src/daemon/verbs/config-validators";
+import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { instantOf } from "../src/utils/instant";
 

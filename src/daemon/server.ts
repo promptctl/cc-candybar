@@ -49,6 +49,7 @@ import {
   type RunningBundle,
 } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
+import { daemonGates } from "./update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./protocol";
@@ -207,6 +208,7 @@ async function boot(): Promise<void> {
     memoryLimitBytes: memoryLimit,
     registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: SYSTEM_CLOCK,
+    gates: daemonGates(),
     exit: shutdown,
   });
   serving = daemon;

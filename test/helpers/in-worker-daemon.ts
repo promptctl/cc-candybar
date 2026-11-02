@@ -28,7 +28,7 @@ import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
 import type { StatsSnapshot } from "../../src/daemon/stats";
-import { reserveUpdateKeys } from "../../src/daemon/update-notice";
+import { daemonGates } from "../../src/daemon/update-keys";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
@@ -140,6 +140,8 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
       clock: SYSTEM_CLOCK,
+      // A daemon's gates are its own: none is shared with another built here.
+      gates: daemonGates(),
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
@@ -220,15 +222,38 @@ export const startBarDaemon: StartBarDaemon = async (env) => {
   return { target: daemon, stop: daemon.stop };
 };
 
+// [LAW:no-shared-mutable-globals] The env that daemons started here hold, and
+// how many, with the env the first of them found, which the last to stop puts
+// back. `process.env` is the worker's one ambient value, so the harness is its
+// single owner: a start that asks for another env than a daemon not yet stopped
+// holds would swap it under that daemon, and a stop that put back what its own
+// start found would leave an earlier start's env behind.
+let held: {
+  readonly env: NodeJS.ProcessEnv;
+  readonly before: NodeJS.ProcessEnv;
+  starts: number;
+} | null = null;
+
+const sameEnv = (a: NodeJS.ProcessEnv, b: NodeJS.ProcessEnv): boolean =>
+  JSON.stringify(Object.entries(a).sort()) ===
+  JSON.stringify(Object.entries(b).sort());
+
 // A daemon serving this worker, placed by `env`: the env a spawned daemon would
 // be given is this file's own until `stop`, and the daemon's paths are read from
-// it once, at the build. One test file's `process.env` is its own, and a process
-// holds one live daemon, so a second start before a stop is refused.
+// it once, at the build. One test file's `process.env` is its own, so a start
+// asking for another env than a daemon not yet stopped holds is refused; a case
+// that wants two daemons over different places builds them with `buildDaemon`
+// and paths of their own.
 export function startDaemon(
   env: NodeJS.ProcessEnv,
   overrides: DaemonOverrides = {},
 ): InWorkerDaemon {
-  const before = { ...process.env };
+  if (held !== null && !sameEnv(held.env, env)) {
+    throw new Error(
+      "startDaemon: this worker's env is held by a daemon that has not stopped, and this start asks for another",
+    );
+  }
+  const before = held?.before ?? { ...process.env };
   placeEnv(env);
   let daemon: Daemon;
   let daemonLog: DaemonLog;
@@ -236,12 +261,12 @@ export function startDaemon(
   try {
     ({ daemon, daemonLog, paths } = buildDaemon(overrides));
   } catch (e) {
-    placeEnv(before);
+    if (held === null) placeEnv(before);
     throw e;
   }
-  // A booted daemon holds these from arming, so every config's gate here is
-  // built against them too.
-  const releaseUpdateKeys = reserveUpdateKeys();
+  held = held ?? { env: { ...env }, before, starts: 0 };
+  let stopped = false;
+  held.starts++;
   const open = new Set<Duplex>();
   const servers: net.Server[] = [];
 
@@ -283,6 +308,10 @@ export function startDaemon(
     // unread: its launches are refused, by its own launcher, and a line of its
     // says it came after the close.
     stop: async () => {
+      // A second stop of one daemon (inline, then the case's afterEach) is no
+      // second daemon ending: only a first one counts down what is held.
+      if (stopped) return;
+      stopped = true;
       void daemon.close(NO_TMUX_AT_EXIT);
       for (const end of open) end.destroy();
       await Promise.all(
@@ -290,8 +319,10 @@ export function startDaemon(
       );
       await daemonLog.drained();
       daemonLog.dispose();
-      releaseUpdateKeys();
-      placeEnv(before);
+      if (held !== null && --held.starts === 0) {
+        placeEnv(held.before);
+        held = null;
+      }
     },
   };
 }

@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { checkConfig, checkPlan, type CheckOutcome } from "../../src/check";
 import { textOf } from "../../src/render/frame";
+import { daemonGates } from "../../src/daemon/update-keys";
 
 // Run `fn` against a real temp config file holding `text`. The file outlives
 // the whole of `fn` (checkConfig is async: it awaits its sources' first run).
@@ -50,6 +51,6 @@ export function checkText(
   text: string,
 ): Promise<Extract<CheckOutcome, { kind: "clean" }>> {
   return withTempConfig(text, async (p) =>
-    expectClean(label, await checkConfig(p)),
+    expectClean(label, await checkConfig(daemonGates(), p)),
   );
 }

@@ -12,9 +12,9 @@ import { sanitizeClient } from "../daemon/protocol.js";
 import {
   FRAMES_SEEN,
   RATE_LIMITS_SEEN,
-  SIGHTING_ROLES,
   type RenderSighting,
 } from "../daemon/render-sightings.js";
+import { SIGHTING_ROLES } from "../daemon/foundations/sighting-roles.js";
 import type { Asked } from "./checks.js";
 import type {
   MemoryReading,

@@ -25,13 +25,11 @@ import {
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../../config/option-domain";
-import { stateVarDecls, type DslConfig } from "../../config/dsl-types";
-import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
-import { sessionSettingValue } from "../setting-drafts";
+import type { DslConfig } from "../../config/dsl-types";
 import {
   createKeyspace,
   mergeContributions,
-  type Gate,
+  type Keyspace,
   type KeySpecContribution,
   type KeyValidator,
 } from "./validator-registry";
@@ -110,24 +108,10 @@ const BASELINE: Readonly<Record<string, KeyValidator>> = {
   "toolbar-expanded": validateBoolean,
 };
 
-// THE SessionState instance of the shared keyspace.
-const keyspace = createKeyspace(BASELINE, "state", deriveActionValidators);
-
-// A key every session may write, whatever config it renders.
-export function registerStateValidator(
-  key: string,
-  allowed: readonly string[],
-): () => void {
-  return keyspace.register(key, allowed);
-}
-
-// [LAW:single-enforcer] The gate `set-state`, `step-state` and every write
-// that re-crosses them pass: the SessionState writes the sessions rendering
-// `config` may make — what its action table derives, over the built-in and
-// daemon-wide keys. An action table that cannot gate throws here, which is
-// how a config load refuses it.
-export function stateGate(config: DslConfig): Gate {
-  return keyspace.gateFor(config);
+// [LAW:no-shared-mutable-globals] A SessionState keyspace is a value the root
+// builds (gates.ts) and passes in: the keys a daemon holds are its own.
+export function makeStateKeyspace(): Keyspace<DslConfig> {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
 }
 
 // [LAW:one-source-of-truth] The ONE place mapping a decoupled ACTION to the
@@ -178,26 +162,6 @@ function dropBaselineAllowLists(
   return contributions.filter(
     (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key),
   );
-}
-
-// [LAW:one-source-of-truth] What a stepped SessionState key shows before any
-// click, in the session whose config and picks these are: a setting's is the
-// value the session's preset resolves it to (sessionSettingValue — the bar and
-// its control show the same); any other key's is its `state` variable's
-// `default`. null when the config declares neither.
-export function stateKeySeed(
-  config: DslConfig,
-  sessionPick: (key: string) => string | null,
-  key: string,
-): string | null {
-  const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting !== undefined) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
-  for (const [, decl] of stateVarDecls(config)) {
-    if (decl.key === key) return decl.default ?? null;
-  }
-  return null;
 }
 
 // [LAW:one-source-of-truth] The writable-key surface a config's `set` actions

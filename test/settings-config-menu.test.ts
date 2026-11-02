@@ -40,11 +40,8 @@ import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  VERBS,
-  type VerbContext,
-} from "../src/daemon/verbs";
+import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   fileHeldSettings,
   settingCounts,

@@ -18,8 +18,6 @@
 // edge: the clocks, the registry fetch, the act's record, the validator
 // registrations.
 
-import type { Globals } from "../config/dsl-types";
-import { SETTINGS } from "../config/setting-projections";
 import {
   effectsUrl,
   VERB_APPLY_UPDATE,
@@ -62,8 +60,12 @@ import { readStartTime } from "./process-fingerprint";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs, DaemonClosing } from "./verb-error";
-import { registerConfigValidator } from "./verbs/config-validators";
-import { registerStateValidator } from "./verbs/state-validators";
+import type { Gates } from "./foundations/gates";
+import {
+  UPDATE_DISMISSED_KEY,
+  UPDATE_NOTICE_FIELD,
+  UPDATE_NOTICE_SESSION_KEY,
+} from "./update-keys";
 
 // [LAW:types-are-the-program] What is newer than the running code. `source`
 // is a checkout whose tree no longer matches the bundle; `release` is an
@@ -81,16 +83,6 @@ export type Update =
       readonly newer: Version;
       readonly running: Version;
     };
-
-// [LAW:one-source-of-truth] The session key a dismissal writes and the
-// config field a disable writes, spelled once. The field is checked against
-// Globals so a rename there fails here at compile time.
-export const UPDATE_DISMISSED_KEY = "update.dismissed";
-export const UPDATE_NOTICE_FIELD = "updateNotice" satisfies keyof Globals;
-// The session half of the same setting (the settings menu's toggle). A disable
-// writes both layers: the file so every session starts disabled, and this
-// session's pick, which outranks the file and may hold `true` from the toggle.
-export const UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
 
 // What a dismissal names: the newer thing's identity, so a dismissal lapses
 // the moment something newer again appears — the digest for source (the
@@ -270,6 +262,8 @@ export interface UpdateWatchOptions {
   readonly releaseIntervalMs: number;
   readonly registryUrl: string;
   readonly fetchImpl: typeof fetch;
+  // The gates whose dismiss key follows the notice's identity.
+  readonly gates: Gates;
   // Runs after a successful act: the bundle on disk has changed, and the
   // binary watch should notice now rather than at its next tick. Called in a
   // turn of the act queue and not awaited, since what it starts may wait on
@@ -342,22 +336,8 @@ function describeRelease(c: Currency): [LogLevel, string] {
 // the layout is a published install, starts and watches the act, and owns the two
 // click gates — the dismiss allow-list (re-registered to the current
 // identity whenever it changes, so a stale dismissal simply stops matching)
-// and the disable allow-list (registered once; `false` is the only value a
-// click writes).
-// [LAW:one-source-of-truth] The keys the notice's links write, held from boot
-// so every config's gate is built against them: [disable]'s two, and
-// [dismiss]'s with no member until something newer exists (syncGate adds the
-// identity). `cc-candybar check` holds the same keys while it builds a
-// config's gates, so it refuses what the daemon's load refuses.
-export function reserveUpdateKeys(): () => void {
-  const disposers = [
-    registerConfigValidator(UPDATE_NOTICE_FIELD, ["false"]),
-    registerStateValidator(UPDATE_NOTICE_SESSION_KEY, ["false"]),
-    registerStateValidator(UPDATE_DISMISSED_KEY, []),
-  ];
-  return () => disposers.forEach((dispose) => dispose());
-}
-
+// and the dismiss allow-list's identity. The disable allow-list is in the
+// gates themselves (`daemonGates`), where a daemon is built with them.
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     launcher,
@@ -368,6 +348,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     releaseIntervalMs,
     registryUrl,
     fetchImpl,
+    gates,
     onApplied,
     log,
   } = opts;
@@ -427,7 +408,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         ? null
         : {
             identity,
-            dispose: registerStateValidator(UPDATE_DISMISSED_KEY, [identity]),
+            dispose: gates.state.register(UPDATE_DISMISSED_KEY, [identity]),
           };
   }
 
@@ -521,7 +502,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   return {
     arm() {
-      armed.push(reserveUpdateKeys());
       sampleBuild();
       every(sampleBuild, intervalMs);
       armed.push(() => clearTimeout(tickTimer));

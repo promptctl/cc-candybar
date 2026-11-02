@@ -451,7 +451,7 @@ export async function replyTo(
         // [LAW:no-silent-failure] Include the allowed values so a
         // CLI consumer (or operator) sees what is supported without
         // grep — same pattern as the set-state verb's unknown-key error
-        // in src/daemon/verbs/state-validators.ts.
+        // in src/daemon/foundations/state-validators.ts.
         error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,

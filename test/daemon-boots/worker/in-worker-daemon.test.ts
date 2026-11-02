@@ -151,13 +151,21 @@ describe("a daemon in this worker", () => {
     expect(event).toContain(` deadline=stated:${120 - DRAW_RESERVE_MS}ms `);
   });
 
-  test("a start refused beside a live daemon leaves it the env it reads", () => {
+  test("the env is held until the last daemon over it stops, however often one is stopped", async () => {
+    const before = { ...process.env };
     daemon = startDaemon(env);
     const placed = { ...process.env };
     expect(() =>
       startDaemon({ ...env, XDG_STATE_HOME: path.join(projectDir, "other") }),
-    ).toThrow("a daemon is already live in this process");
+    ).toThrow("this worker's env is held by a daemon that has not stopped");
     expect({ ...process.env }).toEqual(placed);
+
+    const second = startDaemon(env);
+    await daemon.stop();
+    await daemon.stop();
+    expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
+    await second.stop();
+    expect({ ...process.env }).toEqual(before);
   });
 
   test("a TIMEOUT is the helper's to ask again", async () => {

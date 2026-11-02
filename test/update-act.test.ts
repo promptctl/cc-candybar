@@ -29,12 +29,9 @@ import {
   readStartTime,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
-import {
-  makeUpdateWatch,
-  UPDATE_DISMISSED_KEY,
-} from "../src/daemon/update-notice";
+import { makeUpdateWatch } from "../src/daemon/update-notice";
+import { daemonGates, UPDATE_DISMISSED_KEY } from "../src/daemon/update-keys";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { stateGate } from "../src/daemon/verbs/state-validators";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
 import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { until } from "./helpers/until";
@@ -569,6 +566,7 @@ describe("claimAct: one act per bundle", () => {
       releaseIntervalMs: 60_000,
       registryUrl: "http://127.0.0.1:1",
       fetchImpl: fetch,
+      gates: daemonGates(),
       onApplied: () => {},
       log: (_level, msg) => logged.push(msg),
     });
@@ -587,6 +585,7 @@ describe("claimAct: one act per bundle", () => {
   // closes lands on a watch that knows of no update, and leaves no gate.
   test("a closed watch keeps no dismiss gate, and a late release poll registers none", async () => {
     let answer!: (latest: Response) => void;
+    const gates = daemonGates();
     const watch = makeUpdateWatch({
       launcher: processLauncher,
       digest: null,
@@ -596,18 +595,26 @@ describe("claimAct: one act per bundle", () => {
       releaseIntervalMs: 60_000,
       registryUrl: "http://127.0.0.1:1",
       fetchImpl: () => new Promise((resolve) => (answer = resolve)),
+      gates,
       onApplied: () => {},
       log: () => {},
     });
-    const gate = (): string[] => [...stateGate(DEFAULT_DSL_CONFIG).listKeys()];
+    // The key is held from the gates' construction with no member; what a
+    // dismissal may write under it is the identity of what is newer.
+    const admits = (identity: string): boolean =>
+      gates.state
+        .gateFor(DEFAULT_DSL_CONFIG)
+        .validate(UPDATE_DISMISSED_KEY, identity).ok;
     watch.arm();
-    expect(gate()).toContain(UPDATE_DISMISSED_KEY);
+    expect(gates.state.gateFor(DEFAULT_DSL_CONFIG).listKeys()).toContain(
+      UPDATE_DISMISSED_KEY,
+    );
 
     watch.close();
     answer(new Response(JSON.stringify({ latest: "999.0.0" })));
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(gate()).not.toContain(UPDATE_DISMISSED_KEY);
+    expect(admits("999.0.0")).toBe(false);
     expect(
       watch.notice({ sessionId: "s", dismissed: null, enabled: true }),
     ).toEqual([]);
@@ -688,6 +695,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       releaseIntervalMs: 60_000,
       registryUrl: "http://127.0.0.1:1",
       fetchImpl: async () => Response.json({ latest: "999.0.0" }),
+      gates: daemonGates(),
       onApplied: () => applied++,
       log: (_level, msg) => logged.push(msg),
     });
@@ -822,6 +830,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       releaseIntervalMs: 60_000,
       registryUrl: "http://127.0.0.1:1",
       fetchImpl: fetch,
+      gates: daemonGates(),
       onApplied: () => void binary.checkNow(),
       log: (_level, msg) => logged.push(msg),
     });

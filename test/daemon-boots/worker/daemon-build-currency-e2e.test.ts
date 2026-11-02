@@ -12,11 +12,7 @@ import path from "node:path";
 
 import { sourceDigest } from "../../../src/source-digest";
 import { PACKAGE_VERSION } from "../../../src/version";
-import {
-  UPDATE_DISMISSED_KEY,
-  UPDATE_NOTICE_FIELD,
-  UPDATE_NOTICE_SESSION_KEY,
-} from "../../../src/daemon/update-notice";
+import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY } from "../../../src/daemon/update-keys";
 import {
   effectsUrl,
   VERB_SET_STATE,
