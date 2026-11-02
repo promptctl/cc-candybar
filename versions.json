@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-585",
+      "ref": "refs/pull/585/merge",
+      "sha": "bdba3566dbe3f685e388264fe1051dac08fd6d24",
+      "timestamp": "2026-11-02T21:07:28.700Z",
+      "commits": [
+        {
+          "sha": "bdba3566dbe3f685e388264fe1051dac08fd6d24",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:06:24-07:00",
+          "message": "Merge 1b331129f0c394763a5df26fea708efd362cee5b into 805df08b803697644135dd02d9fc34fee4b2208a\n"
+        },
+        {
+          "sha": "1b331129f0c394763a5df26fea708efd362cee5b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T14:05:40-07:00",
+          "message": "test(host): tests state their machine as a Host, and no test writes process.env (candybar-testing-ihvy.33e)\n\nEvery test that wrote XDG_*, the daemon socket, the breaker's variables or the like now builds a Host over the environment it names and hands it to the code under test; a child a test launches inherits its launcher's environment. A second lint config fails a write to process.env in test/, apart from the setup files, the in-worker harness and a PATH stub, and pnpm lint runs it. Memory notes the rule.\n"
+        },
+        {
+          "sha": "fc619300bb1cc3625ffdc717980417dbbef075e3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T13:31:18-07:00",
+          "message": "refactor(host): the process is read once into a Host, and a launcher inherits what its owner hands it (candybar-testing-ihvy.33e)\n\nsrc names process.env, os.homedir and os.tmpdir only in src/host.ts and the preload's main; every other file takes a Host, a World (host + launcher), or the parsed Locations / DaemonPaths. Launch options carry an envOverlay over the launcher's inherited environment, the module-level launcher singletons are gone, and a lint rule keeps it so.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "805df08b803697644135dd02d9fc34fee4b2208a",
