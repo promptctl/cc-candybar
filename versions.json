@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-588",
+      "ref": "refs/pull/588/merge",
+      "sha": "ac311454384c8fd37fb17643c7f43d50f0cffcfd",
+      "timestamp": "2026-11-02T23:42:08.649Z",
+      "commits": [
+        {
+          "sha": "ac311454384c8fd37fb17643c7f43d50f0cffcfd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:41:06-07:00",
+          "message": "Merge c2e17351ef472727862029915b92805aed158b38 into e4792ac42dfcce8f3f64975e904729a8bf7ff51b\n"
+        },
+        {
+          "sha": "c2e17351ef472727862029915b92805aed158b38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T16:27:33-07:00",
+          "message": "fix(git): a closed git cache answers a late declaration as closed, so no period re-arms after close (candybar-testing-ihvy.dbg)\n\nA render mid-wait at close declared after close had dropped every repo,\nbuilt a fresh state on the closed cache, and that state's period re-armed\nafter every pass: hundreds of timers armed after daemon.close() returned.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-587",
       "ref": "refs/pull/587/merge",
       "sha": "b7e529970f9cdd4bf0c395b05ce0645d45be1772",
