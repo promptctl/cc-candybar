@@ -4,15 +4,22 @@
     {
       "version": "pr-556",
       "ref": "refs/pull/556/merge",
-      "sha": "b49b4cd2cf4ff0094e637f9e1b7f58efbca786c3",
-      "timestamp": "2026-11-02T00:23:06.570Z",
+      "sha": "3be0ae9f7598c49ee07294ab6f33aa6d788f9a02",
+      "timestamp": "2026-11-02T00:31:37.289Z",
       "commits": [
         {
-          "sha": "b49b4cd2cf4ff0094e637f9e1b7f58efbca786c3",
+          "sha": "3be0ae9f7598c49ee07294ab6f33aa6d788f9a02",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T00:22:16Z",
-          "message": "Merge e7903a0db3933289a9860639930292423c249e26 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+          "timestamp": "2026-11-02T00:30:42Z",
+          "message": "Merge d5c7fcd1d303ee34dcf2a35a67d2d608c0d5a2d9 into 72ffdd27eff3be49dc0520bbd5ff5b02ee53daf2\n"
+        },
+        {
+          "sha": "d5c7fcd1d303ee34dcf2a35a67d2d608c0d5a2d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-01T17:30:39-07:00",
+          "message": "Merge branch 'main' into candybar-testing-ihvy.43x"
         },
         {
           "sha": "e7903a0db3933289a9860639930292423c249e26",
