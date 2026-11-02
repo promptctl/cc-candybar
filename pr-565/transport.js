@@ -23256,6 +23256,29 @@ function sanitizeClient(v) {
   return CLIENT_KINDS.includes(kind) && path40 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path40, source } : void 0;
 }
 
+// src/daemon/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
+  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
+  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
+  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
+}
+
+// src/daemon/client.ts
+var CLICK_BUDGETS = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
+};
+
 // src/daemon/acquire.ts
 init_globals();
 var import_node_path9 = __toESM(require_path_browserify(), 1);
@@ -76693,23 +76716,6 @@ function resolvePath2(obj, dotPath) {
     cur = cur[key];
   }
   return cur;
-}
-
-// src/daemon/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
 }
 
 // src/daemon/render-checkpoint.ts

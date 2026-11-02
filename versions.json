@@ -4,15 +4,22 @@
     {
       "version": "pr-565",
       "ref": "refs/pull/565/merge",
-      "sha": "08f7b619bd7cbd6dda2cf424b434cdac02c9af0f",
-      "timestamp": "2026-11-02T12:13:44.918Z",
+      "sha": "4ada9e3bdbcdb08c569342a86d149050254904b9",
+      "timestamp": "2026-11-02T12:17:36.379Z",
       "commits": [
         {
-          "sha": "08f7b619bd7cbd6dda2cf424b434cdac02c9af0f",
+          "sha": "4ada9e3bdbcdb08c569342a86d149050254904b9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T12:12:52Z",
-          "message": "Merge 38c2665d37d256b8a7a162e0c589c6356434eafa into c2a649577d11945c26d035121a186062bf34327f\n"
+          "timestamp": "2026-11-02T12:16:44Z",
+          "message": "Merge 3a3fe33129e6b0285e1ef8257368166a666c6662 into c2a649577d11945c26d035121a186062bf34327f\n"
+        },
+        {
+          "sha": "3a3fe33129e6b0285e1ef8257368166a666c6662",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:16:23-07:00",
+          "message": "fix(client): busy is its own outcome kind, and a click waits past the daemon's backstop (candybar-launch-q7o7.4yv)\n"
         },
         {
           "sha": "38c2665d37d256b8a7a162e0c589c6356434eafa",
