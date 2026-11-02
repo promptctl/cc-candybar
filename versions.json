@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-566",
+      "ref": "refs/pull/566/merge",
+      "sha": "70540fd18f78c4003cf4a420338619d2c3610ed1",
+      "timestamp": "2026-11-02T12:24:12.894Z",
+      "commits": [
+        {
+          "sha": "70540fd18f78c4003cf4a420338619d2c3610ed1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:23:11-07:00",
+          "message": "Merge f803e263f40433b50d65a1a77e3f2f45cf7a075f into c2a649577d11945c26d035121a186062bf34327f\n"
+        },
+        {
+          "sha": "f803e263f40433b50d65a1a77e3f2f45cf7a075f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T05:22:58-07:00",
+          "message": "fix(frame-feed): a timer that fires before its moment waits it out, so no turn is drawn twice (brandon-unfiled-3248.l1mh)\n\nNode starts a timer from the loop's cached time, so one armed late in a slow\ncallback fires early by as long as that callback had run. Past\nTIMER_RESOLUTION_S the draw clamped to the wall, which fell in the turn before\nthe frame's change: that turn drawn twice, the next one late. The feed now\ncompares the timer's moment on the monotonic clock and re-arms for the rest.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-565",
       "ref": "refs/pull/565/merge",
       "sha": "ec5ce6cf256419e8ce68f16ebf0d7823065494a3",
