@@ -22968,7 +22968,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.178.2";
+var PACKAGE_VERSION = "1.179.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -23917,9 +23917,15 @@ function endJob(pid2, status, end) {
   return { stands, signalled };
 }
 function createLauncher(owner) {
+  return launcherWithState(owner).launcher;
+}
+function createOneShotLauncher(owner) {
+  const { launcher, state } = launcherWithState(owner);
+  return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
+}
+function launcherWithState(owner) {
   const launcher = {
     launch: (opts) => track(state, launchWaited(state, opts)),
-    launchSync: (opts) => launchBlocking(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     lifelineWarnings: () => lifelineWarnings(state),
@@ -23962,9 +23968,9 @@ function createLauncher(owner) {
     },
     { once: true }
   );
-  return launcher;
+  return { launcher, state };
 }
-var processLauncher = createLauncher({});
+var oneShotLauncher = createOneShotLauncher({});
 
 // src/daemon/limits.ts
 init_globals();
@@ -84521,8 +84527,7 @@ function createDaemon(inputs) {
         // the journal in flight commits what landed; none opens after.
         ["journalTurns close", () => journalTurns.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts). It runs tmux, so it
-        // comes before the abort that ends the daemon's launches.
+        // back before it goes (src/daemon/tmux-status.ts).
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the

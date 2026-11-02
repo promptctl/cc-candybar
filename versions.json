@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "d9c061c2d616b8719d942bb7129f860c4806fed3",
+      "timestamp": "2026-11-02T11:50:26.409Z",
+      "commits": [
+        {
+          "sha": "d9c061c2d616b8719d942bb7129f860c4806fed3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T04:49:26-07:00",
+          "message": "refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (#563)\n\n* refactor(launch): Launcher loses launchSync; OneShotLauncher is the only type offering it (candybar-launch-q7o7.4em)\n\nDaemon code holds a Launcher, which has no name for the launch that holds the loop to pipe EOF, so tsc refuses the next one added there. Install, plugin install, the doctor's CLI probe and the at-exit tmux restore take the process's oneShotLauncher, which eslint's owned imports confine to them.\n\n* fix(launch): the daemon's launcher carries no launchSync at runtime; narrow the processLauncher owners (candybar-launch-q7o7.4em)\n\n* docs(launch): comments and the audit doc say what the one-shot split guarantees (candybar-launch-q7o7.4em)"
+        },
+        {
+          "sha": "be9a43395ff17c9488877aa5c950900dd98ce5a3",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-02T11:48:20Z",
+          "message": "chore(release): set `package.json` to 1.179.0 [skip ci]\n\n## [1.179.0](https://github.com/promptctl/cc-candybar/compare/v1.178.2...v1.179.0) (2026-11-02)\n\n### Features\n\n* **site:** site:dev serves the live bar and reloads it; the bar gets a font size slider ([#517](https://github.com/promptctl/cc-candybar/issues/517)) ([9b26334](https://github.com/promptctl/cc-candybar/commit/9b26334ab54c1c9fbad087ff535c804d167c9ce5))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-562",
       "ref": "refs/pull/562/merge",
       "sha": "fcd67e5568ce88a0c38e499913a056ab1368c710",
@@ -70,21 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T04:31:43-07:00",
           "message": "test(ci): every CI run stores one record per test file (candybar-testing-ihvy.myy)\n\nA reporter writes test-records/<run>.jsonl, one record per file: layer, count,\nduration, outcome and each case. A file jest never gave a result for reads\nnever-ran and a file with no test reads empty, so neither passes for the other\nor for absent. test:report prints count and time per layer and the jest wall\ntime from those records, and fails for a run that left none. CI uploads the\nrecords.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "9b26334ab54c1c9fbad087ff535c804d167c9ce5",
-      "timestamp": "2026-11-02T11:36:20.223Z",
-      "commits": [
-        {
-          "sha": "9b26334ab54c1c9fbad087ff535c804d167c9ce5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T04:35:02-07:00",
-          "message": "feat(site): site:dev serves the live bar and reloads it; the bar gets a font size slider (#517)\n\n* feat(site): site:dev serves the live bar and reloads it on every rebuild\n\n* feat(site): the live bar's font size is a control, and starts larger\n\n* feat(site): the live bar's font size is a slider\n\n* fix(site): the dev server watches the page, binds loopback, and refuses unknown flags; the font size is parsed where it is read\n\nThe page and its font are esbuild entry points copied as they are, so the watch covers an edit to index.html and the plain build and the served build share one path. The server binds 127.0.0.1 (--port picks another). Flags are parsed strictly. A stored font size is parsed at the border (a whole number inside the slider's range, else the default), storage that cannot be used says so on the status line, and the label, preload and term read one size.\n\n* fix(site): a port is parsed strictly and only with --serve; the font size is kept when the drag ends\n\n--port without --serve and an empty --port no longer pass silently. The slider stores its size on change, so a storage failure is reported once per drag. The site tests share one build helper and clean up whatever they make.\n\n* fix(site): more than one output directory is refused"
         }
       ]
     },
