@@ -4,39 +4,39 @@
     {
       "version": "pr-578",
       "ref": "refs/pull/578/merge",
-      "sha": "d89671554785820e7d757453a6c93e7bcacccdf5",
-      "timestamp": "2026-11-02T15:41:57.856Z",
+      "sha": "00eea65471dea7ace5f028fe3cc43dbe7caa103f",
+      "timestamp": "2026-11-02T15:50:51.817Z",
       "commits": [
         {
-          "sha": "d89671554785820e7d757453a6c93e7bcacccdf5",
+          "sha": "00eea65471dea7ace5f028fe3cc43dbe7caa103f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-02T15:40:50Z",
-          "message": "Merge 6f1023523582322936b1ac6e35edbe5cc2b57e6d into 7e8ae4a5476db0139bc294069ca8a1e4cf5e3085\n"
+          "timestamp": "2026-11-02T15:49:55Z",
+          "message": "Merge 601cc6b23bca07656db4520bc4e6d7849779957f into 7e8ae4a5476db0139bc294069ca8a1e4cf5e3085\n"
         },
         {
-          "sha": "6f1023523582322936b1ac6e35edbe5cc2b57e6d",
+          "sha": "601cc6b23bca07656db4520bc4e6d7849779957f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T08:40:38-07:00",
           "message": "test: review fixes — a run with no records is named, not a raw ENOENT; the shrink check reads own keys; the ledger test no longer pins its own path (candybar-testing-ihvy.icq)\n"
         },
         {
-          "sha": "c98807ab340761deb694e3f8f2189b1418c6a9f4",
+          "sha": "3b2f6443dc8398d7c0921a505402dde947b5e142",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T08:35:05-07:00",
           "message": "test: review fixes — a worker boot with no ledger fails at load, the null-file fault names both causes, the preload note sits with the ledger (candybar-testing-ihvy.icq)\n"
         },
         {
-          "sha": "0231f50d8726de595a62e7382e74e710fbb19615",
+          "sha": "def8e68015fe9091218dee304e76f19c02fb0f74",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T08:30:18-07:00",
           "message": "test: the cases that boot no daemon leave test/daemon-boots/, and the ratchet falls from 372 to 214 (candybar-testing-ihvy.icq)\n\nA probe over a worker and a process run found 158 cases in five files that reach no boot: plugins, the connection over a stand-in daemon, the session-id checkpoint and click verbs, the jest temp-directory sweep and the tmux stub's gate. Each splits on a describe boundary, so the booting remainder keeps its own file and the rest moves to the test/ root, which the unit refusal sends them to by their clock reads at load. The judge proves the split: a moved case that boots fails the worker run.\n"
         },
         {
-          "sha": "29dad7d82b21746fef3d436de78d9d316d612bf3",
+          "sha": "9a857350a447af161a60eb2e7b1ab1ed60a54340",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-02T08:17:49-07:00",
