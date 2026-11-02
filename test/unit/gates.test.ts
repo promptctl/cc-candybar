@@ -43,4 +43,16 @@ describe("a gates value is the whole of what its loads accept", () => {
       UPDATE_DISMISSED_KEY,
     );
   });
+
+  test("a held key stays when a later registration of it is disposed", () => {
+    const gates = daemonGates();
+    const dispose = gates.state.register(UPDATE_DISMISSED_KEY, ["abc"]);
+    expect(
+      gates.state.gateFor(EMPTY_DEFAULT).validate(UPDATE_DISMISSED_KEY, "abc"),
+    ).toEqual({ ok: true, value: "abc" });
+    dispose();
+    expect(gates.state.gateFor(EMPTY_DEFAULT).listKeys()).toContain(
+      UPDATE_DISMISSED_KEY,
+    );
+  });
 });

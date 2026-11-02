@@ -264,7 +264,8 @@ export function startDaemon(
     if (held === null) placeEnv(before);
     throw e;
   }
-  held = held ?? { env, before, starts: 0 };
+  held = held ?? { env: { ...env }, before, starts: 0 };
+  let stopped = false;
   held.starts++;
   const open = new Set<Duplex>();
   const servers: net.Server[] = [];
@@ -307,6 +308,10 @@ export function startDaemon(
     // unread: its launches are refused, by its own launcher, and a line of its
     // says it came after the close.
     stop: async () => {
+      // A second stop of one daemon (inline, then the case's afterEach) is no
+      // second daemon ending: only a first one counts down what is held.
+      if (stopped) return;
+      stopped = true;
       void daemon.close(NO_TMUX_AT_EXIT);
       for (const end of open) end.destroy();
       await Promise.all(
