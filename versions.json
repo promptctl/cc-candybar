@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-582",
+      "ref": "refs/pull/582/merge",
+      "sha": "f6a7df8706a6246d770204f8c9e1646a7fddd546",
+      "timestamp": "2026-11-02T17:44:00.221Z",
+      "commits": [
+        {
+          "sha": "f6a7df8706a6246d770204f8c9e1646a7fddd546",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T10:42:58-07:00",
+          "message": "Merge 06ddc813db8f6505f0725b194deab99f9e8cfb94 into fd15d5587077c36e966519a7da89e8f046818222\n"
+        },
+        {
+          "sha": "06ddc813db8f6505f0725b194deab99f9e8cfb94",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-02T10:42:38-07:00",
+          "message": "test(render): renderLines returns the one event per render its client kept (brandon-unfiled-3248.8c9u)\n\nThe retry loop in renderRequest and renderLines now decide with one predicate, so a retried attempt is not read as a render. Also records the heap-snapshot class-name trap in testing.md.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "fd15d5587077c36e966519a7da89e8f046818222",
