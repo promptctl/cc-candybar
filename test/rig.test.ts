@@ -3,6 +3,7 @@
 // session's picks is a rig's own.
 import { linkSigner } from "../src/click/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { registerOptionDomain } from "../src/config/option-domain";
 import { compileInputOf, compileKey } from "../src/dsl/render";
 import { textOf } from "../src/render/frame";
 import { buildRig, parsedConfig, sharedCompile } from "./helpers/rig";
@@ -58,6 +59,18 @@ describe("buildRig", () => {
     expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, new Set(names))).toBe(
       parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, new Set([...names].reverse())),
     );
+  });
+
+  test("a parse under a registered option domain is not the parse made without it", () => {
+    const palettes = new Set(["tokyo-night"]);
+    const without = parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes);
+    const unregister = registerOptionDomain("rigTestDomain", () => ["a"]);
+    try {
+      expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes)).not.toBe(without);
+    } finally {
+      unregister();
+    }
+    expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes)).toBe(without);
   });
 
   test("a compile is shared by signer: one signer's compile is not another's", () => {

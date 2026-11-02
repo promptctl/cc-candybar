@@ -17,6 +17,7 @@
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
+import { knownOptionDomainNames } from "../../src/config/option-domain";
 import { SessionState } from "../../src/daemon/session-state";
 import {
   compileDslConfig,
@@ -121,9 +122,9 @@ export interface Rig {
 // throughout by type, and a runtime freeze would reach `DEFAULT_DSL_CONFIG`'s
 // own decl objects (`mergeWithDefault` is shallow), which a test does not own.
 //
-// The key is the parse's inputs, not the registries a parse reads (option
-// domains): a test that registers a domain before parsing and removes it after
-// gives its source a label of its own, or a later parse of the same text hits.
+// A parse also reads the option-domain registry, so the key carries the names
+// registered when it ran: a test that registers a domain around a parse never
+// shares it with one that does not.
 const parses = new WeakMap<DslConfig, Map<string, ValidatedConfig>>();
 
 // A compile is shared by what a compile takes: its config (the key) and its
@@ -152,7 +153,12 @@ export function parsedConfig(
   palettes: ReadonlySet<string>,
 ): ValidatedConfig {
   const entries = held(parses, base);
-  const key = JSON.stringify([label, source, [...palettes].sort()]);
+  const key = JSON.stringify([
+    label,
+    source,
+    [...palettes].sort(),
+    knownOptionDomainNames(new Map()),
+  ]);
   let config = entries.get(key);
   if (config === undefined) {
     config = parseAndValidate(label, source, palettes, base);
