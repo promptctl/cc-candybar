@@ -1,10 +1,13 @@
 // [LAW:verifiable-goals] brandon-directory-781 makes fish-style path
-// abbreviation the DEFAULT directory rendering. This pins the exact composition
-// rule the ticket asked us to define: the directory template COLLAPSES first
-// (~-relative → project-relative → absolute), then ABBREVIATES the survivor
-// (every segment but the leaf → its leading char). Rendered through the real
-// spine (registerDslConfig + drawDsl), the same two functions the daemon and
-// demo call — not a synthetic in-process transform.
+// abbreviation the DEFAULT directory rendering. `directory` draws the
+// worktree-aware location (`checkoutLocation`'s main/worktree/subpath/noRepo,
+// see test/git-location.test.ts): COLLAPSE the main checkout (or, outside a
+// repo, the session directory) to `~` under home, then ABBREVIATE the
+// survivor fish-style (every segment but the leaf → its leading char),
+// append the subpath whole, and name a linked worktree in a parenthetical.
+// Rendered through the real spine (registerDslConfig + drawDsl), the same
+// two functions the daemon and demo call — not a synthetic in-process
+// transform.
 
 import { drawPayload } from "./helpers/draw-payload";
 import { textOf } from "../src/render/frame";
@@ -54,7 +57,14 @@ const dirOnlyRoot = {
 // the narrowed one.
 const dropEditNs = dropEditChrome;
 
-type DirPaths = { home: string; project_dir: string; current_dir: string };
+type DirPaths = {
+  home: string;
+  current_dir: string;
+  main?: string;
+  worktree?: string;
+  subpath?: string;
+  noRepo?: boolean;
+};
 
 function renderDir(paths: DirPaths): string {
   return textOf(renderDirRaw(paths)).trim();
@@ -86,8 +96,13 @@ function renderDirRaw(paths: DirPaths): Frame {
       model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
       workspace: {
         current_dir: paths.current_dir,
-        project_dir: paths.project_dir,
         added_dirs: [],
+      },
+      location: {
+        main: paths.main ?? "",
+        worktree: paths.worktree ?? "",
+        subpath: paths.subpath ?? "",
+        noRepo: paths.noRepo ?? false,
       },
     };
     return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
@@ -116,55 +131,68 @@ describe("abbreviatePath (pure helper)", () => {
   });
 });
 
-describe("default directory segment renders fish-abbreviated", () => {
-  test("under home: ~-collapse then abbreviate ancestors, keep leaf", () => {
+describe("default directory segment renders the worktree-aware location, fish-abbreviated", () => {
+  test("main checkout under home: ~-collapse then abbreviate ancestors, keep leaf", () => {
     expect(
       renderDir({
         home: "/Users/bmf",
-        project_dir: "/Users/bmf/code/cc-candybar",
+        main: "/Users/bmf/code/cc-candybar",
         current_dir: "/Users/bmf/code/cc-candybar",
       }),
     ).toBe("~/c/cc-candybar");
   });
 
-  test("home === cwd collapses to a bare ~", () => {
+  test("home === main checkout collapses to a bare ~", () => {
     expect(
       renderDir({
         home: "/Users/bmf",
-        project_dir: "/Users/bmf",
+        main: "/Users/bmf",
         current_dir: "/Users/bmf",
       }),
     ).toBe("~");
   });
 
-  test("not under home, deep under project: project-relative then abbreviate", () => {
+  test("a linked worktree is named in a parenthetical after the main checkout's path", () => {
     expect(
       renderDir({
-        home: "/root",
-        project_dir: "/srv/app",
-        current_dir: "/srv/app/src/deep/leaf",
+        home: "/Users/bmf",
+        main: "/Users/bmf/code/cc-candybar",
+        worktree: "composed-knitting-cake",
+        current_dir: "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake",
       }),
-    ).toBe("s/d/leaf");
+    ).toBe("~/c/cc-candybar (⊫ composed-knitting-cake)");
   });
 
-  test("project root renders its basename (single segment, unabbreviated)", () => {
+  test("a worktree subdirectory keeps the subpath whole, ahead of the worktree name", () => {
     expect(
       renderDir({
-        home: "/root",
-        project_dir: "/srv/my-app",
-        current_dir: "/srv/my-app",
+        home: "/Users/bmf",
+        main: "/Users/bmf/code/cc-candybar",
+        worktree: "composed-knitting-cake",
+        subpath: "/src",
+        current_dir: "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake/src",
       }),
-    ).toBe("my-app");
+    ).toBe("~/c/cc-candybar/src (⊫ composed-knitting-cake)");
   });
 
-  test("outside home and project: absolute path abbreviated, leaf full", () => {
+  test("outside home: the main checkout's absolute path abbreviated, leaf full", () => {
     expect(
       renderDir({
         home: "/root",
-        project_dir: "/other",
-        current_dir: "/var/log/nginx",
+        main: "/srv/app",
+        current_dir: "/srv/app",
       }),
-    ).toBe("/v/l/nginx");
+    ).toBe("/s/app");
+  });
+
+  test("outside a repo: falls back to the session directory", () => {
+    expect(
+      renderDir({
+        home: "/Users/bmf",
+        current_dir: "/Users/bmf/scratch/notes",
+        noRepo: true,
+      }),
+    ).toBe("~/s/notes");
   });
 });
 
@@ -175,7 +203,7 @@ describe("clicking the directory copies the full path", () => {
     const current_dir = "/Users/bmf/code/cc-candybar/src/deep dir/leaf";
     const rendered = renderDirRaw({
       home: "/Users/bmf",
-      project_dir: "/Users/bmf/code/cc-candybar",
+      main: "/Users/bmf/code/cc-candybar/src/deep dir/leaf",
       current_dir,
     });
     const cellLinks = linksOf(rendered);
@@ -225,9 +253,9 @@ describe("configurability seam: user template override restores full path", () =
           model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
           workspace: {
             current_dir: "/Users/bmf/code/cc-candybar",
-            project_dir: "/Users/bmf/code/cc-candybar",
             added_dirs: [],
           },
+          location: { main: "/Users/bmf/code/cc-candybar", worktree: "", subpath: "", noRepo: false },
         },
         instantOf(new Date()),
         {

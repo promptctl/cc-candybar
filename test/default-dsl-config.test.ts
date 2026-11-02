@@ -882,14 +882,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
-  // [LAW:verifiable-goals] The directory segment's template has boundary
-  // cases that round-9 fixed: project root collapse, subdir relative path,
-  // home boundary safety. Each case sets up a focused single-segment
-  // runtime, renders, and reads the visible text for assertion.
+  // [LAW:verifiable-goals] The directory segment's template has a boundary
+  // case round-9 fixed: home-prefix safety. test/directory-fish.test.ts
+  // covers the worktree-aware shape; this stays focused on that one hazard.
   describe("DIR_TEMPLATE", () => {
     function renderDirectoryText(opts: {
       home: string;
-      project_dir: string;
+      main: string;
       current_dir: string;
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
@@ -921,10 +920,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
           model: { id: "x", display_name: "x" },
           workspace: {
             current_dir: opts.current_dir,
-            project_dir: opts.project_dir,
             added_dirs: [],
           },
           home: opts.home,
+          location: { main: opts.main, worktree: "", subpath: "", noRepo: false },
         };
         const line = drawPayload(dirOnly, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
@@ -945,45 +944,23 @@ describe("DEFAULT_DSL_CONFIG", () => {
       }
     }
 
-    test("project root (current_dir === project_dir) renders as project basename", () => {
-      const visible = renderDirectoryText({
-        home: "",
-        project_dir: "/Users/alice/code/myproject",
-        current_dir: "/Users/alice/code/myproject",
-      });
-      expect(visible).toContain("myproject");
-      expect(visible).not.toContain("/Users/alice/code");
-    });
-
-    test("subdir of project renders as project-relative path (fish-abbreviated)", () => {
-      // brandon-directory-781: the project-relative collapse still holds; the
-      // survivor is then fish-abbreviated (`src/foo` → `s/foo`), the leaf full.
-      const visible = renderDirectoryText({
-        home: "",
-        project_dir: "/Users/alice/code/myproject",
-        current_dir: "/Users/alice/code/myproject/src/foo",
-      });
-      expect(visible).toContain("s/foo");
-      expect(visible).not.toContain("/Users/alice");
-    });
-
     test("hasPrefix boundary safety: /home/al is NOT a prefix of /home/alice", () => {
       // If hasPrefix were used naively, `/home/alice/work` would falsely
       // match `/home/al` and try to render relative to it. The path falls
       // through to absolute, then fish-abbreviates to `/h/a/work` (leaf full) —
       // a relative match would have produced a different, non-slash-led string.
       const visible = renderDirectoryText({
-        home: "",
-        project_dir: "/home/al",
+        home: "/home/al",
+        main: "/home/alice/work",
         current_dir: "/home/alice/work",
       });
       expect(visible).toContain("/h/a/work");
     });
 
-    test("home === current_dir renders as just ~", () => {
+    test("home === main checkout renders as just ~", () => {
       const visible = renderDirectoryText({
         home: "/Users/alice",
-        project_dir: "/whatever",
+        main: "/Users/alice",
         current_dir: "/Users/alice",
       });
       expect(visible).toMatch(/^\s*~\s*$/);
@@ -992,7 +969,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     test("home prefix boundary: /Users/al is NOT a prefix of /Users/alice", () => {
       const visible = renderDirectoryText({
         home: "/Users/al",
-        project_dir: "/Users/alice/proj",
+        main: "/Users/alice/work",
         current_dir: "/Users/alice/work",
       });
       expect(visible).not.toContain("~");
@@ -1144,24 +1121,24 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const NO_UPSTREAM = { branch: "spike", repoName: "repo", sha: "abc1234" };
     test.each([
-      ["collapsed", REBASING, "/tmp ⎇ feature +2/-1 SU? ▸"],
+      ["collapsed", REBASING, "⎇ feature +2/-1 SU? ▸"],
       [
         "expanded",
         REBASING,
-        "(git) /tmp [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◂",
+        "(git) repo [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◂",
       ],
-      ["collapsed", CLEAN, "/tmp ⎇ main ▸"],
-      ["expanded", CLEAN, "(git) /tmp abc1234 ⎇ main [origin/main] ◂"],
-      ["collapsed", NO_UPSTREAM, "/tmp ⎇ spike ▸"],
-      ["expanded", NO_UPSTREAM, "(git) /tmp abc1234 ⎇ spike ◂"],
-      ["collapsed", GIT_PAYLOAD.git, "/tmp ⎇ main +1/-1 SU?!1 ▸"],
+      ["collapsed", CLEAN, "⎇ main ▸"],
+      ["expanded", CLEAN, "(git) repo abc1234 ⎇ main [origin/main] ◂"],
+      ["collapsed", NO_UPSTREAM, "⎇ spike ▸"],
+      ["expanded", NO_UPSTREAM, "(git) repo abc1234 ⎇ spike ◂"],
+      ["collapsed", GIT_PAYLOAD.git, "⎇ main +1/-1 SU?!1 ▸"],
       [
         "expanded",
         GIT_PAYLOAD.git,
-        "(git) /tmp abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed) ◂",
+        "(git) repo abc1234 SU?!1 ⎇ main [origin/main +1/-1] (2 stashed) ◂",
       ],
-      ["collapsed", { branch: "" }, "/tmp"],
-      ["expanded", { branch: "" }, "/tmp"],
+      ["collapsed", { branch: "" }, ""],
+      ["expanded", { branch: "" }, ""],
     ] as const)("%s: %j reads %j", (detail, git, text) => {
       const visible = textOf(renderSegment(
         "gitaculous",
@@ -1177,7 +1154,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // variable's default, which a user redeclares to start expanded.
     test("a session starts in the form git.detail defaults to", () => {
       const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
-      expect(strip(renderSegment("gitaculous"))).toBe("/tmp ⎇ main +1/-1 SU?!1 ▸");
+      expect(strip(renderSegment("gitaculous"))).toBe("⎇ main +1/-1 SU?!1 ▸");
       expect(
         strip(
           renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {
@@ -1200,8 +1177,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const ctx = testVerbContext(state, undefined, parsed);
       const arrow = (line: Frame) => {
         const urls = linkUrls(line);
-        expect(urls).toHaveLength(2);
-        return urls[1]!;
+        expect(urls).toHaveLength(1);
+        return urls[0]!;
       };
       const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
       const collapsed = renderSegment(
@@ -1898,7 +1875,10 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const lines = visibleLines(
       renderPreset("git", 200, payloadWithPrAndHistory).rendered,
     );
-    expect(lines.find((l) => l.includes("⇆ #181"))).toContain("~/c/c/src ⎇ main");
+    const prLine = lines.find((l) => l.includes("⇆ #181"));
+    expect(prLine).toContain("~/c/c/src");
+    expect(prLine).toContain("⎇ main");
+    expect(prLine!.indexOf("~/c/c/src")).toBeLessThan(prLine!.indexOf("⎇ main"));
     // What sets it apart from verbose, which also stages gitPr: the status
     // row drops the rate-limit windows the default shows.
     expect(textOf(renderPreset("default", 200).rendered)).toContain("◑ ");

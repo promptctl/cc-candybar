@@ -63,55 +63,42 @@ const GIT_INIT = confirmStep(
   [{ action: "gitInit.run", when: "true" }],
 );
 
-// (`directory` is unaware of worktrees; `gitPath` is the worktree-aware location.)
-// Directory: ~ collapse under $HOME, project-relative under workspace.project_dir,
-// else raw. Inline-recomputes the project-relative path because the DSL has no
-// template-level `:=` (a `kind: "template"` var would express it once, but adds
-// noise for a single use).
-//
-// Prefix checks are boundary-safe: a path is "under" a base iff it equals the
-// base OR starts with `base + "/"`. The naive `hasPrefix base path` is a
-// string match — it would treat `/home/alice` as a child of `/home/al`.
-// `(printf "%s/" base)` adds the separator so the prefix can only land at a
-// path boundary; the `eq` arm catches the exact-match case where the trailing
-// slash would over-match.
-//
-// Equal-paths case (current_dir === project_dir) DOES enter the project-
-// relative arm: DIR_REL evaluates to "" and the ternary picks basename
-// (project_dir), so the project root renders as `<repo-name>` instead of the
-// full absolute path. Same logic handles equal home & current_dir → just "~".
-const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
-// [LAW:decomposition] Two separable concerns: (1) COLLAPSE the absolute cwd to a
-// short display form (`~`-relative first, project-relative only outside home,
-// else absolute) and
-// (2) ABBREVIATE fish-style. Collapse stays in the template (its inputs are the
-// payload's home/project_dir/current_dir); abbreviation is a single helper
-// applied to the collapsed result. `$dir` carries the collapsed path between the
-// two — default is the absolute cwd, overridden only when it lives under home or
-// the project root. brandon-directory-781 makes fish-abbreviation the DEFAULT;
-// a user restores the full path by overriding `segments.directory.template`
-// (drop the `abbreviatePath` wrapper) — the existing merge-by-name seam.
-// (3) The abbreviation hides the full path, so the cell is one `copyDir` link:
+// Worktree-aware location: the main checkout's path, abbreviated, with the
+// subpath kept whole and a linked worktree named after it. Outside a repo
+// `.location.main` is "" and the session's directory stands in. It draws
+// with no leading space, because it starts the bar's form, and reads no
+// `.git`, so it draws while git is still pending.
+// [LAW:decomposition] Two separable concerns, in order: (1) pick which path
+// is being shown (the main checkout, or the session directory when there is
+// none) and COLLAPSE it to `~` under home, (2) ABBREVIATE fish-style, then
+// append the subpath and worktree name — facts `checkoutLocation` already
+// resolved, never recomputed. `$dir` carries the chosen path between the
+// collapse and abbreviate steps; `$text` carries the abbreviated survivor
+// into the subpath/worktree append. brandon-directory-781 made
+// fish-abbreviation the default; a user restores the full path by overriding
+// `segments.directory.template` — drop the `abbreviatePath` wrapper — the
+// existing merge-by-name seam.
+// The abbreviation hides the full path, so the cell is one `copyDir` link:
 // clicking it copies `.current_dir` whole. The click lives in this template,
 // so an override keeps the `action "copyDir"` wrap or loses the click.
 const DIR_TEMPLATE =
-  "{{ $dir := .current_dir }}" +
-  '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}' +
-  `{{ $dir = printf "~%s" (trimPrefix .home .current_dir) }}` +
-  "{{ else }}" +
-  '{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}' +
-  `{{ $dir = ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
-  "{{ end }}{{ end }}" +
-  '{{ action "copyDir" (abbreviatePath $dir) }}';
+  '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}' +
+  '{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}' +
+  '{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}' +
+  '{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}' +
+  '{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}' +
+  '{{ action "copyDir" $text }}';
 
-// How far the two git segments' *structural* text — labels, punctuation,
-// brackets, the sha, the upstream name, the elapsed-time annotation — sits
-// toward their own background, as a percentage. It is applied as the segments'
-// `fg:`, so structural text is simply what a token renders as when the
-// template does NOT paint it; only the operative facts (branch, counts,
-// status) name a color. [LAW:dataflow-not-control-flow] — the quiet case is
-// the default that always applies, not a wrapper each token opts into. That
-// inversion is why these templates carry no de-emphasis markup at all.
+// How far structural text — labels, punctuation, brackets, the sha, the
+// upstream name, the elapsed-time annotation — sits toward its own
+// background, as a percentage. Applied as a segment's `fg:`, so structural
+// text is simply what a token renders as when the template does NOT paint
+// it; only the operative facts (branch, counts, status) name a color.
+// [LAW:dataflow-not-control-flow] — the quiet case is the default that
+// always applies, not a wrapper each token opts into. That inversion is why
+// these templates carry no de-emphasis markup at all. `directory` shares
+// this `fg:` too — it's the same git cell's text, just drawn in a different
+// segment now.
 //
 // The recipe and its measured floor are `QUIET_TEXT` (src/config/quiet-text.ts).
 const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
@@ -236,7 +223,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       kind: "literal",
       value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}",
     },
-    // What marks a linked worktree in `gitPath`'s parenthetical.
+    // What marks a linked worktree in `directory`'s parenthetical.
     "glyph.worktree": { kind: "literal", value: "⊫" },
     ...GIT_INIT.variables,
     version: { kind: "input", path: "version", default: "" },
@@ -372,9 +359,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // arrow at its right edge (the `gitDetail` action). The default is the form
     // every session starts in: redeclare this variable with
     // `default: "expanded"` to start with the full line.
-    // What names the checkout: "path" for the location, "repo" for the repo
-    // name. A variable, so a segment calling a form needs no new setting.
-    "git.location": { kind: "literal", value: "path" },
     "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
 
     // Forge PR/MR — the daemon's git provider resolves the branch's newest PR
@@ -654,8 +638,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     directory: {
       group: "location",
       description:
-        "The current directory, shortened fish-style — `~` under home, project-relative inside the project. Click to copy the full path.",
+        "The main checkout's path, shortened fish-style — `~` under home — plus the subpath and, in a linked worktree, the worktree's name. Click to copy the full path.",
       template: DIR_TEMPLATE,
+      fg: GIT_QUIET_FG,
     },
     model: {
       group: "model-context",
@@ -728,18 +713,20 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       group: "git",
       description:
         "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact — repo, in-progress operation, sha, upstream ±, stash count, time since the last commit.",
-      // [LAW:dataflow-not-control-flow] The location is a request fact and git
-      // a lane, so the first arm draws the path alone until git answers rather
-      // than letting a pending read blank the whole cell.
+      // [LAW:dataflow-not-control-flow] `directory` is the request fact and
+      // draws unconditionally; this segment is the git lane alone, so it
+      // draws nothing — not even a placeholder — until git answers with a
+      // branch, rather than blanking the whole bar on a pending read.
       template:
-        '{{ if and (eq .git.location "path") .location.gitPending }}{{ template "gitPath" . }}' +
-        '{{ else if eq .git.branch "" }}{{ template "gitPath" . }}' +
-        '{{ else }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}' +
+        '{{ if ne .git.branch "" }}' +
+        '{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}' +
         '{{ else }}{{ template "gitCollapsed" . }}{{ end }}' +
         ' {{ action "gitDetail" "▸" "◂" }}{{ end }}' +
         // Armed stays shown wherever the session goes, so a confirm is never
-        // hidden one click from firing.
-        `{{ if or .location.noRepo ${GIT_INIT.armed} }} ${GIT_INIT.template}{{ end }}`,
+        // hidden one click from firing. Its own leading space only applies
+        // once there is branch content to separate from — the init offer is
+        // this segment's only content otherwise.
+        `{{ if or .location.noRepo ${GIT_INIT.armed} }}{{ if ne .git.branch "" }} {{ end }}${GIT_INIT.template}{{ end }}`,
       fg: GIT_QUIET_FG,
       // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
       // (brandon-segment-settings-i4n.u36): each is read by its own piece
@@ -1512,11 +1499,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // The two forms `gitaculous` switches between, each composed of the pieces
     // below. Override one to change what that form shows.
     gitCollapsed:
-      '{{ if eq .git.location "path" }}{{ template "gitPath" . }} {{ end }}' +
       '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
     gitExpanded:
       "(git)" +
-      '{{ if eq .git.location "path" }} {{ template "gitPath" . }}{{ else }}{{ template "gitRepo" . }}{{ end }}' +
+      '{{ template "gitRepo" . }}' +
       '{{ template "gitOperation" . }}' +
       '{{ template "gitSha" . }}' +
       '{{ template "gitFlags" . }}' +
@@ -1535,18 +1521,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // names that segment, the setting, and the helper when it does not).
     gitBranch:
       '⎇ {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
-    // Worktree-aware location: the main checkout's path, abbreviated, with the
-    // subpath kept whole and the linked worktree named after it. Outside a repo
-    // `.location.main` is "" and the session's directory stands in. It draws
-    // with no leading space, because it starts the bar's form, and reads no
-    // `.git`, so it draws while git is still pending.
-    gitPath:
-      '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}' +
-      '{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}' +
-      '{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}' +
-      '{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}' +
-      '{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}' +
-      '{{ action "copyDir" $text }}',
     gitRepo:
       '{{ if and .settings.repo (ne .git.repoName "") }} {{ .git.repoName }}{{ end }}',
     gitOperation:

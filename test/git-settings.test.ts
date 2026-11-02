@@ -98,12 +98,12 @@ function renderPair(
 describe("gitaculous settings", () => {
   test("every default reproduces the segment without settings", () => {
     expect(renderPair({}, "collapsed")).toEqual({
-      full: "/tmp ⎇ feature +2/-1 SU? ▸",
-      lean: "/tmp ⎇ feature +2/-1 SU? ▸",
+      full: "⎇ feature +2/-1 SU? ▸",
+      lean: "⎇ feature +2/-1 SU? ▸",
     });
     const { full, lean } = renderPair({}, "expanded");
     expect(full).toBe(
-      "(git) /tmp [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◷ 5m ◂",
+      "(git) repo [rebase] abc1234 SU? ⎇ feature [origin/feature +2/-1] (1 stashed) ◷ 5m ◂",
     );
     expect(lean).toBe(full);
   });

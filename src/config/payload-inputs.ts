@@ -222,12 +222,6 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: false,
   },
-  "location.gitPending": {
-    kind: "input",
-    path: "location.gitPending",
-    type: "boolean",
-    default: false,
-  },
 
   // The repo's browsable web page, transposed from its remote by the daemon.
   // "" is the genuine "no remote a browser can open" (local-only repo, bare

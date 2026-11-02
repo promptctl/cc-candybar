@@ -1493,7 +1493,6 @@ function projectPayload(
       location: {
         ...hookData.location,
         main: posixify(hookData.location.main) ?? "",
-        gitPending: isPending(git),
       },
     }),
     ...(tmuxPane !== null && {
